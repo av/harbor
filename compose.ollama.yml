@@ -1,7 +1,7 @@
 services:
   ollama:
     volumes:
-      - ./ollama/ollama:/root/.ollama
+      - ~/.ollama:/root/.ollama
     pull_policy: always
     tty: true
     image: ollama/ollama:latest
