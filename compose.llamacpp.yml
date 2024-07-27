@@ -1,0 +1,27 @@
+services:
+  llamacpp:
+    image: ghcr.io/ggerganov/llama.cpp:full-cuda
+    volumes:
+      - ~/.cache/huggingface:/models
+    ports:
+      - 33831:8080
+
+    # -ngl 100 --hf-repo bartowski/gemma-2-9b-it-GGUF --hf-file gemma-2-9b-it-Q4_K_M.gguf --model /models/gemma-2-9b-it-Q4_K_M.gguf
+    # -ngl 32 --hf-repo bartowski/gemma-2-27b-it-GGUF --hf-file gemma-2-27b-it-Q4_K_M.gguf --model /models/gemma-2-27b-it-Q4_K_M.gguf
+    # -ngl 64 --hf-repo bartowski/Gemma-2-9B-It-SPPO-Iter3-GGUF --hf-file Gemma-2-9B-It-SPPO-Iter3-Q8_0.gguf --model /models/Gemma-2-9B-It-SPPO-Iter3-Q8_0.gguf
+    # -ngl 10 --hf-repo bartowski/Einstein-v7-Qwen2-7B-GGUF --hf-file Einstein-v7-Qwen2-7B-Q8_0.gguf --model /models/Einstein-v7-Qwen2-7B-Q8_0.gguf
+    # -ngl 64 --hf-repo bartowski/Hermes-2-Theta-Llama-3-8B-GGUF --hf-file Hermes-2-Theta-Llama-3-8B-Q8_0.gguf --model /models/Hermes-2-Theta-Llama-3-8B-Q8_0.gguf
+    # -ngl 24 --hf-repo bartowski/Hermes-2-Theta-Llama-3-70B-GGUF --hf-file Hermes-2-Theta-Llama-3-70B-Q4_K_M.gguf --model /models/Hermes-2-Theta-Llama-3-70B-Q4_K_M.gguf
+    command: >
+      --server
+      --hf-repo bartowski/Tess-v2.5-Phi-3-medium-128k-14B-GGUF --hf-file Tess-v2.5-Phi-3-medium-128k-14B-Q6_K.gguf --model /models/Tess-v2.5-Phi-3-medium-128k-14B-Q6_K.gguf
+      --port 8080
+      --host 0.0.0.0
+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

@@ -1,0 +1,15 @@
+services:
+  ollama:
+    volumes:
+      - ./ollama/ollama:/root/.ollama
+    pull_policy: always
+    tty: true
+    image: ollama/ollama:latest
+    ports:
+      - 33821:11434
+    networks:
+      - harbor-network
+
+  open-webui:
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434

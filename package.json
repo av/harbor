@@ -1,0 +1,13 @@
+{
+  "name": "@av/harbor",
+  "scripts": {
+    "dc": "docker compose",
+    "dc:webui": "docker compose -f compose.yml -f compose.webui.yml -f compose.searxng.yml -f compose.ollama.yml -f compose.ollama.nvidia.yml",
+    "dwu": "yarn dc:webui up",
+    "dwd": "yarn dc:webui down",
+
+    "dev:fs:ollama": "sudo setfacl --recursive -m user:1000:rwx ./ollama && sudo setfacl --recursive -m user:1002:rwx ./ollama && sudo setfacl --recursive -m user:1001:rwx ./ollama",
+    "dev:fs:open-webui": "sudo setfacl --recursive -m user:1000:rwx ./open-webui && sudo setfacl --recursive -m user:1002:rwx ./open-webui && sudo setfacl --recursive -m user:1001:rwx ./open-webui",
+    "dev:fixfs": "yarn dev:fs:ollama && yarn dev:fs:open-webui"
+  }
+}

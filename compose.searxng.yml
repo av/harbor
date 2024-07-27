@@ -1,0 +1,18 @@
+services:
+  searxng:
+    image: searxng/searxng
+    environment:
+      INSTANCE_NAME: searxng
+      BASE_URL: http://0.0.0.0:8080
+    volumes:
+      - ./searxng:/etc/searxng
+    ports:
+      - 33811:8080
+    networks:
+      - harbor-network
+
+  open-webui:
+    environment:
+      - ENABLE_RAG_WEB_SEARCH=true
+      - RAG_WEB_SEARCH_ENGINE=searxng
+      - SEARXNG_QUERY_URL=http://searxng:8080/search?q=<query>

@@ -1,0 +1,11 @@
+services:
+  lmdeploy:
+    image: openmmlab/lmdeploy:latest
+    volumes:
+      - ~/.cache/huggingface:/root/.cache/huggingface
+    ports:
+      - 33831:23333
+    ipc: host
+    command: lmdeploy serve api_server Weni/ZeroShot-Agents-Llama3-4.0.43-ORPO-AWQ
+    networks:
+      - harbor-network

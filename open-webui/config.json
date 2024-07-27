@@ -1,0 +1,16 @@
+{
+	"openai": {
+		"api_base_urls": [
+			""
+		],
+		"api_keys": [
+			""
+		],
+		"enable": false
+	},
+	"ollama": {
+		"base_urls": [
+			"http://ollama:11434"
+		]
+	}
+}

@@ -1,0 +1,13 @@
+services:
+  tgi:
+    image: ghcr.io/huggingface/text-generation-inference:2.2.0
+    command: --model-id hugging-quants/Meta-Llama-3.1-8B-Instruct-AWQ-INT4 --quantize awq
+    ports:
+      - 33851:80
+    volumes:
+      - ~/.cache/huggingface/hub:/data
+    environment:
+      - PORT=80
+      - HOSTNAME=0.0.0.0
+    networks:
+      - harbor-network

@@ -1,0 +1,7 @@
+# Open WebUI
+open-webui/cache/
+open-webui/vector_db/
+open-webui/webui.db
+
+# Ollama
+/ollama/ollama/

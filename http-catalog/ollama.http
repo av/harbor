@@ -1,0 +1,5 @@
+@host = http://localhost:33821
+
+###
+
+GET {{host}}/api/ps

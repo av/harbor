@@ -1,0 +1,11 @@
+services:
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: open-webui
+    pull_policy: always
+    volumes:
+      - ./open-webui:/app/backend/data
+    ports:
+      - 33801:8080
+    networks:
+      - harbor-network
