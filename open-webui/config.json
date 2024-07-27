@@ -1,4 +1,40 @@
 {
+	"rag": {
+		"pdf_extract_images": false,
+		"youtube_loader_language": [
+			"en"
+		],
+		"enable_web_loader_ssl_verification": null,
+		"web": {
+			"search": {
+				"enable": true,
+				"engine": "searxng",
+				"searxng_query_url": "http://searxng:8080/search?q=<query>",
+				"google_pse_api_key": "",
+				"google_pse_engine_id": "",
+				"brave_search_api_key": "",
+				"serpstack_api_key": "",
+				"serpstack_https": true,
+				"serper_api_key": "",
+				"result_count": 3,
+				"concurrent_requests": 10
+			}
+		},
+		"template": "Use the following context as your learned knowledge, inside <context></context> XML tags.\n<context>\n    [context]\n</context>\n\nWhen answer to user:\n- If you don't know, just say that you don't know.\n- If you don't know when you are not sure, ask for clarification.\nAvoid mentioning that you obtained the information from the context.\nAnd answer according to the language of the user's question.\n\nGiven the context information, answer the query.\nQuery: [query]",
+		"top_k": 8,
+		"relevance_threshold": 0.0,
+		"enable_hybrid_search": true,
+		"reranking_model": "",
+		"embedding_engine": "ollama",
+		"embedding_model": "mxbai-embed-large:latest",
+		"chunk_size": 1500,
+		"chunk_overlap": 100
+	},
+	"ollama": {
+		"base_urls": [
+			"http://ollama:11434"
+		]
+	},
 	"openai": {
 		"api_base_urls": [
 			""
@@ -8,9 +44,33 @@
 		],
 		"enable": false
 	},
-	"ollama": {
-		"base_urls": [
-			"http://ollama:11434"
-		]
+	"image_generation": {
+		"engine": "comfyui",
+		"enable": true,
+		"model": "Juggernaut_X_RunDiffusion_Hyper.safetensors",
+		"size": "512x512",
+		"steps": 50,
+		"comfyui": {
+			"base_url": "http://comfyui:8188"
+		}
+	},
+	"audio": {
+		"tts": {
+			"openai": {
+				"api_base_url": "http://host.docker.internal:8096/v1",
+				"api_key": "123"
+			},
+			"engine": "openai",
+			"model": "tts-1-hd",
+			"voice": "mbb"
+		},
+		"stt": {
+			"openai": {
+				"api_base_url": "https://api.openai.com/v1",
+				"api_key": ""
+			},
+			"engine": "",
+			"model": "whisper-1"
+		}
 	}
 }
