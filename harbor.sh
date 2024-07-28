@@ -33,6 +33,11 @@ compose_with_options() {
 
             # Check if file matches any of the options
             for option in "${options[@]}"; do
+                if [[ $option == "*" ]]; then
+                    match=true
+                    break
+                fi
+
                 if [[ $filename == *"$option"* ]]; then
                     match=true
                     break
@@ -85,15 +90,15 @@ case "$1" in
         ;;
     down)
         shift
-        $(compose_with_options "$@") down
+        $(compose_with_options "*") down
         ;;
     ps)
         shift
-        $(compose_with_options "$@") ps -a
+        $(compose_with_options "*") ps -a
         ;;
     logs)
         shift
-        $(compose_with_options "$@") logs -f
+        $(compose_with_options "*") logs -n 20 -f
         ;;
     help)
         show_help

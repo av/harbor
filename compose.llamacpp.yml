@@ -7,6 +7,12 @@ services:
       - 33831:8080
     command: >
       --server
-      --hf-repo bartowski/Tess-v2.5-Phi-3-medium-128k-14B-GGUF --hf-file Tess-v2.5-Phi-3-medium-128k-14B-Q6_K.gguf --model /models/Tess-v2.5-Phi-3-medium-128k-14B-Q6_K.gguf
+      --model ${HARBOR_LLAMACPP_MODEL}
       --port 8080
       --host 0.0.0.0
+    networks:
+      - harbor-network
+
+  open-webui:
+    environment:
+      - ENABLE_OPENAI_API=true

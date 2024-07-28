@@ -2,4 +2,24 @@
 
 ###
 
-POST {{host}}/api/
+GET {{host}}/v1/models
+
+###
+
+POST {{host}}/v1/chat/completions
+Content-Type: application/json
+
+{
+  "model": "/models/gguf/phi-3-mini-128k-instruct.Q4_K_M.gguf",
+  "messages": [
+    {
+        "role": "system",
+        "content": "You are a helpful assistant."
+    },
+    {
+        "role": "user",
+        "content": "Wno invented Rubik's Cube?"
+    }
+  ],
+  "max_tokens": 60
+}
