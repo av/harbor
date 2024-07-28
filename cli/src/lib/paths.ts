@@ -1,11 +1,11 @@
 import path from 'path';
 
-const root = path.resolve(__dirname, '../../');
+const root = path.resolve('/home/circleci/workspace');
 
 export const paths = {
   root,
-  workspace: '/home/circleci/workspace',
-  workspaceGit: '/home/circleci/workspace/.git',
+  git: resolve('.git'),
+  pkg: resolve('package.json'),
 };
 
 export function resolve(subpath: string) {
