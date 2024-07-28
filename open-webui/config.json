@@ -7,7 +7,7 @@
 		"enable_web_loader_ssl_verification": null,
 		"web": {
 			"search": {
-				"enable": true,
+				"enable": false,
 				"engine": "searxng",
 				"searxng_query_url": "http://searxng:8080/search?q=<query>",
 				"google_pse_api_key": "",

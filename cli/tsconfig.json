@@ -1,7 +1,0 @@
-{
-  "compilerOptions": {
-    "module": "CommonJS",
-    "target": "ESNext",
-    "esModuleInterop": true
-  }
-}
