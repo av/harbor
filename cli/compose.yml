@@ -1,0 +1,11 @@
+services:
+  cli:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - .:/app
+      - workspace:/home/circleci/workspace:rw
+
+volumes:
+  workspace:

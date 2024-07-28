@@ -4,3 +4,6 @@ open-webui/
 
 # Ollama
 /ollama/ollama/
+
+# General
+node_modules/
