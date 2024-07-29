@@ -14,15 +14,29 @@ git clone https://github.com/av/harbor.git && cd harbor
 # Start default services
 harbor up
 
-# [Optional] open in the browser
-harbor open webui
-# Alternatively, just visit http://localhost:33801/ directly
+# [Optional] open Webui in the browser
+harbor open
+
+# ...
+
+# Later the same day
+# (No need to install the CLI tools on the host)
+# Check Ollama models
+harbor ollama list
+# Check HuggingFace cache status
+harbor hf scan-cache
+
+# Decide to download more models
+
 ```
 
 > [!NOTE]
 > First open will require you to create a local admin account. Harbor keeps auth requirement by default because it also supports exposing your local stack to the internet.
 
 ## Why?
+
+- To have an easier way to combine some great projects together
+- To have a central control point for various parts composing the LLM stack
 
 If you're comfortable with Docker and Linux administration - you likely don't need Harbor to manage your LLM setup. However, you're also likely to arrive to a somewhat similar solution eventually.
 
@@ -47,6 +61,8 @@ You can later eject from Harbor and use the services in your own setup, or conti
   - [`harbor hf`](#harbor-hf)
   - [`harbor ollama <command>`](#harbor-ollama-command)
   - [`harbor eject`](#harbor-eject)
+  - [`harbor open <service>`](#harbor-open-service)
+  - [`harbor exec <service> <command>`](#harbor-exec-service-command)
 - [Services Overview](#services-overview)
   - [Open WebUI](#open-webui)
   - [Ollama](#ollama)
@@ -257,7 +273,9 @@ harbor exec webui ls /app/backend/data
 harbor exec searxng ps aux
 ```
 
-`exec` offers plenty of flexibility. For example, you can launch an interactive shell in the running container with one of the services.
+`exec` offers plenty of flexibility. Some useful examples below.
+
+Launch an interactive shell in the running container with one of the services.
 
 ```bash
 # Launch "bash" in the ollama service
@@ -266,6 +284,33 @@ harbor exec ollama bash
 # You are then landed in the interactive
 # container shell
 $ root@279a3a523a0b:/#
+```
+
+Access useful scripts and CLIs from the `llamacpp`.
+
+```bash
+# See .sh scripts from the llama.cpp
+harbor exec llamacpp ls ./scripts
+# Run one of the bundled CLI tools
+harbor exec llamacpp ./llama-bench --help
+```
+
+### `harbor config`
+
+Allows working with the harbor configuration via the CLI.
+
+```bash
+# Show the current configuration
+harbor config list
+
+# Get a specific configuration value
+# All three versions below are equivalent and will return the same value
+harbor config get webui.host.port
+harbor config get webui_host_port
+harbor config get WEBUI_HOST_PORT
+
+# Set a new configuration value
+harbor config set webui.host.port 8080
 ```
 
 ## Services Overview
@@ -308,7 +353,11 @@ You can manage Ollama models right from the [Admin Settings](http://localhost:33
 ### [llama.cpp](https://github.com/ggerganov/llama.cpp)
 LLM inference in C/C++. Allows to bypass Ollama release cycle when needed - to get access to the latest models or features.
 
-Harbor launches llama.cpp server that can be configured via the `llamacpp/.env` file. Downloaded models are stored in the global HuggingFace cache on your local machine. The server can only run one model at a time and must be restarted to switch models.
+`llamacpp` can be configured in a few ways:
+```
+
+```
+. Downloaded models are stored in the global HuggingFace cache on your local machine. The server can only run one model at a time and must be restarted to switch models.
 
 ---
 

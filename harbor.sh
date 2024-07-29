@@ -218,6 +218,45 @@ exec_ollama() {
     run_in_service ollama ollama "$@"
 }
 
+env_manager() {
+    local env_file=".env"
+    local prefix="HARBOR_"
+
+    case "$1" in
+        get)
+            if [[ -z "$2" ]]; then
+                echo "Usage: env_manager get <key>"
+                return 1
+            fi
+            local upper_key=$(echo "$2" | tr '[:lower:]' '[:upper:]' | tr '.' '_')
+            grep "^$prefix$upper_key=" "$env_file" | sed "s/^$prefix$upper_key=//"
+            ;;
+        set)
+            if [[ -z "$2" || -z "$3" ]]; then
+                echo "Usage: env_manager set <key> <value>"
+                return 1
+            fi
+            local upper_key=$(echo "$2" | tr '[:lower:]' '[:upper:]' | tr '.' '_')
+            if grep -q "^$prefix$upper_key=" "$env_file"; then
+                sed -i "s/^$prefix$upper_key=.*/$prefix$upper_key=$3/" "$env_file"
+            else
+                echo "$prefix$upper_key=$3" >> "$env_file"
+            fi
+            ;;
+        list)
+            grep "^$prefix" "$env_file" | sed "s/^$prefix//" | while read -r line; do
+                key=${line%%=*}
+                value=${line#*=}
+                printf "%-30s %s\n" "$key" "$value"
+            done
+            ;;
+        *)
+            echo "Usage: env_manager {get|set|list} [key] [value]"
+            return 1
+            ;;
+    esac
+}
+
 cd $harbor_home
 
 # Main script logic
@@ -239,10 +278,7 @@ case "$1" in
         # Only pass "*" to the command if no options are provided
         $(compose_with_options "*") logs "$@" -n 20 -f
         ;;
-    help)
-        show_help
-        ;;
-    --help)
+    help|--help|-h)
         show_help
         ;;
     hf)
@@ -261,11 +297,7 @@ case "$1" in
         shift
         open_service $@
         ;;
-    version)
-        shift
-        show_version
-        ;;
-    --version)
+    version|--version|-v)
         shift
         show_version
         ;;
@@ -284,6 +316,10 @@ case "$1" in
     exec)
         shift
         run_in_service $@
+        ;;
+    config)
+        shift
+        env_manager $@
         ;;
     *)
         echo "Unknown command: $1"

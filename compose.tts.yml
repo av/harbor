@@ -4,7 +4,7 @@ services:
     container_name: tts
     env_file: ./tts/.env
     ports:
-      - 33861:8000
+      - ${HARBOR_TTS_HOST_PORT}:8000
     volumes:
       - ./tts/voices:/app/voices
       - ./tts/config:/app/config

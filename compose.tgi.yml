@@ -2,11 +2,11 @@ services:
   tgi:
     container_name: tgi
     image: ghcr.io/huggingface/text-generation-inference:2.2.0
-    command: --model-id hugging-quants/Meta-Llama-3.1-8B-Instruct-AWQ-INT4 --quantize awq
+    command: ${HARBOR_TGI_MODEL_SPECIFIER}
     ports:
-      - 33851:80
+      - ${HARBOR_TGI_HOST_PORT}:80
     volumes:
-      - ~/.cache/huggingface/hub:/data
+      - ${HARBOR_HUGGINGFACE_CACHE}/hub:/data
     environment:
       - PORT=80
       - HOSTNAME=0.0.0.0

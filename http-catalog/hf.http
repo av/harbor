@@ -1,0 +1,9 @@
+@host = https://huggingface.co
+
+###
+
+curl {{host}}/api/models
+
+###
+
+curl {{host}}/models-json?search=gguf&sort=trending

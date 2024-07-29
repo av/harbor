@@ -8,7 +8,7 @@ services:
     volumes:
       - ./searxng:/etc/searxng
     ports:
-      - 33811:8080
+      - ${HARBOR_SEARXNG_HOST_PORT}:8080
     networks:
       - harbor-network
 

@@ -2,12 +2,12 @@ services:
   ollama:
     container_name: ollama
     volumes:
-      - ~/.ollama:/root/.ollama
+      - ${HARBOR_OLLAMA_CACHE}:/root/.ollama
     pull_policy: always
     tty: true
     image: ollama/ollama:latest
     ports:
-      - 33821:11434
+      - ${HARBOR_OLLAMA_HOST_PORT}:11434
     networks:
       - harbor-network
 

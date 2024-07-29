@@ -1,3 +1,8 @@
+# Harbor works by combining multiple
+# compose files together and is orchestrated by the CLI.
+# See Readme.md for more information.
+# If you want to obtain your own configuration, see `harbor eject`.
+
 networks:
   harbor-network:
     external: false

@@ -1,11 +1,12 @@
 services:
   litellm:
     image: ghcr.io/berriai/litellm:main-stable
+    env_file: ./.env
     container_name: litellm
     volumes:
       - ./litellm:/app/litellm
     command: ['--config', '/app/litellm/config.yaml']
     ports:
-      - 33841:4000
+      - ${HARBOR_LITELLM_HOST_PORT}:4000
     networks:
       - harbor-network

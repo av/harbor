@@ -1,11 +1,12 @@
 services:
   webui:
     image: ghcr.io/open-webui/open-webui:main
+    env_file: ./.env
     container_name: webui
     pull_policy: always
     volumes:
       - ./open-webui:/app/backend/data
     ports:
-      - 33801:8080
+      - ${HARBOR_WEBUI_HOST_PORT}:8080
     networks:
       - harbor-network

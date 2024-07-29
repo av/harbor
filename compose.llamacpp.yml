@@ -3,12 +3,14 @@ services:
     image: ghcr.io/ggerganov/llama.cpp:full-cuda
     container_name: llamacpp
     volumes:
-      - ~/.cache/huggingface:/models
+      - ${HARBOR_HUGGINGFACE_CACHE}:/app/models
+      - ${HARBOR_LLAMACPP_CACHE}:/root/.cache/llama.cpp
     ports:
-      - 33831:8080
+      - ${HARBOR_LLAMACPP_HOST_PORT}:8080
     command: >
       --server
-      --model $(./scripts/hf.sh https://huggingface.co/bartowski/Qwen2-7B-Instruct-GGUF/blob/main/Qwen2-7B-Instruct-IQ2_S.gguf)
+      ${HARBOR_LLAMACPP_MODEL_SPECIFIER}
+      ${HARBOR_LLAMACPP_EXTRA_ARGS}
       --port 8080
       --host 0.0.0.0
     networks:
