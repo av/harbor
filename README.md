@@ -1,4 +1,4 @@
-# Harbor
+![Harbor project logo](./docs/harbor-2.png)
 
 Developer-friendly containerized LLM setup. The main goal is to provide a reasonable starting point for developers to experiment with LLMs.
 
