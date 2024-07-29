@@ -98,6 +98,7 @@ show_help() {
     echo "  ln       - Create a symbolic link to the CLI"
     echo "  defaults - Show the default services"
     echo "  version  - Show the CLI version"
+    echo "  config   - Manage the Harbor environment configuration"
     echo "  eject    - Eject the Compose configuration, accepts same options as 'up'"
     echo "  help     - Show this help message"
     echo

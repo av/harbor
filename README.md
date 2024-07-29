@@ -63,6 +63,7 @@ You can later eject from Harbor and use the services in your own setup, or conti
   - [`harbor eject`](#harbor-eject)
   - [`harbor open <service>`](#harbor-open-service)
   - [`harbor exec <service> <command>`](#harbor-exec-service-command)
+  - [`harbor config [get|set|list] <option> [value]`](#harbor-config)
 - [Services Overview](#services-overview)
   - [Open WebUI](#open-webui)
   - [Ollama](#ollama)
