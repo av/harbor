@@ -1,0 +1,59 @@
+﻿tts-1:
+  some_other_voice_name_you_want:
+    model: voices/choose your own model.onnx
+    speaker: set your own speaker
+  alloy:
+    model: voices/en_US-libritts_r-medium.onnx
+    speaker: 79 # 64, 79, 80, 101, 130
+  echo:
+    model: voices/en_US-libritts_r-medium.onnx
+    speaker: 134 # 52, 102, 134
+  echo-alt:
+    model: voices/en_US-ryan-high.onnx
+    speaker: # default speaker
+  fable:
+    model: voices/en_GB-northern_english_male-medium.onnx
+    speaker: # default speaker
+  onyx:
+    model: voices/en_US-libritts_r-medium.onnx
+    speaker: 159 # 55, 90, 132, 136, 137, 159
+  nova:
+    model: voices/en_US-libritts_r-medium.onnx
+    speaker: 107 # 57, 61, 107, 150, 162
+  shimmer:
+    model: voices/en_US-libritts_r-medium.onnx
+    speaker: 163
+tts-1-hd:
+  alloy-alt:
+    model: xtts
+    speaker: voices/alloy-alt.wav
+  alloy:
+    model: xtts
+    speaker: voices/alloy.wav
+  echo:
+    model: xtts
+    speaker: voices/echo.wav
+  fable:
+    model: xtts
+    speaker: voices/fable.wav
+  onyx:
+    model: xtts
+    speaker: voices/onyx.wav
+  nova:
+    model: xtts
+    speaker: voices/nova.wav
+  shimmer:
+    model: xtts
+    speaker: voices/shimmer.wav
+  me:
+    model: xtts_v2.0.2 # you can specify an older xtts version
+    speaker: voices/me.wav # this could be you
+    language: auto
+    enable_text_splitting: True
+    length_penalty: 1.0
+    repetition_penalty: 10
+    speed: 1.0
+    temperature: 0.75
+    top_k: 50
+    top_p: 0.85
+    comment: You can add a comment here also, which will be persistent and otherwise ignored.

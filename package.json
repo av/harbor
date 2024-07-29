@@ -7,9 +7,9 @@
     "dwu": "yarn dc:webui up",
     "dwd": "yarn dc:webui down",
 
-    "dev:fs:cli": "sudo setfacl --recursive -m user:1000:rwx ./cli && sudo setfacl --recursive -m user:1002:rwx ./cli && sudo setfacl --recursive -m user:1001:rwx ./cli",
     "dev:fs:ollama": "sudo setfacl --recursive -m user:1000:rwx ./ollama && sudo setfacl --recursive -m user:1002:rwx ./ollama && sudo setfacl --recursive -m user:1001:rwx ./ollama",
     "dev:fs:open-webui": "sudo setfacl --recursive -m user:1000:rwx ./open-webui && sudo setfacl --recursive -m user:1002:rwx ./open-webui && sudo setfacl --recursive -m user:1001:rwx ./open-webui",
-    "dev:fixfs": "yarn dev:fs:cli && yarn dev:fs:ollama && yarn dev:fs:open-webui"
+    "dev:fs:tts": "sudo setfacl --recursive -m user:1000:rwx ./tts && sudo setfacl --recursive -m user:1002:rwx ./tts && sudo setfacl --recursive -m user:1001:rwx ./tts",
+    "dev:fixfs": "yarn dev:fs:ollama && yarn dev:fs:open-webui && yarn dev:fs:tts"
   }
 }

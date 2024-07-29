@@ -1,0 +1,38 @@
+﻿# This is slightly customized by Harbor from the defaults to
+# be better compatible with Open WebUI outputs.
+- - '&amp;'
+  - '&'
+- - '&lt;'
+  - <
+- - '&gt;'
+  - '>'
+- - '&quot;'
+  - '"'
+- - '&#x27;'
+  - ''''
+- - '&copy;'
+  - '©'
+- - '&reg;'
+  - '®'
+- - '&nbsp;'
+  - ' '
+- - '"'
+  - ''
+- - ' biases '
+  - ' bias''s '
+- - ex\.
+  - for example
+- - e\.g\.
+  - for example
+- - ' ESG '
+  - ' E.S.G. '
+- - ' FY '
+  - ' F.Y. '
+- - ([0-9]+)-([0-9]+)
+  - \1 to \2
+- - '\*\*\*'
+  - '*'
+- - '\*\*'
+  - '*'
+- - 'km/h'
+  - 'kilometers per hour'

@@ -379,16 +379,29 @@ Ergonomic wrapper around llama.cpp with plenty of QoL features.
 
 You can manage Ollama models right from the [Admin Settings](http://localhost:33801/admin/settings/) in the Open WebUI. The models are stored in the global ollama cache on your local machine.
 
+Ollama CLI can be accessed via the `harbor ollama` command.
+
+```bash
+harbor ollama version
+harbor ollama list
+```
+
 ---
 
 ### [llama.cpp](https://github.com/ggerganov/llama.cpp)
 LLM inference in C/C++. Allows to bypass Ollama release cycle when needed - to get access to the latest models or features.
 
-`llamacpp` can be configured in a few ways:
-```
+Downloaded models are stored in the global HuggingFace cache on your local machine. The server can only run one model at a time and must be restarted to switch models.
 
+`llama.cpp` comes with an absurd amount of helper tools/CLIs, which all can be accessed via the `harbor exec llamacpp` command (once the service is running).
+
+```bash
+# Show the list of available llama.cpp CLIs
+harbor exec llamacpp ls
+
+# See the help for one of the CLIs
+harbor exec llamacpp ./scripts/llama-bench --help
 ```
-. Downloaded models are stored in the global HuggingFace cache on your local machine. The server can only run one model at a time and must be restarted to switch models.
 
 ---
 
@@ -396,4 +409,29 @@ LLM inference in C/C++. Allows to bypass Ollama release cycle when needed - to g
 
 A free internet metasearch engine which aggregates results from various search services and databases.
 
-Can be configured via the files in the `searxng` folder. [Configuration reference](https://docs.searxng.org/user/configured_engines.html)
+Can be configured via the files in the `searxng` folder. [Configuration reference](https://docs.searxng.org/user/configured_engines.html).
+
+Spin up with `harbor up searxng`. Once running, Open WebUI will automatically connect to the SearXNG instance for Web RAG feature.
+
+---
+
+### [openedai-speech](https://github.com/matatonic/openedai-speech)
+
+An OpenAI API compatible text to speech server.
+
+---
+
+### [litellm](https://docs.litellm.ai/docs/)
+LLM API Proxy/Gateway.
+
+---
+
+### [text-generation-inference](https://github.com/huggingface/text-generation-inference)
+
+A Rust, Python and gRPC server for inference from HuggingFace.
+
+---
+
+### [lmdeploy](https://lmdeploy.readthedocs.io/en/latest/get_started.html)
+
+A toolkit for deploying, and serving LLMs.
