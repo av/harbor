@@ -1,6 +1,6 @@
 ![Harbor project logo](./docs/harbor-2.png)
 
-Developer-friendly containerized LLM setup. The main goal is to provide a reasonable starting point ~~for developers~~ to experiment with LLMs.
+Developer-friendly containerized LLM setup. The main goal is to provide a convenient way ~~for developers~~ to experiment with LLMs.
 
 ## Quickstart
 
@@ -12,31 +12,51 @@ git clone https://github.com/av/harbor.git && cd harbor
 ./harbor.sh ln
 
 # Start default services
+# Initial download of the docker images might take a while
 harbor up
 
 # [Optional] open Webui in the browser
 harbor open
-
-# ...
-
-# Later the same day
-# (No need to install the CLI tools on the host)
-# Check Ollama models
-harbor ollama list
-# Check HuggingFace cache status
-harbor hf scan-cache
-
-# Decide to download more models
-
 ```
 
 > [!NOTE]
 > First open will require you to create a local admin account. Harbor keeps auth requirement by default because it also supports exposing your local stack to the internet.
 
+## Blitz Tour
+
+```bash
+# Run Harbor with additional services
+# Running SearXNG automatically enables it in the Open WebUI.
+harbor up searxng
+
+# Run additional/alternative LLM Inference backends
+# Open Webui is automatically connected to them.
+harbor up llamacpp tgi lmdeploy litellm mistralrs vllm
+
+# Convenience tools for docker setup
+harbor logs llamacpp
+harbor exec llamacpp ./scripts/llama-bench --help
+
+# Access service CLIs without installing them
+harbor hf scan-cache
+harbor ollama list
+
+# Open services from the CLI
+harbor open webui
+harbor open llamacpp
+
+# Config management
+harbor config list
+harbor config set webui.host.port 8080
+
+# Eject from Harbor into a standalone Docker Compose setup
+harbor eject searxng llamacpp > docker-compose.harbor.yml
+```
+
 ## Why?
 
-- To have an easier way to combine some great projects together
-- To have a central control point for various parts composing the LLM stack
+- Convenience factor
+- Workflow/setup centralisation
 
 If you're comfortable with Docker and Linux administration - you likely don't need Harbor to manage your LLM setup. However, you're also likely to arrive to a somewhat similar solution eventually.
 
@@ -72,56 +92,66 @@ You can later eject from Harbor and use the services in your own setup, or conti
 ## Overview and Features
 
 ```mermaid
-graph LR
-    HFCache[HuggingFace Cache]
-    OCache[Ollama Cache]
-    SConfig[Service Configuration]
-
+graph TD
     H((Harbor CLI))
 
-    Webui[Open WebUI]
-    Ollama[Ollama]
+    Webui(Open WebUI)
+    Ollama(Ollama)
     LlamaCPP(llama.cpp)
-    SearXNG[SearXNG]
+    SearXNG(SearXNG)
+    LiteLLM(LiteLLM)
+    LMDeploy(LMDeploy)
+    TGI(text-generation-inference)
+    TTS(openedai-speech)
 
-    subgraph "Host"
-        HFCache
-        OCache
-        SConfig
-    end
+    ConfMan("
+<b>Configuration Management</b>
+- <kbd>.env</kbd> File
+- <kbd>harbor config</kbd> tool
+- configuration files
+")
 
-    subgraph "Services"
+    Services("
+<b>Services</b>
+- LLM Backends, frontends and related tools
+- Pre-configured to work together
+- Shared cache
+- Co-located configs
+    ")
+
+    subgraph "Docker"
       Webui
       Ollama
       LlamaCPP
       SearXNG
+      LiteLLM
+      LMDeploy
+      TGI
+      TTS
     end
 
-    Webui --> SConfig
-    Webui --> Ollama
-    Ollama --> OCache
+    H --> ConfMan
+    H --Manage via Docker--> Services
+    Services --> Docker
 
-    Webui --> LlamaCPP
-    LlamaCPP --> HFCache
+    classDef optional fill: #f0f0f022, stroke-dasharray: 5, 5;
 
-    Webui --> SearXNG
-    SearXNG --> SConfig
-
-    H --> Services
-    H --> Host
-
-    classDef optional stroke-dasharray: 5, 5;
     class LlamaCPP optional
     class SearXNG optional
+    class LiteLLM optional
+    class LMDeploy optional
+    class TGI optional
+    class TTS optional
 ```
 
-This project is a CLI and a pre-configured Docker Compose setup that connects various LLM-related projects together. It simplifies the initial configuration and can serve as a base for your own customized setup.
+This project is a CLI and a pre-configured Docker Compose setup that connects various LLM-related projects together. It simplifies the initial configuration and can serve as a base for your own customized setup later.
 
-- Manage LLM stack with a concise CLI
-- Access service CLIs (`hf`, `ollama`, etc.) via Docker without installing them on the host
+- Manage local LLM stack with a concise CLI
+- Convenience utilities for common tasks (model management, configuration, service debug)
+- Access service CLIs (`hf`, `ollama`, etc.) via Docker without install
 - Services are pre-configured to work together
 - Host cache is shared and reused - huggingface, ollama, etc.
-- All configuration in one place
+- Co-located service configs
 - Eject to run without harbor with `harbor eject`
 
 ## Harbor CLI Reference
@@ -298,7 +328,7 @@ harbor exec llamacpp ./llama-bench --help
 
 ### `harbor config`
 
-Allows working with the harbor configuration via the CLI.
+Allows working with the harbor configuration via the CLI. Mostly useful for the automation and scripting, as the configuration can also be managed via `.env` files.
 
 ```bash
 # Show the current configuration
@@ -316,7 +346,7 @@ harbor config set webui.host.port 8080
 
 ## Services Overview
 
-| Service | Handle / Local URL | Description |
+| Service | Handle / Default Local URL | Description |
 | --- | --- | --- |
 | [Open WebUI](https://docs.openwebui.com/) | `webui` / [http://localhost:33801](http://localhost:33801) | Extensible, self-hosted interface for AI that adapts to your workflow. |
 | [Ollama](https://ollama.com/) | `ollama` / [http://localhost:33821](http://localhost:33821) |  Ergonomic wrapper around llama.cpp with plenty of QoL features |
