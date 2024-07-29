@@ -1,5 +1,5 @@
 services:
-  open-webui:
+  webui:
     image: ghcr.io/open-webui/open-webui:main
     container_name: open-webui
     pull_policy: always

@@ -6,24 +6,94 @@ Developer-friendly containerized LLM setup. The main goal is to provide a reason
 
 ```bash
 git clone https://github.com/av/harbor.git && cd harbor
-./harbor.sh
-```
 
-Open http://localhost:33801/ in your Browser to access a local Open WebUI instance.
+# [Optional] make available globally
+# Creates a symlink in User's local bin directory
+./harbor.sh ln
+
+# Start default services
+harbor up
+
+# [Optional] open in the browser
+harbor open webui
+# Alternatively, just visit http://localhost:33801/ directly
+```
 
 > [!NOTE]
 > First open will require you to create a local admin account. Harbor keeps auth requirement by default because it also supports exposing your local stack to the internet.
 
+## Why?
+
+If you're comfortable with Docker and Linux administration - you likely don't need Harbor to manage your LLM setup. However, you're also likely to arrive to a somewhat similar solution eventually.
+
+Harbor is not designed as a deployment solution, but rather as a helper for the local LLM development environment. It's a good starting point for experimenting with LLMs and related services.
+
+You can later eject from Harbor and use the services in your own setup, or continue using Harbor as a base for your own configuration.
+
+## Table of Contents
+
+- [Table of Contents](#table-of-contents)
+- [Features](#features)
+- [Getting Started](#getting-started)
+- [Harbor CLI Reference](#harbor-cli-reference)
+  - [`harbor ln`](#harbor-ln)
+  - [`harbor up <services>`](#harbor-up-services)
+- [Services Overview](#services-overview)
+  - [Open WebUI](#open-webui)
+  - [Ollama](#ollama)
+  - [llama.cpp](#llamacpp)
 
 ## Features
 
 - Services are pre-configured to work together
-- Reusing local cache for huggingface, ollama, and other services
-- Services configuration is co-located
+- Reused local cache - huggingface, ollama, etc.
+- All configuration in one place
+- Access required CLIs via Docker without installing them
 
 ## Getting Started
 
 This project is a script around a pre-configured Docker Compose setup that connects various LLM-related projects together. It simplifies the initial configuration and can serve as a base for your own customized setup.
+
+## Harbor CLI Reference
+
+### `harbor ln`
+
+Creates a symlink to the `harbor.sh` script in the `/usr/local/bin` directory. This allows you to run the script from any directory.
+
+```bash
+# Puts the script in the /usr/local/bin directory
+harbor ln
+```
+
+### `harbor up <services>`
+
+Starts selected services. See the list of available services here. Run `harbor defaults` to see the default list
+of services that will be started.
+
+```bash
+# Start default services
+harbor up
+```
+
+```bash
+# ------------------------------
+# Docker Compose helpers:
+
+
+# Start services in the default configuration
+harbor up <services>
+
+# Stop all running services
+harbor down
+
+# Proxy helpers for compose
+harbor ps
+harbor logs
+
+# Display CLI help
+harbor help
+
+```
 
 ## Services Overview
 

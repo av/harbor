@@ -11,7 +11,7 @@ services:
     networks:
       - harbor-network
 
-  open-webui:
+  webui:
     environment:
       - ENABLE_RAG_WEB_SEARCH=true
       - RAG_WEB_SEARCH_ENGINE=searxng

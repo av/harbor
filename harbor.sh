@@ -1,7 +1,11 @@
+#!/bin/bash
+
+default_options=("webui" "ollama")
+version="0.0.1"
+
 compose_with_options() {
     local base_dir="$PWD"
     local compose_files=("compose.yml")  # Always include the base compose file
-    local default_options=("webui" "ollama")
     local options=("${default_options[@]}")
 
     # Parse arguments
@@ -68,18 +72,57 @@ compose_with_options() {
     echo "$cmd"
 }
 
+show_version() {
+    echo "Harbor CLI version: $version"
+}
+
 show_help() {
     echo "Usage: $0 <command> [options]"
     echo
-    echo "Commands:"
-    echo "  up       Start the containers"
-    echo "  down     Stop and remove the containers"
-    echo "  ps       List the running containers"
-    echo "  logs     View the logs of the containers"
-    echo "  help     Show this help message"
+    echo "Compose Setup Commands:"
+    echo "  up       - Start the containers"
+    echo "  down     - Stop and remove the containers"
+    echo "  ps       - List the running containers"
+    echo "  logs     - View the logs of the containers"
+    echo "  help     - Show this help message"
+    echo
+    echo "Setup Manageent Commands:"
+    echo "  hf       - Run the Hugging Face CLI"
+    echo
+    echo "CLI Commands:"
+    echo "  ln       - Create a symbolic link to the CLI"
+    echo "  defaults - Show the default services"
+    echo "  version  - Show the CLI version"
     echo
     echo "Options:"
     echo "  Additional options to pass to the compose_with_options function"
+}
+
+run_hf_cli() {
+    local hf_cli_image=shaowenchen/huggingface-cli
+    docker run --rm --log-driver none -v ~/.cache/huggingface:/root/.cache/huggingface $hf_cli_image $@
+}
+
+show_default_services() {
+    echo "Default services:"
+    for service in "${default_options[@]}"; do
+        echo "  - $service"
+    done
+}
+
+link_cli() {
+    ln -s $(pwd)/harbor.sh ~/bin/harbor
+}
+
+open_webui() {
+    local webui_url="http://localhost:33801/"
+    if command -v xdg-open &> /dev/null; then
+        xdg-open $webui_url
+    elif command -v open &> /dev/null; then
+        open $webui_url
+    else
+        echo "Open the following URL in your browser: $webui_url"
+    fi
 }
 
 # Main script logic
@@ -102,6 +145,33 @@ case "$1" in
         ;;
     help)
         show_help
+        ;;
+    --help)
+        show_help
+        ;;
+    hf)
+        shift
+        run_hf_cli $@
+        ;;
+    defaults)
+        shift
+        show_default_services
+        ;;
+    ln)
+        shift
+        link_cli
+        ;;
+    open)
+        shift
+        open_webui
+        ;;
+    version)
+        shift
+        show_version
+        ;;
+    --version)
+        shift
+        show_version
         ;;
     *)
         echo "Unknown command: $1"
