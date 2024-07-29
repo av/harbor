@@ -1,6 +1,7 @@
 services:
   llamacpp:
     image: ghcr.io/ggerganov/llama.cpp:full-cuda
+    container_name: llamacpp
     volumes:
       - ~/.cache/huggingface:/models
     ports:

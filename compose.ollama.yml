@@ -1,5 +1,6 @@
 services:
   ollama:
+    container_name: ollama
     volumes:
       - ~/.ollama:/root/.ollama
     pull_policy: always

@@ -1,5 +1,6 @@
 services:
   searxng:
+    container_name: searxng
     image: searxng/searxng
     environment:
       INSTANCE_NAME: searxng

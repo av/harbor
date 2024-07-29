@@ -1,7 +1,7 @@
 services:
   tts:
     image: ghcr.io/matatonic/openedai-speech
-    container_name: openedai-speech
+    container_name: tts
     env_file: ./tts/.env
     ports:
       - 33861:8000

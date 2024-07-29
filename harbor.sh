@@ -1,7 +1,9 @@
 #!/bin/bash
 
+version="0.0.2"
 default_options=("webui" "ollama")
-version="0.0.1"
+default_open="webui"
+harbor_home=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
 
 compose_with_options() {
     local base_dir="$PWD"
@@ -90,6 +92,7 @@ show_help() {
     echo "  hf       - Run the Hugging Face CLI"
     echo
     echo "CLI Commands:"
+    echo "  open     - Open a service in the default browser"
     echo "  ln       - Create a symbolic link to the CLI"
     echo "  defaults - Show the default services"
     echo "  version  - Show the CLI version"
@@ -111,19 +114,78 @@ show_default_services() {
 }
 
 link_cli() {
-    ln -s $(pwd)/harbor.sh ~/bin/harbor
-}
+    local target_dir="$HOME/.local/bin"
+    local script_path="$harbor_home/harbor.sh"
 
-open_webui() {
-    local webui_url="http://localhost:33801/"
-    if command -v xdg-open &> /dev/null; then
-        xdg-open $webui_url
-    elif command -v open &> /dev/null; then
-        open $webui_url
+    # Check if target directory exists in PATH
+    if ! echo $PATH | tr ':' '\n' | grep -q "$target_dir"; then
+        echo "Creating $target_dir and adding it to PATH..."
+        mkdir -p "$target_dir"
+        echo -e '\nexport PATH="$PATH:$HOME/.local/bin"\n' >> "$HOME/.bashrc"
+        export PATH="$PATH:$HOME/.local/bin"
+    fi
+
+    # Create symlink
+    if ln -s "$script_path" "$target_dir/$script_name"; then
+        echo "Symlink created: $target_dir/$script_name -> $script_path"
+        echo "You may need to reload your shell or run 'source ~/.bashrc' for changes to take effect."
     else
-        echo "Open the following URL in your browser: $webui_url"
+        echo "Failed to create symlink. Please check permissions and try again."
+        return 1
     fi
 }
+
+open_service() {
+    # Get list of running services
+    services=$(docker ps --format "{{.Names}}")
+
+    # Check if any services are running
+    if [ -z "$services" ]; then
+        echo "No services are currently running."
+        return 1
+    fi
+
+    # If no service name provided, default to webui
+    if [ -z "$1" ]; then
+        open_service "$default_open"
+        return 0
+    fi
+
+    # Check if the specified service is running
+    if ! echo "$services" | grep -q "^$1$"; then
+        echo "Service '$1' is not currently running."
+        echo "Available services:"
+        echo "$services"
+        return 1
+    fi
+
+    # Get the port mapping for the service
+    port=$(docker port "$1" | grep -oP '0.0.0.0:\K\d+' | head -n 1)
+
+    if [ -z "$port" ]; then
+        echo "No port mapping found for service '$1'."
+        return 1
+    fi
+
+    # Construct the URL
+    url="http://localhost:$port"
+
+    # Open the URL in the default browser
+    if command -v xdg-open &> /dev/null; then
+        xdg-open "$url"  # Linux
+    elif command -v open &> /dev/null; then
+        open "$url"  # macOS
+    elif command -v start &> /dev/null; then
+        start "$url"  # Windows
+    else
+        echo "Unable to open browser. Please visit $url manually."
+        return 1
+    fi
+
+    echo "Opened $url in your default browser."
+}
+
+cd $harbor_home
 
 # Main script logic
 case "$1" in
@@ -137,11 +199,12 @@ case "$1" in
         ;;
     ps)
         shift
-        $(compose_with_options "*") ps -a
+        $(compose_with_options "*") ps
         ;;
     logs)
         shift
-        $(compose_with_options "*") logs -n 20 -f
+        # Only pass "*" to the command if no options are provided
+        $(compose_with_options "*") logs "$@" -n 20 -f
         ;;
     help)
         show_help
@@ -163,7 +226,7 @@ case "$1" in
         ;;
     open)
         shift
-        open_webui
+        open_service $@
         ;;
     version)
         shift

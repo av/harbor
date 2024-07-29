@@ -1,6 +1,6 @@
 {
   "name": "@av/harbor",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "scripts": {
     "dc": "docker compose",
     "dc:webui": "docker compose -f compose.yml -f compose.webui.yml -f compose.searxng.yml -f compose.ollama.yml -f compose.ollama.nvidia.yml",

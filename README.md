@@ -33,7 +33,7 @@ You can later eject from Harbor and use the services in your own setup, or conti
 ## Table of Contents
 
 - [Table of Contents](#table-of-contents)
-- [Features](#features)
+- [Overview and Features](#overview-and-features)
 - [Getting Started](#getting-started)
 - [Harbor CLI Reference](#harbor-cli-reference)
   - [`harbor ln`](#harbor-ln)
@@ -43,25 +43,63 @@ You can later eject from Harbor and use the services in your own setup, or conti
   - [Ollama](#ollama)
   - [llama.cpp](#llamacpp)
 
-## Features
+## Overview and Features
+
+```mermaid
+graph LR
+    HFCache[HuggingFace Cache]
+    OCache[Ollama Cache]
+    SConfig[Service Configuration]
+
+    H((Harbor CLI))
+
+    Webui[Open WebUI]
+    Ollama[Ollama]
+    LlamaCPP(llama.cpp)
+
+    subgraph "Host"
+        HFCache
+        OCache
+        SConfig
+    end
+
+    subgraph "Services"
+      Webui
+      Ollama
+      LlamaCPP
+    end
+
+    Webui --> SConfig
+    Webui --> Ollama
+    Ollama --> OCache
+
+    Webui --> LlamaCPP
+    LlamaCPP --> HFCache
+
+
+    H --> Services
+    H --> Host
+
+    classDef optional stroke-dasharray: 5, 5;
+    class LlamaCPP optional
+```
+
+This project is a script around a pre-configured Docker Compose setup that connects various LLM-related projects together. It simplifies the initial configuration and can serve as a base for your own customized setup.
 
 - Services are pre-configured to work together
 - Reused local cache - huggingface, ollama, etc.
 - All configuration in one place
 - Access required CLIs via Docker without installing them
 
-## Getting Started
-
-This project is a script around a pre-configured Docker Compose setup that connects various LLM-related projects together. It simplifies the initial configuration and can serve as a base for your own customized setup.
 
 ## Harbor CLI Reference
 
 ### `harbor ln`
 
-Creates a symlink to the `harbor.sh` script in the `/usr/local/bin` directory. This allows you to run the script from any directory.
+Creates a symlink to the `harbor.sh` script in the `~/bin` directory. This allows you to run the script from any directory.
 
 ```bash
-# Puts the script in the /usr/local/bin directory
+# Puts the script in the ~/bin directory
 harbor ln
 ```
 
@@ -71,38 +109,93 @@ Starts selected services. See the list of available services here. Run `harbor d
 of services that will be started.
 
 ```bash
-# Start default services
+# Start with default services
 harbor up
+
+# Start with additional services
+# See service descriptions in the Services Overview section
+harbor up searxng
+
+# Start with multiple additional services
+harbor up webui ollama searxng llamacpp tts tgi lmdeploy litellm
 ```
 
+### `harbor defaults`
+
+Displays the list of default services that will be started when running `harbor up`. Will include one LLM backend and one LLM frontend out of the box.
+
 ```bash
-# ------------------------------
-# Docker Compose helpers:
+harbor defaults
+```
 
+### `harbor down`
 
-# Start services in the default configuration
-harbor up <services>
+Stops all currently running services.
 
-# Stop all running services
+```bash
 harbor down
+```
 
-# Proxy helpers for compose
+### `harbor ps`
+
+Proxy to `docker-compose ps` command. Displays the status of all services.
+
+```bash
 harbor ps
+```
+
+### `harbor logs`
+
+Proxy to `docker-compose logs` command. Starts tailing logs for all or selected services.
+
+```bash
 harbor logs
 
-# Display CLI help
-harbor help
+# Show logs for a specific service
+harbor logs webui
 
+# Show logs for multiple services
+harbor logs webui ollama
+```
+
+### `harbor help`
+
+Print basic help information to the console.
+
+```bash
+harbor help
+harbor --help
+```
+
+### `harbor version`
+
+Prints the current version of the Harbor script.
+
+```bash
+harbor version
+harbor --version
+```
+
+### `harbor hf`
+
+Runs HuggingFace CLI in the container against the hosts' HuggingFace cache.
+
+```bash
+# All HF commands are available
+harbor hf --help
+
+# Show current cache status
+harbor hf scan-cache
 ```
 
 ## Services Overview
 
-| Service | Option / Default URL | Description |
+| Service | Handle / Local URL | Description |
 | --- | --- | --- |
-| [Open WebUI](https://docs.openwebui.com/) | `webui` | Extensible, self-hosted interface for AI that adapts to your workflow. |
-| [Ollama](https://ollama.com/) | `ollama` |  Ergonomic wrapper around llama.cpp with plenty of QoL features |
-| [llama.cpp](https://github.com/ggerganov/llama.cpp) | `llamacpp` | LLM inference in C/C++ |
-| [SearXNG](https://github.com/searxng/searxng) | `searxng` | A free internet metasearch engine which aggregates results from various search services and databases. |
+| [Open WebUI](https://docs.openwebui.com/) | `webui` / [http://localhost:33801](http://localhost:33801) | Extensible, self-hosted interface for AI that adapts to your workflow. |
+| [Ollama](https://ollama.com/) | `ollama` / [http://localhost:33821](http://localhost:33821) |  Ergonomic wrapper around llama.cpp with plenty of QoL features |
+| [llama.cpp](https://github.com/ggerganov/llama.cpp) | `llamacpp` / [http://localhost:33831](http://localhost:33831) | LLM inference in C/C++ |
+| [SearXNG](https://github.com/searxng/searxng) | `searxng` / [http://localhost:33811/](http://localhost:33811/) | A free internet metasearch engine which aggregates results from various search services and databases. |
 | [openedai-speech](https://github.com/matatonic/openedai-speech) | `tts` | An OpenAI API compatible text to speech server |
 | [litellm](https://docs.litellm.ai/docs/) | `litellm`| LLM API Proxy/Gateway |
 | [text-generation-inference](https://github.com/huggingface/text-generation-inference) | `tgi` | A Rust, Python and gRPC server for inference from HuggingFace |
