@@ -86,7 +86,7 @@ show_help() {
     echo "  down     - Stop and remove the containers"
     echo "  ps       - List the running containers"
     echo "  logs     - View the logs of the containers"
-    echo "  help     - Show this help message"
+    echo "  exec     - Execute a command in a running service"
     echo
     echo "Setup Management Commands:"
     echo "  hf       - Run the Harbor's Hugging Face CLI"
@@ -99,6 +99,7 @@ show_help() {
     echo "  defaults - Show the default services"
     echo "  version  - Show the CLI version"
     echo "  eject    - Eject the Compose configuration, accepts same options as 'up'"
+    echo "  help     - Show this help message"
     echo
     echo "Options:"
     echo "  Additional options to pass to the compose_with_options function"
@@ -279,6 +280,10 @@ case "$1" in
     ollama)
         shift
         exec_ollama $@
+        ;;
+    exec)
+        shift
+        run_in_service $@
         ;;
     *)
         echo "Unknown command: $1"

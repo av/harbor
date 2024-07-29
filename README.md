@@ -1,6 +1,6 @@
 ![Harbor project logo](./docs/harbor-2.png)
 
-Developer-friendly containerized LLM setup. The main goal is to provide a reasonable starting point for developers to experiment with LLMs.
+Developer-friendly containerized LLM setup. The main goal is to provide a reasonable starting point ~~for developers~~ to experiment with LLMs.
 
 ## Quickstart
 
@@ -38,6 +38,15 @@ You can later eject from Harbor and use the services in your own setup, or conti
 - [Harbor CLI Reference](#harbor-cli-reference)
   - [`harbor ln`](#harbor-ln)
   - [`harbor up <services>`](#harbor-up-services)
+  - [`harbor defaults`](#harbor-defaults)
+  - [`harbor down`](#harbor-down)
+  - [`harbor ps`](#harbor-ps)
+  - [`harbor logs`](#harbor-logs)
+  - [`harbor help`](#harbor-help)
+  - [`harbor version`](#harbor-version)
+  - [`harbor hf`](#harbor-hf)
+  - [`harbor ollama <command>`](#harbor-ollama-command)
+  - [`harbor eject`](#harbor-eject)
 - [Services Overview](#services-overview)
   - [Open WebUI](#open-webui)
   - [Ollama](#ollama)
@@ -91,11 +100,12 @@ graph LR
 
 This project is a CLI and a pre-configured Docker Compose setup that connects various LLM-related projects together. It simplifies the initial configuration and can serve as a base for your own customized setup.
 
+- Manage LLM stack with a concise CLI
+- Access service CLIs (`hf`, `ollama`, etc.) via Docker without installing them on the host
 - Services are pre-configured to work together
-- Reused local cache - huggingface, ollama, etc.
+- Host cache is shared and reused - huggingface, ollama, etc.
 - All configuration in one place
-- Access required CLIs via Docker without installing them
-- Eject from Harbor at any time
+- Eject to run without harbor with `harbor eject`
 
 ## Harbor CLI Reference
 
@@ -111,7 +121,7 @@ harbor ln
 ### `harbor up <services>`
 
 Starts selected services. See the list of available services here. Run `harbor defaults` to see the default list
-of services that will be started.
+of services that will be started. When starting additional services, you might need to `harbor down` first, so that all the services can pick updated configuration. API-only services can be started without stopping the main stack.
 
 ```bash
 # Start with default services
@@ -221,6 +231,41 @@ harbor eject searxng
 
 # Likely, you want the output to be saved in a file
 harbor eject searxng llamacpp > docker-compose.harbor.yml
+```
+
+### `harbor open <service>`
+
+Opens the service URL in the default browser. In case of API services, you'll see the response from the service main endpoint.
+
+```bash
+# Webui is default service to open
+harbor open
+
+# Open a specific service
+harbor open ollama
+```
+
+### `harbor exec <service> <command>`
+
+Allows executing arbitrary commands in the container running given service. Useful for inspecting service at runtime or performing some custom operations that aren't natively covered by Harbor CLI.
+
+```bash
+# This is the same folder as "harbor/open-webui"
+harbor exec webui ls /app/backend/data
+
+# Check the processes in searxng container
+harbor exec searxng ps aux
+```
+
+`exec` offers plenty of flexibility. For example, you can launch an interactive shell in the running container with one of the services.
+
+```bash
+# Launch "bash" in the ollama service
+harbor exec ollama bash
+
+# You are then landed in the interactive
+# container shell
+$ root@279a3a523a0b:/#
 ```
 
 ## Services Overview
