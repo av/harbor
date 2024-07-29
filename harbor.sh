@@ -1,6 +1,6 @@
 #!/bin/bash
 
-version="0.0.3"
+version="0.0.4"
 default_options=("webui" "ollama")
 default_open="webui"
 harbor_home=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
