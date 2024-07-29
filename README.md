@@ -56,6 +56,7 @@ graph LR
     Webui[Open WebUI]
     Ollama[Ollama]
     LlamaCPP(llama.cpp)
+    SearXNG[SearXNG]
 
     subgraph "Host"
         HFCache
@@ -67,6 +68,7 @@ graph LR
       Webui
       Ollama
       LlamaCPP
+      SearXNG
     end
 
     Webui --> SConfig
@@ -76,12 +78,15 @@ graph LR
     Webui --> LlamaCPP
     LlamaCPP --> HFCache
 
+    Webui --> SearXNG
+    SearXNG --> SConfig
 
     H --> Services
     H --> Host
 
     classDef optional stroke-dasharray: 5, 5;
     class LlamaCPP optional
+    class SearXNG optional
 ```
 
 This project is a script around a pre-configured Docker Compose setup that connects various LLM-related projects together. It simplifies the initial configuration and can serve as a base for your own customized setup.
@@ -229,3 +234,11 @@ You can manage Ollama models right from the [Admin Settings](http://localhost:33
 LLM inference in C/C++. Allows to bypass Ollama release cycle when needed - to get access to the latest models or features.
 
 Harbor launches llama.cpp server that can be configured via the `llamacpp/.env` file. Downloaded models are stored in the global HuggingFace cache on your local machine. The server can only run one model at a time and must be restarted to switch models.
+
+---
+
+### [SearXNG](https://github.com/searxng/searxng)
+
+A free internet metasearch engine which aggregates results from various search services and databases.
+
+Can be configured via the files in the `searxng` folder. [Configuration reference](https://docs.searxng.org/user/configured_engines.html)

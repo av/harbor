@@ -2,14 +2,11 @@
 
 ###
 
-GET {{host}}/v1/models
+curl {{host}}/v1/models
 
 ###
 
-POST {{host}}/v1/chat/completions
-Content-Type: application/json
-
-{
+curl {{host}}/v1/chat/completions -H "Content-Type: application/json" -d '{
   "model": "/models/gguf/phi-3-mini-128k-instruct.Q4_K_M.gguf",
   "messages": [
     {
@@ -18,8 +15,8 @@ Content-Type: application/json
     },
     {
         "role": "user",
-        "content": "Wno invented Rubik's Cube?"
+        "content": "Wno invented Rubiks Cube?"
     }
   ],
   "max_tokens": 60
-}
+}'
