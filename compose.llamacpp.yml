@@ -8,7 +8,7 @@ services:
       - 33831:8080
     command: >
       --server
-      --model ${HARBOR_LLAMACPP_MODEL}
+      --model $(./scripts/hf.sh https://huggingface.co/bartowski/Qwen2-7B-Instruct-GGUF/blob/main/Qwen2-7B-Instruct-IQ2_S.gguf)
       --port 8080
       --host 0.0.0.0
     networks:

@@ -25,8 +25,9 @@
 			"http://llamacpp:8080/v1"
 		],
 		"api_keys": [
-			""
-		]
+			"123"
+		],
+		"enabled": true
 	},
 	"image_generation": {
 		"engine": "comfyui",

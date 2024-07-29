@@ -88,14 +88,17 @@ show_help() {
     echo "  logs     - View the logs of the containers"
     echo "  help     - Show this help message"
     echo
-    echo "Setup Manageent Commands:"
-    echo "  hf       - Run the Hugging Face CLI"
+    echo "Setup Management Commands:"
+    echo "  hf       - Run the Harbor's Hugging Face CLI"
+    echo "  ollama   - Run the Harbor's Ollama CLI. Ollama service should be running"
+    echo "  smi      - Show NVIDIA GPU information"
     echo
     echo "CLI Commands:"
     echo "  open     - Open a service in the default browser"
     echo "  ln       - Create a symbolic link to the CLI"
     echo "  defaults - Show the default services"
     echo "  version  - Show the CLI version"
+    echo "  eject    - Eject the Compose configuration, accepts same options as 'up'"
     echo
     echo "Options:"
     echo "  Additional options to pass to the compose_with_options function"
@@ -185,6 +188,35 @@ open_service() {
     echo "Opened $url in your default browser."
 }
 
+smi() {
+    if command -v nvidia-smi &> /dev/null; then
+        nvidia-smi
+    else
+        echo "nvidia-smi not found."
+    fi
+}
+
+eject() {
+    $(compose_with_options "$@") config
+}
+
+run_in_service() {
+    local service_name="$1"
+    shift
+    local command_to_run="$@"
+
+    if docker compose ps --services --filter "status=running" | grep -q "^${service_name}$"; then
+        echo "Service ${service_name} is running. Executing command..."
+        docker compose exec ${service_name} ${command_to_run}
+    else
+        echo "Harbor ${service_name} is not running. Please start it with 'harbor up ${service_name}' first."
+    fi
+}
+
+exec_ollama() {
+    run_in_service ollama ollama "$@"
+}
+
 cd $harbor_home
 
 # Main script logic
@@ -235,6 +267,18 @@ case "$1" in
     --version)
         shift
         show_version
+        ;;
+    smi)
+        shift
+        smi
+        ;;
+    eject)
+        shift
+        eject $@
+        ;;
+    ollama)
+        shift
+        exec_ollama $@
         ;;
     *)
         echo "Unknown command: $1"

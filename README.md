@@ -89,13 +89,13 @@ graph LR
     class SearXNG optional
 ```
 
-This project is a script around a pre-configured Docker Compose setup that connects various LLM-related projects together. It simplifies the initial configuration and can serve as a base for your own customized setup.
+This project is a CLI and a pre-configured Docker Compose setup that connects various LLM-related projects together. It simplifies the initial configuration and can serve as a base for your own customized setup.
 
 - Services are pre-configured to work together
 - Reused local cache - huggingface, ollama, etc.
 - All configuration in one place
 - Access required CLIs via Docker without installing them
-
+- Eject from Harbor at any time
 
 ## Harbor CLI Reference
 
@@ -191,6 +191,36 @@ harbor hf --help
 
 # Show current cache status
 harbor hf scan-cache
+```
+
+### `harbor ollama <command>`
+
+Runs Ollama CLI in the container against the Harbor configuraiton.
+
+```bash
+# All Ollama commands are available
+harbor ollama --version
+
+# Show currently cached models
+harbor ollama list
+
+# See for more commands
+harbor ollama --help
+```
+
+### `harbor eject`
+
+Renders Harbor's Docker Compose configuration into a standalone config that can be moved and used elsewhere. Accepts the same options as `harbor up`.
+
+```bash
+# Eject with default services
+harbor eject
+
+# Eject with additional services
+harbor eject searxng
+
+# Likely, you want the output to be saved in a file
+harbor eject searxng llamacpp > docker-compose.harbor.yml
 ```
 
 ## Services Overview
