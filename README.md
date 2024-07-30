@@ -99,6 +99,7 @@ You can later eject from Harbor and use the services in your own setup, or conti
   - [litellm](#litellm)
   - [text-generation-inference](#text-generation-inference)
   - [lmdeploy](#lmdeploy)
+  - [hollama](#hollama)
 
 ## Overview and Features
 
@@ -439,6 +440,7 @@ WEBUI_HOST_PORT -> HARBOR_WEBUI_HOST_PORT
 | [litellm](https://docs.litellm.ai/docs/) | `litellm` / [http://localhost:33841/](http://localhost:33841/) | LLM API Proxy/Gateway |
 | [text-generation-inference](https://github.com/huggingface/text-generation-inference) | `tgi` / [http://localhost:33851/](http://localhost:33851/) | A Rust, Python and gRPC server for inference from HuggingFace |
 | [lmdeploy](https://lmdeploy.readthedocs.io/en/latest/get_started.html) | `lmdeploy` | A toolkit for deploying, and serving LLMs. |
+| [hollama](https://github.com/fmaclen/hollama) | `hollama` [http://localhost:33871](http://localhost:33871) | A minimal web-UI for talking to Ollama servers. |
 
 ---
 
@@ -695,3 +697,20 @@ harbor exec tgi text-generation-server --help
 ### [lmdeploy](https://lmdeploy.readthedocs.io/en/latest/get_started.html)
 
 A toolkit for deploying, and serving LLMs.
+
+---
+
+### [hollama](https://github.com/fmaclen/hollama)
+
+A minimal web-UI for talking to Ollama servers.
+Run with `harbor up hollama`. Unfortunately, there's no way to pre-configure Ollama URL, so has to be done manually.
+
+```bash
+# Grab the URL
+harbor url ollama
+# First visit should land you right on
+# the settings page to set the copied URL
+harbor open hollama
+```
+
+---

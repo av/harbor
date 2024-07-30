@@ -1,0 +1,8 @@
+services:
+  hollama:
+    image: ghcr.io/fmaclen/hollama:latest
+    env_file: ./.env
+    container_name: hollama
+    ports:
+      - ${HARBOR_HOLLAMA_HOST_PORT}:4173
+
