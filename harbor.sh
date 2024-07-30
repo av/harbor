@@ -379,7 +379,7 @@ run_llamacpp_command() {
 # == Main script
 # ========================================================================
 
-version="0.0.4"
+version="0.0.5"
 default_options=($(env_manager get services.default))
 default_open=$(env_manager get ui.main)
 harbor_home=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
