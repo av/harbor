@@ -90,7 +90,7 @@ You can later eject from Harbor and use the services in your own setup, or conti
   - [`harbor open <service>`](#harbor-open-service)
   - [`harbor exec <service> <command>`](#harbor-exec-service-command)
   - [`harbor config [get|set|list] <option> [value]`](#harbor-config)
-- [Services Overview](#services-overview)
+- [Services Overview](#services-overview-and-configuration)
   - [Open WebUI](#open-webui)
   - [Ollama](#ollama)
   - [llama.cpp](#llamacpp)
@@ -435,9 +435,9 @@ WEBUI_HOST_PORT -> HARBOR_WEBUI_HOST_PORT
 | [Ollama](https://ollama.com/) | `ollama` / [http://localhost:33821](http://localhost:33821) |  Ergonomic wrapper around llama.cpp with plenty of QoL features |
 | [llama.cpp](https://github.com/ggerganov/llama.cpp) | `llamacpp` / [http://localhost:33831](http://localhost:33831) | LLM inference in C/C++ |
 | [SearXNG](https://github.com/searxng/searxng) | `searxng` / [http://localhost:33811/](http://localhost:33811/) | A free internet metasearch engine which aggregates results from various search services and databases. |
-| [openedai-speech](https://github.com/matatonic/openedai-speech) | `tts` | An OpenAI API compatible text to speech server |
-| [litellm](https://docs.litellm.ai/docs/) | `litellm`| LLM API Proxy/Gateway |
-| [text-generation-inference](https://github.com/huggingface/text-generation-inference) | `tgi` | A Rust, Python and gRPC server for inference from HuggingFace |
+| [openedai-speech](https://github.com/matatonic/openedai-speech) | `tts` / [http://localhost:33861/](http://localhost:33861/)  | An OpenAI API compatible text to speech server |
+| [litellm](https://docs.litellm.ai/docs/) | `litellm` / [http://localhost:33841/](http://localhost:33841/) | LLM API Proxy/Gateway |
+| [text-generation-inference](https://github.com/huggingface/text-generation-inference) | `tgi` / [http://localhost:33851/](http://localhost:33851/) | A Rust, Python and gRPC server for inference from HuggingFace |
 | [lmdeploy](https://lmdeploy.readthedocs.io/en/latest/get_started.html) | `lmdeploy` | A toolkit for deploying, and serving LLMs. |
 
 ---
