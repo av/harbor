@@ -3,3 +3,19 @@
 ###
 
 curl {{host}}/api/ps
+
+###
+
+curl {{host}}/api/generate -d '{
+  "model": "gpt2",
+  "prompt": "Today is a"
+}'
+
+###
+
+curl {{host}}/api/chat -d '{
+  "model": "llama3.1",
+  "messages": [
+    { "role": "user", "content": "why is the sky blue?" }
+  ]
+}'

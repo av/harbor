@@ -1,9 +1,8 @@
 #!/bin/bash
 
-version="0.0.4"
-default_options=("webui" "ollama")
-default_open="webui"
-harbor_home=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
+# ========================================================================
+# == Functions
+# ========================================================================
 
 compose_with_options() {
     local base_dir="$PWD"
@@ -79,36 +78,50 @@ show_version() {
 }
 
 show_help() {
+    show_version
     echo "Usage: $0 <command> [options]"
     echo
     echo "Compose Setup Commands:"
-    echo "  up       - Start the containers"
-    echo "  down     - Stop and remove the containers"
-    echo "  ps       - List the running containers"
-    echo "  logs     - View the logs of the containers"
-    echo "  exec     - Execute a command in a running service"
+    echo "  up            - Start the containers"
+    echo "  down          - Stop and remove the containers"
+    echo "  ps            - List the running containers"
+    echo "  logs          - View the logs of the containers"
+    echo "  exec          - Execute a command in a running service"
     echo
     echo "Setup Management Commands:"
-    echo "  hf       - Run the Harbor's Hugging Face CLI"
-    echo "  ollama   - Run the Harbor's Ollama CLI. Ollama service should be running"
-    echo "  smi      - Show NVIDIA GPU information"
-    echo "  top      - Run nvtop to monitor GPU usage"
+    echo "  ollama        - Run the Harbor's Ollama CLI. Ollama service should be running"
+    echo "  smi           - Show NVIDIA GPU information"
+    echo "  top           - Run nvtop to monitor GPU usage"
+    echo "  llamacpp      - Configure llamacpp service"
     echo
-    echo "CLI Commands:"
-    echo "  open     - Open a service in the default browser"
-    echo "  url      - Get the URL for a service"
-    echo "  config   - Manage the Harbor environment configuration"
-    echo "  ln       - Create a symbolic link to the CLI"
-    echo "  eject    - Eject the Compose configuration, accepts same options as 'up'"
-    echo "  defaults - Show the default services"
-    echo "  help     - Show this help message"
-    echo "  version  - Show the CLI version"
+    echo "Huggingface CLI:"
+    echo "  hf            - Run the Harbor's Huggingface CLI. Expanded with a few additional commands."
+    echo "  hf parse-url  - Parse file URL from Hugging Face"
+    echo
+    echo "Harbor CLI Commands:"
+    echo "  open          - Open a service in the default browser"
+    echo "  url           - Get the URL for a service"
+    echo "  config        - Manage the Harbor environment configuration"
+    echo "  ln            - Create a symbolic link to the CLI"
+    echo "  eject         - Eject the Compose configuration, accepts same options as 'up'"
+    echo "  defaults      - Show the default services"
+    echo "  help          - Show this help message"
+    echo "  version       - Show the CLI version"
+    echo "  gum           - Run the Gum terminal commands"
     echo
     echo "Options:"
     echo "  Additional options to pass to the compose_with_options function"
 }
 
 run_hf_cli() {
+    case "$1" in
+        parse-url)
+            shift
+            parse_hf_url $@
+            return
+            ;;
+    esac
+
     local hf_cli_image=shaowenchen/huggingface-cli
     docker run --rm --log-driver none -v ~/.cache/huggingface:/root/.cache/huggingface $hf_cli_image $@
 }
@@ -244,6 +257,13 @@ env_manager() {
     local env_file=".env"
     local prefix="HARBOR_"
 
+    transform_llamacpp_model() {
+        local url="$1"
+        local repo=$(echo "$url" | sed -n 's|https://huggingface.co/\(.*\)/blob/.*|\1|p')
+        local file=$(basename "$url")
+        echo "--hf-repo $repo --hf-file $file"
+    }
+
     case "$1" in
         get)
             if [[ -z "$2" ]]; then
@@ -251,33 +271,119 @@ env_manager() {
                 return 1
             fi
             local upper_key=$(echo "$2" | tr '[:lower:]' '[:upper:]' | tr '.' '_')
-            grep "^$prefix$upper_key=" "$env_file" | sed "s/^$prefix$upper_key=//"
+            value=$(grep "^$prefix$upper_key=" "$env_file" | cut -d '=' -f2-)
+            value="${value#\"}"  # Remove leading quote if present
+            value="${value%\"}"  # Remove trailing quote if present
+            echo "$value"
             ;;
         set)
-            if [[ -z "$2" || -z "$3" ]]; then
+            if [[ -z "$2" ]]; then
                 echo "Usage: env_manager set <key> <value>"
                 return 1
             fi
+
             local upper_key=$(echo "$2" | tr '[:lower:]' '[:upper:]' | tr '.' '_')
-            if grep -q "^$prefix$upper_key=" "$env_file"; then
-                sed -i "s/^$prefix$upper_key=.*/$prefix$upper_key=$3/" "$env_file"
-            else
-                echo "$prefix$upper_key=$3" >> "$env_file"
+            shift 2  # Remove 'set' and the key from the arguments
+            local value="$*"  # Capture all remaining arguments as the value
+
+            if [[ "$upper_key" == "LLAMACPP_MODEL" ]]; then
+                local transformed_value=$(transform_llamacpp_model "$value")
+                if grep -q "^${prefix}LLAMACPP_MODEL_SPECIFIER=" "$env_file"; then
+                    sed -i "s|^${prefix}LLAMACPP_MODEL_SPECIFIER=.*|${prefix}LLAMACPP_MODEL_SPECIFIER=\"$transformed_value\"|" "$env_file"
+                else
+                    echo "${prefix}LLAMACPP_MODEL_SPECIFIER=\"$transformed_value\"" >> "$env_file"
+                fi
+                echo "Set ${prefix}LLAMACPP_MODEL_SPECIFIER to: \"$transformed_value\""
             fi
+
+            if grep -q "^$prefix$upper_key=" "$env_file"; then
+                sed -i "s|^$prefix$upper_key=.*|$prefix$upper_key=\"$value\"|" "$env_file"
+            else
+                echo "$prefix$upper_key=\"$value\"" >> "$env_file"
+            fi
+            echo "Set $prefix$upper_key to: \"$value\""
             ;;
         list)
             grep "^$prefix" "$env_file" | sed "s/^$prefix//" | while read -r line; do
                 key=${line%%=*}
                 value=${line#*=}
+                value=$(echo "$value" | sed -E 's/^"(.*)"$/\1/')  # Remove surrounding quotes for display
                 printf "%-30s %s\n" "$key" "$value"
             done
             ;;
         *)
-            echo "Usage: env_manager {get|set|list} [key] [value]"
+            echo "Usage: harbor config {get|set|list} [key] [value]"
             return 1
             ;;
     esac
 }
+
+parse_hf_url() {
+    local url=$1
+    local base_url="https://huggingface.co/"
+    local ref="/blob/main/"
+
+    # Extract repo name
+    repo_name=${url#$base_url}
+    repo_name=${repo_name%%$ref*}
+
+    # Extract file specifier
+    file_specifier=${url#*$ref}
+
+    # Return values separated by a delimiter (we'll use '|')
+    echo "$repo_name$delimiter$file_specifier"
+}
+
+hf_url_2_llama_spec() {
+    local decomposed=$(parse_hf_url $1)
+    local repo_name=$(echo "$decomposed" | cut -d"$delimiter" -f1)
+    local file_specifier=$(echo "$decomposed" | cut -d"$delimiter" -f2)
+
+    echo "--hf-repo $repo_name --hf-file $file_specifier"
+}
+
+run_llamacpp_command() {
+    case "$1" in
+        model)
+            shift
+
+            # No args - get current model
+            if [ $# -eq 0 ]; then
+                env_manager get llamacpp.model
+            else
+                env_manager set llamacpp.model $@
+            fi
+            ;;
+        args)
+            shift
+
+            if [ $# -eq 0 ]; then
+                env_manager get llamacpp.extra.args
+            else
+                env_manager set llamacpp.extra.args $@
+            fi
+            ;;
+        *)
+            echo "Please note that this is not llama.cpp CLI, but a Harbor CLI to manage llama.cpp service."
+            echo "Access llama.cpp own CLI by running 'harbor exec llamacpp' when it's running."
+            echo
+            echo "Usage: harbor llamacpp <command>"
+            echo
+            echo "Commands:"
+            echo "  harbor llamacpp model [Huggingface URL] - Get or set the llamacpp model to run"
+            ;;
+    esac
+}
+
+# ========================================================================
+# == Main script
+# ========================================================================
+
+version="0.0.4"
+default_options=($(env_manager get services.default))
+default_open=$(env_manager get ui.main)
+harbor_home=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
+delimiter="|"
 
 cd $harbor_home
 
@@ -342,6 +448,10 @@ case "$1" in
     ollama)
         shift
         exec_ollama $@
+        ;;
+    llamacpp)
+        shift
+        run_llamacpp_command $@
         ;;
     exec)
         shift

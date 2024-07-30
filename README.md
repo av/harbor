@@ -33,6 +33,9 @@ harbor up searxng
 # Open Webui is automatically connected to them.
 harbor up llamacpp tgi lmdeploy litellm mistralrs vllm
 
+# Use custom model for llama.cpp
+harbor llamacpp model https://huggingface.co/user/repo/model.gguf
+
 # Convenience tools for docker setup
 harbor logs llamacpp
 harbor exec llamacpp ./scripts/llama-bench --help
@@ -50,6 +53,7 @@ harbor config list
 harbor config set webui.host.port 8080
 
 # Eject from Harbor into a standalone Docker Compose setup
+# Will export
 harbor eject searxng llamacpp > docker-compose.harbor.yml
 ```
 
@@ -182,6 +186,13 @@ harbor up searxng
 harbor up webui ollama searxng llamacpp tts tgi lmdeploy litellm
 ```
 
+You can configure default set of services using the `harbor config` command.
+
+```bash
+# `harbor up` will start these services by default from now on
+harbor config set services.default 'webui ollama searxng'
+```
+
 ### `harbor defaults`
 
 Displays the list of default services that will be started when running `harbor up`. Will include one LLM backend and one LLM frontend out of the box.
@@ -250,6 +261,16 @@ harbor hf --help
 harbor hf scan-cache
 ```
 
+Harbor's `hf` CLI is expanded with some additional commands for convenience.
+
+```bash
+# Get repository and file names from the HuggingFace URL
+harbor hf parse-url https://huggingface.co/user/repo/blob/main/file.gguf
+
+# > Repository: user/repo
+# > File: file.gguf
+```
+
 ### `harbor ollama <command>`
 
 Runs Ollama CLI in the container against the Harbor configuraiton.
@@ -263,6 +284,27 @@ harbor ollama list
 
 # See for more commands
 harbor ollama --help
+```
+
+### `harbor llamacpp <command>`
+
+Runs CLI tasks specific to managing `llamacpp` service.
+
+```bash
+# Show the model currently configured to run
+harbor llamacpp model
+
+# Set a new model to run via a HuggingFace URL
+# ⚠️ Note, other kinds of URLs are not supported
+harbor llamacpp model https://huggingface.co/user/repo/blob/main/file.gguf
+# Above command is an equivalent of
+harbor config set llamacpp.model https://huggingface.co/user/repo/blob/main/file.gguf
+# And will translate to a --hf-repo and --hf-file flags for the llama.cpp CLI runtime
+```
+
+You can specify additional flags and arguments that'll be passed to the `llamacpp` CLI.
+
+```bash
 ```
 
 ### `harbor eject`
@@ -338,7 +380,7 @@ harbor exec llamacpp ./llama-bench --help
 
 ### `harbor config`
 
-Allows working with the harbor configuration via the CLI. Mostly useful for the automation and scripting, as the configuration can also be managed via `.env` files.
+Allows working with the harbor configuration via the CLI. Mostly useful for the automation and scripting, as the configuration can also be managed via the `.env` file variables.
 
 ```bash
 # Show the current configuration
@@ -354,7 +396,19 @@ harbor config get WEBUI_HOST_PORT
 harbor config set webui.host.port 8080
 ```
 
-## Services Overview
+Translating CLI config fields to `.env` file variables:
+
+```bash
+# All three version are pointing to the same
+# environment variable in the .env file
+webui.host.port -> HARBOR_WEBUI_HOST_PORT
+webui_host_port -> HARBOR_WEBUI_HOST_PORT
+WEBUI_HOST_PORT -> HARBOR_WEBUI_HOST_PORT
+```
+
+## Services Overview and Configuration
+
+#### Overview
 
 | Service | Handle / Default Local URL | Description |
 | --- | --- | --- |
@@ -387,23 +441,83 @@ You can configure Open WebUI in three ways:
 ### [Ollama](https://ollama.com/)
 Ergonomic wrapper around llama.cpp with plenty of QoL features.
 
-You can manage Ollama models right from the [Admin Settings](http://localhost:33801/admin/settings/) in the Open WebUI. The models are stored in the global ollama cache on your local machine.
+Ollama is connected directly to the Open WebUI as the main LLM backend.
 
-Ollama CLI can be accessed via the `harbor ollama` command.
+#### Models
+
+You can manage Ollama models right from the [Open WebUI Admin Settings](http://localhost:33801/admin/settings/). The models are stored in the global ollama cache on your local machine.
+
+Alternatively, you can use `ollama` CLI itself.
 
 ```bash
-harbor ollama version
+# Show the list of available models
 harbor ollama list
+
+# Pull a new model
+harbor ollama pull phi3
 ```
+
+More generally, you can use a full `ollama` CLI, when the corresponding service is running.
+
+```bash
+# Ollama service should be running to access the cli
+harbor ollama --help
+# See the envrionment variables
+# supported by ollama service
+harbor ollama serve --help
+
+# Access Ollama CLI commands
+harbor ollama version
+```
+
+#### Configuration
+
+You can specify Ollama's environment variables (run `harbor ollama serve --help` for reference) in the `.env` and `docker-compose.ollama.yml` files.
+
+#### API
+
+Retreive the endpoint for `ollama` service with:
+```bash
+harbor url ollama
+```
+
+Additionally, you can find a small [HTTP playbook](./http-catalog/ollama.http) in the [http-catalog](./http-catalog) folder.
 
 ---
 
 ### [llama.cpp](https://github.com/ggerganov/llama.cpp)
 LLM inference in C/C++. Allows to bypass Ollama release cycle when needed - to get access to the latest models or features.
 
-Downloaded models are stored in the global HuggingFace cache on your local machine. The server can only run one model at a time and must be restarted to switch models.
+#### Models
 
-`llama.cpp` comes with an absurd amount of helper tools/CLIs, which all can be accessed via the `harbor exec llamacpp` command (once the service is running).
+You can find GGUF models to run on Huggingface [here](https://huggingface.co/models?sort=trending&search=gguf). After you find a model you want to run, grab the URL from the browser address bar and pass it to the `harbor config`
+
+```bash
+# Set the model to run
+# Config accepts a full URL (from Browser address bar)
+harbor llamacpp model https://huggingface.co/user/repo/file.gguf
+
+# Alternatively, use `config` command directly
+harbor config set llamacpp.model https://huggingface.co/user/repo/file.gguf
+```
+
+Downloaded models are stored in the global `llama.cpp` cache on your local machine (same as native version uses). The server can only run one model at a time and must be restarted to switch models.
+
+#### Configuration
+
+You can provide additional arguments to the `llama.cpp` CLI via the `LLAMACPP_EXTRA_ARGS`. It can be set either with Harbor CLI or in the `.env` file.
+
+```bash
+# Set the extra arguments
+harbor llamacpp args '--max-tokens 1024 -ngl 100'
+
+# Edit the .env file
+HARBOR_LLAMACPP_EXTRA_ARGS="--max-tokens 1024 -ngl 100"
+```
+
+#### `llama.cpp` CLIs and scripts
+
+`llama.cpp` comes with a lot of helper tools/CLIs, which all can be accessed via the `harbor exec llamacpp` command (once the service is running).
 
 ```bash
 # Show the list of available llama.cpp CLIs
@@ -419,9 +533,11 @@ harbor exec llamacpp ./scripts/llama-bench --help
 
 A free internet metasearch engine which aggregates results from various search services and databases.
 
-Can be configured via the files in the `searxng` folder. [Configuration reference](https://docs.searxng.org/user/configured_engines.html).
-
 Spin up with `harbor up searxng`. Once running, Open WebUI will automatically connect to the SearXNG instance for Web RAG feature.
+
+#### Configuration
+
+Can be configured via the files in the `searxng` folder. [Configuration reference](https://docs.searxng.org/user/configured_engines.html).
 
 ---
 
