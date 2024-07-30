@@ -670,9 +670,6 @@ harbor config set tgi.model.specifier '--model-id repo/model --quantize awq --re
 
 TGI will serve one model at a time and must be restarted to switch models.
 
-> [!NOTE]
-> If running with `litellm` - please also update the
-
 #### Configuration
 
 In addition to specifying the model, you can provide extra environment variables in the `.env` file or extra arguments to pass to the TGI CLI as defined in the [TGI Cli Options](https://huggingface.co/docs/text-generation-inference/en/basic_tutorials/launcher#quantize)
