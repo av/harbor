@@ -1,0 +1,30 @@
+@host = http://localhost:33841
+
+###
+
+curl {{host}}/models
+
+###
+
+curl {{host}}/v1/completions -X POST -H "Content-Type: application/json" -d '{
+  "model": "tgi",
+  "prompt": "Once upon a time",
+  "max_tokens": 50
+}'
+
+###
+
+curl {{host}}/v1/chat/completions -H 'Content-Type: application/json' -d '{
+  "model": "tgi",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are a helpful assistant."
+    },
+    {
+      "role": "user",
+      "content": "What is deep frying?"
+    }
+  ],
+  "max_tokens": 64
+}'

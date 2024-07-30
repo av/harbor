@@ -84,6 +84,8 @@ You can later eject from Harbor and use the services in your own setup, or conti
   - [`harbor version`](#harbor-version)
   - [`harbor hf`](#harbor-hf)
   - [`harbor ollama <command>`](#harbor-ollama-command)
+  - [`harbor llamacpp <command>`](#harbor-llamacpp-command)
+  - [`harbor tgi <command>`](#harbor-tgi-command)
   - [`harbor eject`](#harbor-eject)
   - [`harbor open <service>`](#harbor-open-service)
   - [`harbor exec <service> <command>`](#harbor-exec-service-command)
@@ -92,6 +94,11 @@ You can later eject from Harbor and use the services in your own setup, or conti
   - [Open WebUI](#open-webui)
   - [Ollama](#ollama)
   - [llama.cpp](#llamacpp)
+  - [SearXNG](#searxng)
+  - [openedai-speech](#openedai-speech)
+  - [litellm](#litellm)
+  - [text-generation-inference](#text-generation-inference)
+  - [lmdeploy](#lmdeploy)
 
 ## Overview and Features
 
@@ -302,9 +309,21 @@ harbor config set llamacpp.model https://huggingface.co/user/repo/blob/main/file
 # And will translate to a --hf-repo and --hf-file flags for the llama.cpp CLI runtime
 ```
 
-You can specify additional flags and arguments that'll be passed to the `llamacpp` CLI.
+### `harbor tgi <command>`
+
+Runs CLI tasks specific to managing `text-generation-inference` service.
 
 ```bash
+# Show the model currently configured to run
+harbor tgi model
+
+# Unlike llama.cpp, a few more parameters are needed,
+# example of setting them below
+harbor tgi quant awq
+harbor tgi revision 4.0bpw
+
+# Alternatively, configure all in one go
+harbor config set tgi.model.specifier '--model-id repo/model --quantize awq --revision 3_5'
 ```
 
 ### `harbor eject`
@@ -501,6 +520,9 @@ harbor llamacpp model https://huggingface.co/user/repo/file.gguf
 harbor config set llamacpp.model https://huggingface.co/user/repo/file.gguf
 ```
 
+> [!NOTE]
+> Please, note that this procedure doesn't download the model. If model is not found in the cache, it will be downloaded on the next start of `llamacpp` service.
+
 Downloaded models are stored in the global `llama.cpp` cache on your local machine (same as native version uses). The server can only run one model at a time and must be restarted to switch models.
 
 #### Configuration
@@ -545,16 +567,131 @@ Can be configured via the files in the `searxng` folder. [Configuration referenc
 
 An OpenAI API compatible text to speech server.
 
+```bash
+# Sping up Harbor with the TTS instance
+harbor up tts
+```
+
+Upon the first start, service will initialise its cache and download the necessary models. You can find both in the `tts` folder in the Harbor workspace.
+
+#### Configuration
+
+`openedai-speech` runs two types of models out of the box - `tts-1` (via [piper tts](https://github.com/rhasspy/piper), very fast, runs on cpu) and `tts-1-hd` (via [xtts_v2](https://github.com/idiap/coqui-ai-TTS)  with voice cloning, fast but requires around ~4Gb of VRAM).
+
+##### tts-1
+
+You can map your [Piper voices](https://rhasspy.github.io/piper-samples/) via the [./tts/config/voice_to_speaker.yaml](./tts/config/voice_to_speaker.yaml) file.
+
+Download more voices from the official Piper repo [here](https://github.com/rhasspy/piper/blob/master/VOICES.md).
+
+##### tts-1-hd
+
+[xtts_v2](https://github.com/idiap/coqui-ai-TTS) provides you with a voice cloning feature. It can deliver very pleasant and natural sounding voices with appropriate samples. See the [official repo guide](https://github.com/matatonic/openedai-speech?tab=readme-ov-file#coqui-xtts-v2) on how to set up the voice cloning.
+
+You can find more detailed documentation about `openedai-speech` configuration in the [official repository](https://github.com/matatonic/openedai-speech?tab=readme-ov-file#openedai-speech).
+
 ---
 
 ### [litellm](https://docs.litellm.ai/docs/)
 LLM API Proxy/Gateway.
+
+LiteLLM is very useful for setups where the target LLM backend is either:
+- Not supported by Harbor directly
+- Doesn't have an OpenAI-compatible API that can be plugged into Open WebUI directly (for example, `text-generation-inference`)
+
+`litellm` is also a way to use API-based LLM providers with Harbor.
+
+#### Configuration
+
+Harbor runs LiteLLM in the [proxy mode](https://docs.litellm.ai/docs/proxy/configs). In order to configure it, you'll need to edit [./litellm/config.yaml](./litellm/config.yaml) file according to the documentation.
+
+For example:
+
+```yaml
+model_list:
+  # What LiteLLM client will see
+  - model_name: sllama
+    litellm_params:
+      # What LiteLLM will send to downstream API
+      model: huggingface/repo/model
+      # This can be pointed to one of the compatible Harbor
+      # backends or to the external API compatible with the LiteLLM
+      api_base: http://tgi:80
+  - model_name: llamaster
+    litellm_params:
+      model: bedrock/meta.llama3-1-405b-instruct-v1:0
+      aws_region_name: us-west-2
+```
+
+Please see [official LiteLLM documentation](https://docs.litellm.ai/docs/) for plenty of additional examples.
 
 ---
 
 ### [text-generation-inference](https://github.com/huggingface/text-generation-inference)
 
 A Rust, Python and gRPC server for inference from HuggingFace.
+
+TGI's API is not fully compatible with Open Webui, so you also need to use `litellm` if you need to connect them together.
+
+```bash
+# Harbor's litellm is pointing to the tgi
+# by default as well
+harbor up tgi litellm
+
+# You should now see a new "tgi" model in the Open WebUI
+```
+
+#### Models
+
+TGI downloads the models on its own when the service is started. Harbor's instance of the `tgi` will use your global Huggingface cache. TGI supports [multiple quantisation types](https://huggingface.co/docs/text-generation-inference/en/basic_tutorials/launcher#quantize) and one must be specified alongside the model name.
+
+- [Supported model architectures](https://huggingface.co/docs/text-generation-inference/en/supported_models)
+- [Quantisation types with links to HF search](https://huggingface.co/docs/text-generation-inference/en/basic_tutorials/launcher#quantize)
+
+When you located the model you're interested to run, Harbor can be configured as following:
+
+```bash
+# Specify the repository to run
+harbor tgi model repo/model
+# Also, specify the type of quant TGI should use
+harbor tgi quant awq
+
+# [Optional] some repos store specific version in a revision rather than all together, it can be specified as well
+harbor tgi revision 4.0bpw
+
+# [Optional] configure any additional arguments
+# that might be needed for a specific model
+harbor tgi args '--rope-factor 4.0'
+
+# Alternatively, you can provide a full
+# set of args for the TGI CLI in one go
+harbor config set tgi.model.specifier '--model-id repo/model --quantize awq --revision 3_5'
+```
+
+TGI will serve one model at a time and must be restarted to switch models.
+
+> [!NOTE]
+> If running with `litellm` - please also update the
+
+#### Configuration
+
+In addition to specifying the model, you can provide extra environment variables in the `.env` file or extra arguments to pass to the TGI CLI as defined in the [TGI Cli Options](https://huggingface.co/docs/text-generation-inference/en/basic_tutorials/launcher#quantize)
+
+```bash
+# .env
+ROPE_SCALING=linear
+
+# CLI
+harbor tgi args '--rope-factor 4.0'
+```
+
+### CLI tools
+
+When `tgi` service is running, you can access embedded tools via `exec`:
+
+```bash
+harbor exec tgi text-generation-server --help
+```
 
 ---
 

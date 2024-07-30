@@ -1,8 +1,9 @@
 services:
   tgi:
     container_name: tgi
+    env_file: ./.env
     image: ghcr.io/huggingface/text-generation-inference:2.2.0
-    command: ${HARBOR_TGI_MODEL_SPECIFIER}
+    command: ${HARBOR_TGI_MODEL_SPECIFIER} ${HARBOR_TGI_EXTRA_ARGS}
     ports:
       - ${HARBOR_TGI_HOST_PORT}:80
     volumes:

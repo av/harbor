@@ -93,6 +93,7 @@ show_help() {
     echo "  smi           - Show NVIDIA GPU information"
     echo "  top           - Run nvtop to monitor GPU usage"
     echo "  llamacpp      - Configure llamacpp service"
+    echo "  tgi           - Configure text-generation-inference service"
     echo
     echo "Huggingface CLI:"
     echo "  hf            - Run the Harbor's Huggingface CLI. Expanded with a few additional commands."
@@ -199,7 +200,12 @@ get_service_url() {
 }
 
 open_service() {
-    url=$(get_service_url "$1")
+    output=$(get_service_url "$1" 2>&1) || {
+        echo "Failed to get service URL for $1. Error output:" >&2;
+        echo "$output" >&2;
+        exit 1;
+    }
+    url="$output"
 
     # Open the URL in the default browser
     if command -v xdg-open &> /dev/null; then
@@ -375,17 +381,98 @@ run_llamacpp_command() {
     esac
 }
 
+run_tgi_command() {
+    update_model_spec() {
+        local spec=""
+        local current_model=$(env_manager get tgi.model)
+        local current_quant=$(env_manager get tgi.quant)
+        local current_revision=$(env_manager get tgi.revision)
+
+        if [ -n "$current_model" ]; then
+            spec="--model-id $current_model"
+        fi
+
+        if [ -n "$current_quant" ]; then
+            spec="$spec --quantize $current_quant"
+        fi
+
+        if [ -n "$current_revision" ]; then
+            spec="$spec --revision $current_revision"
+        fi
+
+        env_manager set tgi.model.specifier "$spec"
+    }
+
+    case "$1" in
+        model)
+            shift
+
+            # No args - get current model
+            if [ $# -eq 0 ]; then
+                env_manager get tgi.model
+            else
+                env_manager set tgi.model $@
+                update_model_spec
+            fi
+            ;;
+        args)
+            shift
+
+            if [ $# -eq 0 ]; then
+                env_manager get tgi.extra.args
+            else
+                env_manager set tgi.extra.args $@
+            fi
+            ;;
+        quant)
+            shift
+
+            if [ $# -eq 0 ]; then
+                env_manager get tgi.quant
+            else
+                env_manager set tgi.quant $@
+                update_model_spec
+            fi
+            ;;
+        revision)
+            shift
+
+            if [ $# -eq 0 ]; then
+                env_manager get tgi.revision
+            else
+                env_manager set tgi.revision $@
+                update_model_spec
+            fi
+            ;;
+        *)
+            echo "Please note that this is not TGI CLI, but a Harbor CLI to manage TGI service."
+            echo "Access TGI own CLI by running 'harbor exec tgi' when it's running."
+            echo
+            echo "Usage: harbor tgi <command>"
+            echo
+            echo "Commands:"
+            echo "  harbor tgi model [user/repo]   - Get or set the TGI model repository to run"
+            echo "  harbor tgi quant"
+            echo "    [awq|eetq|exl2|gptq|marlin|bitsandbytes|bitsandbytes-nf4|bitsandbytes-fp4|fp8]"
+            echo "    Get or set the TGI quantization mode. Must match the contents of the model repository."
+            echo "  harbor tgi revision [revision] - Get or set the TGI model revision to run"
+            echo "  harbor tgi args [args]         - Get or set extra args to pass to the TGI CLI"
+            ;;
+    esac
+}
+
 # ========================================================================
 # == Main script
 # ========================================================================
 
 version="0.0.5"
-default_options=($(env_manager get services.default))
-default_open=$(env_manager get ui.main)
-harbor_home=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
 delimiter="|"
 
+harbor_home=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
 cd $harbor_home
+
+default_options=($(env_manager get services.default))
+default_open=$(env_manager get ui.main)
 
 # Main script logic
 case "$1" in
@@ -452,6 +539,10 @@ case "$1" in
     llamacpp)
         shift
         run_llamacpp_command $@
+        ;;
+    tgi)
+        shift
+        run_tgi_command $@
         ;;
     exec)
         shift

@@ -22,10 +22,12 @@
 	},
 	"openai": {
 		"api_base_urls": [
-			"http://llamacpp:8080/v1"
+			"http://llamacpp:8080/v1",
+			"http://litellm:4000/v1"
 		],
 		"api_keys": [
-			"123"
+			"",
+			""
 		],
 		"enabled": true
 	},
@@ -42,12 +44,12 @@
 	"audio": {
 		"tts": {
 			"openai": {
-				"api_base_url": "http://host.docker.internal:8096/v1",
+				"api_base_url": "http://tts:8000/v1",
 				"api_key": "123"
 			},
 			"engine": "openai",
-			"model": "tts-1-hd",
-			"voice": "mbb"
+			"model": "tts-1",
+			"voice": "alloy"
 		},
 		"stt": {
 			"openai": {
