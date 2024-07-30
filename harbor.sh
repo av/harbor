@@ -465,7 +465,7 @@ run_tgi_command() {
 # == Main script
 # ========================================================================
 
-version="0.0.5"
+version="0.0.6"
 delimiter="|"
 
 harbor_home=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
