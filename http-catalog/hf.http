@@ -7,3 +7,11 @@ curl {{host}}/api/models
 ###
 
 curl {{host}}/models-json?search=gguf&sort=trending
+
+###
+
+curl {{host}}/api/models-tags-by-type
+
+###
+
+curl {{host}}/lmstudio-community/Meta-Llama-3.1-8B-Instruct-GGUF

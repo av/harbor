@@ -92,15 +92,17 @@ show_help() {
     echo "  hf       - Run the Harbor's Hugging Face CLI"
     echo "  ollama   - Run the Harbor's Ollama CLI. Ollama service should be running"
     echo "  smi      - Show NVIDIA GPU information"
+    echo "  top      - Run nvtop to monitor GPU usage"
     echo
     echo "CLI Commands:"
     echo "  open     - Open a service in the default browser"
-    echo "  ln       - Create a symbolic link to the CLI"
-    echo "  defaults - Show the default services"
-    echo "  version  - Show the CLI version"
+    echo "  url      - Get the URL for a service"
     echo "  config   - Manage the Harbor environment configuration"
+    echo "  ln       - Create a symbolic link to the CLI"
     echo "  eject    - Eject the Compose configuration, accepts same options as 'up'"
+    echo "  defaults - Show the default services"
     echo "  help     - Show this help message"
+    echo "  version  - Show the CLI version"
     echo
     echo "Options:"
     echo "  Additional options to pass to the compose_with_options function"
@@ -109,6 +111,11 @@ show_help() {
 run_hf_cli() {
     local hf_cli_image=shaowenchen/huggingface-cli
     docker run --rm --log-driver none -v ~/.cache/huggingface:/root/.cache/huggingface $hf_cli_image $@
+}
+
+run_gum() {
+    local gum_image=ghcr.io/charmbracelet/gum
+    docker run --rm -it -e "TERM=xterm-256color" $gum_image $@
 }
 
 show_default_services() {
@@ -140,7 +147,7 @@ link_cli() {
     fi
 }
 
-open_service() {
+get_service_url() {
     # Get list of running services
     services=$(docker ps --format "{{.Names}}")
 
@@ -152,7 +159,7 @@ open_service() {
 
     # If no service name provided, default to webui
     if [ -z "$1" ]; then
-        open_service "$default_open"
+        get_service_url "$default_open"
         return 0
     fi
 
@@ -175,6 +182,12 @@ open_service() {
     # Construct the URL
     url="http://localhost:$port"
 
+    echo "$url"
+}
+
+open_service() {
+    url=$(get_service_url "$1")
+
     # Open the URL in the default browser
     if command -v xdg-open &> /dev/null; then
         xdg-open "$url"  # Linux
@@ -195,6 +208,14 @@ smi() {
         nvidia-smi
     else
         echo "nvidia-smi not found."
+    fi
+}
+
+nvidia_top() {
+    if command -v nvtop &> /dev/null; then
+        nvtop
+    else
+        echo "nvtop not found."
     fi
 }
 
@@ -298,6 +319,10 @@ case "$1" in
         shift
         open_service $@
         ;;
+    url)
+        shift
+        get_service_url $@
+        ;;
     version|--version|-v)
         shift
         show_version
@@ -305,6 +330,10 @@ case "$1" in
     smi)
         shift
         smi
+        ;;
+    top)
+        shift
+        nvidia_top
         ;;
     eject)
         shift
@@ -321,6 +350,10 @@ case "$1" in
     config)
         shift
         env_manager $@
+        ;;
+    gum)
+        shift
+        run_gum $@
         ;;
     *)
         echo "Unknown command: $1"

@@ -26,7 +26,7 @@ harbor open
 
 ```bash
 # Run Harbor with additional services
-# Running SearXNG automatically enables it in the Open WebUI.
+# Running SearXNG automatically enables Web RAG in Open WebUI
 harbor up searxng
 
 # Run additional/alternative LLM Inference backends
@@ -290,6 +290,16 @@ harbor open
 
 # Open a specific service
 harbor open ollama
+```
+
+### `harbor url <service>`
+
+Prints the URL of the service to the terminal.
+
+```bash
+# With default settings, this will print
+# http://localhost:33831
+harbor url llamacpp
 ```
 
 ### `harbor exec <service> <command>`
