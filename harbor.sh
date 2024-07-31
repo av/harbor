@@ -113,6 +113,7 @@ show_help() {
     echo "  ps            - List the running containers"
     echo "  logs          - View the logs of the containers"
     echo "  exec          - Execute a command in a running service"
+    echo "  pull          - Pull the latest images"
     echo
     echo "Setup Management Commands:"
     echo "  ollama        - Run the Harbor's Ollama CLI. Ollama service should be running"
@@ -564,6 +565,10 @@ case "$1" in
         shift
         # Only pass "*" to the command if no options are provided
         $(compose_with_options "*") logs -n 20 -f "$@"
+        ;;
+    pull)
+        shift
+        $(compose_with_options "$@") pull
         ;;
     help|--help|-h)
         show_help
