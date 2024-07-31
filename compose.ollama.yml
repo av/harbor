@@ -4,7 +4,6 @@ services:
     env_file: ./.env
     volumes:
       - ${HARBOR_OLLAMA_CACHE}:/root/.ollama
-    pull_policy: always
     tty: true
     image: ollama/ollama:latest
     ports:

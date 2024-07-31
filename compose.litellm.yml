@@ -7,7 +7,7 @@ services:
       - ./litellm:/app/litellm
     command: ['--config', '/app/litellm/config.yaml']
     depends_on:
-      langfusedb:
+      litellmdb:
         condition: service_healthy
     ports:
       - ${HARBOR_LITELLM_HOST_PORT}:4000

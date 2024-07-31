@@ -1,9 +1,10 @@
 services:
   webui:
     image: ghcr.io/open-webui/open-webui:main
-    env_file: ./.env
+    env_file:
+      - ./.env
+      - ./librechat/.env
     container_name: webui
-    pull_policy: always
     volumes:
       - ./open-webui:/app/backend/data
     ports:

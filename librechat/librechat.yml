@@ -1,0 +1,254 @@
+version: 1.1.5
+
+cache: true
+
+interface:
+  # Privacy policy settings
+  privacyPolicy:
+    externalUrl: 'https://librechat.ai/privacy-policy'
+    openNewTab: true
+
+  # Terms of service
+  termsOfService:
+    externalUrl: 'https://librechat.ai/tos'
+    openNewTab: true
+
+registration:
+  socialLogins: ["discord", "facebook", "github", "google", "openid"]
+
+endpoints:
+  custom:
+    # Ollama
+    - name: "Ollama"
+      apiKey: "ollama"
+      # use 'host.docker.internal' instead of localhost if running LibreChat in a docker container
+      baseURL: "http://ollama:11434/v1/chat/completions"
+      models:
+        default: [
+          ""
+        ]
+        # fetching list of models is supported but the `name` field must start
+        # with `ollama` (case-insensitive), as it does in this example.
+        fetch: true
+      titleConvo: true
+      titleModel: "current_model"
+      summarize: false
+      summaryModel: "current_model"
+      forcePrompt: false
+      modelDisplayLabel: "Ollama"
+
+    # Anyscale
+    - name: "Anyscale"
+      apiKey: "${ANYSCALE_API_KEY}"
+      baseURL: "https://api.endpoints.anyscale.com/v1"
+      models:
+        default: [
+          "meta-llama/Llama-2-7b-chat-hf",
+        ]
+        fetch: true
+      titleConvo: true
+      titleModel: "meta-llama/Llama-2-7b-chat-hf"
+      summarize: false
+      summaryModel: "meta-llama/Llama-2-7b-chat-hf"
+      forcePrompt: false
+      modelDisplayLabel: "Anyscale"
+
+    # APIpie
+    - name: "APIpie"
+      apiKey: "${APIPIE_API_KEY}"
+      baseURL: "https://apipie.ai/v1/"
+      models:
+        default: [
+          "gpt-4",
+          "gpt-4-turbo",
+          "gpt-3.5-turbo",
+          "claude-3-opus",
+          "claude-3-sonnet",
+          "claude-3-haiku",
+          "llama-3-70b-instruct",
+          "llama-3-8b-instruct",
+          "gemini-pro-1.5",
+          "gemini-pro",
+          "mistral-large",
+          "mistral-medium",
+          "mistral-small",
+          "mistral-tiny",
+          "mixtral-8x22b",
+        ]
+        fetch: false
+      titleConvo: true
+      titleModel: "gpt-3.5-turbo"
+      dropParams: ["stream"]
+
+    #cohere
+    - name: "cohere"
+      apiKey: "${COHERE_API_KEY}"
+      baseURL: "https://api.cohere.ai/v1"
+      models:
+        default: ["command-r","command-r-plus","command-light","command-light-nightly","command","command-nightly"]
+        fetch: false
+      modelDisplayLabel: "cohere"
+      titleModel: "command"
+      dropParams: ["stop", "user", "frequency_penalty", "presence_penalty", "temperature", "top_p"]
+
+    # Fireworks
+    - name: "Fireworks"
+      apiKey: "${FIREWORKS_API_KEY}"
+      baseURL: "https://api.fireworks.ai/inference/v1"
+      models:
+        default: [
+          "accounts/fireworks/models/mixtral-8x7b-instruct",
+        ]
+        fetch: true
+      titleConvo: true
+      titleModel: "accounts/fireworks/models/llama-v2-7b-chat"
+      summarize: false
+      summaryModel: "accounts/fireworks/models/llama-v2-7b-chat"
+      forcePrompt: false
+      modelDisplayLabel: "Fireworks"
+      dropParams: ["user"]
+
+    # groq
+    - name: "groq"
+      apiKey: "${GROQ_API_KEY}"
+      baseURL: "https://api.groq.com/openai/v1/"
+      models:
+        default: [
+          "llama2-70b-4096",
+          "llama3-70b-8192",
+          "llama3-8b-8192",
+          "mixtral-8x7b-32768",
+          "gemma-7b-it",
+        ]
+        fetch: false
+      titleConvo: true
+      titleModel: "mixtral-8x7b-32768"
+      modelDisplayLabel: "groq"
+
+    # Mistral AI API
+    - name: "Mistral"
+      apiKey: "${MISTRAL_API_KEY}"
+      baseURL: "https://api.mistral.ai/v1"
+      models:
+        default: [
+          "mistral-tiny",
+          "mistral-small",
+          "mistral-medium",
+          "mistral-large-latest"
+          ]
+        fetch: true
+      titleConvo: true
+      titleModel: "mistral-tiny"
+      modelDisplayLabel: "Mistral"
+      dropParams: ["stop", "user", "frequency_penalty", "presence_penalty"]
+
+    # OpenRouter.ai
+    - name: "OpenRouter"
+      apiKey: "${OPENROUTER_KEY}"
+      baseURL: "https://openrouter.ai/api/v1"
+      models:
+        default: ["openai/gpt-3.5-turbo"]
+        fetch: true
+      titleConvo: true
+      titleModel: "gpt-3.5-turbo"
+      summarize: false
+      summaryModel: "gpt-3.5-turbo"
+      forcePrompt: false
+      modelDisplayLabel: "OpenRouter"
+
+    # Perplexity
+    - name: "Perplexity"
+      apiKey: "${PERPLEXITY_API_KEY}"
+      baseURL: "https://api.perplexity.ai/"
+      models:
+        default: [
+          "mistral-7b-instruct",
+          "sonar-small-chat",
+          "sonar-small-online",
+          "sonar-medium-chat",
+          "sonar-medium-online"
+        ]
+        fetch: false # fetching list of models is not supported
+      titleConvo: true
+      titleModel: "sonar-medium-chat"
+      summarize: false
+      summaryModel: "sonar-medium-chat"
+      forcePrompt: false
+      dropParams: ["stop", "frequency_penalty"]
+      modelDisplayLabel: "Perplexity"
+
+    # ShuttleAI API
+    - name: "ShuttleAI"
+      apiKey: "${SHUTTLEAI_API_KEY}"
+      baseURL: "https://api.shuttleai.app/v1"
+      models:
+        default: [
+          "shuttle-2-turbo", "shuttle-turbo",
+        ]
+        fetch: true
+      titleConvo: true
+      titleModel: "shuttle-2-turbo"
+      summarize: false
+      summaryModel: "shuttle-2-turbo"
+      forcePrompt: false
+      modelDisplayLabel: "ShuttleAI"
+      dropParams: ["user"]
+
+    # together.ai
+    - name: "together.ai"
+      apiKey: "${TOGETHERAI_API_KEY}"
+      baseURL: "https://api.together.xyz"
+      models:
+        default: [
+          "zero-one-ai/Yi-34B-Chat",
+          "Austism/chronos-hermes-13b",
+          "DiscoResearch/DiscoLM-mixtral-8x7b-v2",
+          "Gryphe/MythoMax-L2-13b",
+          "lmsys/vicuna-13b-v1.5",
+          "lmsys/vicuna-7b-v1.5",
+          "lmsys/vicuna-13b-v1.5-16k",
+          "codellama/CodeLlama-13b-Instruct-hf",
+          "codellama/CodeLlama-34b-Instruct-hf",
+          "codellama/CodeLlama-70b-Instruct-hf",
+          "codellama/CodeLlama-7b-Instruct-hf",
+          "togethercomputer/llama-2-13b-chat",
+          "togethercomputer/llama-2-70b-chat",
+          "togethercomputer/llama-2-7b-chat",
+          "NousResearch/Nous-Capybara-7B-V1p9",
+          "NousResearch/Nous-Hermes-2-Mixtral-8x7B-DPO",
+          "NousResearch/Nous-Hermes-2-Mixtral-8x7B-SFT",
+          "NousResearch/Nous-Hermes-Llama2-70b",
+          "NousResearch/Nous-Hermes-llama-2-7b",
+          "NousResearch/Nous-Hermes-Llama2-13b",
+          "NousResearch/Nous-Hermes-2-Yi-34B",
+          "openchat/openchat-3.5-1210",
+          "Open-Orca/Mistral-7B-OpenOrca",
+          "togethercomputer/Qwen-7B-Chat",
+          "snorkelai/Snorkel-Mistral-PairRM-DPO",
+          "togethercomputer/alpaca-7b",
+          "togethercomputer/falcon-40b-instruct",
+          "togethercomputer/falcon-7b-instruct",
+          "togethercomputer/GPT-NeoXT-Chat-Base-20B",
+          "togethercomputer/Llama-2-7B-32K-Instruct",
+          "togethercomputer/Pythia-Chat-Base-7B-v0.16",
+          "togethercomputer/RedPajama-INCITE-Chat-3B-v1",
+          "togethercomputer/RedPajama-INCITE-7B-Chat",
+          "togethercomputer/StripedHyena-Nous-7B",
+          "Undi95/ReMM-SLERP-L2-13B",
+          "Undi95/Toppy-M-7B",
+          "WizardLM/WizardLM-13B-V1.2",
+          "garage-bAInd/Platypus2-70B-instruct",
+          "mistralai/Mistral-7B-Instruct-v0.1",
+          "mistralai/Mistral-7B-Instruct-v0.2",
+          "mistralai/Mixtral-8x7B-Instruct-v0.1",
+          "teknium/OpenHermes-2-Mistral-7B",
+          "teknium/OpenHermes-2p5-Mistral-7B",
+          "upstage/SOLAR-10.7B-Instruct-v1.0"
+        ]
+        fetch: false # fetching list of models is not supported
+      titleConvo: true
+      titleModel: "togethercomputer/llama-2-7b-chat"
+      summarize: false
+      summaryModel: "togethercomputer/llama-2-7b-chat"
+      forcePrompt: false
+      modelDisplayLabel: "together.ai"

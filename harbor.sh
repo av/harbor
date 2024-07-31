@@ -497,6 +497,7 @@ fix_fs_acl() {
     docker_fsacl ./langfuse
     docker_fsacl ./open-webui
     docker_fsacl ./tts
+    docker_fsacl ./librechat
 }
 
 run_litellm_command() {
@@ -553,7 +554,7 @@ case "$1" in
         ;;
     down)
         shift
-        $(compose_with_options "*") down
+        $(compose_with_options "*") down "$@"
         ;;
     ps)
         shift
