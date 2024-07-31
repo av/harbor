@@ -36,6 +36,32 @@ compose_with_options() {
             local match=false
             local is_nvidia_file=false
 
+            # This is a "cross" file, only to be included
+            # if we're running all the mentioned services
+            if [[ $filename == *".x."* ]]; then
+                local cross="${filename#compose.x.}"
+                cross="${cross%.yml}"
+
+                # Convert dot notation to array
+                local filename_parts=(${cross//./ })
+                local all_matched=true
+
+                for part in "${filename_parts[@]}"; do
+                    if [[ ! " ${options[*]} " =~ " ${part} " ]]; then
+                        all_matched=false
+                        break
+                    fi
+                done
+
+                if $all_matched; then
+                    compose_files+=("$file")
+                fi
+
+                # Either way, the processing
+                # for this file is done
+                break
+            fi
+
             # Check if file matches any of the options
             for option in "${options[@]}"; do
                 if [[ $option == "*" ]]; then
@@ -43,7 +69,7 @@ compose_with_options() {
                     break
                 fi
 
-                if [[ $filename == *"$option"* ]]; then
+                if [[ $filename == *".$option."* ]]; then
                     match=true
                     break
                 fi
@@ -94,6 +120,7 @@ show_help() {
     echo "  top           - Run nvtop to monitor GPU usage"
     echo "  llamacpp      - Configure llamacpp service"
     echo "  tgi           - Configure text-generation-inference service"
+    echo "  litellm       - Configure LiteLLM service"
     echo
     echo "Huggingface CLI:"
     echo "  hf            - Run the Harbor's Huggingface CLI. Expanded with a few additional commands."
@@ -109,6 +136,7 @@ show_help() {
     echo "  help          - Show this help message"
     echo "  version       - Show the CLI version"
     echo "  gum           - Run the Gum terminal commands"
+    echo "  fixfs         - Fix file system ACLs for service volumes"
     echo
     echo "Options:"
     echo "  Additional options to pass to the compose_with_options function"
@@ -199,13 +227,8 @@ get_service_url() {
     echo "$url"
 }
 
-open_service() {
-    output=$(get_service_url "$1" 2>&1) || {
-        echo "Failed to get service URL for $1. Error output:" >&2;
-        echo "$output" >&2;
-        exit 1;
-    }
-    url="$output"
+sys_open() {
+    url=$1
 
     # Open the URL in the default browser
     if command -v xdg-open &> /dev/null; then
@@ -218,7 +241,16 @@ open_service() {
         echo "Unable to open browser. Please visit $url manually."
         return 1
     fi
+}
 
+open_service() {
+    output=$(get_service_url "$1" 2>&1) || {
+        echo "Failed to get service URL for $1. Error output:" >&2;
+        echo "$output" >&2;
+        exit 1;
+    }
+    url="$output"
+    sys_open "$url"
     echo "Opened $url in your default browser."
 }
 
@@ -324,6 +356,35 @@ env_manager() {
     esac
 }
 
+env_manager_alias() {
+    local field=$1
+    shift
+    local get_command=""
+    local set_command=""
+
+    # Check if optional commands are provided
+    if [[ "$1" == "--on-get" ]]; then
+        get_command="$2"
+        shift 2
+    fi
+    if [[ "$1" == "--on-set" ]]; then
+        set_command="$2"
+        shift 2
+    fi
+
+    if [ $# -eq 0 ]; then
+        env_manager get $field
+        if [ -n "$get_command" ]; then
+            eval "$get_command"
+        fi
+    else
+        env_manager set $field $@
+        if [ -n "$set_command" ]; then
+            eval "$set_command"
+        fi
+    fi
+}
+
 parse_hf_url() {
     local url=$1
     local base_url="https://huggingface.co/"
@@ -352,22 +413,11 @@ run_llamacpp_command() {
     case "$1" in
         model)
             shift
-
-            # No args - get current model
-            if [ $# -eq 0 ]; then
-                env_manager get llamacpp.model
-            else
-                env_manager set llamacpp.model $@
-            fi
+            env_manager_alias llamacpp.model $@
             ;;
         args)
             shift
-
-            if [ $# -eq 0 ]; then
-                env_manager get llamacpp.extra.args
-            else
-                env_manager set llamacpp.extra.args $@
-            fi
+            env_manager_alias llamacpp.extra.args $@
             ;;
         *)
             echo "Please note that this is not llama.cpp CLI, but a Harbor CLI to manage llama.cpp service."
@@ -406,43 +456,19 @@ run_tgi_command() {
     case "$1" in
         model)
             shift
-
-            # No args - get current model
-            if [ $# -eq 0 ]; then
-                env_manager get tgi.model
-            else
-                env_manager set tgi.model $@
-                update_model_spec
-            fi
+            env_manager_alias tgi.model --on-set update_model_spec $@
             ;;
         args)
             shift
-
-            if [ $# -eq 0 ]; then
-                env_manager get tgi.extra.args
-            else
-                env_manager set tgi.extra.args $@
-            fi
+            env_manager_alias tgi.extra.args $@
             ;;
         quant)
             shift
-
-            if [ $# -eq 0 ]; then
-                env_manager get tgi.quant
-            else
-                env_manager set tgi.quant $@
-                update_model_spec
-            fi
+            env_manager_alias tgi.quant --on-set update_model_spec $@
             ;;
         revision)
             shift
-
-            if [ $# -eq 0 ]; then
-                env_manager get tgi.revision
-            else
-                env_manager set tgi.revision $@
-                update_model_spec
-            fi
+            env_manager_alias tgi.revision --on-set update_model_spec $@
             ;;
         *)
             echo "Please note that this is not TGI CLI, but a Harbor CLI to manage TGI service."
@@ -460,6 +486,51 @@ run_tgi_command() {
             ;;
     esac
 }
+
+docker_fsacl() {
+    local folder=$1
+    sudo setfacl --recursive -m user:1000:rwx $folder && sudo setfacl --recursive -m user:1002:rwx $folder && sudo setfacl --recursive -m user:1001:rwx $folder
+}
+
+fix_fs_acl() {
+    docker_fsacl ./ollama
+    docker_fsacl ./langfuse
+    docker_fsacl ./open-webui
+    docker_fsacl ./tts
+}
+
+run_litellm_command() {
+    case "$1" in
+        username)
+            shift
+            env_manager_alias litellm.ui.username $@
+            ;;
+        password)
+            shift
+            env_manager_alias litellm.ui.password $@
+            ;;
+        ui)
+            shift
+            if service_url=$(get_service_url litellm 2>&1); then
+                sys_open "$service_url/ui"
+            else
+                echo "Error: Failed to get service URL for litellm: $service_url"
+                exit 1
+            fi
+            ;;
+        *)
+            echo "Please note that this is not LiteLLM CLI, but a Harbor CLI to manage LiteLLM service."
+            echo
+            echo "Usage: harbor litellm <command>"
+            echo
+            echo "Commands:"
+            echo "  harbor litellm username [username] - Get or set the LITeLLM UI username"
+            echo "  harbor litellm password [username] - Get or set the LITeLLM UI password"
+            echo "  harbor litellm ui                  - Open LiteLLM UI screen"
+            ;;
+    esac
+}
+
 
 # ========================================================================
 # == Main script
@@ -491,7 +562,7 @@ case "$1" in
     logs)
         shift
         # Only pass "*" to the command if no options are provided
-        $(compose_with_options "*") logs "$@" -n 20 -f
+        $(compose_with_options "*") logs -n 20 -f "$@"
         ;;
     help|--help|-h)
         show_help
@@ -502,7 +573,7 @@ case "$1" in
         ;;
     defaults)
         shift
-        show_default_services
+        env_manager_alias services.default $@
         ;;
     ln)
         shift
@@ -544,6 +615,10 @@ case "$1" in
         shift
         run_tgi_command $@
         ;;
+    litellm)
+        shift
+        run_litellm_command $@
+        ;;
     exec)
         shift
         run_in_service $@
@@ -555,6 +630,10 @@ case "$1" in
     gum)
         shift
         run_gum $@
+        ;;
+    fixfs)
+        shift
+        fix_fs_acl
         ;;
     *)
         echo "Unknown command: $1"

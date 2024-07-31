@@ -1,6 +1,7 @@
 model_list:
   - model_name: tgi
     litellm_params:
-      # model: huggingface/hugging-quants/Meta-Llama-3.1-8B-Instruct-AWQ-INT4
       model: huggingface/anymodel
       api_base: http://tgi:80
+litellm_settings:
+  success_callback: ['langfuse']

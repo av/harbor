@@ -5,4 +5,6 @@ services:
     container_name: hollama
     ports:
       - ${HARBOR_HOLLAMA_HOST_PORT}:4173
+    networks:
+      - harbor-network
 

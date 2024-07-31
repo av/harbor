@@ -1,0 +1,39 @@
+services:
+  langfuse:
+    image: langfuse/langfuse
+    env_file: ./.env
+    container_name: langfuse
+    ports:
+      - ${HARBOR_LANGFUSE_HOST_PORT}:3000
+    depends_on:
+      langfusedb:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@langfusedb:5432/postgres
+      - NEXTAUTH_URL=http://localhost:${HARBOR_LANGFUSE_HOST_PORT}
+      - NEXTAUTH_SECRET=${HARBOR_LANGFUSE_NEXTAUTH_SECRET}
+      - SALT=${HARBOR_LANGFUSE_SALT}
+    networks:
+      - harbor-network
+
+  langfusedb:
+    image: postgres
+    restart: always
+    container_name: langfusedb
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=postgres
+    ports:
+      - ${HARBOR_LANGFUSE_DB_HOST_PORT}:5432
+    volumes:
+      - ./langfuse/db:/var/lib/postgresql/data
+    networks:
+      - harbor-network
+
+

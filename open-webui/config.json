@@ -27,7 +27,7 @@
 		],
 		"api_keys": [
 			"",
-			""
+			"sk-litellm"
 		],
 		"enabled": true
 	},

@@ -1,0 +1,5 @@
+@host = http://localhost:33881
+
+###
+
+curl {{host}}/api/public/health

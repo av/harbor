@@ -1,0 +1,6 @@
+services:
+  litellm:
+    environment:
+      - LANGFUSE_HOST=http://langfuse:3000
+      - LANGFUSE_PUBLIC_KEY=${HARBOR_LANGFUSE_PUBLIC_KEY}
+      - LANGFUSE_SECRET_KEY=${HARBOR_LANGFUSE_SECRET_KEY}

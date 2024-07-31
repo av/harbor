@@ -6,7 +6,35 @@ services:
     volumes:
       - ./litellm:/app/litellm
     command: ['--config', '/app/litellm/config.yaml']
+    depends_on:
+      langfusedb:
+        condition: service_healthy
     ports:
       - ${HARBOR_LITELLM_HOST_PORT}:4000
+    networks:
+      - harbor-network
+    environment:
+      - LITELLM_MASTER_KEY=${HARBOR_LITELLM_MASTER_KEY}
+      - DATABASE_URL=postgresql://postgres:postgres@litellmdb:5432/postgres
+      - UI_USERNAME=${HARBOR_LITELLM_UI_USERNAME}
+      - UI_PASSWORD=${HARBOR_LITELLM_UI_PASSWORD}
+
+  litellmdb:
+    image: postgres
+    restart: always
+    container_name: litellmdb
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=postgres
+    ports:
+      - ${HARBOR_LITELLM_DB_HOST_PORT}:5432
+    volumes:
+      - ./litellm/db:/var/lib/postgresql/data
     networks:
       - harbor-network

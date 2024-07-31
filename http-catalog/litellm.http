@@ -1,12 +1,13 @@
 @host = http://localhost:33841
+@apiKey = sk-litellm
 
 ###
 
-curl {{host}}/models
+curl {{host}}/models -H 'Authorization: Bearer {{apiKey}}'
 
 ###
 
-curl {{host}}/v1/completions -X POST -H "Content-Type: application/json" -d '{
+curl {{host}}/v1/completions -X POST -H "Content-Type: application/json" -H 'Authorization: Bearer {{apiKey}}' -d '{
   "model": "tgi",
   "prompt": "Once upon a time",
   "max_tokens": 50
@@ -14,7 +15,7 @@ curl {{host}}/v1/completions -X POST -H "Content-Type: application/json" -d '{
 
 ###
 
-curl {{host}}/v1/chat/completions -H 'Content-Type: application/json' -d '{
+curl {{host}}/v1/chat/completions -H 'Content-Type: application/json' -H 'Authorization: Bearer {{apiKey}}' -d '{
   "model": "tgi",
   "messages": [
     {
@@ -23,7 +24,20 @@ curl {{host}}/v1/chat/completions -H 'Content-Type: application/json' -d '{
     },
     {
       "role": "user",
-      "content": "What is deep frying?"
+      "content": "Who are you?"
+    }
+  ],
+  "max_tokens": 64
+}'
+
+###
+
+curl {{host}}/v1/chat/completions -H 'Content-Type: application/json' -H 'Authorization: Bearer {{apiKey}}' -d '{
+  "model": "tgi",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Who are you?"
     }
   ],
   "max_tokens": 64
