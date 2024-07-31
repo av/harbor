@@ -22,8 +22,8 @@ services:
     container_name: langfusedb
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 3s
-      timeout: 3s
+      interval: 1s
+      timeout: 5s
       retries: 10
     environment:
       - POSTGRES_USER=postgres

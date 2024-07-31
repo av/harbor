@@ -67,7 +67,7 @@ harbor config list
 harbor config set webui.host.port 8080
 
 # Eject from Harbor into a standalone Docker Compose setup
-# Will export
+# Will export related services and variables into a standalone file.
 harbor eject searxng llamacpp > docker-compose.harbor.yml
 ```
 
