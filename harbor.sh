@@ -538,7 +538,7 @@ run_litellm_command() {
 # == Main script
 # ========================================================================
 
-version="0.0.7"
+version="0.0.8"
 delimiter="|"
 
 harbor_home=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
