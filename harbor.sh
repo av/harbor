@@ -600,7 +600,7 @@ run_vllm_command() {
 # == Main script
 # ========================================================================
 
-version="0.0.8"
+version="0.0.9"
 delimiter="|"
 
 harbor_home=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
