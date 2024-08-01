@@ -125,6 +125,7 @@ show_help() {
     echo "Huggingface CLI:"
     echo "  hf            - Run the Harbor's Huggingface CLI. Expanded with a few additional commands."
     echo "  hf parse-url  - Parse file URL from Hugging Face"
+    echo "  hf token      - Get/set the Hugging Face Hub token"
     echo
     echo "Harbor CLI Commands:"
     echo "  open          - Open a service in the default browser"
@@ -147,6 +148,11 @@ run_hf_cli() {
         parse-url)
             shift
             parse_hf_url $@
+            return
+            ;;
+        token)
+            shift
+            env_manager_alias hf.hub.token $@
             return
             ;;
     esac
@@ -582,6 +588,10 @@ run_vllm_command() {
             shift
             env_manager_alias vllm.extra.args $@
             ;;
+        attention)
+            shift
+            env_manager_alias vllm.attention_backend $@
+            ;;
         *)
             echo "Please note that this is not VLLM CLI, but a Harbor CLI to manage VLLM service."
             echo "Access VLLM own CLI by running 'harbor exec vllm' when it's running."
@@ -589,8 +599,9 @@ run_vllm_command() {
             echo "Usage: harbor vllm <command>"
             echo
             echo "Commands:"
-            echo "  harbor vllm model [user/repo] - Get or set the VLLM model repository to run"
-            echo "  harbor vllm args [args]       - Get or set extra args to pass to the VLLM CLI"
+            echo "  harbor vllm model [user/repo]   - Get or set the VLLM model repository to run"
+            echo "  harbor vllm args [args]         - Get or set extra args to pass to the VLLM CLI"
+            echo "  harbor vllm attention [backend] - Get or set the attention backend to use"
             ;;
     esac
 }
