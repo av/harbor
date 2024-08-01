@@ -41,14 +41,14 @@ harbor up searxng
 # Open Webui is automatically connected to them.
 harbor up llamacpp tgi lmdeploy litellm mistralrs vllm
 
-# Use custom model for llama.cpp
-harbor llamacpp model https://huggingface.co/user/repo/model.gguf
+# Run different Frontends
+harbor up librechat bionicgpt hollama
 
-# Use custom model/args for text-generation-inference
-harbor tgi model repo/model
-harbor tgi quant eetq
-harbor tgi revision 4.0bpw
-harbor tgi args '--rope-factor 2.0'
+# Use custom models for supported backends
+harbor llamacpp model https://huggingface.co/user/repo/model.gguf
+# Where possible, cache is shared between the services
+harbor tgi model google/gemma-2-2b-it
+harbor vllm model google/gemma-2-2b-it
 
 # Convenience tools for docker setup
 harbor logs llamacpp
