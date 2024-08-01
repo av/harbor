@@ -6,7 +6,7 @@
 
 compose_with_options() {
     local base_dir="$PWD"
-    local compose_files=("compose.yml")  # Always include the base compose file
+    local compose_files=("$base_dir/compose.yml")  # Always include the base compose file
     local options=("${default_options[@]}")
 
     # Parse arguments
@@ -29,7 +29,6 @@ compose_with_options() {
         has_nvidia=true
     fi
 
-    # Loop through compose files in the directory
     for file in "$base_dir"/compose.*.yml; do
         if [ -f "$file" ]; then
             local filename=$(basename "$file")
@@ -59,7 +58,7 @@ compose_with_options() {
 
                 # Either way, the processing
                 # for this file is done
-                break
+                continue
             fi
 
             # Check if file matches any of the options
@@ -386,6 +385,32 @@ env_manager_alias() {
     fi
 }
 
+override_yaml_value() {
+    local file="$1"
+    local key="$2"
+    local new_value="$3"
+    local temp_file="$(mktemp)"
+
+    if [ -z "$file" ] || [ -z "$key" ] || [ -z "$new_value" ]; then
+        echo "Usage: override_yaml_value <file_path> <key> <new_value>"
+        return 1
+    fi
+
+    awk -v key="$key" -v value="$new_value" '
+    $0 ~ key {
+        sub(/:[[:space:]]*.*/, ": " value)
+    }
+    {print}
+    ' "$file" > "$temp_file" && mv "$temp_file" "$file"
+
+    if [ $? -eq 0 ]; then
+        echo "Successfully updated '$key' in $file"
+    else
+        echo "Failed to update '$key' in $file"
+        return 1
+    fi
+}
+
 parse_hf_url() {
     local url=$1
     local base_url="https://huggingface.co/"
@@ -533,6 +558,43 @@ run_litellm_command() {
     esac
 }
 
+run_vllm_command() {
+    update_model_spec() {
+        local spec=""
+        local current_model=$(env_manager get vllm.model)
+
+        if [ -n "$current_model" ]; then
+            spec="--model $current_model"
+        fi
+
+        env_manager set vllm.model.specifier "$spec"
+
+        # Litellm model specifier for vLLM
+        override_yaml_value ./litellm/litellm.vllm.yaml "model:" "openai/$current_model"
+    }
+
+    case "$1" in
+        model)
+            shift
+            env_manager_alias vllm.model --on-set update_model_spec $@
+            ;;
+        args)
+            shift
+            env_manager_alias vllm.extra.args $@
+            ;;
+        *)
+            echo "Please note that this is not VLLM CLI, but a Harbor CLI to manage VLLM service."
+            echo "Access VLLM own CLI by running 'harbor exec vllm' when it's running."
+            echo
+            echo "Usage: harbor vllm <command>"
+            echo
+            echo "Commands:"
+            echo "  harbor vllm model [user/repo] - Get or set the VLLM model repository to run"
+            echo "  harbor vllm args [args]       - Get or set extra args to pass to the VLLM CLI"
+            ;;
+    esac
+}
+
 
 # ========================================================================
 # == Main script
@@ -569,6 +631,20 @@ case "$1" in
     pull)
         shift
         $(compose_with_options "$@") pull
+        ;;
+    exec)
+        shift
+        run_in_service $@
+        ;;
+    run)
+        shift
+        service=$1
+        shift
+        $(compose_with_options "$service") run --rm $service $@
+        ;;
+    cmd)
+        shift
+        echo $(compose_with_options "$@")
         ;;
     help|--help|-h)
         show_help
@@ -625,9 +701,9 @@ case "$1" in
         shift
         run_litellm_command $@
         ;;
-    exec)
+    vllm)
         shift
-        run_in_service $@
+        run_vllm_command $@
         ;;
     config)
         shift

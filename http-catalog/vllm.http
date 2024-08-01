@@ -1,0 +1,27 @@
+@host = http://localhost:33911
+
+###
+
+curl {{host}}/v1/chat/completions -H 'Content-Type: application/json' -d '{
+  "model": "google/gemma-2-2b-it",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Bobby was born in Paris. How old is Bobby?"
+    }
+  ],
+  "max_tokens": 200
+}'
+
+###
+
+curl {{host}}/v1/chat/completions -H 'Content-Type: application/json' -H "Authorization: Bearer ---" -d '{
+  "model": "google/gemma-2-2b-it",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Bobby was born in Paris. How old is Bobby?"
+    }
+  ],
+  "max_tokens": 200
+}'

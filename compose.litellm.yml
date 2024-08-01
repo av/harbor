@@ -4,8 +4,17 @@ services:
     env_file: ./.env
     container_name: litellm
     volumes:
-      - ./litellm:/app/litellm
-    command: ['--config', '/app/litellm/config.yaml']
+    # Additional config file volumes will be appended when
+    # LiteLLM is combined with other services
+      - ./litellm/litellm.config.yaml:/app/litellm/config.yaml
+      - ./litellm/start_litellm.sh:/app/litellm/start_litellm.sh
+      - ./shared/config_merger.py:/app/config_merger.py
+    # Note that this config is "assembled" from
+    # the parts that implement relevant service
+    # compatibility, such as vllm or tgi or langfuse.
+    # See individual parts in the ./litellm folder
+    command: ['--config', '/app/proxy.yaml']
+    entrypoint: ["/app/litellm/start_litellm.sh"]
     depends_on:
       litellmdb:
         condition: service_healthy

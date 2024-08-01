@@ -1,0 +1,6 @@
+@host = http://localhost:33861
+
+===
+
+curl -s {{host}}/v1/audio/speech -H "Content-Type: application/json" -d '{
+    "input": "The quick brown fox jumped over the lazy dog."}' > speech.mp3

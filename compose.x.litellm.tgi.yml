@@ -1,0 +1,4 @@
+services:
+  litellm:
+    volumes:
+      - ./litellm/litellm.tgi.yaml:/app/litellm/tgi.yaml

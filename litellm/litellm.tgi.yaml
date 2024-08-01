@@ -3,5 +3,3 @@ model_list:
     litellm_params:
       model: huggingface/anymodel
       api_base: http://tgi:80
-litellm_settings:
-  success_callback: ['langfuse']

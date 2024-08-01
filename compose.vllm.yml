@@ -1,0 +1,18 @@
+services:
+  vllm:
+    container_name: vllm
+    env_file: ./.env
+    image: vllm/vllm-openai:latest
+    ports:
+      - ${HARBOR_VLLM_HOST_PORT}:8000
+    ipc: host
+    volumes:
+      - ${HARBOR_HF_CACHE}:/root/.cache/huggingface
+    command: >
+      ${HARBOR_VLLM_MODEL_SPECIFIER}
+      ${HARBOR_VLLM_EXTRA_ARGS}
+    environment:
+      - HUGGING_FACE_HUB_TOKEN=${HARBOR_HF_HUB_TOKEN}
+      - VLLM_ATTENTION_BACKEND=${HARBOR_VLLM_ATTENTION_BACKEND}
+    networks:
+      - harbor-network

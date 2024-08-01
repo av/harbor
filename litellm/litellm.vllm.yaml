@@ -1,0 +1,6 @@
+model_list:
+  - model_name: vllm
+    litellm_params:
+      model: openai/google/gemma-2-2b-it
+      api_base: http://vllm:8000/v1
+      api_key: "---"

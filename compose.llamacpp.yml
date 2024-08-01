@@ -3,7 +3,7 @@ services:
     image: ghcr.io/ggerganov/llama.cpp:full-cuda
     container_name: llamacpp
     volumes:
-      - ${HARBOR_HUGGINGFACE_CACHE}:/app/models
+      - ${HARBOR_HF_CACHE}:/app/models
       - ${HARBOR_LLAMACPP_CACHE}:/root/.cache/llama.cpp
     ports:
       - ${HARBOR_LLAMACPP_HOST_PORT}:8080

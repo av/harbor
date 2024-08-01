@@ -3,7 +3,7 @@ services:
     image: openmmlab/lmdeploy:latest
     container_name: lmdeploy
     volumes:
-      - ${HARBOR_HUGGINGFACE_CACHE}:/root/.cache/huggingface
+      - ${HARBOR_HF_CACHE}:/root/.cache/huggingface
     ports:
       - ${HARBOR_LMDEPLOY_HOST_PORT}:23333
     ipc: host

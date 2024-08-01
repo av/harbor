@@ -42,3 +42,20 @@ curl {{host}}/v1/chat/completions -H 'Content-Type: application/json' -H 'Author
   ],
   "max_tokens": 64
 }'
+
+###
+
+curl {{host}}/v1/chat/completions -H 'Content-Type: application/json' -H 'Authorization: Bearer {{apiKey}}' -d '{
+  "model": "vllm",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Who are you?"
+    }
+  ],
+  "max_tokens": 64
+}'
+
+###
+
+curl {{host}}/health  -H 'Authorization: Bearer {{apiKey}}'
