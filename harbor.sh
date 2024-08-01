@@ -634,7 +634,7 @@ run_aphrodite_command() {
 # == Main script
 # ========================================================================
 
-version="0.0.9"
+version="0.0.10"
 delimiter="|"
 
 harbor_home=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
