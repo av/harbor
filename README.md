@@ -7,6 +7,7 @@ Containerized LLM toolkit. Run LLM backends, APIs, frontends, and additional ser
 #### Requirements
 
 - Docker
+  - _Optional_ [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html#installation)
 - git
 - bash-compatible shell
 
@@ -19,6 +20,8 @@ git clone https://github.com/av/harbor.git && cd harbor
 
 # Start default services
 # Initial download of the docker images might take a while
+# If you have container toolkit installed, GPU will
+# be automatically used for supported services.
 harbor up
 
 # [Optional] open Webui in the browser
