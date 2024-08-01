@@ -1,0 +1,17 @@
+services:
+  aphrodite:
+    image: alpindale/aphrodite-engine
+    container_name: aphrodite
+    env_file: ./.env
+    ipc: host
+    ports:
+      - "${HARBOR_APHRODITE_HOST_PORT}:7860"
+    volumes:
+      - ${HARBOR_HF_CACHE}:/tmp:rw
+    user: root
+    networks:
+      - harbor-network
+    environment:
+      - HF_TOKEN=${HARBOR_HF_CACHE}
+      - MODEL_NAME=${HARBOR_APHRODITE_MODEL}
+      - CMD_ADDITIONAL_ARGUMENTS=${HARBOR_APHRODITE_EXTRA_ARGS}

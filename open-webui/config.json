@@ -23,11 +23,13 @@
 	"openai": {
 		"api_base_urls": [
 			"http://llamacpp:8080/v1",
-			"http://litellm:4000/v1"
+			"http://litellm:4000/v1",
+			"http://aphrodite:7860/v1"
 		],
 		"api_keys": [
 			"",
-			"sk-litellm"
+			"sk-litellm",
+			""
 		],
 		"enabled": true
 	},

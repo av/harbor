@@ -1,0 +1,19 @@
+@host = http://localhost:33921
+@model = neuralmagic/Mistral-7B-Instruct-v0.3-GPTQ-4bit
+
+###
+
+curl {{host}}/v1/models
+
+###
+
+curl {{host}}/v1/chat/completions -H 'Content-Type: application/json' -d '{
+  "model": "{{model}}",
+  "messages": [
+    {
+      "role": "user",
+      "content": "You are a potato. Tell me about your life."
+    }
+  ],
+  "max_tokens": 200
+}'

@@ -606,6 +606,29 @@ run_vllm_command() {
     esac
 }
 
+run_aphrodite_command() {
+    case "$1" in
+        model)
+            shift
+            env_manager_alias aphrodite.model $@
+            ;;
+        args)
+            shift
+            env_manager_alias aphrodite.extra.args $@
+            ;;
+        *)
+            echo "Please note that this is not Aphrodite CLI, but a Harbor CLI to manage Aphrodite service."
+            echo "Access Aphrodite own CLI by running 'harbor exec aphrodite' when it's running."
+            echo
+            echo "Usage: harbor aphrodite <command>"
+            echo
+            echo "Commands:"
+            echo "  harbor aphrodite model <user/repo>   - Get/set the Aphrodite model to run"
+            echo "  harbor aphrodite args <args>         - Get/set extra args to pass to the Aphrodite CLI"
+            ;;
+    esac
+}
+
 
 # ========================================================================
 # == Main script
@@ -715,6 +738,10 @@ case "$1" in
     vllm)
         shift
         run_vllm_command $@
+        ;;
+    aphrodite)
+        shift
+        run_aphrodite_command $@
         ;;
     config)
         shift
