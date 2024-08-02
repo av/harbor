@@ -3,7 +3,6 @@ services:
     image: ghcr.io/open-webui/open-webui:main
     env_file:
       - ./.env
-      - ./librechat/.env
     container_name: webui
     volumes:
       - ./open-webui:/app/backend/data
