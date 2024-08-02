@@ -1,0 +1,12 @@
+{
+	"image_generation": {
+		"engine": "comfyui",
+		"enable": true,
+		"model": "Juggernaut_X_RunDiffusion_Hyper.safetensors",
+		"size": "512x512",
+		"steps": 50,
+		"comfyui": {
+			"base_url": "http://comfyui:8188"
+		}
+	}
+}

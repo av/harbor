@@ -82,6 +82,8 @@ harbor eject searxng llamacpp > docker-compose.harbor.yml
   Read about supported services and the ways to configure them.
 - [Harbor Compose Setup](https://github.com/av/harbor/wiki/Harbor-Compose-Setup)<br/>
   Read about the way Harbor uses Docker Compose to manage services.
+- [Compatibility](https://github.com/av/harbor/wiki/Compatibility)<br/>
+  Known compatibility issues between the services and models as well as possible workarounds.
 
 ## Why?
 

@@ -8,7 +8,7 @@ services:
     # LiteLLM is combined with other services
       - ./litellm/litellm.config.yaml:/app/litellm/config.yaml
       - ./litellm/start_litellm.sh:/app/litellm/start_litellm.sh
-      - ./shared/config_merger.py:/app/config_merger.py
+      - ./shared/yaml_config_merger.py:/app/yaml_config_merger.py
     # Note that this config is "assembled" from
     # the parts that implement relevant service
     # compatibility, such as vllm or tgi or langfuse.

@@ -1,6 +1,9 @@
 # Open WebUI
-open-webui/
-!open-webui/config.json
+open-webui/*
+open-webui/config.json
+
+!open-webui/configs/
+!open-webui/start_webui.sh
 
 # Ollama
 /ollama/ollama/
@@ -20,3 +23,6 @@ librechat/meili_data_v1.7/
 librechat/logs/
 librechat/vectordb/
 librechat/images/
+
+# Local scripts
+scripts/

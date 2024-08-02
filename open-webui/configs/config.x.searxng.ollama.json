@@ -1,0 +1,6 @@
+{
+	"rag": {
+		"embedding_engine": "ollama",
+		"embedding_model": "mxbai-embed-large:latest"
+	}
+}

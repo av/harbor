@@ -1,0 +1,11 @@
+{
+  "openai": {
+		"api_base_urls": [
+			"http://llamacpp:8080/v1"
+		],
+		"api_keys": [
+			""
+		],
+		"enabled": true
+	}
+}

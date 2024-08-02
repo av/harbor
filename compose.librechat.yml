@@ -17,22 +17,22 @@ services:
       - MEILI_HOST=http://lcsearch:7700
       - RAG_PORT=${HARBOR_LIBRECHAT_RAG_HOST_PORT}
       - RAG_API_URL=http://lcrag:${HARBOR_LIBRECHAT_RAG_HOST_PORT}
-      - ANYSCALE_API_KEY=${HARBOR_ANYSCALE_API_KEY:-user_provided}
-      - APIPIE_API_KEY=${HARBOR_APIPIE_API_KEY:-user_provided}
-      - COHERE_API_KEY=${HARBOR_COHERE_API_KEY:-user_provided}
+      - ANYSCALE_API_KEY=${HARBOR_ANYSCALE_KEY:-user_provided}
+      - APIPIE_API_KEY=${HARBOR_APIPIE_KEY:-user_provided}
+      - COHERE_API_KEY=${HARBOR_COHERE_KEY:-user_provided}
       - FIREWORKS_API_KEY=${HARBOR_FIREWORKS_API_KEY:-user_provided}
-      - GROQ_API_KEY=${HARBOR_GROQ_API_KEY:-user_provided}
-      - HUGGINGFACE_TOKEN=${HARBOR_HUGGINGFACE_TOKEN:-user_provided}
-      - MISTRAL_API_KEY=${HARBOR_MISTRAL_API_KEY:-user_provided}
+      - GROQ_API_KEY=${HARBOR_GROQ_KEY:-user_provided}
+      - HUGGINGFACE_TOKEN=${HARBOR_HF_HUB_TOKEN:-user_provided}
+      - MISTRAL_API_KEY=${HARBOR_MISTRAL_KEY:-user_provided}
       - OPENROUTER_KEY=${HARBOR_OPENROUTER_KEY:-user_provided}
-      - PERPLEXITY_API_KEY=${HARBOR_PERPLEXITY_API_KEY:-user_provided}
-      - SHUTTLEAI_API_KEY=${HARBOR_SHUTTLEAI_API_KEY:-user_provided}
-      - TOGETHERAI_API_KEY=${HARBOR_TOGETHERAI_API_KEY:-user_provided}
-      - ANTHROPIC_API_KEY=${HARBOR_ANTHROPIC_API_KEY:-user_provided}
+      - PERPLEXITY_API_KEY=${HARBOR_PERPLEXITY_KEY:-user_provided}
+      - SHUTTLEAI_API_KEY=${HARBOR_SHUTTLEAI_KEY:-user_provided}
+      - TOGETHERAI_API_KEY=${HARBOR_TOGETHERAI_KEY:-user_provided}
+      - ANTHROPIC_API_KEY=${HARBOR_ANTHROPIC_KEY:-user_provided}
       - BINGAI_TOKEN=${HARBOR_BINGAI_TOKEN:-user_provided}
       - GOOGLE_KEY=${HARBOR_GOOGLE_KEY:-user_provided}
-      - OPENAI_API_KEY=${HARBOR_OPENAI_API_KEY:-user_provided}
-      - ASSISTANTS_API_KEY=${HARBOR_ASSISTANTS_API_KEY:-user_provided}
+      - OPENAI_API_KEY=${HARBOR_OPENAI_KEY:-user_provided}
+      - ASSISTANTS_API_KEY=${HARBOR_ASSISTANTS_KEY:-user_provided}
     volumes:
       - type: bind
         source: ./librechat/.env

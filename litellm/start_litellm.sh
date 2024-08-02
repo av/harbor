@@ -7,7 +7,7 @@ echo "Harbor: Custom LiteLLM Entrypoint"
 python --version
 
 echo "YAML Merger is starting..."
-python /app/config_merger.py --pattern ".yaml" --output "/app/proxy.yaml" --directory "/app/litellm"
+python /app/yaml_config_merger.py --pattern ".yaml" --output "/app/proxy.yaml" --directory "/app/litellm"
 
 echo "Merged Configs:"
 cat /app/proxy.yaml

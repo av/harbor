@@ -1,0 +1,11 @@
+{
+  "openai": {
+		"api_base_urls": [
+			"http://aphrodite:7860/v1"
+		],
+		"api_keys": [
+			""
+		],
+		"enabled": true
+	}
+}

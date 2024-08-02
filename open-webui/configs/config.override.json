@@ -1,0 +1,11 @@
+{
+  "openai": {
+		"api_base_urls": [
+			"${...HARBOR_OPENAI_URLS}"
+		],
+		"api_keys": [
+			"${...HARBOR_OPENAI_KEYS}"
+		],
+		"enabled": true
+	}
+}

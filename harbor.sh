@@ -4,6 +4,58 @@
 # == Functions
 # ========================================================================
 
+show_version() {
+    echo "Harbor CLI version: $version"
+}
+
+show_help() {
+    show_version
+    echo "Usage: $0 <command> [options]"
+    echo
+    echo "Compose Setup Commands:"
+    echo "  up            - Start the containers"
+    echo "  down          - Stop and remove the containers"
+    echo "  ps            - List the running containers"
+    echo "  logs          - View the logs of the containers"
+    echo "  exec          - Execute a command in a running service"
+    echo "  pull          - Pull the latest images"
+    echo "  dive          - Run the Dive CLI to inspect Docker images"
+    echo
+    echo "Setup Management Commands:"
+    echo "  ollama        - Run the Harbor's Ollama CLI. Ollama service should be running"
+    echo "  smi           - Show NVIDIA GPU information"
+    echo "  top           - Run nvtop to monitor GPU usage"
+    echo "  llamacpp      - Configure llamacpp service"
+    echo "  tgi           - Configure text-generation-inference service"
+    echo "  litellm       - Configure LiteLLM service"
+    echo "  openai        - Configure OpenAI API keys and URLs"
+    echo "  vllm          - Configure VLLM service"
+    echo "  aphrodite     - Configure Aphrodite service"
+    echo
+    echo "Huggingface CLI:"
+    echo "  hf            - Run the Harbor's Huggingface CLI. Expanded with a few additional commands."
+    echo "  hf parse-url  - Parse file URL from Hugging Face"
+    echo "  hf token      - Get/set the Hugging Face Hub token"
+    echo
+    echo "Harbor CLI Commands:"
+    echo "  open                  - Open a service in the default browser"
+    echo "  url                   - Get the URL for a service"
+    echo "  config                - Manage the Harbor environment configuration"
+    echo "  ln                    - Create a symbolic link to the CLI"
+    echo "  eject                 - Eject the Compose configuration, accepts same options as 'up'"
+    echo "  defaults [ls]         - List default services"
+    echo "  defaults rm           - Remove default services, no options to remove all, accepts handle or index"
+    echo "  defaults add <handle> - Add a default service"
+    echo "  help                  - Show this help message"
+    echo "  version               - Show the CLI version"
+    echo "  gum                   - Run the Gum terminal commands"
+    echo "  fixfs                 - Fix file system ACLs for service volumes"
+    echo "  info                  - Show system information for debug/issues"
+    echo
+    echo "Options:"
+    echo "  Additional options to pass to the compose_with_options function"
+}
+
 compose_with_options() {
     local base_dir="$PWD"
     local compose_files=("$base_dir/compose.yml")  # Always include the base compose file
@@ -98,51 +150,6 @@ compose_with_options() {
     echo "$cmd"
 }
 
-show_version() {
-    echo "Harbor CLI version: $version"
-}
-
-show_help() {
-    show_version
-    echo "Usage: $0 <command> [options]"
-    echo
-    echo "Compose Setup Commands:"
-    echo "  up            - Start the containers"
-    echo "  down          - Stop and remove the containers"
-    echo "  ps            - List the running containers"
-    echo "  logs          - View the logs of the containers"
-    echo "  exec          - Execute a command in a running service"
-    echo "  pull          - Pull the latest images"
-    echo
-    echo "Setup Management Commands:"
-    echo "  ollama        - Run the Harbor's Ollama CLI. Ollama service should be running"
-    echo "  smi           - Show NVIDIA GPU information"
-    echo "  top           - Run nvtop to monitor GPU usage"
-    echo "  llamacpp      - Configure llamacpp service"
-    echo "  tgi           - Configure text-generation-inference service"
-    echo "  litellm       - Configure LiteLLM service"
-    echo
-    echo "Huggingface CLI:"
-    echo "  hf            - Run the Harbor's Huggingface CLI. Expanded with a few additional commands."
-    echo "  hf parse-url  - Parse file URL from Hugging Face"
-    echo "  hf token      - Get/set the Hugging Face Hub token"
-    echo
-    echo "Harbor CLI Commands:"
-    echo "  open          - Open a service in the default browser"
-    echo "  url           - Get the URL for a service"
-    echo "  config        - Manage the Harbor environment configuration"
-    echo "  ln            - Create a symbolic link to the CLI"
-    echo "  eject         - Eject the Compose configuration, accepts same options as 'up'"
-    echo "  defaults      - Show the default services"
-    echo "  help          - Show this help message"
-    echo "  version       - Show the CLI version"
-    echo "  gum           - Run the Gum terminal commands"
-    echo "  fixfs         - Fix file system ACLs for service volumes"
-    echo
-    echo "Options:"
-    echo "  Additional options to pass to the compose_with_options function"
-}
-
 run_hf_cli() {
     case "$1" in
         parse-url)
@@ -166,11 +173,9 @@ run_gum() {
     docker run --rm -it -e "TERM=xterm-256color" $gum_image $@
 }
 
-show_default_services() {
-    echo "Default services:"
-    for service in "${default_options[@]}"; do
-        echo "  - $service"
-    done
+run_dive() {
+    local dive_image=wagoodman/dive
+    docker run --rm -it -v /var/run/docker.sock:/var/run/docker.sock $dive_image $@
 }
 
 link_cli() {
@@ -231,6 +236,10 @@ get_service_url() {
     url="http://localhost:$port"
 
     echo "$url"
+}
+
+sys_info() {
+    docker info
 }
 
 sys_open() {
@@ -297,6 +306,10 @@ exec_ollama() {
     run_in_service ollama ollama "$@"
 }
 
+# ========================================================================
+# == Env Manager
+# ========================================================================
+
 env_manager() {
     local env_file=".env"
     local prefix="HARBOR_"
@@ -329,16 +342,6 @@ env_manager() {
             local upper_key=$(echo "$2" | tr '[:lower:]' '[:upper:]' | tr '.' '_')
             shift 2  # Remove 'set' and the key from the arguments
             local value="$*"  # Capture all remaining arguments as the value
-
-            if [[ "$upper_key" == "LLAMACPP_MODEL" ]]; then
-                local transformed_value=$(transform_llamacpp_model "$value")
-                if grep -q "^${prefix}LLAMACPP_MODEL_SPECIFIER=" "$env_file"; then
-                    sed -i "s|^${prefix}LLAMACPP_MODEL_SPECIFIER=.*|${prefix}LLAMACPP_MODEL_SPECIFIER=\"$transformed_value\"|" "$env_file"
-                else
-                    echo "${prefix}LLAMACPP_MODEL_SPECIFIER=\"$transformed_value\"" >> "$env_file"
-                fi
-                echo "Set ${prefix}LLAMACPP_MODEL_SPECIFIER to: \"$transformed_value\""
-            fi
 
             if grep -q "^$prefix$upper_key=" "$env_file"; then
                 sed -i "s|^$prefix$upper_key=.*|$prefix$upper_key=\"$value\"|" "$env_file"
@@ -389,6 +392,134 @@ env_manager_alias() {
             eval "$set_command"
         fi
     fi
+}
+
+env_manager_arr() {
+    local field=$1
+    shift
+    local delimiter=";"
+    local get_command=""
+    local set_command=""
+    local add_command=""
+    local remove_command=""
+
+    # Parse optional hook commands
+    while [[ "$1" == --* ]]; do
+        case "$1" in
+            --on-get)
+                get_command="$2"
+                shift 2
+                ;;
+            --on-set)
+                set_command="$2"
+                shift 2
+                ;;
+            --on-add)
+                add_command="$2"
+                shift 2
+                ;;
+            --on-remove)
+                remove_command="$2"
+                shift 2
+                ;;
+        esac
+    done
+
+    local action=$1
+    local value=$2
+
+    # Helper function to get the current array
+    get_array() {
+        local array_string=$(env_manager get "$field")
+        echo "$array_string"
+    }
+
+    # Helper function to set the array
+    set_array() {
+        local new_array=$1
+        env_manager set "$field" "$new_array"
+        if [ -n "$set_command" ]; then
+            eval "$set_command"
+        fi
+    }
+
+    case "$action" in
+        ls|"")
+            # Show all values
+            local array=$(get_array)
+            if [ -z "$array" ]; then
+                echo "Config $field is empty"
+            else
+                echo "$array" | tr "$delimiter" "\n"
+            fi
+            if [ -n "$get_command" ]; then
+                eval "$get_command"
+            fi
+            ;;
+        rm)
+            if [ -z "$value" ]; then
+                # Remove all values
+                set_array ""
+                echo "All values removed from $field"
+            else
+                # Remove one value
+                local array=$(get_array)
+                if [ "$value" -eq "$value" ] 2>/dev/null; then
+                    # If value is a number, treat it as an index
+                    local new_array=$(echo "$array" | awk -F"$delimiter" -v idx="$value" '{
+                        OFS=FS;
+                        for(i=1;i<=NF;i++) {
+                            if(i-1 != idx) {
+                                a[++n] = $i
+                            }
+                        }
+                        for(i=1;i<=n;i++) {
+                            printf("%s%s", a[i], (i==n)?"":OFS)
+                        }
+                    }')
+                else
+                    # Otherwise, treat it as a value to be removed
+                    local new_array=$(echo "$array" | awk -F"$delimiter" -v val="$value" '{
+                        OFS=FS;
+                        for(i=1;i<=NF;i++) {
+                            if($i != val) {
+                                a[++n] = $i
+                            }
+                        }
+                        for(i=1;i<=n;i++) {
+                            printf("%s%s", a[i], (i==n)?"":OFS)
+                        }
+                    }')
+                fi
+                set_array "$new_array"
+                echo "Value removed from $field"
+            fi
+            if [ -n "$remove_command" ]; then
+                eval "$remove_command"
+            fi
+            ;;
+        add)
+            if [ -z "$value" ]; then
+                echo "Usage: env_manager_arr $field add <value>"
+                return 1
+            fi
+            local array=$(get_array)
+            if [ -z "$array" ]; then
+                new_array="$value"
+            else
+                new_array="${array}${delimiter}${value}"
+            fi
+            set_array "$new_array"
+            echo "Value added to $field"
+            if [ -n "$add_command" ]; then
+                eval "$add_command"
+            fi
+            ;;
+        *)
+            echo "Usage: env_manager_arr <field> [--on-get <command>] [--on-set <command>] [--on-add <command>] [--on-remove <command>] {ls|rm|add} [value]"
+            return 1
+            ;;
+    esac
 }
 
 override_yaml_value() {
@@ -442,10 +573,21 @@ hf_url_2_llama_spec() {
 }
 
 run_llamacpp_command() {
+    update_model_spec() {
+        local spec=""
+        local current_model=$(env_manager get llamacpp.model)
+
+        if [ -n "$current_model" ]; then
+            spec=$(hf_url_2_llama_spec $current_model)
+        fi
+
+        env_manager set llamacpp.model.specifier "$spec"
+    }
+
     case "$1" in
         model)
             shift
-            env_manager_alias llamacpp.model $@
+            env_manager_alias llamacpp.model --on-set update_model_spec $@
             ;;
         args)
             shift
@@ -530,6 +672,7 @@ fix_fs_acl() {
     docker_fsacl ./open-webui
     docker_fsacl ./tts
     docker_fsacl ./librechat
+    docker_fsacl ./searxng
 }
 
 run_litellm_command() {
@@ -629,6 +772,66 @@ run_aphrodite_command() {
     esac
 }
 
+run_open_ai_command() {
+    update_main_key() {
+        local key=$(env_manager get openai.keys | cut -d";" -f1)
+        env_manager set openai.key "$key"
+    }
+
+    update_main_url() {
+        local url=$(env_manager get openai.urls | cut -d";" -f1)
+        env_manager set openai.url "$url"
+    }
+
+    case "$1" in
+        keys)
+            shift
+            env_manager_arr openai.keys --on-set update_main_key $@
+            ;;
+        urls)
+            shift
+            env_manager_arr openai.urls --on-set update_main_url $@
+            ;;
+        *)
+            echo "Please note that this is not an OpenAI CLI, but a Harbor CLI to manage OpenAI configuration."
+            echo
+            echo "Usage: harbor openai <command>"
+            echo
+            echo "Commands:"
+            echo "  harbor openai keys [ls|rm|add]   - Get/set the API Keys for the OpenAI-compatible APIs."
+            echo "  harbor openai urls [ls|rm|add]   - Get/set the API URLs for the OpenAI-compatible APIs."
+            ;;
+    esac
+}
+
+run_webui_command() {
+    case "$1" in
+        secret)
+            shift
+            env_manager_alias webui.secret $@
+            ;;
+        name)
+            shift
+            env_manager_alias webui.name $@
+            ;;
+        log)
+            shift
+            env_manager_alias webui.log.level $@
+            ;;
+        *)
+            echo "Please note that this is not WebUI CLI, but a Harbor CLI to manage WebUI service."
+            echo
+            echo "Usage: harbor webui <command>"
+            echo
+            echo "Commands:"
+            echo "  harbor webui secret [secret]   - Get/set WebUI JWT Secret"
+            echo "  harbor webui name [name]       - Get/set the name WebUI will present"
+            echo "  harbor webui log [level]       - Get/set WebUI log level"
+            ;;
+    esac
+
+}
+
 
 # ========================================================================
 # == Main script
@@ -638,16 +841,23 @@ version="0.0.10"
 delimiter="|"
 
 harbor_home=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
+original_dir=$PWD
+
 cd $harbor_home
 
-default_options=($(env_manager get services.default))
+default_options=($(env_manager get services.default | tr ';' ' '))
 default_open=$(env_manager get ui.main)
+default_autoopen=$(env_manager get ui.autoopen)
 
 # Main script logic
 case "$1" in
     up)
         shift
         $(compose_with_options "$@") up -d
+
+        if [ "$default_autoopen" = "true" ]; then
+            open_service $default_open
+        fi
         ;;
     down)
         shift
@@ -689,7 +899,7 @@ case "$1" in
         ;;
     defaults)
         shift
-        env_manager_alias services.default $@
+        env_manager_arr services.default $@
         ;;
     ln)
         shift
@@ -714,6 +924,10 @@ case "$1" in
     top)
         shift
         nvidia_top
+        ;;
+    dive)
+        shift
+        run_dive $@
         ;;
     eject)
         shift
@@ -743,6 +957,14 @@ case "$1" in
         shift
         run_aphrodite_command $@
         ;;
+    openai)
+        shift
+        run_open_ai_command $@
+        ;;
+    webui)
+        shift
+        run_webui_command $@
+        ;;
     config)
         shift
         env_manager $@
@@ -754,6 +976,10 @@ case "$1" in
     fixfs)
         shift
         fix_fs_acl
+        ;;
+    info)
+        shift
+        sys_info
         ;;
     *)
         echo "Unknown command: $1"

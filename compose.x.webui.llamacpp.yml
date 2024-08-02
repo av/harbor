@@ -1,0 +1,4 @@
+services:
+  webui:
+    volumes:
+      - ./open-webui/configs/config.llamacpp.json:/app/configs/config.llamacpp.json

@@ -1,0 +1,4 @@
+services:
+  webui:
+    volumes:
+      - ./open-webui/configs/config.tts.json:/app/configs/config.tts.json

@@ -1,0 +1,4 @@
+services:
+  webui:
+    volumes:
+      - ./open-webui/configs/config.aphrodite.json:/app/configs/config.aphrodite.json
