@@ -157,6 +157,6 @@ This project is a CLI and a pre-configured Docker Compose setup that connects va
 - Convenience utilities for common tasks (model management, configuration, service debug)
 - Access service CLIs (`hf`, `ollama`, etc.) via Docker without install
 - Services are pre-configured to work together
-- Host cache is shared and reused - huggingface, ollama, etc.
+- Host cache is shared and reused - Hugging Face, ollama, etc.
 - Co-located service configs
 - Eject to run without harbor with `harbor eject`
