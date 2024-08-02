@@ -1,0 +1,222 @@
+# Sample YAML file for configuration.
+# Comment and uncomment values as needed. Every value has a default within the application.
+# This file serves to be a drop in for config.yml
+
+# Unless specified in the comments, DO NOT put these options in quotes!
+# You can use https://www.yamllint.com/ if you want to check your YAML formatting.
+
+# Options for networking
+network:
+  # The IP to host on (default: 127.0.0.1).
+  # Use 0.0.0.0 to expose on all network adapters
+  host: 0.0.0.0
+
+  # The port to host on (default: 5000)
+  port: 5000
+
+  # Disable HTTP token authenticaion with requests
+  # WARNING: This will make your instance vulnerable!
+  # Turn on this option if you are ONLY connecting from localhost
+  disable_auth: False
+
+  # Send tracebacks over the API to clients (default: False)
+  # NOTE: Only enable this for debug purposes
+  send_tracebacks: False
+
+  # Select API servers to enable (default: ["OAI"])
+  # Possible values: OAI
+  api_servers: ["OAI"]
+
+# Options for logging
+logging:
+  # Enable prompt logging (default: False)
+  prompt: False
+
+  # Enable generation parameter logging (default: False)
+  generation_params: False
+
+  # Enable request logging (default: False)
+  # NOTE: Only use this for debugging!
+  requests: False
+
+# Options for sampling
+sampling:
+  # Override preset name. Find this in the sampler-overrides folder (default: None)
+  # This overrides default fallbacks for sampler values that are passed to the API
+  # Server-side overrides are NOT needed by default
+  # WARNING: Using this can result in a generation speed penalty
+  #override_preset:
+
+# Options for development and experimentation
+developer:
+  # Skips exllamav2 version check (default: False)
+  # It's highly recommended to update your dependencies rather than enabling this flag
+  # WARNING: Don't set this unless you know what you're doing!
+  #unsafe_launch: False
+
+  # Disable all request streaming (default: False)
+  # A kill switch for turning off SSE in the API server
+  #disable_request_streaming: False
+
+  # Enable the torch CUDA malloc backend (default: False)
+  # This can save a few MBs of VRAM, but has a risk of errors. Use at your own risk.
+  #cuda_malloc_backend: False
+
+  # Enable Uvloop or Winloop (default: False)
+  # Make the program utilize a faster async event loop which can improve performance
+  # NOTE: It's recommended to enable this, but if something breaks, turn this off.
+  #uvloop: False
+
+  # Set process to use a higher priority
+  # For realtime process priority, run as administrator or sudo
+  # Otherwise, the priority will be set to high
+  #realtime_process_priority: False
+
+# Options for model overrides and loading
+# Please read the comments to understand how arguments are handled between initial and API loads
+model:
+  # Overrides the directory to look for models (default: models)
+  # Windows users, DO NOT put this path in quotes! This directory will be invalid otherwise.
+  model_dir: models
+
+  # Sends dummy model names when the models endpoint is queried
+  # Enable this if the program is looking for a specific OAI model
+  #use_dummy_models: False
+
+  # An initial model to load. Make sure the model is located in the model directory!
+  # A model can be loaded later via the API.
+  # REQUIRED: This must be filled out to load a model on startup!
+  model_name: hf/${HARBOR_TABBYAPI_MODEL_SPECIFIER}
+
+  # The below parameters only apply for initial loads
+  # All API based loads do NOT inherit these settings unless specified in use_as_default
+
+  # Names of args to use as a default fallback for API load requests (default: [])
+  # For example, if you always want cache_mode to be Q4 instead of on the inital model load,
+  # Add "cache_mode" to this array
+  # Ex. ["max_seq_len", "cache_mode"]
+  #use_as_default: []
+
+  # The below parameters apply only if model_name is set
+
+  # Max sequence length (default: Empty)
+  # Fetched from the model's base sequence length in config.json by default
+  #max_seq_len:
+
+  # Overrides base model context length (default: Empty)
+  # WARNING: Don't set this unless you know what you're doing!
+  # Again, do NOT use this for configuring context length, use max_seq_len above ^
+  # Only use this if the model's base sequence length in config.json is incorrect (ex. Mistral 7B)
+  #override_base_seq_len:
+
+  # Automatically allocate resources to GPUs (default: True)
+  # NOTE: Not parsed for single GPU users
+  #gpu_split_auto: True
+
+  # Reserve VRAM used for autosplit loading (default: 96 MB on GPU 0)
+  # This is represented as an array of MB per GPU used
+  #autosplit_reserve: [96]
+
+  # An integer array of GBs of vram to split between GPUs (default: [])
+  # NOTE: Not parsed for single GPU users
+  #gpu_split: [20.6, 24]
+
+  # Rope scale (default: 1.0)
+  # Same thing as compress_pos_emb
+  # Only use if your model was trained on long context with rope (check config.json)
+  # Leave blank to pull the value from the model
+  #rope_scale: 1.0
+
+  # Rope alpha (default: 1.0)
+  # Same thing as alpha_value
+  # Leave blank to automatically calculate alpha
+  #rope_alpha: 1.0
+
+  # Enable different cache modes for VRAM savings (slight performance hit).
+  # Possible values FP16, Q8, Q6, Q4. (default: FP16)
+  #cache_mode: FP16
+
+  # Size of the prompt cache to allocate (default: max_seq_len)
+  # This must be a multiple of 256. A larger cache uses more VRAM, but allows for more prompts to be processed at once.
+  # NOTE: Cache size should not be less than max_seq_len.
+  # For CFG, set this to 2 * max_seq_len to make room for both positive and negative prompts.
+  #cache_size:
+
+  # Chunk size for prompt ingestion. A lower value reduces VRAM usage at the cost of ingestion speed (default: 2048)
+  # NOTE: Effects vary depending on the model. An ideal value is between 512 and 4096
+  #chunk_size: 2048
+
+  # Set the maximum amount of prompts to process at one time (default: None/Automatic)
+  # This will be automatically calculated if left blank.
+  # A max batch size of 1 processes prompts one at a time.
+  # NOTE: Only available for Nvidia ampere (30 series) and above GPUs
+  #max_batch_size:
+
+  # Set the prompt template for this model. If empty, attempts to look for the model's chat template. (default: None)
+  # If a model contains multiple templates in its tokenizer_config.json, set prompt_template to the name
+  # of the template you want to use.
+  # NOTE: Only works with chat completion message lists!
+  #prompt_template:
+
+  # Number of experts to use PER TOKEN. Fetched from the model's config.json if not specified (default: Empty)
+  # WARNING: Don't set this unless you know what you're doing!
+  # NOTE: For MoE models (ex. Mixtral) only!
+  #num_experts_per_token:
+
+  # Enables fasttensors to possibly increase model loading speeds (default: False)
+  #fasttensors: true
+
+  # Options for draft models (speculative decoding). This will use more VRAM!
+  #draft:
+    # Overrides the directory to look for draft (default: models)
+    #draft_model_dir: models
+
+    # An initial draft model to load. Make sure this model is located in the model directory!
+    # A draft model can be loaded later via the API.
+    #draft_model_name: A model name
+
+    # The below parameters only apply for initial loads
+    # All API based loads do NOT inherit these settings unless specified in use_as_default
+
+    # Rope scale for draft models (default: 1.0)
+    # Same thing as compress_pos_emb
+    # Only use if your draft model was trained on long context with rope (check config.json)
+    #draft_rope_scale: 1.0
+
+    # Rope alpha for draft model (default: 1.0)
+    # Same thing as alpha_value
+    # Leave blank to automatically calculate alpha value
+    #draft_rope_alpha: 1.0
+
+    # Enable different draft model cache modes for VRAM savings (slight performance hit).
+    # Possible values FP16, Q8, Q6, Q4. (default: FP16)
+    #draft_cache_mode: FP16
+
+  # Options for loras
+  #lora:
+    # Overrides the directory to look for loras (default: loras)
+    #lora_dir: loras
+
+    # List of loras to load and associated scaling factors (default: 1.0). Comment out unused entries or add more rows as needed.
+    #loras:
+    #- name: lora1
+    #  scaling: 1.0
+
+# Options for embedding models and loading.
+# NOTE: Embeddings requires the "extras" feature to be installed
+# Install it via "pip install .[extras]"
+embeddings:
+  # Overrides directory to look for embedding models (default: models)
+  embedding_model_dir: models
+
+  # Device to load embedding models on (default: cpu)
+  # Possible values: cpu, auto, cuda
+  # NOTE: It's recommended to load embedding models on the CPU.
+  # If you'd like to load on an AMD gpu, set this value to "cuda" as well.
+  embeddings_device: cpu
+
+  # The below parameters only apply for initial loads
+  # All API based loads do NOT inherit these settings unless specified in use_as_default
+
+  # An initial embedding model to load on the infinity backend (default: None)
+  embedding_model_name:

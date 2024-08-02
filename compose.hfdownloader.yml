@@ -1,0 +1,13 @@
+# Note that this is not a service
+# in the same sense as the other services, but rather a pre-configured CLI
+# that can be used to download models from Hugging Face.
+services:
+  hfdownloader:
+    build:
+      context: ./hfdownloader
+      dockerfile: Dockerfile
+    container_name: ${HARBOR_CONTAINER_PREFIX}.hfdownloader
+    env_file: ./.env
+    volumes:
+      - ${HARBOR_HF_CACHE}:/app/hf
+      - ${HARBOR_LLAMACPP_CACHE}:/app/llama.cpp

@@ -1,0 +1,2 @@
+admin_key: ${HARBOR_TABBYAPI_ADMIN_KEY}
+api_key: ${HARBOR_TABBYAPI_API_KEY}

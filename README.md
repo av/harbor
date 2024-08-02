@@ -42,20 +42,28 @@ harbor up searxng
 
 # Run additional/alternative LLM Inference backends
 # Open Webui is automatically connected to them.
-harbor up llamacpp tgi lmdeploy litellm mistralrs vllm
+harbor up llamacpp tgi litellm vllm tabbyapi aphrodite
 
 # Run different Frontends
 harbor up librechat bionicgpt hollama
 
 # Use custom models for supported backends
 harbor llamacpp model https://huggingface.co/user/repo/model.gguf
+
+# Shortcut to HF Hub to find the models
+harbor hf find gguf gemma-2
+# Download and cache the model
+harbor hf dl -m google/gemma-2-2b-it -c 10 -s ./hf
+
 # Where possible, cache is shared between the services
 harbor tgi model google/gemma-2-2b-it
 harbor vllm model google/gemma-2-2b-it
+harbor tabbyapi model google/gemma-2-2b-it-exl2
 
 # Convenience tools for docker setup
 harbor logs llamacpp
 harbor exec llamacpp ./scripts/llama-bench --help
+harbor shell tabbyapi
 
 # Access service CLIs without installing them
 harbor hf scan-cache

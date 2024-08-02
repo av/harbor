@@ -20,6 +20,9 @@ show_help() {
     echo "  exec          - Execute a command in a running service"
     echo "  pull          - Pull the latest images"
     echo "  dive          - Run the Dive CLI to inspect Docker images"
+    echo "  run           - Run a one-off command in a service container"
+    echo "  restart       - down then up"
+    echo "  shell         - Load shell in the given service main container"
     echo
     echo "Setup Management Commands:"
     echo "  ollama        - Run the Harbor's Ollama CLI. Ollama service should be running"
@@ -34,6 +37,7 @@ show_help() {
     echo
     echo "Huggingface CLI:"
     echo "  hf            - Run the Harbor's Huggingface CLI. Expanded with a few additional commands."
+    echo "  hf downloader - HuggingFaceModelDownloader CLI"
     echo "  hf parse-url  - Parse file URL from Hugging Face"
     echo "  hf token      - Get/set the Hugging Face Hub token"
     echo
@@ -51,6 +55,7 @@ show_help() {
     echo "  gum                   - Run the Gum terminal commands"
     echo "  fixfs                 - Fix file system ACLs for service volumes"
     echo "  info                  - Show system information for debug/issues"
+    echo "  cmd                   - Print the docker-compose command"
     echo
     echo "Options:"
     echo "  Additional options to pass to the compose_with_options function"
@@ -150,6 +155,13 @@ compose_with_options() {
     echo "$cmd"
 }
 
+run_hf_open() {
+    local search_term="${*// /+}"
+    local hf_url="https://huggingface.co/models?sort=trending&search=${search_term}"
+
+    sys_open "$hf_url"
+}
+
 run_hf_cli() {
     case "$1" in
         parse-url)
@@ -160,6 +172,16 @@ run_hf_cli() {
         token)
             shift
             env_manager_alias hf.hub.token $@
+            return
+            ;;
+        dl)
+            shift
+            $(compose_with_options "hfdownloader") run --rm hfdownloader $@
+            return
+            ;;
+        find)
+            shift
+            run_hf_open $@
             return
             ;;
     esac
@@ -575,6 +597,11 @@ hf_url_2_llama_spec() {
     echo "--hf-repo $repo_name --hf-file $file_specifier"
 }
 
+hf_spec_2_folder_spec() {
+    # Replace all "/" with "_"
+    echo "${1//\//_}"
+}
+
 run_llamacpp_command() {
     update_model_spec() {
         local spec=""
@@ -832,7 +859,50 @@ run_webui_command() {
             echo "  harbor webui log [level]       - Get/set WebUI log level"
             ;;
     esac
+}
 
+run_tabbyapi_command() {
+    update_model_spec() {
+        local spec=""
+        local current_model=$(env_manager get tabbyapi.model)
+
+        if [ -n "$current_model" ]; then
+            spec=$(hf_spec_2_folder_spec $current_model)
+        fi
+
+        env_manager set tabbyapi.model.specifier "$spec"
+    }
+
+    case "$1" in
+        model)
+            shift
+            env_manager_alias tabbyapi.model --on-set update_model_spec $@
+            ;;
+        args)
+            shift
+            env_manager_alias tabbyapi.extra.args $@
+            ;;
+        apidoc)
+            shift
+            if service_url=$(get_service_url tabbyapi 2>&1); then
+                sys_open "$service_url/docs"
+            else
+                echo "Error: Failed to get service URL for tabbyapi: $service_url"
+                exit 1
+            fi
+            ;;
+        *)
+            echo "Please note that this is not TabbyAPI CLI, but a Harbor CLI to manage TabbyAPI service."
+            echo "Access TabbyAPI own CLI by running 'harbor exec tabbyapi' when it's running."
+            echo
+            echo "Usage: harbor tabbyapi <command>"
+            echo
+            echo "Commands:"
+            echo "  harbor tabbyapi model [user/repo]   - Get or set the TabbyAPI model repository to run"
+            echo "  harbor tabbyapi args [args]         - Get or set extra args to pass to the TabbyAPI CLI"
+            echo "  harbor tabbyapi apidoc              - Open TabbyAPI built-in API documentation"
+            ;;
+    esac
 }
 
 
@@ -840,7 +910,7 @@ run_webui_command() {
 # == Main script
 # ========================================================================
 
-version="0.0.12"
+version="0.0.13"
 delimiter="|"
 
 harbor_home=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
@@ -865,11 +935,28 @@ case "$1" in
         ;;
     down)
         shift
-        $(compose_with_options "*") down "$@"
+        $(compose_with_options "*") down --remove-orphans "$@"
+        ;;
+    restart)
+        shift
+        $(compose_with_options "*") down --remove-orphans "$@"
+        $(compose_with_options "$@") up -d
         ;;
     ps)
         shift
         $(compose_with_options "*") ps
+        ;;
+    build)
+        shift
+        service=$1
+        shift
+        $(compose_with_options "$service") build $service $@
+        ;;
+    shell)
+        shift
+        service=$1
+        shift
+        $(compose_with_options "$service") run -it --entrypoint bash $service
         ;;
     logs)
         shift
@@ -968,6 +1055,10 @@ case "$1" in
     webui)
         shift
         run_webui_command $@
+        ;;
+    tabbyapi)
+        shift
+        run_tabbyapi_command $@
         ;;
     config)
         shift

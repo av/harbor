@@ -1,0 +1,23 @@
+services:
+  tabbyapi:
+    image: nschle/tabbyapi:12.4.1-runtime-ubuntu22.04-runpod
+    container_name: ${HARBOR_CONTAINER_PREFIX}.tabbyapi
+    env_file: ./.env
+    ports:
+      - ${HARBOR_TABBYAPI_HOST_PORT}:5000
+    environment:
+      - NAME=TabbyAPI
+    volumes:
+      - ${HARBOR_HF_CACHE}:/models/hf
+      - ${HARBOR_LLAMACPP_CACHE}:/models/llama.cpp
+
+      - ./shared/yaml_config_merger.py:/app/yaml_config_merger.py
+      - ./tabbyapi/start_tabbyapi.sh:/app/start_tabbyapi.sh
+      - ./tabbyapi/config.yml:/app/configs/config.yml
+      - ./tabbyapi/api_tokens.yml:/app/tokens/tokens.yml
+    entrypoint: [ "/app/start_tabbyapi.sh" ]
+    command: >
+      ${HARBOR_TABBYAPI_EXTRA_ARGS}
+    networks:
+      - harbor-network
+
