@@ -837,7 +837,7 @@ run_webui_command() {
 # == Main script
 # ========================================================================
 
-version="0.0.10"
+version="0.0.11"
 delimiter="|"
 
 harbor_home=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
