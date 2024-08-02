@@ -1,6 +1,6 @@
 services:
   bionicgpt:
-    container_name: bionicgpt
+    container_name: ${HARBOR_CONTAINER_PREFIX}.bionicgpt
     image: ghcr.io/bionic-gpt/bionicgpt-envoy:1.7.41
     ports:
       - ${HARBOR_BIONICGPT_HOST_PORT}:7700
@@ -12,7 +12,7 @@ services:
 
   bi-app:
     image: ghcr.io/bionic-gpt/bionicgpt:1.7.41
-    container_name: bi-app
+    container_name: ${HARBOR_CONTAINER_PREFIX}.bi-app
     environment:
       SIGNOUT_URL: /auth/sign_out
       ENABLE_BARRICADE: 1
@@ -26,25 +26,25 @@ services:
       - harbor-network
 
   bi-llm-api:
-    container_name: bi-llm-api
+    container_name: ${HARBOR_CONTAINER_PREFIX}.bi-llm-api
     image: ghcr.io/bionic-gpt/llama-3-8b-chat:1.1.1
     networks:
       - harbor-network
 
   bi-embeddings-api:
-    container_name: bi-embeddings-api
+    container_name: ${HARBOR_CONTAINER_PREFIX}.bi-embeddings-api
     image: ghcr.io/bionic-gpt/bionicgpt-embeddings-api:cpu-0.6
     networks:
       - harbor-network
 
   bi-chunking-engine:
-    container_name: bi-chunking-engine
+    container_name: ${HARBOR_CONTAINER_PREFIX}.bi-chunking-engine
     image: downloads.unstructured.io/unstructured-io/unstructured-api:4ffd8bc
     networks:
       - harbor-network
 
   bi-postgres:
-    container_name: bi-postgres
+    container_name: ${HARBOR_CONTAINER_PREFIX}.bi-postgres
     image: ankane/pgvector
     platform: linux/amd64
     environment:
@@ -62,7 +62,7 @@ services:
       - ./bionicgpt/db:/var/lib/postgresql/data
 
   bi-barricade:
-    container_name: bi-barricade
+    container_name: ${HARBOR_CONTAINER_PREFIX}.bi-barricade
     image: purtontech/barricade:1.2.10
     environment:
         # This secret key is used to encrypt cookies.
@@ -80,7 +80,7 @@ services:
 
   # Sets up our database tables
   bi-migrations:
-    container_name: bi-migrations
+    container_name: ${HARBOR_CONTAINER_PREFIX}.bi-migrations
     image: ghcr.io/bionic-gpt/bionicgpt-db-migrations:1.7.41
     environment:
       DATABASE_URL: postgresql://postgres:testpassword@bi-postgres:5432/bionic-gpt?sslmode=disable
@@ -92,7 +92,7 @@ services:
 
   # Parses documents into chunks and creates embeddings.
   bi-pipeline-job:
-    container_name: bi-pipeline-job
+    container_name: ${HARBOR_CONTAINER_PREFIX}.bi-pipeline-job
     image: ghcr.io/bionic-gpt/bionicgpt-pipeline-job:1.7.41
     environment:
       APP_DATABASE_URL: postgresql://bionic_application:testpassword@bi-postgres:5432/bionic-gpt?sslmode=disable

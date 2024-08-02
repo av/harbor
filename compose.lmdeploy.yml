@@ -1,7 +1,7 @@
 services:
   lmdeploy:
     image: openmmlab/lmdeploy:latest
-    container_name: lmdeploy
+    container_name: ${HARBOR_CONTAINER_PREFIX}.lmdeploy
     volumes:
       - ${HARBOR_HF_CACHE}:/root/.cache/huggingface
     ports:

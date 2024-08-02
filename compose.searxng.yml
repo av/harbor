@@ -1,6 +1,6 @@
 services:
   searxng:
-    container_name: searxng
+    container_name: ${HARBOR_CONTAINER_PREFIX}.searxng
     env_file: ./.env
     image: searxng/searxng
     environment:

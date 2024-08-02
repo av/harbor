@@ -1,6 +1,6 @@
 services:
   vllm:
-    container_name: vllm
+    container_name: ${HARBOR_CONTAINER_PREFIX}.vllm
     env_file: ./.env
     image: vllm/vllm-openai:latest
     ports:

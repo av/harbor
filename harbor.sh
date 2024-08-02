@@ -180,6 +180,7 @@ run_dive() {
 
 link_cli() {
     local target_dir="$HOME/.local/bin"
+    local script_name="harbor"
     local script_path="$harbor_home/harbor.sh"
 
     # Check if target directory exists in PATH
@@ -216,8 +217,10 @@ get_service_url() {
         return 0
     fi
 
+    local target_name="$default_container_prefix.$1"
+
     # Check if the specified service is running
-    if ! echo "$services" | grep -q "^$1$"; then
+    if ! echo "$services" | grep -q "^$target_name$"; then
         echo "Service '$1' is not currently running."
         echo "Available services:"
         echo "$services"
@@ -225,7 +228,7 @@ get_service_url() {
     fi
 
     # Get the port mapping for the service
-    port=$(docker port "$1" | grep -oP '0.0.0.0:\K\d+' | head -n 1)
+    port=$(docker port "$target_name" | grep -oP '0.0.0.0:\K\d+' | head -n 1)
 
     if [ -z "$port" ]; then
         echo "No port mapping found for service '$1'."
@@ -848,6 +851,7 @@ cd $harbor_home
 default_options=($(env_manager get services.default | tr ';' ' '))
 default_open=$(env_manager get ui.main)
 default_autoopen=$(env_manager get ui.autoopen)
+default_container_prefix=$(env_manager get container.prefix)
 
 # Main script logic
 case "$1" in

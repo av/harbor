@@ -1,7 +1,7 @@
 services:
   tts:
     image: ghcr.io/matatonic/openedai-speech
-    container_name: tts
+    container_name: ${HARBOR_CONTAINER_PREFIX}.tts
     env_file: ./.env
     ports:
       - ${HARBOR_TTS_HOST_PORT}:8000

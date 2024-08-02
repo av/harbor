@@ -2,7 +2,7 @@ services:
   litellm:
     image: ghcr.io/berriai/litellm:main-stable
     env_file: ./.env
-    container_name: litellm
+    container_name: ${HARBOR_CONTAINER_PREFIX}.litellm
     volumes:
     # Additional config file volumes will be appended when
     # LiteLLM is combined with other services
@@ -31,7 +31,7 @@ services:
   litellmdb:
     image: postgres
     restart: always
-    container_name: litellmdb
+    container_name: ${HARBOR_CONTAINER_PREFIX}.litellmdb
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 3s

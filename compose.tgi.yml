@@ -1,6 +1,6 @@
 services:
   tgi:
-    container_name: tgi
+    container_name: ${HARBOR_CONTAINER_PREFIX}.tgi
     env_file: ./.env
     image: ghcr.io/huggingface/text-generation-inference:2.2.0
     command: ${HARBOR_TGI_MODEL_SPECIFIER} ${HARBOR_TGI_EXTRA_ARGS}

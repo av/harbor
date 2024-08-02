@@ -3,7 +3,7 @@ services:
     image: ghcr.io/open-webui/open-webui:main
     env_file:
       - ./.env
-    container_name: webui
+    container_name: ${HARBOR_CONTAINER_PREFIX}.webui
     volumes:
       - ./open-webui:/app/backend/data
       - ./open-webui/start_webui.sh:/app/start_webui.sh

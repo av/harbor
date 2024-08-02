@@ -2,7 +2,7 @@ services:
   langfuse:
     image: langfuse/langfuse
     env_file: ./.env
-    container_name: langfuse
+    container_name: ${HARBOR_CONTAINER_PREFIX}.langfuse
     ports:
       - ${HARBOR_LANGFUSE_HOST_PORT}:3000
     depends_on:
@@ -19,7 +19,7 @@ services:
   langfusedb:
     image: postgres
     restart: always
-    container_name: langfusedb
+    container_name: ${HARBOR_CONTAINER_PREFIX}.langfusedb
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 1s

@@ -1,6 +1,6 @@
 services:
   librechat:
-    container_name: librechat
+    container_name: ${HARBOR_CONTAINER_PREFIX}.librechat
     ports:
       - "${HARBOR_LIBRECHAT_HOST_PORT}:${HARBOR_LIBRECHAT_HOST_PORT}"
     depends_on:
@@ -42,7 +42,7 @@ services:
       - ./librechat/logs:/app/api/logs
 
   lcdb:
-    container_name: lcdb
+    container_name: ${HARBOR_CONTAINER_PREFIX}.lcdb
     image: mongo
     volumes:
       - ./librechat/data:/data/db
@@ -51,7 +51,7 @@ services:
       - harbor-network
 
   lcsearch:
-    container_name: lcsearch
+    container_name: ${HARBOR_CONTAINER_PREFIX}.lcsearch
     image: getmeili/meilisearch:v1.7.3
     environment:
       - MEILI_HOST=http://lcsearch:7700
@@ -62,7 +62,7 @@ services:
       - harbor-network
 
   lcvector:
-    container_name: lcvector
+    container_name: ${HARBOR_CONTAINER_PREFIX}.lcvector
     image: ankane/pgvector:latest
     environment:
       POSTGRES_DB: mydatabase
@@ -74,7 +74,7 @@ services:
       - harbor-network
 
   lcrag:
-    container_name: lcrag
+    container_name: ${HARBOR_CONTAINER_PREFIX}.lcrag
     image: ghcr.io/danny-avila/librechat-rag-api-dev-lite:latest
     environment:
       - DB_HOST=lcvector

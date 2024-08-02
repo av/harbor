@@ -1,7 +1,7 @@
 services:
   aphrodite:
     image: alpindale/aphrodite-engine
-    container_name: aphrodite
+    container_name: ${HARBOR_CONTAINER_PREFIX}.aphrodite
     env_file: ./.env
     ipc: host
     ports:

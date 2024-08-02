@@ -1,7 +1,7 @@
 services:
   llamacpp:
     image: ghcr.io/ggerganov/llama.cpp:full-cuda
-    container_name: llamacpp
+    container_name: ${HARBOR_CONTAINER_PREFIX}.llamacpp
     volumes:
       - ${HARBOR_HF_CACHE}:/app/models
       - ${HARBOR_LLAMACPP_CACHE}:/root/.cache/llama.cpp
