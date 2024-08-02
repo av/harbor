@@ -23,6 +23,7 @@ show_help() {
     echo "  run           - Run a one-off command in a service container"
     echo "  restart       - down then up"
     echo "  shell         - Load shell in the given service main container"
+    echo "  build         - Build the given service"
     echo
     echo "Setup Management Commands:"
     echo "  ollama        - Run the Harbor's Ollama CLI. Ollama service should be running"
