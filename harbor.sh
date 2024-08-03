@@ -164,43 +164,6 @@ run_hf_open() {
     sys_open "$hf_url"
 }
 
-run_hf_cli() {
-    case "$1" in
-        parse-url)
-            shift
-            parse_hf_url $@
-            return
-            ;;
-        token)
-            shift
-            env_manager_alias hf.hub.token $@
-            return
-            ;;
-        dl)
-            shift
-            $(compose_with_options "hfdownloader") run --rm hfdownloader $@
-            return
-            ;;
-        find)
-            shift
-            run_hf_open $@
-            return
-            ;;
-    esac
-
-    $(compose_with_options "hf") run --rm hf $@
-}
-
-run_gum() {
-    local gum_image=ghcr.io/charmbracelet/gum
-    docker run --rm -it -e "TERM=xterm-256color" $gum_image $@
-}
-
-run_dive() {
-    local dive_image=wagoodman/dive
-    docker run --rm -it -v /var/run/docker.sock:/var/run/docker.sock $dive_image $@
-}
-
 link_cli() {
     local target_dir="$HOME/.local/bin"
     local script_name="harbor"
@@ -548,6 +511,10 @@ env_manager_arr() {
     esac
 }
 
+# ========================================================================
+# == Utils
+# ========================================================================
+
 override_yaml_value() {
     local file="$1"
     local key="$2"
@@ -601,6 +568,39 @@ hf_url_2_llama_spec() {
 hf_spec_2_folder_spec() {
     # Replace all "/" with "_"
     echo "${1//\//_}"
+}
+
+
+docker_fsacl() {
+    local folder=$1
+    sudo setfacl --recursive -m user:1000:rwx $folder && sudo setfacl --recursive -m user:1002:rwx $folder && sudo setfacl --recursive -m user:1001:rwx $folder
+}
+
+fix_fs_acl() {
+    docker_fsacl ./ollama
+    docker_fsacl ./langfuse
+    docker_fsacl ./open-webui
+    docker_fsacl ./tts
+    docker_fsacl ./librechat
+    docker_fsacl ./searxng
+}
+
+unsafe_update() {
+    git pull
+}
+
+# ========================================================================
+# == Service CLIs
+# ========================================================================
+
+run_gum() {
+    local gum_image=ghcr.io/charmbracelet/gum
+    docker run --rm -it -e "TERM=xterm-256color" $gum_image $@
+}
+
+run_dive() {
+    local dive_image=wagoodman/dive
+    docker run --rm -it -v /var/run/docker.sock:/var/run/docker.sock $dive_image $@
 }
 
 run_llamacpp_command() {
@@ -692,20 +692,6 @@ run_tgi_command() {
     esac
 }
 
-docker_fsacl() {
-    local folder=$1
-    sudo setfacl --recursive -m user:1000:rwx $folder && sudo setfacl --recursive -m user:1002:rwx $folder && sudo setfacl --recursive -m user:1001:rwx $folder
-}
-
-fix_fs_acl() {
-    docker_fsacl ./ollama
-    docker_fsacl ./langfuse
-    docker_fsacl ./open-webui
-    docker_fsacl ./tts
-    docker_fsacl ./librechat
-    docker_fsacl ./searxng
-}
-
 run_litellm_command() {
     case "$1" in
         username)
@@ -736,6 +722,33 @@ run_litellm_command() {
             echo "  harbor litellm ui                  - Open LiteLLM UI screen"
             ;;
     esac
+}
+
+run_hf_cli() {
+    case "$1" in
+        parse-url)
+            shift
+            parse_hf_url $@
+            return
+            ;;
+        token)
+            shift
+            env_manager_alias hf.hub.token $@
+            return
+            ;;
+        dl)
+            shift
+            $(compose_with_options "hfdownloader") run --rm hfdownloader $@
+            return
+            ;;
+        find)
+            shift
+            run_hf_open $@
+            return
+            ;;
+    esac
+
+    $(compose_with_options "hf") run --rm hf $@
 }
 
 run_vllm_command() {
@@ -1084,6 +1097,10 @@ case "$1" in
     info)
         shift
         sys_info
+        ;;
+    update)
+        shift
+        unsafe_update
         ;;
     *)
         echo "Unknown command: $1"
