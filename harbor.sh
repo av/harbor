@@ -637,11 +637,11 @@ run_llamacpp_command() {
     case "$1" in
         model)
             shift
-            env_manager_alias llamacpp.model --on-set update_model_spec $@
+            env_manager_alias llamacpp.model --on-set update_model_spec "$@"
             ;;
         args)
             shift
-            env_manager_alias llamacpp.extra.args $@
+            env_manager_alias llamacpp.extra.args "$@"
             ;;
         *)
             echo "Please note that this is not llama.cpp CLI, but a Harbor CLI to manage llama.cpp service."
@@ -680,19 +680,19 @@ run_tgi_command() {
     case "$1" in
         model)
             shift
-            env_manager_alias tgi.model --on-set update_model_spec $@
+            env_manager_alias tgi.model --on-set update_model_spec "$@"
             ;;
         args)
             shift
-            env_manager_alias tgi.extra.args $@
+            env_manager_alias tgi.extra.args "$@"
             ;;
         quant)
             shift
-            env_manager_alias tgi.quant --on-set update_model_spec $@
+            env_manager_alias tgi.quant --on-set update_model_spec "$@"
             ;;
         revision)
             shift
-            env_manager_alias tgi.revision --on-set update_model_spec $@
+            env_manager_alias tgi.revision --on-set update_model_spec "$@"
             ;;
         *)
             echo "Please note that this is not TGI CLI, but a Harbor CLI to manage TGI service."
@@ -715,11 +715,11 @@ run_litellm_command() {
     case "$1" in
         username)
             shift
-            env_manager_alias litellm.ui.username $@
+            env_manager_alias litellm.ui.username "$@"
             ;;
         password)
             shift
-            env_manager_alias litellm.ui.password $@
+            env_manager_alias litellm.ui.password "$@"
             ;;
         ui)
             shift
@@ -752,7 +752,7 @@ run_hf_cli() {
             ;;
         token)
             shift
-            env_manager_alias hf.hub.token $@
+            env_manager_alias hf.hub.token "$@"
             return
             ;;
         dl)
@@ -788,15 +788,15 @@ run_vllm_command() {
     case "$1" in
         model)
             shift
-            env_manager_alias vllm.model --on-set update_model_spec $@
+            env_manager_alias vllm.model --on-set update_model_spec "$@"
             ;;
         args)
             shift
-            env_manager_alias vllm.extra.args $@
+            env_manager_alias vllm.extra.args "$@"
             ;;
         attention)
             shift
-            env_manager_alias vllm.attention_backend $@
+            env_manager_alias vllm.attention_backend "$@"
             ;;
         *)
             echo "Please note that this is not VLLM CLI, but a Harbor CLI to manage VLLM service."
@@ -816,11 +816,11 @@ run_aphrodite_command() {
     case "$1" in
         model)
             shift
-            env_manager_alias aphrodite.model $@
+            env_manager_alias aphrodite.model "$@"
             ;;
         args)
             shift
-            env_manager_alias aphrodite.extra.args $@
+            env_manager_alias aphrodite.extra.args "$@"
             ;;
         *)
             echo "Please note that this is not Aphrodite CLI, but a Harbor CLI to manage Aphrodite service."
@@ -849,11 +849,11 @@ run_open_ai_command() {
     case "$1" in
         keys)
             shift
-            env_manager_arr openai.keys --on-set update_main_key $@
+            env_manager_arr openai.keys --on-set update_main_key "$@"
             ;;
         urls)
             shift
-            env_manager_arr openai.urls --on-set update_main_url $@
+            env_manager_arr openai.urls --on-set update_main_url "$@"
             ;;
         *)
             echo "Please note that this is not an OpenAI CLI, but a Harbor CLI to manage OpenAI configuration."
@@ -871,15 +871,15 @@ run_webui_command() {
     case "$1" in
         secret)
             shift
-            env_manager_alias webui.secret $@
+            env_manager_alias webui.secret "$@"
             ;;
         name)
             shift
-            env_manager_alias webui.name $@
+            env_manager_alias webui.name "$@"
             ;;
         log)
             shift
-            env_manager_alias webui.log.level $@
+            env_manager_alias webui.log.level "$@"
             ;;
         *)
             echo "Please note that this is not WebUI CLI, but a Harbor CLI to manage WebUI service."
@@ -909,11 +909,11 @@ run_tabbyapi_command() {
     case "$1" in
         model)
             shift
-            env_manager_alias tabbyapi.model --on-set update_model_spec $@
+            env_manager_alias tabbyapi.model --on-set update_model_spec "$@"
             ;;
         args)
             shift
-            env_manager_alias tabbyapi.extra.args $@
+            env_manager_alias tabbyapi.extra.args "$@"
             ;;
         apidoc)
             shift
@@ -1044,7 +1044,7 @@ case "$1" in
         ;;
     defaults)
         shift
-        env_manager_arr services.default $@
+        env_manager_arr services.default "$@"
         ;;
     ln)
         shift
@@ -1080,47 +1080,47 @@ case "$1" in
         ;;
     ollama)
         shift
-        exec_ollama $@
+        exec_ollama "$@"
         ;;
     llamacpp)
         shift
-        run_llamacpp_command $@
+        run_llamacpp_command "$@"
         ;;
     tgi)
         shift
-        run_tgi_command $@
+        run_tgi_command "$@"
         ;;
     litellm)
         shift
-        run_litellm_command $@
+        run_litellm_command "$@"
         ;;
     vllm)
         shift
-        run_vllm_command $@
+        run_vllm_command "$@"
         ;;
     aphrodite)
         shift
-        run_aphrodite_command $@
+        run_aphrodite_command "$@"
         ;;
     openai)
         shift
-        run_open_ai_command $@
+        run_open_ai_command "$@"
         ;;
     webui)
         shift
-        run_webui_command $@
+        run_webui_command "$@"
         ;;
     tabbyapi)
         shift
-        run_tabbyapi_command $@
+        run_tabbyapi_command "$@"
         ;;
     parllama)
         shift
-        run_parllama_command $@
+        run_parllama_command "$@"
         ;;
     plandex|pdx)
         shift
-        run_plandex_command $@
+        run_plandex_command "$@"
         ;;
     config)
         shift
