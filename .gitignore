@@ -26,3 +26,10 @@ librechat/images/
 
 # Local scripts
 scripts/
+
+# LiteLLM
+litellm/db
+
+# Plandex
+plandex/data
+plandex/db

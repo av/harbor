@@ -1,0 +1,75 @@
+services:
+  # Dockerized CLI
+  plandex:
+    build:
+      context: ./plandex
+      dockerfile: Dockerfile
+    container_name: ${HARBOR_CONTAINER_PREFIX}.plandex
+    env_file: ./.env
+    # When running "harbor plandex <cmd>", Harbor will also
+    #  dynamically mount closest .git directory to serve
+    # as a volume for plandex to work in
+    volumes:
+      - ${HARBOR_PLANDEX_HOME}:/root/.plandex-home
+    networks:
+      - harbor-network
+    environment:
+      - GOENV=development
+      - PLANDEX_SKIP_UPGRADE=1
+      - PLANDEX_API_HOST=http://plandexserver:8080
+      # These will inject the default OpenAI API key and URL
+      # See .x. files for the connections with other Harbor services
+      - OPENAI_API_KEY=${HARBOR_OPENAI_KEY}
+      - OPENAI_API_BASE=${HARBOR_OPENAI_URL}
+
+  plandexserver:
+    image: ghcr.io/wipash/plandex:rolling
+    container_name: ${HARBOR_CONTAINER_PREFIX}.plandexserver
+    volumes:
+      - ./plandex/data:/app/data
+      # There's a bug with incorrect timezone that might
+      # make it impossible to invalidate the email pin
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    ports:
+      - ${HARBOR_PLANDEX_HOST_PORT}:8080
+    env_file: ./.env
+    environment:
+      GOENV: development
+      DATABASE_URL: postgresql://postgres:postgres@plandexdb:5432/postgres?sslmode=disable
+      PLANDEX_BASE_DIR: /app/data
+    networks:
+      - harbor-network
+    depends_on:
+      plandexdb:
+        condition: service_healthy
+    command:
+      [
+        "/bin/sh",
+        "-c",
+        "./plandex-server"
+      ]
+
+  plandexdb:
+    image: postgres
+    container_name: ${HARBOR_CONTAINER_PREFIX}.plandexdb
+    env_file: ./.env
+    ports:
+      - ${HARBOR_PLANDEX_DB_HOST_PORT}:5432
+    volumes:
+      # There's a bug with incorrect timezone that might
+      # make it impossible to invalidate the email pin
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+      - ./plandex/db:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 1s
+      timeout: 3s
+      retries: 10
+    networks:
+      - harbor-network

@@ -48,7 +48,7 @@ def merge_dicts(dict1, dict2):
 def merge_yaml_files(directory, pattern, output_file):
     merged_data = {}
 
-    for filename in os.listdir(directory):
+    for filename in sorted(os.listdir(directory)):
         if filename.endswith(pattern):
             file_path = os.path.join(directory, filename)
             yaml_data = read_yaml(file_path)

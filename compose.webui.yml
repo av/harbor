@@ -8,7 +8,7 @@ services:
       - ./open-webui:/app/backend/data
       - ./open-webui/start_webui.sh:/app/start_webui.sh
       - ./shared/json_config_merger.py:/app/json_config_merger.py
-      - ./open-webui/configs/config.override.json:/app/configs/config.override.json
+      - ./open-webui/configs/config.override.json:/app/configs/config.z.override.json
     entrypoint: ["/app/start_webui.sh"]
     ports:
       - ${HARBOR_WEBUI_HOST_PORT}:8080

@@ -4,7 +4,7 @@
 			"http://litellm:4000/v1"
 		],
 		"api_keys": [
-			"sk-litellm"
+			"${HARBOR_LITELLM_MASTER_KEY}"
 		],
 		"enabled": true
 	}

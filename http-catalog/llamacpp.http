@@ -20,3 +20,20 @@ curl {{host}}/v1/chat/completions -H "Content-Type: application/json" -d '{
   ],
   "max_tokens": 60
 }'
+
+###
+
+curl {{host}}/v1/chat/completions -H "Content-Type: application/json" -H "Authorization: Bearer sk-llamacpp" -d '{
+  "model": "/models/gguf/phi-3-mini-128k-instruct.Q4_K_M.gguf",
+  "messages": [
+    {
+        "role": "system",
+        "content": "You are a helpful assistant."
+    },
+    {
+        "role": "user",
+        "content": "Wno invented Rubiks Cube?"
+    }
+  ],
+  "max_tokens": 60
+}'

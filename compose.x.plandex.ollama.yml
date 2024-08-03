@@ -1,0 +1,8 @@
+services:
+  plandex:
+    environment:
+      # Point to ollama
+      # Ollama will ignore the API key, but
+      # it's required for the OpenAI SDK
+      - OPENAI_API_KEY=sk-ollama
+      - OPENAI_API_BASE=http://ollama:11434/v1

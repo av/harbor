@@ -1,0 +1,8 @@
+services:
+  plandex:
+    environment:
+      # Point to llamacpp
+      # Llamacpp will ignore the API key, but
+      # it's required for the OpenAI SDK
+      - OPENAI_API_KEY=sk-llamacpp
+      - OPENAI_API_BASE=http://llamacpp:8080/v1

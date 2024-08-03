@@ -58,9 +58,6 @@ show_help() {
     echo "  fixfs                 - Fix file system ACLs for service volumes"
     echo "  info                  - Show system information for debug/issues"
     echo "  cmd                   - Print the docker-compose command"
-    echo
-    echo "Options:"
-    echo "  Additional options to pass to the compose_with_options function"
 }
 
 compose_with_options() {
@@ -583,6 +580,8 @@ fix_fs_acl() {
     docker_fsacl ./tts
     docker_fsacl ./librechat
     docker_fsacl ./searxng
+    docker_fsacl ./tabbyapi
+    docker_fsacl ./litellm
 }
 
 unsafe_update() {
@@ -923,6 +922,30 @@ run_parllama_command() {
     $(compose_with_options "parllama") run -it --entrypoint bash parllama -c parllama
 }
 
+run_plandex_command() {
+    case "$1" in
+        health)
+            shift
+            curl $(get_service_url plandex)/health
+            ;;
+        pwd)
+            shift
+            echo $original_dir
+            ;;
+        *)
+            $(compose_with_options "plandex") run -v "$original_dir:/app/context" --workdir "/app/context" -it --entrypoint "plandex" plandex "$@"
+            ;;
+        # *)
+        #     echo "Please note that this is not Plandex CLI, but a Harbor CLI to manage Plandex service."
+        #     echo "Access Plandex own CLI by running 'harbor exec plandex' when it's running."
+        #     echo
+        #     echo "Usage: harbor plandex <command>"
+        #     echo "Commands:"
+        #     echo "  harbor plandex health        - Check the health of the Plandex service using its API health endpoint"
+        #     ;;
+    esac
+}
+
 
 # ========================================================================
 # == Main script
@@ -1081,6 +1104,10 @@ case "$1" in
     parllama)
         shift
         run_parllama_command $@
+        ;;
+    plandex)
+        shift
+        run_plandex_command $@
         ;;
     config)
         shift
