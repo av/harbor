@@ -971,7 +971,7 @@ run_plandex_command() {
 # == Main script
 # ========================================================================
 
-version="0.0.14"
+version="0.0.15"
 delimiter="|"
 
 harbor_home=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
