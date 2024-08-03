@@ -1,0 +1,12 @@
+services:
+  parllama:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.parllama
+    env_file: ./.env
+    build:
+      context: ./parllama
+      dockerfile: Dockerfile
+    volumes:
+      - ${HARBOR_PARLLAMA_CACHE}:/root/.parllama
+    tty: true
+    networks:
+      - harbor-network

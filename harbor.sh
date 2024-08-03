@@ -35,6 +35,7 @@ show_help() {
     echo "  openai        - Configure OpenAI API keys and URLs"
     echo "  vllm          - Configure VLLM service"
     echo "  aphrodite     - Configure Aphrodite service"
+    echo "  parllama      - Launch Parllama - TUI for chatting with Ollama models"
     echo
     echo "Huggingface CLI:"
     echo "  hf            - Run the Harbor's Huggingface CLI. Expanded with a few additional commands."
@@ -906,6 +907,10 @@ run_tabbyapi_command() {
     esac
 }
 
+run_parllama_command() {
+    $(compose_with_options "parllama") run -it --entrypoint bash parllama -c parllama
+}
+
 
 # ========================================================================
 # == Main script
@@ -1060,6 +1065,10 @@ case "$1" in
     tabbyapi)
         shift
         run_tabbyapi_command $@
+        ;;
+    parllama)
+        shift
+        run_parllama_command $@
         ;;
     config)
         shift
