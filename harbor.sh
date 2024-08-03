@@ -188,8 +188,7 @@ run_hf_cli() {
             ;;
     esac
 
-    local hf_cli_image=shaowenchen/huggingface-cli
-    docker run --rm --log-driver none -v ~/.cache/huggingface:/root/.cache/huggingface $hf_cli_image $@
+    $(compose_with_options "hf") run --rm hf $@
 }
 
 run_gum() {

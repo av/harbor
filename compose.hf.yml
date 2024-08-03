@@ -1,0 +1,9 @@
+services:
+  hf:
+    image: shaowenchen/huggingface-cli
+    container_name: ${HARBOR_CONTAINER_PREFIX}.hf
+    env_file: ./.env
+    volumes:
+      - ${HARBOR_HF_CACHE}:/root/.cache/huggingface
+    networks:
+      - harbor-network
