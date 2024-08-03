@@ -955,14 +955,6 @@ run_plandex_command() {
         *)
             $(compose_with_options "plandex") run -v "$original_dir:/app/context" --workdir "/app/context" -it --entrypoint "plandex" plandex "$@"
             ;;
-        # *)
-        #     echo "Please note that this is not Plandex CLI, but a Harbor CLI to manage Plandex service."
-        #     echo "Access Plandex own CLI by running 'harbor exec plandex' when it's running."
-        #     echo
-        #     echo "Usage: harbor plandex <command>"
-        #     echo "Commands:"
-        #     echo "  harbor plandex health        - Check the health of the Plandex service using its API health endpoint"
-        #     ;;
     esac
 }
 
