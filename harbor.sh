@@ -292,6 +292,16 @@ exec_ollama() {
     run_in_service ollama ollama "$@"
 }
 
+ensure_env_file() {
+    local src_file="default.env"
+    local tgt_file=".env"
+
+    if [ ! -f "$tgt_file" ]; then
+        echo "Creating .env file..."
+        cp "$src_file" "$tgt_file"
+    fi
+}
+
 # ========================================================================
 # == Env Manager
 # ========================================================================
@@ -956,8 +966,9 @@ delimiter="|"
 
 harbor_home=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
 original_dir=$PWD
-
 cd $harbor_home
+
+ensure_env_file
 
 default_options=($(env_manager get services.default | tr ';' ' '))
 default_open=$(env_manager get ui.main)

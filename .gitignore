@@ -1,3 +1,6 @@
+# Local .env
+.env
+
 # Open WebUI
 open-webui/*
 open-webui/config.json
