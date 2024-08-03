@@ -6,6 +6,10 @@ curl {{host}}/api/ps
 
 ###
 
+curl {{host}}/v1/models
+
+###
+
 curl {{host}}/api/generate -d '{
   "model": "gpt2",
   "prompt": "Today is a"

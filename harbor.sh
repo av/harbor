@@ -1126,7 +1126,7 @@ case "$1" in
         shift
         run_parllama_command $@
         ;;
-    plandex)
+    plandex|pdx)
         shift
         run_plandex_command $@
         ;;
