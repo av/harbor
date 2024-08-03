@@ -302,6 +302,12 @@ ensure_env_file() {
     fi
 }
 
+reset_env_file() {
+    echo "Resetting Harbor configuration..."
+    rm .env
+    ensure_env_file
+}
+
 # ========================================================================
 # == Env Manager
 # ========================================================================
@@ -354,8 +360,12 @@ env_manager() {
                 printf "%-30s %s\n" "$key" "$value"
             done
             ;;
+        reset)
+            shift
+            run_gum confirm "Are you sure you want to reset Harbor configuration?" && reset_env_file || echo "Reset cancelled"
+            ;;
         *)
-            echo "Usage: harbor config {get|set|list} [key] [value]"
+            echo "Usage: harbor config {get|set|list|rest} [key] [value]"
             return 1
             ;;
     esac
@@ -604,7 +614,7 @@ unsafe_update() {
 
 run_gum() {
     local gum_image=ghcr.io/charmbracelet/gum
-    docker run --rm -it -e "TERM=xterm-256color" $gum_image $@
+    docker run --rm -it -e "TERM=xterm-256color" $gum_image "$@"
 }
 
 run_dive() {
@@ -1126,7 +1136,7 @@ case "$1" in
         ;;
     gum)
         shift
-        run_gum $@
+        run_gum "$@"
         ;;
     fixfs)
         shift
