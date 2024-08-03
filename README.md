@@ -58,6 +58,7 @@ harbor hf dl -m google/gemma-2-2b-it -c 10 -s ./hf
 # Where possible, cache is shared between the services
 harbor tgi model google/gemma-2-2b-it
 harbor vllm model google/gemma-2-2b-it
+harbor aphrodite model google/gemma-2-2b-it
 harbor tabbyapi model google/gemma-2-2b-it-exl2
 
 # Convenience tools for docker setup

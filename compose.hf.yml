@@ -5,5 +5,7 @@ services:
     env_file: ./.env
     volumes:
       - ${HARBOR_HF_CACHE}:/root/.cache/huggingface
-    networks:
-      - harbor-network
+    environment:
+      - HF_HUB_ENABLE_HF_TRANSFER=1
+      - HF_TOKEN=${HARBOR_HF_HUB_TOKEN}
+    network_mode: host
