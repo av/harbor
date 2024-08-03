@@ -916,7 +916,7 @@ run_parllama_command() {
 # == Main script
 # ========================================================================
 
-version="0.0.13"
+version="0.0.14"
 delimiter="|"
 
 harbor_home=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
