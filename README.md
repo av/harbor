@@ -75,6 +75,7 @@ harbor tgi model google/gemma-2-2b-it
 harbor vllm model google/gemma-2-2b-it
 harbor aphrodite model google/gemma-2-2b-it
 harbor tabbyapi model google/gemma-2-2b-it-exl2
+harbor mistralrs model google/gemma-2-2b-it
 
 # Convenience tools for docker setup
 harbor logs llamacpp
