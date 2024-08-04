@@ -11,11 +11,21 @@ Containerized LLM toolkit. Run LLM backends, APIs, frontends, and additional ser
 - git
 - bash-compatible shell
 
+#### Unsafe install
+
+```bash
+# Will write to your shell profile
+curl -sSL https://raw.githubusercontent.com/av/harbor/main/install.sh | bash
+```
+
+#### Manual install
+
 ```bash
 git clone https://github.com/av/harbor.git && cd harbor
 
 # [Optional] make Harbor CLI available globally
 # Creates a symlink in User's local bin directory
+# Adds the bin folder to the path
 ./harbor.sh ln
 
 # Start default services

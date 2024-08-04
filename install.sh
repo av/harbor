@@ -38,14 +38,7 @@ main() {
   install_or_update_project
 
   ./harbor.sh -v
-
-  ./harbor.sh gum confirm "Do you want a symlink for global access? Will write to shell profile." \
-    && ./harbor.sh link \
-    || echo "Skipping symlink. See README for manual setup."
-
-  ./harbor.sh gum confirm "Pull default service images?" \
-    && ./harbor.sh pull \
-    || echo "Skipping image pull. Run 'harbor pull' to pull images later."
+  ./harbor.sh ln
 
   echo "Installation complete."
 }
