@@ -706,6 +706,10 @@ unsafe_update() {
     git pull
 }
 
+get_active_services() {
+    docker compose ps --format "{{.Service}}" | tr '\n' ' '
+}
+
 # ========================================================================
 # == Service CLIs
 # ========================================================================
@@ -1141,6 +1145,10 @@ run_opint_command() {
     }
 
     case "$1" in
+        backend)
+            shift
+            env_manager_alias opint.backend "$@"
+            ;;
         profiles|--profiles)
             shift
             execute_and_process "env_manager get opint.config.path" "sys_open {{output}}/profiles" "No opint.config.path set"
@@ -1170,9 +1178,15 @@ run_opint_command() {
             echo "Harbor does not support Open Interpreter OS mode".
             ;;
         *)
-            # Everything is proxied to the opint container
+            # Allow permanent override of the target backend
+            local services=$(env_manager get opint.backend)
+
+            if [ -z "$services" ]; then
+                services=$(get_active_services)
+            fi
+
             # Mount the current directory and set it as the working directory
-            $(compose_with_options "opint") run -v "$original_dir:$original_dir" --workdir "$original_dir" opint $@
+            $(compose_with_options "$services" "opint") run -v "$original_dir:$original_dir" --workdir "$original_dir" opint $@
             ;;
     esac
 }

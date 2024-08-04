@@ -1,0 +1,7 @@
+services:
+  opint:
+    entrypoint: >
+      interpreter
+        --api_base http://mistralrs:8021/v1
+        --api_key sk-mistralrs
+        ${HARBOR_OPINT_CMD}

@@ -1,10 +1,10 @@
 {
   "openai": {
 		"api_base_urls": [
-			"http://llamacpp:8080/v1"
+			"http://vllm:8000/v1"
 		],
 		"api_keys": [
-			"sk-llamacpp"
+			"sk-vllm"
 		],
 		"enabled": true
 	}

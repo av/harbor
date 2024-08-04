@@ -4,7 +4,7 @@
 			"http://aphrodite:7860/v1"
 		],
 		"api_keys": [
-			""
+			"sk-aphrodite"
 		],
 		"enabled": true
 	}
