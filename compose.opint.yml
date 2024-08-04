@@ -1,0 +1,14 @@
+services:
+  opint:
+    build:
+      context: ./openinterpreter
+      dockerfile: Dockerfile
+    container_name: ${HARBOR_CONTAINER_PREFIX}.opint
+    env_file: ./.env
+    volumes:
+      - ./openinterpreter/configs:/app/configs
+    networks:
+      - harbor-network
+    environment:
+      - OPENAI_API_KEY=${HARBOR_OPENAI_KEY}
+      - OPENAI_API_BASE=${HARBOR_OPENAI_URL}

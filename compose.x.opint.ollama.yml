@@ -1,0 +1,5 @@
+services:
+  opint:
+    command: >
+      --api_base http://ollama:11434
+      --model ${HARBOR_OPINT_MODEL:-ollama/llama3.1}

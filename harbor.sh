@@ -361,14 +361,11 @@ run_in_service() {
 
     if docker compose ps --services --filter "status=running" | grep -q "^${service_name}$"; then
         echo "Service ${service_name} is running. Executing command..."
-        docker compose exec "${service_name}" "${command_to_run}"
+        # shellcheck disable=SC2086
+        docker compose exec ${service_name} ${command_to_run}
     else
         echo "Harbor ${service_name} is not running. Please start it with 'harbor up ${service_name}' first."
     fi
-}
-
-exec_ollama() {
-    run_in_service ollama ollama "$@"
 }
 
 ensure_env_file() {
@@ -1121,6 +1118,11 @@ run_mistralrs_command() {
     esac
 }
 
+run_opint_command() {
+    # Everything is proxied to the opint container
+    $(compose_with_options "opint") run -v "$original_dir:/app/context" --workdir "/app/context" -it opint "$@"
+}
+
 
 # ========================================================================
 # == Main script
@@ -1247,7 +1249,7 @@ case "$1" in
         ;;
     ollama)
         shift
-        exec_ollama "$@"
+        run_in_service ollama ollama "$@"
         ;;
     llamacpp)
         shift
@@ -1292,6 +1294,10 @@ case "$1" in
     mistralrs)
         shift
         run_mistralrs_command "$@"
+        ;;
+    interpreter|opint)
+        shift
+        run_opint_command "$@"
         ;;
     config)
         shift
