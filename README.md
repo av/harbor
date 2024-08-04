@@ -13,12 +13,17 @@ Containerized LLM toolkit. Run LLM backends, APIs, frontends, and additional ser
 
 #### Unsafe install
 
+- Runs the install script directly from the internet (make sure you trust the source)
+- Will clone the Harbor repository to your home directory
+- Will write to your shell profile to add bin folder to the path
+
 ```bash
-# Will write to your shell profile
 curl -sSL https://raw.githubusercontent.com/av/harbor/main/install.sh | bash
 ```
 
 #### Manual install
+
+Same as above, just done by you.
 
 ```bash
 git clone https://github.com/av/harbor.git && cd harbor
