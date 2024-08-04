@@ -1149,7 +1149,7 @@ run_opint_command() {
             shift
             env_manager_alias opint.backend "$@"
             ;;
-        profiles|--profiles)
+        profiles|--profiles|-p)
             shift
             execute_and_process "env_manager get opint.config.path" "sys_open {{output}}/profiles" "No opint.config.path set"
             ;;
