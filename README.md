@@ -67,8 +67,9 @@ harbor llamacpp model https://huggingface.co/user/repo/model.gguf
 
 # Shortcut to HF Hub to find the models
 harbor hf find gguf gemma-2
-# Download and cache the model
+# Use HFDownloader and official HF CLI to download models
 harbor hf dl -m google/gemma-2-2b-it -c 10 -s ./hf
+harbor hf download google/gemma-2-2b-it
 
 # Where possible, cache is shared between the services
 harbor tgi model google/gemma-2-2b-it
