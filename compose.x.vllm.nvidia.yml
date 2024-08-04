@@ -1,9 +1,9 @@
 services:
-  tts:
+  vllm:
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
-              count: 1
+              count: all
               capabilities: [gpu]

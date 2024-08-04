@@ -1,0 +1,27 @@
+services:
+  mistralrs:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.mistralrs
+    env_file: ./.env
+    # See .nvidia. file for an alternative image
+    image: ghcr.io/ericlbuehler/mistral.rs:cpu-0.2
+    ports:
+      - ${HARBOR_MISTRALRS_HOST_PORT}:8021
+    networks:
+      - harbor-network
+    environment:
+      - RUST_BACKTRACE=full
+    volumes:
+      - ${HARBOR_HF_CACHE}:/root/.cache/huggingface
+      - ${HARBOR_LLAMACPP_CACHE}:/gguf
+      # Mounting second time for the symmetry of the
+      # "folder" type of model specifiers
+      - ${HARBOR_HF_CACHE}:/hf
+    entrypoint: mistralrs-server
+    command: >
+      --port 8021
+      --serve-ip 0.0.0.0
+      --token-source env:HARBOR_HF_TOKEN
+      ${HARBOR_MISTRALRS_EXTRA_ARGS}
+      ${HARBOR_MISTRALRS_MODEL_SPECIFIER}
+
+

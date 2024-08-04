@@ -1,9 +1,9 @@
 services:
-  llamacpp:
+  lmdeploy:
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
-              count: 1
+              count: all
               capabilities: [gpu]

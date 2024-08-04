@@ -6,6 +6,5 @@ services:
     volumes:
       - ${HARBOR_HF_CACHE}:/root/.cache/huggingface
     environment:
-      - HF_HUB_ENABLE_HF_TRANSFER=1
-      - HF_TOKEN=${HARBOR_HF_HUB_TOKEN}
+      - HF_TOKEN=${HARBOR_HF_TOKEN}
     network_mode: host

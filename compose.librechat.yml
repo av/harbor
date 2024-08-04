@@ -22,7 +22,7 @@ services:
       - COHERE_API_KEY=${HARBOR_COHERE_KEY:-user_provided}
       - FIREWORKS_API_KEY=${HARBOR_FIREWORKS_API_KEY:-user_provided}
       - GROQ_API_KEY=${HARBOR_GROQ_KEY:-user_provided}
-      - HUGGINGFACE_TOKEN=${HARBOR_HF_HUB_TOKEN:-user_provided}
+      - HUGGINGFACE_TOKEN=${HARBOR_HF_TOKEN:-user_provided}
       - MISTRAL_API_KEY=${HARBOR_MISTRAL_KEY:-user_provided}
       - OPENROUTER_KEY=${HARBOR_OPENROUTER_KEY:-user_provided}
       - PERPLEXITY_API_KEY=${HARBOR_PERPLEXITY_KEY:-user_provided}

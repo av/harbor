@@ -13,51 +13,71 @@ show_help() {
     echo "Usage: $0 <command> [options]"
     echo
     echo "Compose Setup Commands:"
-    echo "  up            - Start the containers"
-    echo "  down          - Stop and remove the containers"
-    echo "  ps            - List the running containers"
-    echo "  logs          - View the logs of the containers"
-    echo "  exec          - Execute a command in a running service"
-    echo "  pull          - Pull the latest images"
-    echo "  dive          - Run the Dive CLI to inspect Docker images"
-    echo "  run           - Run a one-off command in a service container"
-    echo "  restart       - down then up"
-    echo "  shell         - Load shell in the given service main container"
-    echo "  build         - Build the given service"
+    echo "  up|u      - Start the containers"
+    echo "  down|d    - Stop and remove the containers"
+    echo "  restart|r - Down then up"
+    echo "  ps        - List the running containers"
+    echo "  logs|l    - View the logs of the containers"
+    echo "  exec      - Execute a command in a running service"
+    echo "  pull      - Pull the latest images"
+    echo "  dive      - Run the Dive CLI to inspect Docker images"
+    echo "  run       - Run a one-off command in a service container"
+    echo "  shell     - Load shell in the given service main container"
+    echo "  build     - Build the given service"
     echo
     echo "Setup Management Commands:"
-    echo "  ollama        - Run the Harbor's Ollama CLI. Ollama service should be running"
-    echo "  smi           - Show NVIDIA GPU information"
-    echo "  top           - Run nvtop to monitor GPU usage"
-    echo "  llamacpp      - Configure llamacpp service"
-    echo "  tgi           - Configure text-generation-inference service"
-    echo "  litellm       - Configure LiteLLM service"
-    echo "  openai        - Configure OpenAI API keys and URLs"
-    echo "  vllm          - Configure VLLM service"
-    echo "  aphrodite     - Configure Aphrodite service"
-    echo "  parllama      - Launch Parllama - TUI for chatting with Ollama models"
+    echo "  ollama     - Run Ollama CLI (docker). Service should be running."
+    echo "  smi        - Show NVIDIA GPU information"
+    echo "  top        - Run nvtop to monitor GPU usage"
+    echo "  llamacpp   - Configure llamacpp service"
+    echo "  tgi        - Configure text-generation-inference service"
+    echo "  litellm    - Configure LiteLLM service"
+    echo "  openai     - Configure OpenAI API keys and URLs"
+    echo "  vllm       - Configure VLLM service"
+    echo "  aphrodite  - Configure Aphrodite service"
+    echo "  parllama   - Launch Parllama - TUI for chatting with Ollama models"
     echo
     echo "Huggingface CLI:"
-    echo "  hf            - Run the Harbor's Huggingface CLI. Expanded with a few additional commands."
-    echo "  hf downloader - HuggingFaceModelDownloader CLI"
-    echo "  hf parse-url  - Parse file URL from Hugging Face"
-    echo "  hf token      - Get/set the Hugging Face Hub token"
+    echo "  hf [dl|parse-url|token] - Run the Harbor's Huggingface CLI. Expanded with a few additional commands."
+    echo "    hf dl                 - HuggingFaceModelDownloader CLI"
+    echo "    hf parse-url          - Parse file URL from Hugging Face"
+    echo "    hf token              - Get/set the Hugging Face Hub token"
+    echo "    hf *                  - Anything else is passed to the official Huggingface CLI"
     echo
     echo "Harbor CLI Commands:"
-    echo "  open                  - Open a service in the default browser"
-    echo "  url                   - Get the URL for a service"
-    echo "  config                - Manage the Harbor environment configuration"
-    echo "  ln                    - Create a symbolic link to the CLI"
-    echo "  eject                 - Eject the Compose configuration, accepts same options as 'up'"
-    echo "  defaults [ls]         - List default services"
-    echo "  defaults rm           - Remove default services, no options to remove all, accepts handle or index"
-    echo "  defaults add <handle> - Add a default service"
-    echo "  help                  - Show this help message"
-    echo "  version               - Show the CLI version"
-    echo "  gum                   - Run the Gum terminal commands"
-    echo "  fixfs                 - Fix file system ACLs for service volumes"
-    echo "  info                  - Show system information for debug/issues"
-    echo "  cmd                   - Print the docker-compose command"
+    echo "  open handle                   - Open a service in the default browser"
+    echo "  url <handle>                  - Get the URL for a service"
+    echo "  config [get|set|ls]           - Manage the Harbor environment configuration"
+    echo "    config ls                   - All config values in ENV format"
+    echo "    config get <field>          - Get a specific config value"
+    echo "    config set <field> <value>  - Get a specific config value"
+    echo "  defaults [ls|rm|add]          - List default services"
+    echo "    defaults rm <handle|index>  - Remove, also accepts handle or index"
+    echo "    defaults add <handle>       - Add"
+    echo "  ln|link [--short]             - Create a symlink to the CLI, --short for 'h' link"
+    echo "  unlink                        - Remove CLI symlinks"
+    echo "  eject                         - Eject the Compose configuration, accepts same options as 'up'"
+    echo "  help|--help|-h                - Show this help message"
+    echo "  version|--version|-v          - Show the CLI version"
+    echo "  gum                           - Run the Gum terminal commands"
+    echo "  fixfs                         - Fix file system ACLs for service volumes"
+    echo "  info                          - Show system information for debug/issues"
+    echo "  cmd <handle>                  - Print the docker-compose command"
+}
+
+resolve_compose_files() {
+    # Find all .yml files in the specified base directory,
+    # but do not go into subdirectories
+    find "$base_dir" -maxdepth 1 -name "*.yml" |
+    # For each file, count the number of dots in the filename
+    # and prepend this count to the filename
+    awk -F. '{print NF-1, $0}' |
+    # Sort the files based on the
+    # number of dots, in ascending order
+    sort -n |
+    # Remove the dot count, leaving
+    # just the sorted filenames
+    cut -d' ' -f2-
 }
 
 compose_with_options() {
@@ -80,16 +100,14 @@ compose_with_options() {
     done
 
     # Check for NVIDIA GPU and drivers
-    local has_nvidia=false
     if command -v nvidia-smi &> /dev/null && docker info | grep -q "Runtimes:.*nvidia"; then
-        has_nvidia=true
+        options+=("nvidia")
     fi
 
-    for file in "$base_dir"/compose.*.yml; do
+    for file in $(resolve_compose_files); do
         if [ -f "$file" ]; then
             local filename=$(basename "$file")
             local match=false
-            local is_nvidia_file=false
 
             # This is a "cross" file, only to be included
             # if we're running all the mentioned services
@@ -130,15 +148,11 @@ compose_with_options() {
                 fi
             done
 
-            # Check if it's an NVIDIA file
-            if [[ $filename == *".nvidia."* ]]; then
-                is_nvidia_file=true
-            fi
-
             # Include the file if:
             # 1. It matches an option and is not an NVIDIA file
             # 2. It matches an option, is an NVIDIA file, and NVIDIA is supported
-            if $match && (! $is_nvidia_file || ($is_nvidia_file && $has_nvidia)); then
+            # if $match && (! $is_nvidia_file || ($is_nvidia_file && $has_nvidia)); then
+            if $match ; then
                 compose_files+=("$file")
             fi
         fi
@@ -162,25 +176,90 @@ run_hf_open() {
 }
 
 link_cli() {
-    local target_dir="$HOME/.local/bin"
-    local script_name="harbor"
+    local target_dir=$(eval echo "$(env_manager get cli.path)")
+    local script_name=$(env_manager get cli.name)
+    local short_name=$(env_manager get cli.short)
     local script_path="$harbor_home/harbor.sh"
+    local create_short_link=false
+
+    # Check for "--short" flag
+    for arg in "$@"; do
+        if [[ "$arg" == "--short" ]]; then
+            create_short_link=true
+            break
+        fi
+    done
+
+    # Determine which shell configuration file to update
+    local shell_profile=""
+    if [[ -f "$HOME/.zshrc" ]]; then
+        shell_profile="$HOME/.zshrc"
+    elif [[ -f "$HOME/.bash_profile" ]]; then
+        shell_profile="$HOME/.bash_profile"
+    elif [[ -f "$HOME/.bashrc" ]]; then
+        shell_profile="$HOME/.bashrc"
+    elif [[ -f "$HOME/.profile" ]]; then
+        shell_profile="$HOME/.profile"
+    else
+        echo "Sorry, but Harbor can't determine which shell configuration file to update."
+        echo "Please link the CLI manually."
+        echo "Harbor supports: ~/.zshrc, ~/.bash_profile, ~/.bashrc, ~/.profile"
+        return 1
+    fi
 
     # Check if target directory exists in PATH
-    if ! echo $PATH | tr ':' '\n' | grep -q "$target_dir"; then
+    if ! echo "$PATH" | tr ':' '\n' | grep -q "$target_dir"; then
         echo "Creating $target_dir and adding it to PATH..."
         mkdir -p "$target_dir"
-        echo -e '\nexport PATH="$PATH:$HOME/.local/bin"\n' >> "$HOME/.bashrc"
-        export PATH="$PATH:$HOME/.local/bin"
+
+        # Update the shell configuration file
+        echo -e "\nexport PATH=\"\$PATH:$target_dir\"\n" >> "$shell_profile"
+        export PATH="$PATH:$target_dir"
+        echo "Updated $shell_profile with new PATH."
     fi
 
     # Create symlink
     if ln -s "$script_path" "$target_dir/$script_name"; then
         echo "Symlink created: $target_dir/$script_name -> $script_path"
-        echo "You may need to reload your shell or run 'source ~/.bashrc' for changes to take effect."
     else
         echo "Failed to create symlink. Please check permissions and try again."
         return 1
+    fi
+
+    # Create short symlink if "--short" flag is present
+    if $create_short_link; then
+        if ln -s "$script_path" "$target_dir/$short_name"; then
+            echo "Short symlink created: $target_dir/$short_name -> $script_path"
+        else
+            echo "Failed to create short symlink. Please check permissions and try again."
+            return 1
+        fi
+    fi
+
+    echo "You may need to reload your shell or run 'source $shell_profile' for changes to take effect."
+}
+
+unlink_cli() {
+    local target_dir=$(eval echo "$(env_manager get cli.path)")
+    local script_name=$(env_manager get cli.name)
+    local short_name=$(env_manager get cli.short)
+
+    echo "Removing symlinks..."
+
+    # Remove the main symlink
+    if [ -L "$target_dir/$script_name" ]; then
+        rm "$target_dir/$script_name"
+        echo "Removed symlink: $target_dir/$script_name"
+    else
+        echo "Main symlink does not exist or is not a symbolic link."
+    fi
+
+    # Remove the short symlink
+    if [ -L "$target_dir/$short_name" ]; then
+        rm "$target_dir/$short_name"
+        echo "Removed short symlink: $target_dir/$short_name"
+    else
+        echo "Short symlink does not exist or is not a symbolic link."
     fi
 }
 
@@ -282,7 +361,7 @@ run_in_service() {
 
     if docker compose ps --services --filter "status=running" | grep -q "^${service_name}$"; then
         echo "Service ${service_name} is running. Executing command..."
-        docker compose exec ${service_name} ${command_to_run}
+        docker compose exec "${service_name}" "${command_to_run}"
     else
         echo "Harbor ${service_name} is not running. Please start it with 'harbor up ${service_name}' first."
     fi
@@ -306,6 +385,28 @@ reset_env_file() {
     echo "Resetting Harbor configuration..."
     rm .env
     ensure_env_file
+}
+
+execute_and_process() {
+    local command_to_execute="$1"
+    local success_command="$2"
+    local error_message="$3"
+
+    # Execute the command and capture its output
+    command_output=$(eval "$command_to_execute" 2>&1)
+    exit_code=$?
+
+    # Check the exit code
+    if [ $exit_code -eq 0 ]; then
+        # Replace placeholder with command output, using | as delimiter
+        success_command_modified=$(echo "$success_command" | sed "s|{{output}}|$command_output|")
+        # If the command succeeded, pass the output to the success command
+        eval "$success_command_modified"
+    else
+        # If the command failed, print the custom error message and the output
+        echo "$error_message Exit code: $exit_code. Output:"
+        echo "$command_output"
+    fi
 }
 
 # ========================================================================
@@ -352,7 +453,7 @@ env_manager() {
             fi
             echo "Set $prefix$upper_key to: \"$value\""
             ;;
-        list)
+        list|ls)
             grep "^$prefix" "$env_file" | sed "s/^$prefix//" | while read -r line; do
                 key=${line%%=*}
                 value=${line#*=}
@@ -365,7 +466,7 @@ env_manager() {
             run_gum confirm "Are you sure you want to reset Harbor configuration?" && reset_env_file || echo "Reset cancelled"
             ;;
         *)
-            echo "Usage: harbor config {get|set|list|rest} [key] [value]"
+            echo "Usage: harbor config {get|set|ls|reset} [key] [value]"
             return 1
             ;;
     esac
@@ -388,12 +489,12 @@ env_manager_alias() {
     fi
 
     if [ $# -eq 0 ]; then
-        env_manager get $field
+        env_manager get "$field"
         if [ -n "$get_command" ]; then
             eval "$get_command"
         fi
     else
-        env_manager set $field $@
+        env_manager set "$field" "$@"
         if [ -n "$set_command" ]; then
             eval "$set_command"
         fi
@@ -619,7 +720,7 @@ run_gum() {
 
 run_dive() {
     local dive_image=wagoodman/dive
-    docker run --rm -it -v /var/run/docker.sock:/var/run/docker.sock $dive_image $@
+    docker run --rm -it -v /var/run/docker.sock:/var/run/docker.sock $dive_image "$@"
 }
 
 run_llamacpp_command() {
@@ -743,31 +844,31 @@ run_litellm_command() {
     esac
 }
 
-run_hf_cli() {
+run_hf_command() {
     case "$1" in
         parse-url)
             shift
-            parse_hf_url $@
+            parse_hf_url "$@"
             return
             ;;
         token)
             shift
-            env_manager_alias hf.hub.token "$@"
+            env_manager_alias hf.token "$@"
             return
             ;;
         dl)
             shift
-            $(compose_with_options "hfdownloader") run --rm hfdownloader $@
+            $(compose_with_options "hfdownloader") run --rm hfdownloader "$@"
             return
             ;;
         find)
             shift
-            run_hf_open $@
+            run_hf_open "$@"
             return
             ;;
     esac
 
-    $(compose_with_options "hf") run --rm hf $@
+    $(compose_with_options "hf") run --rm hf "$@"
 }
 
 run_vllm_command() {
@@ -946,7 +1047,7 @@ run_plandex_command() {
     case "$1" in
         health)
             shift
-            curl $(get_service_url plandex)/health
+            execute_and_process "get_service_url plandexserver" "curl {{output}}/health" "No plandexserver URL:"
             ;;
         pwd)
             shift
@@ -954,6 +1055,68 @@ run_plandex_command() {
             ;;
         *)
             $(compose_with_options "plandex") run -v "$original_dir:/app/context" --workdir "/app/context" -it --entrypoint "plandex" plandex "$@"
+            ;;
+    esac
+}
+
+run_mistralrs_command() {
+    update_model_spec() {
+        local spec=""
+        local current_model=$(env_manager get mistralrs.model)
+        local current_type=$(env_manager get mistralrs.model_type)
+        local current_arch=$(env_manager get mistralrs.model_arch)
+        local current_isq=$(env_manager get mistralrs.isq)
+
+        if [ -n "$current_isq" ]; then
+            spec="--isq $current_isq"
+        fi
+
+        if [ -n "$current_type" ]; then
+            spec="$spec $current_type"
+        fi
+
+        if [ -n "$current_model" ]; then
+            spec="$spec -m $current_model"
+        fi
+
+        if [ -n "$current_arch" ]; then
+            spec="$spec -a $current_arch"
+        fi
+
+        env_manager set mistralrs.model.specifier "$spec"
+    }
+
+    case "$1" in
+        health)
+            shift
+            execute_and_process "get_service_url mistralrs" "curl {{output}}/health" "No mistralrs URL:"
+            ;;
+        docs)
+            shift
+            execute_and_process "get_service_url mistralrs" "sys_open {{output}}/docs" "No mistralrs URL:"
+            ;;
+        args)
+            shift
+            env_manager_alias mistralrs.extra.args "$@"
+            ;;
+        model)
+            shift
+            env_manager_alias mistralrs.model --on-set update_model_spec "$@"
+            ;;
+        type)
+            shift
+            env_manager_alias mistralrs.model_type --on-set update_model_spec "$@"
+            ;;
+        arch)
+            shift
+            env_manager_alias mistralrs.model_arch --on-set update_model_spec "$@"
+            ;;
+        isq)
+            shift
+            env_manager_alias mistralrs.isq --on-set update_model_spec "$@"
+            ;;
+        *)
+            $(compose_with_options "mistralrs") run mistralrs "$@"
             ;;
     esac
 }
@@ -968,7 +1131,7 @@ delimiter="|"
 
 harbor_home=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
 original_dir=$PWD
-cd $harbor_home
+cd "$harbor_home" || exit
 
 ensure_env_file
 
@@ -979,19 +1142,19 @@ default_container_prefix=$(env_manager get container.prefix)
 
 # Main script logic
 case "$1" in
-    up)
+    up|u)
         shift
         $(compose_with_options "$@") up -d
 
         if [ "$default_autoopen" = "true" ]; then
-            open_service $default_open
+            open_service "$default_open"
         fi
         ;;
-    down)
+    down|d)
         shift
         $(compose_with_options "*") down --remove-orphans "$@"
         ;;
-    restart)
+    restart|r)
         shift
         $(compose_with_options "*") down --remove-orphans "$@"
         $(compose_with_options "$@") up -d
@@ -1004,15 +1167,15 @@ case "$1" in
         shift
         service=$1
         shift
-        $(compose_with_options "$service") build $service $@
+        $(compose_with_options "$service") build "$service" "$@"
         ;;
     shell)
         shift
         service=$1
         shift
-        $(compose_with_options "$service") run -it --entrypoint bash $service
+        $(compose_with_options "$service") run -it --entrypoint bash "$service"
         ;;
-    logs)
+    logs|l)
         shift
         # Only pass "*" to the command if no options are provided
         $(compose_with_options "*") logs -n 20 -f "$@"
@@ -1023,40 +1186,44 @@ case "$1" in
         ;;
     exec)
         shift
-        run_in_service $@
+        run_in_service "$@"
         ;;
     run)
         shift
         service=$1
         shift
-        $(compose_with_options "$service") run --rm $service $@
+        $(compose_with_options "$service") run --rm "$service" "$@"
         ;;
     cmd)
         shift
-        echo $(compose_with_options "$@")
+        compose_with_options "$@"
         ;;
     help|--help|-h)
         show_help
         ;;
     hf)
         shift
-        run_hf_cli $@
+        run_hf_command "$@"
         ;;
     defaults)
         shift
         env_manager_arr services.default "$@"
         ;;
-    ln)
+    link|ln)
         shift
-        link_cli
+        link_cli "$@"
+        ;;
+    unlink)
+        shift
+        unlink_cli "$@"
         ;;
     open)
         shift
-        open_service $@
+        open_service "$@"
         ;;
     url)
         shift
-        get_service_url $@
+        get_service_url "$@"
         ;;
     version|--version|-v)
         shift
@@ -1072,11 +1239,11 @@ case "$1" in
         ;;
     dive)
         shift
-        run_dive $@
+        run_dive "$@"
         ;;
     eject)
         shift
-        eject $@
+        eject "$@"
         ;;
     ollama)
         shift
@@ -1122,9 +1289,13 @@ case "$1" in
         shift
         run_plandex_command "$@"
         ;;
+    mistralrs)
+        shift
+        run_mistralrs_command "$@"
+        ;;
     config)
         shift
-        env_manager $@
+        env_manager "$@"
         ;;
     gum)
         shift

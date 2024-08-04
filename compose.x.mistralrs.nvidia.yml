@@ -1,9 +1,10 @@
 services:
-  vllm:
+  mistralrs:
+    image: ghcr.io/ericlbuehler/mistral.rs:cuda-80-0.2
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
-              count: 1
+              count: all
               capabilities: [gpu]

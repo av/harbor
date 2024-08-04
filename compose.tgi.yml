@@ -11,6 +11,6 @@ services:
     environment:
       - PORT=80
       - HOSTNAME=0.0.0.0
-      - HF_TOKEN=${HARBOR_HF_HUB_TOKEN}
+      - HF_TOKEN=${HARBOR_HF_TOKEN}
     networks:
       - harbor-network

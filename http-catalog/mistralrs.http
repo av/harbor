@@ -1,0 +1,47 @@
+@host = http://localhost:33951
+
+###
+
+curl {{host}}/health
+
+###
+
+curl {{host}}/docs
+
+###
+
+curl {{host}}/v1/models
+
+###
+
+curl {{host}}/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer EMPTY" \
+  -d '{
+    "model": "",
+    "messages": [
+      {
+          "role": "system",
+          "content": "You are Mistral.rs, an AI assistant."
+      },
+      {
+          "role": "user",
+          "content": "Write a story about Rust error handling."
+      }
+    ]
+  }'
+
+###
+
+curl {{host}}/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer EMPTY" \
+  -d '{
+    "model": "",
+    "messages": [
+      {
+          "role": "user",
+          "content": "Write a story about Rust error handling."
+      }
+    ]
+  }'

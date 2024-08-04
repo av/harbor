@@ -12,7 +12,7 @@ services:
       ${HARBOR_VLLM_MODEL_SPECIFIER}
       ${HARBOR_VLLM_EXTRA_ARGS}
     environment:
-      - HUGGING_FACE_HUB_TOKEN=${HARBOR_HF_HUB_TOKEN}
+      - HUGGING_FACE_HUB_TOKEN=${HARBOR_HF_TOKEN}
       - VLLM_ATTENTION_BACKEND=${HARBOR_VLLM_ATTENTION_BACKEND}
     networks:
       - harbor-network
