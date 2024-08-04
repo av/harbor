@@ -1126,7 +1126,7 @@ run_mistralrs_command() {
 # == Main script
 # ========================================================================
 
-version="0.0.15"
+version="0.0.16"
 delimiter="|"
 
 harbor_home=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
