@@ -7,6 +7,7 @@ services:
     env_file: ./.env
     volumes:
       - ./openinterpreter/configs:/app/configs
+      - ${HARBOR_OPINT_CONFIG_PATH}:/root/.config/open-interpreter
     networks:
       - harbor-network
     environment:

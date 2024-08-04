@@ -1119,8 +1119,27 @@ run_mistralrs_command() {
 }
 
 run_opint_command() {
-    # Everything is proxied to the opint container
-    $(compose_with_options "opint") run -v "$original_dir:/app/context" --workdir "/app/context" -it opint "$@"
+    case "$1" in
+        profiles)
+            shift
+            execute_and_process "get_service_url plandexserver" "curl {{output}}/health" "No plandexserver URL:"
+            env_manager_arr opint.config.dir "$@"
+            ;;
+        pwd)
+            shift
+            echo $original_dir
+            ;;
+        model)
+            shift
+            env_manager_alias opint.model "$@"
+            ;;
+        *)
+            # Everything is proxied to the opint container
+            # Mount the current directory and set it as the working directory
+            $(compose_with_options "opint") run -v "$original_dir:$original_dir" --workdir "$original_dir" opint $@
+            ;;
+    esac
+
 }
 
 
@@ -1297,7 +1316,7 @@ case "$1" in
         ;;
     interpreter|opint)
         shift
-        run_opint_command "$@"
+        run_opint_command $@
         ;;
     config)
         shift

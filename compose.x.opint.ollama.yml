@@ -1,5 +1,8 @@
 services:
   opint:
-    command: >
-      --api_base http://ollama:11434
-      --model ${HARBOR_OPINT_MODEL:-ollama/llama3.1}
+    entrypoint: >
+      interpreter
+        --api_base http://ollama:11434/v1
+        --api_key sk-ollama
+        --model ${HARBOR_OPINT_MODEL}
+        ${HARBOR_OPINT_EXTRA_ARGS}
