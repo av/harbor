@@ -1119,19 +1119,55 @@ run_mistralrs_command() {
 }
 
 run_opint_command() {
+    update_cmd() {
+        local cmd=""
+        local current_model=$(env_manager get opint.model)
+        local current_args=$(env_manager get opint.extra.args)
+
+        if [ -n "$current_model" ]; then
+            cmd="--model $current_model"
+        fi
+
+        if [ -n "$current_args" ]; then
+            cmd="$cmd $current_args"
+        fi
+
+        env_manager set opint.cmd "$cmd"
+    }
+
+    clear_cmd_srcs() {
+        env_manager set opint.model ""
+        env_manager set opint.args ""
+    }
+
     case "$1" in
-        profiles)
+        profiles|--profiles)
             shift
-            execute_and_process "get_service_url plandexserver" "curl {{output}}/health" "No plandexserver URL:"
-            env_manager_arr opint.config.dir "$@"
+            execute_and_process "env_manager get opint.config.path" "sys_open {{output}}/profiles" "No opint.config.path set"
+            ;;
+        models|--local_models)
+            shift
+            execute_and_process "env_manager get opint.config.path" "sys_open {{output}}/models" "No opint.config.path set"
             ;;
         pwd)
             shift
-            echo $original_dir
+            echo "$original_dir"
             ;;
         model)
             shift
-            env_manager_alias opint.model "$@"
+            env_manager_alias opint.model --on-set update_cmd "$@"
+            ;;
+        args)
+            shift
+            env_manager_alias opint.extra.args --on-set update_cmd "$@"
+            ;;
+        cmd)
+            shift
+            env_manager_alias opint.cmd "$@"
+            ;;
+        -os|--os)
+            shift
+            echo "Harbor does not support Open Interpreter OS mode".
             ;;
         *)
             # Everything is proxied to the opint container
@@ -1315,7 +1351,7 @@ case "$1" in
         ;;
     interpreter|opint)
         shift
-        run_opint_command $@
+        run_opint_command "$@"
         ;;
     config)
         shift

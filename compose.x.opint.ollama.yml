@@ -4,5 +4,4 @@ services:
       interpreter
         --api_base http://ollama:11434/v1
         --api_key sk-ollama
-        --model ${HARBOR_OPINT_MODEL}
-        ${HARBOR_OPINT_EXTRA_ARGS}
+        ${HARBOR_OPINT_CMD}
