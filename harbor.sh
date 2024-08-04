@@ -1139,7 +1139,6 @@ run_opint_command() {
             $(compose_with_options "opint") run -v "$original_dir:$original_dir" --workdir "$original_dir" opint $@
             ;;
     esac
-
 }
 
 
