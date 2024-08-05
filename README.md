@@ -98,6 +98,9 @@ harbor open llamacpp
 # Print yourself a QR to quickly open the
 # service on your phone
 harbor qr
+# Feeling adventurous? Expose your harbor
+# to the internet
+harbor tunnel
 
 # Config management
 harbor config list
