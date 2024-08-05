@@ -1454,7 +1454,7 @@ run_opint_command() {
 # == Main script
 # ========================================================================
 
-version="0.0.16"
+version="0.0.19"
 delimiter="|"
 
 harbor_home=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
