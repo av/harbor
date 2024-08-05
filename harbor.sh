@@ -312,7 +312,7 @@ get_service_port() {
     local port
 
     # Get list of running services
-    services=$(get_services -a)
+    services=$(docker compose ps --services --filter "status=running")
 
     # Check if any services are running
     if [ -z "$services" ]; then
@@ -320,24 +320,24 @@ get_service_port() {
         return 1
     fi
 
+    service_name="$1"
     target_name=$(get_container_name "$1")
 
     # Check if the specified service is running
-    if ! echo "$services" | grep -q "^$target_name$"; then
+    if ! echo "$services" | grep -q "$service_name"; then
         echo "Service '$1' is not currently running."
+        echo "Running services:"
         echo "$services"
         return 1
     fi
 
     # Get the port mapping for the service
-    port=$(docker port "$target_name" | grep -oP '0.0.0.0:\K\d+' | head -n 1)
-
-    if [ -z "$port" ]; then
-        echo "No port mapping found for service '$1'."
+    if port=$(docker port "$target_name" | grep -oP '0.0.0.0:\K\d+' | head -n 1); then
+        echo "$port"
+    else
+        echo "No port mapping found for service '$1': $port"
         return 1
     fi
-
-    echo "$port"
 }
 
 get_service_url() {
@@ -348,7 +348,8 @@ get_service_url() {
         echo "http://localhost:$port"
         return 0
     else
-        echo "Failed to get port for service '$service_name': $port"
+        echo "Failed to get port for service '$service_name':"
+        echo "$port"
         return 1
     fi
 }
@@ -363,11 +364,13 @@ get_adressable_url() {
             echo "http://$ip_address:$port"
             return 0
         else
-            echo "Failed to get IP address."
+            echo "Failed to get IP address:"
+            echo "$ip_address"
             return 1
         fi
     else
-        echo "Failed to get port for service '$service_name': $port"
+        echo "Failed to get port for service '$service_name':"
+        echo "$port"
         return 1
     fi
 }
@@ -467,15 +470,16 @@ sys_open() {
 }
 
 open_service() {
-    output=$(get_url "$1" 2>&1) || {
-        echo "Failed to get service URL for $1. Error output:" >&2;
-        echo "$output" >&2;
-        exit 1;
-    }
+    local service_url
 
-    url="$output"
-    sys_open "$url"
-    echo "Opened $url in your default browser."
+    if service_url=$(get_url "$1"); then
+        sys_open "$service_url"
+        echo "Opened $service_url in your default browser."
+    else
+        echo "Failed to get service URL for $1:"
+        echo "$service_url"
+        return 1
+    fi
 }
 
 smi() {
@@ -628,6 +632,19 @@ env_manager_alias() {
         shift 2
     fi
 
+    case $1 in
+        --help|-h)
+            echo "Harbor config: $field"
+            echo
+            echo "This field is a string, use the following actions to manage it:"
+            echo
+            echo "  no arguments  - Get the current value"
+            echo "  <value>       - Set a new value"
+            echo
+            return 0
+            ;;
+    esac
+
     if [ $# -eq 0 ]; then
         env_manager get "$field"
         if [ -n "$get_command" ]; then
@@ -649,6 +666,22 @@ env_manager_arr() {
     local set_command=""
     local add_command=""
     local remove_command=""
+
+    case "$1" in
+        --help|-h)
+            echo "Harbor config: $field"
+            echo
+            echo "This field is an array, use the following actions to manage it:"
+            echo
+            echo "  ls            - List all values"
+            echo "  clear         - Remove all values"
+            echo "  rm <value>    - Remove a value"
+            echo "  rm <index>    - Remove a value by index"
+            echo "  add <value>   - Add a value"
+            echo
+            return 0
+            ;;
+    esac
 
     # Parse optional hook commands
     while [[ "$1" == --* ]]; do
@@ -701,6 +734,14 @@ env_manager_arr() {
             fi
             if [ -n "$get_command" ]; then
                 eval "$get_command"
+            fi
+            ;;
+        clear)
+            # Clear all values
+            set_array ""
+            echo "All values removed from $field"
+            if [ -n "$remove_command" ]; then
+                eval "$remove_command"
             fi
             ;;
         rm)
@@ -763,7 +804,8 @@ env_manager_arr() {
             fi
             ;;
         *)
-            echo "Usage: env_manager_arr <field> [--on-get <command>] [--on-set <command>] [--on-add <command>] [--on-remove <command>] {ls|rm|add} [value]"
+            echo "Unknown action: $action"
+            echo "Usage: $field [--on-get <command>] [--on-set <command>] [--on-add <command>] [--on-remove <command>] {ls|rm|add} [value]"
             return 1
             ;;
     esac
@@ -1506,7 +1548,7 @@ case "$1" in
         ;;
     url)
         shift
-        get_url "$@"
+        get_url $@
         ;;
     qr)
         shift
