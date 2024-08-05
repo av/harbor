@@ -945,7 +945,7 @@ establish_tunnel() {
     case $1 in
         down|stop|d|s)
             echo "Stopping all tunnels"
-            docker stop $(docker ps -q --filter "name=cfd.tunnel")
+            docker stop $(docker ps -q --filter "name=cfd.tunnel") || true
             exit 0
             ;;
     esac
@@ -957,18 +957,26 @@ establish_tunnel() {
     echo "Starting new tunnel"
     echo "Container name: $container_name"
     echo "Intra URL: $intra_url"
-    $(compose_with_options "cfd") run -d --name "$container_name" cfd --url "$intra_url"
+    $(compose_with_options "cfd") run -d --name "$container_name" cfd --url "$intra_url" || { echo "Failed to start container"; exit 1; }
 
-    while [ -z "$tunnel_url" ]; do
+    local timeout=60
+    local elapsed=0
+    while [ -z "$tunnel_url" ] && [ $elapsed -lt $timeout ]; do
         sleep 1
         echo "Waiting for tunnel URL..."
-        tunnel_url=$(docker logs $container_name 2>&1 | extract_tunnel_url)
+        tunnel_url=$(docker logs -n 200 $container_name 2>&1 | extract_tunnel_url) || true
+        elapsed=$((elapsed + 1))
     done
 
-    echo "Tunnel URL: $tunnel_url"
-    print_qr "$tunnel_url"
-}
+    if [ -z "$tunnel_url" ]; then
+        echo "Failed to obtain tunnel URL within $timeout seconds"
+        docker stop "$container_name" || true
+        exit 1
+    fi
 
+    echo "Tunnel URL: $tunnel_url"
+    print_qr "$tunnel_url" || { echo "Failed to print QR code"; exit 1; }
+}
 # shellcheck disable=SC2034
 __anchor_service_clis=true
 
