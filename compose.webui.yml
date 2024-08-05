@@ -10,6 +10,11 @@ services:
       - ./shared/json_config_merger.py:/app/json_config_merger.py
       - ./open-webui/configs/config.override.json:/app/configs/config.z.override.json
     entrypoint: ["/app/start_webui.sh"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
     ports:
       - ${HARBOR_WEBUI_HOST_PORT}:8080
     networks:

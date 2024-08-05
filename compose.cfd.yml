@@ -1,0 +1,9 @@
+services:
+  cfd:
+    image: cloudflare/cloudflared
+    container_name: ${HARBOR_CONTAINER_PREFIX}.cfd
+    env_file: ./.env
+    environment:
+      - NO_AUTOUPDATE=1
+    networks:
+      - harbor-network

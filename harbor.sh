@@ -1,4 +1,5 @@
 #!/bin/bash
+set -eo pipefail
 
 # ========================================================================
 # == Functions
@@ -37,6 +38,7 @@ show_help() {
     echo "  aphrodite  - Configure Aphrodite service"
     echo "  tabbyapi   - Configure TabbyAPI service"
     echo "  mistralrs  - Configure mistral.rs service"
+    echo "  cfd        - Run cloudflared CLI"
     echo
     echo "Service CLIs:"
     echo "  parllama          - Launch Parllama - TUI for chatting with Ollama models"
@@ -50,15 +52,30 @@ show_help() {
     echo
     echo "Harbor CLI Commands:"
     echo "  open handle                   - Open a service in the default browser"
+    echo
     echo "  url <handle>                  - Get the URL for a service"
+    echo "    url <handle>                         - Url on the local host"
+    echo "    url [-a|--adressable|--lan] <handle> - (supposed) LAN URL"
+    echo "    url [-i|--internal] <handle>         - URL within Harbor's docker network"
+    echo
     echo "  qr  <handle>                  - Print a QR code for a service"
+    echo
+    echo "  t|tunnel <handle>             - Expose given service to the internet"
+    echo "    tunnel down|stop|d|s        - Stop all running tunnels (including auto)"
+    echo "  tunnels [ls|rm|add]           - Manage services that will be tunneled on 'up'"
+    echo "    tunnels rm <handle|index>   - Remove, also accepts handle or index"
+    echo "    tunnels add <handle>        - Add a service to the tunnel list"
+    echo
     echo "  config [get|set|ls]           - Manage the Harbor environment configuration"
     echo "    config ls                   - All config values in ENV format"
     echo "    config get <field>          - Get a specific config value"
     echo "    config set <field> <value>  - Get a specific config value"
+    echo
     echo "  defaults [ls|rm|add]          - List default services"
     echo "    defaults rm <handle|index>  - Remove, also accepts handle or index"
     echo "    defaults add <handle>       - Add"
+    echo
+    echo "  ls|list [--active|-a]         - List available/active Harbor services"
     echo "  ln|link [--short]             - Create a symlink to the CLI, --short for 'h' link"
     echo "  unlink                        - Remove CLI symlinks"
     echo "  eject                         - Eject the Compose configuration, accepts same options as 'up'"
@@ -69,6 +86,9 @@ show_help() {
     echo "  info                          - Show system information for debug/issues"
     echo "  cmd <handle>                  - Print the docker-compose command"
 }
+
+# shellcheck disable=SC2034
+__anchor_fns=true
 
 resolve_compose_files() {
     # Find all .yml files in the specified base directory,
@@ -173,6 +193,18 @@ compose_with_options() {
     echo "$cmd"
 }
 
+harbor_up() {
+    $(compose_with_options "$@") up -d --wait
+
+    if [ "$default_autoopen" = "true" ]; then
+        open_service "$default_open"
+    fi
+
+    for service in "${default_tunnels[@]}"; do
+        establish_tunnel "$service"
+    done
+}
+
 run_hf_open() {
     local search_term="${*// /+}"
     local hf_url="https://huggingface.co/models?sort=trending&search=${search_term}"
@@ -268,9 +300,19 @@ unlink_cli() {
     fi
 }
 
+get_container_name() {
+    local service_name="$1"
+    local container_name="$default_container_prefix.$service_name"
+    echo "$container_name"
+}
+
 get_service_port() {
+    local services
+    local target_name
+    local port
+
     # Get list of running services
-    services=$(docker ps --format "{{.Names}}")
+    services=$(get_services -a)
 
     # Check if any services are running
     if [ -z "$services" ]; then
@@ -278,18 +320,11 @@ get_service_port() {
         return 1
     fi
 
-    # If no service name provided, default to webui
-    if [ -z "$1" ]; then
-        get_service_port "$default_open"
-        return 0
-    fi
-
-    local target_name="$default_container_prefix.$1"
+    target_name=$(get_container_name "$1")
 
     # Check if the specified service is running
     if ! echo "$services" | grep -q "^$target_name$"; then
         echo "Service '$1' is not currently running."
-        echo "Available services:"
         echo "$services"
         return 1
     fi
@@ -307,37 +342,111 @@ get_service_port() {
 
 get_service_url() {
     local service_name="$1"
-    local port=$(get_service_port "$service_name")
+    local port
 
-    if [ -z "$port" ]; then
+    if port=$(get_service_port "$service_name"); then
+        echo "http://localhost:$port"
+        return 0
+    else
+        echo "Failed to get port for service '$service_name': $port"
         return 1
     fi
-
-    echo "http://localhost:$port"
 }
 
-print_service_qr() {
-    local ip_address=$(get_ip)
+get_adressable_url() {
     local service_name="$1"
-    local port=$(get_service_port "$service_name")
+    local port
+    local ip_address
 
-    if [ -z "$port" ]; then
-        echo "Failed to get port for service '$service_name'."
+    if port=$(get_service_port "$service_name"); then
+        if ip_address=$(get_ip); then
+            echo "http://$ip_address:$port"
+            return 0
+        else
+            echo "Failed to get IP address."
+            return 1
+        fi
+    else
+        echo "Failed to get port for service '$service_name': $port"
         return 1
     fi
+}
 
-    if [ -z "$ip_address" ]; then
-        echo "Failed to get IP address."
+get_intra_url() {
+    local service_name="$1"
+    local container_name
+    local intra_host
+    local intra_port
+
+    container_name=$(get_container_name "$service_name")
+    intra_host=$container_name
+
+    if intra_port=$(docker port $container_name | awk -F'[ /]' '{print $1}' | sort -n | uniq); then
+        echo "http://$intra_host:$intra_port"
+        return 0
+    else
+        echo "Failed to get internal port for service '$service_name'"
         return 1
     fi
+}
 
-    local url="http://$ip_address:$port"
+get_url() {
+    local is_local=true
+    local is_adressable=false
+    local is_intra=false
 
-    echo "URL: $url"
+    local filtered_args=()
+    local arg
+
+    for arg in "$@"; do
+        case "$arg" in
+            --intra|-i|--internal)
+                is_local=false
+                is_adressable=false
+                is_intra=true
+                ;;
+            --addressable|-a|--lan)
+                is_local=false
+                is_intra=false
+                is_adressable=true
+                ;;
+            *)
+                filtered_args+=("$arg") # Add to filtered arguments
+                ;;
+        esac
+    done
+
+    # If nothing specified - use a handle
+    # of the default service to open
+    if [ ${#filtered_args[@]} -eq 0 ] || [ -z "${filtered_args[0]}" ]; then
+        filtered_args[0]="$default_open"
+    fi
+
+    if $is_local; then
+        get_service_url "${filtered_args[@]}"
+    elif $is_adressable; then
+        get_adressable_url "${filtered_args[@]}"
+    elif $is_intra; then
+        get_intra_url "${filtered_args[@]}"
+    fi
+}
+
+print_qr() {
+    local url="$1"
     $(compose_with_options "qrgen") run --rm qrgen "$url"
 }
 
+print_service_qr() {
+    local url=$(get_url -a "$1")
+    echo "URL: $url"
+    print_qr "$url"
+}
+
 sys_info() {
+    show_version
+    echo "=========================="
+    get_services -a
+    echo "=========================="
     docker info
 }
 
@@ -358,11 +467,12 @@ sys_open() {
 }
 
 open_service() {
-    output=$(get_service_url "$1" 2>&1) || {
+    output=$(get_url "$1" 2>&1) || {
         echo "Failed to get service URL for $1. Error output:" >&2;
         echo "$output" >&2;
         exit 1;
     }
+
     url="$output"
     sys_open "$url"
     echo "Opened $url in your default browser."
@@ -440,9 +550,8 @@ execute_and_process() {
     fi
 }
 
-# ========================================================================
-# == Env Manager
-# ========================================================================
+# shellcheck disable=SC2034
+__anchor_envm=true
 
 env_manager() {
     local env_file=".env"
@@ -660,10 +769,6 @@ env_manager_arr() {
     esac
 }
 
-# ========================================================================
-# == Utils
-# ========================================================================
-
 override_yaml_value() {
     local file="$1"
     local key="$2"
@@ -689,6 +794,9 @@ override_yaml_value() {
         return 1
     fi
 }
+
+# shellcheck disable=SC2034
+__anchor_utils=true
 
 parse_hf_url() {
     local url=$1
@@ -744,6 +852,30 @@ get_active_services() {
     docker compose ps --format "{{.Service}}" | tr '\n' ' '
 }
 
+get_services() {
+    local is_active=false
+    local filtered_args=()
+
+    for arg in "$@"; do
+        case "$arg" in
+            --active|-a)
+                is_active=true
+                ;;
+            *)
+                filtered_args+=("$arg") # Add to filtered arguments
+                ;;
+        esac
+    done
+
+    if $is_active; then
+        echo "Harbor active services:"
+        docker compose ps --format "{{.Service}}"
+    else
+        echo "Harbor services:"
+        $(compose_with_options "*") config --services
+    fi
+}
+
 get_ip() {
     # Try ip command first
     ip_cmd=$(which ip 2>/dev/null)
@@ -763,9 +895,40 @@ get_ip() {
     hostname -I | awk '{print $1}'
 }
 
-# ========================================================================
-# == Service CLIs
-# ========================================================================
+extract_tunnel_url() {
+    grep -oP '(?<=\|  )https://[^[:space:]]+\.trycloudflare\.com(?=\s+\|)' | head -n1
+}
+
+establish_tunnel() {
+    case $1 in
+        down|stop|d|s)
+            echo "Stopping all tunnels"
+            docker stop $(docker ps -q --filter "name=cfd.tunnel")
+            exit 0
+            ;;
+    esac
+
+    local intra_url=$(get_url -i "$@")
+    local container_name=$(get_container_name "cfd.tunnel.$(date +%s)")
+    local tunnel_url=""
+
+    echo "Starting new tunnel"
+    echo "Container name: $container_name"
+    echo "Intra URL: $intra_url"
+    $(compose_with_options "cfd") run -d --name "$container_name" cfd --url "$intra_url"
+
+    while [ -z "$tunnel_url" ]; do
+        sleep 1
+        echo "Waiting for tunnel URL..."
+        tunnel_url=$(docker logs $container_name 2>&1 | extract_tunnel_url)
+    done
+
+    echo "Tunnel URL: $tunnel_url"
+    print_qr "$tunnel_url"
+}
+
+# shellcheck disable=SC2034
+__anchor_service_clis=true
 
 run_gum() {
     local gum_image=ghcr.io/charmbracelet/gum
@@ -878,7 +1041,7 @@ run_litellm_command() {
             ;;
         ui)
             shift
-            if service_url=$(get_service_url litellm 2>&1); then
+            if service_url=$(get_url litellm 2>&1); then
                 sys_open "$service_url/ui"
             else
                 echo "Error: Failed to get service URL for litellm: $service_url"
@@ -1072,7 +1235,7 @@ run_tabbyapi_command() {
             ;;
         apidoc)
             shift
-            if service_url=$(get_service_url tabbyapi 2>&1); then
+            if service_url=$(get_url tabbyapi 2>&1); then
                 sys_open "$service_url/docs"
             else
                 echo "Error: Failed to get service URL for tabbyapi: $service_url"
@@ -1101,7 +1264,7 @@ run_plandex_command() {
     case "$1" in
         health)
             shift
-            execute_and_process "get_service_url plandexserver" "curl {{output}}/health" "No plandexserver URL:"
+            execute_and_process "get_url plandexserver" "curl {{output}}/health" "No plandexserver URL:"
             ;;
         pwd)
             shift
@@ -1143,11 +1306,11 @@ run_mistralrs_command() {
     case "$1" in
         health)
             shift
-            execute_and_process "get_service_url mistralrs" "curl {{output}}/health" "No mistralrs URL:"
+            execute_and_process "get_url mistralrs" "curl {{output}}/health" "No mistralrs URL:"
             ;;
         docs)
             shift
-            execute_and_process "get_service_url mistralrs" "sys_open {{output}}/docs" "No mistralrs URL:"
+            execute_and_process "get_url mistralrs" "sys_open {{output}}/docs" "No mistralrs URL:"
             ;;
         args)
             shift
@@ -1259,6 +1422,7 @@ cd "$harbor_home" || exit
 ensure_env_file
 
 default_options=($(env_manager get services.default | tr ';' ' '))
+default_tunnels=($(env_manager get services.tunnels | tr ';' ' '))
 default_open=$(env_manager get ui.main)
 default_autoopen=$(env_manager get ui.autoopen)
 default_container_prefix=$(env_manager get container.prefix)
@@ -1267,11 +1431,7 @@ default_container_prefix=$(env_manager get container.prefix)
 case "$1" in
     up|u)
         shift
-        $(compose_with_options "$@") up -d
-
-        if [ "$default_autoopen" = "true" ]; then
-            open_service "$default_open"
-        fi
+        harbor_up "$@"
         ;;
     down|d)
         shift
@@ -1346,11 +1506,15 @@ case "$1" in
         ;;
     url)
         shift
-        get_service_url "$@"
+        get_url "$@"
         ;;
     qr)
         shift
         print_service_qr "$@"
+        ;;
+    list|ls)
+        shift
+        get_services "$@"
         ;;
     version|--version|-v)
         shift
@@ -1423,6 +1587,18 @@ case "$1" in
     interpreter|opint)
         shift
         run_opint_command "$@"
+        ;;
+    cfd|cloudflared)
+        shift
+        $(compose_with_options "cfd") run cfd "$@"
+        ;;
+    tunnel|t)
+        shift
+        establish_tunnel "$@"
+        ;;
+    tunnels)
+        shift
+        env_manager_arr services.tunnels "$@"
         ;;
     config)
         shift
