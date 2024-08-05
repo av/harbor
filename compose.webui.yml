@@ -1,6 +1,6 @@
 services:
   webui:
-    image: ghcr.io/open-webui/open-webui:0.3.10
+    image: ghcr.io/open-webui/open-webui:${HARBOR_WEBUI_VERSION}
     env_file:
       - ./.env
     container_name: ${HARBOR_CONTAINER_PREFIX}.webui

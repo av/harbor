@@ -49,6 +49,7 @@ show_help() {
     echo "    hf dl           - HuggingFaceModelDownloader CLI"
     echo "    hf parse-url    - Parse file URL from Hugging Face"
     echo "    hf token        - Get/set the Hugging Face Hub token"
+    echo "    hf find <query> - Open HF Hub with a query (trending by default)"
     echo "    hf *            - Anything else is passed to the official Huggingface CLI"
     echo
     echo "Harbor CLI Commands:"
@@ -1249,6 +1250,10 @@ run_webui_command() {
             shift
             env_manager_alias webui.log.level "$@"
             ;;
+        version)
+            shift
+            env_manager_alias webui.version "$@"
+            ;;
         *)
             echo "Please note that this is not WebUI CLI, but a Harbor CLI to manage WebUI service."
             echo
@@ -1258,6 +1263,7 @@ run_webui_command() {
             echo "  harbor webui secret [secret]   - Get/set WebUI JWT Secret"
             echo "  harbor webui name [name]       - Get/set the name WebUI will present"
             echo "  harbor webui log [level]       - Get/set WebUI log level"
+            echo "  harbor webui version [version] - Get/set WebUI version (docker tag)"
             ;;
     esac
 }
