@@ -77,11 +77,16 @@ harbor vllm model google/gemma-2-2b-it
 harbor aphrodite model google/gemma-2-2b-it
 harbor tabbyapi model google/gemma-2-2b-it-exl2
 harbor mistralrs model google/gemma-2-2b-it
+harbor opint model google/gemma-2-2b-it
 
 # Convenience tools for docker setup
 harbor logs llamacpp
 harbor exec llamacpp ./scripts/llama-bench --help
 harbor shell tabbyapi
+
+# Tell your shell that you don't like it anymore,
+# courtesy of Open Interpreter
+harbor opint
 
 # Access service CLIs without installing them
 harbor hf scan-cache

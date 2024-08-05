@@ -1,0 +1,6 @@
+services:
+  qrgen:
+    build:
+      context: ./qrgen
+      dockerfile: Dockerfile
+

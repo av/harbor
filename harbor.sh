@@ -35,18 +35,23 @@ show_help() {
     echo "  openai     - Configure OpenAI API keys and URLs"
     echo "  vllm       - Configure VLLM service"
     echo "  aphrodite  - Configure Aphrodite service"
-    echo "  parllama   - Launch Parllama - TUI for chatting with Ollama models"
+    echo "  tabbyapi   - Configure TabbyAPI service"
+    echo "  mistralrs  - Configure mistral.rs service"
     echo
-    echo "Huggingface CLI:"
-    echo "  hf [dl|parse-url|token] - Run the Harbor's Huggingface CLI. Expanded with a few additional commands."
-    echo "    hf dl                 - HuggingFaceModelDownloader CLI"
-    echo "    hf parse-url          - Parse file URL from Hugging Face"
-    echo "    hf token              - Get/set the Hugging Face Hub token"
-    echo "    hf *                  - Anything else is passed to the official Huggingface CLI"
+    echo "Service CLIs:"
+    echo "  parllama          - Launch Parllama - TUI for chatting with Ollama models"
+    echo "  plandex           - Launch Plandex CLI"
+    echo "  interpreter|opint - Launch Open Interpreter CLI"
+    echo "  hf                - Run the Harbor's Huggingface CLI. Expanded with a few additional commands."
+    echo "    hf dl           - HuggingFaceModelDownloader CLI"
+    echo "    hf parse-url    - Parse file URL from Hugging Face"
+    echo "    hf token        - Get/set the Hugging Face Hub token"
+    echo "    hf *            - Anything else is passed to the official Huggingface CLI"
     echo
     echo "Harbor CLI Commands:"
     echo "  open handle                   - Open a service in the default browser"
     echo "  url <handle>                  - Get the URL for a service"
+    echo "  qr  <handle>                  - Print a QR code for a service"
     echo "  config [get|set|ls]           - Manage the Harbor environment configuration"
     echo "    config ls                   - All config values in ENV format"
     echo "    config get <field>          - Get a specific config value"
@@ -263,7 +268,7 @@ unlink_cli() {
     fi
 }
 
-get_service_url() {
+get_service_port() {
     # Get list of running services
     services=$(docker ps --format "{{.Names}}")
 
@@ -275,7 +280,7 @@ get_service_url() {
 
     # If no service name provided, default to webui
     if [ -z "$1" ]; then
-        get_service_url "$default_open"
+        get_service_port "$default_open"
         return 0
     fi
 
@@ -297,10 +302,39 @@ get_service_url() {
         return 1
     fi
 
-    # Construct the URL
-    url="http://localhost:$port"
+    echo "$port"
+}
 
-    echo "$url"
+get_service_url() {
+    local service_name="$1"
+    local port=$(get_service_port "$service_name")
+
+    if [ -z "$port" ]; then
+        return 1
+    fi
+
+    echo "http://localhost:$port"
+}
+
+print_service_qr() {
+    local ip_address=$(get_ip)
+    local service_name="$1"
+    local port=$(get_service_port "$service_name")
+
+    if [ -z "$port" ]; then
+        echo "Failed to get port for service '$service_name'."
+        return 1
+    fi
+
+    if [ -z "$ip_address" ]; then
+        echo "Failed to get IP address."
+        return 1
+    fi
+
+    local url="http://$ip_address:$port"
+
+    echo "URL: $url"
+    $(compose_with_options "qrgen") run --rm qrgen "$url"
 }
 
 sys_info() {
@@ -708,6 +742,25 @@ unsafe_update() {
 
 get_active_services() {
     docker compose ps --format "{{.Service}}" | tr '\n' ' '
+}
+
+get_ip() {
+    # Try ip command first
+    ip_cmd=$(which ip 2>/dev/null)
+    if [ -n "$ip_cmd" ]; then
+        ip route get 1 | awk '{print $7; exit}'
+        return
+    fi
+
+    # Fallback to ifconfig
+    ifconfig_cmd=$(which ifconfig 2>/dev/null)
+    if [ -n "$ifconfig_cmd" ]; then
+        ifconfig | grep -Eo 'inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -Eo '([0-9]*\.){3}[0-9]*' | grep -v '127.0.0.1' | head -n1
+        return
+    fi
+
+    # Last resort: hostname
+    hostname -I | awk '{print $1}'
 }
 
 # ========================================================================
@@ -1294,6 +1347,10 @@ case "$1" in
     url)
         shift
         get_service_url "$@"
+        ;;
+    qr)
+        shift
+        print_service_qr "$@"
         ;;
     version|--version|-v)
         shift
