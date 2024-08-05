@@ -122,6 +122,20 @@ harbor eject searxng llamacpp > docker-compose.harbor.yml
 - [Compatibility](https://github.com/av/harbor/wiki/Compatibility)<br/>
   Known compatibility issues between the services and models as well as possible workarounds.
 
+## Services
+
+##### UIs
+
+[Open WebUI](https://github.com/av/harbor/wiki/Services#open-webui) - [LibreChat](https://github.com/av/harbor/wiki/Services#librechat) - [Hollama](https://github.com/av/harbor/wiki/Services#hollama) - [parllama](https://github.com/av/harbor/wiki/Services#par-llama), [BionicGPT](https://github.com/av/harbor/wiki/Services#bionicgpt)
+
+##### Backends
+
+[Ollama](https://github.com/av/harbor/wiki/Services#ollama) - [llama.cpp](https://github.com/av/harbor/wiki/Services#llamacpp) - [vLLM](https://github.com/av/harbor/wiki/Services#vllm) - [TabbyAPI](https://github.com/av/harbor/wiki/Services#tabbyapi) - [Aphrodite Engine](https://github.com/av/harbor/wiki/Services#aphrodite-engine) - [mistral.rs](https://github.com/av/harbor/wiki/Services#mistralrs) - [openedai-speech](https://github.com/av/harbor/wiki/Services#openedai-speech), [text-generation-inference](https://github.com/av/harbor/wiki/Services#text-generation-inference) - [LMDeploy](https://github.com/av/harbor/wiki/Services#lmdeploy)
+
+##### Satellites
+
+[SearXNG](https://github.com/av/harbor/wiki/Services#searxng) - [Plandex](https://github.com/av/harbor/wiki/Services#plandex) - [LiteLLM](https://github.com/av/harbor/wiki/Services#-litellm) - [LangFuse](https://github.com/av/harbor/wiki/Services#langfuse) - [Open Interpreter](https://github.com/av/harbor/wiki/Services#-open-interpreter) - [cloudflared](https://github.com/av/harbor/wiki/Services#-open-interpreter)
+
 ## Why?
 
 - Convenience factor
@@ -135,65 +149,14 @@ You can later eject from Harbor and use the services in your own setup, or conti
 
 ## Overview and Features
 
-```mermaid
-graph TD
-    H((Harbor CLI))
+This project consists of a fairly large shell CLI, fairly small `.env` file and enourmous (for one repo) amount of `docker-compose` files.
 
-    Webui(Open WebUI)
-    Ollama(Ollama)
-    LlamaCPP(llama.cpp)
-    SearXNG(SearXNG)
-    LiteLLM(LiteLLM)
-    LMDeploy(LMDeploy)
-    TGI(text-generation-inference)
-    TTS(openedai-speech)
-
-    ConfMan("
-<b>Configuration Management</b>
-- <kbd>.env</kbd> File
-- <kbd>harbor config</kbd> tool
-- configuration files
-")
-
-    Services("
-<b>Services</b>
-- LLM Backends, frontends and related tools
-- Pre-configured to work together
-- Shared cache
-- Co-located configs
-    ")
-
-    subgraph "Docker"
-      Webui
-      Ollama
-      LlamaCPP
-      SearXNG
-      LiteLLM
-      LMDeploy
-      TGI
-      TTS
-    end
-
-    H --> ConfMan
-    H --Manage via Docker--> Services
-    Services --> Docker
-
-    classDef optional fill: #f0f0f022, stroke-dasharray: 5, 5;
-
-    class LlamaCPP optional
-    class SearXNG optional
-    class LiteLLM optional
-    class LMDeploy optional
-    class TGI optional
-    class TTS optional
-```
-
-This project is a CLI and a pre-configured Docker Compose setup that connects various LLM-related projects together. It simplifies the initial configuration and can serve as a base for your own customized setup later.
+#### Features
 
 - Manage local LLM stack with a concise CLI
-- Convenience utilities for common tasks (model management, configuration, service debug)
+- Convenience utilities for common tasks (model management, configuration, service debug, URLs, tunnels, etc.)
 - Access service CLIs (`hf`, `ollama`, etc.) via Docker without install
-- Services are pre-configured to work together
+- Services are pre-configured to work together (contributions welcome)
 - Host cache is shared and reused - Hugging Face, ollama, etc.
 - Co-located service configs
 - Eject to run without harbor with `harbor eject`
