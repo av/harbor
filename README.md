@@ -95,6 +95,9 @@ harbor ollama list
 # Open services from the CLI
 harbor open webui
 harbor open llamacpp
+# Print yourself a QR to quickly open the
+# service on your phone
+harbor qr
 
 # Config management
 harbor config list
