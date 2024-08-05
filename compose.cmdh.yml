@@ -1,0 +1,16 @@
+services:
+  cmdh:
+    build:
+      context: ./cmdh
+      dockerfile: Dockerfile
+    container_name: ${HARBOR_CONTAINER_PREFIX}.cmdh
+    env_file:
+      - ./.env
+    volumes:
+      - ./cmdh/override.env:/app/.env
+    networks:
+      - harbor-network
+    environment:
+      - OPENAI_API_KEY=${HARBOR_OPENAI_KEY}
+      - OPENAI_API_BASE=${HARBOR_OPENAI_URL}
+      - OPENAI_MODEL_NAME=${HARBOR_CMDH_MODEL}

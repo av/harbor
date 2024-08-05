@@ -1,0 +1,6 @@
+services:
+  cmdh:
+    environment:
+      - LLM_HOST=ollama
+      - OLLAMA_HOST=http://ollama:11434
+      - OLLAMA_MODEL_NAME=${HARBOR_CMDH_MODEL}

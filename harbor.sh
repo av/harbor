@@ -1463,6 +1463,21 @@ run_opint_command() {
     esac
 }
 
+run_cmdh_command() {
+    case "$1" in
+        model)
+            shift
+            env_manager_alias cmdh.model "$@"
+            ;;
+        *)
+            local services=$(get_active_services)
+
+            # Mount the current directory and set it as the working directory
+            $(compose_with_options "$services" "cmdh") run -v "$original_dir:$original_dir" --workdir "$original_dir" cmdh "$@"
+            ;;
+    esac
+}
+
 
 # ========================================================================
 # == Main script
@@ -1647,6 +1662,10 @@ case "$1" in
     cfd|cloudflared)
         shift
         $(compose_with_options "cfd") run cfd "$@"
+        ;;
+    cmdh)
+        shift
+        run_cmdh_command "$@"
         ;;
     tunnel|t)
         shift

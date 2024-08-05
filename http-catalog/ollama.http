@@ -37,3 +37,25 @@ curl {{host}}/v1/chat/completions -H 'Content-Type: application/json' -H "Author
   ],
   "max_tokens": 200
 }'
+
+###
+
+# JSON Mode
+
+curl {{host}}/v1/chat/completions -H 'Content-Type: application/json' -H "Authorization: Bearer sk-fake" -d '{
+  "model": "codestral",
+  "response_format": {
+    "type": "json_object"
+  },
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are a Linux Expert and bash guru. Your friend asks you for help."
+    },
+    {
+      "role": "user",
+      "content": "How to find all images?"
+    }
+  ],
+  "max_tokens": 200
+}'
