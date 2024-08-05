@@ -14,17 +14,18 @@ show_help() {
     echo "Usage: $0 <command> [options]"
     echo
     echo "Compose Setup Commands:"
-    echo "  up|u      - Start the containers"
-    echo "  down|d    - Stop and remove the containers"
-    echo "  restart|r - Down then up"
-    echo "  ps        - List the running containers"
-    echo "  logs|l    - View the logs of the containers"
-    echo "  exec      - Execute a command in a running service"
-    echo "  pull      - Pull the latest images"
-    echo "  dive      - Run the Dive CLI to inspect Docker images"
-    echo "  run       - Run a one-off command in a service container"
-    echo "  shell     - Load shell in the given service main container"
-    echo "  build     - Build the given service"
+    echo "  up|u         - Start the containers"
+    echo "  down|d       - Stop and remove the containers"
+    echo "  restart|r    - Down then up"
+    echo "  ps           - List the running containers"
+    echo "  logs|l       - View the logs of the containers"
+    echo "  exec         - Execute a command in a running service"
+    echo "  pull         - Pull the latest images"
+    echo "  dive         - Run the Dive CLI to inspect Docker images"
+    echo "  run          - Run a one-off command in a service container"
+    echo "  shell        - Load shell in the given service main container"
+    echo "  build        - Build the given service"
+    echo "  cmd <handle> - Print the docker-compose command"
     echo
     echo "Setup Management Commands:"
     echo "  ollama     - Run Ollama CLI (docker). Service should be running."
@@ -84,7 +85,6 @@ show_help() {
     echo "  gum                           - Run the Gum terminal commands"
     echo "  fixfs                         - Fix file system ACLs for service volumes"
     echo "  info                          - Show system information for debug/issues"
-    echo "  cmd <handle>                  - Print the docker-compose command"
 }
 
 # shellcheck disable=SC2034
