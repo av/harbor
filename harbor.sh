@@ -1168,6 +1168,10 @@ run_vllm_command() {
             shift
             env_manager_alias vllm.attention_backend "$@"
             ;;
+        version)
+            shift
+            env_manager_alias vllm.version "$@"
+            ;;
         *)
             echo "Please note that this is not VLLM CLI, but a Harbor CLI to manage VLLM service."
             echo "Access VLLM own CLI by running 'harbor exec vllm' when it's running."
@@ -1178,6 +1182,7 @@ run_vllm_command() {
             echo "  harbor vllm model [user/repo]   - Get or set the VLLM model repository to run"
             echo "  harbor vllm args [args]         - Get or set extra args to pass to the VLLM CLI"
             echo "  harbor vllm attention [backend] - Get or set the attention backend to use"
+            echo "  harbor vllm version [version]   - Get or set VLLM version (docker tag)"
             ;;
     esac
 }

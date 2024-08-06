@@ -2,12 +2,13 @@ services:
   vllm:
     container_name: ${HARBOR_CONTAINER_PREFIX}.vllm
     env_file: ./.env
-    image: vllm/vllm-openai:latest
+    image: vllm/vllm-openai:${HARBOR_VLLM_VERSION}
     ports:
       - ${HARBOR_VLLM_HOST_PORT}:8000
     ipc: host
     volumes:
       - ${HARBOR_HF_CACHE}:/root/.cache/huggingface
+      - ${HARBOR_VLLM_CACHE}:/root/.cache/vllm
     command: >
       ${HARBOR_VLLM_MODEL_SPECIFIER}
       ${HARBOR_VLLM_EXTRA_ARGS}

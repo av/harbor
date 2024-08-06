@@ -19,6 +19,19 @@ curl {{host}}/v1/chat/completions -H 'Content-Type: application/json' -d '{
 
 ###
 
+curl {{host}}/v1/chat/completions -H 'Content-Type: application/json' -d '{
+  "model": "google/gemma-2-2b-it",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Answer in one word. Where is Paris?"
+    }
+  ],
+  "temperature": 0.2
+}'
+
+###
+
 curl {{host}}/v1/chat/completions -H 'Content-Type: application/json' -H "Authorization: Bearer ---" -d '{
   "model": "google/gemma-2-2b-it",
   "messages": [
@@ -28,4 +41,42 @@ curl {{host}}/v1/chat/completions -H 'Content-Type: application/json' -H "Author
     }
   ],
   "max_tokens": 200
+}'
+
+###
+
+curl {{host}}/v1/chat/completions -H 'Content-Type: application/json' -H "Authorization: Bearer ---" -d '{
+  "model": "ChenMnZ/Mistral-Large-Instruct-2407-EfficientQAT-w2g64-GPTQ",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are a helpful assistant. Be concise, answer in one sentence or less."
+    },
+    {
+      "role": "user",
+      "content": "Imagine a runaway trolley is hurtling down a track towards five dead people. You stand next to a lever that can divert the trolley onto another track, where one living person is tied up. Do you pull the lever?"
+    }
+  ],
+  "max_tokens": 80
+}'
+
+###
+
+curl {{host}}/v1/completions -H 'Content-Type: application/json' -H "Authorization: Bearer ---" -d '{
+  "model": "ChenMnZ/Mistral-Large-Instruct-2407-EfficientQAT-w2g64-GPTQ",
+  "prompt": "Answer in one word. Where is Paris?",
+  "max_tokens": 1
+}'
+
+###
+
+curl {{host}}/v1/chat/completions -H 'Content-Type: application/json' -H "Authorization: Bearer ---" -d '{
+  "model": "ChenMnZ/Mistral-Large-Instruct-2407-EfficientQAT-w2g64-GPTQ",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Answer in one word. Where is Paris?"
+    }
+  ],
+  "max_tokens": 8
 }'
