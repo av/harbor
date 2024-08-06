@@ -109,6 +109,10 @@ harbor config set webui.host.port 8080
 # Eject from Harbor into a standalone Docker Compose setup
 # Will export related services and variables into a standalone file.
 harbor eject searxng llamacpp > docker-compose.harbor.yml
+
+# 50% gimmick, 50% useful
+# Ask harbor about itself
+harbor how to ping ollama container from the webui?
 ```
 
 ## Documentation
