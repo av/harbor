@@ -72,6 +72,7 @@ show_help() {
     echo "    config ls                   - All config values in ENV format"
     echo "    config get <field>          - Get a specific config value"
     echo "    config set <field> <value>  - Get a specific config value"
+    echo "    config reset                - Reset Harbor configuration to default.env"
     echo
     echo "  defaults [ls|rm|add]          - List default services"
     echo "    defaults rm <handle|index>  - Remove, also accepts handle or index"
@@ -1469,13 +1470,28 @@ run_cmdh_command() {
             shift
             env_manager_alias cmdh.model "$@"
             ;;
+        host)
+            shift
+            env_manager_alias cmdh.llm.host "$@"
+            ;;
         *)
             local services=$(get_active_services)
 
             # Mount the current directory and set it as the working directory
-            $(compose_with_options "$services" "cmdh") run -v "$original_dir:$original_dir" --workdir "$original_dir" cmdh "$@"
+            $(compose_with_options "$services" "cmdh") run -v "$original_dir:$original_dir" --workdir "$original_dir" cmdh "$*"
             ;;
     esac
+}
+
+run_harbor_cmdh_command() {
+    local services=$(get_active_services)
+
+    # Mount the current directory and set it as the working directory
+    $(compose_with_options "$services" "cmdh" "harbor") run \
+        -v "$harbor_home/cmdh/harbor.prompt:/app/cmdh/system.prompt" \
+        -v "$original_dir:$original_dir" \
+        --workdir "$original_dir" \
+        cmdh "$*"
 }
 
 
@@ -1694,6 +1710,10 @@ case "$1" in
     update)
         shift
         unsafe_update
+        ;;
+    how)
+        shift
+        run_harbor_cmdh_command "$@"
         ;;
     *)
         echo "Unknown command: $1"

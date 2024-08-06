@@ -9,6 +9,7 @@ import { Ollama } from 'ollama';
 export async function generate(prompt, system) {
   const ollama = new Ollama({ host: process.env.OLLAMA_HOST })
   const response = await ollama.chat({
+    temperature: 0.1,
     model: process.env.OLLAMA_MODEL_NAME,
     format: 'json',
     messages: [{
