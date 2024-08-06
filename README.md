@@ -138,7 +138,7 @@ harbor how to ping ollama container from the webui?
 
 ##### Satellites
 
-[SearXNG](https://github.com/av/harbor/wiki/Services#searxng) - [Plandex](https://github.com/av/harbor/wiki/Services#plandex) - [LiteLLM](https://github.com/av/harbor/wiki/Services#-litellm) - [LangFuse](https://github.com/av/harbor/wiki/Services#langfuse) - [Open Interpreter](https://github.com/av/harbor/wiki/Services#-open-interpreter) - [cloudflared](https://github.com/av/harbor/wiki/Services#-open-interpreter)
+[SearXNG](https://github.com/av/harbor/wiki/Services#searxng) - [Plandex](https://github.com/av/harbor/wiki/Services#plandex) - [LiteLLM](https://github.com/av/harbor/wiki/Services#-litellm) - [LangFuse](https://github.com/av/harbor/wiki/Services#langfuse) - [Open Interpreter](https://github.com/av/harbor/wiki/Services#-open-interpreter) - [cloudflared](https://github.com/av/harbor/wiki/Services#-open-interpreter) - [cmdh](https://github.com/pgibler/cmdh)
 
 ## Why?
 
