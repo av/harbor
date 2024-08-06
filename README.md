@@ -106,13 +106,13 @@ harbor tunnel
 harbor config list
 harbor config set webui.host.port 8080
 
-# Eject from Harbor into a standalone Docker Compose setup
-# Will export related services and variables into a standalone file.
-harbor eject searxng llamacpp > docker-compose.harbor.yml
-
 # 50% gimmick, 50% useful
 # Ask harbor about itself
 harbor how to ping ollama container from the webui?
+
+# Eject from Harbor into a standalone Docker Compose setup
+# Will export related services and variables into a standalone file.
+harbor eject searxng llamacpp > docker-compose.harbor.yml
 ```
 
 ## Documentation
@@ -138,7 +138,7 @@ harbor how to ping ollama container from the webui?
 
 ##### Satellites
 
-[SearXNG](https://github.com/av/harbor/wiki/Services#searxng) - [Plandex](https://github.com/av/harbor/wiki/Services#plandex) - [LiteLLM](https://github.com/av/harbor/wiki/Services#-litellm) - [LangFuse](https://github.com/av/harbor/wiki/Services#langfuse) - [Open Interpreter](https://github.com/av/harbor/wiki/Services#-open-interpreter) - [cloudflared](https://github.com/av/harbor/wiki/Services#-open-interpreter) - [cmdh](https://github.com/pgibler/cmdh)
+[SearXNG](https://github.com/av/harbor/wiki/Services#searxng) - [Plandex](https://github.com/av/harbor/wiki/Services#plandex) - [LiteLLM](https://github.com/av/harbor/wiki/Services#-litellm) - [LangFuse](https://github.com/av/harbor/wiki/Services#langfuse) - [Open Interpreter](https://github.com/av/harbor/wiki/Services#-open-interpreter) - [cloudflared](https://github.com/av/harbor/wiki/Services#cloudflared) - [cmdh](https://github.com/av/harbor/wiki/Services#cmdh)
 
 ## Why?
 
