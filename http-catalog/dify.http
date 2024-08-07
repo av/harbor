@@ -1,0 +1,47 @@
+# Dify's own API
+@host = http://localhost:33961
+# Dify 2 OpenAI
+@2do_host = http://localhost:33963
+
+# Workflow API Key outlines which Dify App you'll hit
+@workflowKey = app-vTW6q71NquO0nJFL2jJrIwPY
+
+###
+
+curl {{2do_host}}/v1/models
+
+###
+
+curl {{2do_host}}/v1/chat/completions -H "Content-Type: application/json" -H "Authorization: Bearer {{workflowKey}}" -d '{
+  "model": "dify",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Suggest me cheap and fast RAM for my LLM rig."
+    }
+  ]
+}'
+
+###
+
+curl --location --request POST '{{host}}/v1/chat-messages' --header 'Authorization: Bearer {{workflowKey}}' --header 'Content-Type: application/json' --data-raw '{
+    "inputs": {},
+    "query": "What is the capital of France?",
+    "response_mode": "streaming",
+    "user": "abc-123"
+}'
+
+###
+
+curl --location --request POST '{{host}}/v1/completion-messages' \
+--header 'Authorization: Bearer {{workflowKey}}' \
+--header 'Content-Type: application/json' \
+--data-raw '{
+    "inputs": {},
+    "response_mode": "streaming",
+    "user": "abc-123"
+}'
+
+###
+
+curl --location --request POST '{{host}}/v1/chat-messages' --header 'Authorization: Bearer {{workflowKey}}' --header 'Content-Type: application/json' --data-raw '{"inputs":{},"query":"here is our talk history:\n'''\n\n'''\n\nhere is my question:\nSuggest me cheap and fast RAM for my LLM rig.","response_mode":"blocking","user":"apiuser","auto_generate_name":false}'

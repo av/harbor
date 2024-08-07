@@ -921,8 +921,14 @@ get_services() {
     done
 
     if $is_active; then
-        echo "Harbor active services:"
-        docker compose ps --format "{{.Service}}"
+        local active_services=$(docker compose ps --format "{{.Service}}")
+
+        if [ -z "$active_services" ]; then
+            echo "Harbor has no active services."
+        else
+            echo "Harbor active services:"
+            echo "$active_services"
+        fi
     else
         echo "Harbor services:"
         $(compose_with_options "*") config --services
@@ -1551,7 +1557,7 @@ case "$1" in
         shift
         service=$1
         shift
-        $(compose_with_options "$service") build "$service" "$@"
+        $(compose_with_options "*") build "$service" "$@"
         ;;
     shell)
         shift

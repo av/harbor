@@ -157,3 +157,22 @@ services:
       - ./dify/override.env
     networks:
       - harbor-network
+
+  dify-openai:
+    build:
+      context: ./dify/openai
+      dockerfile: Dockerfile
+    container_name: ${HARBOR_CONTAINER_PREFIX}.dify-openai
+    ports:
+      - ${HARBOR_DIFY_D2O_HOST_PORT}:3000
+    env_file:
+      - ./.env
+      - ./dify/override.env
+    volumes:
+      - ./dify/openai/app.js:/dify2openai/app.js
+    networks:
+      - harbor-network
+    environment:
+      - DIFY_API_URL=http://harbor.dify:80
+      - BOT_TYPE=${HARBOR_DIFY_BOT_TYPE}
+

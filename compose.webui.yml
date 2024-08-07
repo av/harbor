@@ -12,7 +12,7 @@ services:
     entrypoint: ["/app/start_webui.sh"]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/"]
-      interval: 10s
+      interval: 1s
       timeout: 10s
       retries: 5
     ports:

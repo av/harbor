@@ -1,0 +1,11 @@
+{
+  "openai": {
+		"api_base_urls": [
+			"http://dify-openai:3000/v1"
+		],
+		"api_keys": [
+			"${HARBOR_DIFY_OPENAI_WORKFLOW}"
+		],
+		"enabled": true
+	}
+}
