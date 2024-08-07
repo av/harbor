@@ -1608,6 +1608,12 @@ run_cmdh_command() {
 }
 
 run_harbor_cmdh_command() {
+    # Check if ollama is running
+    if ! is_service_running "ollama"; then
+        echo "Please start ollama service to use 'harbor how'"
+        exit 1
+    fi
+
     local services=$(get_active_services)
 
     # Mount the current directory and set it as the working directory
