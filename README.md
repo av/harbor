@@ -82,9 +82,9 @@ harbor opint model google/gemma-2-2b-it
 # Convenience tools for docker setup
 harbor logs llamacpp
 harbor exec llamacpp ./scripts/llama-bench --help
-harbor shell tabbyapi
+harbor shell vllm
 
-# Tell your shell that you don't like it anymore,
+# Tell your shell exactly what you think about it
 # courtesy of Open Interpreter
 harbor opint
 
@@ -106,13 +106,22 @@ harbor tunnel
 harbor config list
 harbor config set webui.host.port 8080
 
-# 50% gimmick, 50% useful
-# Ask harbor about itself
-harbor how to ping ollama container from the webui?
-
 # Eject from Harbor into a standalone Docker Compose setup
 # Will export related services and variables into a standalone file.
 harbor eject searxng llamacpp > docker-compose.harbor.yml
+
+# Gimmick/Fun Area
+
+# Argument scrambling, below commands are all the same as above
+# Harbor doesn't care if it's "vllm model" or "model vllm", it'll
+# figure it out.
+harbor vllm model            # harbor model vllm
+harbor config get webui.name # harbor get config webui_name
+harbor tabbyapi shell        # harbor shell tabbyapi
+
+# 50% gimmick, 50% useful
+# Ask harbor about itself
+harbor how to ping ollama container from the webui?
 ```
 
 ## Documentation
