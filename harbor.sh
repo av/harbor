@@ -1623,7 +1623,7 @@ run_harbor_cmdh_command() {
 # == Main script
 # ========================================================================
 
-version="0.0.21"
+version="0.1.0"
 delimiter="|"
 scramble_exit_code=42
 

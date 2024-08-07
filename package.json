@@ -1,6 +1,6 @@
 {
   "name": "@av/harbor",
-  "version": "0.0.21",
+  "version": "0.1.0",
   "scripts": {
     "harbor": "./harbor.sh"
   }
