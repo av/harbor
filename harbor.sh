@@ -1,4 +1,5 @@
 #!/bin/bash
+
 set -eo pipefail
 
 # ========================================================================
@@ -45,12 +46,14 @@ show_help() {
     echo "  parllama          - Launch Parllama - TUI for chatting with Ollama models"
     echo "  plandex           - Launch Plandex CLI"
     echo "  interpreter|opint - Launch Open Interpreter CLI"
-    echo "  hf                - Run the Harbor's Huggingface CLI. Expanded with a few additional commands."
+    echo "  hf                - Run the Harbor's Hugging Face CLI. Expanded with a few additional commands."
     echo "    hf dl           - HuggingFaceModelDownloader CLI"
     echo "    hf parse-url    - Parse file URL from Hugging Face"
     echo "    hf token        - Get/set the Hugging Face Hub token"
+    echo "    hf cache        - Get/set the path to Hugging Face cache"
     echo "    hf find <query> - Open HF Hub with a query (trending by default)"
-    echo "    hf *            - Anything else is passed to the official Huggingface CLI"
+    echo "    hf path <spec>  - Print a folder in HF cache for a given model spec"
+    echo "    hf *            - Anything else is passed to the official Hugging Face CLI"
     echo
     echo "Harbor CLI Commands:"
     echo "  open handle                   - Open a service in the default browser"
@@ -78,6 +81,7 @@ show_help() {
     echo "    defaults rm <handle|index>  - Remove, also accepts handle or index"
     echo "    defaults add <handle>       - Add"
     echo
+    echo "  find <file>                   - Find a file in the caches visible to Harbor"
     echo "  ls|list [--active|-a]         - List available/active Harbor services"
     echo "  ln|link [--short]             - Create a symlink to the CLI, --short for 'h' link"
     echo "  unlink                        - Remove CLI symlinks"
@@ -164,6 +168,8 @@ compose_with_options() {
 
             # Check if file matches any of the options
             for option in "${options[@]}"; do
+                # echo "CHECK: $option"
+
                 if [[ $option == "*" ]]; then
                     match=true
                     break
@@ -193,6 +199,25 @@ compose_with_options() {
 
     # Return the command string
     echo "$cmd"
+}
+
+resolve_compose_command() {
+    local is_human=false
+
+    case "$1" in
+        --human|-h)
+            shift
+            is_human=true
+            ;;
+    esac
+
+    local cmd=$(compose_with_options "$@")
+
+    if $is_human; then
+        echo "$cmd" | sed "s|-f $harbor_home/|\n - |g"
+    else
+        echo "$cmd"
+    fi
 }
 
 harbor_up() {
@@ -632,13 +657,6 @@ env_manager() {
     local env_file=".env"
     local prefix="HARBOR_"
 
-    transform_llamacpp_model() {
-        local url="$1"
-        local repo=$(echo "$url" | sed -n 's|https://huggingface.co/\(.*\)/blob/.*|\1|p')
-        local file=$(basename "$url")
-        echo "--hf-repo $repo --hf-file $file"
-    }
-
     case "$1" in
         get)
             if [[ -z "$2" ]]; then
@@ -912,6 +930,32 @@ override_yaml_value() {
 # shellcheck disable=SC2034
 __anchor_utils=true
 
+run_harbor_find() {
+    find $(eval echo "$(env_manager get hf.cache)") \
+        $(eval echo "$(env_manager get llamacpp.cache)") \
+        $(eval echo "$(env_manager get ollama.cache)") \
+        $(eval echo "$(env_manager get vllm.cache)") \
+        -xtype f -wholename "*$**";
+}
+
+run_hf_docker_cli() {
+    $(compose_with_options "hf") run --rm hf "$@"
+}
+
+check_hf_cache() {
+    local maybe_cache_entry
+
+    maybe_cache_entry=$(run_hf_docker_cli scan-cache | grep $1)
+
+    if [ -z "$maybe_cache_entry" ]; then
+        echo "$1 is missing in Hugging Face cache." >&2
+        return 1
+    else
+        echo "$1 found in the cache." >&2
+        return 0
+    fi
+}
+
 parse_hf_url() {
     local url=$1
     local base_url="https://huggingface.co/"
@@ -1081,9 +1125,12 @@ run_llamacpp_command() {
     update_model_spec() {
         local spec=""
         local current_model=$(env_manager get llamacpp.model)
+        local current_gguf=$(env_manager get llamacpp.gguf)
 
         if [ -n "$current_model" ]; then
             spec=$(hf_url_2_llama_spec $current_model)
+        else
+            spec="-m $current_gguf"
         fi
 
         env_manager set llamacpp.model.specifier "$spec"
@@ -1093,6 +1140,10 @@ run_llamacpp_command() {
         model)
             shift
             env_manager_alias llamacpp.model --on-set update_model_spec "$@"
+            ;;
+        gguf)
+            shift
+            env_manager_alias llamacpp.gguf "$@"
             ;;
         args)
             shift
@@ -1105,8 +1156,9 @@ run_llamacpp_command() {
             echo "Usage: harbor llamacpp <command>"
             echo
             echo "Commands:"
-            echo "  harbor llamacpp model [Huggingface URL] - Get or set the llamacpp model to run"
-            echo "  harbor llamacpp args [args]             - Get or set extra args to pass to the llama.cpp CLI"
+            echo "  harbor llamacpp model [Hugging Face URL] - Get or set the llamacpp model to run"
+            echo "  harbor llamacpp gguf [gguf path]         - Get or set the path to GGUF to run"
+            echo "  harbor llamacpp args [args]              - Get or set extra args to pass to the llama.cpp CLI"
             ;;
         *)
             return $scramble_exit_code
@@ -1217,9 +1269,26 @@ run_hf_command() {
             env_manager_alias hf.token "$@"
             return
             ;;
+        cache)
+            shift
+            env_manager_alias hf.cache "$@"
+            return
+            ;;
         dl)
             shift
             $(compose_with_options "hfdownloader") run --rm hfdownloader "$@"
+            return
+            ;;
+        path)
+            shift
+            local found_path
+            local spec="$1"
+
+            if check_hf_cache "$1"; then
+                found_path=$(run_hf_docker_cli download "$1")
+                echo "$found_path"
+            fi
+
             return
             ;;
         find)
@@ -1227,9 +1296,26 @@ run_hf_command() {
             run_hf_open "$@"
             return
             ;;
+        # Matching HF signature, but would love just "help"
+        -h|--help)
+            echo "Please note that this is a combination of Hugging Face"
+            echo "CLI with additional Harbor-specific commands."
+            echo
+            echo "Harbor extensions:"
+            echo "Usage: harbor hf <command>"
+            echo
+            echo "Commands:"
+            echo "  harbor hf token [token]    - Get or set the Hugging Face API token"
+            echo "  harbor hf cache            - Get or set the location of Hugging Face cache"
+            echo "  harbor hf dl [args]        - Download a model from Hugging Face"
+            echo "  harbor hf path [user/repo] - Resolve the path to a model dir in HF cache"
+            echo "  harbor hf find [query]     - Search for a model on Hugging Face"
+            echo
+            echo "Original CLI help:"
+            ;;
     esac
 
-    $(compose_with_options "hf") run --rm hf "$@"
+    run_hf_docker_cli "$@"
 }
 
 run_vllm_command() {
@@ -1367,7 +1453,7 @@ run_webui_command() {
             echo "  harbor webui secret [secret]   - Get/set WebUI JWT Secret"
             echo "  harbor webui name [name]       - Get/set the name WebUI will present"
             echo "  harbor webui log [level]       - Get/set WebUI log level"
-            echo "  harbor webui version [version] - Get/set WebUI version (docker tag)"
+            echo "  harbor webui version [version] - Get/set WebUI version docker tag"
             return 1
             ;;
         *)
@@ -1598,11 +1684,33 @@ run_cmdh_command() {
             shift
             env_manager_alias cmdh.llm.host "$@"
             ;;
+        key)
+            shift
+            env_manager_alias cmdh.llm.key "$@"
+            ;;
+        url)
+            shift
+            env_manager_alias cmdh.llm.url "$@"
+            ;;
+        -h|--help|help)
+            echo "Please note that this is not cmdh CLI, but a Harbor CLI to manage cmdh service."
+            echo "Access cmdh own CLI by running 'harbor exec cmdh' when it's running."
+            echo
+            echo "Usage: harbor cmdh <command>"
+            echo
+            echo "Commands:"
+            echo "  harbor cmdh model [user/repo]    - Get or set the cmdh model repository to run"
+            echo "  harbor cmdh host [ollama|OpenAI] - Get or set the cmdh LLM host"
+            echo "  harbor cmdh key [key]            - Get or set the cmdh OpenAI LLM key"
+            echo "  harbor cmdh url [url]            - Get or set the cmdh OpenAI LLM URL"
+            ;;
         *)
             local services=$(get_active_services)
-
             # Mount the current directory and set it as the working directory
-            $(compose_with_options "$services" "cmdh") run -v "$original_dir:$original_dir" --workdir "$original_dir" cmdh "$*"
+            $(compose_with_options $services "cmdh") run \
+                -v "$original_dir:$original_dir" \
+                --workdir "$original_dir" \
+                cmdh "$*"
             ;;
     esac
 }
@@ -1617,7 +1725,7 @@ run_harbor_cmdh_command() {
     local services=$(get_active_services)
 
     # Mount the current directory and set it as the working directory
-    $(compose_with_options "$services" "cmdh" "harbor") run \
+    $(compose_with_options $services "cmdh" "harbor") run \
         -v "$harbor_home/cmdh/harbor.prompt:/app/cmdh/system.prompt" \
         -v "$original_dir:$original_dir" \
         --workdir "$original_dir" \
@@ -1703,7 +1811,7 @@ main_entrypoint() {
             ;;
         cmd)
             shift
-            compose_with_options "$@"
+            resolve_compose_command "$@"
             ;;
         help|--help|-h)
             show_help
@@ -1851,6 +1959,10 @@ main_entrypoint() {
         how)
             shift
             run_harbor_cmdh_command "$@"
+            ;;
+        find)
+            shift
+            run_harbor_find "$@"
             ;;
         *)
             return $scramble_exit_code

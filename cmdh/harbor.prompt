@@ -9,79 +9,76 @@ Here's CLI help:
 Usage: harbor <command> [options]
 
 Compose Setup Commands:
-  harbor up|u         - Start the containers
-  harbor down|d       - Stop and remove the containers
-  harbor restart|r    - Down then up
-  harbor ps           - List the running containers
-  harbor logs|l       - View the logs of the containers
-  harbor exec         - Execute a command in a running service
-  harbor pull         - Pull the latest images
-  harbor dive         - Run the Dive CLI to inspect Docker images
-  harbor run          - Run a one-off command in a service container
-  harbor shell        - Load shell in the given service main container
-  harbor build        - Build the given service
-  harbor cmd <handle> - Print the docker-compose command
+harbor up|u         - Start the containers
+harbor down|d       - Stop and remove the containers
+harbor restart|r    - Down then up
+harbor ps           - List the running containers
+harbor logs|l       - View the logs of the containers
+harbor exec         - Execute a command in a running service
+harbor pull         - Pull the latest images
+harbor dive         - Run the Dive CLI to inspect Docker images
+harbor run          - Run a one-off command in a service container
+harbor shell        - Load shell in the given service main container
+harbor build        - Build the given service
+harbor cmd <handle> - Print the docker-compose command
 
 Setup Management Commands:
-  harbor ollama     - Run Ollama CLI (docker). Service should be running.
-  harbor smi        - Show NVIDIA GPU information
-  harbor top        - Run nvtop to monitor GPU usage
-  harbor llamacpp   - Configure llamacpp service
-  harbor tgi        - Configure text-generation-inference service
-  harbor litellm    - Configure LiteLLM service
-  harbor openai     - Configure OpenAI API keys and URLs
-  harbor vllm       - Configure VLLM service
-  harbor aphrodite  - Configure Aphrodite service
-  harbor tabbyapi   - Configure TabbyAPI service
-  harbor mistralrs  - Configure mistral.rs service
-  harbor cfd        - Run cloudflared CLI
+harbor ollama     - Run Ollama CLI (docker). Service should be running.
+harbor smi        - Show NVIDIA GPU information
+harbor top        - Run nvtop to monitor GPU usage
+harbor llamacpp   - Configure llamacpp service
+harbor tgi        - Configure text-generation-inference service
+harbor litellm    - Configure LiteLLM service
+harbor openai     - Configure OpenAI API keys and URLs
+harbor vllm       - Configure VLLM service
+harbor aphrodite  - Configure Aphrodite service
+harbor tabbyapi   - Configure TabbyAPI service
+harbor mistralrs  - Configure mistral.rs service
+harbor cfd        - Run cloudflared CLI
 
 Service CLIs:
-  harbor parllama          - Launch Parllama - TUI for chatting with Ollama models
-  harbor plandex           - Launch Plandex CLI
-  harbor interpreter|opint - Launch Open Interpreter CLI
-  harbor hf                - Run the Harbor's Huggingface CLI. Expanded with a few additional commands.
-  harbor hf dl           - HuggingFaceModelDownloader CLI
-  harbor hf parse-url    - Parse file URL from Hugging Face
-  harbor hf token        - Get/set the Hugging Face Hub token
-  harbor hf find <query> - Open HF Hub with a query (trending by default)
-  harbor hf *            - Anything else is passed to the official Huggingface CLI
+harbor parllama          - Launch Parllama - TUI for chatting with Ollama models
+harbor plandex           - Launch Plandex CLI
+harbor interpreter|opint - Launch Open Interpreter CLI
+harbor hf                - Run the Harbor's Hugging Face CLI. Expanded with a few additional commands.
+harbor hf dl           - HuggingFaceModelDownloader CLI
+harbor hf parse-url    - Parse file URL from Hugging Face
+harbor hf token        - Get/set the Hugging Face Hub token
+harbor hf cache        - Get/set the path to Hugging Face cache
+harbor hf find <query> - Open HF Hub with a query (trending by default)
+harbor hf path <spec>  - Print a folder in HF cache for a given model spec
+harbor hf *            - Anything else is passed to the official Hugging Face CLI
 
 Harbor CLI Commands:
-  harbor open handle                   - Open a service in the default browser
-
-  harbor url <handle>                  - Get the URL for a service
-  harbor url <handle>                         - Url on the local host
-  harbor url [-a|--adressable|--lan] <handle> - (supposed) LAN URL
-  harbor url [-i|--internal] <handle>         - URL within Harbor's docker network
-
-  harbor qr <handle>            - Print a QR code for a service
-
-  harbor t|tunnel <handle>             - Expose given service to the internet
-  harbor tunnel down|stop|d|s        - Stop all running tunnels (including auto)
-  harbor tunnels [ls|rm|add]         - Manage services that will have tunnels by default on "harbor up"
-  harbor tunnels rm <handle|index>   - Remove, also accepts handle or index
-  harbor tunnels add <handle>        - Add a service to the tunnel list
-
-  harbor config [get|set|ls]         - Manage the Harbor environment configuration
-  harbor config ls                   - All config values in ENV format
-  harbor config get <field>          - Get a specific config value
-  harbor config set <field> <value>  - Get a specific config value
-  harbor config reset                - Reset Harbor configuration to default.env
-
-  harbor defaults [ls|rm|add]        - List default services
-  harbor defaults rm <handle|index>  - Remove, also accepts handle or index
-  harbor defaults add <handle>       - Add
-
-  harbor ls|list [--active|-a]       - List available/active Harbor services
-  harbor ln|link [--short]           - Create a symlink to the CLI, --short for 'h' link
-  harbor unlink                      - Remove CLI symlinks
-  harbor eject                       - Eject the Compose configuration, accepts same options as 'up'
-  harbor help|--help|-h              - Show this help message
-  harbor version|--version|-v        - Show the CLI version
-  harbor gum                         - Run the Gum terminal commands
-  harbor fixfs                       - Fix file system ACLs for service volumes
-  harbor info                        - Show system information for debug/issues
+harbor open handle                   - Open a service in the default browser
+harbor url <handle>                  - Get the URL for a service
+harbor url <handle>                         - Url on the local host
+harbor url [-a|--adressable|--lan] <handle> - (supposed) LAN URL
+harbor url [-i|--internal] <handle>         - URL within Harbor's docker network
+harbor qr  <handle>                  - Print a QR code for a service
+harbor t|tunnel <handle>             - Expose given service to the internet
+harbor tunnel down|stop|d|s        - Stop all running tunnels (including auto)
+harbor tunnels [ls|rm|add]           - Manage services that will be tunneled on 'up'
+harbor tunnels rm <handle|index>   - Remove, also accepts handle or index
+harbor tunnels add <handle>        - Add a service to the tunnel list
+harbor config [get|set|ls]           - Manage the Harbor environment configuration
+harbor config ls                   - All config values in ENV format
+harbor config get <field>          - Get a specific config value
+harbor config set <field> <value>  - Get a specific config value
+harbor config reset                - Reset Harbor configuration to default.env
+harbor defaults [ls|rm|add]          - List default services
+harbor defaults rm <handle|index>  - Remove, also accepts handle or index
+harbor defaults add <handle>       - Add
+harbor find <file>                   - Find a file in the caches visible to Harbor
+harbor ls|list [--active|-a]         - List available/active Harbor services
+harbor ln|link [--short]             - Create a symlink to the CLI, --short for 'h' link
+harbor unlink                        - Remove CLI symlinks
+harbor eject                         - Eject the Compose configuration, accepts same options as 'up'
+harbor help|--help|-h                - Show this help message
+harbor version|--version|-v          - Show the CLI version
+harbor gum                           - Run the Gum terminal commands
+harbor fixfs                         - Fix file system ACLs for service volumes
+harbor info                          - Show system information for debug/issues
 
 ```bash
 # to enable searxng for WebRAG in webui?

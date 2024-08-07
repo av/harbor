@@ -15,3 +15,4 @@ Fill "safetyLevel" field with:
   - "overwrite" if the command overwrites a file or adds content to an existing file.
   - "safe" if the command does not delete, modify, or overwrite any files or configurations.
 Fill the "assistantMessage" field with the message explaining the functionality of the Linux command that you set in the "desiredCommand" field.
+** VERY IMPORTANT ** Respond with the requested JSON and nothing else.

@@ -1,5 +1,6 @@
 model_list:
   - model_name: tgi
     litellm_params:
-      model: huggingface/anymodel
-      api_base: http://tgi:80
+      model: openai/huggingface/anymodel
+      api_base: http://tgi:80/v1
+      api_key: sk-tgi

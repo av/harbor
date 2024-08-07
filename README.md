@@ -154,7 +154,7 @@ harbor how to ping ollama container from the webui?
 - Convenience factor
 - Workflow/setup centralisation
 
-If you're comfortable with Docker and Linux administration ⦁︎ you likely don't need Harbor per se to manage your local LLM environment. However, you're also likely to eventually arrive to a similar solution. I know this for a fact, since I was rocking pretty much similar setup, just without all the whistles and bells.
+If you're comfortable with Docker and Linux administration - you likely don't need Harbor per se to manage your local LLM environment. However, you're also likely to eventually arrive to a similar solution. I know this for a fact, since I was rocking pretty much similar setup, just without all the whistles and bells.
 
 Harbor is not designed as a deployment solution, but rather as a helper for the local LLM development environment. It's a good starting point for experimenting with LLMs and related services.
 

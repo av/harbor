@@ -2,14 +2,30 @@
 
 ###
 
-curl {{host}}/generate \
-    -X POST \
-    -d '{"inputs":"What is Deep Learning?","parameters":{"max_new_tokens":20}}' \
-    -H 'Content-Type: application/json'
+curl {{host}}/v1/models
 
 ###
 
-curl {{host}}/v1/chat/completions -H 'Content-Type: application/json' -d '{
+curl {{host}}/generate -X POST -H 'Content-Type: application/json' -d '{
+  "inputs": "What is Deep Learning?",
+  "parameters": {
+    "max_new_tokens": 100
+  }
+}'
+
+###
+
+# Misguided Trolley Problem
+curl {{host}}/generate -X POST -H 'Content-Type: application/json' -d '{
+  "inputs": "Imagine a runaway trolley is hurtling down a track towards five dead people. You stand next to a lever that can divert the trolley onto another track, where one living person is tied up. Do you pull the lever?",
+  "parameters": {
+    "max_new_tokens": 2048
+  }
+}'
+
+###
+
+curl {{host}}/v1/chat/completions -H 'Content-Type: application/json' -H "Authorization: Bearer sk-tgi" -d '{
   "model": "tgi",
   "messages": [
     {
@@ -22,4 +38,23 @@ curl {{host}}/v1/chat/completions -H 'Content-Type: application/json' -d '{
     }
   ],
   "max_tokens": 20
+}'
+
+###
+
+
+curl {{host}}/v1/chat/completions -H 'Content-Type: application/json' -H "Authorization: Bearer sk-tgi" -d '{
+  "model": "tgi",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are a helpful assistant."
+    },
+    {
+      "role": "user",
+      "content": "Imagine a runaway trolley is hurtling down a track towards five dead people. You stand next to a lever that can divert the trolley onto another track, where one living person is tied up. Do you pull the lever?"
+    }
+  ],
+  "max_tokens": 4000,
+  "temperature": 0.1
 }'
