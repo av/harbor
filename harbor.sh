@@ -1513,7 +1513,7 @@ run_harbor_cmdh_command() {
 # == Main script
 # ========================================================================
 
-version="0.0.20"
+version="0.0.21"
 delimiter="|"
 
 harbor_home=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
