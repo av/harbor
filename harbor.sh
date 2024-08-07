@@ -556,6 +556,75 @@ execute_and_process() {
     fi
 }
 
+swap_and_retry() {
+    local command=$1
+    shift
+    local args=("$@")
+
+    # Try original order
+    if "$command" "${args[@]}"; then
+        return 0
+    else
+        local exit_code=$?
+
+        # If failed and there are at least two arguments, try swapped order
+        if [ $exit_code -eq $scramble_exit_code ] && [ ${#args[@]} -ge 2 ]; then
+            echo "'harbor ${args[0]} ${args[1]}' failed, trying 'harbor ${args[1]} ${args[0]}'..."
+            if "$command" "${args[1]}" "${args[0]}" "${args[@]:2}"; then
+                return 0
+            else
+                # Check for common user-caused exit codes
+                exit_code=$?
+
+                # Check common exit codes
+                case $exit_code in
+                    0)
+                        echo "Process completed successfully"
+                        ;;
+                    1)
+                        echo "General error occurred"
+                        ;;
+                    2)
+                        echo "Misuse of shell builtin"
+                        ;;
+                    126)
+                        echo "Command invoked cannot execute (permission problem or not executable)"
+                        ;;
+                    127)
+                        echo "Command not found"
+                        ;;
+                    128)
+                        echo "Invalid exit argument"
+                        ;;
+                    129)
+                        echo "SIGHUP (Hangup) received"
+                        ;;
+                    130)
+                        echo "SIGINT (Keyboard interrupt) received"
+                        ;;
+                    131)
+                        echo "SIGQUIT (Keyboard quit) received"
+                        ;;
+                    137)
+                        echo "SIGKILL (Kill signal) received"
+                        ;;
+                    143)
+                        echo "SIGTERM (Termination signal) received"
+                        ;;
+                    42)
+                        # This is our own scrambler code, no need to print it
+                        return 1
+                        ;;
+                    *)
+                        echo "Exit code: $exit_code"
+                        return 1
+                        ;;
+                esac
+            fi
+        fi
+    fi
+}
+
 # shellcheck disable=SC2034
 __anchor_envm=true
 
@@ -613,7 +682,7 @@ env_manager() {
             ;;
         *)
             echo "Usage: harbor config {get|set|ls|reset} [key] [value]"
-            return 1
+            return $scramble_exit_code
             ;;
     esac
 }
@@ -726,7 +795,7 @@ env_manager_arr() {
     }
 
     case "$action" in
-        ls|"")
+        ls|list|"")
             # Show all values
             local array=$(get_array)
             if [ -z "$array" ]; then
@@ -805,10 +874,11 @@ env_manager_arr() {
                 eval "$add_command"
             fi
             ;;
-        *)
-            echo "Unknown action: $action"
+        -h|--help|help)
             echo "Usage: $field [--on-get <command>] [--on-set <command>] [--on-add <command>] [--on-remove <command>] {ls|rm|add} [value]"
-            return 1
+            ;;
+        *)
+            return $scramble_exit_code
             ;;
     esac
 }
@@ -1028,7 +1098,7 @@ run_llamacpp_command() {
             shift
             env_manager_alias llamacpp.extra.args "$@"
             ;;
-        *)
+        -h|--help|help)
             echo "Please note that this is not llama.cpp CLI, but a Harbor CLI to manage llama.cpp service."
             echo "Access llama.cpp own CLI by running 'harbor exec llamacpp' when it's running."
             echo
@@ -1036,7 +1106,10 @@ run_llamacpp_command() {
             echo
             echo "Commands:"
             echo "  harbor llamacpp model [Huggingface URL] - Get or set the llamacpp model to run"
+            echo "  harbor llamacpp args [args]             - Get or set extra args to pass to the llama.cpp CLI"
             ;;
+        *)
+            return $scramble_exit_code
     esac
 }
 
@@ -1079,7 +1152,7 @@ run_tgi_command() {
             shift
             env_manager_alias tgi.revision --on-set update_model_spec "$@"
             ;;
-        *)
+        -h|--help|help)
             echo "Please note that this is not TGI CLI, but a Harbor CLI to manage TGI service."
             echo "Access TGI own CLI by running 'harbor exec tgi' when it's running."
             echo
@@ -1093,6 +1166,8 @@ run_tgi_command() {
             echo "  harbor tgi revision [revision] - Get or set the TGI model revision to run"
             echo "  harbor tgi args [args]         - Get or set extra args to pass to the TGI CLI"
             ;;
+        *)
+            return $scramble_exit_code
     esac
 }
 
@@ -1115,7 +1190,7 @@ run_litellm_command() {
                 exit 1
             fi
             ;;
-        *)
+        -h|--help|help)
             echo "Please note that this is not LiteLLM CLI, but a Harbor CLI to manage LiteLLM service."
             echo
             echo "Usage: harbor litellm <command>"
@@ -1125,6 +1200,8 @@ run_litellm_command() {
             echo "  harbor litellm password [username] - Get or set the LITeLLM UI password"
             echo "  harbor litellm ui                  - Open LiteLLM UI screen"
             ;;
+        *)
+            return $scramble_exit_code
     esac
 }
 
@@ -1187,7 +1264,7 @@ run_vllm_command() {
             shift
             env_manager_alias vllm.version "$@"
             ;;
-        *)
+        -h|--help|help)
             echo "Please note that this is not VLLM CLI, but a Harbor CLI to manage VLLM service."
             echo "Access VLLM own CLI by running 'harbor exec vllm' when it's running."
             echo
@@ -1199,6 +1276,8 @@ run_vllm_command() {
             echo "  harbor vllm attention [backend] - Get or set the attention backend to use"
             echo "  harbor vllm version [version]   - Get or set VLLM version (docker tag)"
             ;;
+        *)
+            return $scramble_exit_code
     esac
 }
 
@@ -1212,7 +1291,7 @@ run_aphrodite_command() {
             shift
             env_manager_alias aphrodite.extra.args "$@"
             ;;
-        *)
+        -h|--help|help)
             echo "Please note that this is not Aphrodite CLI, but a Harbor CLI to manage Aphrodite service."
             echo "Access Aphrodite own CLI by running 'harbor exec aphrodite' when it's running."
             echo
@@ -1222,6 +1301,8 @@ run_aphrodite_command() {
             echo "  harbor aphrodite model <user/repo>   - Get/set the Aphrodite model to run"
             echo "  harbor aphrodite args <args>         - Get/set extra args to pass to the Aphrodite CLI"
             ;;
+        *)
+            return $scramble_exit_code
     esac
 }
 
@@ -1245,7 +1326,7 @@ run_open_ai_command() {
             shift
             env_manager_arr openai.urls --on-set update_main_url "$@"
             ;;
-        *)
+        -h|--help|help)
             echo "Please note that this is not an OpenAI CLI, but a Harbor CLI to manage OpenAI configuration."
             echo
             echo "Usage: harbor openai <command>"
@@ -1254,6 +1335,8 @@ run_open_ai_command() {
             echo "  harbor openai keys [ls|rm|add]   - Get/set the API Keys for the OpenAI-compatible APIs."
             echo "  harbor openai urls [ls|rm|add]   - Get/set the API URLs for the OpenAI-compatible APIs."
             ;;
+        *)
+            return $scramble_exit_code
     esac
 }
 
@@ -1275,7 +1358,7 @@ run_webui_command() {
             shift
             env_manager_alias webui.version "$@"
             ;;
-        *)
+        -h|--help|help)
             echo "Please note that this is not WebUI CLI, but a Harbor CLI to manage WebUI service."
             echo
             echo "Usage: harbor webui <command>"
@@ -1285,6 +1368,10 @@ run_webui_command() {
             echo "  harbor webui name [name]       - Get/set the name WebUI will present"
             echo "  harbor webui log [level]       - Get/set WebUI log level"
             echo "  harbor webui version [version] - Get/set WebUI version (docker tag)"
+            return 1
+            ;;
+        *)
+            return $scramble_exit_code
             ;;
     esac
 }
@@ -1319,7 +1406,7 @@ run_tabbyapi_command() {
                 exit 1
             fi
             ;;
-        *)
+        -h|--help|help)
             echo "Please note that this is not TabbyAPI CLI, but a Harbor CLI to manage TabbyAPI service."
             echo "Access TabbyAPI own CLI by running 'harbor exec tabbyapi' when it's running."
             echo
@@ -1330,6 +1417,8 @@ run_tabbyapi_command() {
             echo "  harbor tabbyapi args [args]         - Get or set extra args to pass to the TabbyAPI CLI"
             echo "  harbor tabbyapi apidoc              - Open TabbyAPI built-in API documentation"
             ;;
+        *)
+            return $scramble_exit_code
     esac
 }
 
@@ -1408,6 +1497,21 @@ run_mistralrs_command() {
         isq)
             shift
             env_manager_alias mistralrs.isq --on-set update_model_spec "$@"
+            ;;
+        -h|--help|help)
+            echo "Please note that this is not mistral.rs CLI, but a Harbor CLI to manage mistral.rs service."
+            echo "Access mistral.rs own CLI by running 'harbor exec mistralrs' when it's running."
+            echo
+            echo "Usage: harbor mistralrs <command>"
+            echo
+            echo "Commands:"
+            echo "  harbor mistralrs health            - Check the health of the mistral.rs service"
+            echo "  harbor mistralrs docs              - Open mistral.rs built-in API documentation"
+            echo "  harbor mistralrs args [args]       - Get or set extra args to pass to the mistral.rs CLI"
+            echo "  harbor mistralrs model [user/repo] - Get or set the mistral.rs model repository to run"
+            echo "  harbor mistralrs type [type]       - Get or set the mistral.rs model type"
+            echo "  harbor mistralrs arch [arch]       - Get or set the mistral.rs model architecture"
+            echo "  harbor mistralrs isq [isq]         - Get or set the mistral.rs model ISQ"
             ;;
         *)
             $(compose_with_options "mistralrs") run mistralrs "$@"
@@ -1521,6 +1625,7 @@ run_harbor_cmdh_command() {
 
 version="0.0.21"
 delimiter="|"
+scramble_exit_code=42
 
 harbor_home=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
 original_dir=$PWD
@@ -1534,216 +1639,222 @@ default_open=$(env_manager get ui.main)
 default_autoopen=$(env_manager get ui.autoopen)
 default_container_prefix=$(env_manager get container.prefix)
 
-# Main script logic
-case "$1" in
-    up|u)
-        shift
-        harbor_up "$@"
-        ;;
-    down|d)
-        shift
-        $(compose_with_options "*") down --remove-orphans "$@"
-        ;;
-    restart|r)
-        shift
-        $(compose_with_options "*") down --remove-orphans "$@"
-        $(compose_with_options "$@") up -d
-        ;;
-    ps)
-        shift
-        $(compose_with_options "*") ps
-        ;;
-    build)
-        shift
-        service=$1
-        shift
-        $(compose_with_options "*") build "$service" "$@"
-        ;;
-    shell)
-        shift
-        service=$1
-        shift
+main_entrypoint() {
+    case "$1" in
+        up|u)
+            shift
+            harbor_up "$@"
+            ;;
+        down|d)
+            shift
+            $(compose_with_options "*") down --remove-orphans "$@"
+            ;;
+        restart|r)
+            shift
+            $(compose_with_options "*") down --remove-orphans "$@"
+            $(compose_with_options "$@") up -d
+            ;;
+        ps)
+            shift
+            $(compose_with_options "*") ps
+            ;;
+        build)
+            shift
+            service=$1
+            shift
+            $(compose_with_options "*") build "$service" "$@"
+            ;;
+        shell)
+            shift
+            service=$1
+            shift
 
-        if [ -z "$service" ]; then
-            echo "Usage: harbor shell <service>"
-            exit 1
-        fi
+            if [ -z "$service" ]; then
+                echo "Usage: harbor shell <service>"
+                exit 1
+            fi
 
-        $(compose_with_options "*") run -it --entrypoint bash "$service"
-        ;;
-    logs|l)
-        shift
-        # Only pass "*" to the command if no options are provided
-        $(compose_with_options "*") logs -n 20 -f "$@"
-        ;;
-    pull)
-        shift
-        $(compose_with_options "$@") pull
-        ;;
-    exec)
-        shift
-        run_in_service "$@"
-        ;;
-    run)
-        shift
-        service=$1
-        shift
-        $(compose_with_options "$service") run --rm "$service" "$@"
-        ;;
-    cmd)
-        shift
-        compose_with_options "$@"
-        ;;
-    help|--help|-h)
-        show_help
-        ;;
-    hf)
-        shift
-        run_hf_command "$@"
-        ;;
-    defaults)
-        shift
-        env_manager_arr services.default "$@"
-        ;;
-    link|ln)
-        shift
-        link_cli "$@"
-        ;;
-    unlink)
-        shift
-        unlink_cli "$@"
-        ;;
-    open|o)
-        shift
-        open_service "$@"
-        ;;
-    url)
-        shift
-        get_url $@
-        ;;
-    qr)
-        shift
-        print_service_qr "$@"
-        ;;
-    list|ls)
-        shift
-        get_services "$@"
-        ;;
-    version|--version|-v)
-        shift
-        show_version
-        ;;
-    smi)
-        shift
-        smi
-        ;;
-    top)
-        shift
-        nvidia_top
-        ;;
-    dive)
-        shift
-        run_dive "$@"
-        ;;
-    eject)
-        shift
-        eject "$@"
-        ;;
-    ollama)
-        shift
-        run_in_service ollama ollama "$@"
-        ;;
-    llamacpp)
-        shift
-        run_llamacpp_command "$@"
-        ;;
-    tgi)
-        shift
-        run_tgi_command "$@"
-        ;;
-    litellm)
-        shift
-        run_litellm_command "$@"
-        ;;
-    vllm)
-        shift
-        run_vllm_command "$@"
-        ;;
-    aphrodite)
-        shift
-        run_aphrodite_command "$@"
-        ;;
-    openai)
-        shift
-        run_open_ai_command "$@"
-        ;;
-    webui)
-        shift
-        run_webui_command "$@"
-        ;;
-    tabbyapi)
-        shift
-        run_tabbyapi_command "$@"
-        ;;
-    parllama)
-        shift
-        run_parllama_command "$@"
-        ;;
-    plandex|pdx)
-        shift
-        run_plandex_command "$@"
-        ;;
-    mistralrs)
-        shift
-        run_mistralrs_command "$@"
-        ;;
-    interpreter|opint)
-        shift
-        run_opint_command "$@"
-        ;;
-    cfd|cloudflared)
-        shift
-        $(compose_with_options "cfd") run cfd "$@"
-        ;;
-    cmdh)
-        shift
-        run_cmdh_command "$@"
-        ;;
-    tunnel|t)
-        shift
-        establish_tunnel "$@"
-        ;;
-    tunnels)
-        shift
-        env_manager_arr services.tunnels "$@"
-        ;;
-    config)
-        shift
-        env_manager "$@"
-        ;;
-    gum)
-        shift
-        run_gum "$@"
-        ;;
-    fixfs)
-        shift
-        fix_fs_acl
-        ;;
-    info)
-        shift
-        sys_info
-        ;;
-    update)
-        shift
-        unsafe_update
-        ;;
-    how)
-        shift
-        run_harbor_cmdh_command "$@"
-        ;;
-    *)
-        echo "Unknown command: $1"
-        show_help
-        exit 1
-        ;;
-esac
+            $(compose_with_options "*") run -it --entrypoint bash "$service"
+            ;;
+        logs|l)
+            shift
+            # Only pass "*" to the command if no options are provided
+            $(compose_with_options "*") logs -n 20 -f "$@"
+            ;;
+        pull)
+            shift
+            $(compose_with_options "$@") pull
+            ;;
+        exec)
+            shift
+            run_in_service "$@"
+            ;;
+        run)
+            shift
+            service=$1
+            shift
+            $(compose_with_options "$service") run --rm "$service" "$@"
+            ;;
+        cmd)
+            shift
+            compose_with_options "$@"
+            ;;
+        help|--help|-h)
+            show_help
+            ;;
+        hf)
+            shift
+            run_hf_command "$@"
+            ;;
+        defaults)
+            shift
+            env_manager_arr services.default "$@"
+            ;;
+        link|ln)
+            shift
+            link_cli "$@"
+            ;;
+        unlink)
+            shift
+            unlink_cli "$@"
+            ;;
+        open|o)
+            shift
+            open_service "$@"
+            ;;
+        url)
+            shift
+            get_url $@
+            ;;
+        qr)
+            shift
+            print_service_qr "$@"
+            ;;
+        list|ls)
+            shift
+            get_services "$@"
+            ;;
+        version|--version|-v)
+            shift
+            show_version
+            ;;
+        smi)
+            shift
+            smi
+            ;;
+        top)
+            shift
+            nvidia_top
+            ;;
+        dive)
+            shift
+            run_dive "$@"
+            ;;
+        eject)
+            shift
+            eject "$@"
+            ;;
+        ollama)
+            shift
+            run_in_service ollama ollama "$@"
+            ;;
+        llamacpp)
+            shift
+            run_llamacpp_command "$@"
+            ;;
+        tgi)
+            shift
+            run_tgi_command "$@"
+            ;;
+        litellm)
+            shift
+            run_litellm_command "$@"
+            ;;
+        vllm)
+            shift
+            run_vllm_command "$@"
+            ;;
+        aphrodite)
+            shift
+            run_aphrodite_command "$@"
+            ;;
+        openai)
+            shift
+            run_open_ai_command "$@"
+            ;;
+        webui)
+            shift
+            run_webui_command "$@"
+            ;;
+        tabbyapi)
+            shift
+            run_tabbyapi_command "$@"
+            ;;
+        parllama)
+            shift
+            run_parllama_command "$@"
+            ;;
+        plandex|pdx)
+            shift
+            run_plandex_command "$@"
+            ;;
+        mistralrs)
+            shift
+            run_mistralrs_command "$@"
+            ;;
+        interpreter|opint)
+            shift
+            run_opint_command "$@"
+            ;;
+        cfd|cloudflared)
+            shift
+            $(compose_with_options "cfd") run cfd "$@"
+            ;;
+        cmdh)
+            shift
+            run_cmdh_command "$@"
+            ;;
+        tunnel|t)
+            shift
+            establish_tunnel "$@"
+            ;;
+        tunnels)
+            shift
+            env_manager_arr services.tunnels "$@"
+            ;;
+        config)
+            shift
+            env_manager "$@"
+            ;;
+        gum)
+            shift
+            run_gum "$@"
+            ;;
+        fixfs)
+            shift
+            fix_fs_acl
+            ;;
+        info)
+            shift
+            sys_info
+            ;;
+        update)
+            shift
+            unsafe_update
+            ;;
+        how)
+            shift
+            run_harbor_cmdh_command "$@"
+            ;;
+        *)
+            return $scramble_exit_code
+            ;;
+    esac
+}
+
+
+# Call the main logic with argument swapping
+if ! swap_and_retry main_entrypoint "$@"; then
+    show_help
+    exit 1
+fi
