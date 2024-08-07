@@ -130,22 +130,22 @@ harbor eject searxng llamacpp > docker-compose.harbor.yml
 
 ##### UIs
 
-[Open WebUI](https://github.com/av/harbor/wiki/Services#open-webui) - [LibreChat](https://github.com/av/harbor/wiki/Services#librechat) - [Hollama](https://github.com/av/harbor/wiki/Services#hollama) - [parllama](https://github.com/av/harbor/wiki/Services#par-llama), [BionicGPT](https://github.com/av/harbor/wiki/Services#bionicgpt)
+[Open WebUI](https://github.com/av/harbor/wiki/Services#open-webui) ⦁︎ [LibreChat](https://github.com/av/harbor/wiki/Services#librechat) ⦁︎ [Hollama](https://github.com/av/harbor/wiki/Services#hollama) ⦁︎ [parllama](https://github.com/av/harbor/wiki/Services#par-llama), [BionicGPT](https://github.com/av/harbor/wiki/Services#bionicgpt)
 
 ##### Backends
 
-[Ollama](https://github.com/av/harbor/wiki/Services#ollama) - [llama.cpp](https://github.com/av/harbor/wiki/Services#llamacpp) - [vLLM](https://github.com/av/harbor/wiki/Services#vllm) - [TabbyAPI](https://github.com/av/harbor/wiki/Services#tabbyapi) - [Aphrodite Engine](https://github.com/av/harbor/wiki/Services#aphrodite-engine) - [mistral.rs](https://github.com/av/harbor/wiki/Services#mistralrs) - [openedai-speech](https://github.com/av/harbor/wiki/Services#openedai-speech), [text-generation-inference](https://github.com/av/harbor/wiki/Services#text-generation-inference) - [LMDeploy](https://github.com/av/harbor/wiki/Services#lmdeploy)
+[Ollama](https://github.com/av/harbor/wiki/Services#ollama) ⦁︎ [llama.cpp](https://github.com/av/harbor/wiki/Services#llamacpp) ⦁︎ [vLLM](https://github.com/av/harbor/wiki/Services#vllm) ⦁︎ [TabbyAPI](https://github.com/av/harbor/wiki/Services#tabbyapi) ⦁︎ [Aphrodite Engine](https://github.com/av/harbor/wiki/Services#aphrodite-engine) ⦁︎ [mistral.rs](https://github.com/av/harbor/wiki/Services#mistralrs) ⦁︎ [openedai-speech](https://github.com/av/harbor/wiki/Services#openedai-speech), [text-generation-inference](https://github.com/av/harbor/wiki/Services#text-generation-inference) ⦁︎ [LMDeploy](https://github.com/av/harbor/wiki/Services#lmdeploy)
 
 ##### Satellites
 
-[SearXNG](https://github.com/av/harbor/wiki/Services#searxng) - [Plandex](https://github.com/av/harbor/wiki/Services#plandex) - [LiteLLM](https://github.com/av/harbor/wiki/Services#-litellm) - [LangFuse](https://github.com/av/harbor/wiki/Services#langfuse) - [Open Interpreter](https://github.com/av/harbor/wiki/Services#-open-interpreter) - [cloudflared](https://github.com/av/harbor/wiki/Services#cloudflared) - [cmdh](https://github.com/av/harbor/wiki/Services#cmdh)
+[SearXNG](https://github.com/av/harbor/wiki/Services#searxng) ⦁︎ [Dify](https://github.com/av/harbor/wiki/Services#dify) ⦁︎ [Plandex](https://github.com/av/harbor/wiki/Services#plandex) ⦁︎ [LiteLLM](https://github.com/av/harbor/wiki/Services#-litellm) ⦁︎ [LangFuse](https://github.com/av/harbor/wiki/Services#langfuse) ⦁︎ [Open Interpreter](https://github.com/av/harbor/wiki/Services#-open-interpreter) ⦁︎ [cloudflared](https://github.com/av/harbor/wiki/Services#cloudflared) ⦁︎ [cmdh](https://github.com/av/harbor/wiki/Services#cmdh)
 
 ## Why?
 
 - Convenience factor
 - Workflow/setup centralisation
 
-If you're comfortable with Docker and Linux administration - you likely don't need Harbor per se to manage your local LLM environment. However, you're also likely to eventually arrive to a similar solution. I know this for a fact, since I was rocking pretty much similar setup, just without all the whistles and bells.
+If you're comfortable with Docker and Linux administration ⦁︎ you likely don't need Harbor per se to manage your local LLM environment. However, you're also likely to eventually arrive to a similar solution. I know this for a fact, since I was rocking pretty much similar setup, just without all the whistles and bells.
 
 Harbor is not designed as a deployment solution, but rather as a helper for the local LLM development environment. It's a good starting point for experimenting with LLMs and related services.
 
@@ -161,6 +161,6 @@ This project consists of a fairly large shell CLI, fairly small `.env` file and 
 - Convenience utilities for common tasks (model management, configuration, service debug, URLs, tunnels, etc.)
 - Access service CLIs (`hf`, `ollama`, etc.) via Docker without install
 - Services are pre-configured to work together (contributions welcome)
-- Host cache is shared and reused - Hugging Face, ollama, etc.
+- Host cache is shared and reused ⦁︎ Hugging Face, ollama, etc.
 - Co-located service configs
 - Eject to run without harbor with `harbor eject`

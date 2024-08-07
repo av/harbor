@@ -48,11 +48,15 @@ services:
       - ./dify/override.env
     volumes:
       - ${HARBOR_DIFY_VOLUMES}/db/data:/var/lib/postgresql/data/pgdata
+    ports:
+      - ${HARBOR_DIFY_DB_HOST_PORT}:5432
     healthcheck:
       test: [ "CMD", "pg_isready" ]
       interval: 1s
       timeout: 3s
       retries: 30
+    networks:
+      - harbor-network
 
   dify-redis:
     container_name: ${HARBOR_CONTAINER_PREFIX}.dify-redis
@@ -65,355 +69,91 @@ services:
     command: redis-server --requirepass difyai123456
     healthcheck:
       test: [ "CMD", "redis-cli", "ping" ]
+      interval: 1s
+      timeout: 3s
+    networks:
+      - harbor-network
 
-  sandbox:
-    container_name: ${HARBOR_CONTAINER_PREFIX}.dify-redis
+  dify-sandbox:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.dify-sandbox
     image: langgenius/dify-sandbox:${HARBOR_DIFY_SANDBOX_VERSION}
     env_file:
       - ./.env
       - ./dify/override.env
-    # environment:
-    #   # The DifySandbox configurations
-    #   # Make sure you are changing this key for your deployment with a strong key.
-    #   # You can generate a strong key using `openssl rand -base64 42`.
-    #   API_KEY: ${SANDBOX_API_KEY:-dify-sandbox}
-    #   GIN_MODE: ${SANDBOX_GIN_MODE:-release}
-    #   WORKER_TIMEOUT: ${SANDBOX_WORKER_TIMEOUT:-15}
-    #   ENABLE_NETWORK: ${SANDBOX_ENABLE_NETWORK:-true}
-    #   HTTP_PROXY: ${SANDBOX_HTTP_PROXY:-http://ssrf_proxy:3128}
-    #   HTTPS_PROXY: ${SANDBOX_HTTPS_PROXY:-http://ssrf_proxy:3128}
-    #   SANDBOX_PORT: ${SANDBOX_PORT:-8194}
     volumes:
-      - ./volumes/sandbox/dependencies:/dependencies
+      - ${HARBOR_DIFY_VOLUMES}/sandbox/dependencies:/dependencies
     networks:
       - harbor-network
 
-#   # ssrf_proxy server
-#   # for more information, please refer to
-#   # https://docs.dify.ai/learn-more/faq/self-host-faq#id-18.-why-is-ssrf_proxy-needed
-#   ssrf_proxy:
-#     image: ubuntu/squid:latest
-#     restart: always
-#     volumes:
-#       - ./ssrf_proxy/squid.conf.template:/etc/squid/squid.conf.template
-#       - ./ssrf_proxy/docker-entrypoint.sh:/docker-entrypoint-mount.sh
-#     entrypoint: [ "sh", "-c", "cp /docker-entrypoint-mount.sh /docker-entrypoint.sh && sed -i 's/\r$$//' /docker-entrypoint.sh && chmod +x /docker-entrypoint.sh && /docker-entrypoint.sh" ]
-#     environment:
-#       # pls clearly modify the squid env vars to fit your network environment.
-#       HTTP_PORT: ${SSRF_HTTP_PORT:-3128}
-#       COREDUMP_DIR: ${SSRF_COREDUMP_DIR:-/var/spool/squid}
-#       REVERSE_PROXY_PORT: ${SSRF_REVERSE_PROXY_PORT:-8194}
-#       SANDBOX_HOST: ${SSRF_SANDBOX_HOST:-sandbox}
-#       SANDBOX_PORT: ${SANDBOX_PORT:-8194}
-#     networks:
-#       - ssrf_proxy_network
-#       - default
+  dify-ssrf:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.dify-ssrf
+    image: ubuntu/squid:latest
+    env_file:
+      - ./.env
+      - ./dify/override.env
+    volumes:
+      - ./dify/ssrf_proxy/squid.conf.template:/etc/squid/squid.conf.template
+      - ./dify/ssrf_proxy/docker-entrypoint.sh:/docker-entrypoint-mount.sh
+    entrypoint: [ "sh", "-c", "cp /docker-entrypoint-mount.sh /docker-entrypoint.sh && sed -i 's/\r$$//' /docker-entrypoint.sh && chmod +x /docker-entrypoint.sh && /docker-entrypoint.sh" ]
+    environment:
+      HTTP_PORT: 3128
+      COREDUMP_DIR: /var/spool/squid
+      REVERSE_PROXY_PORT: 8194
+      SANDBOX_HOST: dify-sandbox
+      SANDBOX_PORT: 8194
+    networks:
+      - harbor-network
 
-#   # Certbot service
-#   # use `docker-compose --profile certbot up` to start the certbot service.
-#   certbot:
-#     image: certbot/certbot
-#     profiles:
-#       - certbot
-#     volumes:
-#       - ./volumes/certbot/conf:/etc/letsencrypt
-#       - ./volumes/certbot/www:/var/www/html
-#       - ./volumes/certbot/logs:/var/log/letsencrypt
-#       - ./volumes/certbot/conf/live:/etc/letsencrypt/live
-#       - ./certbot/update-cert.template.txt:/update-cert.template.txt
-#       - ./certbot/docker-entrypoint.sh:/docker-entrypoint.sh
-#     environment:
-#       - CERTBOT_EMAIL=${CERTBOT_EMAIL}
-#       - CERTBOT_DOMAIN=${CERTBOT_DOMAIN}
-#       - CERTBOT_OPTIONS=${CERTBOT_OPTIONS:-}
-#     entrypoint: [ "/docker-entrypoint.sh" ]
-#     command: ["tail", "-f", "/dev/null"]
+  dify-certbot:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.dify-certbot
+    image: certbot/certbot
+    env_file:
+      - ./.env
+      - ./dify/override.env
+    volumes:
+      - ${HARBOR_DIFY_VOLUMES}/certbot/conf:/etc/letsencrypt
+      - ${HARBOR_DIFY_VOLUMES}/certbot/www:/var/www/html
+      - ${HARBOR_DIFY_VOLUMES}/certbot/logs:/var/log/letsencrypt
+      - ${HARBOR_DIFY_VOLUMES}/certbot/conf/live:/etc/letsencrypt/live
+      - ./dify/certbot/update-cert.template.txt:/update-cert.template.txt
+      - ./dify/certbot/docker-entrypoint.sh:/docker-entrypoint.sh
+    entrypoint: [ "/docker-entrypoint.sh" ]
+    command: ["tail", "-f", "/dev/null"]
+    networks:
+      - harbor-network
 
-#   # The nginx reverse proxy.
-#   # used for reverse proxying the API service and Web service.
-#   nginx:
-#     image: nginx:latest
-#     restart: always
-#     volumes:
-#       - ./nginx/nginx.conf.template:/etc/nginx/nginx.conf.template
-#       - ./nginx/proxy.conf.template:/etc/nginx/proxy.conf.template
-#       - ./nginx/https.conf.template:/etc/nginx/https.conf.template
-#       - ./nginx/conf.d:/etc/nginx/conf.d
-#       - ./nginx/docker-entrypoint.sh:/docker-entrypoint-mount.sh
-#       - ./nginx/ssl:/etc/ssl # cert dir (legacy)
-#       - ./volumes/certbot/conf/live:/etc/letsencrypt/live # cert dir (with certbot container)
-#       - ./volumes/certbot/conf:/etc/letsencrypt
-#       - ./volumes/certbot/www:/var/www/html
-#     entrypoint: [ "sh", "-c", "cp /docker-entrypoint-mount.sh /docker-entrypoint.sh && sed -i 's/\r$$//' /docker-entrypoint.sh && chmod +x /docker-entrypoint.sh && /docker-entrypoint.sh" ]
-#     environment:
-#       NGINX_SERVER_NAME: ${NGINX_SERVER_NAME:-_}
-#       NGINX_HTTPS_ENABLED: ${NGINX_HTTPS_ENABLED:-false}
-#       NGINX_SSL_PORT: ${NGINX_SSL_PORT:-443}
-#       NGINX_PORT: ${NGINX_PORT:-80}
-#       # You're required to add your own SSL certificates/keys to the `./nginx/ssl` directory
-#       # and modify the env vars below in .env if HTTPS_ENABLED is true.
-#       NGINX_SSL_CERT_FILENAME: ${NGINX_SSL_CERT_FILENAME:-dify.crt}
-#       NGINX_SSL_CERT_KEY_FILENAME: ${NGINX_SSL_CERT_KEY_FILENAME:-dify.key}
-#       NGINX_SSL_PROTOCOLS: ${NGINX_SSL_PROTOCOLS:-TLSv1.1 TLSv1.2 TLSv1.3}
-#       NGINX_WORKER_PROCESSES: ${NGINX_WORKER_PROCESSES:-auto}
-#       NGINX_CLIENT_MAX_BODY_SIZE: ${NGINX_CLIENT_MAX_BODY_SIZE:-15M}
-#       NGINX_KEEPALIVE_TIMEOUT: ${NGINX_KEEPALIVE_TIMEOUT:-65}
-#       NGINX_PROXY_READ_TIMEOUT: ${NGINX_PROXY_READ_TIMEOUT:-3600s}
-#       NGINX_PROXY_SEND_TIMEOUT: ${NGINX_PROXY_SEND_TIMEOUT:-3600s}
-#       NGINX_ENABLE_CERTBOT_CHALLENGE: ${NGINX_ENABLE_CERTBOT_CHALLENGE:-false}
-#       CERTBOT_DOMAIN: ${CERTBOT_DOMAIN:-}
-#     depends_on:
-#       - api
-#       - web
-#     ports:
-#       - "${EXPOSE_NGINX_PORT:-80}:${NGINX_PORT:-80}"
-#       - "${EXPOSE_NGINX_SSL_PORT:-443}:${NGINX_SSL_PORT:-443}"
+  dify:
+    image: nginx:latest
+    container_name: ${HARBOR_CONTAINER_PREFIX}.dify
+    volumes:
+      - ./dify/nginx/nginx.conf.template:/etc/nginx/nginx.conf.template
+      - ./dify/nginx/proxy.conf.template:/etc/nginx/proxy.conf.template
+      - ./dify/nginx/https.conf.template:/etc/nginx/https.conf.template
+      - ./dify/nginx/conf.d:/etc/nginx/conf.d
+      - ./dify/nginx/docker-entrypoint.sh:/docker-entrypoint-mount.sh
+      - ./dify/nginx/ssl:/etc/ssl
+      - ${HARBOR_DIFY_VOLUMES}/certbot/conf/live:/etc/letsencrypt/live
+      - ${HARBOR_DIFY_VOLUMES}/certbot/conf:/etc/letsencrypt
+      - ${HARBOR_DIFY_VOLUMES}/certbot/www:/var/www/html
+    entrypoint: [ "sh", "-c", "cp /docker-entrypoint-mount.sh /docker-entrypoint.sh && sed -i 's/\r$$//' /docker-entrypoint.sh && chmod +x /docker-entrypoint.sh && /docker-entrypoint.sh" ]
+    env_file:
+      - ./.env
+      - ./dify/override.env
+    depends_on:
+      - dify-api
+      - dify-web
+    ports:
+      - ${HARBOR_DIFY_HOST_PORT}:80
+    networks:
+      - harbor-network
 
-#   # The Weaviate vector store.
-#   weaviate:
-#     image: semitechnologies/weaviate:1.19.0
-#     profiles:
-#       - ''
-#       - weaviate
-#     restart: always
-#     volumes:
-#       # Mount the Weaviate data directory to the con tainer.
-#       - ./volumes/weaviate:/var/lib/weaviate
-#     environment:
-#       # The Weaviate configurations
-#       # You can refer to the [Weaviate](https://weaviate.io/developers/weaviate/config-refs/env-vars) documentation for more information.
-#       PERSISTENCE_DATA_PATH: ${WEAVIATE_PERSISTENCE_DATA_PATH:-/var/lib/weaviate}
-#       QUERY_DEFAULTS_LIMIT: ${WEAVIATE_QUERY_DEFAULTS_LIMIT:-25}
-#       AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: ${WEAVIATE_AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED:-false}
-#       DEFAULT_VECTORIZER_MODULE: ${WEAVIATE_DEFAULT_VECTORIZER_MODULE:-none}
-#       CLUSTER_HOSTNAME: ${WEAVIATE_CLUSTER_HOSTNAME:-node1}
-#       AUTHENTICATION_APIKEY_ENABLED: ${WEAVIATE_AUTHENTICATION_APIKEY_ENABLED:-true}
-#       AUTHENTICATION_APIKEY_ALLOWED_KEYS: ${WEAVIATE_AUTHENTICATION_APIKEY_ALLOWED_KEYS:-WVF5YThaHlkYwhGUSmCRgsX3tD5ngdN8pkih}
-#       AUTHENTICATION_APIKEY_USERS: ${WEAVIATE_AUTHENTICATION_APIKEY_USERS:-hello@dify.ai}
-#       AUTHORIZATION_ADMINLIST_ENABLED: ${WEAVIATE_AUTHORIZATION_ADMINLIST_ENABLED:-true}
-#       AUTHORIZATION_ADMINLIST_USERS: ${WEAVIATE_AUTHORIZATION_ADMINLIST_USERS:-hello@dify.ai}
-
-#   # Qdrant vector store.
-#   # (if used, you need to set VECTOR_STORE to qdrant in the api & worker service.)
-#   qdrant:
-#     image: langgenius/qdrant:v1.7.3
-#     profiles:
-#       - qdrant
-#     restart: always
-#     volumes:
-#       - ./volumes/qdrant:/qdrant/storage
-#     environment:
-#       QDRANT_API_KEY: ${QDRANT_API_KEY:-difyai123456}
-
-#   # The pgvector vector database.
-#   pgvector:
-#     image: pgvector/pgvector:pg16
-#     profiles:
-#       - pgvector
-#     restart: always
-#     environment:
-#       PGUSER: ${PGVECTOR_PGUSER:-postgres}
-#       # The password for the default postgres user.
-#       POSTGRES_PASSWORD: ${PGVECTOR_POSTGRES_PASSWORD:-difyai123456}
-#       # The name of the default postgres database.
-#       POSTGRES_DB: ${PGVECTOR_POSTGRES_DB:-dify}
-#       # postgres data directory
-#       PGDATA: ${PGVECTOR_PGDATA:-/var/lib/postgresql/data/pgdata}
-#     volumes:
-#       - ./volumes/pgvector/data:/var/lib/postgresql/data
-#     healthcheck:
-#       test: [ "CMD", "pg_isready" ]
-#       interval: 1s
-#       timeout: 3s
-#       retries: 30
-
-#   # pgvecto-rs vector store
-#   pgvecto-rs:
-#     image: tensorchord/pgvecto-rs:pg16-v0.3.0
-#     profiles:
-#       - pgvecto-rs
-#     restart: always
-#     environment:
-#       PGUSER: ${PGVECTOR_PGUSER:-postgres}
-#       # The password for the default postgres user.
-#       POSTGRES_PASSWORD: ${PGVECTOR_POSTGRES_PASSWORD:-difyai123456}
-#       # The name of the default postgres database.
-#       POSTGRES_DB: ${PGVECTOR_POSTGRES_DB:-dify}
-#       # postgres data directory
-#       PGDATA: ${PGVECTOR_PGDATA:-/var/lib/postgresql/data/pgdata}
-#     volumes:
-#       - ./volumes/pgvecto_rs/data:/var/lib/postgresql/data
-#     healthcheck:
-#       test: [ "CMD", "pg_isready" ]
-#       interval: 1s
-#       timeout: 3s
-#       retries: 30
-
-#   # Chroma vector database
-#   chroma:
-#     image: ghcr.io/chroma-core/chroma:0.5.1
-#     profiles:
-#       - chroma
-#     restart: always
-#     volumes:
-#       - ./volumes/chroma:/chroma/chroma
-#     environment:
-#       CHROMA_SERVER_AUTHN_CREDENTIALS: ${CHROMA_SERVER_AUTHN_CREDENTIALS:-difyai123456}
-#       CHROMA_SERVER_AUTHN_PROVIDER: ${CHROMA_SERVER_AUTHN_PROVIDER:-chromadb.auth.token_authn.TokenAuthenticationServerProvider}
-#       IS_PERSISTENT: ${CHROMA_IS_PERSISTENT:-TRUE}
-
-#   # Oracle vector database
-#   oracle:
-#     image: container-registry.oracle.com/database/free:latest
-#     profiles:
-#       - oracle
-#     restart: always
-#     volumes:
-#       - type: volume
-#         source: oradata
-#         target: /opt/oracle/oradata
-#       - ./startupscripts:/opt/oracle/scripts/startup
-#     environment:
-#       - ORACLE_PWD=${ORACLE_PWD:-Dify123456}
-#       - ORACLE_CHARACTERSET=${ORACLE_CHARACTERSET:-AL32UTF8}
-
-#   # Milvus vector database services
-#   etcd:
-#     container_name: milvus-etcd
-#     image: quay.io/coreos/etcd:v3.5.5
-#     profiles:
-#       - milvus
-#     environment:
-#       - ETCD_AUTO_COMPACTION_MODE=${ETCD_AUTO_COMPACTION_MODE:-revision}
-#       - ETCD_AUTO_COMPACTION_RETENTION=${ETCD_AUTO_COMPACTION_RETENTION:-1000}
-#       - ETCD_QUOTA_BACKEND_BYTES=${ETCD_QUOTA_BACKEND_BYTES:-4294967296}
-#       - ETCD_SNAPSHOT_COUNT=${ETCD_SNAPSHOT_COUNT:-50000}
-#     volumes:
-#       - ./volumes/milvus/etcd:/etcd
-#     command: etcd -advertise-client-urls=http://127.0.0.1:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
-#     healthcheck:
-#       test: [ "CMD", "etcdctl", "endpoint", "health" ]
-#       interval: 30s
-#       timeout: 20s
-#       retries: 3
-#     networks:
-#       - milvus
-
-#   minio:
-#     container_name: milvus-minio
-#     image: minio/minio:RELEASE.2023-03-20T20-16-18Z
-#     profiles:
-#       - milvus
-#     environment:
-#       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
-#       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
-#     volumes:
-#       - ./volumes/milvus/minio:/minio_data
-#     command: minio server /minio_data --console-address ":9001"
-#     healthcheck:
-#       test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
-#       interval: 30s
-#       timeout: 20s
-#       retries: 3
-#     networks:
-#       - milvus
-
-#   milvus-standalone:
-#     container_name: milvus-standalone
-#     image: milvusdb/milvus:v2.3.1
-#     profiles:
-#       - milvus
-#     command: [ "milvus", "run", "standalone" ]
-#     environment:
-#       ETCD_ENDPOINTS: ${ETCD_ENDPOINTS:-etcd:2379}
-#       MINIO_ADDRESS: ${MINIO_ADDRESS:-minio:9000}
-#       common.security.authorizationEnabled: ${MILVUS_AUTHORIZATION_ENABLED:-true}
-#     volumes:
-#       - ./volumes/milvus/milvus:/var/lib/milvus
-#     healthcheck:
-#       test: [ "CMD", "curl", "-f", "http://localhost:9091/healthz" ]
-#       interval: 30s
-#       start_period: 90s
-#       timeout: 20s
-#       retries: 3
-#     depends_on:
-#       - "etcd"
-#       - "minio"
-#     networks:
-#       - milvus
-
-#   # Opensearch vector database
-#   opensearch:
-#     container_name: opensearch
-#     image: opensearchproject/opensearch:latest
-#     profiles:
-#       - opensearch
-#     environment:
-#       - discovery.type=${OPENSEARCH_DISCOVERY_TYPE:-single-node}
-#       - bootstrap.memory_lock=${OPENSEARCH_BOOTSTRAP_MEMORY_LOCK:-true}
-#       - OPENSEARCH_JAVA_OPTS=-Xms${OPENSEARCH_JAVA_OPTS_MIN:-512m} -Xmx${OPENSEARCH_JAVA_OPTS_MAX:-1024m}
-#       - OPENSEARCH_INITIAL_ADMIN_PASSWORD=${OPENSEARCH_INITIAL_ADMIN_PASSWORD:-Qazwsxedc!@#123}
-#     ulimits:
-#       memlock:
-#         soft: ${OPENSEARCH_MEMLOCK_SOFT:--1}
-#         hard: ${OPENSEARCH_MEMLOCK_HARD:--1}
-#       nofile:
-#         soft: ${OPENSEARCH_NOFILE_SOFT:-65536}
-#         hard: ${OPENSEARCH_NOFILE_HARD:-65536}
-#     volumes:
-#       - ./volumes/opensearch/data:/usr/share/opensearch/data
-#     networks:
-#       - opensearch-net
-
-#   opensearch-dashboards:
-#     container_name: opensearch-dashboards
-#     image: opensearchproject/opensearch-dashboards:latest
-#     profiles:
-#       - opensearch
-#     environment:
-#       OPENSEARCH_HOSTS: '["https://opensearch:9200"]'
-#     volumes:
-#       - ./volumes/opensearch/opensearch_dashboards.yml:/usr/share/opensearch-dashboards/config/opensearch_dashboards.yml
-#     networks:
-#       - opensearch-net
-#     depends_on:
-#       - opensearch
-
-#   # MyScale vector database
-#   myscale:
-#     container_name: myscale
-#     image: myscale/myscaledb:1.6
-#     profiles:
-#       - myscale
-#     restart: always
-#     tty: true
-#     volumes:
-#       - ./volumes/myscale/data:/var/lib/clickhouse
-#       - ./volumes/myscale/log:/var/log/clickhouse-server
-#       - ./volumes/myscale/config/users.d/custom_users_config.xml:/etc/clickhouse-server/users.d/custom_users_config.xml
-#     ports:
-#       - "${MYSCALE_PORT:-8123}:${MYSCALE_PORT:-8123}"
-
-#   # unstructured .
-#   # (if used, you need to set ETL_TYPE to Unstructured in the api & worker service.)
-#   unstructured:
-#     image: downloads.unstructured.io/unstructured-io/unstructured-api:latest
-#     profiles:
-#       - unstructured
-#     restart: always
-#     volumes:
-#       - ./volumes/unstructured:/app/data
-
-# networks:
-#   # create a network between sandbox, api and ssrf_proxy, and can not access outside.
-#   ssrf_proxy_network:
-#     driver: bridge
-#     internal: true
-#   milvus:
-#     driver: bridge
-#   opensearch-net:
-#     driver: bridge
-#     internal: true
-
-# volumes:
-#   oradata:
+  dify-weaviate:
+    image: semitechnologies/weaviate:${HARBOR_DIFY_WEAVIATE_VERSION}
+    container_name: ${HARBOR_CONTAINER_PREFIX}.dify-weaviate
+    volumes:
+      - ${HARBOR_DIFY_VOLUMES}/weaviate:/var/lib/weaviate
+    env_file:
+      - ./.env
+      - ./dify/override.env
+    networks:
+      - harbor-network

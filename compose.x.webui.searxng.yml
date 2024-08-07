@@ -2,3 +2,7 @@ services:
   webui:
     volumes:
       - ./open-webui/configs/config.searxng.json:/app/configs/config.searxng.json
+    environment:
+      - ENABLE_RAG_WEB_SEARCH=true
+      - RAG_WEB_SEARCH_ENGINE=searxng
+      - SEARXNG_QUERY_URL=http://searxng:8080/search?q=<query>

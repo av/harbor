@@ -886,6 +886,7 @@ fix_fs_acl() {
     docker_fsacl ./searxng
     docker_fsacl ./tabbyapi
     docker_fsacl ./litellm
+    docker_fsacl ./dify
 }
 
 unsafe_update() {
@@ -894,6 +895,14 @@ unsafe_update() {
 
 get_active_services() {
     docker compose ps --format "{{.Service}}" | tr '\n' ' '
+}
+
+is_service_running() {
+    if docker compose ps --services --filter "status=running" | grep -q "^$1$"; then
+        return 0
+    else
+        return 1
+    fi
 }
 
 get_services() {
@@ -1548,7 +1557,13 @@ case "$1" in
         shift
         service=$1
         shift
-        $(compose_with_options "$service") run -it --entrypoint bash "$service"
+
+        if [ -z "$service" ]; then
+            echo "Usage: harbor shell <service>"
+            exit 1
+        fi
+
+        $(compose_with_options "*") run -it --entrypoint bash "$service"
         ;;
     logs|l)
         shift
@@ -1592,7 +1607,7 @@ case "$1" in
         shift
         unlink_cli "$@"
         ;;
-    open)
+    open|o)
         shift
         open_service "$@"
         ;;

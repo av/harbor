@@ -36,3 +36,7 @@ litellm/db
 # Plandex
 plandex/data
 plandex/db
+
+# Dify
+dify/volumes/
+dify/nginx/conf.d/default.conf

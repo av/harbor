@@ -12,9 +12,3 @@ services:
       - ${HARBOR_SEARXNG_HOST_PORT}:8080
     networks:
       - harbor-network
-
-  webui:
-    environment:
-      - ENABLE_RAG_WEB_SEARCH=true
-      - RAG_WEB_SEARCH_ENGINE=searxng
-      - SEARXNG_QUERY_URL=http://searxng:8080/search?q=<query>
