@@ -1,6 +1,9 @@
 services:
   llamacpp:
-    image: ghcr.io/ggerganov/llama.cpp:full-cuda
+    # image: ghcr.io/ggerganov/llama.cpp:full-cuda
+    build:
+      context: ./llamacpp
+      dockerfile: host.Dockerfile
     container_name: ${HARBOR_CONTAINER_PREFIX}.llamacpp
     volumes:
       - ${HARBOR_HF_CACHE}:/app/models
@@ -16,6 +19,23 @@ services:
     networks:
       - harbor-network
 
-  webui:
-    environment:
-      - ENABLE_OPENAI_API=true
+  # llamacpp-client:
+  #   image: ghcr.io/ggerganov/llama.cpp:full-cuda
+  #   container_name: ${HARBOR_CONTAINER_PREFIX}.llamacpp
+  #   volumes:
+  #     - ${HARBOR_HF_CACHE}:/app/models
+  #     - ${HARBOR_LLAMACPP_CACHE}:/root/.cache/llama.cpp
+  #   ports:
+  #     - ${HARBOR_LLAMACPP_HOST_PORT}:8080
+  #   command: >
+  #     --server
+  #     ${HARBOR_LLAMACPP_MODEL_SPECIFIER}
+  #     ${HARBOR_LLAMACPP_EXTRA_ARGS}
+  #     --port 8080
+  #     --host 0.0.0.0
+  #   networks:
+  #     - harbor-network
+
+  # webui:
+  #   environment:
+  #     - ENABLE_OPENAI_API=true
