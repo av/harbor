@@ -4,8 +4,9 @@ set -e
 
 # ========================================
 
-INSTALL_PATH="${HOME}/.harbor"
-REPO_URL="https://github.com/av/harbor.git"
+HARBOR_INSTALL_PATH="${HOME}/.harbor"
+HARBOR_REPO_URL="https://github.com/av/harbor.git"
+HARBOR_VERSION="0.1.1"
 
 # ========================================
 
@@ -17,14 +18,14 @@ check_dependencies() {
 }
 
 install_or_update_project() {
-  if [ -d "$INSTALL_PATH" ]; then
+  if [ -d "$HARBOR_INSTALL_PATH" ]; then
     echo "Existing installation found. Updating..."
-    cd "$INSTALL_PATH"
+    cd "$HARBOR_INSTALL_PATH"
     git pull
   else
     echo "Cloning project repository..."
-    git clone "$REPO_URL" "$INSTALL_PATH"
-    cd "$INSTALL_PATH"
+    git clone --depth 1 --branch "$HARBOR_VERSION" "$HARBOR_REPO_URL" "$HARBOR_INSTALL_PATH"
+    cd "$HARBOR_INSTALL_PATH"
   fi
 }
 
