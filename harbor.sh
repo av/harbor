@@ -1869,7 +1869,9 @@ main_entrypoint() {
             shift
             service=$1
             shift
-            $(compose_with_options "$service") run --rm "$service" "$@"
+
+            local services=$(get_active_services)
+            $(compose_with_options $services "$service") run --rm "$service" "$@"
             ;;
         cmd)
             shift

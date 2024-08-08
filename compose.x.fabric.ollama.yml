@@ -1,7 +1,5 @@
 services:
   fabric:
-    environment:
-      - OLLAMA_HOST=http://ollama:11434
     entrypoint:
       - "bash"
       - "/app/fabric/start_fabric.sh"
