@@ -6,9 +6,13 @@ set -e
 
 HARBOR_INSTALL_PATH="${HOME}/.harbor"
 HARBOR_REPO_URL="https://github.com/av/harbor.git"
-HARBOR_VERSION="0.1.1"
+HARBOR_VERSION=""
 
 # ========================================
+
+resolve_harbor_version() {
+  git ls-remote --tags "$HARBOR_REPO_URL" | grep -o "v.*" | sort -r | head -n 1
+}
 
 check_dependencies() {
   if ! command -v docker >/dev/null 2>&1 || ! command -v git >/dev/null 2>&1; then
@@ -34,6 +38,16 @@ main() {
 
   echo "Checking dependencies..."
   check_dependencies
+
+  echo "Resolving version..."
+  HARBOR_VERSION=$(resolve_harbor_version)
+
+  if [ -z "$HARBOR_VERSION" ]; then
+    echo "Error: Unable to resolve Harbor version."
+    exit 1
+  else
+    echo "Resolved Harbor version: $HARBOR_VERSION"
+  fi
 
   echo "Starting installation..."
   install_or_update_project
