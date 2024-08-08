@@ -359,7 +359,7 @@ get_service_port() {
     fi
 
     # Get the port mapping for the service
-    if port=$(docker port "$target_name" | grep -oP '0.0.0.0:\K\d+' | head -n 1); then
+    if port=$(docker port "$target_name" | perl -nle 'print m{0.0.0.0:\K\d+}g' | head -n 1); then
         echo "$port"
     else
         echo "No port mapping found for service '$1': $port"
