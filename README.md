@@ -147,7 +147,7 @@ harbor how to ping ollama container from the webui?
 
 ##### Satellites
 
-[SearXNG](https://github.com/av/harbor/wiki/Services#searxng) ⦁︎ [Dify](https://github.com/av/harbor/wiki/Services#dify) ⦁︎ [Plandex](https://github.com/av/harbor/wiki/Services#plandex) ⦁︎ [LiteLLM](https://github.com/av/harbor/wiki/Services#-litellm) ⦁︎ [LangFuse](https://github.com/av/harbor/wiki/Services#langfuse) ⦁︎ [Open Interpreter](https://github.com/av/harbor/wiki/Services#-open-interpreter) ⦁︎ [cloudflared](https://github.com/av/harbor/wiki/Services#cloudflared) ⦁︎ [cmdh](https://github.com/av/harbor/wiki/Services#cmdh)
+[SearXNG](https://github.com/av/harbor/wiki/Services#searxng) ⦁︎ [Dify](https://github.com/av/harbor/wiki/Services#dify) ⦁︎ [Plandex](https://github.com/av/harbor/wiki/Services#plandex) ⦁︎ [LiteLLM](https://github.com/av/harbor/wiki/Services#-litellm) ⦁︎ [LangFuse](https://github.com/av/harbor/wiki/Services#langfuse) ⦁︎ [Open Interpreter](https://github.com/av/harbor/wiki/Services#-open-interpreter) ⦁︎ [cloudflared](https://github.com/av/harbor/wiki/Services#cloudflared) ⦁︎ [cmdh](https://github.com/av/harbor/wiki/Services#cmdh) ⦁︎ [fabric](https://github.com/av/harbor/wiki/Services#fabric)
 
 ## Why?
 
