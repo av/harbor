@@ -18,7 +18,7 @@ Containerized LLM toolkit. Run LLM backends, APIs, frontends, and additional ser
 - Will write to your shell profile to add bin folder to the path
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/av/harbor/main/install.sh | bash
+curl https://av.codes/get-harbor.sh | bash
 ```
 
 #### Manual install

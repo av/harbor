@@ -2,6 +2,9 @@
 
 set -e
 
+# This is an installation script for the Harbor project.
+# See https://github.com/av/harbor for more information.
+
 # ========================================
 
 HARBOR_INSTALL_PATH="${HOME}/.harbor"
