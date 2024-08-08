@@ -265,10 +265,17 @@ link_cli() {
     elif [[ -f "$HOME/.profile" ]]; then
         shell_profile="$HOME/.profile"
     else
-        echo "Sorry, but Harbor can't determine which shell configuration file to update."
-        echo "Please link the CLI manually."
-        echo "Harbor supports: ~/.zshrc, ~/.bash_profile, ~/.bashrc, ~/.profile"
-        return 1
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            shell_profile="$HOME/.zshrc"
+        elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+            shell_profile="$HOME/.bashrc"
+        else
+            # We can't determine the shell profile
+            echo "Sorry, but Harbor can't determine which shell configuration file to update."
+            echo "Please link the CLI manually."
+            echo "Harbor supports: ~/.zshrc, ~/.bash_profile, ~/.bashrc, ~/.profile"
+            return 1
+        fi
     fi
 
     # Check if target directory exists in PATH
