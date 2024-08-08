@@ -92,6 +92,7 @@ show_help() {
     echo "  gum                           - Run the Gum terminal commands"
     echo "  fixfs                         - Fix file system ACLs for service volumes"
     echo "  info                          - Show system information for debug/issues"
+    echo "  update [-l|--latest]          - Update Harbor. --latest for the dev version"
 }
 
 # shellcheck disable=SC2034
@@ -1033,6 +1034,29 @@ unsafe_update() {
     git pull
 }
 
+resolve_harbor_version() {
+  git ls-remote --tags "$HARBOR_REPO_URL" | grep -o "v.*" | sort -r | head -n 1
+}
+
+update_harbor() {
+    local is_latest=false
+
+    case "$1" in
+        --latest|-l)
+            is_latest=true
+            ;;
+    esac
+
+    if $is_latest; then
+        echo "Updating to the bleeding edge version..."
+        unsafe_update
+    else
+        harbor_version=$(resolve_harbor_version)
+        echo "Updating to version $harbor_version..."
+        git checkout tags/$harbor_version
+    fi
+}
+
 get_active_services() {
     docker compose ps --format "{{.Service}}" | tr '\n' ' '
 }
@@ -1799,7 +1823,7 @@ run_fabric_command() {
 # == Main script
 # ========================================================================
 
-version="0.1.1"
+version="0.1.2"
 delimiter="|"
 scramble_exit_code=42
 
@@ -2022,7 +2046,7 @@ main_entrypoint() {
             ;;
         update)
             shift
-            unsafe_update
+            update_harbor "$@"
             ;;
         how)
             shift
