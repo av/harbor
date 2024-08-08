@@ -46,6 +46,7 @@ show_help() {
     echo "  parllama          - Launch Parllama - TUI for chatting with Ollama models"
     echo "  plandex           - Launch Plandex CLI"
     echo "  interpreter|opint - Launch Open Interpreter CLI"
+    echo "  fabric            - Run Fabric CLI"
     echo "  hf                - Run the Harbor's Hugging Face CLI. Expanded with a few additional commands."
     echo "    hf dl           - HuggingFaceModelDownloader CLI"
     echo "    hf parse-url    - Parse file URL from Hugging Face"
@@ -1008,6 +1009,24 @@ fix_fs_acl() {
     docker_fsacl ./tabbyapi
     docker_fsacl ./litellm
     docker_fsacl ./dify
+
+    docker_fsacl $(eval echo "$(env_manager get hf.cache)")
+    docker_fsacl $(eval echo "$(env_manager get vllm.cache)")
+    docker_fsacl $(eval echo "$(env_manager get llamacpp.cache)")
+    docker_fsacl $(eval echo "$(env_manager get ollama.cache)")
+    docker_fsacl $(eval echo "$(env_manager get parllama.cache)")
+    docker_fsacl $(eval echo "$(env_manager get opint.config.path)")
+    docker_fsacl $(eval echo "$(env_manager get fabric.config.path)")
+}
+
+open_home_code() {
+    # If VS Code executable is available
+    if command -v code &> /dev/null; then
+        code "$harbor_home"
+    else
+        # shellcheck disable=SC2016
+        echo '"code" is not installed or not available in $PATH.'
+    fi
 }
 
 unsafe_update() {
@@ -1739,6 +1758,42 @@ run_harbor_cmdh_command() {
         cmdh "$*"
 }
 
+run_fabric_command() {
+    case "$1" in
+        model)
+            shift
+            env_manager_alias fabric.model "$@"
+            return 0
+            ;;
+        patterns|--patterns)
+            shift
+            execute_and_process "env_manager get fabric.config.path" "sys_open {{output}}/patterns" "No fabric.config.path set"
+            return 0
+            ;;
+        -h|--help|help)
+            echo "Please note that this is not Fabric CLI, but a Harbor CLI to manage Fabric service."
+            echo
+            echo "Usage: harbor fabric <command>"
+            echo
+            echo "Commands:"
+            echo "  harbor fabric -h|--help|help    - Show this help message"
+            echo "  harbor fabric model [user/repo] - Get or set the Fabric model repository to run"
+            echo "  harbor fabric patterns          - Open the Fabric patterns directory"
+            echo
+            echo "Fabric CLI Help:"
+            ;;
+    esac
+
+    local services=$(get_active_services)
+
+    # To allow using preferred pipe pattern for fabric
+    $(compose_with_options $services "fabric") run \
+        -T \
+        -v "$original_dir:$original_dir" \
+        --workdir "$original_dir" \
+        fabric "$@"
+}
+
 
 # ========================================================================
 # == Main script
@@ -1935,6 +1990,10 @@ main_entrypoint() {
             shift
             run_cmdh_command "$@"
             ;;
+        fabric)
+            shift
+            run_fabric_command "$@"
+            ;;
         tunnel|t)
             shift
             establish_tunnel "$@"
@@ -1970,6 +2029,14 @@ main_entrypoint() {
         find)
             shift
             run_harbor_find "$@"
+            ;;
+        home)
+            shift
+            echo "$harbor_home"
+            ;;
+        vscode)
+            shift
+            open_home_code
             ;;
         *)
             return $scramble_exit_code

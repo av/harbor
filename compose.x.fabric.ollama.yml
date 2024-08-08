@@ -1,0 +1,11 @@
+services:
+  fabric:
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+    entrypoint:
+      - "bash"
+      - "/app/fabric/start_fabric.sh"
+      - "-m"
+      - "${HARBOR_FABRIC_MODEL}"
+      - "--remoteOllamaServer"
+      - "http://ollama:11434"
