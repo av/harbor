@@ -1,6 +1,8 @@
 ![Harbor project logo](./docs/harbor-2.png)
 
-Containerized LLM toolkit. Run LLM backends, APIs, frontends, and additional services via a concise CLI.
+Effortlessly run LLM backends, APIs, frontends, and services with one command.
+
+Harbor is a containerized LLM toolkit that allows you to run LLMs and additional services via a concise CLI.
 
 ## Blitz Tour
 
