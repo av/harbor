@@ -2,50 +2,6 @@
 
 Containerized LLM toolkit. Run LLM backends, APIs, frontends, and additional services via a concise CLI.
 
-## Quickstart
-
-#### Requirements
-
-- Docker
-  - _Optional_ [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html#installation)
-- git
-- bash-compatible shell
-
-#### Unsafe install
-
-- Runs the install script directly from the internet (make sure you trust the source)
-- Will clone the Harbor repository to your home directory
-- Will write to your shell profile to add bin folder to the path
-
-```bash
-curl https://av.codes/get-harbor.sh | bash
-```
-
-#### Manual install
-
-Same as above, just done by you.
-
-```bash
-git clone https://github.com/av/harbor.git && cd harbor
-
-# [Optional] make Harbor CLI available globally
-# Creates a symlink in User's local bin directory
-# Adds the bin folder to the path
-./harbor.sh ln
-
-# Start default services
-# Initial download of the docker images might take a while
-# If you have container toolkit installed, GPU will
-# be automatically used for supported services.
-harbor up
-
-# [Optional] open Webui in the browser
-harbor open
-```
-
-> [!NOTE]
-> First open will require you to create a local admin account. Harbor keeps auth requirement by default because it also supports exposing your local stack to the internet.
-
 ## Blitz Tour
 
 ![Diagram outlining Harbor's service structure](https://raw.githubusercontent.com/wiki/av/harbor/harbor-arch-diag.png)
@@ -126,6 +82,50 @@ harbor tabbyapi shell        # harbor shell tabbyapi
 # Ask harbor about itself
 harbor how to ping ollama container from the webui?
 ```
+
+## Quickstart
+
+#### Requirements
+
+- Docker
+  - _Optional_ [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html#installation)
+- git
+- bash-compatible shell
+
+#### Unsafe install
+
+- Runs the install script directly from the internet (make sure you trust the source)
+- Will clone the Harbor repository to your home directory
+- Will write to your shell profile to add bin folder to the path
+
+```bash
+curl https://av.codes/get-harbor.sh | bash
+```
+
+#### Manual install
+
+Same as above, just done by you.
+
+```bash
+git clone https://github.com/av/harbor.git && cd harbor
+
+# [Optional] make Harbor CLI available globally
+# Creates a symlink in User's local bin directory
+# Adds the bin folder to the path
+./harbor.sh ln
+
+# Start default services
+# Initial download of the docker images might take a while
+# If you have container toolkit installed, GPU will
+# be automatically used for supported services.
+harbor up
+
+# [Optional] open Webui in the browser
+harbor open
+```
+
+> [!NOTE]
+> First open will require you to create a local admin account. Harbor keeps auth requirement by default because it also supports exposing your local stack to the internet.
 
 ## Documentation
 
