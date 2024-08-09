@@ -1847,7 +1847,7 @@ run_parler_command() {
 # == Main script
 # ========================================================================
 
-version="0.1.2"
+version="0.1.3"
 delimiter="|"
 scramble_exit_code=42
 
