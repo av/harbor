@@ -1,0 +1,38 @@
+@host = http://localhost:33981
+
+###
+
+curl {{host}}/v1/models
+
+###
+
+curl {{host}}/v1/chat/completions -H 'Content-Type: application/json' -H "Authorization: Bearer sk-airllm" -d '{
+  "messages": [
+    {
+      "role": "system",
+      "content": "You always reply in one word."
+    },
+    {
+      "role": "user",
+      "content": "Where is paris?"
+    }
+  ],
+  "max_tokens": 20
+}'
+
+###
+
+curl {{host}}/v1/chat/completions -H 'Content-Type: application/json' -H "Authorization: Bearer sk-airllm" -d '{
+  "messages": [
+    {
+      "role": "system",
+      "content": "You always reply in one word."
+    },
+    {
+      "role": "user",
+      "content": "Where are my glasses?"
+    }
+  ],
+  "max_tokens": 20,
+  "stream": true
+}'

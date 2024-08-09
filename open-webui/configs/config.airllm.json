@@ -1,0 +1,11 @@
+{
+  "openai": {
+		"api_base_urls": [
+			"http://airllm:5000/v1"
+		],
+		"api_keys": [
+			"sk-airllm"
+		],
+		"enabled": true
+	}
+}

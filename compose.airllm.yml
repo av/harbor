@@ -1,0 +1,29 @@
+services:
+  airllm:
+    build:
+      context: ./airllm
+      dockerfile: ./Dockerfile
+    container_name: ${HARBOR_CONTAINER_PREFIX}.airllm
+    env_file: ./.env
+    environment:
+      - HF_TOKEN=${HARBOR_HF_TOKEN}
+      - MODEL=${HARBOR_AIRLLM_MODEL}
+      - MAX_LENGTH=${HARBOR_AIRLLM_CTX_LEN}
+      - COMPRESSION=${HARBOR_AIRLLM_COMPRESSION}
+    ports:
+      - ${HARBOR_AIRLLM_HOST_PORT}:5000
+    networks:
+      - harbor-network
+    volumes:
+      - ${HARBOR_HF_CACHE}:/root/.cache/huggingface
+      - ./airllm/server.py:/app/server.py
+    # In this instance, it's not split into an ".x." file,
+    # as AitLLM requires GPU to function, this helps
+    # to fulfill the requirement.
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

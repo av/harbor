@@ -1842,12 +1842,42 @@ run_parler_command() {
     esac
 }
 
+run_airllm_command() {
+    case "$1" in
+        model)
+            shift
+            env_manager_alias airllm.model "$@"
+            ;;
+        ctx)
+            shift
+            env_manager_alias airllm.ctx.len "$@"
+            ;;
+        compression)
+            shift
+            env_manager_alias airllm.compression "$@"
+            ;;
+        -h|--help|help)
+            echo "Please note that this is not AirLLM CLI, but a Harbor CLI to manage AirLLM service."
+            echo
+            echo "Usage: harbor airllm <command>"
+            echo
+            echo "Commands:"
+            echo "  harbor airllm model [user/repo]            - Get or set model to run"
+            echo "  harbor airllm ctx [len]                    - Get or set context length for AirLLM"
+            echo "  harbor airllm compression [4bit|8bit|none] - Get or set compression level for AirLLM"
+            ;;
+        *)
+            return $scramble_exit_code
+            ;;
+    esac
+}
+
 
 # ========================================================================
 # == Main script
 # ========================================================================
 
-version="0.1.3"
+version="0.1.4"
 delimiter="|"
 scramble_exit_code=42
 
@@ -2047,6 +2077,10 @@ main_entrypoint() {
         parler)
             shift
             run_parler_command "$@"
+            ;;
+        airllm)
+            shift
+            run_airllm_command "$@"
             ;;
         tunnel|t)
             shift
