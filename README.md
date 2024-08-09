@@ -88,6 +88,9 @@ harbor shell vllm
 # courtesy of Open Interpreter
 harbor opint
 
+# Use fabric to LLM-ify your linux pipes
+cat ./file.md | harbor fabric --pattern extract_extraordinary_claims | grep "LK99"
+
 # Access service CLIs without installing them
 harbor hf scan-cache
 harbor ollama list
