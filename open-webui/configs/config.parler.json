@@ -1,0 +1,17 @@
+{
+  "audio": {
+		"tts": {
+			"openai": {
+				"api_base_url": "http://parler:8000/v1",
+				"api_key": "sk-dummy-key"
+			},
+			"engine": "openai",
+			"model": "${HARBOR_PARLER_MODEL}",
+			"voice": "${HARBOR_PARLER_VOICE}"
+		},
+		"stt": {
+			"engine": "",
+			"model": "whisper-1"
+		}
+	}
+}

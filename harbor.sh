@@ -1818,6 +1818,30 @@ run_fabric_command() {
         fabric "$@"
 }
 
+run_parler_command() {
+    case "$1" in
+        model)
+            shift
+            env_manager_alias parler.model "$@"
+            ;;
+        voice)
+            shift
+            env_manager_alias parler.voice "$@"
+            ;;
+        -h|--help|help)
+            echo "Please note that this is not Parler CLI, but a Harbor CLI to manage Parler service."
+            echo
+            echo "Usage: harbor parler <command>"
+            echo
+            echo "Commands:"
+            echo "  harbor parler -h|--help|help - Show this help message"
+            ;;
+        *)
+            return $scramble_exit_code
+            ;;
+    esac
+}
+
 
 # ========================================================================
 # == Main script
@@ -2019,6 +2043,10 @@ main_entrypoint() {
         fabric)
             shift
             run_fabric_command "$@"
+            ;;
+        parler)
+            shift
+            run_parler_command "$@"
             ;;
         tunnel|t)
             shift

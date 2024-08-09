@@ -11,5 +11,6 @@ cat /app/backend/data/config.json
 
 echo
 echo "Starting Open WebUI..."
+
 # Original entrypoint
 bash start.sh

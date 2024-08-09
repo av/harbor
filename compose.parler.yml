@@ -1,0 +1,15 @@
+services:
+  parler:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.parler
+    image: fedirz/parler-tts-server
+    env_file: ./.env
+    ports:
+      - ${HARBOR_PARLER_HOST_PORT}:8000
+    volumes:
+      - ${HARBOR_HF_CACHE}:/root/.cache/huggingface
+      - ./parler/main.py:/root/parler-tts-server/parler_tts_server/main.py
+    environment:
+      - MODEL=${HARBOR_PARLER_MODEL}
+      - VOICE=${HARBOR_PARLER_VOICE}
+    networks:
+      - harbor-network

@@ -1,0 +1,14 @@
+@host = http://localhost:33971
+
+###
+
+# To file
+curl -s -H "content-type: application/json" http://localhost:33971/v1/audio/speech -d '{"input": "Hey, how are you?"}' -o audio.mp3
+
+###
+
+# Specify the voice, also play right away
+curl -s -H "content-type: application/json" http://localhost:33971/v1/audio/speech -d '{
+  "input": "Hey, how are you?",
+  "voice": "Dave, Loud, Cheerful and speedy"
+}' | ffplay -hide_banner -autoexit -nodisp -loglevel quiet -
