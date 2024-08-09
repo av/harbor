@@ -41,6 +41,7 @@ show_help() {
     echo "  tabbyapi   - Configure TabbyAPI service"
     echo "  mistralrs  - Configure mistral.rs service"
     echo "  cfd        - Run cloudflared CLI"
+    echo "  airllm     - Configure AirLLM service"
     echo
     echo "Service CLIs:"
     echo "  parllama          - Launch Parllama - TUI for chatting with Ollama models"

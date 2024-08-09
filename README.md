@@ -148,7 +148,7 @@ harbor open
 
 ##### Backends
 
-[Ollama](https://github.com/av/harbor/wiki/Services#ollama) ⦁︎ [llama.cpp](https://github.com/av/harbor/wiki/Services#llamacpp) ⦁︎ [vLLM](https://github.com/av/harbor/wiki/Services#vllm) ⦁︎ [TabbyAPI](https://github.com/av/harbor/wiki/Services#tabbyapi) ⦁︎ [Aphrodite Engine](https://github.com/av/harbor/wiki/Services#aphrodite-engine) ⦁︎ [mistral.rs](https://github.com/av/harbor/wiki/Services#mistralrs) ⦁︎ [openedai-speech](https://github.com/av/harbor/wiki/Services#openedai-speech) ⦁︎ [Parler](https://github.com/av/harbor/wiki/Services#parler) ⦁︎ [text-generation-inference](https://github.com/av/harbor/wiki/Services#text-generation-inference) ⦁︎ [LMDeploy](https://github.com/av/harbor/wiki/Services#lmdeploy)
+[Ollama](https://github.com/av/harbor/wiki/Services#ollama) ⦁︎ [llama.cpp](https://github.com/av/harbor/wiki/Services#llamacpp) ⦁︎ [vLLM](https://github.com/av/harbor/wiki/Services#vllm) ⦁︎ [TabbyAPI](https://github.com/av/harbor/wiki/Services#tabbyapi) ⦁︎ [Aphrodite Engine](https://github.com/av/harbor/wiki/Services#aphrodite-engine) ⦁︎ [mistral.rs](https://github.com/av/harbor/wiki/Services#mistralrs) ⦁︎ [openedai-speech](https://github.com/av/harbor/wiki/Services#openedai-speech) ⦁︎ [Parler](https://github.com/av/harbor/wiki/Services#parler) ⦁︎ [text-generation-inference](https://github.com/av/harbor/wiki/Services#text-generation-inference) ⦁︎ [LMDeploy](https://github.com/av/harbor/wiki/Services#lmdeploy) ⦁︎ [AirLLM](https://github.com/av/harbor/wiki/Services#airllm)
 
 ##### Satellites
 
