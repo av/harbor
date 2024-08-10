@@ -1019,6 +1019,7 @@ fix_fs_acl() {
     docker_fsacl $(eval echo "$(env_manager get parllama.cache)")
     docker_fsacl $(eval echo "$(env_manager get opint.config.path)")
     docker_fsacl $(eval echo "$(env_manager get fabric.config.path)")
+    docker_fsacl $(eval echo "$(env_manager get txtai.cache)")
 }
 
 open_home_code() {
@@ -1873,12 +1874,61 @@ run_airllm_command() {
     esac
 }
 
+run_txtairag_command() {
+    case "$1" in
+        model)
+            shift
+            env_manager_alias txtai.rag.model "$@"
+            ;;
+        embeddings)
+            shift
+            env_manager_alias txtai.rag.embeddings "$@"
+            ;;
+        -h|--help|help)
+            echo "Please note that this is not txtai rag CLI, but a Harbor CLI to manage txtai rag service."
+            echo
+            echo "Usage: harbor txtai rag <command>"
+            echo
+            echo "Commands:"
+            echo "  harbor txtai rag model [user/repo] - Get or set the txtai rag model repository to run"
+            echo "  harbor txtai rag embeddings [path] - Get or set the path to the embeddings file"
+            ;;
+        *)
+            return $scramble_exit_code
+            ;;
+    esac
+}
+
+run_txtai_command() {
+    case "$1" in
+        rag)
+            shift
+            run_txtairag_command "$@"
+            ;;
+        cache)
+            shift
+            env_manager_alias txtai.cache "$@"
+            ;;
+        -h|--help|help)
+            echo "Please note that this is not txtai CLI, but a Harbor CLI to manage txtai service."
+            echo
+            echo "Usage: harbor txtai <command>"
+            echo
+            echo "Commands:"
+            echo "  harbor txtai cache - Get/set the location of global txtai cache"
+            echo "  harbor txtai rag   - Run commands related to txtai rag application"
+            ;;
+        *)
+            return $scramble_exit_code
+            ;;
+    esac
+}
 
 # ========================================================================
 # == Main script
 # ========================================================================
 
-version="0.1.4"
+version="0.1.5"
 delimiter="|"
 scramble_exit_code=42
 
@@ -2082,6 +2132,10 @@ main_entrypoint() {
         airllm)
             shift
             run_airllm_command "$@"
+            ;;
+        txtai)
+            shift
+            run_txtai_command "$@"
             ;;
         tunnel|t)
             shift

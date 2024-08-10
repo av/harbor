@@ -1,0 +1,17 @@
+services:
+  txtairag:
+    image: neuml/rag
+    container_name: ${HARBOR_CONTAINER_PREFIX}.txtairag
+    env_file: ./.env
+    ports:
+      - ${HARBOR_TXTAI_RAG_HOST_PORT}:8501
+    volumes:
+      - ${HARBOR_HF_CACHE}:/root/.cache/huggingface
+      - ${HARBOR_TXTAI_CACHE}:/root/.cache/txtai
+    environment:
+      - DATA=/root/.cache/txtai/data
+      - PERSIST=/root/.cache/txtai/embeddings
+      - EMBEDDINGS=${HARBOR_TXTAI_RAG_EMBEDDINGS}
+      - HF_HOME=/root/.cache/huggingface
+    networks:
+      - harbor-network
