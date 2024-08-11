@@ -40,3 +40,7 @@ plandex/db
 # Dify
 dify/volumes/
 dify/nginx/conf.d/default.conf
+
+# TextGrad
+textgrad/workspace/*
+!textgrad/workspace/000-sample.ipynb

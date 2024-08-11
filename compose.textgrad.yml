@@ -1,0 +1,22 @@
+services:
+  textgrad:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.textgrad
+    build:
+      context: ./textgrad
+      dockerfile: Dockerfile
+    env_file: ./.env
+    ports:
+      - ${HARBOR_TEXTGRAD_HOST_PORT}:8888
+    command: [
+      "jupyter", "lab",
+      "--port=8888", "--ip=0.0.0.0",
+      "--allow-root", "--browser=false", "--no-browser",
+      "--IdentityProvider.token=''",
+      "--ServerApp.password=''",
+      "--allow_remote_access=true",
+      "--NotebookApp.disable_check_xsrf=True",
+    ]
+    volumes:
+      - ./textgrad/workspace:/app/workspace
+    networks:
+      - harbor-network

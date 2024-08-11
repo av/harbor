@@ -1011,6 +1011,7 @@ fix_fs_acl() {
     docker_fsacl ./tabbyapi
     docker_fsacl ./litellm
     docker_fsacl ./dify
+    docker_fsacl ./textgrad
 
     docker_fsacl $(eval echo "$(env_manager get hf.cache)")
     docker_fsacl $(eval echo "$(env_manager get vllm.cache)")
@@ -1928,7 +1929,7 @@ run_txtai_command() {
 # == Main script
 # ========================================================================
 
-version="0.1.5"
+version="0.1.6"
 delimiter="|"
 scramble_exit_code=42
 
