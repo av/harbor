@@ -1,0 +1,32 @@
+services:
+  aider:
+    image: paulgauthier/aider-full
+    env_file:
+      - ./.env
+      - ./aider/override.env
+    container_name: ${HARBOR_CONTAINER_PREFIX}.aider
+    entrypoint: ["/root/.aider/start_aider.sh"]
+    volumes:
+      - ./aider/configs/aider.config.yml:/root/.aider/config.yaml
+      - ./aider/start_aider.sh:/root/.aider/start_aider.sh
+      - ./shared/yaml_config_merger.py:/root/.aider/yaml_config_merger.py
+    ports:
+      - ${HARBOR_AIDER_HOST_PORT}:8501
+    networks:
+      - harbor-network
+    environment:
+      # Additional base API keys supported by Harbor
+      - ANYSCALE_API_KEY=${HARBOR_ANYSCALE_KEY}
+      - APIPIE_API_KEY=${HARBOR_APIPIE_KEY}
+      - COHERE_API_KEY=${HARBOR_COHERE_KEY}
+      - FIREWORKS_API_KEY=${HARBOR_FIREWORKS_API_KEY}
+      - GROQ_API_KEY=${HARBOR_GROQ_KEY}
+      - MISTRAL_API_KEY=${HARBOR_MISTRAL_KEY}
+      - OPENROUTER_API_KEY=${HARBOR_OPENROUTER_KEY}
+      - PERPLEXITY_API_KEY=${HARBOR_PERPLEXITY_KEY}
+      - SHUTTLEAI_API_KEY=${HARBOR_SHUTTLEAI_KEY}
+      - TOGETHERAI_API_KEY=${HARBOR_TOGETHERAI_KEY}
+      - ANTHROPIC_API_KEY=${HARBOR_ANTHROPIC_KEY}
+      - BINGAI_TOAPI_KEN=${HARBOR_BINGAI_TOKEN}
+      - GOOGLE_API_KEY=${HARBOR_GOOGLE_KEY}
+      - ASSISTANTS_API_KEY=${HARBOR_ASSISTANTS_KEY}

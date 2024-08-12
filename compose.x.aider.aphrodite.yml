@@ -1,0 +1,4 @@
+services:
+  aider:
+    volumes:
+      - ./aider/configs/aider.aphrodite.yml:/root/.aider/aphrodite.yml

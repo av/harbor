@@ -1,0 +1,4 @@
+openai-api-base: http://tabbyapi:5000/v1
+openai-api-key: ${HARBOR_TABBYAPI_ADMIN_KEY}
+model: openai/${HARBOR_AIDER_MODEL}
+verify-ssl: false

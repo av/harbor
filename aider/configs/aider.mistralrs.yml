@@ -1,0 +1,4 @@
+openai-api-base: http://mistralrs:8021/v1
+openai-api-key: sk-mistralrs
+model: openai/${HARBOR_AIDER_MODEL}
+verify-ssl: false

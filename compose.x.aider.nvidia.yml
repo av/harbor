@@ -1,0 +1,9 @@
+services:
+  aider:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+              count: all
+              driver: nvidia

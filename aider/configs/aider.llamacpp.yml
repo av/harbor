@@ -1,0 +1,4 @@
+openai-api-base: http://llamacpp:8080/v1
+openai-api-key: sk-llamacpp
+model: openai/${HARBOR_AIDER_MODEL}
+verify-ssl: false

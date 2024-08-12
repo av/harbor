@@ -1,0 +1,4 @@
+openai-api-base: http://dify-openai:3000/v1
+openai-api-key: ${HARBOR_DIFY_OPENAI_WORKFLOW}
+model: openai/${HARBOR_AIDER_MODEL}
+verify-ssl: false

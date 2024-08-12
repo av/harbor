@@ -1,0 +1,4 @@
+services:
+  aider:
+    volumes:
+      - ./aider/configs/aider.ollama.yml:/root/.aider/ollama.yml

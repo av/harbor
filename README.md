@@ -152,7 +152,7 @@ harbor open
 
 ##### Satellites
 
-[SearXNG](https://github.com/av/harbor/wiki/Services#searxng) ⦁︎ [Dify](https://github.com/av/harbor/wiki/Services#dify) ⦁︎ [Plandex](https://github.com/av/harbor/wiki/Services#plandex) ⦁︎ [LiteLLM](https://github.com/av/harbor/wiki/Services#-litellm) ⦁︎ [LangFuse](https://github.com/av/harbor/wiki/Services#langfuse) ⦁︎ [Open Interpreter](https://github.com/av/harbor/wiki/Services#-open-interpreter) ⦁︎ [cloudflared](https://github.com/av/harbor/wiki/Services#cloudflared) ⦁︎ [cmdh](https://github.com/av/harbor/wiki/Services#cmdh) ⦁︎ [fabric](https://github.com/av/harbor/wiki/Services#fabric) ⦁︎ [txtai RAG](https://github.com/av/harbor/wiki/Services#txtai-rag) ⦁︎ [TextGrad](https://github.com/av/harbor/wiki/Services#textgrad)
+[SearXNG](https://github.com/av/harbor/wiki/Services#searxng) ⦁︎ [Dify](https://github.com/av/harbor/wiki/Services#dify) ⦁︎ [Plandex](https://github.com/av/harbor/wiki/Services#plandex) ⦁︎ [LiteLLM](https://github.com/av/harbor/wiki/Services#-litellm) ⦁︎ [LangFuse](https://github.com/av/harbor/wiki/Services#langfuse) ⦁︎ [Open Interpreter](https://github.com/av/harbor/wiki/Services#-open-interpreter) ⦁︎ [cloudflared](https://github.com/av/harbor/wiki/Services#cloudflared) ⦁︎ [cmdh](https://github.com/av/harbor/wiki/Services#cmdh) ⦁︎ [fabric](https://github.com/av/harbor/wiki/Services#fabric) ⦁︎ [txtai RAG](https://github.com/av/harbor/wiki/Services#txtai-rag) ⦁︎ [TextGrad](https://github.com/av/harbor/wiki/Services#textgrad) ⦁︎ [Aider](https://github.com/av/harbor/wiki/Services#aider)
 
 ## Why?
 

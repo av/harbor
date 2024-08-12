@@ -349,7 +349,7 @@ get_service_port() {
     local port
 
     # Get list of running services
-    services=$(docker compose ps --services --filter "status=running")
+    services=$(docker compose ps -a --services --filter "status=running")
 
     # Check if any services are running
     if [ -z "$services" ]; then
@@ -1012,6 +1012,7 @@ fix_fs_acl() {
     docker_fsacl ./litellm
     docker_fsacl ./dify
     docker_fsacl ./textgrad
+    docker_fsacl ./aider
 
     docker_fsacl $(eval echo "$(env_manager get hf.cache)")
     docker_fsacl $(eval echo "$(env_manager get vllm.cache)")
@@ -1141,7 +1142,7 @@ establish_tunnel() {
     echo "Starting new tunnel"
     echo "Container name: $container_name"
     echo "Intra URL: $intra_url"
-    $(compose_with_options "cfd") run -d --name "$container_name" cfd --url "$intra_url" || { echo "Failed to start container"; exit 1; }
+    $(compose_with_options "cfd") run --rm -d --name "$container_name" cfd --url "$intra_url" || { echo "Failed to start container"; exit 1; }
 
     local timeout=60
     local elapsed=0
@@ -1562,7 +1563,7 @@ run_tabbyapi_command() {
 }
 
 run_parllama_command() {
-    $(compose_with_options "parllama") run -it --entrypoint bash parllama -c parllama
+    $(compose_with_options "parllama") run --rm -it --entrypoint bash parllama -c parllama
 }
 
 run_plandex_command() {
@@ -1576,7 +1577,7 @@ run_plandex_command() {
             echo $original_dir
             ;;
         *)
-            $(compose_with_options "plandex") run -v "$original_dir:/app/context" --workdir "/app/context" -it --entrypoint "plandex" plandex "$@"
+            $(compose_with_options "plandex") run --rm -v "$original_dir:/app/context" --workdir "/app/context" -it --entrypoint "plandex" plandex "$@"
             ;;
     esac
 }
@@ -1653,7 +1654,7 @@ run_mistralrs_command() {
             echo "  harbor mistralrs isq [isq]         - Get or set the mistral.rs model ISQ"
             ;;
         *)
-            $(compose_with_options "mistralrs") run mistralrs "$@"
+            $(compose_with_options "mistralrs") run --rm mistralrs "$@"
             ;;
     esac
 }
@@ -1761,6 +1762,7 @@ run_cmdh_command() {
             local services=$(get_active_services)
             # Mount the current directory and set it as the working directory
             $(compose_with_options $services "cmdh") run \
+                --rm \
                 -v "$original_dir:$original_dir" \
                 --workdir "$original_dir" \
                 cmdh "$*"
@@ -1779,6 +1781,7 @@ run_harbor_cmdh_command() {
 
     # Mount the current directory and set it as the working directory
     $(compose_with_options $services "cmdh" "harbor") run \
+        --rm \
         -v "$harbor_home/cmdh/harbor.prompt:/app/cmdh/system.prompt" \
         -v "$original_dir:$original_dir" \
         --workdir "$original_dir" \
@@ -1815,6 +1818,7 @@ run_fabric_command() {
 
     # To allow using preferred pipe pattern for fabric
     $(compose_with_options $services "fabric") run \
+        --rm \
         -T \
         -v "$original_dir:$original_dir" \
         --workdir "$original_dir" \
@@ -1925,11 +1929,29 @@ run_txtai_command() {
     esac
 }
 
+run_aider_command() {
+    local services
+
+    services=$(get_active_services)
+
+    # To allow using preferred pipe pattern for fabric
+    $(compose_with_options $services "aider") run \
+        -it \
+        --rm \
+        --service-ports \
+        -e "TERM=xterm-256color" \
+        -e "PYTHONUNBUFFERED=1" \
+        -e "PYTHONIOENCODING=utf-8" \
+        -v "$original_dir:/root/workspace" \
+        --workdir "/root/workspace" \
+        aider "$@"
+}
+
 # ========================================================================
 # == Main script
 # ========================================================================
 
-version="0.1.6"
+version="0.1.7"
 delimiter="|"
 scramble_exit_code=42
 
@@ -2137,6 +2159,10 @@ main_entrypoint() {
         txtai)
             shift
             run_txtai_command "$@"
+            ;;
+        aider)
+            shift
+            run_aider_command "$@"
             ;;
         tunnel|t)
             shift
