@@ -1930,6 +1930,22 @@ run_txtai_command() {
 }
 
 run_aider_command() {
+    case "$1" in
+        model)
+            shift
+            env_manager_alias aider.model "$@"
+            return 0
+            ;;
+        -h|--help|help)
+            echo "Please note that this is not Aider CLI, but a Harbor CLI to manage Aider service."
+            echo
+            echo "Usage: harbor aider <command>"
+            echo
+            echo "Commands:"
+            echo "  harbor aider model [user/repo] - Get or set the Aider model repository to run"
+            ;;
+    esac
+
     local services
 
     services=$(get_active_services)
