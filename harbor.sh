@@ -1039,7 +1039,7 @@ unsafe_update() {
 }
 
 resolve_harbor_version() {
-  git ls-remote --tags "$HARBOR_REPO_URL" | grep -o "v.*" | sort -r | head -n 1
+  git ls-remote --tags "$harbor_repo_url" | grep -o "v.*" | sort -r | head -n 1
 }
 
 update_harbor() {
@@ -1968,6 +1968,7 @@ run_aider_command() {
 # ========================================================================
 
 version="0.1.7"
+harbor_repo_url="https://github.com/av/harbor.git"
 delimiter="|"
 scramble_exit_code=42
 
