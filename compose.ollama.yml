@@ -5,7 +5,7 @@ services:
     volumes:
       - ${HARBOR_OLLAMA_CACHE}:/root/.ollama
     tty: true
-    image: ollama/ollama:latest
+    image: ollama/ollama:${HARBOR_OLLAMA_VERSION}
     ports:
       - ${HARBOR_OLLAMA_HOST_PORT}:11434
     networks:
