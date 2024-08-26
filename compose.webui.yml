@@ -11,10 +11,10 @@ services:
       - ./open-webui/configs/config.override.json:/app/configs/config.z.override.json
     entrypoint: ["/app/start_webui.sh"]
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 1s
       timeout: 10s
-      retries: 5
+      retries: 10
     ports:
       - ${HARBOR_WEBUI_HOST_PORT}:8080
     networks:
@@ -22,4 +22,4 @@ services:
     environment:
       - WEBUI_NAME=${HARBOR_WEBUI_NAME}
       - WEBUI_SECRET_KEY=${HARBOR_WEBUI_SECRET}
-      - GLOBAL_LOG_LEVEL=DEBUG
+      - GLOBAL_LOG_LEVEL=${HARBOR_WEBUI_LOG_LEVEL}
