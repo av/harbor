@@ -2048,7 +2048,7 @@ run_aider_command() {
 # == Main script
 # ========================================================================
 
-version="0.1.7"
+version="0.1.8"
 harbor_repo_url="https://github.com/av/harbor.git"
 delimiter="|"
 scramble_exit_code=42
