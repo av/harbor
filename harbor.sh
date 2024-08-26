@@ -78,6 +78,7 @@ show_help() {
     echo "    config get <field>          - Get a specific config value"
     echo "    config set <field> <value>  - Get a specific config value"
     echo "    config reset                - Reset Harbor configuration to default.env"
+    echo "    config update               - Merge upstream config changes from default.env"
     echo
     echo "  defaults [ls|rm|add]          - List default services"
     echo "    defaults rm <handle|index>  - Remove, also accepts handle or index"
@@ -569,6 +570,75 @@ reset_env_file() {
     ensure_env_file
 }
 
+merge_env_files() {
+    local default_file="default.env"
+    local target_file=".env"
+
+    # Check if both files exist
+    if [[ ! -f "$target_file" ]]; then
+        cp "$default_file" "$target_file"
+        echo "Copied $default_file to $target_file"
+        return
+    fi
+
+    # Create a temporary file
+    local temp_file=$(mktemp)
+
+    # Variable to track empty lines
+    local empty_lines=0
+    # Variable to track repeated lines
+    local prev_line=""
+    local repeat_count=0
+
+    # Read default.env line by line and merge with .env
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        # Handle empty lines
+        if [[ -z "$line" ]]; then
+            ((empty_lines++))
+            if ((empty_lines <= 2)); then
+                echo "$line" >> "$temp_file"
+            fi
+            prev_line=""
+            repeat_count=0
+            continue
+        else
+            empty_lines=0
+        fi
+
+        # Check for repeated lines
+        if [[ "$line" == "$prev_line" ]]; then
+            ((repeat_count++))
+            if ((repeat_count <= 1)); then
+                echo "$line" >> "$temp_file"
+            fi
+        else
+            repeat_count=0
+            if [[ "$line" =~ ^[[:alnum:]_]+=.* ]]; then
+                var_name="${line%%=*}"
+                if grep -q "^$var_name=" "$target_file"; then
+                    # If the variable exists in .env, use that value
+                    grep "^$var_name=" "$target_file" >> "$temp_file"
+                else
+                    # If the variable doesn't exist in .env, add the new line
+                    echo "$line" >> "$temp_file"
+                fi
+            else
+                # For comments or other content, add the new line as is
+                echo "$line" >> "$temp_file"
+            fi
+        fi
+        prev_line="$line"
+    done < "$default_file"
+
+    # Remove trailing newlines from the temp file
+    sed -i -e :a -e '/^\n*$/{$d;N;ba' -e '}' "$temp_file"
+
+    # Move the temporary file to replace the target file
+    mv "$temp_file" "$target_file"
+
+    echo "Merged content from $default_file into $target_file, preserving order and structure"
+}
+
 execute_and_process() {
     local command_to_execute="$1"
     local success_command="$2"
@@ -707,6 +777,10 @@ env_manager() {
         reset)
             shift
             run_gum confirm "Are you sure you want to reset Harbor configuration?" && reset_env_file || echo "Reset cancelled"
+            ;;
+        update)
+            shift
+            merge_env_files
             ;;
         *)
             echo "Usage: harbor config {get|set|ls|reset} [key] [value]"
@@ -1035,6 +1109,8 @@ open_home_code() {
 }
 
 unsafe_update() {
+    git fetch origin main:main --depth 1
+    git checkout main
     git pull
 }
 
@@ -1059,6 +1135,11 @@ update_harbor() {
         echo "Updating to version $harbor_version..."
         git checkout tags/$harbor_version
     fi
+
+    echo "Merging .env files..."
+    merge_env_files
+
+    echo "Harbor updated successfully."
 }
 
 get_active_services() {
