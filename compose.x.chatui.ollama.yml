@@ -1,0 +1,4 @@
+services:
+  chatui:
+    volumes:
+      - ./chatui/configs/chatui.ollama.yml:/app/configs/chatui.ollama.yml

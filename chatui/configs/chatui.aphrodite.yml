@@ -1,0 +1,8 @@
+envVars:
+  MODELS:
+    - name: aphrodite
+      id: aphrodite
+      endpoints:
+        - type: openai
+          baseURL: http://aphrodite:7860/v1
+          apiKey: sk-aphrodite

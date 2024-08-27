@@ -1,0 +1,4 @@
+services:
+  chatui:
+    volumes:
+      - ./chatui/configs/chatui.dify.yml:/app/configs/chatui.dify.yml

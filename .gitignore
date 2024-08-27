@@ -44,3 +44,6 @@ dify/nginx/conf.d/default.conf
 # TextGrad
 textgrad/workspace/*
 !textgrad/workspace/000-sample.ipynb
+
+# ChatUI
+chatui/data/

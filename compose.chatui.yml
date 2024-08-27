@@ -1,0 +1,42 @@
+# Corresponds to the HuggingFace ChatUI project
+# https://github.com/huggingface/chat-ui
+services:
+  chatui:
+    image: ghcr.io/huggingface/chat-ui:${HARBOR_CHATUI_VERSION}
+    env_file:
+      - ./.env
+    volumes:
+      # Harbor configuration merger:
+      # - Base configuration
+      - ./chatui/configs/chatui.config.yml:/app/configs/chatui.config.yml
+      # - Custom entrypoint
+      - ./chatui/start_chatui.sh:/app/start_chatui.sh
+      # - Merger scripts
+      - ./shared/yaml_config_merger.js:/app/yaml_config_merger.js
+      - ./chatui/envify.js:/app/envify.js
+    entrypoint: ["/app/start_chatui.sh"]
+    depends_on:
+      chatui-db:
+        condition: service_healthy
+    ports:
+      - ${HARBOR_CHATUI_HOST_PORT}:3000
+    container_name: ${HARBOR_CONTAINER_PREFIX}.chatui
+    environment:
+      - HF_TOKEN=${HARBOR_HF_TOKEN}
+    networks:
+      - harbor-network
+
+  chatui-db:
+    image: mongo:latest
+    container_name: ${HARBOR_CONTAINER_PREFIX}.chatui-db
+    volumes:
+      - ./chatui/data:/data/db
+    networks:
+      - harbor-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 1s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+

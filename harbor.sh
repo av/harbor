@@ -1087,6 +1087,7 @@ fix_fs_acl() {
     docker_fsacl ./dify
     docker_fsacl ./textgrad
     docker_fsacl ./aider
+    docker_fsacl ./chatui
 
     docker_fsacl $(eval echo "$(env_manager get hf.cache)")
     docker_fsacl $(eval echo "$(env_manager get vllm.cache)")
@@ -2044,6 +2045,31 @@ run_aider_command() {
         aider "$@"
 }
 
+run_chatui_command() {
+    case "$1" in
+        version)
+            shift
+            env_manager_alias chatui.version "$@"
+            ;;
+        model)
+            shift
+            env_manager_alias chatui.ollama.model "$@"
+            ;;
+        -h|--help|help)
+            echo "Please note that this is not ChatUI CLI, but a Harbor CLI to manage ChatUI service."
+            echo
+            echo "Usage: harbor chatui <command>"
+            echo
+            echo "Commands:"
+            echo "  harbor chatui version [version] - Get or set the ChatUI version docker tag"
+            echo "  harbor chatui model [id]        - Get or set the Ollama model to target"
+            ;;
+        *)
+            return $scramble_exit_code
+            ;;
+    esac
+}
+
 # ========================================================================
 # == Main script
 # ========================================================================
@@ -2261,6 +2287,10 @@ main_entrypoint() {
         aider)
             shift
             run_aider_command "$@"
+            ;;
+        chatui)
+            shift
+            run_chatui_command "$@"
             ;;
         tunnel|t)
             shift

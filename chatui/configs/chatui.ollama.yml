@@ -1,0 +1,7 @@
+envVars:
+  MODELS:
+    - name: ollama
+      id: ${HARBOR_CHATUI_OLLAMA_MODEL}
+      endpoints:
+        - type: openai
+          baseURL: http://ollama:11434/v1

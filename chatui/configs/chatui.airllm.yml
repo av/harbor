@@ -1,0 +1,8 @@
+envVars:
+  MODELS:
+    - name: airllm
+      id: airllm
+      endpoints:
+        - type: openai
+          baseURL: http://airllm:5000/v1
+          apiKey: sk-airllm

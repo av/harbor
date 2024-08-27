@@ -1,0 +1,8 @@
+envVars:
+  MODELS:
+    - name: vllm
+      id: vllm
+      endpoints:
+        - type: openai
+          baseURL: http://vllm:8000/v1
+          apiKey: sk-vllm

@@ -1,0 +1,4 @@
+services:
+  chatui:
+    volumes:
+      - ./chatui/configs/chatui.llamacpp.yml:/app/configs/chatui.llamacpp.yml

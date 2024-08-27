@@ -1,0 +1,8 @@
+envVars:
+  MODELS:
+    - name: litellm
+      id: ${HARBOR_CHATUI_LITELLM_MODEL}
+      endpoints:
+        - type: openai
+          baseURL: http://litellm:4000/v1
+          apiKey: "${HARBOR_LITELLM_MASTER_KEY}"

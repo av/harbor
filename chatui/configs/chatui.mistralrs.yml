@@ -1,0 +1,8 @@
+envVars:
+  MODELS:
+    - name: mistralrs
+      id: mistralrs
+      endpoints:
+        - type: openai
+          baseURL: http://mistralrs:8021/v1
+          apiKey: sk-mistralrs

@@ -1,0 +1,4 @@
+services:
+  chatui:
+    volumes:
+      - ./chatui/configs/chatui.tabbyapi.yml:/app/configs/chatui.tabbyapi.yml

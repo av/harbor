@@ -1,0 +1,8 @@
+envVars:
+  MODELS:
+    - name: dify
+      id: dify
+      endpoints:
+        - type: openai
+          baseURL: http://dify-openai:3000/v1
+          apiKey: "${HARBOR_DIFY_OPENAI_WORKFLOW}"

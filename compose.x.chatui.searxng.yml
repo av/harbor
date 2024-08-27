@@ -1,0 +1,4 @@
+services:
+  chatui:
+    volumes:
+      - ./chatui/configs/chatui.searxng.yml:/app/configs/chatui.searxng.yml

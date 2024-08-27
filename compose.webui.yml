@@ -15,6 +15,7 @@ services:
       interval: 1s
       timeout: 10s
       retries: 10
+      start_period: 10s
     ports:
       - ${HARBOR_WEBUI_HOST_PORT}:8080
     networks:
