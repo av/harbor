@@ -1,7 +1,5 @@
-FROM pkgxdev/pkgx
+FROM python:3.11
 
-# Install/warmup
-RUN pkgx install huggingface-cli
-RUN huggingface-cli --help
+RUN pip install -U huggingface_hub[cli]
 
 ENTRYPOINT [ "huggingface-cli" ]
