@@ -2148,7 +2148,7 @@ run_comfyui_command() {
 # == Main script
 # ========================================================================
 
-version="0.1.9"
+version="0.1.10"
 harbor_repo_url="https://github.com/av/harbor.git"
 delimiter="|"
 scramble_exit_code=42
