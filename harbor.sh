@@ -2118,6 +2118,10 @@ run_comfyui_command() {
             shift
             run_comfyui_workspace_command "$@"
             ;;
+        output)
+            shift
+            sys_open "$harbor_home/comfyui/workspace/ComfyUI/output"
+            ;;
         -h|--help|help)
             echo "Please note that this is not ComfyUI CLI, but a Harbor CLI to manage ComfyUI service."
             echo
@@ -2131,6 +2135,7 @@ run_comfyui_command() {
             echo "  harbor comfyui workspace sync    - Sync installed custom nodes to persistent storage"
             echo "  harbor comfyui workspace open    - Open folder containing ComfyUI workspace in the File Manager"
             echo "  harbor comfyui workspace clear   - Clear ComfyUI workspace, including all configurations and models"
+            echo "  harbor comfyui output             - Open folder containing ComfyUI output in the File Manager"
             ;;
         *)
             return $scramble_exit_code
