@@ -1088,6 +1088,7 @@ fix_fs_acl() {
     docker_fsacl ./textgrad
     docker_fsacl ./aider
     docker_fsacl ./chatui
+    docker_fsacl ./comfyui
 
     docker_fsacl $(eval echo "$(env_manager get hf.cache)")
     docker_fsacl $(eval echo "$(env_manager get vllm.cache)")
@@ -2070,6 +2071,65 @@ run_chatui_command() {
     esac
 }
 
+run_comfyui_workspace_command() {
+    case "$1" in
+        sync)
+            shift
+            echo "Cleaning up ComfyUI environment..."
+            run_in_service comfyui rm -rf /workspace/environments/python/comfyui
+            echo "Syncing installed custom nodes to persistent storage..."
+            run_in_service comfyui venv-sync comfyui
+            ;;
+        clear)
+            shift
+            echo "Cleaning up ComfyUI workspace..."
+            run_gum confirm "This operation will delete all stored ComfyUI configuration. Continue?" && run_in_service comfyui rm -rf /workspace/* || echo "Cleanup aborted."
+            echo "Restart Harbor to re-init Comfy UI"
+            ;;
+        *)
+            return $scramble_exit_code
+            ;;
+    esac
+}
+
+run_comfyui_command() {
+    case "$1" in
+        version)
+            shift
+            env_manager_alias comfyui.version "$@"
+            ;;
+        user)
+            shift
+            env_manager_alias comfyui.user "$@"
+            ;;
+        password)
+            shift
+            env_manager_alias comfyui.password "$@"
+            ;;
+        auth)
+            shift
+            env_manager_alias comfyui.auth "$@"
+            ;;
+        workspace)
+            shift
+            run_comfyui_workspace_command "$@"
+            ;;
+        -h|--help|help)
+            echo "Please note that this is not ComfyUI CLI, but a Harbor CLI to manage ComfyUI service."
+            echo
+            echo "Usage: harbor comfyui <command>"
+            echo
+            echo "Commands:"
+            echo "  harbor comfyui version [version] - Get or set the ComfyUI version docker tag"
+            echo "  harbor comfyui workspace sync    - Sync installed custom nodes to persistent storage"
+            ;;
+        *)
+            return $scramble_exit_code
+            ;;
+    esac
+
+}
+
 # ========================================================================
 # == Main script
 # ========================================================================
@@ -2291,6 +2351,10 @@ main_entrypoint() {
         chatui)
             shift
             run_chatui_command "$@"
+            ;;
+        comfyui)
+            shift
+            run_comfyui_command "$@"
             ;;
         tunnel|t)
             shift

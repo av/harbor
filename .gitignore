@@ -47,3 +47,6 @@ textgrad/workspace/*
 
 # ChatUI
 chatui/data/
+
+# ComfyUI
+comfyui/workspace/
