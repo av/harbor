@@ -144,7 +144,7 @@ harbor open
 
 ##### UIs
 
-[Open WebUI](https://github.com/av/harbor/wiki/Services#open-webui) ⦁︎ [LibreChat](https://github.com/av/harbor/wiki/Services#librechat) ⦁︎ [HuggingFace ChatUI](https://github.com/av/harbor/wiki/Services#huggingface-chatui) ⦁︎ [Hollama](https://github.com/av/harbor/wiki/Services#hollama) ⦁︎ [parllama](https://github.com/av/harbor/wiki/Services#par-llama), [BionicGPT](https://github.com/av/harbor/wiki/Services#bionicgpt)
+[Open WebUI](https://github.com/av/harbor/wiki/Services#open-webui) ⦁︎ [ComfyUI](https://github.com/av/harbor/wiki/Services#comfyui) ⦁︎ [LibreChat](https://github.com/av/harbor/wiki/Services#librechat) ⦁︎ [HuggingFace ChatUI](https://github.com/av/harbor/wiki/Services#huggingface-chatui) ⦁︎ [Hollama](https://github.com/av/harbor/wiki/Services#hollama) ⦁︎ [parllama](https://github.com/av/harbor/wiki/Services#par-llama) ⦁︎ [BionicGPT](https://github.com/av/harbor/wiki/Services#bionicgpt)
 
 ##### Backends
 
