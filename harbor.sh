@@ -2073,6 +2073,10 @@ run_chatui_command() {
 
 run_comfyui_workspace_command() {
     case "$1" in
+        open)
+            shift
+            sys_open "$harbor_home/comfyui/workspace"
+            ;;
         sync)
             shift
             echo "Cleaning up ComfyUI environment..."
@@ -2120,8 +2124,13 @@ run_comfyui_command() {
             echo "Usage: harbor comfyui <command>"
             echo
             echo "Commands:"
-            echo "  harbor comfyui version [version] - Get or set the ComfyUI version docker tag"
+            echo "  harbor comfyui version [version]   - Get or set the ComfyUI version docker tag"
+            echo "  harbor comfyui user [username]     - Get or set the ComfyUI username"
+            echo "  harbor comfyui password [password] - Get or set the ComfyUI password"
+            echo "  harbor comfyui auth [true|false]   - Enable/disable ComfyUI authentication"
             echo "  harbor comfyui workspace sync    - Sync installed custom nodes to persistent storage"
+            echo "  harbor comfyui workspace open    - Open folder containing ComfyUI workspace in the File Manager"
+            echo "  harbor comfyui workspace clear   - Clear ComfyUI workspace, including all configurations and models"
             ;;
         *)
             return $scramble_exit_code
