@@ -50,3 +50,7 @@ chatui/data/
 
 # ComfyUI
 comfyui/workspace/
+
+# Perplexica
+perplexica/data/
+perplexica/config.toml

@@ -1,0 +1,4 @@
+services:
+  perplexica-be:
+    environment:
+      - SEARXNG_API_ENDPOINT=http://searxng:8080

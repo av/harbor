@@ -1,0 +1,36 @@
+services:
+  perplexica:
+    image: andypenno/perplexica-frontend
+    container_name: ${HARBOR_CONTAINER_PREFIX}.perplexica
+    env_file:
+      - ./.env
+      - ./perplexica/override.env
+    depends_on:
+      - perplexica-be
+    ports:
+      - ${HARBOR_PERPLEXICA_HOST_PORT}:3000
+    networks:
+      - harbor-network
+    environment:
+      - BACKEND_API_URL=http://localhost:${HARBOR_PERPLEXICA_BACKEND_HOST_PORT}/api
+      - BACKEND_WS_URL=ws://localhost:${HARBOR_PERPLEXICA_BACKEND_HOST_PORT}
+
+  perplexica-be:
+    image: andypenno/perplexica-backend
+    container_name: ${HARBOR_CONTAINER_PREFIX}.perplexica-be
+    env_file:
+      - ./.env
+      - ./perplexica/override.env
+    ports:
+      - ${HARBOR_PERPLEXICA_BACKEND_HOST_PORT}:3001
+    volumes:
+      - ./perplexica/data:/home/perplexica/data
+      - ./perplexica/source.config.toml:/home/perplexica/config.toml
+    networks:
+      - harbor-network
+    environment:
+      - PORT=3001
+      - SIMILARITY_MEASURE=cosine
+      - OPENAI_API_KEY=${HARBOR_OPENAI_KEY}
+      - GROQ_API_KEY=${HARBOR_GROQ_KEY}
+      - ANTHROPIC_API_KEY=${HARBOR_ANTHROPIC_KEY}

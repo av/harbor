@@ -1,0 +1,4 @@
+services:
+  perplexica-be:
+    environment:
+      - OLLAMA_API_ENDPOINT=http://ollama:11434
