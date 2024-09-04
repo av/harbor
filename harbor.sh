@@ -1766,6 +1766,10 @@ run_mistralrs_command() {
             shift
             env_manager_alias mistralrs.isq --on-set update_model_spec "$@"
             ;;
+        version)
+            shift
+            env_manager_alias mistralrs.version "$@"
+            ;;
         -h|--help|help)
             echo "Please note that this is not mistral.rs CLI, but a Harbor CLI to manage mistral.rs service."
             echo "Access mistral.rs own CLI by running 'harbor exec mistralrs' when it's running."
@@ -1775,6 +1779,7 @@ run_mistralrs_command() {
             echo "Commands:"
             echo "  harbor mistralrs health            - Check the health of the mistral.rs service"
             echo "  harbor mistralrs docs              - Open mistral.rs built-in API documentation"
+            echo "  harbor mistralrs version [version] - Get or set mistral.rs version (0.3, 0.4, etc.)"
             echo "  harbor mistralrs args [args]       - Get or set extra args to pass to the mistral.rs CLI"
             echo "  harbor mistralrs model [user/repo] - Get or set the mistral.rs model repository to run"
             echo "  harbor mistralrs type [type]       - Get or set the mistral.rs model type"

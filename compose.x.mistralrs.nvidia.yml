@@ -1,6 +1,6 @@
 services:
   mistralrs:
-    image: ghcr.io/ericlbuehler/mistral.rs:cuda-80-0.2
+    image: ghcr.io/ericlbuehler/mistral.rs:cuda-80-${HARBOR_MISTRALRS_VERSION}
     deploy:
       resources:
         reservations:

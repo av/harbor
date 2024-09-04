@@ -3,7 +3,7 @@ services:
     container_name: ${HARBOR_CONTAINER_PREFIX}.mistralrs
     env_file: ./.env
     # See .nvidia. file for an alternative image
-    image: ghcr.io/ericlbuehler/mistral.rs:cpu-0.2
+    image: ghcr.io/ericlbuehler/mistral.rs:cpu-${HARBOR_MISTRALRS_VERSION}
     ports:
       - ${HARBOR_MISTRALRS_HOST_PORT}:8021
     networks:
