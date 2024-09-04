@@ -1,0 +1,20 @@
+services:
+  aichat:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.aichat
+    build:
+      context: ./aichat
+      dockerfile: Dockerfile
+    env_file:
+      - ./.env
+    networks:
+      - harbor-network
+    volumes:
+      # Base config
+      - ./aichat/configs/aichat.config.yml:/app/configs/z.config.yml
+      # Custom entrypoint for config merging
+      - ./aichat/start_aichat.sh:/app/start_aichat.sh
+      - ./shared/yaml_config_merger.py:/app/yaml_config_merger.py
+      - ${HARBOR_AICHAT_CONFIG_PATH}:/root/.config/aichat
+    ports:
+      - ${HARBOR_AICHAT_HOST_PORT}:${HARBOR_AICHAT_HOST_PORT}
+    entrypoint: ["/app/start_aichat.sh"]

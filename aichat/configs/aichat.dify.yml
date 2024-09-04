@@ -1,0 +1,8 @@
+clients:
+  - type: openai-compatible
+    name: dify
+    api_base: http://dify-openai:3000/v1
+    apiKey: "${HARBOR_DIFY_OPENAI_WORKFLOW}"
+    models:
+      - name: ${HARBOR_AICHAT_MODEL}
+

@@ -1,0 +1,8 @@
+clients:
+  - type: openai-compatible
+    name: llamacpp
+    api_base: http://llamacpp:8080/v1
+    apiKey: sk-llamacpp
+    models:
+      - name: ${HARBOR_AICHAT_MODEL}
+

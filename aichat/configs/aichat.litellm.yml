@@ -1,0 +1,8 @@
+clients:
+  - type: openai-compatible
+    name: litellm
+    api_base: http://litellm:3000/v1
+    apiKey: "${HARBOR_LITELLM_MASTER_KEY}"
+    models:
+      - name: ${HARBOR_AICHAT_MODEL}
+

@@ -1,0 +1,115 @@
+# This is where other configs will be merged into
+# See official example: https://github.com/sigoden/aichat/blob/main/config.example.yaml
+
+# ---- llm ----
+
+# This field requires a prefix matching
+# the name of the openai-compatible backend,
+# so it's set from the "cross" files, e.g. aichat.ollama.yml
+# model: ollama:${HARBOR_AICHAT_MODEL}
+
+temperature: null                # Set default temperature parameter
+top_p: null                      # Set default top-p parameter, range (0, 1)
+
+# ---- behavior ----
+stream: true                     # Controls whether to use the stream-style API.
+save: true                       # Indicates whether to persist the message
+keybindings: emacs               # Choose keybinding style (emacs, vi)
+editor: null                     # Specifies the command used to edit input buffer or session. (e.g. vim, emacs, nano).
+wrap: 'auto'                     # Controls text wrapping (no, auto, <max-width>)
+wrap_code: false                 # Enables or disables wrapping of code blocks
+
+# ---- prelude ----
+prelude: null                    # Set a default role or session to start with (e.g. role:<name>, session:<name>)
+repl_prelude: null               # Overrides the `prelude` setting specifically for conversations started in REPL
+agent_prelude: null              # Set a session to use when starting a agent. (e.g. temp, default)
+
+# ---- session ----
+# Controls the persistence of the session. if true, auto save; if false, not save; if null, asking the user
+save_session: null
+# Compress session when token count reaches or exceeds this threshold
+compress_threshold: 4000
+# Text prompt used for creating a concise summary of session message
+summarize_prompt: 'Summarize the discussion briefly in 200 words or less to use as a prompt for future context.'
+# Text prompt used for including the summary of the entire session
+summary_prompt: 'This is a summary of the chat history as a recap: '
+
+# ---- function-calling ----
+# Visit https://github.com/sigoden/llm-functions for setup instructions
+function_calling: true           # Enables or disables function calling (Globally).
+mapping_tools:                   # Alias for a tool or toolset
+  fs: 'fs_cat,fs_ls,fs_mkdir,fs_rm,fs_write'
+use_tools: null                  # Which tools to use by default. (e.g. 'fs,web_search')
+
+# ---- RAG ----
+# See [RAG-Guide](https://github.com/sigoden/aichat/wiki/RAG-Guide) for more details.
+rag_embedding_model: null                   # Specifies the embedding model to use
+rag_reranker_model: null                    # Specifies the rerank model to use
+rag_top_k: 4                                # Specifies the number of documents to retrieve
+rag_chunk_size: null                        # Specifies the chunk size
+rag_chunk_overlap: null                     # Specifies the chunk overlap
+rag_min_score_vector_search: 0              # Specifies the minimum relevance score for vector-based searching
+rag_min_score_keyword_search: 0             # Specifies the minimum relevance score for keyword-based searching
+rag_min_score_rerank: 0                     # Specifies the minimum relevance score for reranking
+# Defines the query structure using variables like __CONTEXT__ and __INPUT__ to tailor searches to specific needs
+rag_template: |
+  Use the following context as your learned knowledge, inside <context></context> XML tags.
+  <context>
+  __CONTEXT__
+  </context>
+
+  When answer to user:
+  - If you don't know, just say that you don't know.
+  - If you don't know when you are not sure, ask for clarification.
+  Avoid mentioning that you obtained the information from the context.
+  And answer according to the language of the user's question.
+
+  Given the context information, answer the query.
+  Query: __INPUT__
+# Define document loaders to control how RAG and `.file`/`--file` load files of specific formats.
+document_loaders:
+  # You can add custom loaders using the following syntax:
+  #   <file-extension>: <command-to-load-the-file>
+  # Note: Use `$1` for input file and `$2` for output file. If `$2` is omitted, use stdout as output.
+  pdf: 'pdftotext $1 -'                         # Load .pdf file, see https://poppler.freedesktop.org to set up pdftotext
+  docx: 'pandoc --to plain $1'                  # Load .docx file, see https://pandoc.org to set up pandoc
+
+# ---- appearance ----
+highlight: true                  # Controls syntax highlighting
+light_theme: false               # Activates a light color theme when true. env: AICHAT_LIGHT_THEME
+# Custom REPL left/right prompts, see https://github.com/sigoden/aichat/wiki/Custom-REPL-Prompt for more details
+left_prompt:
+  '{color.green}{?session {?agent {agent}>}{session}{?role /}}{!session {?agent {agent}>}}{role}{?rag @{rag}}{color.cyan}{?session )}{!session >}{color.reset} '
+right_prompt:
+  '{color.purple}{?session {?consume_tokens {consume_tokens}({consume_percent}%)}{!consume_tokens {consume_tokens}}}{color.reset}'
+
+# ---- clients ----
+clients: []
+  # All clients have the following configuration:
+  # - type: xxxx
+  #   name: xxxx                                      # Only use it to distinguish clients with the same client type. Optional
+  #   models:
+  #     - name: xxxx                                  # Chat model
+  #       max_input_tokens: 100000
+  #       supports_vision: true
+  #       supports_function_calling: true
+  #     - name: xxxx                                  # Embedding model
+  #       type: embedding
+  #       max_input_tokens: 2048
+  #       max_tokens_per_chunk: 2048
+  #       default_chunk_size: 1500
+  #       max_batch_size: 100
+  #     - name: xxxx                                  # Reranker model
+  #       type: reranker
+  #       max_input_tokens: 2048
+  #   patch:                                          # Patch api
+  #     chat_completions:                             # Api type, possible values: chat_completions, embeddings, and rerank
+  #       <regex>:                                    # The regex to match model names, e.g. '.*' 'gpt-4o' 'gpt-4o|gpt-4-.*'
+  #         url: ''                                   # Patch request url
+  #         body:                                     # Patch request body
+  #           <json>
+  #         headers:                                  # Patch request headers
+  #           <key>: <value>
+  #   extra:
+  #     proxy: socks5://127.0.0.1:1080                # Set proxy
+  #     connect_timeout: 10                           # Set timeout in seconds for connect to api

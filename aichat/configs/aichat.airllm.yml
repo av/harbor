@@ -1,0 +1,8 @@
+clients:
+  - type: openai-compatible
+    name: airllm
+    api_base: http://airllm:5000/v1
+    api_key: sk-airllm
+    models:
+      - name: ${HARBOR_AICHAT_MODEL}
+

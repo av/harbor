@@ -1,0 +1,8 @@
+clients:
+  - type: openai-compatible
+    name: mistralrs
+    api_base: http://mistralrs:8021/v1
+    apiKey: sk-mistralrs
+    models:
+      - name: ${HARBOR_AICHAT_MODEL}
+

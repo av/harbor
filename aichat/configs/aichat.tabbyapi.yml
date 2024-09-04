@@ -1,0 +1,8 @@
+clients:
+  - type: openai-compatible
+    name: tabbyapi
+    api_base: http://tabbyapi:5000/v1
+    apiKey: "${HARBOR_TABBYAPI_ADMIN_KEY}"
+    models:
+      - name: ${HARBOR_AICHAT_MODEL}
+

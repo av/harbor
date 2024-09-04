@@ -15,18 +15,18 @@ show_help() {
     echo "Usage: $0 <command> [options]"
     echo
     echo "Compose Setup Commands:"
-    echo "  up|u         - Start the containers"
-    echo "  down|d       - Stop and remove the containers"
-    echo "  restart|r    - Down then up"
-    echo "  ps           - List the running containers"
-    echo "  logs|l       - View the logs of the containers"
-    echo "  exec         - Execute a command in a running service"
-    echo "  pull         - Pull the latest images"
-    echo "  dive         - Run the Dive CLI to inspect Docker images"
-    echo "  run          - Run a one-off command in a service container"
-    echo "  shell        - Load shell in the given service main container"
-    echo "  build        - Build the given service"
-    echo "  cmd <handle> - Print the docker-compose command"
+    echo "  up|u [handle]           - Start the containers"
+    echo "  down|d                  - Stop and remove the containers"
+    echo "  restart|r [handle]      - Down then up"
+    echo "  ps                      - List the running containers"
+    echo "  logs|l <handle>         - View the logs of the containers"
+    echo "  exec <handle> [command] - Execute a command in a running service"
+    echo "  pull <handle>           - Pull the latest images"
+    echo "  dive <handle>           - Run the Dive CLI to inspect Docker images"
+    echo "  run <handle> [command]  - Run a one-off command in a service container"
+    echo "  shell <handle>          - Load shell in the given service main container"
+    echo "  build <handle>          - Build the given service"
+    echo "  cmd <handle>            - Print the docker-compose command"
     echo
     echo "Setup Management Commands:"
     echo "  ollama     - Run Ollama CLI (docker). Service should be running."
@@ -47,12 +47,13 @@ show_help() {
     echo "  comfyui    - Configure ComfyUI service"
     echo
     echo "Service CLIs:"
-    echo "  parllama          - Launch Parllama - TUI for chatting with Ollama models"
-    echo "  plandex           - Launch Plandex CLI"
     echo "  aider             - Launch Aider CLI"
+    echo "  aichat            - Run aichat CLI"
     echo "  interpreter|opint - Launch Open Interpreter CLI"
     echo "  fabric            - Run Fabric CLI"
+    echo "  plandex           - Launch Plandex CLI"
     echo "  cmdh              - Run cmdh CLI"
+    echo "  parllama          - Launch Parllama - TUI for chatting with Ollama models"
     echo "  hf                - Run the Harbor's Hugging Face CLI. Expanded with a few additional commands."
     echo "    hf dl           - HuggingFaceModelDownloader CLI"
     echo "    hf parse-url    - Parse file URL from Hugging Face"
@@ -70,7 +71,7 @@ show_help() {
     echo "    url [-a|--adressable|--lan] <handle> - (supposed) LAN URL"
     echo "    url [-i|--internal] <handle>         - URL within Harbor's docker network"
     echo
-    echo "  qr  <handle>                  - Print a QR code for a service"
+    echo "  qr <handle>                   - Print a QR code for a service"
     echo
     echo "  t|tunnel <handle>             - Expose given service to the internet"
     echo "    tunnel down|stop|d|s        - Stop all running tunnels (including auto)"
@@ -177,8 +178,6 @@ compose_with_options() {
 
             # Check if file matches any of the options
             for option in "${options[@]}"; do
-                # echo "CHECK: $option"
-
                 if [[ $option == "*" ]]; then
                     match=true
                     break
@@ -280,16 +279,16 @@ link_cli() {
             shell_profile="$HOME/.bashrc"
         else
             # We can't determine the shell profile
-            echo "Sorry, but Harbor can't determine which shell configuration file to update."
-            echo "Please link the CLI manually."
-            echo "Harbor supports: ~/.zshrc, ~/.bash_profile, ~/.bashrc, ~/.profile"
+            log_warn "Sorry, but Harbor can't determine which shell configuration file to update."
+            log_warn "Please link the CLI manually."
+            log_warn "Harbor supports: ~/.zshrc, ~/.bash_profile, ~/.bashrc, ~/.profile"
             return 1
         fi
     fi
 
     # Check if target directory exists in PATH
     if ! echo "$PATH" | tr ':' '\n' | grep -q "$target_dir"; then
-        echo "Creating $target_dir and adding it to PATH..."
+        log_info "Creating $target_dir and adding it to PATH..."
         mkdir -p "$target_dir"
 
         # Update the shell configuration file
@@ -300,23 +299,23 @@ link_cli() {
 
     # Create symlink
     if ln -s "$script_path" "$target_dir/$script_name"; then
-        echo "Symlink created: $target_dir/$script_name -> $script_path"
+        log_info "Symlink created: $target_dir/$script_name -> $script_path"
     else
-        echo "Failed to create symlink. Please check permissions and try again."
+        log_warn "Failed to create symlink. Please check permissions and try again."
         return 1
     fi
 
     # Create short symlink if "--short" flag is present
     if $create_short_link; then
         if ln -s "$script_path" "$target_dir/$short_name"; then
-            echo "Short symlink created: $target_dir/$short_name -> $script_path"
+            log_info "Short symlink created: $target_dir/$short_name -> $script_path"
         else
-            echo "Failed to create short symlink. Please check permissions and try again."
+            log_warn "Failed to create short symlink. Please check permissions and try again."
             return 1
         fi
     fi
 
-    echo "You may need to reload your shell or run 'source $shell_profile' for changes to take effect."
+    log_info "You may need to reload your shell or run 'source $shell_profile' for changes to take effect."
 }
 
 unlink_cli() {
@@ -324,22 +323,22 @@ unlink_cli() {
     local script_name=$(env_manager get cli.name)
     local short_name=$(env_manager get cli.short)
 
-    echo "Removing symlinks..."
+    log_info "Removing symlinks..."
 
     # Remove the main symlink
     if [ -L "$target_dir/$script_name" ]; then
         rm "$target_dir/$script_name"
-        echo "Removed symlink: $target_dir/$script_name"
+        log_info "Removed symlink: $target_dir/$script_name"
     else
-        echo "Main symlink does not exist or is not a symbolic link."
+        log_info "Main symlink does not exist or is not a symbolic link."
     fi
 
     # Remove the short symlink
     if [ -L "$target_dir/$short_name" ]; then
         rm "$target_dir/$short_name"
-        echo "Removed short symlink: $target_dir/$short_name"
+        log_info "Removed short symlink: $target_dir/$short_name"
     else
-        echo "Short symlink does not exist or is not a symbolic link."
+        log_info "Short symlink does not exist or is not a symbolic link."
     fi
 }
 
@@ -359,7 +358,7 @@ get_service_port() {
 
     # Check if any services are running
     if [ -z "$services" ]; then
-        echo "No services are currently running."
+        log_warn "No services are currently running."
         return 1
     fi
 
@@ -368,9 +367,9 @@ get_service_port() {
 
     # Check if the specified service is running
     if ! echo "$services" | grep -q "$service_name"; then
-        echo "Service '$1' is not currently running."
-        echo "Running services:"
-        echo "$services"
+        log_warn "Service '$1' is not currently running."
+        log_info "Running services:"
+        log_info "$services"
         return 1
     fi
 
@@ -378,7 +377,7 @@ get_service_port() {
     if port=$(docker port "$target_name" | perl -nle 'print m{0.0.0.0:\K\d+}g' | head -n 1); then
         echo "$port"
     else
-        echo "No port mapping found for service '$1': $port"
+        log_error "No port mapping found for service '$1': $port"
         return 1
     fi
 }
@@ -391,8 +390,7 @@ get_service_url() {
         echo "http://localhost:$port"
         return 0
     else
-        echo "Failed to get port for service '$service_name':"
-        echo "$port"
+        log_error "Failed to get port for service '$service_name'"
         return 1
     fi
 }
@@ -407,13 +405,11 @@ get_adressable_url() {
             echo "http://$ip_address:$port"
             return 0
         else
-            echo "Failed to get IP address:"
-            echo "$ip_address"
+            log_error "Failed to get service '$service_name' IP address"
             return 1
         fi
     else
-        echo "Failed to get port for service '$service_name':"
-        echo "$port"
+        log_error "Failed to get port for service '$service_name'"
         return 1
     fi
 }
@@ -431,7 +427,7 @@ get_intra_url() {
         echo "http://$intra_host:$intra_port"
         return 0
     else
-        echo "Failed to get internal port for service '$service_name'"
+        log_error "Failed to get internal port for service '$service_name'"
         return 1
     fi
 }
@@ -484,7 +480,7 @@ print_qr() {
 
 print_service_qr() {
     local url=$(get_url -a "$1")
-    echo "URL: $url"
+    log_info "URL: $url"
     print_qr "$url"
 }
 
@@ -507,7 +503,7 @@ sys_open() {
     elif command -v start &> /dev/null; then
         start "$url"  # Windows
     else
-        echo "Unable to open browser. Please visit $url manually."
+        log_error "Unable to open browser. Please visit $url manually."
         return 1
     fi
 }
@@ -517,10 +513,9 @@ open_service() {
 
     if service_url=$(get_url "$1"); then
         sys_open "$service_url"
-        echo "Opened $service_url in your default browser."
+        log_info "Opened $service_url in your default browser."
     else
-        echo "Failed to get service URL for $1:"
-        echo "$service_url"
+        log_error "Failed to get service URL for '$1'"
         return 1
     fi
 }
@@ -529,7 +524,7 @@ smi() {
     if command -v nvidia-smi &> /dev/null; then
         nvidia-smi
     else
-        echo "nvidia-smi not found."
+        log_error "nvidia-smi not found."
     fi
 }
 
@@ -537,7 +532,7 @@ nvidia_top() {
     if command -v nvtop &> /dev/null; then
         nvtop
     else
-        echo "nvtop not found."
+        log_error "nvtop not found."
     fi
 }
 
@@ -546,16 +541,44 @@ eject() {
 }
 
 run_in_service() {
-    local service_name="$1"
-    shift
-    local command_to_run="$@"
+    local service_name=""
+    local before_args=()
+    local after_args=()
+    local parsing_after=false
 
+    # Parse arguments
+    for arg in "$@"; do
+        if [[ -z $service_name ]]; then
+            if docker compose ps --services | grep -q "^${arg}$"; then
+                service_name="$arg"
+                parsing_after=true
+            else
+                before_args+=("$arg")
+            fi
+        elif $parsing_after; then
+            after_args+=("$arg")
+        fi
+    done
+
+    # Check if service name was found
+    if [[ -z $service_name ]]; then
+        echo "Error: No valid service name provided."
+        return 1
+    fi
+
+    # Check if the service is running
     if docker compose ps --services --filter "status=running" | grep -q "^${service_name}$"; then
-        echo "Service ${service_name} is running. Executing command..."
-        # shellcheck disable=SC2086
-        docker compose exec ${service_name} ${command_to_run}
+        log_info "Service ${service_name} is running. Executing command..."
+
+        # Construct the command
+        local full_command=("${before_args[@]}" "${service_name}" "${after_args[@]}")
+
+        # Execute the command
+        # shellcheck disable=SC2068
+        docker compose exec ${full_command[@]}
     else
-        echo "Harbor ${service_name} is not running. Please start it with 'harbor up ${service_name}' first."
+        log_error "Service ${service_name} is not running. Please start it with 'harbor up ${service_name}' first."
+        return 1
     fi
 }
 
@@ -570,7 +593,7 @@ ensure_env_file() {
 }
 
 reset_env_file() {
-    echo "Resetting Harbor configuration..."
+    log_warn "Resetting Harbor configuration..."
     rm .env
     ensure_env_file
 }
@@ -641,7 +664,7 @@ merge_env_files() {
     # Move the temporary file to replace the target file
     mv "$temp_file" "$target_file"
 
-    echo "Merged content from $default_file into $target_file, preserving order and structure"
+    log_info "Merged content from $default_file into $target_file, preserving order and structure"
 }
 
 execute_and_process() {
@@ -661,8 +684,8 @@ execute_and_process() {
         eval "$success_command_modified"
     else
         # If the command failed, print the custom error message and the output
-        echo "$error_message Exit code: $exit_code. Output:"
-        echo "$command_output"
+        log_warn "$error_message Exit code: $exit_code. Output:"
+        log_info "$command_output"
     fi
 }
 
@@ -678,62 +701,79 @@ swap_and_retry() {
         local exit_code=$?
 
         # If failed and there are at least two arguments, try swapped order
-        if [ $exit_code -eq $scramble_exit_code ] && [ ${#args[@]} -ge 2 ]; then
-            echo "'harbor ${args[0]} ${args[1]}' failed, trying 'harbor ${args[1]} ${args[0]}'..."
-            if "$command" "${args[1]}" "${args[0]}" "${args[@]:2}"; then
-                return 0
-            else
-                # Check for common user-caused exit codes
-                exit_code=$?
+        if [ $exit_code -eq $scramble_exit_code ]; then
+            if [ ${#args[@]} -ge 2 ]; then
+                log_warn "'harbor ${args[0]} ${args[1]}' failed, trying 'harbor ${args[1]} ${args[0]}'..."
+                if "$command" "${args[1]}" "${args[0]}" "${args[@]:2}"; then
+                    return 0
+                else
+                    # Check for common user-caused exit codes
+                    exit_code=$?
 
-                # Check common exit codes
-                case $exit_code in
-                    0)
-                        echo "Process completed successfully"
-                        ;;
-                    1)
-                        echo "General error occurred"
-                        ;;
-                    2)
-                        echo "Misuse of shell builtin"
-                        ;;
-                    126)
-                        echo "Command invoked cannot execute (permission problem or not executable)"
-                        ;;
-                    127)
-                        echo "Command not found"
-                        ;;
-                    128)
-                        echo "Invalid exit argument"
-                        ;;
-                    129)
-                        echo "SIGHUP (Hangup) received"
-                        ;;
-                    130)
-                        echo "SIGINT (Keyboard interrupt) received"
-                        ;;
-                    131)
-                        echo "SIGQUIT (Keyboard quit) received"
-                        ;;
-                    137)
-                        echo "SIGKILL (Kill signal) received"
-                        ;;
-                    143)
-                        echo "SIGTERM (Termination signal) received"
-                        ;;
-                    42)
-                        # This is our own scrambler code, no need to print it
-                        return 1
-                        ;;
-                    *)
-                        echo "Exit code: $exit_code"
-                        return 1
-                        ;;
-                esac
+                    # Check common exit codes
+                    case $exit_code in
+                        0)
+                            log_debug "Process completed successfully"
+                            ;;
+                        1)
+                            log_error "General error occurred"
+                            ;;
+                        2)
+                            log_error "Misuse of shell builtin"
+                            ;;
+                        126)
+                            log_error "Command invoked cannot execute (permission problem or not executable)"
+                            ;;
+                        127)
+                            log_error "Command not found"
+                            ;;
+                        128)
+                            log_error "Invalid exit argument"
+                            ;;
+                        129)
+                            log_warn "SIGHUP (Hangup) received"
+                            ;;
+                        130)
+                            log_info "SIGINT (Keyboard interrupt) received"
+                            ;;
+                        131)
+                            log_info "SIGQUIT (Keyboard quit) received"
+                            ;;
+                        137)
+                            log_info "SIGKILL (Kill signal) received"
+                            ;;
+                        143)
+                            log_info "SIGTERM (Termination signal) received"
+                            ;;
+                        *)
+                            log_info "Exit code: $exit_code"
+                            return 1
+                            ;;
+                    esac
+                fi
+            else
+                # Less than two arguments, retry is impossible
+                return 1
             fi
         fi
     fi
 }
+
+log() {
+    local level="$1"
+    shift
+
+    # Check if the numeric value of the current log level is greater than or equal to the set HARBOR_LOG_LEVEL
+    if [[ "${default_log_levels[$level]}" -ge "${default_log_levels[$default_log_level]}" ]]; then
+        echo "$(date +'%H:%M:%S') [$level] $*" >&2
+    fi
+}
+
+# Convenience functions for different log levels
+log_debug() { log "DEBUG" "$@"; }
+log_info() { log "INFO" "$@"; }
+log_warn() { log "WARN" "$@"; }
+log_error() { log "ERROR" "$@"; }
 
 # shellcheck disable=SC2034
 __anchor_envm=true
@@ -745,7 +785,7 @@ env_manager() {
     case "$1" in
         get)
             if [[ -z "$2" ]]; then
-                echo "Usage: env_manager get <key>"
+                log_info "Usage: env_manager get <key>"
                 return 1
             fi
             local upper_key=$(echo "$2" | tr '[:lower:]' '[:upper:]' | tr '.' '_')
@@ -756,7 +796,7 @@ env_manager() {
             ;;
         set)
             if [[ -z "$2" ]]; then
-                echo "Usage: env_manager set <key> <value>"
+                log_info "Usage: env_manager set <key> <value>"
                 return 1
             fi
 
@@ -769,7 +809,7 @@ env_manager() {
             else
                 echo "$prefix$upper_key=\"$value\"" >> "$env_file"
             fi
-            echo "Set $prefix$upper_key to: \"$value\""
+            log_info "Set $prefix$upper_key to: \"$value\""
             ;;
         list|ls)
             grep "^$prefix" "$env_file" | sed "s/^$prefix//" | while read -r line; do
@@ -781,7 +821,7 @@ env_manager() {
             ;;
         reset)
             shift
-            run_gum confirm "Are you sure you want to reset Harbor configuration?" && reset_env_file || echo "Reset cancelled"
+            run_gum confirm "Are you sure you want to reset Harbor configuration?" && reset_env_file || log_warn "Reset cancelled"
             ;;
         update)
             shift
@@ -906,7 +946,7 @@ env_manager_arr() {
             # Show all values
             local array=$(get_array)
             if [ -z "$array" ]; then
-                echo "Config $field is empty"
+                log_info "Config $field is empty"
             else
                 echo "$array" | tr "$delimiter" "\n"
             fi
@@ -917,7 +957,7 @@ env_manager_arr() {
         clear)
             # Clear all values
             set_array ""
-            echo "All values removed from $field"
+            log_info "All values removed from $field"
             if [ -n "$remove_command" ]; then
                 eval "$remove_command"
             fi
@@ -926,7 +966,7 @@ env_manager_arr() {
             if [ -z "$value" ]; then
                 # Remove all values
                 set_array ""
-                echo "All values removed from $field"
+                log_info "All values removed from $field"
             else
                 # Remove one value
                 local array=$(get_array)
@@ -958,7 +998,7 @@ env_manager_arr() {
                     }')
                 fi
                 set_array "$new_array"
-                echo "Value removed from $field"
+                log_info "Value removed from $field"
             fi
             if [ -n "$remove_command" ]; then
                 eval "$remove_command"
@@ -976,7 +1016,7 @@ env_manager_arr() {
                 new_array="${array}${delimiter}${value}"
             fi
             set_array "$new_array"
-            echo "Value added to $field"
+            log_info "Value added to $field"
             if [ -n "$add_command" ]; then
                 eval "$add_command"
             fi
@@ -1009,9 +1049,9 @@ override_yaml_value() {
     ' "$file" > "$temp_file" && mv "$temp_file" "$file"
 
     if [ $? -eq 0 ]; then
-        echo "Successfully updated '$key' in $file"
+        log_info "Successfully updated '$key' in $file"
     else
-        echo "Failed to update '$key' in $file"
+        log_error "Failed to update '$key' in $file"
         return 1
     fi
 }
@@ -1037,10 +1077,10 @@ check_hf_cache() {
     maybe_cache_entry=$(run_hf_docker_cli scan-cache | grep $1)
 
     if [ -z "$maybe_cache_entry" ]; then
-        echo "$1 is missing in Hugging Face cache." >&2
+        log_warn "$1 is missing in Hugging Face cache."
         return 1
     else
-        echo "$1 found in the cache." >&2
+        log_info "$1 found in the cache."
         return 0
     fi
 }
@@ -1111,7 +1151,7 @@ open_home_code() {
         code "$harbor_home"
     else
         # shellcheck disable=SC2016
-        echo '"code" is not installed or not available in $PATH.'
+        log_warn '"code" is not installed or not available in $PATH.'
     fi
 }
 
@@ -1135,18 +1175,18 @@ update_harbor() {
     esac
 
     if $is_latest; then
-        echo "Updating to the bleeding edge version..."
+        log_info "Updating to the latest dev version..."
         unsafe_update
     else
         harbor_version=$(resolve_harbor_version)
-        echo "Updating to version $harbor_version..."
+        log_info "Updating to version $harbor_version..."
         git checkout tags/$harbor_version
     fi
 
-    echo "Merging .env files..."
+    log_info "Merging .env files..."
     merge_env_files
 
-    echo "Harbor updated successfully."
+    log_info "Harbor updated successfully."
 }
 
 get_active_services() {
@@ -1180,13 +1220,13 @@ get_services() {
         local active_services=$(docker compose ps --format "{{.Service}}")
 
         if [ -z "$active_services" ]; then
-            echo "Harbor has no active services."
+            log_warn "Harbor has no active services."
         else
-            echo "Harbor active services:"
+            log_info "Harbor active services:"
             echo "$active_services"
         fi
     else
-        echo "Harbor services:"
+        log_info "Harbor services:"
         $(compose_with_options "*") config --services
     fi
 }
@@ -1227,28 +1267,28 @@ establish_tunnel() {
     local container_name=$(get_container_name "cfd.tunnel.$(date +%s)")
     local tunnel_url=""
 
-    echo "Starting new tunnel"
-    echo "Container name: $container_name"
-    echo "Intra URL: $intra_url"
+    log_info "Starting new tunnel"
+    log_info "Container name: $container_name"
+    log_info "Intra URL: $intra_url"
     $(compose_with_options "cfd") run --rm -d --name "$container_name" cfd --url "$intra_url" || { echo "Failed to start container"; exit 1; }
 
     local timeout=60
     local elapsed=0
     while [ -z "$tunnel_url" ] && [ $elapsed -lt $timeout ]; do
         sleep 1
-        echo "Waiting for tunnel URL..."
+        log_info "Waiting for tunnel URL..."
         tunnel_url=$(docker logs -n 200 $container_name 2>&1 | extract_tunnel_url) || true
         elapsed=$((elapsed + 1))
     done
 
     if [ -z "$tunnel_url" ]; then
-        echo "Failed to obtain tunnel URL within $timeout seconds"
+        log_error "Failed to obtain tunnel URL within $timeout seconds"
         docker stop "$container_name" || true
         exit 1
     fi
 
-    echo "Tunnel URL: $tunnel_url"
-    print_qr "$tunnel_url" || { echo "Failed to print QR code"; exit 1; }
+    log_info "Tunnel URL: $tunnel_url"
+    print_qr "$tunnel_url" || { log_error "Failed to print QR code"; exit 1; }
 }
 # shellcheck disable=SC2034
 __anchor_service_clis=true
@@ -1861,7 +1901,7 @@ run_cmdh_command() {
 run_harbor_cmdh_command() {
     # Check if ollama is running
     if ! is_service_running "ollama"; then
-        echo "Please start ollama service to use 'harbor how'"
+        log_error "Please start ollama service to use 'harbor how'"
         exit 1
     fi
 
@@ -2084,16 +2124,16 @@ run_comfyui_workspace_command() {
             ;;
         sync)
             shift
-            echo "Cleaning up ComfyUI environment..."
+            log_info "Cleaning up ComfyUI environment..."
             run_in_service comfyui rm -rf /workspace/environments/python/comfyui
-            echo "Syncing installed custom nodes to persistent storage..."
+            log_info "Syncing installed custom nodes to persistent storage..."
             run_in_service comfyui venv-sync comfyui
             ;;
         clear)
             shift
-            echo "Cleaning up ComfyUI workspace..."
+            log_info "Cleaning up ComfyUI workspace..."
             run_gum confirm "This operation will delete all stored ComfyUI configuration. Continue?" && run_in_service comfyui rm -rf /workspace/* || echo "Cleanup aborted."
-            echo "Restart Harbor to re-init Comfy UI"
+            log_info "Restart Harbor to re-init Comfy UI"
             ;;
         *)
             return $scramble_exit_code
@@ -2146,14 +2186,56 @@ run_comfyui_command() {
             return $scramble_exit_code
             ;;
     esac
+}
 
+run_aichat_command() {
+    case "$1" in
+        model)
+            shift
+            env_manager_alias aichat.model "$@"
+            return 0
+            ;;
+        workspace)
+            shift
+            execute_and_process "env_manager get aichat.config.path" "sys_open {{output}}" "No aichat.config.path set"
+            ;;
+        -h|--help|help)
+            echo "Please note that this is not aichat CLI, but a Harbor CLI to manage aichat service."
+            echo
+            echo "Usage: harbor aichat <command>"
+            echo
+            echo "Commands:"
+            echo "  harbor aichat model [model] - Get or set the model to run"
+            echo "  harbor aichat workspace     - Open the aichat workspace directory"
+            echo
+            echo "Original CLI help:"
+            ;;
+    esac
+
+    local services=$(get_active_services)
+
+    $(compose_with_options $services "aichat") run \
+        --rm \
+        --name harbor.aichat \
+        --service-ports \
+        -e "TERM=xterm-256color" \
+        -v "$original_dir:$original_dir" \
+        --workdir "$original_dir" \
+        aichat "$@"
+}
+
+run_ollama_command() {
+    run_in_service \
+        -e "TERM=xterm-256color" \
+        ollama \
+        ollama "$@"
 }
 
 # ========================================================================
 # == Main script
 # ========================================================================
 
-version="0.1.11"
+version="0.1.12"
 harbor_repo_url="https://github.com/av/harbor.git"
 delimiter="|"
 scramble_exit_code=42
@@ -2169,6 +2251,14 @@ default_tunnels=($(env_manager get services.tunnels | tr ';' ' '))
 default_open=$(env_manager get ui.main)
 default_autoopen=$(env_manager get ui.autoopen)
 default_container_prefix=$(env_manager get container.prefix)
+
+declare -A default_log_levels=(
+    ["DEBUG"]=0
+    ["INFO"]=1
+    ["WARN"]=2
+    ["ERROR"]=3
+)
+default_log_level=$(env_manager get log.level)
 
 main_entrypoint() {
     case "$1" in
@@ -2289,7 +2379,7 @@ main_entrypoint() {
             ;;
         ollama)
             shift
-            run_in_service ollama ollama "$@"
+            run_ollama_command "$@"
             ;;
         llamacpp)
             shift
@@ -2374,6 +2464,10 @@ main_entrypoint() {
         comfyui)
             shift
             run_comfyui_command "$@"
+            ;;
+        aichat)
+            shift
+            run_aichat_command "$@"
             ;;
         tunnel|t)
             shift

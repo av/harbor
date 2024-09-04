@@ -71,7 +71,8 @@ def main():
     args = parser.parse_args()
 
     merge_yaml_files(args.directory, args.pattern, args.output)
-    print(f"Merged YAML files matching '{args.pattern}' into '{args.output}' with environment variables rendered")
+    if os.environ.get('HARBOR_LOG_LEVEL', '').upper() == 'DEBUG':
+        print(f"Merged YAML files matching '{args.pattern}' into '{args.output}' with environment variables rendered")
 
 if __name__ == '__main__':
     main()

@@ -1,0 +1,8 @@
+clients:
+  - type: openai-compatible
+    name: tabbyapi
+    api_base: http://vllm:8000/v1
+    apiKey: sk-vllm
+    models:
+      - name: ${HARBOR_AICHAT_MODEL}
+

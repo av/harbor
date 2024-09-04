@@ -1,0 +1,8 @@
+clients:
+  - type: openai-compatible
+    name: aphrodite
+    api_base: http://aphrodite:7860/v1
+    api_key: sk-aphrodite
+    models:
+      - name: ${HARBOR_AICHAT_MODEL}
+
