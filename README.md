@@ -8,7 +8,7 @@ Harbor is a containerized LLM toolkit that allows you to run LLMs and additional
 
 ##### UIs
 
-[Open WebUI](https://github.com/av/harbor/wiki/Services#open-webui) ⦁︎ [ComfyUI](https://github.com/av/harbor/wiki/Services#comfyui) ⦁︎ [LibreChat](https://github.com/av/harbor/wiki/Services#librechat) ⦁︎ [HuggingFace ChatUI](https://github.com/av/harbor/wiki/Services#huggingface-chatui) ⦁︎ [Hollama](https://github.com/av/harbor/wiki/Services#hollama) ⦁︎ [parllama](https://github.com/av/harbor/wiki/Services#par-llama) ⦁︎ [BionicGPT](https://github.com/av/harbor/wiki/Services#bionicgpt)
+[Open WebUI](https://github.com/av/harbor/wiki/Services#open-webui) ⦁︎ [ComfyUI](https://github.com/av/harbor/wiki/Services#comfyui) ⦁︎ [LibreChat](https://github.com/av/harbor/wiki/Services#librechat) ⦁︎ [HuggingFace ChatUI](https://github.com/av/harbor/wiki/Services#huggingface-chatui) ⦁︎ [Lobe Chat](https://github.com/av/harbor/wiki/Services#lobe-chat) ⦁︎ [Hollama](https://github.com/av/harbor/wiki/Services#hollama) ⦁︎ [parllama](https://github.com/av/harbor/wiki/Services#par-llama) ⦁︎ [BionicGPT](https://github.com/av/harbor/wiki/Services#bionicgpt)
 
 ##### Backends
 
