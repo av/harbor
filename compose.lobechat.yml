@@ -1,0 +1,10 @@
+services:
+  lobechat:
+    image: lobehub/lobe-chat:${HARBOR_LOBECHAT_VERSION}
+    container_name: ${HARBOR_CONTAINER_PREFIX}.lobechat
+    env_file:
+      - ./.env
+    ports:
+      - ${HARBOR_LOBECHAT_HOST_PORT}:3210
+    networks:
+      - harbor-network

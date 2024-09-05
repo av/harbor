@@ -1,0 +1,4 @@
+services:
+  lobechat:
+    environment:
+      - OLLAMA_PROXY_URL=http://ollama:11434
