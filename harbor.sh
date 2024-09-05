@@ -2260,7 +2260,7 @@ run_ollama_command() {
 # == Main script
 # ========================================================================
 
-version="0.1.12"
+version="0.1.13"
 harbor_repo_url="https://github.com/av/harbor.git"
 delimiter="|"
 scramble_exit_code=42
