@@ -160,6 +160,8 @@ harbor open
 
 ## Documentation
 
+- [Harbor User Guide](https://github.com/av/harbor/wiki/Harbor-User-Guide)<br/>
+  High-level overview of working with Harbor
 - [Harbor CLI Reference](https://github.com/av/harbor/wiki/Harbor-CLI-Reference)<br/>
   Read more about Harbor CLI commands and options.
 - [Harbor Services](https://github.com/av/harbor/wiki/Services)<br/>
@@ -168,6 +170,8 @@ harbor open
   Read about the way Harbor uses Docker Compose to manage services.
 - [Compatibility](https://github.com/av/harbor/wiki/Compatibility)<br/>
   Known compatibility issues between the services and models as well as possible workarounds.
+- [Adding A New Service](https://github.com/av/harbor/wiki/Adding-A-New-Service)<br/>
+  Documentation on bringing more services into the Harbor.
 
 ## Why?
 
