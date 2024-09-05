@@ -11,3 +11,6 @@ services:
       - ./autogpt/workspace:/app/auto_gpt_workspace
       - ./autogpt/data:/app/data
       - ./autogpt/logs:/app/logs
+      - ./autogpt/backends/autogpt.ollama.yml:/app/azure.yaml
+    networks:
+      - harbor-network

@@ -1,0 +1,5 @@
+azure_api_type: azure
+azure_api_version: api-version-for-azure
+azure_endpoint: http://ollama:11434/v1
+azure_model_map:
+    ollama: ${HARBOR_AUTOGPT_MODEL}
