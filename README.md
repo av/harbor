@@ -9,6 +9,10 @@ Harbor is a containerized LLM toolkit that allows you to run LLMs and additional
 ![Diagram outlining Harbor's service structure](https://raw.githubusercontent.com/wiki/av/harbor/harbor-arch-diag.png)
 
 ```bash
+# Run Harbor with default services:
+# Open WebUI and Ollama
+harbor up
+
 # Run Harbor with additional services
 # Running SearXNG automatically enables Web RAG in Open WebUI
 harbor up searxng
@@ -18,7 +22,10 @@ harbor up searxng
 harbor up llamacpp tgi litellm vllm tabbyapi aphrodite
 
 # Run different Frontends
-harbor up librechat bionicgpt hollama
+harbor up librechat chatui bionicgpt hollama
+
+# Use FLUX in Open WebUI in one command
+harbor up comfyui
 
 # Use custom models for supported backends
 harbor llamacpp model https://huggingface.co/user/repo/model.gguf
@@ -45,6 +52,9 @@ harbor shell vllm
 # Tell your shell exactly what you think about it
 # courtesy of Open Interpreter
 harbor opint
+harbor aider
+harbor aichat
+harbor cmdh
 
 # Use fabric to LLM-ify your linux pipes
 cat ./file.md | harbor fabric --pattern extract_extraordinary_claims | grep "LK99"
@@ -76,9 +86,14 @@ harbor eject searxng llamacpp > docker-compose.harbor.yml
 # Argument scrambling, below commands are all the same as above
 # Harbor doesn't care if it's "vllm model" or "model vllm", it'll
 # figure it out.
-harbor vllm model            # harbor model vllm
-harbor config get webui.name # harbor get config webui_name
-harbor tabbyapi shell        # harbor shell tabbyapi
+harbor model vllm
+harbor vllm model
+
+harbor config get webui.name
+harbor get config webui_name
+
+harbor tabbyapi shell
+harbor shell tabbyapi
 
 # 50% gimmick, 50% useful
 # Ask harbor about itself
