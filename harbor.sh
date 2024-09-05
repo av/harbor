@@ -759,12 +759,28 @@ swap_and_retry() {
     fi
 }
 
+set_default_log_levels() {
+    default_log_levels_DEBUG=0
+    default_log_levels_INFO=1
+    default_log_levels_WARN=2
+    default_log_levels_ERROR=3
+}
+
+get_default_log_level() {
+    local level="$1"
+    local var_name="default_log_levels_$level"
+    eval echo \$$var_name
+}
+
 log() {
     local level="$1"
     shift
 
-    # Check if the numeric value of the current log level is greater than or equal to the set HARBOR_LOG_LEVEL
-    if [[ "${default_log_levels[$level]}" -ge "${default_log_levels[$default_log_level]}" ]]; then
+    local current_level=$(get_default_log_level "$level")
+    local set_level=$(get_default_log_level "$default_log_level")
+
+    # Check if the numeric value of the current log level is greater than or equal to the set default_log_level
+    if [[ $current_level -ge $set_level ]]; then
         echo "$(date +'%H:%M:%S') [$level] $*" >&2
     fi
 }
@@ -2256,14 +2272,10 @@ default_tunnels=($(env_manager get services.tunnels | tr ';' ' '))
 default_open=$(env_manager get ui.main)
 default_autoopen=$(env_manager get ui.autoopen)
 default_container_prefix=$(env_manager get container.prefix)
-
-declare -A default_log_levels=(
-    ["DEBUG"]=0
-    ["INFO"]=1
-    ["WARN"]=2
-    ["ERROR"]=3
-)
 default_log_level=$(env_manager get log.level)
+
+# Initialize the log levels
+set_default_log_levels
 
 main_entrypoint() {
     case "$1" in
