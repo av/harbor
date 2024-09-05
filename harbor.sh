@@ -659,7 +659,11 @@ merge_env_files() {
     done < "$default_file"
 
     # Remove trailing newlines from the temp file
-    sed -i -e :a -e '/^\n*$/{$d;N;ba' -e '}' "$temp_file"
+    if [[ "$(uname)" == "Darwin" ]]; then
+        sed -i '' -e :a -e '/^\n*$/{$d;N;ba' -e '}' "$temp_file"
+    else
+        sed -i -e :a -e '/^\n*$/{$d;N;ba' -e '}' "$temp_file"
+    fi
 
     # Move the temporary file to replace the target file
     mv "$temp_file" "$target_file"
