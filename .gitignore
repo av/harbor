@@ -54,3 +54,8 @@ comfyui/workspace/
 # Perplexica
 perplexica/data/
 perplexica/config.toml
+
+# AutoGPT
+autogpt/data/
+autogpt/workspace/
+autogpt/logs/
