@@ -847,6 +847,19 @@ env_manager() {
             shift
             merge_env_files
             ;;
+        --help|-h)
+            echo "Harbor configuration management"
+            echo
+            echo "Usage: harbor config {get|set|ls|list|reset|update} [key] [value]"
+            echo
+            echo "Commands:"
+            echo "  get <key>         - Get the value of a configuration key"
+            echo "  set <key> <value> - Set the value of a configuration key"
+            echo "  ls|list           - List all configuration keys and values"
+            echo "  reset             - Reset Harbor configuration to default.env"
+            echo "  update            - Merge upstream config changes from default.env"
+            return 0
+            ;;
         *)
             echo "Usage: harbor config {get|set|ls|reset} [key] [value]"
             return $scramble_exit_code
