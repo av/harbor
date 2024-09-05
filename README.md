@@ -4,6 +4,20 @@ Effortlessly run LLM backends, APIs, frontends, and services with one command.
 
 Harbor is a containerized LLM toolkit that allows you to run LLMs and additional services via a concise CLI.
 
+## Services
+
+##### UIs
+
+[Open WebUI](https://github.com/av/harbor/wiki/Services#open-webui) ⦁︎ [ComfyUI](https://github.com/av/harbor/wiki/Services#comfyui) ⦁︎ [LibreChat](https://github.com/av/harbor/wiki/Services#librechat) ⦁︎ [HuggingFace ChatUI](https://github.com/av/harbor/wiki/Services#huggingface-chatui) ⦁︎ [Hollama](https://github.com/av/harbor/wiki/Services#hollama) ⦁︎ [parllama](https://github.com/av/harbor/wiki/Services#par-llama) ⦁︎ [BionicGPT](https://github.com/av/harbor/wiki/Services#bionicgpt)
+
+##### Backends
+
+[Ollama](https://github.com/av/harbor/wiki/Services#ollama) ⦁︎ [llama.cpp](https://github.com/av/harbor/wiki/Services#llamacpp) ⦁︎ [vLLM](https://github.com/av/harbor/wiki/Services#vllm) ⦁︎ [TabbyAPI](https://github.com/av/harbor/wiki/Services#tabbyapi) ⦁︎ [Aphrodite Engine](https://github.com/av/harbor/wiki/Services#aphrodite-engine) ⦁︎ [mistral.rs](https://github.com/av/harbor/wiki/Services#mistralrs) ⦁︎ [openedai-speech](https://github.com/av/harbor/wiki/Services#openedai-speech) ⦁︎ [Parler](https://github.com/av/harbor/wiki/Services#parler) ⦁︎ [text-generation-inference](https://github.com/av/harbor/wiki/Services#text-generation-inference) ⦁︎ [LMDeploy](https://github.com/av/harbor/wiki/Services#lmdeploy) ⦁︎ [AirLLM](https://github.com/av/harbor/wiki/Services#airllm)
+
+##### Satellites
+
+[SearXNG](https://github.com/av/harbor/wiki/Services#searxng) ⦁︎ [Perplexica](https://github.com/av/harbor/wiki/Services#perplexica) ⦁︎ [Dify](https://github.com/av/harbor/wiki/Services#dify) ⦁︎ [Plandex](https://github.com/av/harbor/wiki/Services#plandex) ⦁︎ [LiteLLM](https://github.com/av/harbor/wiki/Services#-litellm) ⦁︎ [LangFuse](https://github.com/av/harbor/wiki/Services#langfuse) ⦁︎ [Open Interpreter](https://github.com/av/harbor/wiki/Services#-open-interpreter) ⦁︎ [cloudflared](https://github.com/av/harbor/wiki/Services#cloudflared) ⦁︎ [cmdh](https://github.com/av/harbor/wiki/Services#cmdh) ⦁︎ [fabric](https://github.com/av/harbor/wiki/Services#fabric) ⦁︎ [txtai RAG](https://github.com/av/harbor/wiki/Services#txtai-rag) ⦁︎ [TextGrad](https://github.com/av/harbor/wiki/Services#textgrad) ⦁︎ [Aider](https://github.com/av/harbor/wiki/Services#aider) ⦁︎ [aichat](https://github.com/av/harbor/wiki/Services#aichat)
+
 ## Blitz Tour
 
 ![Diagram outlining Harbor's service structure](https://raw.githubusercontent.com/wiki/av/harbor/harbor-arch-diag.png)
@@ -154,20 +168,6 @@ harbor open
   Read about the way Harbor uses Docker Compose to manage services.
 - [Compatibility](https://github.com/av/harbor/wiki/Compatibility)<br/>
   Known compatibility issues between the services and models as well as possible workarounds.
-
-## Services
-
-##### UIs
-
-[Open WebUI](https://github.com/av/harbor/wiki/Services#open-webui) ⦁︎ [ComfyUI](https://github.com/av/harbor/wiki/Services#comfyui) ⦁︎ [LibreChat](https://github.com/av/harbor/wiki/Services#librechat) ⦁︎ [HuggingFace ChatUI](https://github.com/av/harbor/wiki/Services#huggingface-chatui) ⦁︎ [Hollama](https://github.com/av/harbor/wiki/Services#hollama) ⦁︎ [parllama](https://github.com/av/harbor/wiki/Services#par-llama) ⦁︎ [BionicGPT](https://github.com/av/harbor/wiki/Services#bionicgpt)
-
-##### Backends
-
-[Ollama](https://github.com/av/harbor/wiki/Services#ollama) ⦁︎ [llama.cpp](https://github.com/av/harbor/wiki/Services#llamacpp) ⦁︎ [vLLM](https://github.com/av/harbor/wiki/Services#vllm) ⦁︎ [TabbyAPI](https://github.com/av/harbor/wiki/Services#tabbyapi) ⦁︎ [Aphrodite Engine](https://github.com/av/harbor/wiki/Services#aphrodite-engine) ⦁︎ [mistral.rs](https://github.com/av/harbor/wiki/Services#mistralrs) ⦁︎ [openedai-speech](https://github.com/av/harbor/wiki/Services#openedai-speech) ⦁︎ [Parler](https://github.com/av/harbor/wiki/Services#parler) ⦁︎ [text-generation-inference](https://github.com/av/harbor/wiki/Services#text-generation-inference) ⦁︎ [LMDeploy](https://github.com/av/harbor/wiki/Services#lmdeploy) ⦁︎ [AirLLM](https://github.com/av/harbor/wiki/Services#airllm)
-
-##### Satellites
-
-[SearXNG](https://github.com/av/harbor/wiki/Services#searxng) ⦁︎ [Perplexica](https://github.com/av/harbor/wiki/Services#perplexica) ⦁︎ [Dify](https://github.com/av/harbor/wiki/Services#dify) ⦁︎ [Plandex](https://github.com/av/harbor/wiki/Services#plandex) ⦁︎ [LiteLLM](https://github.com/av/harbor/wiki/Services#-litellm) ⦁︎ [LangFuse](https://github.com/av/harbor/wiki/Services#langfuse) ⦁︎ [Open Interpreter](https://github.com/av/harbor/wiki/Services#-open-interpreter) ⦁︎ [cloudflared](https://github.com/av/harbor/wiki/Services#cloudflared) ⦁︎ [cmdh](https://github.com/av/harbor/wiki/Services#cmdh) ⦁︎ [fabric](https://github.com/av/harbor/wiki/Services#fabric) ⦁︎ [txtai RAG](https://github.com/av/harbor/wiki/Services#txtai-rag) ⦁︎ [TextGrad](https://github.com/av/harbor/wiki/Services#textgrad) ⦁︎ [Aider](https://github.com/av/harbor/wiki/Services#aider) ⦁︎ [aichat](https://github.com/av/harbor/wiki/Services#aichat)
 
 ## Why?
 
