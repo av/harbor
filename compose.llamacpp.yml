@@ -15,7 +15,3 @@ services:
       --host 0.0.0.0
     networks:
       - harbor-network
-
-  webui:
-    environment:
-      - ENABLE_OPENAI_API=true
