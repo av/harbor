@@ -29,9 +29,7 @@ show_help() {
     echo "  cmd <handle>            - Print the docker-compose command"
     echo
     echo "Setup Management Commands:"
-    echo "  ollama     - Run Ollama CLI (docker). Service should be running."
-    echo "  smi        - Show NVIDIA GPU information"
-    echo "  top        - Run nvtop to monitor GPU usage"
+    echo "  webui      - Configure Open WebUI Service"
     echo "  llamacpp   - Configure llamacpp service"
     echo "  tgi        - Configure text-generation-inference service"
     echo "  litellm    - Configure LiteLLM service"
@@ -45,8 +43,10 @@ show_help() {
     echo "  txtai      - Configure txtai service"
     echo "  chatui     - Configure HuggingFace ChatUI service"
     echo "  comfyui    - Configure ComfyUI service"
+    echo "  parler     - Configure Parler service"
     echo
     echo "Service CLIs:"
+    echo "  ollama     - Run Ollama CLI (docker). Service should be running."
     echo "  aider             - Launch Aider CLI"
     echo "  aichat            - Run aichat CLI"
     echo "  interpreter|opint - Launch Open Interpreter CLI"
@@ -98,9 +98,16 @@ show_help() {
     echo "  help|--help|-h                - Show this help message"
     echo "  version|--version|-v          - Show the CLI version"
     echo "  gum                           - Run the Gum terminal commands"
-    echo "  fixfs                         - Fix file system ACLs for service volumes"
-    echo "  info                          - Show system information for debug/issues"
     echo "  update [-l|--latest]          - Update Harbor. --latest for the dev version"
+    echo "  info                          - Show system information for debug/issues"
+    echo "  how                           - Ask questions about Harbor CLI, uses cmdh under the hood"
+    echo "  smi                           - Show NVIDIA GPU information"
+    echo "  top                           - Run nvtop to monitor GPU usage"
+    echo
+    echo "Harbor Workspace Commands:"
+    echo "  home    - Show path to the Harbor workspace"
+    echo "  vscode  - Open Harbor Workspace in VS Code"
+    echo "  fixfs   - Fix file system ACLs for service volumes"
 }
 
 # shellcheck disable=SC2034

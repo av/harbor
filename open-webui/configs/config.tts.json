@@ -7,7 +7,7 @@
 			},
 			"engine": "openai",
 			"model": "tts-1",
-			"voice": "alloy"
+			"voice": "shimmer"
 		},
 		"stt": {
 			"engine": "",
