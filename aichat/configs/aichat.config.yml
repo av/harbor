@@ -83,6 +83,9 @@ left_prompt:
 right_prompt:
   '{color.purple}{?session {?consume_tokens {consume_tokens}({consume_percent}%)}{!consume_tokens {consume_tokens}}}{color.reset}'
 
+# ---- server ----
+serve_addr: 0.0.0.0:${HARBOR_AICHAT_HOST_PORT}
+
 # ---- clients ----
 clients: []
   # All clients have the following configuration:
