@@ -1174,6 +1174,7 @@ fix_fs_acl() {
     docker_fsacl ./aider
     docker_fsacl ./chatui
     docker_fsacl ./comfyui
+    docker_fsacl ./bionicgpt
 
     docker_fsacl $(eval echo "$(env_manager get hf.cache)")
     docker_fsacl $(eval echo "$(env_manager get vllm.cache)")
