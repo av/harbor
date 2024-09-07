@@ -2303,7 +2303,7 @@ run_omnichain_command() {
 # == Main script
 # ========================================================================
 
-version="0.1.14"
+version="0.1.15"
 harbor_repo_url="https://github.com/av/harbor.git"
 delimiter="|"
 scramble_exit_code=42
