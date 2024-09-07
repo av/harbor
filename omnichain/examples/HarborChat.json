@@ -1,0 +1,192 @@
+{
+  "name": "Harbor Chat",
+  "graphId": "c502dbef-fc4a-486c-96a6-f9a9ac30efa1",
+  "nodes": [
+    {
+      "nodeType": "StartNode",
+      "nodeId": "2fb74735a7cf92a1",
+      "controls": {},
+      "positionX": 375.0375763191436,
+      "positionY": 314.7640571014688
+    },
+    {
+      "nodeType": "CheckForNextMessageNode",
+      "nodeId": "7e99b65d4d24e30c",
+      "controls": {
+        "waitTimeMs": 100
+      },
+      "positionX": 365.26806015482106,
+      "positionY": -115.38184174239824
+    },
+    {
+      "nodeType": "BlockChatNode",
+      "nodeId": "babd8093d8d89bcd",
+      "controls": {
+        "action": "block"
+      },
+      "positionX": 846.407517774896,
+      "positionY": -193.15524538049172
+    },
+    {
+      "nodeType": "ResponseNode",
+      "nodeId": "ed68f6887695ceb2",
+      "controls": {},
+      "positionX": 1306.1170952278771,
+      "positionY": -270.92850947776157
+    },
+    {
+      "nodeType": "BlockChatNode",
+      "nodeId": "cdda8fcd33166f9f",
+      "controls": {
+        "action": "unblock"
+      },
+      "positionX": -93.27857465447406,
+      "positionY": 0.2679008626286725
+    },
+    {
+      "nodeType": "OllamaChatCompletionNode",
+      "nodeId": "28f08391c38646e6",
+      "controls": {
+        "model": "zenoverflow/replete_coder_3_1_8b_q8_custom",
+        "mirostat": "0",
+        "mirostatEta": 0.1,
+        "mirostatTau": 5,
+        "numCtx": 2048,
+        "repeatLastN": 0,
+        "repeatPenalty": 1.1,
+        "temperature": 0.8,
+        "seed": null,
+        "stop": null,
+        "tfsZ": 1,
+        "numPredict": 128,
+        "topK": 20,
+        "topP": 1,
+        "host": "http://ollama:11434",
+        "keepAlive": -1,
+        "json": "false"
+      },
+      "positionX": 1306.341921727005,
+      "positionY": 581.5786696722553
+    },
+    {
+      "nodeType": "ReadSessionMessagesNode",
+      "nodeId": "5413f4377640aeaa",
+      "controls": {
+        "limit": -1
+      },
+      "positionX": 847.037238204008,
+      "positionY": 852.8678384010803
+    },
+    {
+      "nodeType": "ReadFileNode",
+      "nodeId": "037083ac7b1f8bf8",
+      "controls": {},
+      "positionX": 417.657328008878,
+      "positionY": 698.0961566020494
+    },
+    {
+      "nodeType": "TextNode",
+      "nodeId": "0f2b51fe9535a459",
+      "controls": {
+        "val": "/app/omnichain/files/harbor.prompt"
+      },
+      "positionX": -266.7912930092313,
+      "positionY": 737.2301477419849
+    },
+    {
+      "nodeType": "StringifyFileNode",
+      "nodeId": "792cd9915eb2cff2",
+      "controls": {},
+      "positionX": 843.0836804295834,
+      "positionY": 660.5057470765239
+    },
+    {
+      "nodeType": "BuildMessageNode",
+      "nodeId": "9998e4416de4d65d",
+      "controls": {
+        "role": "assistant"
+      },
+      "positionX": 1306.2760487878186,
+      "positionY": 122.70649474575616
+    }
+  ],
+  "connections": [
+    {
+      "source": "2fb74735a7cf92a1",
+      "sourceOutput": "triggerOut",
+      "target": "7e99b65d4d24e30c",
+      "targetInput": "triggerIn"
+    },
+    {
+      "source": "7e99b65d4d24e30c",
+      "sourceOutput": "noMsg",
+      "target": "7e99b65d4d24e30c",
+      "targetInput": "triggerIn"
+    },
+    {
+      "source": "7e99b65d4d24e30c",
+      "sourceOutput": "haveMsg",
+      "target": "babd8093d8d89bcd",
+      "targetInput": "triggerIn"
+    },
+    {
+      "source": "babd8093d8d89bcd",
+      "sourceOutput": "triggerOut",
+      "target": "ed68f6887695ceb2",
+      "targetInput": "triggerIn"
+    },
+    {
+      "source": "cdda8fcd33166f9f",
+      "sourceOutput": "triggerOut",
+      "target": "7e99b65d4d24e30c",
+      "targetInput": "triggerIn"
+    },
+    {
+      "source": "ed68f6887695ceb2",
+      "sourceOutput": "triggerOut",
+      "target": "cdda8fcd33166f9f",
+      "targetInput": "triggerIn"
+    },
+    {
+      "source": "5413f4377640aeaa",
+      "sourceOutput": "messages",
+      "target": "28f08391c38646e6",
+      "targetInput": "messages"
+    },
+    {
+      "source": "0f2b51fe9535a459",
+      "sourceOutput": "out",
+      "target": "037083ac7b1f8bf8",
+      "targetInput": "path"
+    },
+    {
+      "source": "037083ac7b1f8bf8",
+      "sourceOutput": "file",
+      "target": "792cd9915eb2cff2",
+      "targetInput": "in"
+    },
+    {
+      "source": "792cd9915eb2cff2",
+      "sourceOutput": "out",
+      "target": "28f08391c38646e6",
+      "targetInput": "system"
+    },
+    {
+      "source": "28f08391c38646e6",
+      "sourceOutput": "result",
+      "target": "9998e4416de4d65d",
+      "targetInput": "content"
+    },
+    {
+      "source": "9998e4416de4d65d",
+      "sourceOutput": "message",
+      "target": "ed68f6887695ceb2",
+      "targetInput": "message"
+    }
+  ],
+  "zoom": 0.7207074550502492,
+  "areaX": 200.48861770629838,
+  "areaY": 7.447610402107401,
+  "created": 1725715268130,
+  "execPersistence": "onChange"
+}

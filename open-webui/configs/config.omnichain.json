@@ -1,0 +1,11 @@
+{
+  "openai": {
+		"api_base_urls": [
+			"http://omnichain:34082/v1"
+		],
+		"api_keys": [
+			"sk-omnichain"
+		],
+		"enabled": true
+	}
+}

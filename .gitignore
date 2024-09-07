@@ -62,3 +62,6 @@ autogpt/logs/
 
 # Bionicgpt
 bionicgpt/db
+
+# Omnichain
+omnichain/data/

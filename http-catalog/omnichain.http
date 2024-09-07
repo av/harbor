@@ -1,0 +1,59 @@
+@host = http://localhost:34081
+@apiHost = http://localhost:34082
+
+###
+
+curl {{host}}
+
+###
+
+curl {{apiHost}}/v1/chat/completions -H 'Content-Type: application/json' -H "Authorization: Bearer sk-fake" -d '{
+  "model": "8786c415-deaf-42da-a938-991a174b60de",
+  "messages": [
+    {
+      "role": "user",
+      "content": "What date is it today?"
+    }
+  ]
+}'
+
+###
+
+curl {{apiHost}}/v1/chat/completions -H 'Content-Type: application/json' -H "Authorization: Bearer sk-fake" -d '{
+  "model": "8786c415-deaf-42da-a938-991a174b60de",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Y"
+    }
+  ]
+}'
+
+###
+
+curl {{apiHost}}/v1/models -H 'Content-Type: application/json' -H "Authorization: Bearer sk-omnichain"
+
+###
+
+curl {{apiHost}}/v1/chat/completions -H 'Content-Type: application/json' -H "Authorization: Bearer sk-fake" -d '{
+  "model": "73bef3b5-fa82-4a7c-94e7-1979cfe7ee69",
+  "messages": [
+    {
+      "role": "user",
+      "content": "What date is it today?"
+    }
+  ]
+}'
+
+###
+
+curl {{apiHost}}/v1/chat/completions -H 'Content-Type: application/json' -H "Authorization: Bearer sk-fake" -d '{
+  "model": "73bef3b5-fa82-4a7c-94e7-1979cfe7ee69",
+  "messages": [
+    {
+      "role": "user",
+      "content": "What date is it today?"
+    }
+  ],
+  "stream": true
+}'

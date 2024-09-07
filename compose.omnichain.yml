@@ -1,0 +1,23 @@
+services:
+  omnichain:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.omnichain
+    build:
+      context: ./omnichain
+      dockerfile: Dockerfile
+    env_file:
+      - ./.env
+      - ./omnichain/override.env
+    networks:
+      - harbor-network
+    ports:
+      - ${HARBOR_OMNICHAIN_HOST_PORT}:${HARBOR_OMNICHAIN_HOST_PORT}
+      - ${HARBOR_OMNICHAIN_API_HOST_PORT}:${HARBOR_OMNICHAIN_API_HOST_PORT}
+    command: >
+      npm run serve --
+      --port ${HARBOR_OMNICHAIN_HOST_PORT}
+      --port_openai ${HARBOR_OMNICHAIN_API_HOST_PORT}
+    volumes:
+      - ./omnichain/custom_nodes:/app/omnichain/custom_nodes
+      - ./omnichain/data:/app/omnichain/data
+      - ./omnichain/openai.ts:/app/omnichain/server/openai.ts
+      - ./omnichain/files:/app/omnichain/files

@@ -1,0 +1,4 @@
+services:
+  webui:
+    volumes:
+      - ./open-webui/configs/config.omnichain.json:/app/configs/config.omnichain.json

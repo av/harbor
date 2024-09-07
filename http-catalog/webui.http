@@ -3,3 +3,7 @@
 ###
 
 curl {{host}}/health
+
+###
+
+curl {{host}}/api/models
