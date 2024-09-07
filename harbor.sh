@@ -44,6 +44,7 @@ show_help() {
     echo "  chatui     - Configure HuggingFace ChatUI service"
     echo "  comfyui    - Configure ComfyUI service"
     echo "  parler     - Configure Parler service"
+    echo "  omnichain  - Work with Omnichain service"
     echo
     echo "Service CLIs:"
     echo "  ollama     - Run Ollama CLI (docker). Service should be running."
@@ -2278,6 +2279,26 @@ run_ollama_command() {
         ollama "$@"
 }
 
+run_omnichain_command() {
+    case "$1" in
+        workspace)
+            shift
+            execute_and_process "env_manager get omnichain.workspace" "sys_open {{output}}" "No omnichain.workspace set"
+            ;;
+        -h|--help|help)
+            echo "Please note that this is not aichat CLI, but a Harbor CLI to manage aichat service."
+            echo
+            echo "Usage: harbor aichat <command>"
+            echo
+            echo "Commands:"
+            echo "  harbor omnichain workspace     - Open the aichat workspace directory"
+            ;;
+        *)
+            return $scramble_exit_code
+            ;;
+    esac
+}
+
 # ========================================================================
 # == Main script
 # ========================================================================
@@ -2511,6 +2532,10 @@ main_entrypoint() {
         aichat)
             shift
             run_aichat_command "$@"
+            ;;
+        omnichain)
+            shift
+            run_omnichain_command "$@"
             ;;
         tunnel|t)
             shift
