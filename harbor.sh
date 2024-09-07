@@ -26,7 +26,7 @@ show_help() {
     echo "  run <handle> [command]  - Run a one-off command in a service container"
     echo "  shell <handle>          - Load shell in the given service main container"
     echo "  build <handle>          - Build the given service"
-    echo "  cmd <handle>            - Print the docker-compose command"
+    echo "  cmd <handle>            - Print the docker compose command"
     echo
     echo "Setup Management Commands:"
     echo "  webui      - Configure Open WebUI Service"
@@ -110,6 +110,53 @@ show_help() {
     echo "  vscode  - Open Harbor Workspace in VS Code"
     echo "  fixfs   - Fix file system ACLs for service volumes"
 }
+
+run_harbor_doctor() {
+    log_info "Running Harbor Doctor..."
+
+    # Check if Docker is installed and running
+    if command -v docker &> /dev/null && docker info &> /dev/null; then
+        log_info "${ok} Docker is installed and running"
+    else
+        log_error "${nok} Docker is not installed or not running. Please install or start Docker."
+        return 1
+    fi
+
+    # Check if Docker Compose is installed
+    if command -v docker-compose &> /dev/null; then
+        log_info "${ok} Docker Compose is installed"
+    else
+        log_error "${nok} Docker Compose is not installed. Please install Docker Compose."
+        return 1
+    fi
+
+    # Check if the .env file exists and is readable
+    if [ -f ".env" ] && [ -r ".env" ]; then
+        log_info "${ok} .env file exists and is readable"
+    else
+        log_error "${nok} .env file is missing or not readable. Please ensure it exists and has the correct permissions."
+        return 1
+    fi
+
+    # Check if the default.env file exists and is readable
+    if [ -f "default.env" ] && [ -r "default.env" ]; then
+        log_info "${ok} default.env file exists and is readable"
+    else
+        log_error "${nok} default.env file is missing or not readable. Please ensure it exists and has the correct permissions."
+        return 1
+    fi
+
+    # Check if the Harbor workspace directory exists
+    if [ -d "$harbor_home" ]; then
+        log_info "${ok} Harbor workspace directory exists"
+    else
+        log_error "${nok} Harbor workspace directory $harbor_home does not exist."
+        return 1
+    fi
+
+    log_info "Harbor Doctor checks completed successfully."
+}
+
 
 # shellcheck disable=SC2034
 __anchor_fns=true
@@ -588,6 +635,26 @@ run_in_service() {
         log_error "Service ${service_name} is not running. Please start it with 'harbor up ${service_name}' first."
         return 1
     fi
+}
+
+set_colors() {
+    if [ -t 1 ] && command -v tput > /dev/null 2>&1 && tput setaf 1 > /dev/null 2>&1; then
+        c_r=$(tput setaf 1)
+        c_g=$(tput setaf 2)
+        c_nc=$(tput sgr0)
+    elif [ -t 1 ]; then
+        c_r='\033[0;31m'
+        c_g='\033[0;32m'
+        c_nc='\033[0m'
+    else
+        c_r=''
+        c_g=''
+        c_nc=''
+    fi
+
+    # Define symbols
+    ok="${c_g}✔${c_nc}"
+    nok="${c_r}✘${c_nc}"
 }
 
 ensure_env_file() {
@@ -2303,23 +2370,26 @@ run_omnichain_command() {
 # == Main script
 # ========================================================================
 
+# Globals
 version="0.1.15"
 harbor_repo_url="https://github.com/av/harbor.git"
 delimiter="|"
 scramble_exit_code=42
-
 harbor_home=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
 original_dir=$PWD
 cd "$harbor_home" || exit
 
+# Config
 ensure_env_file
-
 default_options=($(env_manager get services.default | tr ';' ' '))
 default_tunnels=($(env_manager get services.tunnels | tr ';' ' '))
 default_open=$(env_manager get ui.main)
 default_autoopen=$(env_manager get ui.autoopen)
 default_container_prefix=$(env_manager get container.prefix)
 default_log_level=$(env_manager get log.level)
+
+# Set color variables
+set_colors
 
 # Initialize the log levels
 set_default_log_levels
@@ -2580,6 +2650,10 @@ main_entrypoint() {
         vscode)
             shift
             open_home_code
+            ;;
+        doctor)
+            shift
+            run_harbor_doctor "$@"
             ;;
         *)
             return $scramble_exit_code
