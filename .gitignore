@@ -65,3 +65,6 @@ bionicgpt/db
 
 # Omnichain
 omnichain/data/
+
+# Bench
+bench/results/

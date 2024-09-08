@@ -1,0 +1,12 @@
+# The task format:
+# 
+# type Task {
+#   tags: string[];
+#   question: string;
+#   criteria: Record<string, string>;
+# };
+
+- tags: [easy, knowledge]
+  question: Who painted "Starry Night"?
+  criteria: 
+    correctness: Answer mentions this painting was made by Vincent van Gogh

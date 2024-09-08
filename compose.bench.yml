@@ -1,0 +1,15 @@
+services:
+  bench:
+    build:
+      context: ./bench
+      dockerfile: Dockerfile
+    container_name: ${HARBOR_CONTAINER_PREFIX}.bench
+    env_file:
+      - ./.env
+    volumes:
+      # Inline source
+      - ./bench/src:/app/src
+      - ${HARBOR_BENCH_RESULTS}:/app/results
+      - ${HARBOR_BENCH_TASKS}:/app/tasks.yml
+    networks:
+      - harbor-network

@@ -154,6 +154,14 @@ run_harbor_doctor() {
         return 1
     fi
 
+    # Check if CLI is linked
+    if [ -L "$(eval echo "$(env_manager get cli.path)")/$(env_manager get cli.name)" ]; then
+        log_info "${ok} CLI is linked"
+    else
+        log_error "${nok} CLI is not linked. Run 'harbor link' to create a symlink."
+        return 1
+    fi
+
     log_info "Harbor Doctor checks completed successfully."
 }
 
@@ -1244,6 +1252,7 @@ fix_fs_acl() {
     docker_fsacl ./comfyui
     docker_fsacl ./bionicgpt
     docker_fsacl ./omnichain
+    docker_fsacl ./bench
 
     docker_fsacl $(eval echo "$(env_manager get hf.cache)")
     docker_fsacl $(eval echo "$(env_manager get vllm.cache)")
@@ -2353,7 +2362,7 @@ run_omnichain_command() {
             execute_and_process "env_manager get omnichain.workspace" "sys_open {{output}}" "No omnichain.workspace set"
             ;;
         -h|--help|help)
-            echo "Please note that this is not aichat CLI, but a Harbor CLI to manage aichat service."
+            echo "Please note that this is not omnichain CLI, but a Harbor CLI to manage aichat service."
             echo
             echo "Usage: harbor aichat <command>"
             echo
@@ -2366,12 +2375,87 @@ run_omnichain_command() {
     esac
 }
 
+run_bench_command() {
+    case "$1" in
+        results)
+            shift
+            execute_and_process "env_manager get bench.results" "sys_open {{output}}" "No bench.results set"
+            return 0
+            ;;
+        tasks)
+            shift
+            env_manager_alias bench.tasks "$@"
+            return 0
+            ;;
+        debug)
+            shift
+            env_manager_alias bench.debug "$@"
+            return 0
+            ;;
+        model)
+            shift
+            env_manager_alias bench.model "$@"
+            return 0
+            ;;
+        api)
+            shift
+            env_manager_alias bench.api "$@"
+            return 0
+            ;;
+        key)
+            shift
+            env_manager_alias bench.api_key "$@"
+            return 0
+            ;;
+        judge)
+            shift
+            env_manager_alias bench.judge "$@"
+            return 0
+            ;;
+        judge_api)
+            shift
+            env_manager_alias bench.judge_api "$@"
+            return 0
+            ;;
+        judge_key)
+            shift
+            env_manager_alias bench.judge_api_key "$@"
+            return 0
+            ;;
+        variants)
+            shift
+            env_manager_alias bench.variants "$@"
+            return 0
+            ;;
+        -h|--help|help)
+            echo "Usage: harbor bench <command>"
+            echo
+            echo "Commands:"
+            echo "  harbor bench - runs the benchmark"
+            echo "  harbor bench results       - Open the directory containing benchmark results"
+            echo "  harbor bench tasks [tasks] - Get or set the path to tasks.yml to run in the benchmark"
+            echo "  harbor bench model [model] - Get or set the model to run in the benchmark"
+            echo "  harbor bench api [url]   - Get or set the API URL to use in the benchmark"
+            echo "  harbor bench key [key]   - Get or set the API key to use in the benchmark"
+            echo "  harbor bench judge [url] - Get or set the judge URL to use in the benchmark"
+            echo "  harbor bench judge_api [url] - Get or set the judge API URL to use in the benchmark"
+            echo "  harbor bench judge_key [key] - Get or set the judge API key to use in the benchmark"
+            echo "  harbor bench variants [variants] - Get or set the path to variants.yml to run in the benchmark"
+            echo "  harbor bench debug [true]  - Enable or disable debug mode in the benchmark"
+            return 0
+            ;;
+    esac
+
+    local services=$(get_active_services)
+    $(compose_with_options $services "bench") run --rm "bench" "$@"
+}
+
 # ========================================================================
 # == Main script
 # ========================================================================
 
 # Globals
-version="0.1.15"
+version="0.1.16"
 harbor_repo_url="https://github.com/av/harbor.git"
 delimiter="|"
 scramble_exit_code=42
@@ -2654,6 +2738,10 @@ main_entrypoint() {
         doctor)
             shift
             run_harbor_doctor "$@"
+            ;;
+        bench)
+            shift
+            run_bench_command "$@"
             ;;
         *)
             return $scramble_exit_code

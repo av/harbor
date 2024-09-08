@@ -16,7 +16,7 @@ Harbor is a containerized LLM toolkit that allows you to run LLMs and additional
 
 ##### Satellites
 
-[SearXNG](https://github.com/av/harbor/wiki/Services#searxng) ⦁︎ [Perplexica](https://github.com/av/harbor/wiki/Services#perplexica) ⦁︎ [Dify](https://github.com/av/harbor/wiki/Services#dify) ⦁︎ [Plandex](https://github.com/av/harbor/wiki/Services#plandex) ⦁︎ [LiteLLM](https://github.com/av/harbor/wiki/Services#-litellm) ⦁︎ [LangFuse](https://github.com/av/harbor/wiki/Services#langfuse) ⦁︎ [Open Interpreter](https://github.com/av/harbor/wiki/Services#-open-interpreter) ⦁︎ [cloudflared](https://github.com/av/harbor/wiki/Services#cloudflared) ⦁︎ [cmdh](https://github.com/av/harbor/wiki/Services#cmdh) ⦁︎ [fabric](https://github.com/av/harbor/wiki/Services#fabric) ⦁︎ [txtai RAG](https://github.com/av/harbor/wiki/Services#txtai-rag) ⦁︎ [TextGrad](https://github.com/av/harbor/wiki/Services#textgrad) ⦁︎ [Aider](https://github.com/av/harbor/wiki/Services#aider) ⦁︎ [aichat](https://github.com/av/harbor/wiki/Services#aichat) ⦁︎ [omnichain](https://github.com/av/harbor/wiki/Services#omnichain)
+[SearXNG](https://github.com/av/harbor/wiki/Services#searxng) ⦁︎ [Perplexica](https://github.com/av/harbor/wiki/Services#perplexica) ⦁︎ [Dify](https://github.com/av/harbor/wiki/Services#dify) ⦁︎ [Plandex](https://github.com/av/harbor/wiki/Services#plandex) ⦁︎ [LiteLLM](https://github.com/av/harbor/wiki/Services#-litellm) ⦁︎ [LangFuse](https://github.com/av/harbor/wiki/Services#langfuse) ⦁︎ [Open Interpreter](https://github.com/av/harbor/wiki/Services#-open-interpreter) ⦁︎ [cloudflared](https://github.com/av/harbor/wiki/Services#cloudflared) ⦁︎ [cmdh](https://github.com/av/harbor/wiki/Services#cmdh) ⦁︎ [fabric](https://github.com/av/harbor/wiki/Services#fabric) ⦁︎ [txtai RAG](https://github.com/av/harbor/wiki/Services#txtai-rag) ⦁︎ [TextGrad](https://github.com/av/harbor/wiki/Services#textgrad) ⦁︎ [Aider](https://github.com/av/harbor/wiki/Services#aider) ⦁︎ [aichat](https://github.com/av/harbor/wiki/Services#aichat) ⦁︎ [omnichain](https://github.com/av/harbor/wiki/Services#omnichain) ⦁︎ [bench](https://github.com/av/harbor/wiki/Services#bench)
 
 ## Blitz Tour
 
@@ -94,6 +94,10 @@ harbor config set webui.host.port 8080
 # Eject from Harbor into a standalone Docker Compose setup
 # Will export related services and variables into a standalone file.
 harbor eject searxng llamacpp > docker-compose.harbor.yml
+
+# Run a build-in LLM benchmark with
+# your own tasks
+harbor bench
 
 # Gimmick/Fun Area
 
