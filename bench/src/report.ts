@@ -4,7 +4,7 @@ export const template = (data: unknown) => `
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Task Results Report</title>
+    <title>Harbor Bench</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body {
@@ -56,7 +56,7 @@ export const template = (data: unknown) => `
     </style>
 </head>
 <body>
-    <h1>Task Results Report</h1>
+    <h1>Bench</h1>
     <div class="summary">
         <h2>Summary</h2>
         <p>Total tasks: <span id="totalTasks"></span></p>
@@ -64,7 +64,7 @@ export const template = (data: unknown) => `
         <p>Average task duration: <span id="averageTaskDuration"></span> ms</p>
         <p>Task duration range: <span id="minTaskDuration"></span> ms - <span id="maxTaskDuration"></span> ms</p>
     </div>
-    <h2>Results by Dimension</h2>
+    <h2>Results</h2>
     <div id="chartGrid" class="chart-grid"></div>
     <h2>Detailed Results</h2>
     <table id="resultsTable">
