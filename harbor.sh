@@ -162,6 +162,13 @@ run_harbor_doctor() {
         return 1
     fi
 
+    # Check if nvidia-container-toolkit is installed
+    if command -v nvidia-container-toolkit &> /dev/null; then
+        log_info "${ok} NVIDIA Container Toolkit is installed"
+    else
+        log_warn "${nok} NVIDIA Container Toolkit is not installed. NVIDIA GPU support may not work."
+    fi
+
     log_info "Harbor Doctor checks completed successfully."
 }
 
@@ -204,7 +211,7 @@ compose_with_options() {
     done
 
     # Check for NVIDIA GPU and drivers
-    if command -v nvidia-smi &> /dev/null && docker info | grep -q "Runtimes:.*nvidia"; then
+    if command -v nvidia-smi &> /dev/null && command -v nvidia-container-toolkit &> /dev/null; then
         options+=("nvidia")
     fi
 
