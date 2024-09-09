@@ -5,6 +5,7 @@ import { BenchConfig, config } from './config.ts';
 import { BenchTask } from "./task.ts";
 import { BenchRun } from "./run.ts";
 import { csv, yaml } from './deps.ts';
+import { template } from './report.ts';
 
 export class BenchRunner {
   static async init(config: BenchConfig) {
@@ -103,6 +104,7 @@ export class BenchRunner {
       Deno.writeTextFile(`${output}/results.csv`, csv.stringify(results, {
         columns,
       })),
+      Deno.writeTextFile(`${output}/report.html`, template(results)),
     ]);
   }
 }
