@@ -1,9 +1,14 @@
 @host = http://localhost:33921
-@model = neuralmagic/Mistral-7B-Instruct-v0.3-GPTQ-4bit
+# @model = neuralmagic/Mistral-7B-Instruct-v0.3-GPTQ-4bit
+@model = meta-llama/Meta-Llama-3.1-8B-Instruct
 
 ###
 
 curl {{host}}/v1/models
+
+###
+
+curl {{host}}/version
 
 ###
 
@@ -16,4 +21,18 @@ curl {{host}}/v1/chat/completions -H 'Content-Type: application/json' -d '{
     }
   ],
   "max_tokens": 200
+}'
+
+###
+
+curl {{host}}/v1/chat/completions -H 'Content-Type: application/json' -d '{
+  "model": "{{model}}",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Where is Minsk located?"
+    }
+  ],
+  "max_tokens": 200,
+  "temperature": "0.5"
 }'

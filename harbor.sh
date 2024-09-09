@@ -1678,6 +1678,10 @@ run_aphrodite_command() {
             shift
             env_manager_alias aphrodite.extra.args "$@"
             ;;
+        version)
+            shift
+            env_manager_alias aphrodite.version "$@"
+            ;;
         -h|--help|help)
             echo "Please note that this is not Aphrodite CLI, but a Harbor CLI to manage Aphrodite service."
             echo "Access Aphrodite own CLI by running 'harbor exec aphrodite' when it's running."
@@ -1687,6 +1691,7 @@ run_aphrodite_command() {
             echo "Commands:"
             echo "  harbor aphrodite model <user/repo>   - Get/set the Aphrodite model to run"
             echo "  harbor aphrodite args <args>         - Get/set extra args to pass to the Aphrodite CLI"
+            echo "  harbor aphrodite version <version>   - Get/set Aphrodite version docker tag"
             ;;
         *)
             return $scramble_exit_code

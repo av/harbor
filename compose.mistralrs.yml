@@ -23,5 +23,3 @@ services:
       --token-source env:HARBOR_HF_TOKEN
       ${HARBOR_MISTRALRS_EXTRA_ARGS}
       ${HARBOR_MISTRALRS_MODEL_SPECIFIER}
-
-

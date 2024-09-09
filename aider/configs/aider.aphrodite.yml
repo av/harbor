@@ -1,4 +1,4 @@
-openai-api-base: http://aphrodite:7860/v1
+openai-api-base: http://aphrodite:2242/v1
 openai-api-key: sk-aphrodite
 model: openai/${HARBOR_AIDER_MODEL}
 verify-ssl: false

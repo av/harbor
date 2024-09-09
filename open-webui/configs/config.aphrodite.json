@@ -1,7 +1,7 @@
 {
   "openai": {
 		"api_base_urls": [
-			"http://aphrodite:7860/v1"
+			"http://aphrodite:2242/v1"
 		],
 		"api_keys": [
 			"sk-aphrodite"
