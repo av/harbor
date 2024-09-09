@@ -84,6 +84,7 @@ export class BenchRun {
           id,
           result,
           tags: t.tags,
+          time: t.time,
           ...base,
         };
       });

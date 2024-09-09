@@ -76,6 +76,7 @@ export class BenchRunner {
 
     for (const run of this.runs) {
       console.log(`Run ${++runs}/${this.runs.length}`);
+      console.log(`LLM`, run.llm.toJson());
       await run.run();
       await this.save();
     }
@@ -86,6 +87,7 @@ export class BenchRunner {
 
     for (const run of this.runs) {
       console.log(`Evals ${++evals}/${this.runs.length}`);
+      console.log(`Judge`, run.judge.toJson());
       await run.eval();
       await this.save();
     }

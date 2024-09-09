@@ -7,6 +7,7 @@ export class BenchTask implements Task {
   question: string;
   criteria: Record<string, string>;
   tags: Task['tags'];
+  time: number;
 
   answer: string;
   results: Record<string, number>;
@@ -18,10 +19,13 @@ export class BenchTask implements Task {
 
     this.answer = '';
     this.results = {};
+    this.time = 0;
   }
 
   async run(llm: LLM) {
+    const start = Date.now();
     this.answer = await llm.chat(this.question);
+    this.time = Date.now() - start;
   }
 
   async eval(judge: LLM) {
@@ -45,6 +49,7 @@ export class BenchTask implements Task {
       tags: this.tags,
       criteria: this.criteria,
       results: this.results,
+      time: this.time,
     };
   }
 }
