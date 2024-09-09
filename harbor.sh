@@ -2431,7 +2431,7 @@ run_bench_command() {
             echo "Usage: harbor bench <command>"
             echo
             echo "Commands:"
-            echo "  harbor bench - runs the benchmark"
+            echo "  harbor bench run - runs the benchmark"
             echo "  harbor bench results       - Open the directory containing benchmark results"
             echo "  harbor bench tasks [tasks] - Get or set the path to tasks.yml to run in the benchmark"
             echo "  harbor bench model [model] - Get or set the model to run in the benchmark"
@@ -2444,10 +2444,15 @@ run_bench_command() {
             echo "  harbor bench debug [true]  - Enable or disable debug mode in the benchmark"
             return 0
             ;;
+        run)
+            shift
+            local services=$(get_active_services)
+            $(compose_with_options $services "bench") run --rm "bench" "$@"
+            ;;
+        *)
+            return $scramble_exit_code
+            ;;
     esac
-
-    local services=$(get_active_services)
-    $(compose_with_options $services "bench") run --rm "bench" "$@"
 }
 
 # ========================================================================

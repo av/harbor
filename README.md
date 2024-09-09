@@ -97,7 +97,7 @@ harbor eject searxng llamacpp > docker-compose.harbor.yml
 
 # Run a build-in LLM benchmark with
 # your own tasks
-harbor bench
+harbor bench run
 
 # Gimmick/Fun Area
 
