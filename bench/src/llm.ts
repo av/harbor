@@ -1,4 +1,5 @@
 import { config } from "./config.ts";
+import { omit } from './utils.ts';
 
 export type LLMOptions = {
   maxTokens?: number;
@@ -70,6 +71,6 @@ export class LLM {
   }
 
   toJson() {
-    return this.llm;
+    return omit(this.llm, ['apiKey']);
   }
 }

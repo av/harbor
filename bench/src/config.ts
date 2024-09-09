@@ -17,10 +17,12 @@ export const config = {
     llm: {
         model: Deno.env.get('HARBOR_BENCH_MODEL'),
         apiUrl: Deno.env.get('HARBOR_BENCH_API'),
+        apiKey: Deno.env.get('HARBOR_BENCH_API_KEY'),
     } as LLMConfig,
     judge: {
         model: Deno.env.get('HARBOR_BENCH_JUDGE'),
         apiUrl: Deno.env.get('HARBOR_BENCH_JUDGE_API'),
+        apiKey: Deno.env.get('HARBOR_BENCH_JUDGE_API_KEY'),
         options: {
             temperature: 0,
         },

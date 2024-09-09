@@ -6,7 +6,8 @@ async function main() {
 ░█▀▄░█▀▀░█▀█░█▀▀░█░█
 ░█▀▄░█▀▀░█░█░█░░░█▀█
 ░▀▀░░▀▀▀░▀░▀░▀▀▀░▀░▀
-  `)
+  `);
+
   const runner = await BenchRunner.init(config);
   console.table(runner.scenarios);
 
@@ -14,4 +15,12 @@ async function main() {
   await runner.eval();
 }
 
+async function handleSignal() {
+  console.info("Interrupted");
+  Deno.exit(0);
+}
+
 main().catch(console.error);
+
+Deno.addSignalListener("SIGINT", handleSignal);
+Deno.addSignalListener("SIGTERM", handleSignal);

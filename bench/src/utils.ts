@@ -22,6 +22,10 @@ export function uniqueVariants<T>(variations: Record<string, string[]>): T[] {
   });
 }
 
+export function omit(obj: Object, keys: string[]) {
+  return Object.fromEntries(Object.entries(obj).filter(([key]) => !keys.includes(key)));
+}
+
 export function permutate(a: any[], b: any[]): any[] {
     return a.reduce((acc, aItem) => {
         if (b.length > 0) {
