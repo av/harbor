@@ -175,7 +175,9 @@ harbor open
 - [Compatibility](https://github.com/av/harbor/wiki/Compatibility)<br/>
   Known compatibility issues between the services and models as well as possible workarounds.
 - [Adding A New Service](https://github.com/av/harbor/wiki/Adding-A-New-Service)<br/>
-  Documentation on bringing more services into the Harbor.
+  Documentation on bringing more services into the Harbor toolkit.
+- [Harbor Bench](https://github.com/av/harbor/wiki/Adding-A-New-Service)<br/>
+  Documentation on built-in LLM benchmarking service.
 
 ## Why?
 
