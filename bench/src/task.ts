@@ -17,9 +17,9 @@ export class BenchTask implements Task {
     this.criteria = task.criteria;
     this.tags = task.tags;
 
-    this.answer = '';
-    this.results = {};
-    this.time = 0;
+    this.answer = task.answer ?? '';
+    this.results = task.results ?? {};
+    this.time = task.time ?? 0;
   }
 
   async run(llm: LLM) {

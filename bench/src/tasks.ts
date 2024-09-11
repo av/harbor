@@ -14,6 +14,12 @@ export type Task = {
   question: string;
   criteria: Record<string, string>;
   tags: `${TaskTags}`[];
+
+  // Optional, could be
+  // present on semi-complete tasks
+  time?: number;
+  answer?: string;
+  results?: Record<string, number>;
 };
 
 export const tasks: Task[] = [

@@ -1,4 +1,6 @@
-export const template = (data: unknown) => `
+import { prompt } from './judge.ts';
+
+export const summaryTemplate = (data: unknown) => `
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -193,3 +195,154 @@ export const template = (data: unknown) => `
 </html>
 `;
 
+export const runsTemplate = (runs: unknown) => {
+    const htmlContent = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task Report</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f0f4f8;
+        }
+        h1, h2, h3 {
+            color: #2c3e50;
+        }
+        h1 {
+            text-align: center;
+            color: #34495e;
+            margin-bottom: 30px;
+        }
+        .section {
+            background-color: #ffffff;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .task {
+            background-color: #f9f9f9;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            transition: all 0.3s ease;
+        }
+        .parameter {
+            margin-bottom: 12px;
+        }
+        .tag {
+            display: inline-block;
+            background-color: #3498db;
+            color: white;
+            padding: 3px 10px;
+            border-radius: 15px;
+            margin-right: 5px;
+            font-size: 0.9em;
+        }
+        .result {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 15px;
+            font-weight: bold;
+        }
+        .result-1 {
+            background-color: #2ecc71;
+            color: white;
+        }
+        .result-0 {
+            background-color: #e74c3c;
+            color: white;
+        }
+        details {
+            border: 1px solid #aaa;
+            border-radius: 4px;
+            padding: 0.5em 0.5em 0;
+        }
+        summary {
+            font-weight: bold;
+            margin: -0.5em -0.5em 0;
+            padding: 0.5em;
+        }
+        details[open] {
+            padding: 0.5em;
+        }
+        details[open] summary {
+            border-bottom: 1px solid #aaa;
+            margin-bottom: 0.5em;
+        }
+        pre {
+            overflow: auto;
+        }
+    </style>
+</head>
+<body>
+    ${runs.map((run, index) => {
+        const { llm, judge, tasks } = run;
+        return `
+        <h1>Run #${index + 1}</h1>
+        <div class="section">
+            <h2>LLM Parameters</h2>
+            <div class="parameter"><strong>Model:</strong> ${llm.llm.model}</div>
+            <div class="parameter"><strong>API URL:</strong> ${llm.llm.apiUrl}</div>
+            <div class="parameter"><strong>Max Tokens:</strong> ${llm.llm.max_tokens}</div>
+            <div class="parameter"><strong>Temperature:</strong> ${llm.llm.temperature}</div>
+        </div>
+        <div class="section">
+            <h2>Judge Parameters</h2>
+            <div class="parameter"><strong>Model:</strong> ${judge.llm.model}</div>
+            <div class="parameter"><strong>API URL:</strong> ${judge.llm.apiUrl}</div>
+            <div class="parameter"><strong>Temperature:</strong> ${judge.llm.temperature}</div>
+        </div>
+        <h2>Tasks</h2>
+        ${tasks.map((task, index) => `
+        <div class="task">
+            <h3>Task ${index + 1}</h3>
+            <div class="parameter"><strong>Question:</strong> ${task.question}</div>
+            <div class="parameter"><strong>Answer:</strong> ${task.answer}</div>
+            <div class="parameter"><strong>Criteria:</strong>
+                <ul>
+                    ${Object.entries(task.criteria).map(([key, value]) => {
+                        const result = task.results[key];
+                        const judgePrompt = prompt({ question: task.question, answer: task.answer, criteria: value })
+                        return `
+                    <li>
+                        <strong>${key}:</strong>
+                        <span class="result result-${result}">${result}</span>&nbsp;
+                        <span class="value">${value}</span>
+                        <details>
+                            <summary>Prompt</summary>
+                            <pre>${escapeHTML(judgePrompt)}</pre>
+                        </details>
+                    </li>
+                `.trim();
+                    })}
+                </ul>
+            </div>
+            <div class="parameter"><strong>Tags:</strong> ${task.tags.map((tag: string) => `<span class="tag">${tag}</span>`).join(' ')}</div>
+            <div class="parameter"><strong>Time:</strong> ${task.time} ms</div>
+        </div>
+        `.trim()).join('')}`;
+    })}
+</body>
+</html>
+    `;
+    return htmlContent;
+}
+
+function escapeHTML(str: string) {
+    return str.replace(/[&<>]/g, (char) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+    }[char]));
+}

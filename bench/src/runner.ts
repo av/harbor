@@ -4,10 +4,29 @@ import { deepMerge, parseArgs, permutate, uniqueVariants } from "./utils.ts";
 import { BenchConfig, config } from './config.ts';
 import { BenchTask } from "./task.ts";
 import { BenchRun } from "./run.ts";
-import { csv, yaml } from './deps.ts';
-import { template } from './report.ts';
+import { csv, yaml, path } from './deps.ts';
+import { runsTemplate, summaryTemplate } from './report.ts';
 
 export class BenchRunner {
+  static async fromRunsFile(file: string) {
+    // Preserve the output directory
+    const name = path.dirname(file).split('/').pop();
+    config.name = name;
+
+    const runsFile = JSON.parse(await Deno.readTextFile(file));
+    const runner = new BenchRunner([], []);
+
+    runner.runs = runsFile.map((run: any) => {
+      const llm = new LLM(run.llm.llm);
+      const judge = new LLM(run.judge.llm);
+      const tasks = run.tasks.map((t: Task) => new BenchTask(t));
+
+      return new BenchRun({ llm, judge, tasks });
+    });
+
+    return runner;
+  }
+
   static async init(config: BenchConfig) {
     const [
       scenarios,
@@ -106,7 +125,8 @@ export class BenchRunner {
       Deno.writeTextFile(`${output}/results.csv`, csv.stringify(results, {
         columns,
       })),
-      Deno.writeTextFile(`${output}/report.html`, template(results)),
+      Deno.writeTextFile(`${output}/report.html`, summaryTemplate(results)),
+      Deno.writeTextFile(`${output}/tasks.html`, runsTemplate(this.runs)),
     ]);
   }
 }

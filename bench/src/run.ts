@@ -77,7 +77,7 @@ export class BenchRun {
       const results = t.criteria;
 
       return Object.entries(results).map(([k]) => {
-        const id = `task.${i}.${k}`;
+        const id = `task.${i + 1}.${k}`;
         const result = t.results[k];
 
         return {

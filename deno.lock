@@ -3,14 +3,24 @@
   "packages": {
     "specifiers": {
       "jsr:@std/cli": "jsr:@std/cli@1.0.5",
+      "jsr:@std/csv": "jsr:@std/csv@1.0.3",
       "jsr:@std/fmt@^1.0.2": "jsr:@std/fmt@1.0.2",
       "jsr:@std/fs@^1.0.3": "jsr:@std/fs@1.0.3",
       "jsr:@std/io@^0.224.7": "jsr:@std/io@0.224.7",
-      "jsr:@std/log": "jsr:@std/log@0.224.7"
+      "jsr:@std/log": "jsr:@std/log@0.224.7",
+      "jsr:@std/path": "jsr:@std/path@1.0.4",
+      "jsr:@std/streams@^1.0.4": "jsr:@std/streams@1.0.4",
+      "jsr:@std/yaml": "jsr:@std/yaml@1.0.5"
     },
     "jsr": {
       "@std/cli@1.0.5": {
         "integrity": "c93cce26ffd26f617c15a12874e1bfeabc90b1eee86017c9639093734c2bf587"
+      },
+      "@std/csv@1.0.3": {
+        "integrity": "623acf0dcb88d62ba727c3611ad005df7f109ede8cac833e3986f540744562e5",
+        "dependencies": [
+          "jsr:@std/streams@^1.0.4"
+        ]
       },
       "@std/fmt@1.0.2": {
         "integrity": "87e9dfcdd3ca7c066e0c3c657c1f987c82888eb8103a3a3baa62684ffeb0f7a7"
@@ -28,6 +38,15 @@
           "jsr:@std/fs@^1.0.3",
           "jsr:@std/io@^0.224.7"
         ]
+      },
+      "@std/path@1.0.4": {
+        "integrity": "48dd5d8389bcfcd619338a01bdf862cb7799933390146a54ae59356a0acc7105"
+      },
+      "@std/streams@1.0.4": {
+        "integrity": "a1a5b01c74ca1d2dcaacfe1d4bbb91392e765946d82a3471bd95539adc6da83a"
+      },
+      "@std/yaml@1.0.5": {
+        "integrity": "71ba3d334305ee2149391931508b2c293a8490f94a337eef3a09cade1a2a2742"
       }
     }
   },
