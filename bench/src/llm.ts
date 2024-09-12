@@ -1,5 +1,5 @@
 import { config } from "./config.ts";
-import { omit } from './utils.ts';
+import { omit, sleep } from './utils.ts';
 
 export type LLMOptions = {
   maxTokens?: number;
@@ -21,6 +21,26 @@ export class LLM {
   }
 
   async chat(message: string, options = {}): Promise<string> {
+    const maxRetries = 4;
+    let retries = 0;
+
+    while (retries < maxRetries) {
+      try {
+        return await this.attemptChat(message, options);
+      } catch (error) {
+        retries++;
+        if (retries >= maxRetries) {
+          throw error;
+        }
+        console.warn(`Attempt ${retries} failed. Retrying in ${2 ** retries} seconds...`);
+        await sleep(2 ** retries * 1000); // Exponential backoff
+      }
+    }
+
+    throw new Error('Max retries reached');
+  }
+
+  private async attemptChat(message: string, options = {}): Promise<string> {
     const completionOptions = {
       ...(this.llm?.options || {}),
       ...options,

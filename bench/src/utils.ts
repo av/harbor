@@ -169,3 +169,5 @@ export function parseArgs(args: string[]) {
     return acc;
   }, {} as Record<string, string | string[] | boolean>);
 }
+
+export const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));

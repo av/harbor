@@ -20,11 +20,11 @@ curl {{host}}/v1/chat/completions -H 'Content-Type: application/json' -d '{
 ###
 
 curl {{host}}/v1/chat/completions -H 'Content-Type: application/json' -d '{
-  "model": "google/gemma-2-2b-it",
+  "model": "meta-llama/Meta-Llama-3.1-8B-Instruct",
   "messages": [
     {
       "role": "user",
-      "content": "Answer in one word. Where is Paris?"
+      "content": "Answer in one word starting with a letter 'A'. Where is Paris?"
     }
   ],
   "temperature": 0.2
