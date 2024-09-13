@@ -173,6 +173,9 @@ harbor shell mistralrs
 
 # generate images
 harbor up comfyui
+
+# List models from the service API (vllm in this instance)
+curl -s $(harbor url vllm)/v1/models | jq -r '.data[].id'
 ```
 
 Respond in JSON with the following schema:

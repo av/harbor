@@ -1153,6 +1153,179 @@ env_manager_arr() {
     esac
 }
 
+env_manager_dict() {
+    local field=$1
+    shift
+
+    local delimiter=","
+
+    local get_command=""
+    local set_command=""
+
+    case "$1" in
+        --help|-h)
+            echo "Harbor dict: $field"
+            echo
+            echo "This field is a dictionary, use the following actions to manage it:"
+            echo
+            echo " ls - List all key/value pairs"
+            echo " get <key> - Get a key value"
+            echo " set <key> <value> - Set a key value"
+            echo " rm <key> - Remove a key/value pair"
+            echo
+            return 0
+            ;;
+    esac
+
+    # Parse optional hook commands
+    while [[ "$1" == --* ]]; do
+        case "$1" in
+            --on-get)
+                get_command="$2"
+                shift 2
+                ;;
+            --on-set)
+                set_command="$2"
+                shift 2
+                ;;
+        esac
+    done
+
+    local action=$1
+    local key=$2
+    local value=$3
+
+    # Helper function to get the current dictionary
+    get_dict() {
+        local dict_string=$(env_manager get "$field")
+        echo "$dict_string"
+    }
+
+    # Helper function to set the dictionary
+    set_dict() {
+        local new_dict=$1
+        env_manager set "$field" "$new_dict"
+        if [ -n "$set_command" ]; then
+            eval "$set_command"
+        fi
+    }
+
+    case "$action" in
+        ls|list|"")
+            # Show all key/value pairs
+            local dict=$(get_dict)
+            if [ -z "$dict" ]; then
+                log_info "Config $field is empty"
+            else
+                echo "$dict" | tr "$delimiter" "\n" | sed 's/=/: /'
+            fi
+            if [ -n "$get_command" ]; then
+                eval "$get_command"
+            fi
+            ;;
+        get)
+            if [ -z "$key" ]; then
+                echo "Usage: env_dict_manager $field get <key>"
+                return 1
+            fi
+            local dict=$(get_dict)
+            local value=$(echo "$dict" | awk -F"$delimiter" -v key="$key" '{
+                for(i=1;i<=NF;i++) {
+                    split($i,kv,"=")
+                    if(kv[1] == key) {
+                        print kv[2]
+                        exit
+                    }
+                }
+            }')
+            if [ -n "$value" ]; then
+                echo "$value"
+            else
+                log_info "Key $key not found in $field"
+            fi
+            if [ -n "$get_command" ]; then
+                eval "$get_command"
+            fi
+            ;;
+        set)
+            if [ -z "$key" ] || [ -z "$value" ]; then
+                echo "Usage: env_dict_manager $field set <key> <value>"
+                return 1
+            fi
+            local dict=$(get_dict)
+            local new_dict=$(echo "$dict" | awk -F"$delimiter" -v key="$key" -v val="$value" '{
+                OFS=FS
+                found=0
+                for(i=1;i<=NF;i++) {
+                    split($i,kv,"=")
+                    if(kv[1] == key) {
+                        $i = key "=" val
+                        found=1
+                    }
+                }
+                if(!found) {
+                    $0 = $0 (NF?OFS:"") key "=" val
+                }
+                print $0
+            }')
+            set_dict "$new_dict"
+            log_info "Key $key set in $field"
+            if [ -n "$set_command" ]; then
+                eval "$set_command"
+            fi
+            ;;
+        rm)
+            if [ -z "$key" ]; then
+                echo "Usage: env_dict_manager $field rm <key>"
+                return 1
+            fi
+            local dict=$(get_dict)
+            local new_dict=$(echo "$dict" | awk -F"$delimiter" -v key="$key" '{
+                OFS=FS
+                for(i=1;i<=NF;i++) {
+                    split($i,kv,"=")
+                    if(kv[1] != key) {
+                        a[++n] = $i
+                    }
+                }
+                for(i=1;i<=n;i++) {
+                    printf("%s%s", a[i], (i==n)?"":OFS)
+                }
+            }')
+            set_dict "$new_dict"
+            log_info "Key $key removed from $field"
+            if [ -n "$set_command" ]; then
+                eval "$set_command"
+            fi
+            ;;
+        -h|--help|help)
+            echo "Usage: $field [--on-get <command>] [--on-set <command>] {ls|get|set|rm} [key] [value]"
+            ;;
+        *)
+            return $scramble_exit_code
+            ;;
+    esac
+}
+
+env_manager_dict_alias() {
+    local dict_var=$1
+    local field=$2
+    local value=$3
+
+    if [ -z "$dict_var" ] || [ -z "$field" ]; then
+        echo "Usage: env_manager_dict_alias <dict_var> <field> [value]"
+        return 1
+    fi
+
+    if [ -z "$value" ]; then
+        # Get mode
+        env_manager_dict "$dict_var" get "$field"
+    else
+        # Set mode
+        env_manager_dict "$dict_var" set "$field" "$value"
+    fi
+}
+
 override_yaml_value() {
     local file="$1"
     local key="$2"
@@ -2467,12 +2640,67 @@ run_bench_command() {
     esac
 }
 
+run_lm_eval_command() {
+    case "$1" in
+        type)
+            shift
+            env_manager_alias lmeval.type "$@"
+            return 0
+            ;;
+        model)
+            shift
+            env_manager_dict_alias lmeval.model.args model "$@"
+            return 0
+            ;;
+        api)
+            shift
+            env_manager_dict_alias lmeval.model.args base_url "$@"
+            return 0
+            ;;
+        args)
+            shift
+            env_manager_dict lmeval.model.args "$@"
+            return 0
+            ;;
+        extra)
+            shift
+            env_manager_alias lmeval.extra.args "$@"
+            return 0
+            ;;
+        -h|--help)
+            echo "Please note that this is not lm_eval CLI, but a Harbor CLI to manage lm_eval service."
+            echo
+            echo "Usage: harbor [lmeval|lm_eval] <command>"
+            echo
+            echo "Commands:"
+            echo "  harbor lmeval type  - Get set --model to pass to the lm_eval CLI"
+            echo "  harbor lmeval model - Alias for 'harbor lmeval args get|set model'"
+            echo "  harbor lmeval api   - Alias for 'harbor lmeval args get|set base_url'"
+            echo "  harbor lmeval args  - Get or set individual --model_args to pass to the lm_eval CLI"
+            echo "  harbor lmeval extra - Get or set extra args to pass to the lm_eval CLI"
+            echo
+            echo "Original CLI help:"
+            ;;
+    esac
+
+    local services=$(get_active_services)
+
+    $(compose_with_options $services "lmeval") run \
+        --rm \
+        --name harbor.lmeval \
+        --service-ports \
+        -e "TERM=xterm-256color" \
+        -v "$original_dir:$original_dir" \
+        --workdir "$original_dir" \
+        lmeval "$@"
+}
+
 # ========================================================================
 # == Main script
 # ========================================================================
 
 # Globals
-version="0.1.18"
+version="0.1.19"
 harbor_repo_url="https://github.com/av/harbor.git"
 delimiter="|"
 scramble_exit_code=42
@@ -2707,6 +2935,10 @@ main_entrypoint() {
         omnichain)
             shift
             run_omnichain_command "$@"
+            ;;
+        lmeval|lm_eval)
+            shift
+            run_lm_eval_command "$@"
             ;;
         tunnel|t)
             shift

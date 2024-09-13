@@ -68,3 +68,7 @@ omnichain/data/
 
 # Bench
 bench/results/
+
+# lm_eval
+lmeval/cache/
+lmeval/results/
