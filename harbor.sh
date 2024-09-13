@@ -2738,7 +2738,7 @@ run_sglang_command() {
 # ========================================================================
 
 # Globals
-version="0.1.19"
+version="0.1.20"
 harbor_repo_url="https://github.com/av/harbor.git"
 delimiter="|"
 scramble_exit_code=42
