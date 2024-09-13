@@ -1,0 +1,8 @@
+clients:
+  - type: openai-compatible
+    name: sglang
+    api_base: http://sglang:30000/v1
+    api_key: sk-sglang
+    models:
+      - name: ${HARBOR_AICHAT_MODEL}
+

@@ -12,7 +12,7 @@ Harbor is a containerized LLM toolkit that allows you to run LLMs and additional
 
 ##### Backends
 
-[Ollama](https://github.com/av/harbor/wiki/Services#ollama) ⦁︎ [llama.cpp](https://github.com/av/harbor/wiki/Services#llamacpp) ⦁︎ [vLLM](https://github.com/av/harbor/wiki/Services#vllm) ⦁︎ [TabbyAPI](https://github.com/av/harbor/wiki/Services#tabbyapi) ⦁︎ [Aphrodite Engine](https://github.com/av/harbor/wiki/Services#aphrodite-engine) ⦁︎ [mistral.rs](https://github.com/av/harbor/wiki/Services#mistralrs) ⦁︎ [openedai-speech](https://github.com/av/harbor/wiki/Services#openedai-speech) ⦁︎ [Parler](https://github.com/av/harbor/wiki/Services#parler) ⦁︎ [text-generation-inference](https://github.com/av/harbor/wiki/Services#text-generation-inference) ⦁︎ [LMDeploy](https://github.com/av/harbor/wiki/Services#lmdeploy) ⦁︎ [AirLLM](https://github.com/av/harbor/wiki/Services#airllm)
+[Ollama](https://github.com/av/harbor/wiki/Services#ollama) ⦁︎ [llama.cpp](https://github.com/av/harbor/wiki/Services#llamacpp) ⦁︎ [vLLM](https://github.com/av/harbor/wiki/Services#vllm) ⦁︎ [TabbyAPI](https://github.com/av/harbor/wiki/Services#tabbyapi) ⦁︎ [Aphrodite Engine](https://github.com/av/harbor/wiki/Services#aphrodite-engine) ⦁︎ [mistral.rs](https://github.com/av/harbor/wiki/Services#mistralrs) ⦁︎ [openedai-speech](https://github.com/av/harbor/wiki/Services#openedai-speech) ⦁︎ [Parler](https://github.com/av/harbor/wiki/Services#parler) ⦁︎ [text-generation-inference](https://github.com/av/harbor/wiki/Services#text-generation-inference) ⦁︎ [LMDeploy](https://github.com/av/harbor/wiki/Services#lmdeploy) ⦁︎ [AirLLM](https://github.com/av/harbor/wiki/Services#airllm) ⦁︎ [SGLang](https://github.com/av/harbor/wiki/Services#sglang)
 
 ##### Satellites
 
@@ -33,7 +33,7 @@ harbor up searxng
 
 # Run additional/alternative LLM Inference backends
 # Open Webui is automatically connected to them.
-harbor up llamacpp tgi litellm vllm tabbyapi aphrodite
+harbor up llamacpp tgi litellm vllm tabbyapi aphrodite sglang
 
 # Run different Frontends
 harbor up librechat chatui bionicgpt hollama
@@ -57,6 +57,7 @@ harbor aphrodite model google/gemma-2-2b-it
 harbor tabbyapi model google/gemma-2-2b-it-exl2
 harbor mistralrs model google/gemma-2-2b-it
 harbor opint model google/gemma-2-2b-it
+harbor sglang model google/gemma-2-2b-it
 
 # Convenience tools for docker setup
 harbor logs llamacpp

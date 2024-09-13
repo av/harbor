@@ -44,6 +44,7 @@ show_help() {
     echo "  chatui     - Configure HuggingFace ChatUI service"
     echo "  comfyui    - Configure ComfyUI service"
     echo "  parler     - Configure Parler service"
+    echo "  sglang     - Configure SGLang CLI"
     echo "  omnichain  - Work with Omnichain service"
     echo
     echo "Service CLIs:"
@@ -55,6 +56,7 @@ show_help() {
     echo "  plandex           - Launch Plandex CLI"
     echo "  cmdh              - Run cmdh CLI"
     echo "  parllama          - Launch Parllama - TUI for chatting with Ollama models"
+    echo "  bench             - Run and manage Harbor Bench"
     echo "  hf                - Run the Harbor's Hugging Face CLI. Expanded with a few additional commands."
     echo "    hf dl           - HuggingFaceModelDownloader CLI"
     echo "    hf parse-url    - Parse file URL from Hugging Face"
@@ -2707,6 +2709,30 @@ run_lm_eval_command() {
         lmeval "$@"
 }
 
+run_sglang_command() {
+    case "$1" in
+        model)
+            shift
+            env_manager_alias sglang.model "$@"
+            return 0
+            ;;
+        args)
+            shift
+            env_manager_alias sglang.extra.args "$@"
+            return 0
+            ;;
+        -h|--help|help)
+            echo "Please note that this is not sglang CLI, but a Harbor CLI to manage sglang service."
+            echo
+            echo "Usage: harbor sglang <command>"
+            echo
+            echo "Commands:"
+            echo "  harbor sglang model [user/repo] - Get or set the sglang model repository to run"
+            echo "  harbor sglang args [args]       - Get or set extra args to pass to the sglang CLI"
+            ;;
+    esac
+}
+
 # ========================================================================
 # == Main script
 # ========================================================================
@@ -2951,6 +2977,10 @@ main_entrypoint() {
         lmeval|lm_eval)
             shift
             run_lm_eval_command "$@"
+            ;;
+        sglang)
+            shift
+            run_sglang_command "$@"
             ;;
         tunnel|t)
             shift

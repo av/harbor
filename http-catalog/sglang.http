@@ -1,0 +1,18 @@
+@host = http://localhost:34091
+
+###
+
+curl {{host}}/v1/models
+
+###
+
+curl {{host}}/v1/chat/completions -H 'Content-Type: application/json' -H "Authorization: Bearer sk-sglang" -d '{
+  "model": "anything",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Bobby was born in Paris. How old is Bobby?"
+    }
+  ],
+  "max_tokens": 30
+}'
