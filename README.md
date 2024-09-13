@@ -127,6 +127,7 @@ harbor how to ping ollama container from the webui?
 
 - Docker
   - _Optional_ [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html#installation)
+  - Only a few services have ARM builds - beware
 - git
 - bash-compatible shell
 
