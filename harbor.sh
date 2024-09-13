@@ -2642,6 +2642,16 @@ run_bench_command() {
 
 run_lm_eval_command() {
     case "$1" in
+        results)
+            shift
+            execute_and_process "env_manager get lmeval.results" "sys_open {{output}}" "No lmeval.results set"
+            return 0
+            ;;
+        cache)
+            shift
+            execute_and_process "env_manager get lmeval.cache" "sys_open {{output}}" "No lmeval.cache set"
+            return 0
+            ;;
         type)
             shift
             env_manager_alias lmeval.type "$@"
@@ -2673,11 +2683,13 @@ run_lm_eval_command() {
             echo "Usage: harbor [lmeval|lm_eval] <command>"
             echo
             echo "Commands:"
-            echo "  harbor lmeval type  - Get set --model to pass to the lm_eval CLI"
-            echo "  harbor lmeval model - Alias for 'harbor lmeval args get|set model'"
-            echo "  harbor lmeval api   - Alias for 'harbor lmeval args get|set base_url'"
-            echo "  harbor lmeval args  - Get or set individual --model_args to pass to the lm_eval CLI"
-            echo "  harbor lmeval extra - Get or set extra args to pass to the lm_eval CLI"
+            echo "  harbor lmeval results - Open the directory containing lm_eval results"
+            echo "  harbor lmeval cache   - Open the directory containing lm_eval cache"
+            echo "  harbor lmeval type    - Get set --model to pass to the lm_eval CLI"
+            echo "  harbor lmeval model   - Alias for 'harbor lmeval args get|set model'"
+            echo "  harbor lmeval api     - Alias for 'harbor lmeval args get|set base_url'"
+            echo "  harbor lmeval args    - Get or set individual --model_args to pass to the lm_eval CLI"
+            echo "  harbor lmeval extra   - Get or set extra args to pass to the lm_eval CLI"
             echo
             echo "Original CLI help:"
             ;;

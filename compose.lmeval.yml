@@ -9,8 +9,8 @@ services:
       - ./lmeval/override.env
     volumes:
       - ${HARBOR_HF_CACHE}:/root/.cache/huggingface
-      - ./lmeval/cache:/app/cache
-      - ./lmeval/results:/app/results
+      - ${HARBOR_LMEVAL_CACHE}:/app/cache
+      - ${HARBOR_LMEVAL_RESULTS}:/app/results
     networks:
       - harbor-network
     environment:
