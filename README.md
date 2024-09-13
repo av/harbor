@@ -1,5 +1,7 @@
 ![Harbor project logo](./docs/harbor-2.png)
 
+![GitHub Tag](https://img.shields.io/github/v/tag/av/harbor) ![GitHub repo size](https://img.shields.io/github/repo-size/av/harbor) [![Visitors](https://api.visitorbadge.io/api/visitors?path=av%2Fharbor&countColor=%23263759)](https://visitorbadge.io/status?path=av%2Fharbor) ![GitHub language count](https://img.shields.io/github/languages/count/av/harbor)
+
 Effortlessly run LLM backends, APIs, frontends, and services with one command.
 
 Harbor is a containerized LLM toolkit that allows you to run LLMs and additional services via a concise CLI.
