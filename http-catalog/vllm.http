@@ -88,3 +88,16 @@ curl {{host}}/v1/chat/completions -H 'Content-Type: application/json' -H "Author
   ],
   "max_tokens": 8
 }'
+
+###
+
+curl {{host}}/v1/chat/completions -H 'Content-Type: application/json' -H "Authorization: Bearer ---" -d '{
+  "model": "microsoft/Phi-3.5-MoE-instruct",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Answer in one word. Where is Paris?"
+    }
+  ],
+  "max_tokens": 8
+}'

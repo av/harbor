@@ -76,3 +76,7 @@ lmeval/results/
 # profiles
 profiles/*
 !profiles/default.env
+
+# Jupyter
+jupyter/workspace/*
+!jupyter/workspace/000-sample.ipynb

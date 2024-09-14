@@ -665,14 +665,17 @@ set_colors() {
     if [ -t 1 ] && command -v tput > /dev/null 2>&1 && tput setaf 1 > /dev/null 2>&1; then
         c_r=$(tput setaf 1)
         c_g=$(tput setaf 2)
+        c_gray=$(tput setaf 8)
         c_nc=$(tput sgr0)
     elif [ -t 1 ]; then
         c_r='\033[0;31m'
         c_g='\033[0;32m'
+        c_gray='\033[0;37m'
         c_nc='\033[0m'
     else
         c_r=''
         c_g=''
+        c_gray=''
         c_nc=''
     fi
 
@@ -867,11 +870,22 @@ set_default_log_levels() {
     default_log_levels_INFO=1
     default_log_levels_WARN=2
     default_log_levels_ERROR=3
+
+    default_logl_labels_DEBUG="DEBUG"
+    default_logl_labels_INFO="INFO"
+    default_logl_labels_WARN="WARN"
+    default_logl_labels_ERROR="${c_r}ERROR${c_nc}"
 }
 
 get_default_log_level() {
     local level="$1"
     local var_name="default_log_levels_$level"
+    eval echo \$$var_name
+}
+
+get_default_log_label() {
+    local level="$1"
+    local var_name="default_logl_labels_$level"
     eval echo \$$var_name
 }
 
@@ -881,10 +895,11 @@ log() {
 
     local current_level=$(get_default_log_level "$level")
     local set_level=$(get_default_log_level "$default_log_level")
+    local label=$(get_default_log_label "$level")
 
     # Check if the numeric value of the current log level is greater than or equal to the set default_log_level
     if [[ $current_level -ge $set_level ]]; then
-        echo "$(date +'%H:%M:%S') [$level] $*" >&2
+        echo "${c_gray}$(date +'%H:%M:%S')${c_nc} [$label] $*" >&2
     fi
 }
 
@@ -1702,7 +1717,7 @@ establish_tunnel() {
     log_info "Starting new tunnel"
     log_info "Container name: $container_name"
     log_info "Intra URL: $intra_url"
-    $(compose_with_options "cfd") run --rm -d --name "$container_name" cfd --url "$intra_url" || { echo "Failed to start container"; exit 1; }
+    $(compose_with_options "cfd") run --rm -d --name "$container_name" cfd --url "$intra_url" || { log_error "Failed to start container"; exit 1; }
 
     local timeout=60
     local elapsed=0
@@ -1852,7 +1867,7 @@ run_litellm_command() {
             if service_url=$(get_url litellm 2>&1); then
                 sys_open "$service_url/ui"
             else
-                echo "Error: Failed to get service URL for litellm: $service_url"
+                log_error "Failed to get service URL for litellm: $service_url"
                 exit 1
             fi
             ;;
@@ -2107,7 +2122,7 @@ run_tabbyapi_command() {
             if service_url=$(get_url tabbyapi 2>&1); then
                 sys_open "$service_url/docs"
             else
-                echo "Error: Failed to get service URL for tabbyapi: $service_url"
+                log_error "Failed to get service URL for tabbyapi: $service_url"
                 exit 1
             fi
             ;;
@@ -2873,6 +2888,37 @@ run_sglang_command() {
     esac
 }
 
+run_jupyter_command() {
+    case "$1" in
+        workspace)
+            shift
+            execute_and_process "env_manager get jupyter.workspace" "sys_open {{output}}" "No jupyter.workspace set"
+            ;;
+        image)
+            shift
+            env_manager_alias jupyter.image "$@"
+            ;;
+        deps)
+            shift
+            env_manager_arr jupyter.extra.deps "$@"
+            ;;
+        -h|--help|help)
+            echo "Please note that this is not Jupyter CLI, but a Harbor CLI to manage Jupyter service."
+            echo
+            echo "Usage: harbor jupyter <command>"
+            echo
+            echo "Commands:"
+            echo "  harbor jupyter workspace     - Open the Jupyter workspace directory"
+            echo "  harbor jupyter image [image] - Get or set the Jupyter image to run"
+            echo "  harbor jupyter deps [deps]   - Manage extra dependencies to install in the Jupyter image"
+            ;;
+        *)
+            return $scramble_exit_code
+            ;;
+    esac
+
+}
+
 # ========================================================================
 # == Main script
 # ========================================================================
@@ -3123,6 +3169,10 @@ main_entrypoint() {
         sglang)
             shift
             run_sglang_command "$@"
+            ;;
+        jupyter)
+            shift
+            run_jupyter_command "$@"
             ;;
         tunnel|t)
             shift
