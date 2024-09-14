@@ -18,8 +18,8 @@ services:
       - LM_HARNESS_CACHE_PATH=/app/cache
     entrypoint: >
       lm_eval
-      --output_path /app/results/
-      --use_cache /app/cache/sqlite_cache_rank
+      --output_path /app/results/${HARBOR_LMEVAL_MODEL_SPECIFIER}/
+      --use_cache /app/cache/${HARBOR_LMEVAL_MODEL_SPECIFIER}/sqlite_cache_rank
       --model ${HARBOR_LMEVAL_TYPE}
       --model_args ${HARBOR_LMEVAL_MODEL_ARGS}
       ${HARBOR_LMEVAL_EXTRA_ARGS}

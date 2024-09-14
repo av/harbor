@@ -1278,10 +1278,7 @@ env_manager_dict() {
                 print $0
             }')
             set_dict "$new_dict"
-            log_info "Key $key set in $field"
-            if [ -n "$set_command" ]; then
-                eval "$set_command"
-            fi
+            log_info "Key '$key' set in $field"
             ;;
         rm)
             if [ -z "$key" ]; then
@@ -1302,10 +1299,7 @@ env_manager_dict() {
                 }
             }')
             set_dict "$new_dict"
-            log_info "Key $key removed from $field"
-            if [ -n "$set_command" ]; then
-                eval "$set_command"
-            fi
+            log_info "Key '$key' removed from $field"
             ;;
         -h|--help|help)
             echo "Usage: $field [--on-get <command>] [--on-set <command>] {ls|get|set|rm} [key] [value]"
@@ -1316,22 +1310,42 @@ env_manager_dict() {
     esac
 }
 
+
 env_manager_dict_alias() {
     local dict_var=$1
     local field=$2
-    local value=$3
+    shift 2
+
+    local get_command=""
+    local set_command=""
+
+    # Parse optional hook commands
+    while [[ "$1" == --* ]]; do
+        case "$1" in
+            --on-get)
+                get_command="$2"
+                shift 2
+                ;;
+            --on-set)
+                set_command="$2"
+                shift 2
+                ;;
+        esac
+    done
+
+    local value=$1
 
     if [ -z "$dict_var" ] || [ -z "$field" ]; then
-        echo "Usage: env_manager_dict_alias <dict_var> <field> [value]"
+        echo "Usage: env_manager_dict_alias <dict_var> <field> [--on-get <command>] [--on-set <command>] [value]"
         return 1
     fi
 
     if [ -z "$value" ]; then
         # Get mode
-        env_manager_dict "$dict_var" get "$field"
+        env_manager_dict "$dict_var" --on-get "$get_command" get "$field"
     else
         # Set mode
-        env_manager_dict "$dict_var" set "$field" "$value"
+        env_manager_dict "$dict_var" --on-set "$set_command" set "$field" "$value"
     fi
 }
 
@@ -2760,6 +2774,15 @@ run_bench_command() {
 }
 
 run_lm_eval_command() {
+    update_model_spec() {
+        local current_model=$(env_manager_dict lmeval.model.args get model)
+
+        # If model is present, propagate to env var
+        if [ -n "$current_model" ]; then
+            env_manager set lmeval.model.specifier "$current_model"
+        fi
+    }
+
     case "$1" in
         results)
             shift
@@ -2778,7 +2801,7 @@ run_lm_eval_command() {
             ;;
         model)
             shift
-            env_manager_dict_alias lmeval.model.args model "$@"
+            env_manager_dict_alias lmeval.model.args model --on-set update_model_spec "$@"
             return 0
             ;;
         api)
