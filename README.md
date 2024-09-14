@@ -168,20 +168,21 @@ harbor open
 
 ## Documentation
 
-- [Harbor User Guide](https://github.com/av/harbor/wiki/Harbor-User-Guide)<br/>
+- [Harbor User Guide](https://github.com/av/harbor/wiki/1.-Harbor-User-Guide)<br/>
   High-level overview of working with Harbor
-- [Harbor CLI Reference](https://github.com/av/harbor/wiki/Harbor-CLI-Reference)<br/>
+- [Harbor Services](https://github.com/av/harbor/wiki/2.-Services)<br/>
+  Catalog of services available in Harbor
+- [Harbor CLI Reference](https://github.com/av/harbor/wiki/3.-Harbor-CLI-Reference)<br/>
   Read more about Harbor CLI commands and options.
-- [Harbor Services](https://github.com/av/harbor/wiki/Services)<br/>
   Read about supported services and the ways to configure them.
-- [Harbor Compose Setup](https://github.com/av/harbor/wiki/Harbor-Compose-Setup)<br/>
-  Read about the way Harbor uses Docker Compose to manage services.
-- [Compatibility](https://github.com/av/harbor/wiki/Compatibility)<br/>
+- [Compatibility](https://github.com/av/harbor/wiki/4.-Compatibility)<br/>
   Known compatibility issues between the services and models as well as possible workarounds.
-- [Adding A New Service](https://github.com/av/harbor/wiki/Adding-A-New-Service)<br/>
-  Documentation on bringing more services into the Harbor toolkit.
-- [Harbor Bench](https://github.com/av/harbor/wiki/Harbor-Bench)<br/>
+- [Harbor Bench](https://github.com/av/harbor/wiki/5.-Harbor-Bench)<br/>
   Documentation on built-in LLM benchmarking service.
+- [Harbor Compose Setup](https://github.com/av/harbor/wiki/6.-Harbor-Compose-Setup)<br/>
+  Read about the way Harbor uses Docker Compose to manage services.
+- [Adding A New Service](https://github.com/av/harbor/wiki/7.-Adding-A-New-Service)<br/>
+  Documentation on bringing more services into the Harbor toolkit.
 
 ## Why?
 
