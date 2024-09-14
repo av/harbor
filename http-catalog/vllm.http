@@ -70,6 +70,14 @@ curl {{host}}/v1/completions -H 'Content-Type: application/json' -H "Authorizati
 
 ###
 
+curl {{host}}/v1/completions -H 'Content-Type: application/json' -H "Authorization: Bearer ---" -d '{
+  "model": "ISTA-DASLab/Meta-Llama-3.1-8B-Instruct-AQLM-PV-2Bit-1x16-hf",
+  "prompt": "Answer in one word. Where is Paris?",
+  "max_tokens": 10
+}'
+
+###
+
 curl {{host}}/v1/chat/completions -H 'Content-Type: application/json' -H "Authorization: Bearer ---" -d '{
   "model": "ChenMnZ/Mistral-Large-Instruct-2407-EfficientQAT-w2g64-GPTQ",
   "messages": [

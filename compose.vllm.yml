@@ -1,7 +1,9 @@
 services:
   vllm:
     container_name: ${HARBOR_CONTAINER_PREFIX}.vllm
-    env_file: ./.env
+    env_file:
+      - ./.env
+      - ./vllm/override.env
     build:
       context: ./vllm
       dockerfile: Dockerfile

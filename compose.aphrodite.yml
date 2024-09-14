@@ -2,7 +2,9 @@ services:
   aphrodite:
     image: alpindale/aphrodite-openai:${HARBOR_APHRODITE_VERSION}
     container_name: ${HARBOR_CONTAINER_PREFIX}.aphrodite
-    env_file: ./.env
+    env_file:
+      - ./.env
+      - ./aphrodite/override.env
     ipc: host
     ports:
       - "${HARBOR_APHRODITE_HOST_PORT}:2242"
