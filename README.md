@@ -18,7 +18,7 @@ Harbor is a containerized LLM toolkit that allows you to run LLMs and additional
 
 ##### Satellites
 
-[SearXNG](https://github.com/av/harbor/wiki/2.3.1-Satellite:-SearXNG) ⦁︎ [Perplexica](https://github.com/av/harbor/wiki/2.3.2-Satellite:-Perplexica) ⦁︎ [Dify](https://github.com/av/harbor/wiki/2.3.3-Satellite:-Dify) ⦁︎ [Plandex](https://github.com/av/harbor/wiki/2.3.4-Satellite:-Plandex) ⦁︎ [LiteLLM](https://github.com/av/harbor/wiki/2.3.5-Satellite:-LiteLLM) ⦁︎ [LangFuse](https://github.com/av/harbor/wiki/2.3.6-Satellite:-langfuse) ⦁︎ [Open Interpreter](https://github.com/av/harbor/wiki/2.3.7-Satellite:-Open-Interpreter) ⦁︎ [cloudflared](https://github.com/av/harbor/wiki/2.3.8-Satellite:-cloudflared) ⦁︎ [cmdh](https://github.com/av/harbor/wiki/2.3.9-Satellite:-cmdh) ⦁︎ [fabric](https://github.com/av/harbor/wiki/2.3.10-Satellite:-fabric) ⦁︎ [txtai RAG](https://github.com/av/harbor/wiki/2.3.11-Satellite:-txtai-RAG) ⦁︎ [TextGrad](https://github.com/av/harbor/wiki/2.3.12-Satellite:-TextGrad) ⦁︎ [Aider](https://github.com/av/harbor/wiki/2.3.13-Satellite:-aider) ⦁︎ [aichat](https://github.com/av/harbor/wiki/2.3.14-Satellite:-aichat) ⦁︎ [omnichain](https://github.com/av/harbor/wiki/2.3.16-Satellite:-omnichain) ⦁︎ [Harbor Bench](https://github.com/av/harbor/wiki/5.-Harbor-Bench.md) ⦁︎ [lm-evaluation-harness](https://github.com/av/harbor/wiki/2.3.17-Satellite:-lm-evaluation-harness)
+[SearXNG](https://github.com/av/harbor/wiki/2.3.1-Satellite:-SearXNG) ⦁︎ [Perplexica](https://github.com/av/harbor/wiki/2.3.2-Satellite:-Perplexica) ⦁︎ [Dify](https://github.com/av/harbor/wiki/2.3.3-Satellite:-Dify) ⦁︎ [Plandex](https://github.com/av/harbor/wiki/2.3.4-Satellite:-Plandex) ⦁︎ [LiteLLM](https://github.com/av/harbor/wiki/2.3.5-Satellite:-LiteLLM) ⦁︎ [LangFuse](https://github.com/av/harbor/wiki/2.3.6-Satellite:-langfuse) ⦁︎ [Open Interpreter](https://github.com/av/harbor/wiki/2.3.7-Satellite:-Open-Interpreter) ⦁︎ [cloudflared](https://github.com/av/harbor/wiki/2.3.8-Satellite:-cloudflared) ⦁︎ [cmdh](https://github.com/av/harbor/wiki/2.3.9-Satellite:-cmdh) ⦁︎ [fabric](https://github.com/av/harbor/wiki/2.3.10-Satellite:-fabric) ⦁︎ [txtai RAG](https://github.com/av/harbor/wiki/2.3.11-Satellite:-txtai-RAG) ⦁︎ [TextGrad](https://github.com/av/harbor/wiki/2.3.12-Satellite:-TextGrad) ⦁︎ [Aider](https://github.com/av/harbor/wiki/2.3.13-Satellite:-aider) ⦁︎ [aichat](https://github.com/av/harbor/wiki/2.3.14-Satellite:-aichat) ⦁︎ [omnichain](https://github.com/av/harbor/wiki/2.3.16-Satellite:-omnichain) ⦁︎ [Harbor Bench](https://github.com/av/harbor/wiki/5.-Harbor-Bench.md) ⦁︎ [lm-evaluation-harness](https://github.com/av/harbor/wiki/2.3.17-Satellite:-lm-evaluation-harness) ⦁︎ [JupyterLab](https://github.com/av/harbor/wiki/2.3.18-Satellite:-JupyterLab)
 
 ## Blitz Tour
 
@@ -209,6 +209,8 @@ This project consists of a fairly large shell CLI, fairly small `.env` file and 
 - Convenience utilities for common tasks (model management, configuration, service debug, URLs, tunnels, etc.)
 - Access service CLIs (`hf`, `ollama`, etc.) via Docker without install
 - Services are pre-configured to work together (contributions welcome)
-- Host cache is shared and reused ⦁︎ Hugging Face, ollama, etc.
+- Host cache is shared and reused - Hugging Face, ollama, etc.
 - Co-located service configs
+- Built-in LLM benchmarking service
+- Manage configuration profiles for different use cases
 - Eject to run without harbor with `harbor eject`
