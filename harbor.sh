@@ -2924,7 +2924,7 @@ run_jupyter_command() {
 # ========================================================================
 
 # Globals
-version="0.1.21"
+version="0.1.22"
 harbor_repo_url="https://github.com/av/harbor.git"
 delimiter="|"
 scramble_exit_code=42
