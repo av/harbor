@@ -86,26 +86,33 @@ show_help() {
     echo "    config ls                   - All config values in ENV format"
     echo "    config get <field>          - Get a specific config value"
     echo "    config set <field> <value>  - Get a specific config value"
-    echo "    config reset                - Reset Harbor configuration to default.env"
-    echo "    config update               - Merge upstream config changes from default.env"
+    echo "    config reset                - Reset Harbor configuration to default .env"
+    echo "    config update               - Merge upstream config changes from default .env"
+    echo
+    echo "  profile|profiles|p [ls|rm|add] - Manage Harbor profiles"
+    echo "    profile ls|list             - List all profiles"
+    echo "    profile rm|remove <name>    - Remove a profile"
+    echo "    profile add|save <name>     - Add current config as a profile"
+    echo "    profile set|use|load <name> - Use a profile"
     echo
     echo "  defaults [ls|rm|add]          - List default services"
     echo "    defaults rm <handle|index>  - Remove, also accepts handle or index"
     echo "    defaults add <handle>       - Add"
     echo
-    echo "  find <file>                   - Find a file in the caches visible to Harbor"
-    echo "  ls|list [--active|-a]         - List available/active Harbor services"
-    echo "  ln|link [--short]             - Create a symlink to the CLI, --short for 'h' link"
-    echo "  unlink                        - Remove CLI symlinks"
-    echo "  eject                         - Eject the Compose configuration, accepts same options as 'up'"
-    echo "  help|--help|-h                - Show this help message"
-    echo "  version|--version|-v          - Show the CLI version"
-    echo "  gum                           - Run the Gum terminal commands"
-    echo "  update [-l|--latest]          - Update Harbor. --latest for the dev version"
-    echo "  info                          - Show system information for debug/issues"
-    echo "  how                           - Ask questions about Harbor CLI, uses cmdh under the hood"
-    echo "  smi                           - Show NVIDIA GPU information"
-    echo "  top                           - Run nvtop to monitor GPU usage"
+    echo "  find <file>           - Find a file in the caches visible to Harbor"
+    echo "  ls|list [--active|-a] - List available/active Harbor services"
+    echo "  ln|link [--short]     - Create a symlink to the CLI, --short for 'h' link"
+    echo "  unlink                - Remove CLI symlinks"
+    echo "  eject                 - Eject the Compose configuration, accepts same options as 'up'"
+    echo "  help|--help|-h        - Show this help message"
+    echo "  version|--version|-v  - Show the CLI version"
+    echo "  gum                   - Run the Gum terminal commands"
+    echo "  update [-l|--latest]  - Update Harbor. --latest for the dev version"
+    echo "  info                  - Show system information for debug/issues"
+    echo "  doctor                - Tiny troubleshooting script"
+    echo "  how                   - Ask questions about Harbor CLI, uses cmdh under the hood"
+    echo "  smi                   - Show NVIDIA GPU information"
+    echo "  top                   - Run nvtop to monitor GPU usage"
     echo
     echo "Harbor Workspace Commands:"
     echo "  home    - Show path to the Harbor workspace"
@@ -140,11 +147,11 @@ run_harbor_doctor() {
         return 1
     fi
 
-    # Check if the default.env file exists and is readable
-    if [ -f "default.env" ] && [ -r "default.env" ]; then
-        log_info "${ok} default.env file exists and is readable"
+    # Check if the default profile file exists and is readable
+    if [ -f $default_profile ] && [ -r $default_profile ]; then
+        log_info "${ok} default profile exists and is readable"
     else
-        log_error "${nok} default.env file is missing or not readable. Please ensure it exists and has the correct permissions."
+        log_error "${nok} default profile is missing or not readable. Please ensure it exists and has the correct permissions."
         return 1
     fi
 
@@ -675,7 +682,7 @@ set_colors() {
 }
 
 ensure_env_file() {
-    local src_file="default.env"
+    local src_file=$default_profile
     local tgt_file=".env"
 
     if [ ! -f "$tgt_file" ]; then
@@ -691,7 +698,7 @@ reset_env_file() {
 }
 
 merge_env_files() {
-    local default_file="default.env"
+    local default_file=$default_profile
     local target_file=".env"
 
     # Check if both files exist
@@ -710,7 +717,7 @@ merge_env_files() {
     local prev_line=""
     local repeat_count=0
 
-    # Read default.env line by line and merge with .env
+    # Read .env line by line and merge with .env
     while IFS= read -r line || [[ -n "$line" ]]; do
         # Handle empty lines
         if [[ -z "$line" ]]; then
@@ -948,8 +955,8 @@ env_manager() {
             echo "  get <key>         - Get the value of a configuration key"
             echo "  set <key> <value> - Set the value of a configuration key"
             echo "  ls|list           - List all configuration keys and values"
-            echo "  reset             - Reset Harbor configuration to default.env"
-            echo "  update            - Merge upstream config changes from default.env"
+            echo "  reset             - Reset Harbor configuration to default .env"
+            echo "  update            - Merge upstream config changes from default .env"
             return 0
             ;;
         *)
@@ -1352,6 +1359,116 @@ override_yaml_value() {
         log_error "Failed to update '$key' in $file"
         return 1
     fi
+}
+
+# shellcheck disable=SC2034
+__anchor_profiles=true
+
+run_profile_command() {
+    case "$1" in
+        save|add)
+            shift
+            harbor_profile_save "$@"
+            ;;
+        set|use|load)
+            shift
+            harbor_profile_set "$@"
+            ;;
+        remove|rm)
+            shift
+            harbor_profile_remove "$@"
+            ;;
+        list|ls)
+            shift
+            harbor_profile_list
+            ;;
+        --help|-h)
+            echo "Harbor profile management"
+            echo "Usage: $0 profile"
+            echo
+            echo "Commands:"
+            echo "  save|add <profile_name>      - Save the current configuration as a profile"
+            echo "  set|use|load <profile_name>  - Set current profile"
+            echo "  remove|rm <profile_name> - Remove a profile"
+            echo "  list|ls                  - List all profiles"
+            return 0
+            ;;
+        *)
+            echo "Usage: $0 profile {save|set|load|remove|list} [profile_name]"
+            return $scramble_exit_code
+            ;;
+    esac
+}
+
+harbor_profile_save() {
+    local profile_name=$1
+    local profile_file="$profiles_dir/$profile_name.env"
+
+    if [ -z "$profile_name" ]; then
+        log_error "Please provide a profile name."
+        return 1
+    fi
+
+    if [ -f "$profile_file" ]; then
+        if ! run_gum confirm "Profile '$profile_name' already exists. Overwrite?"; then
+            echo "Save cancelled."
+            return 1
+        fi
+    fi
+
+    cp .env "$profile_file"
+    log_info "Profile '$profile_name' saved."
+}
+
+
+harbor_profile_list() {
+    echo "Available profiles:"
+    for profile in "$profiles_dir"/*.env; do
+        basename "$profile" .env
+    done
+}
+
+harbor_profile_set() {
+    local profile_name=$1
+    local profile_file="$profiles_dir/$profile_name.env"
+
+    if [ -z "$profile_name" ]; then
+        log_error "Please provide a profile name."
+        return 1
+    fi
+
+    if [ ! -f "$profile_file" ]; then
+        log_error "Profile '$profile_name' not found."
+        return 1
+    fi
+
+    cp "$profile_file" .env
+    log_info "Profile '$profile_name' loaded."
+}
+
+harbor_profile_remove() {
+    local profile_name=$1
+    local profile_file="$profiles_dir/$profile_name.env"
+
+    if [ -z "$profile_name" ]; then
+        log_error "Please provide a profile name."
+        return 1
+    fi
+
+    if [ "$profile_name" == "default" ]; then
+        log_error "Cannot remove the default profile."
+        return 1
+    fi
+
+    if [ ! -f "$profile_file" ]; then
+        log_error "Profile '$profile_name' not found."
+        return 1
+    fi
+
+    run_gum confirm "Are you sure you want to remove profile '$profile_name'?" || return 1
+
+    rm "$profile_file"
+    log_info "Profile '$profile_name' removed."
 }
 
 # shellcheck disable=SC2034
@@ -2738,13 +2855,15 @@ run_sglang_command() {
 # ========================================================================
 
 # Globals
-version="0.1.20"
+version="0.1.21"
 harbor_repo_url="https://github.com/av/harbor.git"
 delimiter="|"
 scramble_exit_code=42
 harbor_home=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
 original_dir=$PWD
 cd "$harbor_home" || exit
+profiles_dir="$harbor_home/profiles"
+default_profile="$profiles_dir/default.env"
 
 # Config
 ensure_env_file
@@ -2993,6 +3112,10 @@ main_entrypoint() {
         config)
             shift
             env_manager "$@"
+            ;;
+        profile|profiles|p)
+            shift
+            run_profile_command "$@"
             ;;
         gum)
             shift

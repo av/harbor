@@ -72,3 +72,7 @@ bench/results/
 # lm_eval
 lmeval/cache/
 lmeval/results/
+
+# profiles
+profiles/*
+!profiles/default.env

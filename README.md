@@ -94,6 +94,10 @@ harbor tunnel
 harbor config list
 harbor config set webui.host.port 8080
 
+# Create and manage config profiles
+harbor profile save l370b
+harbor profile use default
+
 # Eject from Harbor into a standalone Docker Compose setup
 # Will export related services and variables into a standalone file.
 harbor eject searxng llamacpp > docker-compose.harbor.yml
