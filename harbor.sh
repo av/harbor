@@ -95,6 +95,12 @@ show_help() {
     echo "    profile add|save <name>     - Add current config as a profile"
     echo "    profile set|use|load <name> - Use a profile"
     echo
+    echo "  history|h [ls|rm|add]  - Harbor command history."
+    echo "                           When run without arguments, launches interactive selector."
+    echo "    history clear   - Clear the history"
+    echo "    history size    - Get/set the history size"
+    echo "    history list|ls - List recored history"
+    echo
     echo "  defaults [ls|rm|add]          - List default services"
     echo "    defaults rm <handle|index>  - Remove, also accepts handle or index"
     echo "    defaults add <handle>       - Add"
@@ -796,9 +802,11 @@ execute_and_process() {
 }
 
 swap_and_retry() {
+
     local command=$1
     shift
     local args=("$@")
+    record_history_entry "$default_history_file" "$default_history_size" "${args[*]}"
 
     # Try original order
     if "$command" "${args[@]}"; then
@@ -1737,12 +1745,86 @@ establish_tunnel() {
     log_info "Tunnel URL: $tunnel_url"
     print_qr "$tunnel_url" || { log_error "Failed to print QR code"; exit 1; }
 }
+
+record_history_entry() {
+    local file="$1"
+    local max_entries="$2"
+    local input="harbor $3"
+
+    # Check if the input already exists in the file
+    if ! grep -Fxq -- "$input" "$file" 2>/dev/null; then
+        log_debug "Recording history entry: '$file', '$max_entries', '$input'"
+
+        printf '%s\n' "$input" >> "$file"
+
+        # If we've exceeded max entries, remove oldest entries
+        if [ "$(wc -l < "$file")" -gt "$max_entries" ]; then
+            tail -n "$max_entries" "$file" > "$file.tmp" && mv "$file.tmp" "$file"
+        fi
+    fi
+}
+
+run_harbor_history() {
+    case "$1" in
+        ls|list)
+            shift
+            cat "$default_history_file"
+            ;;
+        size)
+            shift
+            env_manager_alias history.size "$@"
+            ;;
+        clear)
+            log_info "Clearing history"
+            echo "" > "$default_history_file"
+            ;;
+        --help|-h)
+            echo "Harbor history management"
+            echo
+            echo "Usage: harbor history {ls|size|clear}"
+            echo
+            echo "Commands:"
+            echo "  ls|list - List all history entries"
+            echo "  size    - Get or set the maximum number of history entries"
+            echo "  clear   - Clear all history entries"
+            return 0
+            ;;
+        *)
+            local max_entries=10
+            local history_file="$default_history_file"
+            local tmp_dir=$(mktemp -d)
+            local services=$(get_active_services)
+
+            local output_file="$tmp_dir/selected_command.txt"
+            local entrypoint="/bin/sh -c \"/usr/local/bin/gum filter < ${history_file} > /tmp/gum_test/selected_command.txt\""
+
+            $(compose_with_options $services "gum") run \
+                --rm \
+                -it \
+                -e "TERM=xterm-256color" \
+                -v "$harbor_home:$harbor_home" \
+                -v "$tmp_dir:/tmp/gum_test" \
+                --workdir "$harbor_home" \
+                --entrypoint "$entrypoint" \
+                gum
+
+            if [ -s "$output_file" ]; then
+                log_debug "Selected command: $(cat "$output_file")"
+                eval "$(cat "$output_file")"
+            else
+                log_info "No command selected"
+            fi
+
+            rm -rf "$tmp_dir"
+            ;;
+    esac
+}
+
 # shellcheck disable=SC2034
 __anchor_service_clis=true
 
 run_gum() {
-    local gum_image=ghcr.io/charmbracelet/gum
-    docker run --rm -it -e "TERM=xterm-256color" $gum_image "$@"
+    docker run --rm -it -e "TERM=xterm-256color" $default_gum_image "$@"
 }
 
 run_dive() {
@@ -2924,15 +3006,22 @@ run_jupyter_command() {
 # ========================================================================
 
 # Globals
-version="0.1.22"
+version="0.1.23"
 harbor_repo_url="https://github.com/av/harbor.git"
 delimiter="|"
 scramble_exit_code=42
 harbor_home=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
-original_dir=$PWD
-cd "$harbor_home" || exit
 profiles_dir="$harbor_home/profiles"
 default_profile="$profiles_dir/default.env"
+default_gum_image="ghcr.io/charmbracelet/gum"
+
+original_dir=$PWD
+cd "$harbor_home" || exit
+
+# Set color variables
+set_colors
+# Initialize the log levels
+set_default_log_levels
 
 # Config
 ensure_env_file
@@ -2942,12 +3031,8 @@ default_open=$(env_manager get ui.main)
 default_autoopen=$(env_manager get ui.autoopen)
 default_container_prefix=$(env_manager get container.prefix)
 default_log_level=$(env_manager get log.level)
-
-# Set color variables
-set_colors
-
-# Initialize the log levels
-set_default_log_levels
+default_history_file=$(env_manager get history.file)
+default_history_size=$(env_manager get history.size)
 
 main_entrypoint() {
     case "$1" in
@@ -3229,6 +3314,10 @@ main_entrypoint() {
         bench)
             shift
             run_bench_command "$@"
+            ;;
+        history|h)
+            shift
+            run_harbor_history "$@"
             ;;
         *)
             return $scramble_exit_code

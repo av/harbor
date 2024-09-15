@@ -80,3 +80,6 @@ profiles/*
 # Jupyter
 jupyter/workspace/*
 !jupyter/workspace/000-sample.ipynb
+
+# History
+.history
