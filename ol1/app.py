@@ -17,8 +17,17 @@ OLLAMA_URL = os.getenv('OLLAMA_URL', 'http://localhost:11434')
 OLLAMA_MODEL = os.getenv('OLLAMA_MODEL', 'llama3.1:8b')
 OLLAMA_OPTIONS = os.getenv('OLLAMA_OPTIONS', 'num_predict=300,temperature=0.2')
 
+
 def parse_options(options):
-    return {k: v for k, v in (opt.split('=') for opt in options.split(','))}
+    parsed_options = {}
+    for opt in options.split(','):
+        k, v = opt.split('=')
+        if k.strip() != "stop":
+            parsed_options[k.strip()] = float(v.strip()) if '.' in v else int(v.strip())
+        else:
+            parsed_options[k.strip()] = v.strip()
+    return parsed_options
+
 
 def make_api_call(messages, max_tokens, is_final_answer=False):
     for attempt in range(3):
@@ -29,8 +38,7 @@ def make_api_call(messages, max_tokens, is_final_answer=False):
                                          "messages": messages,
                                          "stream": False,
                                          "format": "json",
-                                         "options":
-                                         parse_options(OLLAMA_OPTIONS),
+                                         "options": parse_options(OLLAMA_OPTIONS),
                                      })
             response.raise_for_status()
             return json.loads(response.json()["message"]["content"])
