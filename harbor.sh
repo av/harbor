@@ -2998,7 +2998,24 @@ run_jupyter_command() {
             return $scramble_exit_code
             ;;
     esac
+}
 
+run_ol1_command() {
+    case "$1" in
+        model)
+            shift
+            env_manager_alias ol1.model "$@"
+            return 0
+            ;;
+        -h|--help|help)
+            echo "Please note that this is not OL1 CLI, but a Harbor CLI to manage OL1 service."
+            echo
+            echo "Usage: harbor ol1 <command>"
+            echo
+            echo "Commands:"
+            echo "  harbor ol1 model [user/repo] - Get or set the OL1 model repository to run"
+            ;;
+    esac
 }
 
 # ========================================================================
@@ -3258,6 +3275,10 @@ main_entrypoint() {
         jupyter)
             shift
             run_jupyter_command "$@"
+            ;;
+        ol1)
+            shift
+            run_ol1_command "$@"
             ;;
         tunnel|t)
             shift

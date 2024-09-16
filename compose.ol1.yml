@@ -1,0 +1,18 @@
+services:
+  ol1:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.ol1
+    env_file:
+      - ./.env
+      - ./ol1/override.env
+    build:
+      context: ./ol1
+      dockerfile: Dockerfile
+    ports:
+      - ${HARBOR_OL1_HOST_PORT}:8501
+    environment:
+      - OLLAMA_URL=http://ollama:11434
+      - OLLAMA_MODEL=${HARBOR_OL1_MODEL}
+    volumes:
+      - ./ol1/app.py:/app/app.py
+    networks:
+      - harbor-network
