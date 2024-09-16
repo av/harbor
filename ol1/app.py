@@ -41,7 +41,10 @@ def make_api_call(messages, max_tokens, is_final_answer=False):
                                          "options": parse_options(OLLAMA_OPTIONS),
                                      })
             response.raise_for_status()
-            return json.loads(response.json()["message"]["content"])
+            data = json.loads(response.json()["message"]["content"])
+            if "title" not in data or "content" not in data:
+                raise ValueError("Response JSON is missing 'title' or 'content' fields.")
+            return data
 
         except Exception as e:
             if attempt == 2:
