@@ -12,6 +12,7 @@ services:
     environment:
       - OLLAMA_URL=http://ollama:11434
       - OLLAMA_MODEL=${HARBOR_OL1_MODEL}
+      - OLLAMA_OPTIONS=${HARBOR_OL1_ARGS}
     volumes:
       - ./ol1/app.py:/app/app.py
     networks:

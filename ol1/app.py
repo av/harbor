@@ -15,7 +15,10 @@ load_dotenv()
 
 OLLAMA_URL = os.getenv('OLLAMA_URL', 'http://localhost:11434')
 OLLAMA_MODEL = os.getenv('OLLAMA_MODEL', 'llama3.1:8b')
+OLLAMA_OPTIONS = os.getenv('OLLAMA_OPTIONS', 'num_predict=300,temperature=0.2')
 
+def parse_options(options):
+    return {k: v for k, v in (opt.split('=') for opt in options.split(','))}
 
 def make_api_call(messages, max_tokens, is_final_answer=False):
     for attempt in range(3):
@@ -26,10 +29,8 @@ def make_api_call(messages, max_tokens, is_final_answer=False):
                                          "messages": messages,
                                          "stream": False,
                                          "format": "json",
-                                         "options": {
-                                             "num_predict": max_tokens,
-                                             "temperature": 0.2
-                                         }
+                                         "options":
+                                         parse_options(OLLAMA_OPTIONS),
                                      })
             response.raise_for_status()
             return json.loads(response.json()["message"]["content"])
@@ -91,14 +92,15 @@ Example of a valid JSON response:
 
         steps.append(
             (f"Step {step_count}: {step_data.get('title', 'Untitled Step')}",
-             step_data.get('content', 'No content provided'), thinking_time))
+             step_data.get('content', json.dumps(step_data,
+                                                 indent=2)), thinking_time))
 
         messages.append({
             "role": "assistant",
             "content": json.dumps(step_data)
         })
 
-        if step_data['next_action'] == 'final_answer':
+        if step_data.get('next_action', 'continue') == 'final_answer':
             break
 
         step_count += 1

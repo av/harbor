@@ -3007,6 +3007,11 @@ run_ol1_command() {
             env_manager_alias ol1.model "$@"
             return 0
             ;;
+        args)
+            shift
+            env_manager_dict ol1.args "$@"
+            return 0
+            ;;
         -h|--help|help)
             echo "Please note that this is not OL1 CLI, but a Harbor CLI to manage OL1 service."
             echo
