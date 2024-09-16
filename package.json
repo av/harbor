@@ -1,6 +1,6 @@
 {
   "name": "@av/harbor",
-  "version": "0.1.23",
+  "version": "0.1.24",
   "bin": {
     "harbor": "./bin/harbor"
   }
