@@ -1,0 +1,4 @@
+services:
+  aichat:
+    volumes:
+      - ./aichat/configs/aichat.ktransformers.yml:/app/configs/ktransformers.yml

@@ -1,0 +1,25 @@
+services:
+  ktransformers:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.ktransformers
+    env_file:
+      - ./.env
+      - ./ktransformers/override.env
+    ipc: host
+    build:
+      context: ./ktransformers
+      dockerfile: Dockerfile
+    ports:
+      - ${HARBOR_KTRANSFORMERS_HOST_PORT}:12456
+    volumes:
+      - ${HARBOR_HF_CACHE}:/root/.cache/huggingface
+      - ${HARBOR_LLAMACPP_CACHE}:/root/.cache/llama.cpp
+      # Monkey-patch to make compatible with Open WebUI
+      - ./ktransformers/chat.py:/opt/conda/lib/python3.10/site-packages/ktransformers/server/api/openai/endpoints/chat.py
+    environment:
+      - HF_TOKEN=${HARBOR_HF_TOKEN}
+    networks:
+      - harbor-network
+    command: >
+      --model_path ${HARBOR_KTRANSFORMERS_MODEL}
+      --gguf_path ${HARBOR_KTRANSFORMERS_GGUF}
+      ${HARBOR_KTRANSFORMERS_EXTRA_ARGS}

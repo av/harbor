@@ -1,0 +1,8 @@
+clients:
+  - type: openai-compatible
+    name: ktransformers
+    api_base: http://ktransformers:12456/v1
+    api_key: sk-ktransformers
+    models:
+      - name: ${HARBOR_AICHAT_MODEL}
+

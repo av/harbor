@@ -1,10 +1,10 @@
 {
   "openai": {
 		"api_base_urls": [
-			"http://airllm:5000/v1"
+			"http://ktransformers:12456/v1"
 		],
 		"api_keys": [
-			"sk-airllm"
+			"sk-ktransformers"
 		],
 		"enabled": true
 	}

@@ -29,23 +29,26 @@ show_help() {
     echo "  cmd <handle>            - Print the docker compose command"
     echo
     echo "Setup Management Commands:"
-    echo "  webui      - Configure Open WebUI Service"
-    echo "  llamacpp   - Configure llamacpp service"
-    echo "  tgi        - Configure text-generation-inference service"
-    echo "  litellm    - Configure LiteLLM service"
-    echo "  openai     - Configure OpenAI API keys and URLs"
-    echo "  vllm       - Configure VLLM service"
-    echo "  aphrodite  - Configure Aphrodite service"
-    echo "  tabbyapi   - Configure TabbyAPI service"
-    echo "  mistralrs  - Configure mistral.rs service"
-    echo "  cfd        - Run cloudflared CLI"
-    echo "  airllm     - Configure AirLLM service"
-    echo "  txtai      - Configure txtai service"
-    echo "  chatui     - Configure HuggingFace ChatUI service"
-    echo "  comfyui    - Configure ComfyUI service"
-    echo "  parler     - Configure Parler service"
-    echo "  sglang     - Configure SGLang CLI"
-    echo "  omnichain  - Work with Omnichain service"
+    echo "  webui     - Configure Open WebUI Service"
+    echo "  llamacpp  - Configure llamacpp service"
+    echo "  tgi       - Configure text-generation-inference service"
+    echo "  litellm   - Configure LiteLLM service"
+    echo "  openai    - Configure OpenAI API keys and URLs"
+    echo "  vllm      - Configure VLLM service"
+    echo "  aphrodite - Configure Aphrodite service"
+    echo "  tabbyapi  - Configure TabbyAPI service"
+    echo "  mistralrs - Configure mistral.rs service"
+    echo "  cfd       - Run cloudflared CLI"
+    echo "  airllm    - Configure AirLLM service"
+    echo "  txtai     - Configure txtai service"
+    echo "  chatui    - Configure HuggingFace ChatUI service"
+    echo "  comfyui   - Configure ComfyUI service"
+    echo "  parler    - Configure Parler service"
+    echo "  sglang    - Configure SGLang CLI"
+    echo "  omnichain - Work with Omnichain service"
+    echo "  jupyter   - Configure Jupyter service"
+    echo "  ol1       - Configure ol1 service"
+    echo "  ktransformers - Configure ktransformers service"
     echo
     echo "Service CLIs:"
     echo "  ollama     - Run Ollama CLI (docker). Service should be running."
@@ -1589,6 +1592,8 @@ fix_fs_acl() {
     docker_fsacl ./bionicgpt
     docker_fsacl ./omnichain
     docker_fsacl ./bench
+    docker_fsacl ./jupyter
+    docker_fsacl ./ktransformers
 
     docker_fsacl $(eval echo "$(env_manager get hf.cache)")
     docker_fsacl $(eval echo "$(env_manager get vllm.cache)")
@@ -3023,12 +3028,54 @@ run_ol1_command() {
     esac
 }
 
+run_ktransformers_command() {
+    case "$1" in
+        model)
+            shift
+            env_manager_alias ktransformers.model "$@"
+            return 0
+            ;;
+        gguf)
+            shift
+            env_manager_dict ktransformers.gguf "$@"
+            return 0
+            ;;
+        version)
+            shift
+            env_manager_alias ktransformers.version "$@"
+            return 0
+            ;;
+        image)
+            shift
+            env_manager_alias ktransformers.image "$@"
+            return 0
+            ;;
+        args)
+            shift
+            env_manager_alias ktransformers.args "$@"
+            return 0
+            ;;
+        -h|--help|help)
+            echo "Please note that this is not KTransformers CLI, but a Harbor CLI to manage KTransformers service."
+            echo
+            echo "Usage: harbor ktransformers <command>"
+            echo
+            echo "Commands:"
+            echo "  harbor ktransformers model [user/repo] - Get or set --model_path for KTransformers"
+            echo "  harbor ktransformers gguf [args]       - Get or set --gguf_path for KTransformers"
+            echo "  harbor ktransformers version [version] - Get or set KTransformers version"
+            echo "  harbor ktransformers image [image]     - Get or set KTransformers image"
+            echo "  harbor ktransformers args [args]       - Get or set extra args to pass to KTransformers"
+            ;;
+    esac
+}
+
 # ========================================================================
 # == Main script
 # ========================================================================
 
 # Globals
-version="0.1.24"
+version="0.1.25"
 harbor_repo_url="https://github.com/av/harbor.git"
 delimiter="|"
 scramble_exit_code=42
@@ -3284,6 +3331,10 @@ main_entrypoint() {
         ol1)
             shift
             run_ol1_command "$@"
+            ;;
+        ktransformers)
+            shift
+            run_ktransformers_command "$@"
             ;;
         tunnel|t)
             shift

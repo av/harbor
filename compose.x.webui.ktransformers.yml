@@ -1,0 +1,4 @@
+services:
+  webui:
+    volumes:
+      - ./open-webui/configs/config.ktransformers.json:/app/configs/config.ktransformers.json

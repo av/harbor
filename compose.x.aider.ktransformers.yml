@@ -1,0 +1,4 @@
+services:
+  aider:
+    volumes:
+      - ./aider/configs/aider.ktransformers.yml:/root/.aider/ktransformers.yml
