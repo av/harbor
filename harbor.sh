@@ -1622,7 +1622,7 @@ unsafe_update() {
 }
 
 resolve_harbor_version() {
-  git ls-remote --tags "$harbor_repo_url" | grep -o "v.*" | sort -r | head -n 1
+  git ls-remote --tags "$harbor_repo_url" | grep -o "v.*" | sort -t. -k 1,1n -k 2,2n -k 3,3n -k 4,4n | head -n 1
 }
 
 update_harbor() {
