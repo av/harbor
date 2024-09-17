@@ -1,4 +1,4 @@
-openai-api-base: http://ollama:11434/v1
+openai-api-base: ${HARBOR_OLLAMA_INTERNAL_URL}/v1
 openai-api-key: sk-ollama
 model: openai/${HARBOR_AIDER_MODEL}
 verify-ssl: false

@@ -1,4 +1,4 @@
 services:
   parllama:
     environment:
-      - OLLAMA_URL=http://ollama:11434
+      - OLLAMA_URL=${HARBOR_OLLAMA_INTERNAL_URL}

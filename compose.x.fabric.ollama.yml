@@ -6,4 +6,4 @@ services:
       - "-m"
       - "${HARBOR_FABRIC_MODEL}"
       - "--remoteOllamaServer"
-      - "http://ollama:11434"
+      - "${HARBOR_OLLAMA_INTERNAL_URL}"

@@ -80,7 +80,7 @@ services:
       - DB_HOST=lcvector
       - RAG_PORT=${HARBOR_LIBRECHAT_RAG_HOST_PORT}
       - EMBEDDINGS_PROVIDER=ollama
-      - OLLAMA_BASE_URL=http://ollama:11434
+      - OLLAMA_BASE_URL=${HARBOR_OLLAMA_INTERNAL_URL}
       - EMBEDDINGS_MODEL=nomic-embed-text
     depends_on:
       - lcvector

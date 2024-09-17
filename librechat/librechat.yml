@@ -22,7 +22,7 @@ endpoints:
     - name: "Ollama"
       apiKey: "ollama"
       # use 'host.docker.internal' instead of localhost if running LibreChat in a docker container
-      baseURL: "http://ollama:11434/v1/chat/completions"
+      baseURL: "${HARBOR_OLLAMA_INTERNAL_URL}/v1/chat/completions"
       models:
         default: [
           ""

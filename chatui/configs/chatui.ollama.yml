@@ -4,4 +4,4 @@ envVars:
       id: ${HARBOR_CHATUI_OLLAMA_MODEL}
       endpoints:
         - type: openai
-          baseURL: http://ollama:11434/v1
+          baseURL: ${HARBOR_OLLAMA_INTERNAL_URL}/v1

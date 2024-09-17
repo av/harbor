@@ -1,4 +1,4 @@
 services:
   webui:
     environment:
-      - OLLAMA_BASE_URL=http://ollama:11434
+      - OLLAMA_BASE_URL=${HARBOR_OLLAMA_INTERNAL_URL}
