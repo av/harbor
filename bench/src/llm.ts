@@ -1,8 +1,9 @@
 import { config } from "./config.ts";
 import { omit, sleep } from './utils.ts';
+import { log } from './log.ts';
 
 export type LLMOptions = {
-  maxTokens?: number;
+  max_tokens?: number;
   temperature?: number;
 }
 
@@ -10,6 +11,7 @@ export type LLMConfig = {
   model: string;
   apiUrl: string;
   apiKey?: string;
+  prompt?: string;
   options?: LLMOptions;
 };
 
@@ -32,7 +34,7 @@ export class LLM {
         if (retries >= maxRetries) {
           throw error;
         }
-        console.warn(`Attempt ${retries} failed. Retrying in ${2 ** retries} seconds...`);
+        log(`Attempt ${retries} failed. Retrying in ${2 ** retries} seconds...`);
         await sleep(2 ** retries * 1000); // Exponential backoff
       }
     }
@@ -41,11 +43,6 @@ export class LLM {
   }
 
   private async attemptChat(message: string, options = {}): Promise<string> {
-    const completionOptions = {
-      ...(this.llm?.options || {}),
-      ...options,
-    };
-
     const headers: Record<string, string> = {
       'Content-Type': 'application/json'
     };
@@ -55,11 +52,11 @@ export class LLM {
     }
 
     if (config.debug) {
-      console.debug(`>> ${message}`);
+      log(`>> ${message}`);
     }
 
     const body = JSON.stringify({
-      ...completionOptions,
+      ...this.completionOptions,
       model: this.llm.model,
       messages: [
         {
@@ -77,6 +74,8 @@ export class LLM {
     });
 
     if (!response.ok) {
+      const text = await response.text();
+      log(`Failed to fetch completion: ${text}`);
       throw new Error(`Failed to fetch completion: ${response.statusText}`);
     }
 
@@ -91,6 +90,38 @@ export class LLM {
   }
 
   toJson() {
-    return omit(this.llm, ['apiKey']);
+    return omit({
+      ...this.llm,
+      ...this.completionOptions,
+    }, ['apiKey']);
+  }
+
+  get completionOptions() {
+    const system = [
+      'model',
+      'apiUrl',
+      'apiKey',
+      'prompt',
+      'options',
+    ];
+
+    const draft = {
+      ...(this.llm?.options || {}),
+      ...omit(this.llm, system),
+    };
+
+    if ('max_tokens' in draft) {
+      draft.max_tokens = parseInt(draft.max_tokens as any);
+    }
+
+    if ('temperature' in draft) {
+      draft.temperature = parseFloat(draft.temperature as any);
+    }
+
+    if ('seed' in draft) {
+      draft.seed = parseInt(draft.seed as any);
+    }
+
+    return draft;
   }
 }

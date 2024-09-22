@@ -1,0 +1,28 @@
+services:
+  boost:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.boost
+    build:
+      context: ./boost
+      dockerfile: Dockerfile
+    env_file:
+      - ./.env
+      - ./boost/override.env
+    volumes:
+      - ./boost/src:/app
+      - ${HARBOR_OLLAMA_CACHE}:/root/.ollama
+      - ${HARBOR_HF_CACHE}:/root/.cache/huggingface
+      - ${HARBOR_LLAMACPP_CACHE}:/root/.cache/llama.cpp
+      - ${HARBOR_VLLM_CACHE}:/root/.cache/vllm
+    ports:
+      - ${HARBOR_BOOST_HOST_PORT}:8000
+    environment:
+      - HARBOR_BOOST_KLMBR_PERCENTAGE=${HARBOR_BOOST_KLMBR_PERCENTAGE}
+      - HARBOR_BOOST_KLMBR_MODS=${HARBOR_BOOST_KLMBR_MODS}
+      - HARBOR_BOOST_KLMBR_STRAT=${HARBOR_BOOST_KLMBR_STRAT}
+      - HARBOR_BOOST_KLMBR_STRAT_PARAMS=${HARBOR_BOOST_KLMBR_STRAT_PARAMS}
+      - HARBOR_BOOST_RCN_STRAT=${HARBOR_BOOST_RCN_STRAT}
+      - HARBOR_BOOST_RCN_STRAT_PARAMS=${HARBOR_BOOST_RCN_STRAT_PARAMS}
+      - HARBOR_BOOST_OPENAI_URLS=${HARBOR_BOOST_OPENAI_URLS}
+      - HARBOR_BOOST_OPENAI_KEYS=${HARBOR_BOOST_OPENAI_KEYS}
+    networks:
+      - harbor-network

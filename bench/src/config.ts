@@ -23,7 +23,9 @@ export const config = {
         model: Deno.env.get('HARBOR_BENCH_JUDGE'),
         apiUrl: Deno.env.get('HARBOR_BENCH_JUDGE_API'),
         apiKey: Deno.env.get('HARBOR_BENCH_JUDGE_API_KEY'),
+        prompt: Deno.env.get('HARBOR_BENCH_JUDGE_PROMPT') ?? 'default',
         temperature: 0,
+        seed: 42,
     } as LLMConfig,
 };
 

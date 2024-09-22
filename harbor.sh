@@ -1825,6 +1825,27 @@ run_harbor_history() {
     esac
 }
 
+run_harbor_size() {
+    # Get the cache directories
+    cache_dirs=$(h config ls | grep CACHE | awk '{print $NF}' | sed "s|~|$HOME|g")
+    # Add $(harbor home) to the list
+    cache_dirs+=$'\n'"$(harbor home)"
+
+    # Print header
+    echo "Harbor size:"
+    echo "----------------------"
+
+    # Iterate through each directory and print its size
+    while IFS= read -r dir; do
+        if [ -d "$dir" ]; then
+            size=$(du -sh "$dir" 2>/dev/null | cut -f1)
+            echo "$dir: $size"
+        else
+            echo "$dir: Directory not found"
+        fi
+    done <<< "$cache_dirs"
+}
+
 # shellcheck disable=SC2034
 __anchor_service_clis=true
 
@@ -2842,6 +2863,11 @@ run_bench_command() {
             env_manager_alias bench.judge_api_key "$@"
             return 0
             ;;
+        judge_prompt)
+            shift
+            env_manager_alias bench.judge_prompt "$@"
+            return 0
+            ;;
         variants)
             shift
             env_manager_alias bench.variants "$@"
@@ -2860,7 +2886,8 @@ run_bench_command() {
             echo "  harbor bench judge [url] - Get or set the judge URL to use in the benchmark"
             echo "  harbor bench judge_api [url] - Get or set the judge API URL to use in the benchmark"
             echo "  harbor bench judge_key [key] - Get or set the judge API key to use in the benchmark"
-            echo "  harbor bench variants [variants] - Get or set the path to variants.yml to run in the benchmark"
+            echo "  harbor bench judge_prompt [prompt] - Get or set the judge prompt to use in the benchmark"
+            echo "  harbor bench variants [variants] - Get or set the variants of LLM params that bench will run"
             echo "  harbor bench debug [true]  - Enable or disable debug mode in the benchmark"
             return 0
             ;;
@@ -3070,12 +3097,127 @@ run_ktransformers_command() {
     esac
 }
 
+run_boost_klmbr_command() {
+    case "$1" in
+        percentage)
+            shift
+            env_manager_alias boost.klmbr.percentage "$@"
+            ;;
+        mods)
+            shift
+            env_manager_arr boost.klmbr.mods "$@"
+            ;;
+        strat)
+            shift
+            env_manager_alias boost.klmbr.strat "$@"
+            ;;
+        strat_params)
+            shift
+            env_manager_dict boost.klmbr.strat_params "$@"
+            ;;
+        -h|--help|help)
+            echo "Usage: harbor boost klmbr <command>"
+            echo
+            echo "Commands:"
+            echo "  harbor boost klmbr percentage [percentage] - Get or set the klmbr percentage parameter"
+            echo "  harbor boost klmbr mods [mods]             - Get or set the klmbr mods parameter"
+            echo "  harbor boost klmbr strat [strat]           - Get or set the klmbr strat parameter"
+            echo "  harbor boost klmbr strat_params [params]   - Get or set the klmbr strat_params parameter"
+            ;;
+    esac
+}
+
+run_boost_rcn_command() {
+    case "$1" in
+        strat)
+            shift
+            env_manager_alias boost.rcn.strat "$@"
+            ;;
+        strat_params)
+            shift
+            env_manager_dict boost.rcn.strat_params "$@"
+            ;;
+        -h|--help|help)
+            echo "Usage: harbor boost rcn <command>"
+            echo
+            echo "Commands:"
+            echo "  harbor boost rcn strat [strat]           - Get or set the rcn strat parameter"
+            echo "  harbor boost rcn strat_params [params]   - Get or set the rcn strat_params parameter"
+            ;;
+    esac
+}
+
+run_boost_g1_command() {
+    case "$1" in
+        strat)
+            shift
+            env_manager_alias boost.g1.strat "$@"
+            ;;
+        strat_params)
+            shift
+            env_manager_dict boost.g1.strat_params "$@"
+            ;;
+        max_steps)
+            shift
+            env_manager_alias boost.g1.max_steps "$@"
+            ;;
+        -h|--help|help)
+            echo "Usage: harbor boost g1 <command>"
+            echo
+            echo "Commands:"
+            echo "  harbor boost g1 strat [strat]           - Get or set the g1 strat parameter"
+            echo "  harbor boost g1 strat_params [params]   - Get or set the g1 strat_params parameter"
+            ;;
+    esac
+}
+
+run_boost_command() {
+    case "$1" in
+        urls)
+            shift
+            env_manager_arr boost.openai.urls "$@"
+            ;;
+        keys)
+            shift
+            env_manager_arr boost.openai.keys "$@"
+            ;;
+        modules)
+            shift
+            env_manager_arr boost.modules "$@"
+            ;;
+        klmbr)
+            shift
+            run_boost_klmbr_command "$@"
+            ;;
+        rcn)
+            shift
+            run_boost_rcn_command "$@"
+            ;;
+        g1)
+            shift
+            run_boost_g1_command "$@"
+            ;;
+        -h|--help|help)
+            echo "Please note that this is not Boost CLI, but a Harbor CLI to manage Boost service."
+            echo
+            echo "Usage: harbor boost <command>"
+            echo
+            echo "Commands:"
+            echo "  harbor boost urls [urls] - Manage OpenAI API URLs to boost"
+            echo "  harbor boost keys [keys] - Manage OpenAI API keys to boost"
+            echo "  harbor boost klmbr       - Manage klmbr module"
+            echo "  harbor boost rcn         - Manage rcn module"
+            echo "  harbor boost g1          - Manage g1 module"
+            ;;
+    esac
+}
+
 # ========================================================================
 # == Main script
 # ========================================================================
 
 # Globals
-version="0.1.26"
+version="0.1.27"
 harbor_repo_url="https://github.com/av/harbor.git"
 delimiter="|"
 scramble_exit_code=42
@@ -3336,6 +3478,10 @@ main_entrypoint() {
             shift
             run_ktransformers_command "$@"
             ;;
+        boost)
+            shift
+            run_boost_command "$@"
+            ;;
         tunnel|t)
             shift
             establish_tunnel "$@"
@@ -3395,6 +3541,10 @@ main_entrypoint() {
         history|h)
             shift
             run_harbor_history "$@"
+            ;;
+        size)
+            shift
+            run_harbor_size "$@"
             ;;
         *)
             return $scramble_exit_code

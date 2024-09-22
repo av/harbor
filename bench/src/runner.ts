@@ -6,6 +6,9 @@ import { BenchTask } from "./task.ts";
 import { BenchRun } from "./run.ts";
 import { csv, yaml, path } from './deps.ts';
 import { runsTemplate, summaryTemplate } from './report.ts';
+import { log as logger } from './log.ts';
+
+const log = logger.child('runner');
 
 export class BenchRunner {
   static async fromRunsFile(file: string) {
@@ -94,8 +97,8 @@ export class BenchRunner {
     let runs = 0;
 
     for (const run of this.runs) {
-      console.log(`Run ${++runs}/${this.runs.length}`);
-      console.log(`LLM`, run.llm.toJson());
+      log(`Run ${++runs}/${this.runs.length}`);
+      log(`LLM`, run.llm.toJson());
       await run.run();
       await this.save();
     }
@@ -105,8 +108,8 @@ export class BenchRunner {
     let evals = 0;
 
     for (const run of this.runs) {
-      console.log(`Evals ${++evals}/${this.runs.length}`);
-      console.log(`Judge`, run.judge.toJson());
+      log(`Evals ${++evals}/${this.runs.length}`);
+      log(`Judge`, run.judge.toJson());
       await run.eval();
       await this.save();
     }
@@ -114,6 +117,8 @@ export class BenchRunner {
 
   async save() {
     const output = `${config.output}/${config.name}`;
+    log(`Saving results to ${output}...`);
+
     const results = this.runs.map((r) => r.toResults()).flat();
     const columns = Object.keys(results[0]);
 

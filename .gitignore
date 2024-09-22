@@ -1,6 +1,12 @@
 # Local .env
 .env
 
+# Python
+.venv
+
+# Node
+node_modules/
+
 # Open WebUI
 open-webui/*
 open-webui/config.json
@@ -83,3 +89,6 @@ jupyter/workspace/*
 
 # History
 .history
+
+# Boost
+boost/src/**/__pycache__/

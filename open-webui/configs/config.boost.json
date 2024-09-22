@@ -1,0 +1,11 @@
+{
+  "openai": {
+		"api_base_urls": [
+			"http://boost:8000/v1"
+		],
+		"api_keys": [
+			"sk-boost"
+		],
+		"enabled": true
+	}
+}

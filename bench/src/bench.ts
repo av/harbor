@@ -1,8 +1,9 @@
 import { config } from "./config.ts";
 import { BenchRunner } from "./runner.ts";
+import { log } from "./log.ts";
 
 async function main() {
-  console.log(`
+  log(`
 ░█▀▄░█▀▀░█▀█░█▀▀░█░█
 ░█▀▄░█▀▀░█░█░█░░░█▀█
 ░▀▀░░▀▀▀░▀░▀░▀▀▀░▀░▀
@@ -16,7 +17,7 @@ async function main() {
 }
 
 async function handleSignal() {
-  console.info("Interrupted");
+  log("Interrupted");
   Deno.exit(0);
 }
 

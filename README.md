@@ -18,7 +18,7 @@ Harbor is a containerized LLM toolkit that allows you to run LLMs and additional
 
 ##### Satellites
 
-[SearXNG](https://github.com/av/harbor/wiki/2.3.1-Satellite:-SearXNG) ⦁︎ [Perplexica](https://github.com/av/harbor/wiki/2.3.2-Satellite:-Perplexica) ⦁︎ [Dify](https://github.com/av/harbor/wiki/2.3.3-Satellite:-Dify) ⦁︎ [Plandex](https://github.com/av/harbor/wiki/2.3.4-Satellite:-Plandex) ⦁︎ [LiteLLM](https://github.com/av/harbor/wiki/2.3.5-Satellite:-LiteLLM) ⦁︎ [LangFuse](https://github.com/av/harbor/wiki/2.3.6-Satellite:-langfuse) ⦁︎ [Open Interpreter](https://github.com/av/harbor/wiki/2.3.7-Satellite:-Open-Interpreter) ⦁︎ [cloudflared](https://github.com/av/harbor/wiki/2.3.8-Satellite:-cloudflared) ⦁︎ [cmdh](https://github.com/av/harbor/wiki/2.3.9-Satellite:-cmdh) ⦁︎ [fabric](https://github.com/av/harbor/wiki/2.3.10-Satellite:-fabric) ⦁︎ [txtai RAG](https://github.com/av/harbor/wiki/2.3.11-Satellite:-txtai-RAG) ⦁︎ [TextGrad](https://github.com/av/harbor/wiki/2.3.12-Satellite:-TextGrad) ⦁︎ [Aider](https://github.com/av/harbor/wiki/2.3.13-Satellite:-aider) ⦁︎ [aichat](https://github.com/av/harbor/wiki/2.3.14-Satellite:-aichat) ⦁︎ [omnichain](https://github.com/av/harbor/wiki/2.3.16-Satellite:-omnichain) ⦁︎ [Harbor Bench](https://github.com/av/harbor/wiki/5.-Harbor-Bench.md) ⦁︎ [lm-evaluation-harness](https://github.com/av/harbor/wiki/2.3.17-Satellite:-lm-evaluation-harness) ⦁︎ [JupyterLab](https://github.com/av/harbor/wiki/2.3.18-Satellite:-JupyterLab) ⦁︎ [ol1](https://github.com/av/harbor/wiki/2.3.19-Satellite:-ol1)
+[Harbor Bench](https://github.com/av/harbor/wiki/5.1.-Harbor-Bench.md) ⦁︎ [Harbor Bench](https://github.com/av/harbor/wiki/5.2.-Harbor-Boost.md) ⦁︎ [SearXNG](https://github.com/av/harbor/wiki/2.3.1-Satellite:-SearXNG) ⦁︎ [Perplexica](https://github.com/av/harbor/wiki/2.3.2-Satellite:-Perplexica) ⦁︎ [Dify](https://github.com/av/harbor/wiki/2.3.3-Satellite:-Dify) ⦁︎ [Plandex](https://github.com/av/harbor/wiki/2.3.4-Satellite:-Plandex) ⦁︎ [LiteLLM](https://github.com/av/harbor/wiki/2.3.5-Satellite:-LiteLLM) ⦁︎ [LangFuse](https://github.com/av/harbor/wiki/2.3.6-Satellite:-langfuse) ⦁︎ [Open Interpreter](https://github.com/av/harbor/wiki/2.3.7-Satellite:-Open-Interpreter) ⦁︎ [cloudflared](https://github.com/av/harbor/wiki/2.3.8-Satellite:-cloudflared) ⦁︎ [cmdh](https://github.com/av/harbor/wiki/2.3.9-Satellite:-cmdh) ⦁︎ [fabric](https://github.com/av/harbor/wiki/2.3.10-Satellite:-fabric) ⦁︎ [txtai RAG](https://github.com/av/harbor/wiki/2.3.11-Satellite:-txtai-RAG) ⦁︎ [TextGrad](https://github.com/av/harbor/wiki/2.3.12-Satellite:-TextGrad) ⦁︎ [Aider](https://github.com/av/harbor/wiki/2.3.13-Satellite:-aider) ⦁︎ [aichat](https://github.com/av/harbor/wiki/2.3.14-Satellite:-aichat) ⦁︎ [omnichain](https://github.com/av/harbor/wiki/2.3.16-Satellite:-omnichain) ⦁︎ [lm-evaluation-harness](https://github.com/av/harbor/wiki/2.3.17-Satellite:-lm-evaluation-harness) ⦁︎ [JupyterLab](https://github.com/av/harbor/wiki/2.3.18-Satellite:-JupyterLab) ⦁︎ [ol1](https://github.com/av/harbor/wiki/2.3.19-Satellite:-ol1)
 
 ## Blitz Tour
 
@@ -39,6 +39,10 @@ harbor up llamacpp tgi litellm vllm tabbyapi aphrodite sglang ktransformers
 
 # Run different Frontends
 harbor up librechat chatui bionicgpt hollama
+
+# Get a free quality boost with
+# built-in optimizing proxy
+harbor up boost
 
 # Use FLUX in Open WebUI in one command
 harbor up comfyui
@@ -184,8 +188,10 @@ harbor open
   Read about supported services and the ways to configure them.
 - [Compatibility](https://github.com/av/harbor/wiki/4.-Compatibility)<br/>
   Known compatibility issues between the services and models as well as possible workarounds.
-- [Harbor Bench](https://github.com/av/harbor/wiki/5.-Harbor-Bench)<br/>
-  Documentation on built-in LLM benchmarking service.
+- [Harbor Bench](https://github.com/av/harbor/wiki/5.1.-Harbor-Bench)<br/>
+  Documentation for the built-in LLM benchmarking service.
+- [Harbor Boost](https://github.com/av/harbor/wiki/5.2.-Harbor-Boost)<br/>
+  Documentation for the built-in LLM optimiser proxy.
 - [Harbor Compose Setup](https://github.com/av/harbor/wiki/6.-Harbor-Compose-Setup)<br/>
   Read about the way Harbor uses Docker Compose to manage services.
 - [Adding A New Service](https://github.com/av/harbor/wiki/7.-Adding-A-New-Service)<br/>

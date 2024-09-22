@@ -1,0 +1,5 @@
+services:
+  boost:
+    environment:
+      - HARBOR_BOOST_OPENAI_URL_OMNICHAIN=http://omnichain:34082/v1
+      - HARBOR_BOOST_OPENAI_KEY_OMNICHAIN=sk-omnichain
