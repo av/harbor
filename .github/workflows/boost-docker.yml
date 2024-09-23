@@ -71,7 +71,7 @@ jobs:
         if: github.ref == 'refs/heads/main'
         uses: docker/build-push-action@v6
         with:
-          context: boost
+          context: ./boost
           file: Dockerfile
           push: true
           tags: ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:latest
@@ -83,7 +83,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         uses: docker/build-push-action@v6
         with:
-          context: boost
+          context: ./boost
           file: Dockerfile
           push: true
           tags: ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}
