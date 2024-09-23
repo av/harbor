@@ -1,0 +1,19 @@
+services:
+  openhands:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.openhands
+    env_file:
+      - ./.env
+      - ./openhands/override.env
+    image: ghcr.io/all-hands-ai/openhands:${HARBOR_OPENHANDS_VERSION}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - SANDBOX_RUNTIME_CONTAINER_IMAGE=ghcr.io/all-hands-ai/runtime:${HARBOR_OPENHANDS_VERSION}-nikolaik
+      - SANDBOX_USER_ID=${HARBOR_USER_ID}
+    networks:
+      - harbor-network
+    ports:
+      - ${HARBOR_OPENHANDS_HOST_PORT}:3000
+    extra_hosts:
+      - host.docker.internal:host-gateway
+

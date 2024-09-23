@@ -133,7 +133,7 @@ run_harbor_doctor() {
     log_info "Running Harbor Doctor..."
 
     # Check if Docker is installed and running
-    if command -v docker &> /dev/null && docker info &> /dev/null; then
+    if command -v docker &>/dev/null && docker info &>/dev/null; then
         log_info "${ok} Docker is installed and running"
     else
         log_error "${nok} Docker is not installed or not running. Please install or start Docker."
@@ -141,7 +141,7 @@ run_harbor_doctor() {
     fi
 
     # Check if Docker Compose is installed
-    if command -v docker-compose &> /dev/null; then
+    if command -v docker-compose &>/dev/null; then
         log_info "${ok} Docker Compose is installed"
     else
         log_error "${nok} Docker Compose is not installed. Please install Docker Compose."
@@ -181,7 +181,7 @@ run_harbor_doctor() {
     fi
 
     # Check if nvidia-container-toolkit is installed
-    if command -v nvidia-container-toolkit &> /dev/null; then
+    if command -v nvidia-container-toolkit &>/dev/null; then
         log_info "${ok} NVIDIA Container Toolkit is installed"
     else
         log_warn "${nok} NVIDIA Container Toolkit is not installed. NVIDIA GPU support may not work."
@@ -190,7 +190,6 @@ run_harbor_doctor() {
     log_info "Harbor Doctor checks completed successfully."
 }
 
-
 # shellcheck disable=SC2034
 __anchor_fns=true
 
@@ -198,38 +197,38 @@ resolve_compose_files() {
     # Find all .yml files in the specified base directory,
     # but do not go into subdirectories
     find "$base_dir" -maxdepth 1 -name "*.yml" |
-    # For each file, count the number of dots in the filename
-    # and prepend this count to the filename
-    awk -F. '{print NF-1, $0}' |
-    # Sort the files based on the
-    # number of dots, in ascending order
-    sort -n |
-    # Remove the dot count, leaving
-    # just the sorted filenames
-    cut -d' ' -f2-
+        # For each file, count the number of dots in the filename
+        # and prepend this count to the filename
+        awk -F. '{print NF-1, $0}' |
+        # Sort the files based on the
+        # number of dots, in ascending order
+        sort -n |
+        # Remove the dot count, leaving
+        # just the sorted filenames
+        cut -d' ' -f2-
 }
 
 compose_with_options() {
     local base_dir="$PWD"
-    local compose_files=("$base_dir/compose.yml")  # Always include the base compose file
+    local compose_files=("$base_dir/compose.yml") # Always include the base compose file
     local options=("${default_options[@]}")
 
     # Parse arguments
     while [[ $# -gt 0 ]]; do
         case $1 in
-            --dir=*)
-                base_dir="${1#*=}"
-                shift
-                ;;
-            *)
-                options+=("$1")
-                shift
-                ;;
+        --dir=*)
+            base_dir="${1#*=}"
+            shift
+            ;;
+        *)
+            options+=("$1")
+            shift
+            ;;
         esac
     done
 
     # Check for NVIDIA GPU and drivers
-    if command -v nvidia-smi &> /dev/null && command -v nvidia-container-toolkit &> /dev/null; then
+    if command -v nvidia-smi &>/dev/null && command -v nvidia-container-toolkit &>/dev/null; then
         options+=("nvidia")
     fi
 
@@ -281,7 +280,7 @@ compose_with_options() {
             # 1. It matches an option and is not an NVIDIA file
             # 2. It matches an option, is an NVIDIA file, and NVIDIA is supported
             # if $match && (! $is_nvidia_file || ($is_nvidia_file && $has_nvidia)); then
-            if $match ; then
+            if $match; then
                 compose_files+=("$file")
             fi
         fi
@@ -301,10 +300,10 @@ resolve_compose_command() {
     local is_human=false
 
     case "$1" in
-        --human|-h)
-            shift
-            is_human=true
-            ;;
+    --human | -h)
+        shift
+        is_human=true
+        ;;
     esac
 
     local cmd=$(compose_with_options "$@")
@@ -380,7 +379,7 @@ link_cli() {
         mkdir -p "$target_dir"
 
         # Update the shell configuration file
-        echo -e "\nexport PATH=\"\$PATH:$target_dir\"\n" >> "$shell_profile"
+        echo -e "\nexport PATH=\"\$PATH:$target_dir\"\n" >>"$shell_profile"
         export PATH="$PATH:$target_dir"
         echo "Updated $shell_profile with new PATH."
     fi
@@ -530,19 +529,19 @@ get_url() {
 
     for arg in "$@"; do
         case "$arg" in
-            --intra|-i|--internal)
-                is_local=false
-                is_adressable=false
-                is_intra=true
-                ;;
-            --addressable|-a|--lan)
-                is_local=false
-                is_intra=false
-                is_adressable=true
-                ;;
-            *)
-                filtered_args+=("$arg") # Add to filtered arguments
-                ;;
+        --intra | -i | --internal)
+            is_local=false
+            is_adressable=false
+            is_intra=true
+            ;;
+        --addressable | -a | --lan)
+            is_local=false
+            is_intra=false
+            is_adressable=true
+            ;;
+        *)
+            filtered_args+=("$arg") # Add to filtered arguments
+            ;;
         esac
     done
 
@@ -584,12 +583,12 @@ sys_open() {
     url=$1
 
     # Open the URL in the default browser
-    if command -v xdg-open &> /dev/null; then
-        xdg-open "$url"  # Linux
-    elif command -v open &> /dev/null; then
-        open "$url"  # macOS
-    elif command -v start &> /dev/null; then
-        start "$url"  # Windows
+    if command -v xdg-open &>/dev/null; then
+        xdg-open "$url" # Linux
+    elif command -v open &>/dev/null; then
+        open "$url" # macOS
+    elif command -v start &>/dev/null; then
+        start "$url" # Windows
     else
         log_error "Unable to open browser. Please visit $url manually."
         return 1
@@ -609,7 +608,7 @@ open_service() {
 }
 
 smi() {
-    if command -v nvidia-smi &> /dev/null; then
+    if command -v nvidia-smi &>/dev/null; then
         nvidia-smi
     else
         log_error "nvidia-smi not found."
@@ -617,7 +616,7 @@ smi() {
 }
 
 nvidia_top() {
-    if command -v nvtop &> /dev/null; then
+    if command -v nvtop &>/dev/null; then
         nvtop
     else
         log_error "nvtop not found."
@@ -671,7 +670,7 @@ run_in_service() {
 }
 
 set_colors() {
-    if [ -t 1 ] && command -v tput > /dev/null 2>&1 && tput setaf 1 > /dev/null 2>&1; then
+    if [ -t 1 ] && command -v tput >/dev/null 2>&1 && tput setaf 1 >/dev/null 2>&1; then
         c_r=$(tput setaf 1)
         c_g=$(tput setaf 2)
         c_gray=$(tput setaf 8)
@@ -735,7 +734,7 @@ merge_env_files() {
         if [[ -z "$line" ]]; then
             ((empty_lines++))
             if ((empty_lines <= 2)); then
-                echo "$line" >> "$temp_file"
+                echo "$line" >>"$temp_file"
             fi
             prev_line=""
             repeat_count=0
@@ -748,7 +747,7 @@ merge_env_files() {
         if [[ "$line" == "$prev_line" ]]; then
             ((repeat_count++))
             if ((repeat_count <= 1)); then
-                echo "$line" >> "$temp_file"
+                echo "$line" >>"$temp_file"
             fi
         else
             repeat_count=0
@@ -756,18 +755,18 @@ merge_env_files() {
                 var_name="${line%%=*}"
                 if grep -q "^$var_name=" "$target_file"; then
                     # If the variable exists in .env, use that value
-                    grep "^$var_name=" "$target_file" >> "$temp_file"
+                    grep "^$var_name=" "$target_file" >>"$temp_file"
                 else
                     # If the variable doesn't exist in .env, add the new line
-                    echo "$line" >> "$temp_file"
+                    echo "$line" >>"$temp_file"
                 fi
             else
                 # For comments or other content, add the new line as is
-                echo "$line" >> "$temp_file"
+                echo "$line" >>"$temp_file"
             fi
         fi
         prev_line="$line"
-    done < "$default_file"
+    done <"$default_file"
 
     # Remove trailing newlines from the temp file
     if [[ "$(uname)" == "Darwin" ]]; then
@@ -829,43 +828,43 @@ swap_and_retry() {
 
                     # Check common exit codes
                     case $exit_code in
-                        0)
-                            log_debug "Process completed successfully"
-                            ;;
-                        1)
-                            log_error "General error occurred"
-                            ;;
-                        2)
-                            log_error "Misuse of shell builtin"
-                            ;;
-                        126)
-                            log_error "Command invoked cannot execute (permission problem or not executable)"
-                            ;;
-                        127)
-                            log_error "Command not found"
-                            ;;
-                        128)
-                            log_error "Invalid exit argument"
-                            ;;
-                        129)
-                            log_warn "SIGHUP (Hangup) received"
-                            ;;
-                        130)
-                            log_info "SIGINT (Keyboard interrupt) received"
-                            ;;
-                        131)
-                            log_info "SIGQUIT (Keyboard quit) received"
-                            ;;
-                        137)
-                            log_info "SIGKILL (Kill signal) received"
-                            ;;
-                        143)
-                            log_info "SIGTERM (Termination signal) received"
-                            ;;
-                        *)
-                            log_info "Exit code: $exit_code"
-                            return 1
-                            ;;
+                    0)
+                        log_debug "Process completed successfully"
+                        ;;
+                    1)
+                        log_error "General error occurred"
+                        ;;
+                    2)
+                        log_error "Misuse of shell builtin"
+                        ;;
+                    126)
+                        log_error "Command invoked cannot execute (permission problem or not executable)"
+                        ;;
+                    127)
+                        log_error "Command not found"
+                        ;;
+                    128)
+                        log_error "Invalid exit argument"
+                        ;;
+                    129)
+                        log_warn "SIGHUP (Hangup) received"
+                        ;;
+                    130)
+                        log_info "SIGINT (Keyboard interrupt) received"
+                        ;;
+                    131)
+                        log_info "SIGQUIT (Keyboard quit) received"
+                        ;;
+                    137)
+                        log_info "SIGKILL (Kill signal) received"
+                        ;;
+                    143)
+                        log_info "SIGTERM (Termination signal) received"
+                        ;;
+                    *)
+                        log_info "Exit code: $exit_code"
+                        return 1
+                        ;;
                     esac
                 fi
             else
@@ -926,69 +925,87 @@ __anchor_envm=true
 env_manager() {
     local env_file=".env"
     local prefix="HARBOR_"
+    local silent=false
+
+    # Check for --silent flag
+    if [[ "$1" == "--silent" ]]; then
+        silent=true
+        shift
+    fi
 
     case "$1" in
-        get)
-            if [[ -z "$2" ]]; then
-                log_info "Usage: env_manager get <key>"
-                return 1
-            fi
-            local upper_key=$(echo "$2" | tr '[:lower:]' '[:upper:]' | tr '.' '_')
-            value=$(grep "^$prefix$upper_key=" "$env_file" | cut -d '=' -f2-)
-            value="${value#\"}"  # Remove leading quote if present
-            value="${value%\"}"  # Remove trailing quote if present
-            echo "$value"
-            ;;
-        set)
-            if [[ -z "$2" ]]; then
-                log_info "Usage: env_manager set <key> <value>"
-                return 1
-            fi
+    get)
+        if [[ -z "$2" ]]; then
+            $silent || log_info "Usage: env_manager get <key>"
+            return 1
+        fi
+        local upper_key=$(echo "$2" | tr '[:lower:]' '[:upper:]' | tr '.' '_')
+        value=$(grep "^$prefix$upper_key=" "$env_file" | cut -d '=' -f2-)
+        value="${value#\"}" # Remove leading quote if present
+        value="${value%\"}" # Remove trailing quote if present
+        echo "$value"
+        ;;
 
-            local upper_key=$(echo "$2" | tr '[:lower:]' '[:upper:]' | tr '.' '_')
-            shift 2  # Remove 'set' and the key from the arguments
-            local value="$*"  # Capture all remaining arguments as the value
+    set)
+        if [[ -z "$2" ]]; then
+            $silent || log_info "Usage: env_manager set <key> <value>"
+            return 1
+        fi
+        local upper_key=$(echo "$2" | tr '[:lower:]' '[:upper:]' | tr '.' '_')
+        shift 2          # Remove 'set' and the key from the arguments
+        local value="$*" # Capture all remaining arguments as the value
+        if grep -q "^$prefix$upper_key=" "$env_file"; then
+            sed -i "s|^$prefix$upper_key=.*|$prefix$upper_key=\"$value\"|" "$env_file"
+        else
+            echo "$prefix$upper_key=\"$value\"" >>"$env_file"
+        fi
+        $silent || log_info "Set $prefix$upper_key to: \"$value\""
+        ;;
 
-            if grep -q "^$prefix$upper_key=" "$env_file"; then
-                sed -i "s|^$prefix$upper_key=.*|$prefix$upper_key=\"$value\"|" "$env_file"
-            else
-                echo "$prefix$upper_key=\"$value\"" >> "$env_file"
-            fi
-            log_info "Set $prefix$upper_key to: \"$value\""
-            ;;
-        list|ls)
-            grep "^$prefix" "$env_file" | sed "s/^$prefix//" | while read -r line; do
-                key=${line%%=*}
-                value=${line#*=}
-                value=$(echo "$value" | sed -E 's/^"(.*)"$/\1/')  # Remove surrounding quotes for display
-                printf "%-30s %s\n" "$key" "$value"
-            done
-            ;;
-        reset)
-            shift
+    list | ls)
+        grep "^$prefix" "$env_file" | sed "s/^$prefix//" | while read -r line; do
+            key=${line%%=*}
+            value=${line#*=}
+            value=$(echo "$value" | sed -E 's/^"(.*)"$/\1/') # Remove surrounding quotes for display
+            printf "%-30s %s\n" "$key" "$value"
+        done
+        ;;
+
+    reset)
+        shift
+        if $silent; then
+            reset_env_file
+        else
             run_gum confirm "Are you sure you want to reset Harbor configuration?" && reset_env_file || log_warn "Reset cancelled"
-            ;;
-        update)
-            shift
-            merge_env_files
-            ;;
-        --help|-h)
-            echo "Harbor configuration management"
-            echo
-            echo "Usage: harbor config {get|set|ls|list|reset|update} [key] [value]"
-            echo
-            echo "Commands:"
-            echo "  get <key>         - Get the value of a configuration key"
-            echo "  set <key> <value> - Set the value of a configuration key"
-            echo "  ls|list           - List all configuration keys and values"
-            echo "  reset             - Reset Harbor configuration to default .env"
-            echo "  update            - Merge upstream config changes from default .env"
-            return 0
-            ;;
-        *)
-            echo "Usage: harbor config {get|set|ls|reset} [key] [value]"
-            return $scramble_exit_code
-            ;;
+        fi
+        ;;
+
+    update)
+        shift
+        merge_env_files
+        ;;
+
+    --help | -h)
+        echo "Harbor configuration management"
+        echo
+        echo "Usage: harbor config [--silent] {get|set|ls|list|reset|update} [key] [value]"
+        echo
+        echo "Options:"
+        echo " --silent - Suppress all non-essential output"
+        echo
+        echo "Commands:"
+        echo " get <key> - Get the value of a configuration key"
+        echo " set <key> <value> - Set the value of a configuration key"
+        echo " ls|list - List all configuration keys and values"
+        echo " reset - Reset Harbor configuration to default .env"
+        echo " update - Merge upstream config changes from default .env"
+        return 0
+        ;;
+
+    *)
+        $silent || echo "Usage: harbor config [--silent] {get|set|ls|reset} [key] [value]"
+        return $scramble_exit_code
+        ;;
     esac
 }
 
@@ -1009,16 +1026,16 @@ env_manager_alias() {
     fi
 
     case $1 in
-        --help|-h)
-            echo "Harbor config: $field"
-            echo
-            echo "This field is a string, use the following actions to manage it:"
-            echo
-            echo "  no arguments  - Get the current value"
-            echo "  <value>       - Set a new value"
-            echo
-            return 0
-            ;;
+    --help | -h)
+        echo "Harbor config: $field"
+        echo
+        echo "This field is a string, use the following actions to manage it:"
+        echo
+        echo "  no arguments  - Get the current value"
+        echo "  <value>       - Set a new value"
+        echo
+        return 0
+        ;;
     esac
 
     if [ $# -eq 0 ]; then
@@ -1044,40 +1061,40 @@ env_manager_arr() {
     local remove_command=""
 
     case "$1" in
-        --help|-h)
-            echo "Harbor config: $field"
-            echo
-            echo "This field is an array, use the following actions to manage it:"
-            echo
-            echo "  ls            - List all values"
-            echo "  clear         - Remove all values"
-            echo "  rm <value>    - Remove a value"
-            echo "  rm <index>    - Remove a value by index"
-            echo "  add <value>   - Add a value"
-            echo
-            return 0
-            ;;
+    --help | -h)
+        echo "Harbor config: $field"
+        echo
+        echo "This field is an array, use the following actions to manage it:"
+        echo
+        echo "  ls            - List all values"
+        echo "  clear         - Remove all values"
+        echo "  rm <value>    - Remove a value"
+        echo "  rm <index>    - Remove a value by index"
+        echo "  add <value>   - Add a value"
+        echo
+        return 0
+        ;;
     esac
 
     # Parse optional hook commands
     while [[ "$1" == --* ]]; do
         case "$1" in
-            --on-get)
-                get_command="$2"
-                shift 2
-                ;;
-            --on-set)
-                set_command="$2"
-                shift 2
-                ;;
-            --on-add)
-                add_command="$2"
-                shift 2
-                ;;
-            --on-remove)
-                remove_command="$2"
-                shift 2
-                ;;
+        --on-get)
+            get_command="$2"
+            shift 2
+            ;;
+        --on-set)
+            set_command="$2"
+            shift 2
+            ;;
+        --on-add)
+            add_command="$2"
+            shift 2
+            ;;
+        --on-remove)
+            remove_command="$2"
+            shift 2
+            ;;
         esac
     done
 
@@ -1100,37 +1117,37 @@ env_manager_arr() {
     }
 
     case "$action" in
-        ls|list|"")
-            # Show all values
-            local array=$(get_array)
-            if [ -z "$array" ]; then
-                log_info "Config $field is empty"
-            else
-                echo "$array" | tr "$delimiter" "\n"
-            fi
-            if [ -n "$get_command" ]; then
-                eval "$get_command"
-            fi
-            ;;
-        clear)
-            # Clear all values
+    ls | list | "")
+        # Show all values
+        local array=$(get_array)
+        if [ -z "$array" ]; then
+            log_info "Config $field is empty"
+        else
+            echo "$array" | tr "$delimiter" "\n"
+        fi
+        if [ -n "$get_command" ]; then
+            eval "$get_command"
+        fi
+        ;;
+    clear)
+        # Clear all values
+        set_array ""
+        log_info "All values removed from $field"
+        if [ -n "$remove_command" ]; then
+            eval "$remove_command"
+        fi
+        ;;
+    rm)
+        if [ -z "$value" ]; then
+            # Remove all values
             set_array ""
             log_info "All values removed from $field"
-            if [ -n "$remove_command" ]; then
-                eval "$remove_command"
-            fi
-            ;;
-        rm)
-            if [ -z "$value" ]; then
-                # Remove all values
-                set_array ""
-                log_info "All values removed from $field"
-            else
-                # Remove one value
-                local array=$(get_array)
-                if [ "$value" -eq "$value" ] 2>/dev/null; then
-                    # If value is a number, treat it as an index
-                    local new_array=$(echo "$array" | awk -F"$delimiter" -v idx="$value" '{
+        else
+            # Remove one value
+            local array=$(get_array)
+            if [ "$value" -eq "$value" ] 2>/dev/null; then
+                # If value is a number, treat it as an index
+                local new_array=$(echo "$array" | awk -F"$delimiter" -v idx="$value" '{
                         OFS=FS;
                         for(i=1;i<=NF;i++) {
                             if(i-1 != idx) {
@@ -1141,9 +1158,9 @@ env_manager_arr() {
                             printf("%s%s", a[i], (i==n)?"":OFS)
                         }
                     }')
-                else
-                    # Otherwise, treat it as a value to be removed
-                    local new_array=$(echo "$array" | awk -F"$delimiter" -v val="$value" '{
+            else
+                # Otherwise, treat it as a value to be removed
+                local new_array=$(echo "$array" | awk -F"$delimiter" -v val="$value" '{
                         OFS=FS;
                         for(i=1;i<=NF;i++) {
                             if($i != val) {
@@ -1154,37 +1171,37 @@ env_manager_arr() {
                             printf("%s%s", a[i], (i==n)?"":OFS)
                         }
                     }')
-                fi
-                set_array "$new_array"
-                log_info "Value removed from $field"
-            fi
-            if [ -n "$remove_command" ]; then
-                eval "$remove_command"
-            fi
-            ;;
-        add)
-            if [ -z "$value" ]; then
-                echo "Usage: env_manager_arr $field add <value>"
-                return 1
-            fi
-            local array=$(get_array)
-            if [ -z "$array" ]; then
-                new_array="$value"
-            else
-                new_array="${array}${delimiter}${value}"
             fi
             set_array "$new_array"
-            log_info "Value added to $field"
-            if [ -n "$add_command" ]; then
-                eval "$add_command"
-            fi
-            ;;
-        -h|--help|help)
-            echo "Usage: $field [--on-get <command>] [--on-set <command>] [--on-add <command>] [--on-remove <command>] {ls|rm|add} [value]"
-            ;;
-        *)
-            return $scramble_exit_code
-            ;;
+            log_info "Value removed from $field"
+        fi
+        if [ -n "$remove_command" ]; then
+            eval "$remove_command"
+        fi
+        ;;
+    add)
+        if [ -z "$value" ]; then
+            echo "Usage: env_manager_arr $field add <value>"
+            return 1
+        fi
+        local array=$(get_array)
+        if [ -z "$array" ]; then
+            new_array="$value"
+        else
+            new_array="${array}${delimiter}${value}"
+        fi
+        set_array "$new_array"
+        log_info "Value added to $field"
+        if [ -n "$add_command" ]; then
+            eval "$add_command"
+        fi
+        ;;
+    -h | --help | help)
+        echo "Usage: $field [--on-get <command>] [--on-set <command>] [--on-add <command>] [--on-remove <command>] {ls|rm|add} [value]"
+        ;;
+    *)
+        return $scramble_exit_code
+        ;;
     esac
 }
 
@@ -1198,31 +1215,31 @@ env_manager_dict() {
     local set_command=""
 
     case "$1" in
-        --help|-h)
-            echo "Harbor dict: $field"
-            echo
-            echo "This field is a dictionary, use the following actions to manage it:"
-            echo
-            echo " ls - List all key/value pairs"
-            echo " get <key> - Get a key value"
-            echo " set <key> <value> - Set a key value"
-            echo " rm <key> - Remove a key/value pair"
-            echo
-            return 0
-            ;;
+    --help | -h)
+        echo "Harbor dict: $field"
+        echo
+        echo "This field is a dictionary, use the following actions to manage it:"
+        echo
+        echo " ls - List all key/value pairs"
+        echo " get <key> - Get a key value"
+        echo " set <key> <value> - Set a key value"
+        echo " rm <key> - Remove a key/value pair"
+        echo
+        return 0
+        ;;
     esac
 
     # Parse optional hook commands
     while [[ "$1" == --* ]]; do
         case "$1" in
-            --on-get)
-                get_command="$2"
-                shift 2
-                ;;
-            --on-set)
-                set_command="$2"
-                shift 2
-                ;;
+        --on-get)
+            get_command="$2"
+            shift 2
+            ;;
+        --on-set)
+            set_command="$2"
+            shift 2
+            ;;
         esac
     done
 
@@ -1246,25 +1263,25 @@ env_manager_dict() {
     }
 
     case "$action" in
-        ls|list|"")
-            # Show all key/value pairs
-            local dict=$(get_dict)
-            if [ -z "$dict" ]; then
-                log_info "Config $field is empty"
-            else
-                echo "$dict" | tr "$delimiter" "\n" | sed 's/=/: /'
-            fi
-            if [ -n "$get_command" ]; then
-                eval "$get_command"
-            fi
-            ;;
-        get)
-            if [ -z "$key" ]; then
-                echo "Usage: env_dict_manager $field get <key>"
-                return 1
-            fi
-            local dict=$(get_dict)
-            local value=$(echo "$dict" | awk -F"$delimiter" -v key="$key" '{
+    ls | list | "")
+        # Show all key/value pairs
+        local dict=$(get_dict)
+        if [ -z "$dict" ]; then
+            log_info "Config $field is empty"
+        else
+            echo "$dict" | tr "$delimiter" "\n" | sed 's/=/: /'
+        fi
+        if [ -n "$get_command" ]; then
+            eval "$get_command"
+        fi
+        ;;
+    get)
+        if [ -z "$key" ]; then
+            echo "Usage: env_dict_manager $field get <key>"
+            return 1
+        fi
+        local dict=$(get_dict)
+        local value=$(echo "$dict" | awk -F"$delimiter" -v key="$key" '{
                 for(i=1;i<=NF;i++) {
                     split($i,kv,"=")
                     if(kv[1] == key) {
@@ -1273,22 +1290,22 @@ env_manager_dict() {
                     }
                 }
             }')
-            if [ -n "$value" ]; then
-                echo "$value"
-            else
-                log_info "Key $key not found in $field"
-            fi
-            if [ -n "$get_command" ]; then
-                eval "$get_command"
-            fi
-            ;;
-        set)
-            if [ -z "$key" ] || [ -z "$value" ]; then
-                echo "Usage: env_dict_manager $field set <key> <value>"
-                return 1
-            fi
-            local dict=$(get_dict)
-            local new_dict=$(echo "$dict" | awk -F"$delimiter" -v key="$key" -v val="$value" '{
+        if [ -n "$value" ]; then
+            echo "$value"
+        else
+            log_info "Key $key not found in $field"
+        fi
+        if [ -n "$get_command" ]; then
+            eval "$get_command"
+        fi
+        ;;
+    set)
+        if [ -z "$key" ] || [ -z "$value" ]; then
+            echo "Usage: env_dict_manager $field set <key> <value>"
+            return 1
+        fi
+        local dict=$(get_dict)
+        local new_dict=$(echo "$dict" | awk -F"$delimiter" -v key="$key" -v val="$value" '{
                 OFS=FS
                 found=0
                 for(i=1;i<=NF;i++) {
@@ -1303,16 +1320,16 @@ env_manager_dict() {
                 }
                 print $0
             }')
-            set_dict "$new_dict"
-            log_info "Key '$key' set in $field"
-            ;;
-        rm)
-            if [ -z "$key" ]; then
-                echo "Usage: env_dict_manager $field rm <key>"
-                return 1
-            fi
-            local dict=$(get_dict)
-            local new_dict=$(echo "$dict" | awk -F"$delimiter" -v key="$key" '{
+        set_dict "$new_dict"
+        log_info "Key '$key' set in $field"
+        ;;
+    rm)
+        if [ -z "$key" ]; then
+            echo "Usage: env_dict_manager $field rm <key>"
+            return 1
+        fi
+        local dict=$(get_dict)
+        local new_dict=$(echo "$dict" | awk -F"$delimiter" -v key="$key" '{
                 OFS=FS
                 for(i=1;i<=NF;i++) {
                     split($i,kv,"=")
@@ -1324,18 +1341,17 @@ env_manager_dict() {
                     printf("%s%s", a[i], (i==n)?"":OFS)
                 }
             }')
-            set_dict "$new_dict"
-            log_info "Key '$key' removed from $field"
-            ;;
-        -h|--help|help)
-            echo "Usage: $field [--on-get <command>] [--on-set <command>] {ls|get|set|rm} [key] [value]"
-            ;;
-        *)
-            return $scramble_exit_code
-            ;;
+        set_dict "$new_dict"
+        log_info "Key '$key' removed from $field"
+        ;;
+    -h | --help | help)
+        echo "Usage: $field [--on-get <command>] [--on-set <command>] {ls|get|set|rm} [key] [value]"
+        ;;
+    *)
+        return $scramble_exit_code
+        ;;
     esac
 }
-
 
 env_manager_dict_alias() {
     local dict_var=$1
@@ -1348,14 +1364,14 @@ env_manager_dict_alias() {
     # Parse optional hook commands
     while [[ "$1" == --* ]]; do
         case "$1" in
-            --on-get)
-                get_command="$2"
-                shift 2
-                ;;
-            --on-set)
-                set_command="$2"
-                shift 2
-                ;;
+        --on-get)
+            get_command="$2"
+            shift 2
+            ;;
+        --on-set)
+            set_command="$2"
+            shift 2
+            ;;
         esac
     done
 
@@ -1391,7 +1407,7 @@ override_yaml_value() {
         sub(/:[[:space:]]*.*/, ": " value)
     }
     {print}
-    ' "$file" > "$temp_file" && mv "$temp_file" "$file"
+    ' "$file" >"$temp_file" && mv "$temp_file" "$file"
 
     if [ $? -eq 0 ]; then
         log_info "Successfully updated '$key' in $file"
@@ -1406,37 +1422,37 @@ __anchor_profiles=true
 
 run_profile_command() {
     case "$1" in
-        save|add)
-            shift
-            harbor_profile_save "$@"
-            ;;
-        set|use|load)
-            shift
-            harbor_profile_set "$@"
-            ;;
-        remove|rm)
-            shift
-            harbor_profile_remove "$@"
-            ;;
-        list|ls)
-            shift
-            harbor_profile_list
-            ;;
-        --help|-h)
-            echo "Harbor profile management"
-            echo "Usage: $0 profile"
-            echo
-            echo "Commands:"
-            echo "  save|add <profile_name>      - Save the current configuration as a profile"
-            echo "  set|use|load <profile_name>  - Set current profile"
-            echo "  remove|rm <profile_name> - Remove a profile"
-            echo "  list|ls                  - List all profiles"
-            return 0
-            ;;
-        *)
-            echo "Usage: $0 profile {save|set|load|remove|list} [profile_name]"
-            return $scramble_exit_code
-            ;;
+    save | add)
+        shift
+        harbor_profile_save "$@"
+        ;;
+    set | use | load)
+        shift
+        harbor_profile_set "$@"
+        ;;
+    remove | rm)
+        shift
+        harbor_profile_remove "$@"
+        ;;
+    list | ls)
+        shift
+        harbor_profile_list
+        ;;
+    --help | -h)
+        echo "Harbor profile management"
+        echo "Usage: $0 profile"
+        echo
+        echo "Commands:"
+        echo "  save|add <profile_name>      - Save the current configuration as a profile"
+        echo "  set|use|load <profile_name>  - Set current profile"
+        echo "  remove|rm <profile_name> - Remove a profile"
+        echo "  list|ls                  - List all profiles"
+        return 0
+        ;;
+    *)
+        echo "Usage: $0 profile {save|set|load|remove|list} [profile_name]"
+        return $scramble_exit_code
+        ;;
     esac
 }
 
@@ -1459,7 +1475,6 @@ harbor_profile_save() {
     cp .env "$profile_file"
     log_info "Profile '$profile_name' saved."
 }
-
 
 harbor_profile_list() {
     echo "Available profiles:"
@@ -1519,7 +1534,7 @@ run_harbor_find() {
         $(eval echo "$(env_manager get llamacpp.cache)") \
         $(eval echo "$(env_manager get ollama.cache)") \
         $(eval echo "$(env_manager get vllm.cache)") \
-        -xtype f -wholename "*$**";
+        -xtype f -wholename "*$**"
 }
 
 run_hf_docker_cli() {
@@ -1569,7 +1584,6 @@ hf_spec_2_folder_spec() {
     echo "${1//\//_}"
 }
 
-
 docker_fsacl() {
     local folder=$1
     sudo setfacl --recursive -m user:1000:rwx $folder && sudo setfacl --recursive -m user:1002:rwx $folder && sudo setfacl --recursive -m user:1001:rwx $folder
@@ -1607,7 +1621,7 @@ fix_fs_acl() {
 
 open_home_code() {
     # If VS Code executable is available
-    if command -v code &> /dev/null; then
+    if command -v code &>/dev/null; then
         code "$harbor_home"
     else
         # shellcheck disable=SC2016
@@ -1622,16 +1636,16 @@ unsafe_update() {
 }
 
 resolve_harbor_version() {
-  git ls-remote --tags "$harbor_repo_url" | grep -o "v.*" | sort -t. -k 1,1n -k 2,2n -k 3,3n -k 4,4n | head -n 1
+    git ls-remote --tags "$harbor_repo_url" | grep -o "v.*" | sort -t. -k 1,1n -k 2,2n -k 3,3n -k 4,4n | head -n 1
 }
 
 update_harbor() {
     local is_latest=false
 
     case "$1" in
-        --latest|-l)
-            is_latest=true
-            ;;
+    --latest | -l)
+        is_latest=true
+        ;;
     esac
 
     if $is_latest; then
@@ -1667,12 +1681,12 @@ get_services() {
 
     for arg in "$@"; do
         case "$arg" in
-            --active|-a)
-                is_active=true
-                ;;
-            *)
-                filtered_args+=("$arg") # Add to filtered arguments
-                ;;
+        --active | -a)
+            is_active=true
+            ;;
+        *)
+            filtered_args+=("$arg") # Add to filtered arguments
+            ;;
         esac
     done
 
@@ -1716,11 +1730,11 @@ extract_tunnel_url() {
 
 establish_tunnel() {
     case $1 in
-        down|stop|d|s)
-            echo "Stopping all tunnels"
-            docker stop $(docker ps -q --filter "name=cfd.tunnel") || true
-            exit 0
-            ;;
+    down | stop | d | s)
+        echo "Stopping all tunnels"
+        docker stop $(docker ps -q --filter "name=cfd.tunnel") || true
+        exit 0
+        ;;
     esac
 
     local intra_url=$(get_url -i "$@")
@@ -1730,7 +1744,10 @@ establish_tunnel() {
     log_info "Starting new tunnel"
     log_info "Container name: $container_name"
     log_info "Intra URL: $intra_url"
-    $(compose_with_options "cfd") run --rm -d --name "$container_name" cfd --url "$intra_url" || { log_error "Failed to start container"; exit 1; }
+    $(compose_with_options "cfd") run --rm -d --name "$container_name" cfd --url "$intra_url" || {
+        log_error "Failed to start container"
+        exit 1
+    }
 
     local timeout=60
     local elapsed=0
@@ -1748,7 +1765,10 @@ establish_tunnel() {
     fi
 
     log_info "Tunnel URL: $tunnel_url"
-    print_qr "$tunnel_url" || { log_error "Failed to print QR code"; exit 1; }
+    print_qr "$tunnel_url" || {
+        log_error "Failed to print QR code"
+        exit 1
+    }
 }
 
 record_history_entry() {
@@ -1760,68 +1780,68 @@ record_history_entry() {
     if ! grep -Fxq -- "$input" "$file" 2>/dev/null; then
         log_debug "Recording history entry: '$file', '$max_entries', '$input'"
 
-        printf '%s\n' "$input" >> "$file"
+        printf '%s\n' "$input" >>"$file"
 
         # If we've exceeded max entries, remove oldest entries
-        if [ "$(wc -l < "$file")" -gt "$max_entries" ]; then
-            tail -n "$max_entries" "$file" > "$file.tmp" && mv "$file.tmp" "$file"
+        if [ "$(wc -l <"$file")" -gt "$max_entries" ]; then
+            tail -n "$max_entries" "$file" >"$file.tmp" && mv "$file.tmp" "$file"
         fi
     fi
 }
 
 run_harbor_history() {
     case "$1" in
-        ls|list)
-            shift
-            cat "$default_history_file"
-            ;;
-        size)
-            shift
-            env_manager_alias history.size "$@"
-            ;;
-        clear)
-            log_info "Clearing history"
-            echo "" > "$default_history_file"
-            ;;
-        --help|-h)
-            echo "Harbor history management"
-            echo
-            echo "Usage: harbor history {ls|size|clear}"
-            echo
-            echo "Commands:"
-            echo "  ls|list - List all history entries"
-            echo "  size    - Get or set the maximum number of history entries"
-            echo "  clear   - Clear all history entries"
-            return 0
-            ;;
-        *)
-            local max_entries=10
-            local history_file="$default_history_file"
-            local tmp_dir=$(mktemp -d)
-            local services=$(get_active_services)
+    ls | list)
+        shift
+        cat "$default_history_file"
+        ;;
+    size)
+        shift
+        env_manager_alias history.size "$@"
+        ;;
+    clear)
+        log_info "Clearing history"
+        echo "" >"$default_history_file"
+        ;;
+    --help | -h)
+        echo "Harbor history management"
+        echo
+        echo "Usage: harbor history {ls|size|clear}"
+        echo
+        echo "Commands:"
+        echo "  ls|list - List all history entries"
+        echo "  size    - Get or set the maximum number of history entries"
+        echo "  clear   - Clear all history entries"
+        return 0
+        ;;
+    *)
+        local max_entries=10
+        local history_file="$default_history_file"
+        local tmp_dir=$(mktemp -d)
+        local services=$(get_active_services)
 
-            local output_file="$tmp_dir/selected_command.txt"
-            local entrypoint="/bin/sh -c \"/usr/local/bin/gum filter < ${history_file} > /tmp/gum_test/selected_command.txt\""
+        local output_file="$tmp_dir/selected_command.txt"
+        local entrypoint="/bin/sh -c \"/usr/local/bin/gum filter < ${history_file} > /tmp/gum_test/selected_command.txt\""
 
-            $(compose_with_options $services "gum") run \
-                --rm \
-                -it \
-                -e "TERM=xterm-256color" \
-                -v "$harbor_home:$harbor_home" \
-                -v "$tmp_dir:/tmp/gum_test" \
-                --workdir "$harbor_home" \
-                --entrypoint "$entrypoint" \
-                gum
+        $(compose_with_options $services "gum") run \
+            --rm \
+            -it \
+            -e "TERM=xterm-256color" \
+            -v "$harbor_home:$harbor_home" \
+            -v "$tmp_dir:/tmp/gum_test" \
+            --workdir "$harbor_home" \
+            --entrypoint "$entrypoint" \
+            gum
 
-            if [ -s "$output_file" ]; then
-                log_debug "Selected command: $(cat "$output_file")"
-                eval "$(cat "$output_file")"
-            else
-                log_info "No command selected"
-            fi
+        if [ -s "$output_file" ]; then
+            log_debug "Selected command: $(cat "$output_file")"
+            eval "$(cat "$output_file")"
+        else
+            log_info "No command selected"
+        fi
 
-            rm -rf "$tmp_dir"
-            ;;
+        rm -rf "$tmp_dir"
+        ;;
     esac
 }
 
@@ -1843,7 +1863,7 @@ run_harbor_size() {
         else
             echo "$dir: Directory not found"
         fi
-    done <<< "$cache_dirs"
+    done <<<"$cache_dirs"
 }
 
 # shellcheck disable=SC2034
@@ -1874,31 +1894,32 @@ run_llamacpp_command() {
     }
 
     case "$1" in
-        model)
-            shift
-            env_manager_alias llamacpp.model --on-set update_model_spec "$@"
-            ;;
-        gguf)
-            shift
-            env_manager_alias llamacpp.gguf "$@"
-            ;;
-        args)
-            shift
-            env_manager_alias llamacpp.extra.args "$@"
-            ;;
-        -h|--help|help)
-            echo "Please note that this is not llama.cpp CLI, but a Harbor CLI to manage llama.cpp service."
-            echo "Access llama.cpp own CLI by running 'harbor exec llamacpp' when it's running."
-            echo
-            echo "Usage: harbor llamacpp <command>"
-            echo
-            echo "Commands:"
-            echo "  harbor llamacpp model [Hugging Face URL] - Get or set the llamacpp model to run"
-            echo "  harbor llamacpp gguf [gguf path]         - Get or set the path to GGUF to run"
-            echo "  harbor llamacpp args [args]              - Get or set extra args to pass to the llama.cpp CLI"
-            ;;
-        *)
-            return $scramble_exit_code
+    model)
+        shift
+        env_manager_alias llamacpp.model --on-set update_model_spec "$@"
+        ;;
+    gguf)
+        shift
+        env_manager_alias llamacpp.gguf "$@"
+        ;;
+    args)
+        shift
+        env_manager_alias llamacpp.extra.args "$@"
+        ;;
+    -h | --help | help)
+        echo "Please note that this is not llama.cpp CLI, but a Harbor CLI to manage llama.cpp service."
+        echo "Access llama.cpp own CLI by running 'harbor exec llamacpp' when it's running."
+        echo
+        echo "Usage: harbor llamacpp <command>"
+        echo
+        echo "Commands:"
+        echo "  harbor llamacpp model [Hugging Face URL] - Get or set the llamacpp model to run"
+        echo "  harbor llamacpp gguf [gguf path]         - Get or set the path to GGUF to run"
+        echo "  harbor llamacpp args [args]              - Get or set extra args to pass to the llama.cpp CLI"
+        ;;
+    *)
+        return $scramble_exit_code
+        ;;
     esac
 }
 
@@ -1925,131 +1946,133 @@ run_tgi_command() {
     }
 
     case "$1" in
-        model)
-            shift
-            env_manager_alias tgi.model --on-set update_model_spec "$@"
-            ;;
-        args)
-            shift
-            env_manager_alias tgi.extra.args "$@"
-            ;;
-        quant)
-            shift
-            env_manager_alias tgi.quant --on-set update_model_spec "$@"
-            ;;
-        revision)
-            shift
-            env_manager_alias tgi.revision --on-set update_model_spec "$@"
-            ;;
-        -h|--help|help)
-            echo "Please note that this is not TGI CLI, but a Harbor CLI to manage TGI service."
-            echo "Access TGI own CLI by running 'harbor exec tgi' when it's running."
-            echo
-            echo "Usage: harbor tgi <command>"
-            echo
-            echo "Commands:"
-            echo "  harbor tgi model [user/repo]   - Get or set the TGI model repository to run"
-            echo "  harbor tgi quant"
-            echo "    [awq|eetq|exl2|gptq|marlin|bitsandbytes|bitsandbytes-nf4|bitsandbytes-fp4|fp8]"
-            echo "    Get or set the TGI quantization mode. Must match the contents of the model repository."
-            echo "  harbor tgi revision [revision] - Get or set the TGI model revision to run"
-            echo "  harbor tgi args [args]         - Get or set extra args to pass to the TGI CLI"
-            ;;
-        *)
-            return $scramble_exit_code
+    model)
+        shift
+        env_manager_alias tgi.model --on-set update_model_spec "$@"
+        ;;
+    args)
+        shift
+        env_manager_alias tgi.extra.args "$@"
+        ;;
+    quant)
+        shift
+        env_manager_alias tgi.quant --on-set update_model_spec "$@"
+        ;;
+    revision)
+        shift
+        env_manager_alias tgi.revision --on-set update_model_spec "$@"
+        ;;
+    -h | --help | help)
+        echo "Please note that this is not TGI CLI, but a Harbor CLI to manage TGI service."
+        echo "Access TGI own CLI by running 'harbor exec tgi' when it's running."
+        echo
+        echo "Usage: harbor tgi <command>"
+        echo
+        echo "Commands:"
+        echo "  harbor tgi model [user/repo]   - Get or set the TGI model repository to run"
+        echo "  harbor tgi quant"
+        echo "    [awq|eetq|exl2|gptq|marlin|bitsandbytes|bitsandbytes-nf4|bitsandbytes-fp4|fp8]"
+        echo "    Get or set the TGI quantization mode. Must match the contents of the model repository."
+        echo "  harbor tgi revision [revision] - Get or set the TGI model revision to run"
+        echo "  harbor tgi args [args]         - Get or set extra args to pass to the TGI CLI"
+        ;;
+    *)
+        return $scramble_exit_code
+        ;;
     esac
 }
 
 run_litellm_command() {
     case "$1" in
-        username)
-            shift
-            env_manager_alias litellm.ui.username "$@"
-            ;;
-        password)
-            shift
-            env_manager_alias litellm.ui.password "$@"
-            ;;
-        ui)
-            shift
-            if service_url=$(get_url litellm 2>&1); then
-                sys_open "$service_url/ui"
-            else
-                log_error "Failed to get service URL for litellm: $service_url"
-                exit 1
-            fi
-            ;;
-        -h|--help|help)
-            echo "Please note that this is not LiteLLM CLI, but a Harbor CLI to manage LiteLLM service."
-            echo
-            echo "Usage: harbor litellm <command>"
-            echo
-            echo "Commands:"
-            echo "  harbor litellm username [username] - Get or set the LITeLLM UI username"
-            echo "  harbor litellm password [username] - Get or set the LITeLLM UI password"
-            echo "  harbor litellm ui                  - Open LiteLLM UI screen"
-            ;;
-        *)
-            return $scramble_exit_code
+    username)
+        shift
+        env_manager_alias litellm.ui.username "$@"
+        ;;
+    password)
+        shift
+        env_manager_alias litellm.ui.password "$@"
+        ;;
+    ui)
+        shift
+        if service_url=$(get_url litellm 2>&1); then
+            sys_open "$service_url/ui"
+        else
+            log_error "Failed to get service URL for litellm: $service_url"
+            exit 1
+        fi
+        ;;
+    -h | --help | help)
+        echo "Please note that this is not LiteLLM CLI, but a Harbor CLI to manage LiteLLM service."
+        echo
+        echo "Usage: harbor litellm <command>"
+        echo
+        echo "Commands:"
+        echo "  harbor litellm username [username] - Get or set the LITeLLM UI username"
+        echo "  harbor litellm password [username] - Get or set the LITeLLM UI password"
+        echo "  harbor litellm ui                  - Open LiteLLM UI screen"
+        ;;
+    *)
+        return $scramble_exit_code
+        ;;
     esac
 }
 
 run_hf_command() {
     case "$1" in
-        parse-url)
-            shift
-            parse_hf_url "$@"
-            return
-            ;;
-        token)
-            shift
-            env_manager_alias hf.token "$@"
-            return
-            ;;
-        cache)
-            shift
-            env_manager_alias hf.cache "$@"
-            return
-            ;;
-        dl)
-            shift
-            $(compose_with_options "hfdownloader") run --rm hfdownloader "$@"
-            return
-            ;;
-        path)
-            shift
-            local found_path
-            local spec="$1"
+    parse-url)
+        shift
+        parse_hf_url "$@"
+        return
+        ;;
+    token)
+        shift
+        env_manager_alias hf.token "$@"
+        return
+        ;;
+    cache)
+        shift
+        env_manager_alias hf.cache "$@"
+        return
+        ;;
+    dl)
+        shift
+        $(compose_with_options "hfdownloader") run --rm hfdownloader "$@"
+        return
+        ;;
+    path)
+        shift
+        local found_path
+        local spec="$1"
 
-            if check_hf_cache "$1"; then
-                found_path=$(run_hf_docker_cli download "$1")
-                echo "$found_path"
-            fi
+        if check_hf_cache "$1"; then
+            found_path=$(run_hf_docker_cli download "$1")
+            echo "$found_path"
+        fi
 
-            return
-            ;;
-        find)
-            shift
-            run_hf_open "$@"
-            return
-            ;;
-        # Matching HF signature, but would love just "help"
-        -h|--help)
-            echo "Please note that this is a combination of Hugging Face"
-            echo "CLI with additional Harbor-specific commands."
-            echo
-            echo "Harbor extensions:"
-            echo "Usage: harbor hf <command>"
-            echo
-            echo "Commands:"
-            echo "  harbor hf token [token]    - Get or set the Hugging Face API token"
-            echo "  harbor hf cache            - Get or set the location of Hugging Face cache"
-            echo "  harbor hf dl [args]        - Download a model from Hugging Face"
-            echo "  harbor hf path [user/repo] - Resolve the path to a model dir in HF cache"
-            echo "  harbor hf find [query]     - Search for a model on Hugging Face"
-            echo
-            echo "Original CLI help:"
-            ;;
+        return
+        ;;
+    find)
+        shift
+        run_hf_open "$@"
+        return
+        ;;
+    # Matching HF signature, but would love just "help"
+    -h | --help)
+        echo "Please note that this is a combination of Hugging Face"
+        echo "CLI with additional Harbor-specific commands."
+        echo
+        echo "Harbor extensions:"
+        echo "Usage: harbor hf <command>"
+        echo
+        echo "Commands:"
+        echo "  harbor hf token [token]    - Get or set the Hugging Face API token"
+        echo "  harbor hf cache            - Get or set the location of Hugging Face cache"
+        echo "  harbor hf dl [args]        - Download a model from Hugging Face"
+        echo "  harbor hf path [user/repo] - Resolve the path to a model dir in HF cache"
+        echo "  harbor hf find [query]     - Search for a model on Hugging Face"
+        echo
+        echo "Original CLI help:"
+        ;;
     esac
 
     run_hf_docker_cli "$@"
@@ -2071,66 +2094,68 @@ run_vllm_command() {
     }
 
     case "$1" in
-        model)
-            shift
-            env_manager_alias vllm.model --on-set update_model_spec "$@"
-            ;;
-        args)
-            shift
-            env_manager_alias vllm.extra.args "$@"
-            ;;
-        attention)
-            shift
-            env_manager_alias vllm.attention_backend "$@"
-            ;;
-        version)
-            shift
-            env_manager_alias vllm.version "$@"
-            ;;
-        -h|--help|help)
-            echo "Please note that this is not VLLM CLI, but a Harbor CLI to manage VLLM service."
-            echo "Access VLLM own CLI by running 'harbor exec vllm' when it's running."
-            echo
-            echo "Usage: harbor vllm <command>"
-            echo
-            echo "Commands:"
-            echo "  harbor vllm model [user/repo]   - Get or set the VLLM model repository to run"
-            echo "  harbor vllm args [args]         - Get or set extra args to pass to the VLLM CLI"
-            echo "  harbor vllm attention [backend] - Get or set the attention backend to use"
-            echo "  harbor vllm version [version]   - Get or set VLLM version (docker tag)"
-            ;;
-        *)
-            return $scramble_exit_code
+    model)
+        shift
+        env_manager_alias vllm.model --on-set update_model_spec "$@"
+        ;;
+    args)
+        shift
+        env_manager_alias vllm.extra.args "$@"
+        ;;
+    attention)
+        shift
+        env_manager_alias vllm.attention_backend "$@"
+        ;;
+    version)
+        shift
+        env_manager_alias vllm.version "$@"
+        ;;
+    -h | --help | help)
+        echo "Please note that this is not VLLM CLI, but a Harbor CLI to manage VLLM service."
+        echo "Access VLLM own CLI by running 'harbor exec vllm' when it's running."
+        echo
+        echo "Usage: harbor vllm <command>"
+        echo
+        echo "Commands:"
+        echo "  harbor vllm model [user/repo]   - Get or set the VLLM model repository to run"
+        echo "  harbor vllm args [args]         - Get or set extra args to pass to the VLLM CLI"
+        echo "  harbor vllm attention [backend] - Get or set the attention backend to use"
+        echo "  harbor vllm version [version]   - Get or set VLLM version (docker tag)"
+        ;;
+    *)
+        return $scramble_exit_code
+        ;;
     esac
 }
 
 run_aphrodite_command() {
     case "$1" in
-        model)
-            shift
-            env_manager_alias aphrodite.model "$@"
-            ;;
-        args)
-            shift
-            env_manager_alias aphrodite.extra.args "$@"
-            ;;
-        version)
-            shift
-            env_manager_alias aphrodite.version "$@"
-            ;;
-        -h|--help|help)
-            echo "Please note that this is not Aphrodite CLI, but a Harbor CLI to manage Aphrodite service."
-            echo "Access Aphrodite own CLI by running 'harbor exec aphrodite' when it's running."
-            echo
-            echo "Usage: harbor aphrodite <command>"
-            echo
-            echo "Commands:"
-            echo "  harbor aphrodite model <user/repo>   - Get/set the Aphrodite model to run"
-            echo "  harbor aphrodite args <args>         - Get/set extra args to pass to the Aphrodite CLI"
-            echo "  harbor aphrodite version <version>   - Get/set Aphrodite version docker tag"
-            ;;
-        *)
-            return $scramble_exit_code
+    model)
+        shift
+        env_manager_alias aphrodite.model "$@"
+        ;;
+    args)
+        shift
+        env_manager_alias aphrodite.extra.args "$@"
+        ;;
+    version)
+        shift
+        env_manager_alias aphrodite.version "$@"
+        ;;
+    -h | --help | help)
+        echo "Please note that this is not Aphrodite CLI, but a Harbor CLI to manage Aphrodite service."
+        echo "Access Aphrodite own CLI by running 'harbor exec aphrodite' when it's running."
+        echo
+        echo "Usage: harbor aphrodite <command>"
+        echo
+        echo "Commands:"
+        echo "  harbor aphrodite model <user/repo>   - Get/set the Aphrodite model to run"
+        echo "  harbor aphrodite args <args>         - Get/set extra args to pass to the Aphrodite CLI"
+        echo "  harbor aphrodite version <version>   - Get/set Aphrodite version docker tag"
+        ;;
+    *)
+        return $scramble_exit_code
+        ;;
     esac
 }
 
@@ -2146,61 +2171,62 @@ run_open_ai_command() {
     }
 
     case "$1" in
-        keys)
-            shift
-            env_manager_arr openai.keys --on-set update_main_key "$@"
-            ;;
-        urls)
-            shift
-            env_manager_arr openai.urls --on-set update_main_url "$@"
-            ;;
-        -h|--help|help)
-            echo "Please note that this is not an OpenAI CLI, but a Harbor CLI to manage OpenAI configuration."
-            echo
-            echo "Usage: harbor openai <command>"
-            echo
-            echo "Commands:"
-            echo "  harbor openai keys [ls|rm|add]   - Get/set the API Keys for the OpenAI-compatible APIs."
-            echo "  harbor openai urls [ls|rm|add]   - Get/set the API URLs for the OpenAI-compatible APIs."
-            ;;
-        *)
-            return $scramble_exit_code
+    keys)
+        shift
+        env_manager_arr openai.keys --on-set update_main_key "$@"
+        ;;
+    urls)
+        shift
+        env_manager_arr openai.urls --on-set update_main_url "$@"
+        ;;
+    -h | --help | help)
+        echo "Please note that this is not an OpenAI CLI, but a Harbor CLI to manage OpenAI configuration."
+        echo
+        echo "Usage: harbor openai <command>"
+        echo
+        echo "Commands:"
+        echo "  harbor openai keys [ls|rm|add]   - Get/set the API Keys for the OpenAI-compatible APIs."
+        echo "  harbor openai urls [ls|rm|add]   - Get/set the API URLs for the OpenAI-compatible APIs."
+        ;;
+    *)
+        return $scramble_exit_code
+        ;;
     esac
 }
 
 run_webui_command() {
     case "$1" in
-        secret)
-            shift
-            env_manager_alias webui.secret "$@"
-            ;;
-        name)
-            shift
-            env_manager_alias webui.name "$@"
-            ;;
-        log)
-            shift
-            env_manager_alias webui.log.level "$@"
-            ;;
-        version)
-            shift
-            env_manager_alias webui.version "$@"
-            ;;
-        -h|--help|help)
-            echo "Please note that this is not WebUI CLI, but a Harbor CLI to manage WebUI service."
-            echo
-            echo "Usage: harbor webui <command>"
-            echo
-            echo "Commands:"
-            echo "  harbor webui secret [secret]   - Get/set WebUI JWT Secret"
-            echo "  harbor webui name [name]       - Get/set the name WebUI will present"
-            echo "  harbor webui log [level]       - Get/set WebUI log level"
-            echo "  harbor webui version [version] - Get/set WebUI version docker tag"
-            return 1
-            ;;
-        *)
-            return $scramble_exit_code
-            ;;
+    secret)
+        shift
+        env_manager_alias webui.secret "$@"
+        ;;
+    name)
+        shift
+        env_manager_alias webui.name "$@"
+        ;;
+    log)
+        shift
+        env_manager_alias webui.log.level "$@"
+        ;;
+    version)
+        shift
+        env_manager_alias webui.version "$@"
+        ;;
+    -h | --help | help)
+        echo "Please note that this is not WebUI CLI, but a Harbor CLI to manage WebUI service."
+        echo
+        echo "Usage: harbor webui <command>"
+        echo
+        echo "Commands:"
+        echo "  harbor webui secret [secret]   - Get/set WebUI JWT Secret"
+        echo "  harbor webui name [name]       - Get/set the name WebUI will present"
+        echo "  harbor webui log [level]       - Get/set WebUI log level"
+        echo "  harbor webui version [version] - Get/set WebUI version docker tag"
+        return 1
+        ;;
+    *)
+        return $scramble_exit_code
+        ;;
     esac
 }
 
@@ -2217,36 +2243,37 @@ run_tabbyapi_command() {
     }
 
     case "$1" in
-        model)
-            shift
-            env_manager_alias tabbyapi.model --on-set update_model_spec "$@"
-            ;;
-        args)
-            shift
-            env_manager_alias tabbyapi.extra.args "$@"
-            ;;
-        apidoc)
-            shift
-            if service_url=$(get_url tabbyapi 2>&1); then
-                sys_open "$service_url/docs"
-            else
-                log_error "Failed to get service URL for tabbyapi: $service_url"
-                exit 1
-            fi
-            ;;
-        -h|--help|help)
-            echo "Please note that this is not TabbyAPI CLI, but a Harbor CLI to manage TabbyAPI service."
-            echo "Access TabbyAPI own CLI by running 'harbor exec tabbyapi' when it's running."
-            echo
-            echo "Usage: harbor tabbyapi <command>"
-            echo
-            echo "Commands:"
-            echo "  harbor tabbyapi model [user/repo]   - Get or set the TabbyAPI model repository to run"
-            echo "  harbor tabbyapi args [args]         - Get or set extra args to pass to the TabbyAPI CLI"
-            echo "  harbor tabbyapi apidoc              - Open TabbyAPI built-in API documentation"
-            ;;
-        *)
-            return $scramble_exit_code
+    model)
+        shift
+        env_manager_alias tabbyapi.model --on-set update_model_spec "$@"
+        ;;
+    args)
+        shift
+        env_manager_alias tabbyapi.extra.args "$@"
+        ;;
+    apidoc)
+        shift
+        if service_url=$(get_url tabbyapi 2>&1); then
+            sys_open "$service_url/docs"
+        else
+            log_error "Failed to get service URL for tabbyapi: $service_url"
+            exit 1
+        fi
+        ;;
+    -h | --help | help)
+        echo "Please note that this is not TabbyAPI CLI, but a Harbor CLI to manage TabbyAPI service."
+        echo "Access TabbyAPI own CLI by running 'harbor exec tabbyapi' when it's running."
+        echo
+        echo "Usage: harbor tabbyapi <command>"
+        echo
+        echo "Commands:"
+        echo "  harbor tabbyapi model [user/repo]   - Get or set the TabbyAPI model repository to run"
+        echo "  harbor tabbyapi args [args]         - Get or set extra args to pass to the TabbyAPI CLI"
+        echo "  harbor tabbyapi apidoc              - Open TabbyAPI built-in API documentation"
+        ;;
+    *)
+        return $scramble_exit_code
+        ;;
     esac
 }
 
@@ -2256,17 +2283,17 @@ run_parllama_command() {
 
 run_plandex_command() {
     case "$1" in
-        health)
-            shift
-            execute_and_process "get_url plandexserver" "curl {{output}}/health" "No plandexserver URL:"
-            ;;
-        pwd)
-            shift
-            echo $original_dir
-            ;;
-        *)
-            $(compose_with_options "plandex") run --rm -v "$original_dir:/app/context" --workdir "/app/context" -it --entrypoint "plandex" plandex "$@"
-            ;;
+    health)
+        shift
+        execute_and_process "get_url plandexserver" "curl {{output}}/health" "No plandexserver URL:"
+        ;;
+    pwd)
+        shift
+        echo $original_dir
+        ;;
+    *)
+        $(compose_with_options "plandex") run --rm -v "$original_dir:/app/context" --workdir "/app/context" -it --entrypoint "plandex" plandex "$@"
+        ;;
     esac
 }
 
@@ -2298,57 +2325,57 @@ run_mistralrs_command() {
     }
 
     case "$1" in
-        health)
-            shift
-            execute_and_process "get_url mistralrs" "curl {{output}}/health" "No mistralrs URL:"
-            ;;
-        docs)
-            shift
-            execute_and_process "get_url mistralrs" "sys_open {{output}}/docs" "No mistralrs URL:"
-            ;;
-        args)
-            shift
-            env_manager_alias mistralrs.extra.args "$@"
-            ;;
-        model)
-            shift
-            env_manager_alias mistralrs.model --on-set update_model_spec "$@"
-            ;;
-        type)
-            shift
-            env_manager_alias mistralrs.model_type --on-set update_model_spec "$@"
-            ;;
-        arch)
-            shift
-            env_manager_alias mistralrs.model_arch --on-set update_model_spec "$@"
-            ;;
-        isq)
-            shift
-            env_manager_alias mistralrs.isq --on-set update_model_spec "$@"
-            ;;
-        version)
-            shift
-            env_manager_alias mistralrs.version "$@"
-            ;;
-        -h|--help|help)
-            echo "Please note that this is not mistral.rs CLI, but a Harbor CLI to manage mistral.rs service."
-            echo "Access mistral.rs own CLI by running 'harbor exec mistralrs' when it's running."
-            echo
-            echo "Usage: harbor mistralrs <command>"
-            echo
-            echo "Commands:"
-            echo "  harbor mistralrs health            - Check the health of the mistral.rs service"
-            echo "  harbor mistralrs docs              - Open mistral.rs built-in API documentation"
-            echo "  harbor mistralrs version [version] - Get or set mistral.rs version (0.3, 0.4, etc.)"
-            echo "  harbor mistralrs args [args]       - Get or set extra args to pass to the mistral.rs CLI"
-            echo "  harbor mistralrs model [user/repo] - Get or set the mistral.rs model repository to run"
-            echo "  harbor mistralrs type [type]       - Get or set the mistral.rs model type"
-            echo "  harbor mistralrs arch [arch]       - Get or set the mistral.rs model architecture"
-            echo "  harbor mistralrs isq [isq]         - Get or set the mistral.rs model ISQ"
-            ;;
-        *)
-            $(compose_with_options "mistralrs") run --rm mistralrs "$@"
-            ;;
+    health)
+        shift
+        execute_and_process "get_url mistralrs" "curl {{output}}/health" "No mistralrs URL:"
+        ;;
+    docs)
+        shift
+        execute_and_process "get_url mistralrs" "sys_open {{output}}/docs" "No mistralrs URL:"
+        ;;
+    args)
+        shift
+        env_manager_alias mistralrs.extra.args "$@"
+        ;;
+    model)
+        shift
+        env_manager_alias mistralrs.model --on-set update_model_spec "$@"
+        ;;
+    type)
+        shift
+        env_manager_alias mistralrs.model_type --on-set update_model_spec "$@"
+        ;;
+    arch)
+        shift
+        env_manager_alias mistralrs.model_arch --on-set update_model_spec "$@"
+        ;;
+    isq)
+        shift
+        env_manager_alias mistralrs.isq --on-set update_model_spec "$@"
+        ;;
+    version)
+        shift
+        env_manager_alias mistralrs.version "$@"
+        ;;
+    -h | --help | help)
+        echo "Please note that this is not mistral.rs CLI, but a Harbor CLI to manage mistral.rs service."
+        echo "Access mistral.rs own CLI by running 'harbor exec mistralrs' when it's running."
+        echo
+        echo "Usage: harbor mistralrs <command>"
+        echo
+        echo "Commands:"
+        echo "  harbor mistralrs health            - Check the health of the mistral.rs service"
+        echo "  harbor mistralrs docs              - Open mistral.rs built-in API documentation"
+        echo "  harbor mistralrs version [version] - Get or set mistral.rs version (0.3, 0.4, etc.)"
+        echo "  harbor mistralrs args [args]       - Get or set extra args to pass to the mistral.rs CLI"
+        echo "  harbor mistralrs model [user/repo] - Get or set the mistral.rs model repository to run"
+        echo "  harbor mistralrs type [type]       - Get or set the mistral.rs model type"
+        echo "  harbor mistralrs arch [arch]       - Get or set the mistral.rs model architecture"
+        echo "  harbor mistralrs isq [isq]         - Get or set the mistral.rs model ISQ"
+        ;;
+    *)
+        $(compose_with_options "mistralrs") run --rm mistralrs "$@"
+        ;;
     esac
 }
 
@@ -2375,91 +2402,91 @@ run_opint_command() {
     }
 
     case "$1" in
-        backend)
-            shift
-            env_manager_alias opint.backend "$@"
-            ;;
-        profiles|--profiles|-p)
-            shift
-            execute_and_process "env_manager get opint.config.path" "sys_open {{output}}/profiles" "No opint.config.path set"
-            ;;
-        models|--local_models)
-            shift
-            execute_and_process "env_manager get opint.config.path" "sys_open {{output}}/models" "No opint.config.path set"
-            ;;
-        pwd)
-            shift
-            echo "$original_dir"
-            ;;
-        model)
-            shift
-            env_manager_alias opint.model --on-set update_cmd "$@"
-            ;;
-        args)
-            shift
-            env_manager_alias opint.extra.args --on-set update_cmd "$@"
-            ;;
-        cmd)
-            shift
-            env_manager_alias opint.cmd "$@"
-            ;;
-        -os|--os)
-            shift
-            echo "Harbor does not support Open Interpreter OS mode".
-            ;;
-        *)
-            # Allow permanent override of the target backend
-            local services=$(env_manager get opint.backend)
+    backend)
+        shift
+        env_manager_alias opint.backend "$@"
+        ;;
+    profiles | --profiles | -p)
+        shift
+        execute_and_process "env_manager get opint.config.path" "sys_open {{output}}/profiles" "No opint.config.path set"
+        ;;
+    models | --local_models)
+        shift
+        execute_and_process "env_manager get opint.config.path" "sys_open {{output}}/models" "No opint.config.path set"
+        ;;
+    pwd)
+        shift
+        echo "$original_dir"
+        ;;
+    model)
+        shift
+        env_manager_alias opint.model --on-set update_cmd "$@"
+        ;;
+    args)
+        shift
+        env_manager_alias opint.extra.args --on-set update_cmd "$@"
+        ;;
+    cmd)
+        shift
+        env_manager_alias opint.cmd "$@"
+        ;;
+    -os | --os)
+        shift
+        echo "Harbor does not support Open Interpreter OS mode".
+        ;;
+    *)
+        # Allow permanent override of the target backend
+        local services=$(env_manager get opint.backend)
 
-            if [ -z "$services" ]; then
-                services=$(get_active_services)
-            fi
+        if [ -z "$services" ]; then
+            services=$(get_active_services)
+        fi
 
-            # Mount the current directory and set it as the working directory
-            $(compose_with_options "$services" "opint") run -v "$original_dir:$original_dir" --workdir "$original_dir" opint $@
-            ;;
+        # Mount the current directory and set it as the working directory
+        $(compose_with_options "$services" "opint") run -v "$original_dir:$original_dir" --workdir "$original_dir" opint $@
+        ;;
     esac
 }
 
 run_cmdh_command() {
     case "$1" in
-        model)
-            shift
-            env_manager_alias cmdh.model "$@"
-            ;;
-        host)
-            shift
-            env_manager_alias cmdh.llm.host "$@"
-            ;;
-        key)
-            shift
-            env_manager_alias cmdh.llm.key "$@"
-            ;;
-        url)
-            shift
-            env_manager_alias cmdh.llm.url "$@"
-            ;;
-        -h|--help|help)
-            echo "Please note that this is not cmdh CLI, but a Harbor CLI to manage cmdh service."
-            echo "Access cmdh own CLI by running 'harbor exec cmdh' when it's running."
-            echo
-            echo "Usage: harbor cmdh <command>"
-            echo
-            echo "Commands:"
-            echo "  harbor cmdh model [user/repo]    - Get or set the cmdh model repository to run"
-            echo "  harbor cmdh host [ollama|OpenAI] - Get or set the cmdh LLM host"
-            echo "  harbor cmdh key [key]            - Get or set the cmdh OpenAI LLM key"
-            echo "  harbor cmdh url [url]            - Get or set the cmdh OpenAI LLM URL"
-            ;;
-        *)
-            local services=$(get_active_services)
-            # Mount the current directory and set it as the working directory
-            $(compose_with_options $services "cmdh") run \
-                --rm \
-                -v "$original_dir:$original_dir" \
-                --workdir "$original_dir" \
-                cmdh "$*"
-            ;;
+    model)
+        shift
+        env_manager_alias cmdh.model "$@"
+        ;;
+    host)
+        shift
+        env_manager_alias cmdh.llm.host "$@"
+        ;;
+    key)
+        shift
+        env_manager_alias cmdh.llm.key "$@"
+        ;;
+    url)
+        shift
+        env_manager_alias cmdh.llm.url "$@"
+        ;;
+    -h | --help | help)
+        echo "Please note that this is not cmdh CLI, but a Harbor CLI to manage cmdh service."
+        echo "Access cmdh own CLI by running 'harbor exec cmdh' when it's running."
+        echo
+        echo "Usage: harbor cmdh <command>"
+        echo
+        echo "Commands:"
+        echo "  harbor cmdh model [user/repo]    - Get or set the cmdh model repository to run"
+        echo "  harbor cmdh host [ollama|OpenAI] - Get or set the cmdh LLM host"
+        echo "  harbor cmdh key [key]            - Get or set the cmdh OpenAI LLM key"
+        echo "  harbor cmdh url [url]            - Get or set the cmdh OpenAI LLM URL"
+        ;;
+    *)
+        local services=$(get_active_services)
+        # Mount the current directory and set it as the working directory
+        $(compose_with_options $services "cmdh") run \
+            --rm \
+            -v "$original_dir:$original_dir" \
+            --workdir "$original_dir" \
+            cmdh "$*"
+        ;;
     esac
 }
 
@@ -2483,28 +2510,28 @@ run_harbor_cmdh_command() {
 
 run_fabric_command() {
     case "$1" in
-        model)
-            shift
-            env_manager_alias fabric.model "$@"
-            return 0
-            ;;
-        patterns|--patterns)
-            shift
-            execute_and_process "env_manager get fabric.config.path" "sys_open {{output}}/patterns" "No fabric.config.path set"
-            return 0
-            ;;
-        -h|--help|help)
-            echo "Please note that this is not Fabric CLI, but a Harbor CLI to manage Fabric service."
-            echo
-            echo "Usage: harbor fabric <command>"
-            echo
-            echo "Commands:"
-            echo "  harbor fabric -h|--help|help    - Show this help message"
-            echo "  harbor fabric model [user/repo] - Get or set the Fabric model repository to run"
-            echo "  harbor fabric patterns          - Open the Fabric patterns directory"
-            echo
-            echo "Fabric CLI Help:"
-            ;;
+    model)
+        shift
+        env_manager_alias fabric.model "$@"
+        return 0
+        ;;
+    patterns | --patterns)
+        shift
+        execute_and_process "env_manager get fabric.config.path" "sys_open {{output}}/patterns" "No fabric.config.path set"
+        return 0
+        ;;
+    -h | --help | help)
+        echo "Please note that this is not Fabric CLI, but a Harbor CLI to manage Fabric service."
+        echo
+        echo "Usage: harbor fabric <command>"
+        echo
+        echo "Commands:"
+        echo "  harbor fabric -h|--help|help    - Show this help message"
+        echo "  harbor fabric model [user/repo] - Get or set the Fabric model repository to run"
+        echo "  harbor fabric patterns          - Open the Fabric patterns directory"
+        echo
+        echo "Fabric CLI Help:"
+        ;;
     esac
 
     local services=$(get_active_services)
@@ -2520,123 +2547,123 @@ run_fabric_command() {
 
 run_parler_command() {
     case "$1" in
-        model)
-            shift
-            env_manager_alias parler.model "$@"
-            ;;
-        voice)
-            shift
-            env_manager_alias parler.voice "$@"
-            ;;
-        -h|--help|help)
-            echo "Please note that this is not Parler CLI, but a Harbor CLI to manage Parler service."
-            echo
-            echo "Usage: harbor parler <command>"
-            echo
-            echo "Commands:"
-            echo "  harbor parler -h|--help|help - Show this help message"
-            ;;
-        *)
-            return $scramble_exit_code
-            ;;
+    model)
+        shift
+        env_manager_alias parler.model "$@"
+        ;;
+    voice)
+        shift
+        env_manager_alias parler.voice "$@"
+        ;;
+    -h | --help | help)
+        echo "Please note that this is not Parler CLI, but a Harbor CLI to manage Parler service."
+        echo
+        echo "Usage: harbor parler <command>"
+        echo
+        echo "Commands:"
+        echo "  harbor parler -h|--help|help - Show this help message"
+        ;;
+    *)
+        return $scramble_exit_code
+        ;;
     esac
 }
 
 run_airllm_command() {
     case "$1" in
-        model)
-            shift
-            env_manager_alias airllm.model "$@"
-            ;;
-        ctx)
-            shift
-            env_manager_alias airllm.ctx.len "$@"
-            ;;
-        compression)
-            shift
-            env_manager_alias airllm.compression "$@"
-            ;;
-        -h|--help|help)
-            echo "Please note that this is not AirLLM CLI, but a Harbor CLI to manage AirLLM service."
-            echo
-            echo "Usage: harbor airllm <command>"
-            echo
-            echo "Commands:"
-            echo "  harbor airllm model [user/repo]            - Get or set model to run"
-            echo "  harbor airllm ctx [len]                    - Get or set context length for AirLLM"
-            echo "  harbor airllm compression [4bit|8bit|none] - Get or set compression level for AirLLM"
-            ;;
-        *)
-            return $scramble_exit_code
-            ;;
+    model)
+        shift
+        env_manager_alias airllm.model "$@"
+        ;;
+    ctx)
+        shift
+        env_manager_alias airllm.ctx.len "$@"
+        ;;
+    compression)
+        shift
+        env_manager_alias airllm.compression "$@"
+        ;;
+    -h | --help | help)
+        echo "Please note that this is not AirLLM CLI, but a Harbor CLI to manage AirLLM service."
+        echo
+        echo "Usage: harbor airllm <command>"
+        echo
+        echo "Commands:"
+        echo "  harbor airllm model [user/repo]            - Get or set model to run"
+        echo "  harbor airllm ctx [len]                    - Get or set context length for AirLLM"
+        echo "  harbor airllm compression [4bit|8bit|none] - Get or set compression level for AirLLM"
+        ;;
+    *)
+        return $scramble_exit_code
+        ;;
     esac
 }
 
 run_txtairag_command() {
     case "$1" in
-        model)
-            shift
-            env_manager_alias txtai.rag.model "$@"
-            ;;
-        embeddings)
-            shift
-            env_manager_alias txtai.rag.embeddings "$@"
-            ;;
-        -h|--help|help)
-            echo "Please note that this is not txtai rag CLI, but a Harbor CLI to manage txtai rag service."
-            echo
-            echo "Usage: harbor txtai rag <command>"
-            echo
-            echo "Commands:"
-            echo "  harbor txtai rag model [user/repo] - Get or set the txtai rag model repository to run"
-            echo "  harbor txtai rag embeddings [path] - Get or set the path to the embeddings file"
-            ;;
-        *)
-            return $scramble_exit_code
-            ;;
+    model)
+        shift
+        env_manager_alias txtai.rag.model "$@"
+        ;;
+    embeddings)
+        shift
+        env_manager_alias txtai.rag.embeddings "$@"
+        ;;
+    -h | --help | help)
+        echo "Please note that this is not txtai rag CLI, but a Harbor CLI to manage txtai rag service."
+        echo
+        echo "Usage: harbor txtai rag <command>"
+        echo
+        echo "Commands:"
+        echo "  harbor txtai rag model [user/repo] - Get or set the txtai rag model repository to run"
+        echo "  harbor txtai rag embeddings [path] - Get or set the path to the embeddings file"
+        ;;
+    *)
+        return $scramble_exit_code
+        ;;
     esac
 }
 
 run_txtai_command() {
     case "$1" in
-        rag)
-            shift
-            run_txtairag_command "$@"
-            ;;
-        cache)
-            shift
-            env_manager_alias txtai.cache "$@"
-            ;;
-        -h|--help|help)
-            echo "Please note that this is not txtai CLI, but a Harbor CLI to manage txtai service."
-            echo
-            echo "Usage: harbor txtai <command>"
-            echo
-            echo "Commands:"
-            echo "  harbor txtai cache - Get/set the location of global txtai cache"
-            echo "  harbor txtai rag   - Run commands related to txtai rag application"
-            ;;
-        *)
-            return $scramble_exit_code
-            ;;
+    rag)
+        shift
+        run_txtairag_command "$@"
+        ;;
+    cache)
+        shift
+        env_manager_alias txtai.cache "$@"
+        ;;
+    -h | --help | help)
+        echo "Please note that this is not txtai CLI, but a Harbor CLI to manage txtai service."
+        echo
+        echo "Usage: harbor txtai <command>"
+        echo
+        echo "Commands:"
+        echo "  harbor txtai cache - Get/set the location of global txtai cache"
+        echo "  harbor txtai rag   - Run commands related to txtai rag application"
+        ;;
+    *)
+        return $scramble_exit_code
+        ;;
     esac
 }
 
 run_aider_command() {
     case "$1" in
-        model)
-            shift
-            env_manager_alias aider.model "$@"
-            return 0
-            ;;
-        -h|--help|help)
-            echo "Please note that this is not Aider CLI, but a Harbor CLI to manage Aider service."
-            echo
-            echo "Usage: harbor aider <command>"
-            echo
-            echo "Commands:"
-            echo "  harbor aider model [user/repo] - Get or set the Aider model repository to run"
-            ;;
+    model)
+        shift
+        env_manager_alias aider.model "$@"
+        return 0
+        ;;
+    -h | --help | help)
+        echo "Please note that this is not Aider CLI, but a Harbor CLI to manage Aider service."
+        echo
+        echo "Usage: harbor aider <command>"
+        echo
+        echo "Commands:"
+        echo "  harbor aider model [user/repo] - Get or set the Aider model repository to run"
+        ;;
     esac
 
     local services
@@ -2658,123 +2685,123 @@ run_aider_command() {
 
 run_chatui_command() {
     case "$1" in
-        version)
-            shift
-            env_manager_alias chatui.version "$@"
-            ;;
-        model)
-            shift
-            env_manager_alias chatui.ollama.model "$@"
-            ;;
-        -h|--help|help)
-            echo "Please note that this is not ChatUI CLI, but a Harbor CLI to manage ChatUI service."
-            echo
-            echo "Usage: harbor chatui <command>"
-            echo
-            echo "Commands:"
-            echo "  harbor chatui version [version] - Get or set the ChatUI version docker tag"
-            echo "  harbor chatui model [id]        - Get or set the Ollama model to target"
-            ;;
-        *)
-            return $scramble_exit_code
-            ;;
+    version)
+        shift
+        env_manager_alias chatui.version "$@"
+        ;;
+    model)
+        shift
+        env_manager_alias chatui.ollama.model "$@"
+        ;;
+    -h | --help | help)
+        echo "Please note that this is not ChatUI CLI, but a Harbor CLI to manage ChatUI service."
+        echo
+        echo "Usage: harbor chatui <command>"
+        echo
+        echo "Commands:"
+        echo "  harbor chatui version [version] - Get or set the ChatUI version docker tag"
+        echo "  harbor chatui model [id]        - Get or set the Ollama model to target"
+        ;;
+    *)
+        return $scramble_exit_code
+        ;;
     esac
 }
 
 run_comfyui_workspace_command() {
     case "$1" in
-        open)
-            shift
-            sys_open "$harbor_home/comfyui/workspace"
-            ;;
-        sync)
-            shift
-            log_info "Cleaning up ComfyUI environment..."
-            run_in_service comfyui rm -rf /workspace/environments/python/comfyui
-            log_info "Syncing installed custom nodes to persistent storage..."
-            run_in_service comfyui venv-sync comfyui
-            ;;
-        clear)
-            shift
-            log_info "Cleaning up ComfyUI workspace..."
-            run_gum confirm "This operation will delete all stored ComfyUI configuration. Continue?" && run_in_service comfyui rm -rf /workspace/* || echo "Cleanup aborted."
-            log_info "Restart Harbor to re-init Comfy UI"
-            ;;
-        *)
-            return $scramble_exit_code
-            ;;
+    open)
+        shift
+        sys_open "$harbor_home/comfyui/workspace"
+        ;;
+    sync)
+        shift
+        log_info "Cleaning up ComfyUI environment..."
+        run_in_service comfyui rm -rf /workspace/environments/python/comfyui
+        log_info "Syncing installed custom nodes to persistent storage..."
+        run_in_service comfyui venv-sync comfyui
+        ;;
+    clear)
+        shift
+        log_info "Cleaning up ComfyUI workspace..."
+        run_gum confirm "This operation will delete all stored ComfyUI configuration. Continue?" && run_in_service comfyui rm -rf /workspace/* || echo "Cleanup aborted."
+        log_info "Restart Harbor to re-init Comfy UI"
+        ;;
+    *)
+        return $scramble_exit_code
+        ;;
     esac
 }
 
 run_comfyui_command() {
     case "$1" in
-        version)
-            shift
-            env_manager_alias comfyui.version "$@"
-            ;;
-        user)
-            shift
-            env_manager_alias comfyui.user "$@"
-            ;;
-        password)
-            shift
-            env_manager_alias comfyui.password "$@"
-            ;;
-        auth)
-            shift
-            env_manager_alias comfyui.auth "$@"
-            ;;
-        workspace)
-            shift
-            run_comfyui_workspace_command "$@"
-            ;;
-        output)
-            shift
-            sys_open "$harbor_home/comfyui/workspace/ComfyUI/output"
-            ;;
-        -h|--help|help)
-            echo "Please note that this is not ComfyUI CLI, but a Harbor CLI to manage ComfyUI service."
-            echo
-            echo "Usage: harbor comfyui <command>"
-            echo
-            echo "Commands:"
-            echo "  harbor comfyui version [version]   - Get or set the ComfyUI version docker tag"
-            echo "  harbor comfyui user [username]     - Get or set the ComfyUI username"
-            echo "  harbor comfyui password [password] - Get or set the ComfyUI password"
-            echo "  harbor comfyui auth [true|false]   - Enable/disable ComfyUI authentication"
-            echo "  harbor comfyui workspace sync    - Sync installed custom nodes to persistent storage"
-            echo "  harbor comfyui workspace open    - Open folder containing ComfyUI workspace in the File Manager"
-            echo "  harbor comfyui workspace clear   - Clear ComfyUI workspace, including all configurations and models"
-            echo "  harbor comfyui output             - Open folder containing ComfyUI output in the File Manager"
-            ;;
-        *)
-            return $scramble_exit_code
-            ;;
+    version)
+        shift
+        env_manager_alias comfyui.version "$@"
+        ;;
+    user)
+        shift
+        env_manager_alias comfyui.user "$@"
+        ;;
+    password)
+        shift
+        env_manager_alias comfyui.password "$@"
+        ;;
+    auth)
+        shift
+        env_manager_alias comfyui.auth "$@"
+        ;;
+    workspace)
+        shift
+        run_comfyui_workspace_command "$@"
+        ;;
+    output)
+        shift
+        sys_open "$harbor_home/comfyui/workspace/ComfyUI/output"
+        ;;
+    -h | --help | help)
+        echo "Please note that this is not ComfyUI CLI, but a Harbor CLI to manage ComfyUI service."
+        echo
+        echo "Usage: harbor comfyui <command>"
+        echo
+        echo "Commands:"
+        echo "  harbor comfyui version [version]   - Get or set the ComfyUI version docker tag"
+        echo "  harbor comfyui user [username]     - Get or set the ComfyUI username"
+        echo "  harbor comfyui password [password] - Get or set the ComfyUI password"
+        echo "  harbor comfyui auth [true|false]   - Enable/disable ComfyUI authentication"
+        echo "  harbor comfyui workspace sync    - Sync installed custom nodes to persistent storage"
+        echo "  harbor comfyui workspace open    - Open folder containing ComfyUI workspace in the File Manager"
+        echo "  harbor comfyui workspace clear   - Clear ComfyUI workspace, including all configurations and models"
+        echo "  harbor comfyui output             - Open folder containing ComfyUI output in the File Manager"
+        ;;
+    *)
+        return $scramble_exit_code
+        ;;
     esac
 }
 
 run_aichat_command() {
     case "$1" in
-        model)
-            shift
-            env_manager_alias aichat.model "$@"
-            return 0
-            ;;
-        workspace)
-            shift
-            execute_and_process "env_manager get aichat.config.path" "sys_open {{output}}" "No aichat.config.path set"
-            ;;
-        -h|--help|help)
-            echo "Please note that this is not aichat CLI, but a Harbor CLI to manage aichat service."
-            echo
-            echo "Usage: harbor aichat <command>"
-            echo
-            echo "Commands:"
-            echo "  harbor aichat model [model] - Get or set the model to run"
-            echo "  harbor aichat workspace     - Open the aichat workspace directory"
-            echo
-            echo "Original CLI help:"
-            ;;
+    model)
+        shift
+        env_manager_alias aichat.model "$@"
+        return 0
+        ;;
+    workspace)
+        shift
+        execute_and_process "env_manager get aichat.config.path" "sys_open {{output}}" "No aichat.config.path set"
+        ;;
+    -h | --help | help)
+        echo "Please note that this is not aichat CLI, but a Harbor CLI to manage aichat service."
+        echo
+        echo "Usage: harbor aichat <command>"
+        echo
+        echo "Commands:"
+        echo "  harbor aichat model [model] - Get or set the model to run"
+        echo "  harbor aichat workspace     - Open the aichat workspace directory"
+        echo
+        echo "Original CLI help:"
+        ;;
     esac
 
     local services=$(get_active_services)
@@ -2798,107 +2825,107 @@ run_ollama_command() {
 
 run_omnichain_command() {
     case "$1" in
-        workspace)
-            shift
-            execute_and_process "env_manager get omnichain.workspace" "sys_open {{output}}" "No omnichain.workspace set"
-            ;;
-        -h|--help|help)
-            echo "Please note that this is not omnichain CLI, but a Harbor CLI to manage aichat service."
-            echo
-            echo "Usage: harbor aichat <command>"
-            echo
-            echo "Commands:"
-            echo "  harbor omnichain workspace     - Open the aichat workspace directory"
-            ;;
-        *)
-            return $scramble_exit_code
-            ;;
+    workspace)
+        shift
+        execute_and_process "env_manager get omnichain.workspace" "sys_open {{output}}" "No omnichain.workspace set"
+        ;;
+    -h | --help | help)
+        echo "Please note that this is not omnichain CLI, but a Harbor CLI to manage aichat service."
+        echo
+        echo "Usage: harbor aichat <command>"
+        echo
+        echo "Commands:"
+        echo "  harbor omnichain workspace     - Open the aichat workspace directory"
+        ;;
+    *)
+        return $scramble_exit_code
+        ;;
     esac
 }
 
 run_bench_command() {
     case "$1" in
-        results)
-            shift
-            execute_and_process "env_manager get bench.results" "sys_open {{output}}" "No bench.results set"
-            return 0
-            ;;
-        tasks)
-            shift
-            env_manager_alias bench.tasks "$@"
-            return 0
-            ;;
-        debug)
-            shift
-            env_manager_alias bench.debug "$@"
-            return 0
-            ;;
-        model)
-            shift
-            env_manager_alias bench.model "$@"
-            return 0
-            ;;
-        api)
-            shift
-            env_manager_alias bench.api "$@"
-            return 0
-            ;;
-        key)
-            shift
-            env_manager_alias bench.api_key "$@"
-            return 0
-            ;;
-        judge)
-            shift
-            env_manager_alias bench.judge "$@"
-            return 0
-            ;;
-        judge_api)
-            shift
-            env_manager_alias bench.judge_api "$@"
-            return 0
-            ;;
-        judge_key)
-            shift
-            env_manager_alias bench.judge_api_key "$@"
-            return 0
-            ;;
-        judge_prompt)
-            shift
-            env_manager_alias bench.judge_prompt "$@"
-            return 0
-            ;;
-        variants)
-            shift
-            env_manager_alias bench.variants "$@"
-            return 0
-            ;;
-        -h|--help|help)
-            echo "Usage: harbor bench <command>"
-            echo
-            echo "Commands:"
-            echo "  harbor bench run - runs the benchmark"
-            echo "  harbor bench results       - Open the directory containing benchmark results"
-            echo "  harbor bench tasks [tasks] - Get or set the path to tasks.yml to run in the benchmark"
-            echo "  harbor bench model [model] - Get or set the model to run in the benchmark"
-            echo "  harbor bench api [url]   - Get or set the API URL to use in the benchmark"
-            echo "  harbor bench key [key]   - Get or set the API key to use in the benchmark"
-            echo "  harbor bench judge [url] - Get or set the judge URL to use in the benchmark"
-            echo "  harbor bench judge_api [url] - Get or set the judge API URL to use in the benchmark"
-            echo "  harbor bench judge_key [key] - Get or set the judge API key to use in the benchmark"
-            echo "  harbor bench judge_prompt [prompt] - Get or set the judge prompt to use in the benchmark"
-            echo "  harbor bench variants [variants] - Get or set the variants of LLM params that bench will run"
-            echo "  harbor bench debug [true]  - Enable or disable debug mode in the benchmark"
-            return 0
-            ;;
-        run)
-            shift
-            local services=$(get_active_services)
-            $(compose_with_options $services "bench") run --rm "bench" "$@"
-            ;;
-        *)
-            return $scramble_exit_code
-            ;;
+    results)
+        shift
+        execute_and_process "env_manager get bench.results" "sys_open {{output}}" "No bench.results set"
+        return 0
+        ;;
+    tasks)
+        shift
+        env_manager_alias bench.tasks "$@"
+        return 0
+        ;;
+    debug)
+        shift
+        env_manager_alias bench.debug "$@"
+        return 0
+        ;;
+    model)
+        shift
+        env_manager_alias bench.model "$@"
+        return 0
+        ;;
+    api)
+        shift
+        env_manager_alias bench.api "$@"
+        return 0
+        ;;
+    key)
+        shift
+        env_manager_alias bench.api_key "$@"
+        return 0
+        ;;
+    judge)
+        shift
+        env_manager_alias bench.judge "$@"
+        return 0
+        ;;
+    judge_api)
+        shift
+        env_manager_alias bench.judge_api "$@"
+        return 0
+        ;;
+    judge_key)
+        shift
+        env_manager_alias bench.judge_api_key "$@"
+        return 0
+        ;;
+    judge_prompt)
+        shift
+        env_manager_alias bench.judge_prompt "$@"
+        return 0
+        ;;
+    variants)
+        shift
+        env_manager_alias bench.variants "$@"
+        return 0
+        ;;
+    -h | --help | help)
+        echo "Usage: harbor bench <command>"
+        echo
+        echo "Commands:"
+        echo "  harbor bench run - runs the benchmark"
+        echo "  harbor bench results       - Open the directory containing benchmark results"
+        echo "  harbor bench tasks [tasks] - Get or set the path to tasks.yml to run in the benchmark"
+        echo "  harbor bench model [model] - Get or set the model to run in the benchmark"
+        echo "  harbor bench api [url]   - Get or set the API URL to use in the benchmark"
+        echo "  harbor bench key [key]   - Get or set the API key to use in the benchmark"
+        echo "  harbor bench judge [url] - Get or set the judge URL to use in the benchmark"
+        echo "  harbor bench judge_api [url] - Get or set the judge API URL to use in the benchmark"
+        echo "  harbor bench judge_key [key] - Get or set the judge API key to use in the benchmark"
+        echo "  harbor bench judge_prompt [prompt] - Get or set the judge prompt to use in the benchmark"
+        echo "  harbor bench variants [variants] - Get or set the variants of LLM params that bench will run"
+        echo "  harbor bench debug [true]  - Enable or disable debug mode in the benchmark"
+        return 0
+        ;;
+    run)
+        shift
+        local services=$(get_active_services)
+        $(compose_with_options $services "bench") run --rm "bench" "$@"
+        ;;
+    *)
+        return $scramble_exit_code
+        ;;
     esac
 }
 
@@ -2913,57 +2940,57 @@ run_lm_eval_command() {
     }
 
     case "$1" in
-        results)
-            shift
-            execute_and_process "env_manager get lmeval.results" "sys_open {{output}}" "No lmeval.results set"
-            return 0
-            ;;
-        cache)
-            shift
-            execute_and_process "env_manager get lmeval.cache" "sys_open {{output}}" "No lmeval.cache set"
-            return 0
-            ;;
-        type)
-            shift
-            env_manager_alias lmeval.type "$@"
-            return 0
-            ;;
-        model)
-            shift
-            env_manager_dict_alias lmeval.model.args model --on-set update_model_spec "$@"
-            return 0
-            ;;
-        api)
-            shift
-            env_manager_dict_alias lmeval.model.args base_url "$@"
-            return 0
-            ;;
-        args)
-            shift
-            env_manager_dict lmeval.model.args "$@"
-            return 0
-            ;;
-        extra)
-            shift
-            env_manager_alias lmeval.extra.args "$@"
-            return 0
-            ;;
-        -h|--help)
-            echo "Please note that this is not lm_eval CLI, but a Harbor CLI to manage lm_eval service."
-            echo
-            echo "Usage: harbor [lmeval|lm_eval] <command>"
-            echo
-            echo "Commands:"
-            echo "  harbor lmeval results - Open the directory containing lm_eval results"
-            echo "  harbor lmeval cache   - Open the directory containing lm_eval cache"
-            echo "  harbor lmeval type    - Get set --model to pass to the lm_eval CLI"
-            echo "  harbor lmeval model   - Alias for 'harbor lmeval args get|set model'"
-            echo "  harbor lmeval api     - Alias for 'harbor lmeval args get|set base_url'"
-            echo "  harbor lmeval args    - Get or set individual --model_args to pass to the lm_eval CLI"
-            echo "  harbor lmeval extra   - Get or set extra args to pass to the lm_eval CLI"
-            echo
-            echo "Original CLI help:"
-            ;;
+    results)
+        shift
+        execute_and_process "env_manager get lmeval.results" "sys_open {{output}}" "No lmeval.results set"
+        return 0
+        ;;
+    cache)
+        shift
+        execute_and_process "env_manager get lmeval.cache" "sys_open {{output}}" "No lmeval.cache set"
+        return 0
+        ;;
+    type)
+        shift
+        env_manager_alias lmeval.type "$@"
+        return 0
+        ;;
+    model)
+        shift
+        env_manager_dict_alias lmeval.model.args model --on-set update_model_spec "$@"
+        return 0
+        ;;
+    api)
+        shift
+        env_manager_dict_alias lmeval.model.args base_url "$@"
+        return 0
+        ;;
+    args)
+        shift
+        env_manager_dict lmeval.model.args "$@"
+        return 0
+        ;;
+    extra)
+        shift
+        env_manager_alias lmeval.extra.args "$@"
+        return 0
+        ;;
+    -h | --help)
+        echo "Please note that this is not lm_eval CLI, but a Harbor CLI to manage lm_eval service."
+        echo
+        echo "Usage: harbor [lmeval|lm_eval] <command>"
+        echo
+        echo "Commands:"
+        echo "  harbor lmeval results - Open the directory containing lm_eval results"
+        echo "  harbor lmeval cache   - Open the directory containing lm_eval cache"
+        echo "  harbor lmeval type    - Get set --model to pass to the lm_eval CLI"
+        echo "  harbor lmeval model   - Alias for 'harbor lmeval args get|set model'"
+        echo "  harbor lmeval api     - Alias for 'harbor lmeval args get|set base_url'"
+        echo "  harbor lmeval args    - Get or set individual --model_args to pass to the lm_eval CLI"
+        echo "  harbor lmeval extra   - Get or set extra args to pass to the lm_eval CLI"
+        echo
+        echo "Original CLI help:"
+        ;;
     esac
 
     local services=$(get_active_services)
@@ -2980,236 +3007,249 @@ run_lm_eval_command() {
 
 run_sglang_command() {
     case "$1" in
-        model)
-            shift
-            env_manager_alias sglang.model "$@"
-            return 0
-            ;;
-        args)
-            shift
-            env_manager_alias sglang.extra.args "$@"
-            return 0
-            ;;
-        -h|--help|help)
-            echo "Please note that this is not sglang CLI, but a Harbor CLI to manage sglang service."
-            echo
-            echo "Usage: harbor sglang <command>"
-            echo
-            echo "Commands:"
-            echo "  harbor sglang model [user/repo] - Get or set the sglang model repository to run"
-            echo "  harbor sglang args [args]       - Get or set extra args to pass to the sglang CLI"
-            ;;
+    model)
+        shift
+        env_manager_alias sglang.model "$@"
+        return 0
+        ;;
+    args)
+        shift
+        env_manager_alias sglang.extra.args "$@"
+        return 0
+        ;;
+    -h | --help | help)
+        echo "Please note that this is not sglang CLI, but a Harbor CLI to manage sglang service."
+        echo
+        echo "Usage: harbor sglang <command>"
+        echo
+        echo "Commands:"
+        echo "  harbor sglang model [user/repo] - Get or set the sglang model repository to run"
+        echo "  harbor sglang args [args]       - Get or set extra args to pass to the sglang CLI"
+        ;;
     esac
 }
 
 run_jupyter_command() {
     case "$1" in
-        workspace)
-            shift
-            execute_and_process "env_manager get jupyter.workspace" "sys_open {{output}}" "No jupyter.workspace set"
-            ;;
-        image)
-            shift
-            env_manager_alias jupyter.image "$@"
-            ;;
-        deps)
-            shift
-            env_manager_arr jupyter.extra.deps "$@"
-            ;;
-        -h|--help|help)
-            echo "Please note that this is not Jupyter CLI, but a Harbor CLI to manage Jupyter service."
-            echo
-            echo "Usage: harbor jupyter <command>"
-            echo
-            echo "Commands:"
-            echo "  harbor jupyter workspace     - Open the Jupyter workspace directory"
-            echo "  harbor jupyter image [image] - Get or set the Jupyter image to run"
-            echo "  harbor jupyter deps [deps]   - Manage extra dependencies to install in the Jupyter image"
-            ;;
-        *)
-            return $scramble_exit_code
-            ;;
+    workspace)
+        shift
+        execute_and_process "env_manager get jupyter.workspace" "sys_open {{output}}" "No jupyter.workspace set"
+        ;;
+    image)
+        shift
+        env_manager_alias jupyter.image "$@"
+        ;;
+    deps)
+        shift
+        env_manager_arr jupyter.extra.deps "$@"
+        ;;
+    -h | --help | help)
+        echo "Please note that this is not Jupyter CLI, but a Harbor CLI to manage Jupyter service."
+        echo
+        echo "Usage: harbor jupyter <command>"
+        echo
+        echo "Commands:"
+        echo "  harbor jupyter workspace     - Open the Jupyter workspace directory"
+        echo "  harbor jupyter image [image] - Get or set the Jupyter image to run"
+        echo "  harbor jupyter deps [deps]   - Manage extra dependencies to install in the Jupyter image"
+        ;;
+    *)
+        return $scramble_exit_code
+        ;;
     esac
 }
 
 run_ol1_command() {
     case "$1" in
-        model)
-            shift
-            env_manager_alias ol1.model "$@"
-            return 0
-            ;;
-        args)
-            shift
-            env_manager_dict ol1.args "$@"
-            return 0
-            ;;
-        -h|--help|help)
-            echo "Please note that this is not OL1 CLI, but a Harbor CLI to manage OL1 service."
-            echo
-            echo "Usage: harbor ol1 <command>"
-            echo
-            echo "Commands:"
-            echo "  harbor ol1 model [user/repo] - Get or set the OL1 model repository to run"
-            ;;
+    model)
+        shift
+        env_manager_alias ol1.model "$@"
+        return 0
+        ;;
+    args)
+        shift
+        env_manager_dict ol1.args "$@"
+        return 0
+        ;;
+    -h | --help | help)
+        echo "Please note that this is not OL1 CLI, but a Harbor CLI to manage OL1 service."
+        echo
+        echo "Usage: harbor ol1 <command>"
+        echo
+        echo "Commands:"
+        echo "  harbor ol1 model [user/repo] - Get or set the OL1 model repository to run"
+        ;;
     esac
 }
 
 run_ktransformers_command() {
     case "$1" in
-        model)
-            shift
-            env_manager_alias ktransformers.model "$@"
-            return 0
-            ;;
-        gguf)
-            shift
-            env_manager_dict ktransformers.gguf "$@"
-            return 0
-            ;;
-        version)
-            shift
-            env_manager_alias ktransformers.version "$@"
-            return 0
-            ;;
-        image)
-            shift
-            env_manager_alias ktransformers.image "$@"
-            return 0
-            ;;
-        args)
-            shift
-            env_manager_alias ktransformers.args "$@"
-            return 0
-            ;;
-        -h|--help|help)
-            echo "Please note that this is not KTransformers CLI, but a Harbor CLI to manage KTransformers service."
-            echo
-            echo "Usage: harbor ktransformers <command>"
-            echo
-            echo "Commands:"
-            echo "  harbor ktransformers model [user/repo] - Get or set --model_path for KTransformers"
-            echo "  harbor ktransformers gguf [args]       - Get or set --gguf_path for KTransformers"
-            echo "  harbor ktransformers version [version] - Get or set KTransformers version"
-            echo "  harbor ktransformers image [image]     - Get or set KTransformers image"
-            echo "  harbor ktransformers args [args]       - Get or set extra args to pass to KTransformers"
-            ;;
+    model)
+        shift
+        env_manager_alias ktransformers.model "$@"
+        return 0
+        ;;
+    gguf)
+        shift
+        env_manager_dict ktransformers.gguf "$@"
+        return 0
+        ;;
+    version)
+        shift
+        env_manager_alias ktransformers.version "$@"
+        return 0
+        ;;
+    image)
+        shift
+        env_manager_alias ktransformers.image "$@"
+        return 0
+        ;;
+    args)
+        shift
+        env_manager_alias ktransformers.args "$@"
+        return 0
+        ;;
+    -h | --help | help)
+        echo "Please note that this is not KTransformers CLI, but a Harbor CLI to manage KTransformers service."
+        echo
+        echo "Usage: harbor ktransformers <command>"
+        echo
+        echo "Commands:"
+        echo "  harbor ktransformers model [user/repo] - Get or set --model_path for KTransformers"
+        echo "  harbor ktransformers gguf [args]       - Get or set --gguf_path for KTransformers"
+        echo "  harbor ktransformers version [version] - Get or set KTransformers version"
+        echo "  harbor ktransformers image [image]     - Get or set KTransformers image"
+        echo "  harbor ktransformers args [args]       - Get or set extra args to pass to KTransformers"
+        ;;
     esac
 }
 
 run_boost_klmbr_command() {
     case "$1" in
-        percentage)
-            shift
-            env_manager_alias boost.klmbr.percentage "$@"
-            ;;
-        mods)
-            shift
-            env_manager_arr boost.klmbr.mods "$@"
-            ;;
-        strat)
-            shift
-            env_manager_alias boost.klmbr.strat "$@"
-            ;;
-        strat_params)
-            shift
-            env_manager_dict boost.klmbr.strat_params "$@"
-            ;;
-        -h|--help|help)
-            echo "Usage: harbor boost klmbr <command>"
-            echo
-            echo "Commands:"
-            echo "  harbor boost klmbr percentage [percentage] - Get or set the klmbr percentage parameter"
-            echo "  harbor boost klmbr mods [mods]             - Get or set the klmbr mods parameter"
-            echo "  harbor boost klmbr strat [strat]           - Get or set the klmbr strat parameter"
-            echo "  harbor boost klmbr strat_params [params]   - Get or set the klmbr strat_params parameter"
-            ;;
+    percentage)
+        shift
+        env_manager_alias boost.klmbr.percentage "$@"
+        ;;
+    mods)
+        shift
+        env_manager_arr boost.klmbr.mods "$@"
+        ;;
+    strat)
+        shift
+        env_manager_alias boost.klmbr.strat "$@"
+        ;;
+    strat_params)
+        shift
+        env_manager_dict boost.klmbr.strat_params "$@"
+        ;;
+    -h | --help | help)
+        echo "Usage: harbor boost klmbr <command>"
+        echo
+        echo "Commands:"
+        echo "  harbor boost klmbr percentage [percentage] - Get or set the klmbr percentage parameter"
+        echo "  harbor boost klmbr mods [mods]             - Get or set the klmbr mods parameter"
+        echo "  harbor boost klmbr strat [strat]           - Get or set the klmbr strat parameter"
+        echo "  harbor boost klmbr strat_params [params]   - Get or set the klmbr strat_params parameter"
+        ;;
     esac
 }
 
 run_boost_rcn_command() {
     case "$1" in
-        strat)
-            shift
-            env_manager_alias boost.rcn.strat "$@"
-            ;;
-        strat_params)
-            shift
-            env_manager_dict boost.rcn.strat_params "$@"
-            ;;
-        -h|--help|help)
-            echo "Usage: harbor boost rcn <command>"
-            echo
-            echo "Commands:"
-            echo "  harbor boost rcn strat [strat]           - Get or set the rcn strat parameter"
-            echo "  harbor boost rcn strat_params [params]   - Get or set the rcn strat_params parameter"
-            ;;
+    strat)
+        shift
+        env_manager_alias boost.rcn.strat "$@"
+        ;;
+    strat_params)
+        shift
+        env_manager_dict boost.rcn.strat_params "$@"
+        ;;
+    -h | --help | help)
+        echo "Usage: harbor boost rcn <command>"
+        echo
+        echo "Commands:"
+        echo "  harbor boost rcn strat [strat]           - Get or set the rcn strat parameter"
+        echo "  harbor boost rcn strat_params [params]   - Get or set the rcn strat_params parameter"
+        ;;
     esac
 }
 
 run_boost_g1_command() {
     case "$1" in
-        strat)
-            shift
-            env_manager_alias boost.g1.strat "$@"
-            ;;
-        strat_params)
-            shift
-            env_manager_dict boost.g1.strat_params "$@"
-            ;;
-        max_steps)
-            shift
-            env_manager_alias boost.g1.max_steps "$@"
-            ;;
-        -h|--help|help)
-            echo "Usage: harbor boost g1 <command>"
-            echo
-            echo "Commands:"
-            echo "  harbor boost g1 strat [strat]           - Get or set the g1 strat parameter"
-            echo "  harbor boost g1 strat_params [params]   - Get or set the g1 strat_params parameter"
-            ;;
+    strat)
+        shift
+        env_manager_alias boost.g1.strat "$@"
+        ;;
+    strat_params)
+        shift
+        env_manager_dict boost.g1.strat_params "$@"
+        ;;
+    max_steps)
+        shift
+        env_manager_alias boost.g1.max_steps "$@"
+        ;;
+    -h | --help | help)
+        echo "Usage: harbor boost g1 <command>"
+        echo
+        echo "Commands:"
+        echo "  harbor boost g1 strat [strat]           - Get or set the g1 strat parameter"
+        echo "  harbor boost g1 strat_params [params]   - Get or set the g1 strat_params parameter"
+        ;;
     esac
 }
 
 run_boost_command() {
     case "$1" in
-        urls)
-            shift
-            env_manager_arr boost.openai.urls "$@"
-            ;;
-        keys)
-            shift
-            env_manager_arr boost.openai.keys "$@"
-            ;;
-        modules)
-            shift
-            env_manager_arr boost.modules "$@"
-            ;;
-        klmbr)
-            shift
-            run_boost_klmbr_command "$@"
-            ;;
-        rcn)
-            shift
-            run_boost_rcn_command "$@"
-            ;;
-        g1)
-            shift
-            run_boost_g1_command "$@"
-            ;;
-        -h|--help|help)
-            echo "Please note that this is not Boost CLI, but a Harbor CLI to manage Boost service."
-            echo
-            echo "Usage: harbor boost <command>"
-            echo
-            echo "Commands:"
-            echo "  harbor boost urls [urls] - Manage OpenAI API URLs to boost"
-            echo "  harbor boost keys [keys] - Manage OpenAI API keys to boost"
-            echo "  harbor boost klmbr       - Manage klmbr module"
-            echo "  harbor boost rcn         - Manage rcn module"
-            echo "  harbor boost g1          - Manage g1 module"
-            ;;
+    urls)
+        shift
+        env_manager_arr boost.openai.urls "$@"
+        ;;
+    keys)
+        shift
+        env_manager_arr boost.openai.keys "$@"
+        ;;
+    modules)
+        shift
+        env_manager_arr boost.modules "$@"
+        ;;
+    klmbr)
+        shift
+        run_boost_klmbr_command "$@"
+        ;;
+    rcn)
+        shift
+        run_boost_rcn_command "$@"
+        ;;
+    g1)
+        shift
+        run_boost_g1_command "$@"
+        ;;
+    -h | --help | help)
+        echo "Please note that this is not Boost CLI, but a Harbor CLI to manage Boost service."
+        echo
+        echo "Usage: harbor boost <command>"
+        echo
+        echo "Commands:"
+        echo "  harbor boost urls [urls] - Manage OpenAI API URLs to boost"
+        echo "  harbor boost keys [keys] - Manage OpenAI API keys to boost"
+        echo "  harbor boost klmbr       - Manage klmbr module"
+        echo "  harbor boost rcn         - Manage rcn module"
+        echo "  harbor boost g1          - Manage g1 module"
+        ;;
     esac
+}
+
+run_openhands_command() {
+    local services=$(get_active_services)
+
+    $(compose_with_options $services "openhands") run \
+        --rm \
+        --name $default_container_prefix.openhands \
+        --service-ports \
+        -e "TERM=xterm-256color" \
+        -e "WORKSPACE_MOUNT_PATH=$original_dir" \
+        -v "$original_dir:/opt/workspace_base" \
+        openhands "$@"
 }
 
 # ========================================================================
@@ -3236,6 +3276,8 @@ set_default_log_levels
 
 # Config
 ensure_env_file
+# Current user ID - FS + UIDs for containers (where applicable)
+env_manager --silent set user.id "$(id -u)"
 default_options=($(env_manager get services.default | tr ';' ' '))
 default_tunnels=($(env_manager get services.tunnels | tr ';' ' '))
 default_open=$(env_manager get ui.main)
@@ -3247,311 +3289,314 @@ default_history_size=$(env_manager get history.size)
 
 main_entrypoint() {
     case "$1" in
-        up|u)
-            shift
-            harbor_up "$@"
-            ;;
-        down|d)
-            shift
-            $(compose_with_options "*") down --remove-orphans "$@"
-            ;;
-        restart|r)
-            shift
-            $(compose_with_options "*") down --remove-orphans "$@"
-            $(compose_with_options "$@") up -d
-            ;;
-        ps)
-            shift
-            $(compose_with_options "*") ps
-            ;;
-        build)
-            shift
-            service=$1
-            shift
-            $(compose_with_options "*") build "$service" "$@"
-            ;;
-        shell)
-            shift
-            service=$1
-            shift
+    up | u)
+        shift
+        harbor_up "$@"
+        ;;
+    down | d)
+        shift
+        $(compose_with_options "*") down --remove-orphans "$@"
+        ;;
+    restart | r)
+        shift
+        $(compose_with_options "*") down --remove-orphans "$@"
+        $(compose_with_options "$@") up -d
+        ;;
+    ps)
+        shift
+        $(compose_with_options "*") ps
+        ;;
+    build)
+        shift
+        service=$1
+        shift
+        $(compose_with_options "*") build "$service" "$@"
+        ;;
+    shell)
+        shift
+        service=$1
+        shift
 
-            if [ -z "$service" ]; then
-                echo "Usage: harbor shell <service>"
-                exit 1
-            fi
+        if [ -z "$service" ]; then
+            echo "Usage: harbor shell <service>"
+            exit 1
+        fi
 
-            $(compose_with_options "*") run -it --entrypoint bash "$service"
-            ;;
-        logs|l)
-            shift
-            # Only pass "*" to the command if no options are provided
-            $(compose_with_options "*") logs -n 20 -f "$@"
-            ;;
-        pull)
-            shift
-            $(compose_with_options "$@") pull
-            ;;
-        exec)
-            shift
-            run_in_service "$@"
-            ;;
-        run)
-            shift
-            service=$1
-            shift
+        $(compose_with_options "*") run -it --entrypoint bash "$service"
+        ;;
+    logs | l)
+        shift
+        # Only pass "*" to the command if no options are provided
+        $(compose_with_options "*") logs -n 20 -f "$@"
+        ;;
+    pull)
+        shift
+        $(compose_with_options "$@") pull
+        ;;
+    exec)
+        shift
+        run_in_service "$@"
+        ;;
+    run)
+        shift
+        service=$1
+        shift
 
-            local services=$(get_active_services)
-            $(compose_with_options $services "$service") run --rm "$service" "$@"
-            ;;
-        cmd)
-            shift
-            resolve_compose_command "$@"
-            ;;
-        help|--help|-h)
-            show_help
-            ;;
-        hf)
-            shift
-            run_hf_command "$@"
-            ;;
-        defaults)
-            shift
-            env_manager_arr services.default "$@"
-            ;;
-        link|ln)
-            shift
-            link_cli "$@"
-            ;;
-        unlink)
-            shift
-            unlink_cli "$@"
-            ;;
-        open|o)
-            shift
-            open_service "$@"
-            ;;
-        url)
-            shift
-            get_url $@
-            ;;
-        qr)
-            shift
-            print_service_qr "$@"
-            ;;
-        list|ls)
-            shift
-            get_services "$@"
-            ;;
-        version|--version|-v)
-            shift
-            show_version
-            ;;
-        smi)
-            shift
-            smi
-            ;;
-        top)
-            shift
-            nvidia_top
-            ;;
-        dive)
-            shift
-            run_dive "$@"
-            ;;
-        eject)
-            shift
-            eject "$@"
-            ;;
-        ollama)
-            shift
-            run_ollama_command "$@"
-            ;;
-        llamacpp)
-            shift
-            run_llamacpp_command "$@"
-            ;;
-        tgi)
-            shift
-            run_tgi_command "$@"
-            ;;
-        litellm)
-            shift
-            run_litellm_command "$@"
-            ;;
-        vllm)
-            shift
-            run_vllm_command "$@"
-            ;;
-        aphrodite)
-            shift
-            run_aphrodite_command "$@"
-            ;;
-        openai)
-            shift
-            run_open_ai_command "$@"
-            ;;
-        webui)
-            shift
-            run_webui_command "$@"
-            ;;
-        tabbyapi)
-            shift
-            run_tabbyapi_command "$@"
-            ;;
-        parllama)
-            shift
-            run_parllama_command "$@"
-            ;;
-        plandex|pdx)
-            shift
-            run_plandex_command "$@"
-            ;;
-        mistralrs)
-            shift
-            run_mistralrs_command "$@"
-            ;;
-        interpreter|opint)
-            shift
-            run_opint_command "$@"
-            ;;
-        cfd|cloudflared)
-            shift
-            $(compose_with_options "cfd") run cfd "$@"
-            ;;
-        cmdh)
-            shift
-            run_cmdh_command "$@"
-            ;;
-        fabric)
-            shift
-            run_fabric_command "$@"
-            ;;
-        parler)
-            shift
-            run_parler_command "$@"
-            ;;
-        airllm)
-            shift
-            run_airllm_command "$@"
-            ;;
-        txtai)
-            shift
-            run_txtai_command "$@"
-            ;;
-        aider)
-            shift
-            run_aider_command "$@"
-            ;;
-        chatui)
-            shift
-            run_chatui_command "$@"
-            ;;
-        comfyui)
-            shift
-            run_comfyui_command "$@"
-            ;;
-        aichat)
-            shift
-            run_aichat_command "$@"
-            ;;
-        omnichain)
-            shift
-            run_omnichain_command "$@"
-            ;;
-        lmeval|lm_eval)
-            shift
-            run_lm_eval_command "$@"
-            ;;
-        sglang)
-            shift
-            run_sglang_command "$@"
-            ;;
-        jupyter)
-            shift
-            run_jupyter_command "$@"
-            ;;
-        ol1)
-            shift
-            run_ol1_command "$@"
-            ;;
-        ktransformers)
-            shift
-            run_ktransformers_command "$@"
-            ;;
-        boost)
-            shift
-            run_boost_command "$@"
-            ;;
-        tunnel|t)
-            shift
-            establish_tunnel "$@"
-            ;;
-        tunnels)
-            shift
-            env_manager_arr services.tunnels "$@"
-            ;;
-        config)
-            shift
-            env_manager "$@"
-            ;;
-        profile|profiles|p)
-            shift
-            run_profile_command "$@"
-            ;;
-        gum)
-            shift
-            run_gum "$@"
-            ;;
-        fixfs)
-            shift
-            fix_fs_acl
-            ;;
-        info)
-            shift
-            sys_info
-            ;;
-        update)
-            shift
-            update_harbor "$@"
-            ;;
-        how)
-            shift
-            run_harbor_cmdh_command "$@"
-            ;;
-        find)
-            shift
-            run_harbor_find "$@"
-            ;;
-        home)
-            shift
-            echo "$harbor_home"
-            ;;
-        vscode)
-            shift
-            open_home_code
-            ;;
-        doctor)
-            shift
-            run_harbor_doctor "$@"
-            ;;
-        bench)
-            shift
-            run_bench_command "$@"
-            ;;
-        history|h)
-            shift
-            run_harbor_history "$@"
-            ;;
-        size)
-            shift
-            run_harbor_size "$@"
-            ;;
-        *)
-            return $scramble_exit_code
-            ;;
+        local services=$(get_active_services)
+        $(compose_with_options $services "$service") run --rm "$service" "$@"
+        ;;
+    cmd)
+        shift
+        resolve_compose_command "$@"
+        ;;
+    help | --help | -h)
+        show_help
+        ;;
+    hf)
+        shift
+        run_hf_command "$@"
+        ;;
+    defaults)
+        shift
+        env_manager_arr services.default "$@"
+        ;;
+    link | ln)
+        shift
+        link_cli "$@"
+        ;;
+    unlink)
+        shift
+        unlink_cli "$@"
+        ;;
+    open | o)
+        shift
+        open_service "$@"
+        ;;
+    url)
+        shift
+        get_url $@
+        ;;
+    qr)
+        shift
+        print_service_qr "$@"
+        ;;
+    list | ls)
+        shift
+        get_services "$@"
+        ;;
+    version | --version | -v)
+        shift
+        show_version
+        ;;
+    smi)
+        shift
+        smi
+        ;;
+    top)
+        shift
+        nvidia_top
+        ;;
+    dive)
+        shift
+        run_dive "$@"
+        ;;
+    eject)
+        shift
+        eject "$@"
+        ;;
+    ollama)
+        shift
+        run_ollama_command "$@"
+        ;;
+    llamacpp)
+        shift
+        run_llamacpp_command "$@"
+        ;;
+    tgi)
+        shift
+        run_tgi_command "$@"
+        ;;
+    litellm)
+        shift
+        run_litellm_command "$@"
+        ;;
+    vllm)
+        shift
+        run_vllm_command "$@"
+        ;;
+    aphrodite)
+        shift
+        run_aphrodite_command "$@"
+        ;;
+    openai)
+        shift
+        run_open_ai_command "$@"
+        ;;
+    webui)
+        shift
+        run_webui_command "$@"
+        ;;
+    tabbyapi)
+        shift
+        run_tabbyapi_command "$@"
+        ;;
+    parllama)
+        shift
+        run_parllama_command "$@"
+        ;;
+    plandex | pdx)
+        shift
+        run_plandex_command "$@"
+        ;;
+    mistralrs)
+        shift
+        run_mistralrs_command "$@"
+        ;;
+    interpreter | opint)
+        shift
+        run_opint_command "$@"
+        ;;
+    cfd | cloudflared)
+        shift
+        $(compose_with_options "cfd") run cfd "$@"
+        ;;
+    cmdh)
+        shift
+        run_cmdh_command "$@"
+        ;;
+    fabric)
+        shift
+        run_fabric_command "$@"
+        ;;
+    parler)
+        shift
+        run_parler_command "$@"
+        ;;
+    airllm)
+        shift
+        run_airllm_command "$@"
+        ;;
+    txtai)
+        shift
+        run_txtai_command "$@"
+        ;;
+    aider)
+        shift
+        run_aider_command "$@"
+        ;;
+    chatui)
+        shift
+        run_chatui_command "$@"
+        ;;
+    comfyui)
+        shift
+        run_comfyui_command "$@"
+        ;;
+    aichat)
+        shift
+        run_aichat_command "$@"
+        ;;
+    omnichain)
+        shift
+        run_omnichain_command "$@"
+        ;;
+    lmeval | lm_eval)
+        shift
+        run_lm_eval_command "$@"
+        ;;
+    sglang)
+        shift
+        run_sglang_command "$@"
+        ;;
+    jupyter)
+        shift
+        run_jupyter_command "$@"
+        ;;
+    ol1)
+        shift
+        run_ol1_command "$@"
+        ;;
+    ktransformers)
+        shift
+        run_ktransformers_command "$@"
+        ;;
+    openhands | oh)
+        shift
+        run_openhands_command "$@"
+        ;;
+    boost)
+        shift
+        run_boost_command "$@"
+        ;;
+    tunnel | t)
+        shift
+        establish_tunnel "$@"
+        ;;
+    tunnels)
+        shift
+        env_manager_arr services.tunnels "$@"
+        ;;
+    config)
+        shift
+        env_manager "$@"
+        ;;
+    profile | profiles | p)
+        shift
+        run_profile_command "$@"
+        ;;
+    gum)
+        shift
+        run_gum "$@"
+        ;;
+    fixfs)
+        shift
+        fix_fs_acl
+        ;;
+    info)
+        shift
+        sys_info
+        ;;
+    update)
+        shift
+        update_harbor "$@"
+        ;;
+    how)
+        shift
+        run_harbor_cmdh_command "$@"
+        ;;
+    find)
+        shift
+        run_harbor_find "$@"
+        ;;
+    home)
+        shift
+        echo "$harbor_home"
+        ;;
+    vscode)
+        shift
+        open_home_code
+        ;;
+    doctor)
+        shift
+        run_harbor_doctor "$@"
+        ;;
+    bench)
+        shift
+        run_bench_command "$@"
+        ;;
+    history | h)
+        shift
+        run_harbor_history "$@"
+        ;;
+    size)
+        shift
+        run_harbor_size "$@"
+        ;;
+    *)
+        return $scramble_exit_code
+        ;;
     esac
 }
-
 
 # Call the main logic with argument swapping
 if ! swap_and_retry main_entrypoint "$@"; then
