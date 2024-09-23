@@ -88,7 +88,7 @@ async def post_boost_chat_completion(request: Request):
     return JSONResponse(content=content, status_code=200)
 
 
-logger.info(f"Boosting: {config.HARBOR_BOOST_EXTRA_OPENAI_URLS.value}")
+logger.info(f"Boosting: {config.HARBOR_BOOST_APIS}")
 
 if __name__ == "__main__":
   import uvicorn
