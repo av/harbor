@@ -2543,7 +2543,7 @@ run_fabric_command() {
     # Container hangs for specific flags
     # We have to explicitly remove -T for them to run
     local tty_flag="-T"
-    local skip_tty=("-l" "--listpatterns" "-L" "--listmodels" "-x" "--listcontexts" "-X" "--listsessions")
+    local skip_tty=("-l" "--listpatterns" "-L" "--listmodels" "-x" "--listcontexts" "-X" "--listsessions" "--setup")
 
     for arg in "$@"; do
         for skip_arg in "${skip_tty[@]}"; do
