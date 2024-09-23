@@ -26,6 +26,59 @@ leetspeak_map = {
   "l": "1",
 }
 
+invert_map = {
+  'a': 'ɐ',
+  'b': 'q',
+  'c': 'ɔ',
+  'd': 'p',
+  'e': 'ǝ',
+  'f': 'ɟ',
+  'g': 'ƃ',
+  'h': 'ɥ',
+  'i': 'ᴉ',
+  'j': 'ɾ',
+  'k': 'ʞ',
+  'l': 'l',
+  'n': 'u',
+  'o': 'o',
+  'p': 'd',
+  'q': 'b',
+  'r': 'ɹ',
+  's': 's',
+  't': 'ʇ',
+  'u': 'n',
+  'v': 'ʌ',
+  'w': 'ʍ',
+  'x': 'x',
+  'y': 'ʎ',
+  'z': 'z',
+  'A': '∀',
+  'B': '𐐒',
+  'C': 'Ɔ',
+  'D': 'ᗡ',
+  'E': 'Ǝ',
+  'F': 'Ⅎ',
+  'G': '⅁',
+  'H': 'H',
+  'I': 'I',
+  'K': '⋊',
+  'L': '˥',
+  'M': 'W',
+  'N': 'N',
+  'O': 'O',
+  'P': 'Ԁ',
+  'Q': 'Q',
+  'R': 'ᴚ',
+  'S': 'S',
+  'T': '⊥',
+  'U': '∩',
+  'V': 'Λ',
+  'W': 'M',
+  'X': 'X',
+  'Y': '⅄',
+  'Z': 'Z',
+}
+
 diacritics = ["̀", "́", "̂", "̃", "̈", "̄", "̆", "̇", "̊", "̋"]
 
 punctuation = ".,!?;:"
@@ -51,11 +104,16 @@ def remove_vowel(chars, idx):
   return chars[idx]
 
 
+def invert_180(chars, idx):
+  return invert_map.get(chars[idx], chars[idx])
+
+
 mods = {
   "capitalize": capitalize,
   "diacritic": diacritic,
   "leetspeak": leetspeak,
   "remove_vowel": remove_vowel,
+  "invert_180": invert_180,
 }
 
 
