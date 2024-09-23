@@ -2539,10 +2539,27 @@ run_fabric_command() {
 
     local services=$(get_active_services)
 
+    # Fabric has some funky TTY handling
+    # Container hangs for specific flags
+    # We have to explicitly remove -T for them to run
+    local tty_flag="-T"
+    local skip_tty=("-l" "--listpatterns" "-L" "--listmodels" "-x" "--listcontexts" "-X" "--listsessions")
+
+    for arg in "$@"; do
+        for skip_arg in "${skip_tty[@]}"; do
+            if [[ "$skip_arg" == "$arg" ]]; then
+                tty_flag=""
+                break
+            fi
+        done
+    done
+
     # To allow using preferred pipe pattern for fabric
     $(compose_with_options $services "fabric") run \
         --rm \
-        -T \
+        $tty_flag \
+        --name $default_container_prefix.fabric \
+        -e "TERM=xterm-256color" \
         -v "$original_dir:$original_dir" \
         --workdir "$original_dir" \
         fabric "$@"
@@ -3283,7 +3300,7 @@ run_stt_command() {
 # ========================================================================
 
 # Globals
-version="0.1.29"
+version="0.1.30"
 harbor_repo_url="https://github.com/av/harbor.git"
 delimiter="|"
 scramble_exit_code=42

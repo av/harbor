@@ -1,9 +1,7 @@
 services:
   fabric:
-    entrypoint:
-      - "bash"
-      - "/app/fabric/start_fabric.sh"
-      - "-m"
-      - "${HARBOR_FABRIC_MODEL}"
-      - "--remoteOllamaServer"
-      - "${HARBOR_OLLAMA_INTERNAL_URL}"
+    environment:
+      - DEFAULT_VENDOR=Ollama
+      - DEFAULT_MODEL=${HARBOR_FABRIC_MODEL}
+      - OLLAMA_API_URL=${HARBOR_OLLAMA_INTERNAL_URL}
+

@@ -1,12 +1,13 @@
 services:
   fabric:
     container_name: ${HARBOR_CONTAINER_PREFIX}.fabric
-    env_file: ./.env
+    env_file:
+      - ./.env
+      - ./fabric/override.env
     build:
       context: ./fabric
       dockerfile: Dockerfile
     volumes:
       - ${HARBOR_FABRIC_CONFIG_PATH}:/root/.config/fabric
-      - ./fabric/utils.py:/root/.local/share/pipx/venvs/fabric/lib/python3.11/site-packages/installer/client/cli/utils.py
     networks:
       - harbor-network
