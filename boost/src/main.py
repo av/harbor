@@ -2,8 +2,7 @@ from typing import List, Dict, Any
 import httpx
 import json
 
-from pydantic import BaseModel
-from fastapi import FastAPI, Request, Response, HTTPException
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from config import HARBOR_BOOST_OPENAI_URLS, HARBOR_BOOST_OPENAI_KEYS
@@ -19,31 +18,15 @@ app = FastAPI()
 # ------------------------------
 
 
-class ChatMessage(BaseModel):
-  role: str
-  content: str
-
-
-class ChatCompletionRequest(BaseModel):
-  model: str
-  messages: List[ChatMessage]
-  temperature: float = 1.0
-  top_p: float = 1.0
-  n: int = 1
-  stream: bool = False
-  stop: List[str] = []
-  max_tokens: int = None
-  presence_penalty: float = 0
-  frequency_penalty: float = 0
-  logit_bias: Dict[str, float] = {}
-  user: str = ""
-
-
-# ------------------------------
-
 @app.get("/")
 async def root():
-  return JSONResponse(content={"status": "ok", "message": "Harbor Boost is running"}, status_code=200)
+  return JSONResponse(
+    content={
+      "status": "ok",
+      "message": "Harbor Boost is running"
+    },
+    status_code=200
+  )
 
 
 @app.get("/health")
@@ -99,21 +82,14 @@ async def post_boost_chat_completion(request: Request):
   logger.debug('Completion: %s', completion)
 
   if stream:
-    return StreamingResponse(
-      completion,
-      media_type="text/event-stream"
-    )
+    return StreamingResponse(completion, media_type="text/event-stream")
   else:
     content = await proxy_llm.consume_stream(completion)
-    return JSONResponse(
-      content=content,
-      status_code=200
-    )
+    return JSONResponse(content=content, status_code=200)
 
 
 logger.info(f"Boosting: {config.HARBOR_BOOST_EXTRA_OPENAI_URLS.value}")
 
 if __name__ == "__main__":
-
   import uvicorn
   uvicorn.run(app, host="0.0.0.0", port=8000)
