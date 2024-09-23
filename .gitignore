@@ -12,6 +12,7 @@ open-webui/*
 open-webui/config.json
 
 !open-webui/configs/
+!open-webui/extras/
 !open-webui/start_webui.sh
 
 # Ollama
