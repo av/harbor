@@ -3283,7 +3283,7 @@ run_stt_command() {
 # ========================================================================
 
 # Globals
-version="0.1.28"
+version="0.1.29"
 harbor_repo_url="https://github.com/av/harbor.git"
 delimiter="|"
 scramble_exit_code=42
