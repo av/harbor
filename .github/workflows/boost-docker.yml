@@ -41,7 +41,7 @@ jobs:
 
       # Log in to the GitHub Container Registry only when not running on a pull request event
       - name: Login to Docker Registry
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
           registry: ${{ env.DOCKER_REGISTRY }}
           username: ${{ github.actor }}
