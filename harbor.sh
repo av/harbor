@@ -49,6 +49,7 @@ show_help() {
     echo "  jupyter   - Configure Jupyter service"
     echo "  ol1       - Configure ol1 service"
     echo "  ktransformers - Configure ktransformers service"
+    echo "  boost     - Configure Harbor Boost service"
     echo
     echo "Service CLIs:"
     echo "  ollama     - Run Ollama CLI (docker). Service should be running."
@@ -60,6 +61,7 @@ show_help() {
     echo "  cmdh              - Run cmdh CLI"
     echo "  parllama          - Launch Parllama - TUI for chatting with Ollama models"
     echo "  bench             - Run and manage Harbor Bench"
+    echi "  openhands|oh      - Run OpenHands service"
     echo "  hf                - Run the Harbor's Hugging Face CLI. Expanded with a few additional commands."
     echo "    hf dl           - HuggingFaceModelDownloader CLI"
     echo "    hf parse-url    - Parse file URL from Hugging Face"
@@ -122,6 +124,7 @@ show_help() {
     echo "  how                   - Ask questions about Harbor CLI, uses cmdh under the hood"
     echo "  smi                   - Show NVIDIA GPU information"
     echo "  top                   - Run nvtop to monitor GPU usage"
+    echo "  size                  - Print the size of caches Harbor is aware of"
     echo
     echo "Harbor Workspace Commands:"
     echo "  home    - Show path to the Harbor workspace"
@@ -3546,6 +3549,10 @@ main_entrypoint() {
     openhands | oh)
         shift
         run_openhands_command "$@"
+        ;;
+    stt)
+        shift
+        run_stt_command "$@"
         ;;
     boost)
         shift
