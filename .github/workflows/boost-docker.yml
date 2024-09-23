@@ -18,7 +18,7 @@ jobs:
 
     env:
       DOCKER_REGISTRY: ghcr.io
-      IMAGE_NAME: ${{ github.repository }}
+      IMAGE_NAME: ${{ github.repository }}-boost
       TAG: ${{ github.sha }}
 
     steps:
@@ -52,6 +52,17 @@ jobs:
         uses: docker/metadata-action@v4
         with:
           images: ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}
+
+      - name: Debug
+        run: |
+          echo "PWD"
+          pwd
+
+          echo "Workspace"
+          ls -la
+
+          echo "Boost"
+          ls -la ./boost
 
       # Build and push the Docker image to GHCR for the main branch or specific tags
       - name: Build and Push Docker Image
