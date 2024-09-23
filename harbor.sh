@@ -3252,6 +3252,29 @@ run_openhands_command() {
         openhands "$@"
 }
 
+run_stt_command() {
+    case "$1" in
+    model)
+        shift
+        env_manager_alias stt.model "$@"
+        ;;
+    version)
+        shift
+        env_manager_alias stt.version "$@"
+        ;;
+    -h | --help | help)
+        echo "Usage: harbor stt <command>"
+        echo
+        echo "Commands:"
+        echo "  harbor stt model [user/repo] - Get or set the STT model to run"
+        echo "  harbor stt version [version] - Get or set the STT docker tag"
+        ;;
+    *)
+        return $scramble_exit_code
+        ;;
+    esac
+}
+
 # ========================================================================
 # == Main script
 # ========================================================================

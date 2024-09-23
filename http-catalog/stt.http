@@ -1,0 +1,33 @@
+@host = http://localhost:34151
+
+###
+
+curl {{host}}/v1/models
+
+###
+
+curl {{host}}/v1/audio/transcriptions -F "file=@audio.wav"
+
+###
+
+curl {{host}}/v1/audio/transcriptions -F "file=@audio.wav"
+
+###
+
+curl {{host}}/v1/audio/transcriptions -F "file=@audio.mp3"
+
+###
+
+curl {{host}}/v1/audio/transcriptions -F "file=@audio.wav" -F "stream=true"
+
+###
+
+curl {{host}}/v1/audio/transcriptions -F "file=@audio.wav" -F "model=Systran/faster-distil-whisper-large-v3"
+
+###
+
+curl {{host}}/v1/audio/transcriptions -F "file=@audio.wav" -F "language=en"
+
+###
+
+curl {{host}}/v1/audio/translations -F "file=@audio.wav"

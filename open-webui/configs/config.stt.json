@@ -1,0 +1,12 @@
+{
+  "audio": {
+    "stt": {
+      "openai": {
+        "api_base_url": "http://stt:8000/v1",
+        "api_key": "sk-stt"
+      },
+      "engine": "openai",
+      "model": "Systran/faster-distil-whisper-large-v3"
+    }
+	}
+}

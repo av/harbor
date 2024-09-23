@@ -1,0 +1,10 @@
+services:
+  stt:
+    image: fedirz/faster-whisper-server:${HARBOR_WHISPER_VERSION}-cuda
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
