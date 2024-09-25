@@ -385,3 +385,20 @@ MCTS_EXPLORATION_CONSTANT = Config[float](
   default='1.414',
   description='The exploration constant for the MCTS algorithm'
 )
+
+# ----------------- ELI5 -----------------
+
+ELI5_STRAT = Config[str](
+  name='HARBOR_ELI5_STRAT',
+  type=str,
+  default='match',
+  description='The strategy that selects messages to target for the eli5 module'
+)
+
+ELI5_STRAT_PARAMS = Config[ConfigDict](
+  name='HARBOR_ELI5_STRAT_PARAMS',
+  type=ConfigDict,
+  # Default - last user message
+  default='role=user,index=-1',
+  description='Parameters for eli5 message selection'
+)
