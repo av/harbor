@@ -22,8 +22,10 @@ auth_header = APIKeyHeader(name="Authorization", auto_error=False)
 async def get_api_key(api_key_header: str = Security(auth_header)):
   if len(BOOST_AUTH) == 0:
     return
-  if api_key_header in BOOST_AUTH:
-    return api_key_header
+  # Bearer/plain versions
+  value = api_key_header.replace("Bearer ", "").replace("bearer ", "")
+  if value in BOOST_AUTH:
+    return value
   raise HTTPException(status_code=403, detail="Unauthorized")
 
 

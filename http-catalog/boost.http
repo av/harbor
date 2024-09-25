@@ -12,7 +12,7 @@ GET {{host}}/v1/models
 
 POST {{host}}/v1/chat/completions
 Content-Type: application/json
-Authorization: sk-fake
+Authorization: Bearer sk-boost
 
 {
   "model": "klmbr-llama3.1:8b",
@@ -30,7 +30,7 @@ Authorization: sk-fake
 
 POST {{host}}/v1/chat/completions
 Content-Type: application/json
-Authorization: sk-fake
+Authorization: sk-boost
 
 {
   "model": "klmbr-llama3.1:8b",
