@@ -1,86 +1,10 @@
-import random
+from typing import Optional
 
-from typing import List, Optional
+from chat_node import ChatNode
 import llm
 import log
 
 logger = log.setup_logger(__name__)
-
-class ChatNode:
-  id: str
-  content: str
-  role: str
-
-  parent: Optional['ChatNode']
-  children: List['ChatNode']
-
-  visits: int
-  value: float
-  meta: dict
-
-  def from_conversation(messages):
-    root_message = messages[0]
-    node = ChatNode(role=root_message['role'], content=root_message['content'])
-
-    for message in messages[1:]:
-      node = node.add_child(
-        ChatNode(role=message['role'], content=message['content'])
-      )
-
-    return node
-
-  def __init__(self, **kwargs):
-    self.id = ''.join(
-      random.choices('abcdefghijklmnopqrstuvwxyz0987654321', k=4)
-    )
-    self.content = kwargs.get('content', '')
-    self.role = kwargs.get('role', '')
-
-    self.parent = kwargs.get('parent', None)
-    self.children = kwargs.get('children', [])
-
-    self.visits = kwargs.get('visits', 0)
-    self.value = kwargs.get('value', 0.0)
-
-    self.meta = kwargs.get('meta', {})
-
-  def add_child(self, child: 'ChatNode'):
-    child.parent = self
-    self.children.append(child)
-    return child
-
-  def best_child(self):
-    if not self.children:
-      return self
-    return max(self.children, key=lambda c: c.value).best_child()
-
-  def parents(self):
-    parents = [self]
-
-    while self.parent:
-      self = self.parent
-      parents.append(self)
-
-    return parents[::-1]
-
-  def history(self):
-    node = self
-    messages = [{
-      "role": node.role,
-      "content": node.content,
-    }]
-
-    while node.parent:
-      node = node.parent
-      messages.append({
-        "role": node.role,
-        "content": node.content,
-      })
-
-    return messages[::-1]
-
-  def __str__(self):
-    return f"{self.role}: {self.content}"
 
 
 class Chat:
@@ -94,11 +18,20 @@ class Chat:
   def __init__(self, **kwargs):
     self.tail = kwargs.get('tail')
     self.llm = kwargs.get('llm')
+    self.chat_node_type = ChatNode
+
+    self.Chat = Chat
+    self.ChatNode = self.chat_node_type
+
+  def has_substring(self, substring):
+    return any(substring in msg.content for msg in self.plain())
 
   def add_message(self, role, content):
     logger.debug(f"Chat message: {role}: {content[:50]}")
 
-    self.tail = self.tail.add_child(ChatNode(role=role, content=content))
+    self.tail = self.tail.add_child(
+      self.__create_node(role=role, content=content)
+    )
     return self.tail
 
   def user(self, content):
@@ -107,18 +40,44 @@ class Chat:
   def assistant(self, content):
     return self.add_message('assistant', content)
 
+  def system(self, content):
+    return self.add_message('system', content)
+
   def plain(self):
     return self.tail.parents()
 
   def history(self):
     return self.tail.history()
 
+  def __create_node(self, **kwargs):
+    NodeType = self.chat_node_type
+    return NodeType(**kwargs)
+
   async def advance(self):
+    """
+    Advance the chat completion
+
+    Will not be streamed back to the client
+    """
+
     if not self.llm:
       raise ValueError("Chat: unable to advance without an LLM")
 
-    response = await self.llm.chat_completion(self)
+    response = await self.llm.chat_completion(chat=self)
     self.assistant(self.llm.get_response_content(response))
 
+  async def emit_advance(self):
+    """
+    Emit the next step in the chat completion
+
+    Will be streamed back to the client
+    """
+
+    if not self.llm:
+      raise ValueError("Chat: unable to advance without an LLM")
+
+    response = await self.llm.stream_chat_completion(chat=self)
+    self.assistant(response)
+
   def __str__(self):
-    return '\n'.join([str(msg) for msg in self.parents()])
+    return '\n'.join([str(msg) for msg in self.plain()])

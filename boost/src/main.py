@@ -1,21 +1,30 @@
-from typing import List, Dict, Any
 import httpx
 import json
 
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, Depends, Security
+from fastapi.security.api_key import APIKeyHeader
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from config import HARBOR_BOOST_OPENAI_URLS, HARBOR_BOOST_OPENAI_KEYS
+from config import MODEL_FILTER, SERVE_BASE_MODELS, BOOST_AUTH
 from log import setup_logger
 
+import selection
 import mapper
 import config
+import mods
 import llm
 
 logger = setup_logger(__name__)
 app = FastAPI()
+auth_header = APIKeyHeader(name="Authorization", auto_error=False)
 
 # ------------------------------
+async def get_api_key(api_key_header: str = Security(auth_header)):
+  if len(BOOST_AUTH) == 0:
+    return
+  if api_key_header in BOOST_AUTH:
+    return api_key_header
+  raise HTTPException(status_code=403, detail="Unauthorized")
 
 
 @app.get("/")
@@ -35,33 +44,41 @@ async def health():
 
 
 @app.get("/v1/models")
-async def get_boost_models():
+async def get_boost_models(api_key: str = Depends(get_api_key)):
   downstream = await mapper.list_downstream()
-  enabled_modules = config.HARBOR_BOOST_MODULES.value
-
-  proxy_models = []
+  enabled_modules = config.BOOST_MODS.value
+  should_filter = len(MODEL_FILTER.value) > 0
+  serve_base_models = SERVE_BASE_MODELS.value
+  candidates = []
+  final = []
 
   for model in downstream:
-    proxy_models.append(model)
+    if serve_base_models:
+      candidates.append(model)
+
     for module in enabled_modules:
-      mod = llm.mods.get(module)
-      proxy_models.append(mapper.get_proxy_model(mod, model))
+      mod = mods.registry.get(module)
+      candidates.append(mapper.get_proxy_model(mod, model))
 
-  return JSONResponse(content=proxy_models, status_code=200)
+  for model in candidates:
+    should_serve = True
 
+    if should_filter:
+      should_serve = selection.matches_filter(model, MODEL_FILTER.value)
 
-async def fetch_stream(url: str, headers: dict, json_data: dict):
-  async with httpx.AsyncClient() as client:
-    async with client.stream(
-      "POST", url, headers=headers, json=json_data
-    ) as response:
-      async for chunk in response.aiter_bytes():
-        yield chunk
+    if should_serve:
+      final.append(model)
+
+  logger.debug(f"Serving {len(final)} models in the API")
+
+  return JSONResponse(content=final, status_code=200)
 
 
 @app.post("/v1/chat/completions")
-async def post_boost_chat_completion(request: Request):
+async def post_boost_chat_completion(request: Request, api_key: str = Depends(get_api_key)):
   body = await request.body()
+
+  logger.debug(f"Request body: {body}")
 
   try:
     decoded = body.decode("utf-8")
@@ -71,24 +88,39 @@ async def post_boost_chat_completion(request: Request):
     logger.debug(f"Invalid JSON in request body: {body[:100]}")
     raise HTTPException(status_code=400, detail="Invalid JSON in request body")
 
+  # Refresh downstream models to ensure
+  # that we know where to route the requests
   await mapper.list_downstream()
 
+  # Get our proxy model configuration
   proxy_config = mapper.resolve_request_config(json_body)
-  proxy_llm = llm.LLM(**proxy_config)
+  proxy = llm.LLM(**proxy_config)
 
-  # This is where the boost happens
-  completion = await proxy_llm.apply()
+  # We don't want to trigger potentially
+  # expensive workflows for title generation
+  if mapper.is_title_generation_task(proxy):
+    logger.debug("Detected title generation task, skipping boost")
+    return JSONResponse(content=await proxy.chat_completion(), status_code=200)
 
-  logger.debug('Completion: %s', completion)
+  # This is where the "boost" happens
+  completion = await proxy.serve()
+
+  if completion is None:
+    return JSONResponse(
+      content={"error": "No completion returned"}, status_code=500
+    )
 
   if stream:
     return StreamingResponse(completion, media_type="text/event-stream")
   else:
-    content = await proxy_llm.consume_stream(completion)
+    content = await proxy.consume_stream(completion)
     return JSONResponse(content=content, status_code=200)
 
+# ------------ Startup ----------------
 
-logger.info(f"Boosting: {config.HARBOR_BOOST_APIS}")
+logger.info(f"Boosting: {config.BOOST_APIS}")
+if len(BOOST_AUTH) == 0:
+    logger.warn("No API keys specified - boost will accept all requests")
 
 if __name__ == "__main__":
   import uvicorn

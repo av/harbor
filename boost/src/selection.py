@@ -1,4 +1,5 @@
 import random
+import re
 
 from chat import Chat
 
@@ -8,6 +9,7 @@ def percentage(chat: Chat, **kwargs):
   num_nodes = max(1, int(len(nodes) * (percentage / 100)))
 
   return nodes[:num_nodes]
+
 
 def match(chat: Chat, **kwargs):
   substring = kwargs.get("substring", "")
@@ -27,17 +29,22 @@ def match(chat: Chat, **kwargs):
 
   return nodes
 
+
 def user(chat: Chat):
   return match(chat, role="user")
+
 
 def all(chat: Chat):
   return chat.plain()
 
+
 def first(chat: Chat):
   return match(chat, index=0)
 
+
 def last(chat: Chat):
   return match(chat, index=-1)
+
 
 def any(chat: Chat):
   return [random.choice(chat.plain())]
@@ -53,5 +60,35 @@ selection_strategies = {
   "user": user,
 }
 
-def apply_selection_strategy(chat: Chat, strategy: str, params: dict):
+
+def apply_strategy(chat: Chat, strategy: str, params: dict):
   return selection_strategies[strategy](chat, **params)
+
+def match_regex(value, regex):
+  return bool(re.match(regex, value))
+
+def match_substring(value, substring):
+  return substring in value
+
+def match_exact(value, target):
+  return value == target
+
+def matches_filter(obj: dict, filter: dict):
+  for key in filter.keys():
+    value = filter[key]
+    field, operation = key.split('.') if '.' in key else (key, 'exact')
+
+    if field not in obj:
+      return False
+
+    if operation == 'regex':
+      if not match_regex(str(obj[field]), value):
+        return False
+    elif operation == 'contains':
+      if not match_substring(str(obj[field]), value):
+        return False
+    else:
+      if not match_exact(str(obj[field]), value):
+        return False
+
+  return True

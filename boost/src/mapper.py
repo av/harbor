@@ -1,13 +1,12 @@
 import httpx
 
 from typing import Dict
-from fastapi import Request
 
-from log import setup_logger
-from llm import mods
 import config
+import mods
+import log
 
-logger = setup_logger(__name__)
+logger = log.setup_logger(__name__)
 
 MODEL_TO_BACKEND: Dict[str, str] = {}
 
@@ -17,8 +16,8 @@ async def list_downstream():
   all_models = []
 
   for url, key in zip(
-    config.HARBOR_BOOST_APIS,
-    config.HARBOR_BOOST_KEYS,
+    config.BOOST_APIS,
+    config.BOOST_KEYS,
   ):
     try:
       endpoint = f"{url}/models"
@@ -54,21 +53,20 @@ def get_proxy_model(module, model: dict) -> Dict:
     "name": f"{module.ID_PREFIX} {model['id']}",
   }
 
+
 def resolve_proxy_model(model_id: str) -> Dict:
   parts = model_id.split("-")
-
-  if parts[0] in mods:
+  if parts[0] in mods.registry:
     return "-".join(parts[1:])
-
   return model_id
+
 
 def resolve_proxy_module(model_id: str) -> Dict:
   parts = model_id.split("-")
-
-  if parts[0] in mods:
+  if parts[0] in mods.registry:
     return parts[0]
-
   return None
+
 
 def resolve_request_config(body: Dict) -> Dict:
   model = body.get("model")
@@ -82,20 +80,26 @@ def resolve_request_config(body: Dict) -> Dict:
   proxy_module = resolve_proxy_module(model)
   proxy_backend = MODEL_TO_BACKEND.get(proxy_model)
 
-  logger.debug(f"Resolved proxy model: {proxy_model}, proxy module: {proxy_module}, proxy backend: {proxy_backend}")
+  logger.debug(
+    f"Resolved proxy model: {proxy_model}, proxy module: {proxy_module}, proxy backend: {proxy_backend}"
+  )
 
-
-  proxy_key = config.HARBOR_BOOST_KEYS[config.HARBOR_BOOST_APIS.index(proxy_backend)]
+  proxy_key = config.BOOST_KEYS[
+    config.BOOST_APIS.index(proxy_backend)]
 
   return {
     "url": proxy_backend,
-    "headers": {
-      "Authorization": f"Bearer {proxy_key}",
-      "Content-Type": "application/json",
-    },
-
+    "headers":
+      {
+        "Authorization": f"Bearer {proxy_key}",
+        "Content-Type": "application/json",
+      },
     "model": proxy_model,
     "params": params,
     "messages": messages,
     "module": proxy_module,
   }
+
+def is_title_generation_task(llm: 'LLM'):
+  # TODO: Better way to identify?
+  return llm.chat.has_substring("3-5 word title")

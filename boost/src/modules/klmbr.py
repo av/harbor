@@ -3,12 +3,12 @@
 
 import random
 
-from chat import Chat
-from config import HARBOR_BOOST_KLMBR_MODS, HARBOR_BOOST_KLMBR_PERCENTAGE, HARBOR_BOOST_KLMBR_STRAT, HARBOR_BOOST_KLMBR_STRAT_PARAMS
-from selection import apply_selection_strategy
+from config import KLMBR_MODS, KLMBR_PERCENTAGE, KLMBR_STRAT, KLMBR_STRAT_PARAMS
 
 import log
 import llm
+import chat as ch
+import selection
 
 logger = log.setup_logger(__name__)
 
@@ -164,11 +164,11 @@ def modify_text(**kwargs):
   return modified_text, word_mapping
 
 
-async def apply(chat: Chat, llm: 'llm.LLM'):
-  strat = HARBOR_BOOST_KLMBR_STRAT.value
-  strat_params = HARBOR_BOOST_KLMBR_STRAT_PARAMS.value
-  percentage = HARBOR_BOOST_KLMBR_PERCENTAGE.value
-  mods = HARBOR_BOOST_KLMBR_MODS.value
+async def apply(chat: 'ch.Chat', llm: 'llm.LLM'):
+  strat = KLMBR_STRAT.value
+  strat_params = KLMBR_STRAT_PARAMS.value
+  percentage = KLMBR_PERCENTAGE.value
+  mods = KLMBR_MODS.value
   debug_info = {
     "strat": strat,
     "strat_params": strat_params,
@@ -176,15 +176,16 @@ async def apply(chat: Chat, llm: 'llm.LLM'):
     "mods": mods,
   }
 
-  logger.debug(f"klmbr: {debug_info}")
+  logger.debug(f"{ID_PREFIX}: {debug_info}")
 
-  nodes = apply_selection_strategy(chat, strategy=strat, params=strat_params)
+  nodes = selection.apply_strategy(chat, strategy=strat, params=strat_params)
 
   for node in nodes:
     content, mapping = modify_text(
       text=node.content, percentage=percentage, mods=mods
     )
     node.content = content
-    node.meta["klmbr"] = mapping
+    node.meta[ID_PREFIX] = mapping
 
-  return llm.stream_chat_completion(chat=chat)
+  await llm.emit_status(llm.chat.tail.content)
+  await llm.stream_final_completion(chat=chat)

@@ -183,49 +183,115 @@ HARBOR_BOOST_EXTRA_OPENAI_KEYS = Config[str](
 
 # Combining all the sources from
 # above into a single list
-HARBOR_BOOST_APIS = [
+BOOST_APIS = [
   *HARBOR_OPENAI_URLS.value, *HARBOR_BOOST_OPENAI_URLS.value,
   *HARBOR_BOOST_EXTRA_OPENAI_URLS.value
 ]
 
-HARBOR_BOOST_KEYS = [
+BOOST_KEYS = [
   *HARBOR_OPENAI_KEYS.value, *HARBOR_BOOST_OPENAI_KEYS.value,
   *HARBOR_BOOST_EXTRA_OPENAI_KEYS.value
 ]
 
 # ----------------- MODULES -----------------
 
-HARBOR_BOOST_MODULES = Config[StrList](
+BOOST_MODS = Config[StrList](
   name='HARBOR_BOOST_MODULES',
   type=StrList,
-  default='',
+  default='klmbr;rcn;g1',
   description='A list of boost modules to load'
 )
 
-# ----------------- KLMBR -----------------
+BOOST_FOLDERS = Config[StrList](
+  name='HARBOR_BOOST_MODULE_FOLDERS',
+  type=StrList,
+  default='modules;custom_modules',
+  description='A list of folders to load boost modules from'
+)
 
-HARBOR_BOOST_KLMBR_PERCENTAGE = Config[int](
+# ---------------- COMPLETION ---------------
+
+INTERMEDIATE_OUTPUT = Config[bool](
+  name='HARBOR_BOOST_INTERMEDIATE_OUTPUT',
+  type=bool,
+  default='true',
+  description='Whether to output intermediate completions'
+)
+
+STATUS_STYLE = Config[str](
+  name='HARBOR_BOOST_STATUS_STYLE',
+  type=str,
+  default='md:codeblock',
+  description='The style of status messages'
+)
+
+# ---------------- BEHAVIOR -----------------
+
+SERVE_BASE_MODELS = Config[bool](
+  name='HARBOR_BOOST_BASE_MODELS',
+  type=bool,
+  default='false',
+  description=
+  'When enabled, boost will also serve original models from downstream APIs'
+)
+
+MODEL_FILTER = Config[ConfigDict](
+  name='HARBOR_BOOST_MODEL_FILTER',
+  type=ConfigDict,
+  default='',
+  description=
+  'When specified, boost will only serve models which IDs match the filter'
+)
+
+API_KEY = Config[str](
+  name='HARBOR_BOOST_API_KEY',
+  type=str,
+  default='',
+  description='The API key to use for the boost API'
+)
+
+API_KEYS = Config[StrList](
+  name='HARBOR_BOOST_API_KEYS',
+  type=StrList,
+  default='',
+  description='A colon-separated list of API keys to use for the boost API'
+)
+
+EXTRA_KEYS = Config[str](
+  name='HARBOR_BOOST_API_KEY_*',
+  type=str,
+  default='',
+  description='Named API keys to use for the boost API'
+)
+
+BOOST_AUTH = [
+  key for key in [API_KEY.value, *API_KEYS.value, *EXTRA_KEYS.value] if key
+]
+
+# ------------------ KLMBR ------------------
+
+KLMBR_PERCENTAGE = Config[int](
   name='HARBOR_BOOST_KLMBR_PERCENTAGE',
   type=int,
   default='15',
   description='The percentage of text to modify with the klmbr module'
 )
 
-HARBOR_BOOST_KLMBR_MODS = Config[StrList](
+KLMBR_MODS = Config[StrList](
   name='HARBOR_BOOST_KLMBR_MODS',
   type=StrList,
   default='',
   description=f'The list of modifications klmbr will apply'
 )
 
-HARBOR_BOOST_KLMBR_STRAT = Config[str](
+KLMBR_STRAT = Config[str](
   name='HARBOR_BOOST_KLMBR_STRAT',
   type=str,
   default='all',
   description='The strategy that selects messages to modify for the klmbr module'
 )
 
-HARBOR_BOOST_KLMBR_STRAT_PARAMS = Config[ConfigDict](
+KLMBR_STRAT_PARAMS = Config[ConfigDict](
   name='HARBOR_BOOST_KLMBR_STRAT_PARAMS',
   type=ConfigDict,
   default='',
@@ -235,43 +301,87 @@ HARBOR_BOOST_KLMBR_STRAT_PARAMS = Config[ConfigDict](
 
 # ----------------- RCN -----------------
 
-HARBOR_BOOST_RCN_STRAT = Config[str](
+RCN_STRAT = Config[str](
   name='HARBOR_RCN_STRAT',
   type=str,
   default='match',
   description='The strategy that selects messages to modify for the rcn module'
 )
 
-HARBOR_BOOST_RCN_STRAT_PARAMS = Config[ConfigDict](
+RCN_STRAT_PARAMS = Config[ConfigDict](
   name='HARBOR_RCN_STRAT',
   type=ConfigDict,
-  # Default - last user message
+    # Default - last user message
   default='role=user,index=-1',
-  description=
-  'The parameters for the strategy that selects messages to modify for the rcn module'
+  description='Parameters for rcn message selection'
 )
 
 # ----------------- G1 -----------------
 
-HARBOR_BOOST_G1_STRAT = Config[str](
+G1_STRAT = Config[str](
   name='HARBOR_G1_STRAT',
   type=str,
   default='match',
   description='The strategy that selects messages to modify for the g1 module'
 )
 
-HARBOR_BOOST_G1_STRAT_PARAMS = Config[ConfigDict](
+G1_STRAT_PARAMS = Config[ConfigDict](
   name='HARBOR_G1_STRAT_PARAMS',
   type=ConfigDict,
-  # Default - last user message
+    # Default - last user message
   default='role=user,index=-1',
-  description=
-  'The parameters for the strategy that selects messages to modify for the g1 module'
+  description='Parameters for g1 message selection'
 )
 
-HARBOR_BOOST_G1_MAX_STEPS = Config[int](
+G1_MAX_STEPS = Config[int](
   name='HARBOR_G1_MAX_STEPS',
   type=int,
   default='15',
   description='The maximum number of reasoning steps to generate'
+)
+
+# ----------------- MCTS -----------------
+
+MCTS_STRAT = Config[str](
+  name='HARBOR_MCTS_STRAT',
+  type=str,
+  default='match',
+  description='The strategy that selects messages to target for the mcts module'
+)
+
+MCTS_STRAT_PARAMS = Config[ConfigDict](
+  name='HARBOR_MCTS_STRAT_PARAMS',
+  type=ConfigDict,
+    # Default - last user message
+  default='role=user,index=-1',
+  description='Parameters for mcts message selection'
+)
+
+MCTS_MAX_SIMULATIONS = Config[int](
+  name='HARBOR_MCTS_MAX_SIMULATIONS',
+  type=int,
+  default='2',
+  description='The maximum number of simulations to run (per iteration)'
+)
+
+MCTS_MAX_ITERATIONS = Config[int](
+  name='HARBOR_MCTS_MAX_ITERATIONS',
+  type=int,
+  default='2',
+  description='The maximum number of iterations to run'
+)
+
+MCTS_THOUGHTS = Config[int](
+  name='HARBOR_MCTS_THOUGHTS',
+  type=int,
+  default='2',
+  description=
+  'The amount of thoughts (node expansions) to generate per simulation'
+)
+
+MCTS_EXPLORATION_CONSTANT = Config[float](
+  name='HARBOR_MCTS_EXPLORATION_CONSTANT',
+  type=float,
+  default='1.414',
+  description='The exploration constant for the MCTS algorithm'
 )

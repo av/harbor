@@ -1,0 +1,89 @@
+name: Harbor Bench Docker image
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'main'
+    paths:
+      - bench/**
+  release:
+    types: [published]
+
+jobs:
+  build-and-push-image:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    env:
+      DOCKER_REGISTRY: ghcr.io
+      IMAGE_NAME: ${{ github.repository }}-bench
+      TAG: ${{ github.sha }}
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Free Disk Space Before Build
+        run: |
+          sudo rm -rf /usr/local/.ghcup
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/share/boost
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Log in to the GitHub Container Registry only when not running on a pull request event
+      - name: Login to Docker Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.DOCKER_REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          images: ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}
+
+      - name: Debug
+        run: |
+          echo "PWD"
+          pwd
+
+          echo "Workspace"
+          ls -la
+
+          echo "Bench"
+          ls -la ./bench
+
+      # Build and push the Docker image to GHCR for the main branch or specific tags
+      - name: Build and Push Docker Image
+        if: github.ref == 'refs/heads/main'
+        uses: docker/build-push-action@v6
+        with:
+          context: ./bench
+          file: bench/Dockerfile
+          push: true
+          tags: ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          labels: version=${{ github.run_id }}
+          platforms: linux/amd64,linux/arm64
+
+      # For tagged releases, build and push the Docker image with the corresponding tag
+      - name: Build and Push Docker Image (Tagged)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: docker/build-push-action@v6
+        with:
+          context: ./bench
+          file: bench/Dockerfile
+          push: true
+          tags: ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}
+          labels: version=${{ github.run_id }}
+          platforms: linux/amd64,linux/arm64

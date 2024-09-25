@@ -36,7 +36,7 @@ curl {{host}}/v1/chat/completions -H 'Content-Type: application/json' -H "Author
     }
   ],
   "max_tokens": 30,
-  "stream": false
+  "stream": true
 }'
 
 ###

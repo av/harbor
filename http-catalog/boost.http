@@ -37,7 +37,9 @@ Authorization: sk-fake
   "messages": [
     {"role": "user", "content": "Suggest me a random color"}
   ],
-  "temperature": 0
+  "temperature": 0,
+  "max_tokens": 20,
+  "stream": true
 }
 
 ###
@@ -95,6 +97,21 @@ Authorization: sk-fake
   "model": "rcn-llama3.1:8b",
   "messages": [
     {"role": "user", "content": "3.11 or 3.9 which number is larger?"}
+  ],
+  "temperature": 0,
+  "stream": false
+}
+
+###
+
+POST {{host}}/v1/chat/completions
+Content-Type: application/json
+Authorization: sk-boost
+
+{
+  "model": "example-llama3.1:8b",
+  "messages": [
+    {"role": "user", "content": "Boost?"}
   ],
   "temperature": 0,
   "stream": false
