@@ -49,6 +49,10 @@ class Chat:
   def history(self):
     return self.tail.history()
 
+  def text(self):
+    # __str__ already does exactly this
+    return f"{self}"
+
   def __create_node(self, **kwargs):
     NodeType = self.chat_node_type
     return NodeType(**kwargs)
