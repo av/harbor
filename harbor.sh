@@ -61,7 +61,7 @@ show_help() {
     echo "  cmdh              - Run cmdh CLI"
     echo "  parllama          - Launch Parllama - TUI for chatting with Ollama models"
     echo "  bench             - Run and manage Harbor Bench"
-    echi "  openhands|oh      - Run OpenHands service"
+    echo "  openhands|oh      - Run OpenHands service"
     echo "  hf                - Run the Harbor's Hugging Face CLI. Expanded with a few additional commands."
     echo "    hf dl           - HuggingFaceModelDownloader CLI"
     echo "    hf parse-url    - Parse file URL from Hugging Face"
@@ -958,7 +958,12 @@ env_manager() {
         shift 2          # Remove 'set' and the key from the arguments
         local value="$*" # Capture all remaining arguments as the value
         if grep -q "^$prefix$upper_key=" "$env_file"; then
-            sed -i "s|^$prefix$upper_key=.*|$prefix$upper_key=\"$value\"|" "$env_file"
+            # Remove trailing newlines from the temp file
+            if [[ "$(uname)" == "Darwin" ]]; then
+                sed -i '' "s|^$prefix$upper_key=.*|$prefix$upper_key=\"$value\"|" "$env_file"
+            else
+                sed -i "s|^$prefix$upper_key=.*|$prefix$upper_key=\"$value\"|" "$env_file"
+            fi
         else
             echo "$prefix$upper_key=\"$value\"" >>"$env_file"
         fi
