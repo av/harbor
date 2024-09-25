@@ -4,7 +4,7 @@
 			"http://boost:8000/v1"
 		],
 		"api_keys": [
-			"sk-boost"
+			"${HARBOR_BOOST_API_KEY}"
 		],
 		"enabled": true
 	}
