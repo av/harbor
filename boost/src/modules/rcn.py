@@ -72,4 +72,4 @@ Describe the meaning of every word in relation to the question. Paraphrase the q
     "Now prepare your final answer. Write it as a response to this message. Do not write anything else."
   )
 
-  await llm.stream_final_completion(output)
+  await llm.stream_final_completion(chat=output)
