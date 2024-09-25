@@ -70,6 +70,12 @@ class ChatNode:
 
     return parents[::-1]
 
+  def ancestor(self):
+    node = self
+    while node.parent:
+      node = node.parent
+    return node
+
   def history(self):
     node = self
     messages = [{
