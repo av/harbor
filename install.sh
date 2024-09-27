@@ -14,7 +14,7 @@ HARBOR_VERSION=""
 # ========================================
 
 resolve_harbor_version() {
-  git ls-remote --tags "$HARBOR_REPO_URL" | grep -o "v.*" | sort -r | head -n 1
+  git ls-remote --tags "$HARBOR_REPO_URL" | grep -o "v.*" | sort -t. -k 1,1n -k 2,2n -k 3,3n -k 4,4n | head -n 1
 }
 
 check_dependencies() {

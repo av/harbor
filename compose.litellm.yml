@@ -16,7 +16,7 @@ services:
     command: ['--config', '/app/proxy.yaml']
     entrypoint: ["/app/litellm/start_litellm.sh"]
     depends_on:
-      litellmdb:
+      litellm-db:
         condition: service_healthy
     ports:
       - ${HARBOR_LITELLM_HOST_PORT}:4000
@@ -24,14 +24,14 @@ services:
       - harbor-network
     environment:
       - LITELLM_MASTER_KEY=${HARBOR_LITELLM_MASTER_KEY}
-      - DATABASE_URL=postgresql://postgres:postgres@litellmdb:5432/postgres
+      - DATABASE_URL=postgresql://postgres:postgres@litellm-db:5432/postgres
       - UI_USERNAME=${HARBOR_LITELLM_UI_USERNAME}
       - UI_PASSWORD=${HARBOR_LITELLM_UI_PASSWORD}
 
-  litellmdb:
+  litellm-db:
     image: postgres
     restart: always
-    container_name: ${HARBOR_CONTAINER_PREFIX}.litellmdb
+    container_name: ${HARBOR_CONTAINER_PREFIX}.litellm-db
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 3s
