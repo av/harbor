@@ -9,12 +9,13 @@ set -e
 
 HARBOR_INSTALL_PATH="${HOME}/.harbor"
 HARBOR_REPO_URL="https://github.com/av/harbor.git"
+HARBOR_RELEASE_URL="https://api.github.com/repos/av/harbor/releases/latest"
 HARBOR_VERSION=""
 
 # ========================================
 
 resolve_harbor_version() {
-  git ls-remote --tags "$HARBOR_REPO_URL" | grep -o "v.*" | sort -t. -k 1,1n -k 2,2n -k 3,3n -k 4,4n | head -n 1
+  curl -s "$HARBOR_RELEASE_URL" | sed -n 's/.*"tag_name": "\(.*\)".*/\1/p'
 }
 
 check_dependencies() {

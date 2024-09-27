@@ -1644,7 +1644,7 @@ unsafe_update() {
 }
 
 resolve_harbor_version() {
-    git ls-remote --tags "$harbor_repo_url" | grep -o "v.*" | sort -t. -k 1,1n -k 2,2n -k 3,3n -k 4,4n | head -n 1
+    curl -s "$harbor_release_url" | sed -n 's/.*"tag_name": "\(.*\)".*/\1/p'
 }
 
 update_harbor() {
@@ -3307,6 +3307,7 @@ run_stt_command() {
 # Globals
 version="0.1.31"
 harbor_repo_url="https://github.com/av/harbor.git"
+harbor_release_url="https://api.github.com/repos/av/harbor/releases/latest"
 delimiter="|"
 scramble_exit_code=42
 harbor_home=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
