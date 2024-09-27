@@ -6,10 +6,15 @@ services:
     depends_on:
       - lc-db
       - lc-rag
+      - lc-search
+      - lc-vector
     image: ghcr.io/danny-avila/librechat-dev:latest
+    user: ${HARBOR_USER_ID}
     networks:
       - harbor-network
-    env_file: ./.env
+    env_file:
+      - ./.env
+      - ./librechat/override.env
     environment:
       - HOST=0.0.0.0
       - PORT=${HARBOR_LIBRECHAT_HOST_PORT}
@@ -34,16 +39,22 @@ services:
       - OPENAI_API_KEY=${HARBOR_OPENAI_KEY:-user_provided}
       - ASSISTANTS_API_KEY=${HARBOR_ASSISTANTS_KEY:-user_provided}
     volumes:
+      - ./shared/yaml_config_merger.js:/app/yaml_config_merger.mjs
       - type: bind
         source: ./librechat/.env
         target: /app/.env
-      - ./librechat/librechat.yml:/app/librechat.yaml
+      - ./librechat/start_librechat.sh:/app/start_librechat.sh
+      - ./librechat/librechat.yml:/app/configs/librechat.yml
       - ./librechat/images:/app/client/public/images
-      - ./librechat/logs:/app/api/logs
+    entrypoint: /app/start_librechat.sh
+
 
   lc-db:
     container_name: ${HARBOR_CONTAINER_PREFIX}.lc-db
     image: mongo
+    env_file:
+      - ./.env
+      - ./librechat/override.env
     volumes:
       - ./librechat/data:/data/db
     command: mongod --noauth
@@ -53,6 +64,9 @@ services:
   lc-search:
     container_name: ${HARBOR_CONTAINER_PREFIX}.lc-search
     image: getmeili/meilisearch:v1.7.3
+    env_file:
+      - ./.env
+      - ./librechat/override.env
     environment:
       - MEILI_HOST=http://lc-search:7700
       - MEILI_NO_ANALYTICS=true
@@ -64,6 +78,9 @@ services:
   lc-vector:
     container_name: ${HARBOR_CONTAINER_PREFIX}.lc-vector
     image: ankane/pgvector:latest
+    env_file:
+      - ./.env
+      - ./librechat/override.env
     environment:
       POSTGRES_DB: mydatabase
       POSTGRES_USER: myuser
@@ -76,6 +93,7 @@ services:
   lc-rag:
     container_name: ${HARBOR_CONTAINER_PREFIX}.lc-rag
     image: ghcr.io/danny-avila/librechat-rag-api-dev-lite:latest
+    user: ${HARBOR_USER_ID}
     environment:
       - DB_HOST=lc-vector
       - RAG_PORT=${HARBOR_LIBRECHAT_RAG_HOST_PORT}
@@ -86,5 +104,6 @@ services:
       - lc-vector
     env_file:
       - .env
+      - ./librechat/override.env
     networks:
       - harbor-network
