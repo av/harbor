@@ -3306,7 +3306,7 @@ run_stt_command() {
 # ========================================================================
 
 # Globals
-version="0.1.33"
+version="0.1.34"
 harbor_repo_url="https://github.com/av/harbor.git"
 harbor_release_url="https://api.github.com/repos/av/harbor/releases/latest"
 delimiter="|"
