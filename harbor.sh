@@ -1662,6 +1662,7 @@ update_harbor() {
     else
         harbor_version=$(resolve_harbor_version)
         log_info "Updating to version $harbor_version..."
+        git fetch --all --tags
         git checkout tags/$harbor_version
     fi
 
