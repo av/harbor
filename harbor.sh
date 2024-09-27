@@ -143,11 +143,11 @@ run_harbor_doctor() {
         return 1
     fi
 
-    # Check if Docker Compose is installed
-    if command -v docker-compose &>/dev/null; then
-        log_info "${ok} Docker Compose is installed"
+    # Check if Docker Compose (v2) is installed
+    if command -v docker &>/dev/null && docker com version &>/dev/null; then
+        log_info "${ok} Docker Compose (v2) is installed"
     else
-        log_error "${nok} Docker Compose is not installed. Please install Docker Compose."
+        log_error "${nok} Docker Compose (v2) is not installed. Please install Docker Compose (v2)."
         return 1
     fi
 

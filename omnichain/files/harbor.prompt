@@ -17,7 +17,7 @@ Compose Setup Commands:
   run <handle> [command]  - Run a one-off command in a service container
   shell <handle>          - Load shell in the given service main container
   build <handle>          - Build the given service
-  cmd <handle>            - Print the docker-compose command
+  cmd <handle>            - Print the docker compose command
 
 Setup Management Commands:
   ollama     - Run Ollama CLI (docker). Service should be running.
