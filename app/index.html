@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en" data-theme="harborLight">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Harbor</title>
+
+    <style>
+      .splash {
+        background: white;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        transition: opacity 0.25s linear;
+      }
+
+      .splash.away {
+        pointer-events: none;
+        opacity: 0;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+    <div class="splash"></div>
+  </body>
+</html>

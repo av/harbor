@@ -1,0 +1,83 @@
+import toast from "react-hot-toast";
+import { IconCheck, IconOctagonAlert } from "./Icons";
+
+export const toasted = async ({
+    action,
+    ok,
+    error,
+}: {
+    action: () => Promise<void>;
+    ok: string;
+    error: string;
+}) => {
+    try {
+        await action();
+        toast(ok, { icon: <IconCheck /> });
+    } catch (e) {
+        console.error(e);
+        toast.error(error, { icon: <IconOctagonAlert /> });
+        return;
+    }
+};
+
+export const once = <T extends unknown>(fn: () => T) => {
+    let value: T;
+
+    return () => {
+        if (value === undefined) {
+            value = fn();
+        }
+
+        return value;
+    };
+};
+
+export const orderByPredefined = <T extends unknown>(arr: T[], order: T[]) => {
+    return arr.sort((a: T, b: T) => {
+        const aIndex = order.indexOf(a);
+        const bIndex = order.indexOf(b);
+
+        if (aIndex === -1 && bIndex === -1) {
+            return `${a}`.localeCompare(`${b}`);
+        }
+
+        if (aIndex === -1) {
+            return 1;
+        }
+
+        if (bIndex === -1) {
+            return -1;
+        }
+
+        return aIndex - bIndex;
+    });
+};
+
+// Undefined - all good
+// String - error message
+type Validator<T> = (value: T) => string | undefined;
+
+export const validate = <T,>(
+    value: T,
+    validators: Validator<T>[] = [],
+) => {
+    for (const validator of validators) {
+        const error = validator(value);
+
+        if (error) {
+            return error;
+        }
+    }
+};
+
+export const notEmpty = (value: string) => {
+    if (value.length === 0) {
+        return "The value should not be empty";
+    }
+};
+
+export const noSpaces = (value: string) => {
+    if (value.includes(" ")) {
+        return "The value should not contain spaces";
+    }
+};

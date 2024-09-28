@@ -6,7 +6,7 @@
         "api_key": "sk-stt"
       },
       "engine": "openai",
-      "model": "Systran/faster-distil-whisper-large-v3"
+      "model": "${HARBOR_STT_MODEL}"
     }
 	}
 }

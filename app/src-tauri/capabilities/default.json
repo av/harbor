@@ -1,0 +1,64 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Capability for the main window",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default",
+    "shell:allow-open",
+    "shell:default",
+    "shell:allow-spawn",
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        {
+          "name": "harbor",
+          "cmd": "harbor",
+          "args": true
+        }
+      ]
+    },
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        {
+          "name": "open",
+          "cmd": "open",
+          "args": true
+        }
+      ]
+    },
+    "store:default",
+    "fs:default",
+    {
+      "identifier": "fs:scope",
+      "allow": [
+        {
+          "path": "**"
+        },
+        {
+          "path": "*/**"
+        },
+        {
+          "path": "**/.env"
+        }
+      ]
+    },
+    {
+      "identifier": "fs:write-all",
+      "allow": [
+        {
+          "path": "**"
+        },
+        {
+          "path": "*/**"
+        },
+        {
+          "path": "**/.env"
+        }
+      ]
+    }
+  ]
+}

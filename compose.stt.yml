@@ -1,12 +1,12 @@
 services:
   stt:
-    image: fedirz/faster-whisper-server:${HARBOR_WHISPER_VERSION}-cpu
+    image: fedirz/faster-whisper-server:${HARBOR_STT_VERSION}-cpu
     container_name: ${HARBOR_CONTAINER_PREFIX}.stt
     env_file:
       - ./.env
       - ./stt/override.env
     ports:
-      - ${HARBOR_WHISPER_HOST_PORT}:8000
+      - ${HARBOR_STT_HOST_PORT}:8000
     volumes:
       - ${HARBOR_OLLAMA_CACHE}:/root/.ollama
       - ${HARBOR_HF_CACHE}:/root/.cache/huggingface
