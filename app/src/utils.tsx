@@ -1,22 +1,33 @@
 import toast from "react-hot-toast";
 import { IconCheck, IconOctagonAlert } from "./Icons";
 
+type Message = Parameters<typeof toast>[0];
+
 export const toasted = async ({
     action,
     ok,
     error,
+    finally: finFn,
 }: {
-    action: () => Promise<void>;
-    ok: string;
-    error: string;
+    action: () => Promise<any>;
+    finally?: () => void;
+    ok?: Message;
+    error: Message;
 }) => {
     try {
         await action();
-        toast(ok, { icon: <IconCheck /> });
+
+        if (ok) {
+            toast(ok, { icon: <IconCheck /> });
+        }
     } catch (e) {
         console.error(e);
         toast.error(error, { icon: <IconOctagonAlert /> });
         return;
+    } finally {
+        if (finFn) {
+            finFn();
+        }
     }
 };
 

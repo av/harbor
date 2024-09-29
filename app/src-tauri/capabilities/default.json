@@ -59,6 +59,7 @@
           "path": "**/.env"
         }
       ]
-    }
+    },
+    "autostart:default"
   ]
 }

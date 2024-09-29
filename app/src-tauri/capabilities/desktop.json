@@ -8,6 +8,7 @@
   "permissions": [
     "window-state:default",
     "store:default",
-    "fs:default"
+    "fs:default",
+    "autostart:default"
   ]
 }

@@ -12,6 +12,7 @@
   "dependencies": {
     "@tailwindcss/typography": "^0.5.15",
     "@tauri-apps/api": ">=2.0.0-rc.0",
+    "@tauri-apps/plugin-autostart": "^2.0.0-rc",
     "@tauri-apps/plugin-fs": "^2.0.0-rc",
     "@tauri-apps/plugin-shell": "^2.0.0-rc",
     "@tauri-apps/plugin-store": "^2.0.0-rc",

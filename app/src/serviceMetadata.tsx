@@ -1,3 +1,11 @@
+import { IconPlaneLanding, IconRocketLaunch } from "./Icons";
+
+export const ACTION_ICONS = {
+    loading: <span className="loading loading-ring loading-xs"></span>,
+    up: <IconRocketLaunch />,
+    down: <IconPlaneLanding />,
+};
+
 // aka Harbor Service Tag
 export enum HST {
     backend = 'Backend',
@@ -44,7 +52,7 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         tags: [HST.satellite, HST.api, HST.builtIn],
     },
     cfd: {
-        tags: [HST.satellite, HST.api],
+        tags: [HST.satellite, HST.api, HST.cli],
     },
     chatui: {
         tags: [HST.frontend],
@@ -163,4 +171,4 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
     webui: {
         tags: [HST.frontend],
     },
-}
+};

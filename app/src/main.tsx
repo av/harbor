@@ -19,9 +19,9 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
         <App />
       </OverlayProvider>
       <Toaster
-        position="bottom-center"
+        position="bottom-right"
         toastOptions={{
-          className: "p-2 pl-4 bg-base-300/50 text-base-content backdrop-blur rounded-box",
+          className: "p-2 pl-4 bg-base-300/50 text-base-content backdrop-blur rounded-box shadow-none",
         }}
       />
     </Router>
