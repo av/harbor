@@ -1,5 +1,5 @@
 import { remove, writeTextFile } from "@tauri-apps/plugin-fs";
-import { dirname, join } from "@tauri-apps/api/path";
+import { join } from "@tauri-apps/api/path";
 
 import {
     CURRENT_PROFILE,

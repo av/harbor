@@ -33,7 +33,11 @@ export const useHarborTrigger = (args: string[]) => {
                 const result = await runHarbor(args);
                 setResult(result);
             } catch (e) {
-                setError(e);
+                if (e instanceof Error) {
+                    setError(e);
+                } else {
+                    setError(new Error(`Unexpected error: ${e}`));
+                }
             } finally {
                 setLoading(false);
             }
