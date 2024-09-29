@@ -38,10 +38,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
 
-      - name: setup node
-        uses: actions/setup-node@v4
+      - name: setup bun
+        uses: oven-sh/setup-bun@v2
         with:
-          node-version: lts/*
+          bun-version: 1.1.29
 
       - name: install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -50,7 +50,7 @@ jobs:
 
       - name: install frontend dependencies
         working-directory: app
-        run: yarn install
+        run: bun install
 
       - uses: tauri-apps/tauri-action@v0
         env:
