@@ -4,7 +4,9 @@
 
 Effortlessly run LLM backends, APIs, frontends, and services with one command.
 
-Harbor is a containerized LLM toolkit that allows you to run LLMs and additional services via a concise CLI.
+Harbor is a containerized LLM toolkit that allows you to run LLMs and additional services. It consists of a CLI and a companion App that allows you to manage and run AI services with ease.
+
+![Screenshot of Harbor CLI and App together](https://github.com/av/harbor/wiki/harbor-app-3.png)
 
 ## Services
 
@@ -132,55 +134,20 @@ harbor shell tabbyapi
 harbor how to ping ollama container from the webui?
 ```
 
-## Quickstart
+## Harbor App Demo
 
-#### Requirements
+https://github.com/user-attachments/assets/a5cd2ef1-3208-400a-8866-7abd85808503
 
-- Docker
-  - _Optional_ [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html#installation)
-  - Note that not all services have native ARM builds and hence unsupported on MacOS
-- git
-- bash-compatible shell
-
-#### Unsafe install
-
-- Runs the install script directly from the internet (make sure you trust the source)
-- Will clone the Harbor repository to your home directory
-- Will write to your shell profile to add bin folder to the path
-
-```bash
-curl https://av.codes/get-harbor.sh | bash
-```
-
-#### Manual install
-
-Same as above, just done by you.
-
-```bash
-git clone https://github.com/av/harbor.git && cd harbor
-
-# [Optional] make Harbor CLI available globally
-# Creates a symlink in User's local bin directory
-# Adds the bin folder to the path
-./harbor.sh ln
-
-# Start default services
-# Initial download of the docker images might take a while
-# If you have container toolkit installed, GPU will
-# be automatically used for supported services.
-harbor up
-
-# [Optional] open Webui in the browser
-harbor open
-```
-
-> [!NOTE]
-> First open will require you to create a local admin account. Harbor keeps auth requirement by default because it also supports exposing your local stack to the internet.
+In the demo, Harbor App is used to launch a default stack with [Ollama](./2.2.1-Backend:-Ollama) and [Open WebUI](./2.1.1-Frontend:-Open-WebUI) services. Later, [SearXNG](./2.3.1-Satellite:-SearXNG) is also started, and WebUI can connect to it for the Web RAG right out of the box. After that, [Harbor Boost](./5.2.-Harbor-Boost) is also started and connected to the WebUI automatically to induce more creative outputs. As a final step, Harbor config is adjusted in the App for the [`klmbr`](./5.2.-Harbor-Boost#klmbr---boost-llm-creativity) module in the [Harbor Boost](./5.2.-Harbor-Boost), which makes the output unparseable for the LLM (yet still undetstandable for humans).
 
 ## Documentation
 
+- [Installing Harbor](https://github.com/av/harbor/wiki/1.0.-Installing-Harbor)<br/>
+  Guides to install Harbor CLI and App
 - [Harbor User Guide](https://github.com/av/harbor/wiki/1.-Harbor-User-Guide)<br/>
   High-level overview of working with Harbor
+- [Harbor App](https://github.com/av/harbor/wiki/1.1-Harbor-App)<br/>
+  Overview and manual for the Harbor companion application
 - [Harbor Services](https://github.com/av/harbor/wiki/2.-Services)<br/>
   Catalog of services available in Harbor
 - [Harbor CLI Reference](https://github.com/av/harbor/wiki/3.-Harbor-CLI-Reference)<br/>
