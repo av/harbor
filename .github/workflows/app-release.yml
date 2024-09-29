@@ -49,6 +49,7 @@ jobs:
           targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
       - name: install frontend dependencies
+        wokring-directory: app
         run: yarn install
 
       - uses: tauri-apps/tauri-action@v0
@@ -63,4 +64,5 @@ jobs:
           releaseId: ${{github.ref_name}}
           releaseDraft: true
           prerelease: false
+          projectPath: app
           args: ${{ matrix.args }}
