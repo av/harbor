@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2.0.0-rc",
-  "productName": "tutaurial",
-  "version": "0.1.0",
-  "identifier": "com.tutaurial.app",
+  "productName": "harbor",
+  "version": "0.2.0",
+  "identifier": "com.harbor.app",
   "build": {
     "beforeDevCommand": "bun run dev",
     "devUrl": "http://localhost:1420",
