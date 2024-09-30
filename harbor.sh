@@ -2844,11 +2844,14 @@ run_aichat_command() {
 
 run_ollama_command() {
     local services=$(get_active_services)
+    local ollama_host=$(env_manager get ollama.internal.url)
+
+    echo "Running Ollama CLI... $services"
 
     $(compose_with_options $services "aichat") run \
         --rm \
-        --name harbor.aichat \
-        --service-ports \
+        -e "OLLAMA_HOST=$ollama_host" \
+        --name harbor.ollama-cli \
         -e "TERM=xterm-256color" \
         -v "$original_dir:$original_dir" \
         --workdir "$original_dir" \
