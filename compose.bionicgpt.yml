@@ -10,41 +10,41 @@ services:
       - ./bionicgpt/start_envoy.sh:/start_envoy.sh
     command: /start_envoy.sh
 
-  bi-app:
+  bionicgpt-app:
     image: ghcr.io/bionic-gpt/bionicgpt:1.7.41
-    container_name: ${HARBOR_CONTAINER_PREFIX}.bi-app
+    container_name: ${HARBOR_CONTAINER_PREFIX}.bionicgpt-app
     environment:
       SIGNOUT_URL: /auth/sign_out
       ENABLE_BARRICADE: 1
-      APP_DATABASE_URL: postgresql://bionic_application:testpassword@bi-postgres:5432/bionic-gpt?sslmode=disable
+      APP_DATABASE_URL: postgresql://bionic_application:testpassword@bionicgpt-postgres:5432/bionic-gpt?sslmode=disable
     depends_on:
-      bi-postgres:
+      bionicgpt-postgres:
         condition: service_healthy
-      bi-migrations:
+      bionicgpt-migrations:
         condition: service_completed_successfully
     networks:
       - harbor-network
 
-  bi-llm-api:
-    container_name: ${HARBOR_CONTAINER_PREFIX}.bi-llm-api
+  bionicgpt-llmapi:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.bionicgpt-llmapi
     image: ghcr.io/bionic-gpt/llama-3-8b-chat:1.1.1
     networks:
       - harbor-network
 
-  bi-embeddings-api:
-    container_name: ${HARBOR_CONTAINER_PREFIX}.bi-embeddings-api
+  bionicgpt-embeddingsapi:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.bionicgpt-embeddingsapi
     image: ghcr.io/bionic-gpt/bionicgpt-embeddings-api:cpu-0.6
     networks:
       - harbor-network
 
-  bi-chunking-engine:
-    container_name: ${HARBOR_CONTAINER_PREFIX}.bi-chunking-engine
+  bionicgpt-chunkingengine:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.bionicgpt-chunkingengine
     image: downloads.unstructured.io/unstructured-io/unstructured-api:4ffd8bc
     networks:
       - harbor-network
 
-  bi-postgres:
-    container_name: ${HARBOR_CONTAINER_PREFIX}.bi-postgres
+  bionicgpt-postgres:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.bionicgpt-postgres
     image: ankane/pgvector
     platform: linux/amd64
     environment:
@@ -61,43 +61,43 @@ services:
     volumes:
       - ./bionicgpt/db:/var/lib/postgresql/data
 
-  bi-barricade:
-    container_name: ${HARBOR_CONTAINER_PREFIX}.bi-barricade
+  bionicgpt-barricade:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.bionicgpt-barricade
     image: purtontech/barricade:1.2.10
     environment:
         # This secret key is used to encrypt cookies.
         SECRET_KEY: 190a5bf4b3cbb6c0991967ab1c48ab30790af876720f1835cbbf3820f4f5d949
-        DATABASE_URL: postgresql://postgres:testpassword@bi-postgres:5432/bionic-gpt?sslmode=disable
+        DATABASE_URL: postgresql://postgres:testpassword@bionicgpt-postgres:5432/bionic-gpt?sslmode=disable
         REDIRECT_URL: /app/post_registration
         USER_TABLE_NAME: 'barricade_users'
     depends_on:
-      bi-postgres:
+      bionicgpt-postgres:
         condition: service_healthy
-      bi-migrations:
+      bionicgpt-migrations:
         condition: service_completed_successfully
     networks:
       - harbor-network
 
   # Sets up our database tables
-  bi-migrations:
-    container_name: ${HARBOR_CONTAINER_PREFIX}.bi-migrations
+  bionicgpt-migrations:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.bionicgpt-migrations
     image: ghcr.io/bionic-gpt/bionicgpt-db-migrations:1.7.41
     environment:
-      DATABASE_URL: postgresql://postgres:testpassword@bi-postgres:5432/bionic-gpt?sslmode=disable
+      DATABASE_URL: postgresql://postgres:testpassword@bionicgpt-postgres:5432/bionic-gpt?sslmode=disable
     depends_on:
-      bi-postgres:
+      bionicgpt-postgres:
         condition: service_healthy
     networks:
       - harbor-network
 
   # Parses documents into chunks and creates embeddings.
-  bi-pipeline-job:
-    container_name: ${HARBOR_CONTAINER_PREFIX}.bi-pipeline-job
+  bionicgpt-pipelinejob:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.bionicgpt-pipelinejob
     image: ghcr.io/bionic-gpt/bionicgpt-pipeline-job:1.7.41
     environment:
-      APP_DATABASE_URL: postgresql://bionic_application:testpassword@bi-postgres:5432/bionic-gpt?sslmode=disable
+      APP_DATABASE_URL: postgresql://bionic_application:testpassword@bionicgpt-postgres:5432/bionic-gpt?sslmode=disable
     depends_on:
-      bi-postgres:
+      bionicgpt-postgres:
         condition: service_healthy
-      bi-migrations:
+      bionicgpt-migrations:
         condition: service_completed_successfully
