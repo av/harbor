@@ -2843,9 +2843,15 @@ run_aichat_command() {
 }
 
 run_ollama_command() {
-    run_in_service \
+    local services=$(get_active_services)
+
+    $(compose_with_options $services "aichat") run \
+        --rm \
+        --name harbor.aichat \
+        --service-ports \
         -e "TERM=xterm-256color" \
-        ollama \
+        -v "$original_dir:$original_dir" \
+        --workdir "$original_dir" \
         ollama "$@"
 }
 
