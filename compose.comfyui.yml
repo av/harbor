@@ -33,8 +33,7 @@ services:
       - ${HARBOR_COMFYUI_PORTAL_HOST_PORT}:${HARBOR_COMFYUI_PORTAL_HOST_PORT}
       - ${HARBOR_COMFYUI_SYNCTHING_HOST_PORT}:${HARBOR_COMFYUI_SYNCTHING_HOST_PORT}
     volumes:
-      - ./comfyui/workspace:/workspace:rshared
-      # - ./comfyui/storage:/storage
+      - ./comfyui/workspace:/workspace
     networks:
       - harbor-network
 

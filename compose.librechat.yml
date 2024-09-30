@@ -4,10 +4,10 @@ services:
     ports:
       - "${HARBOR_LIBRECHAT_HOST_PORT}:${HARBOR_LIBRECHAT_HOST_PORT}"
     depends_on:
-      - lc-db
-      - lc-rag
-      - lc-search
-      - lc-vector
+      - librechat-db
+      - librechat-rag
+      - librechat-search
+      - librechat-vector
     image: ghcr.io/danny-avila/librechat-dev:latest
     user: ${HARBOR_USER_ID}
     networks:
@@ -18,10 +18,10 @@ services:
     environment:
       - HOST=0.0.0.0
       - PORT=${HARBOR_LIBRECHAT_HOST_PORT}
-      - MONGO_URI=mongodb://lc-db:27017/LibreChat
-      - MEILI_HOST=http://lc-search:7700
+      - MONGO_URI=mongodb://librechat-db:27017/LibreChat
+      - MEILI_HOST=http://librechat-search:7700
       - RAG_PORT=${HARBOR_LIBRECHAT_RAG_HOST_PORT}
-      - RAG_API_URL=http://lc-rag:${HARBOR_LIBRECHAT_RAG_HOST_PORT}
+      - RAG_API_URL=http://librechat-rag:${HARBOR_LIBRECHAT_RAG_HOST_PORT}
       - ANYSCALE_API_KEY=${HARBOR_ANYSCALE_KEY:-user_provided}
       - APIPIE_API_KEY=${HARBOR_APIPIE_KEY:-user_provided}
       - COHERE_API_KEY=${HARBOR_COHERE_KEY:-user_provided}
@@ -49,8 +49,8 @@ services:
     entrypoint: /app/start_librechat.sh
 
 
-  lc-db:
-    container_name: ${HARBOR_CONTAINER_PREFIX}.lc-db
+  librechat-db:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.librechat-db
     image: mongo
     env_file:
       - ./.env
@@ -61,22 +61,22 @@ services:
     networks:
       - harbor-network
 
-  lc-search:
-    container_name: ${HARBOR_CONTAINER_PREFIX}.lc-search
+  librechat-search:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.librechat-search
     image: getmeili/meilisearch:v1.7.3
     env_file:
       - ./.env
       - ./librechat/override.env
     environment:
-      - MEILI_HOST=http://lc-search:7700
+      - MEILI_HOST=http://librechat-search:7700
       - MEILI_NO_ANALYTICS=true
     volumes:
       - ./librechat/meili_data_v1.7:/meili_data
     networks:
       - harbor-network
 
-  lc-vector:
-    container_name: ${HARBOR_CONTAINER_PREFIX}.lc-vector
+  librechat-vector:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.librechat-vector
     image: ankane/pgvector:latest
     env_file:
       - ./.env
@@ -90,18 +90,18 @@ services:
     networks:
       - harbor-network
 
-  lc-rag:
-    container_name: ${HARBOR_CONTAINER_PREFIX}.lc-rag
+  librechat-rag:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.librechat-rag
     image: ghcr.io/danny-avila/librechat-rag-api-dev-lite:latest
     user: ${HARBOR_USER_ID}
     environment:
-      - DB_HOST=lc-vector
+      - DB_HOST=librechat-vector
       - RAG_PORT=${HARBOR_LIBRECHAT_RAG_HOST_PORT}
       - EMBEDDINGS_PROVIDER=ollama
       - OLLAMA_BASE_URL=${HARBOR_OLLAMA_INTERNAL_URL}
       - EMBEDDINGS_MODEL=nomic-embed-text
     depends_on:
-      - lc-vector
+      - librechat-vector
     env_file:
       - .env
       - ./librechat/override.env

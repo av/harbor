@@ -330,6 +330,27 @@ harbor_up() {
     done
 }
 
+run_harbor_down() {
+    local services=$(get_active_services)
+    local matched_services=()
+
+    log_debug "Active services: $services"
+
+    services=$(echo "$services" | tr ' ' '\n')
+    for service in "$@"; do
+        log_debug "Checking if service '$service' is in active services list..."
+        matched_service=$(echo "$services" | grep "^$service-")
+        if [ -n "$matched_service" ]; then
+            matched_services+=("$matched_service")
+        fi
+    done
+
+    log_debug "Matched: ${matched_services[*]}"
+
+    matched_services_str=$(printf " %s" "${matched_services[@]}")
+    $(compose_with_options "*") down --remove-orphans "$@" $matched_services_str
+}
+
 run_hf_open() {
     local search_term="${*// /+}"
     local hf_url="https://huggingface.co/models?sort=trending&search=${search_term}"
@@ -3358,7 +3379,7 @@ main_entrypoint() {
         ;;
     down | d)
         shift
-        $(compose_with_options "*") down --remove-orphans "$@"
+        run_harbor_down "$@"
         ;;
     restart | r)
         shift
