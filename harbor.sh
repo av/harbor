@@ -2846,6 +2846,12 @@ run_ollama_command() {
     local services=$(get_active_services)
     local ollama_host=$(env_manager get ollama.internal.url)
 
+    # If ollama is not in $services - inform user
+    if ! is_service_running "ollama"; then
+        log_error "Please start ollama service to use 'harbor ollama'"
+        exit 1
+    fi
+
     $(compose_with_options $services "ollama") run \
         --rm \
         -e "OLLAMA_HOST=$ollama_host" \
