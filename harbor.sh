@@ -2846,9 +2846,7 @@ run_ollama_command() {
     local services=$(get_active_services)
     local ollama_host=$(env_manager get ollama.internal.url)
 
-    echo "Running Ollama CLI... $services"
-
-    $(compose_with_options $services "aichat") run \
+    $(compose_with_options $services "ollama") run \
         --rm \
         -e "OLLAMA_HOST=$ollama_host" \
         --name harbor.ollama-cli \
