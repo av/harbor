@@ -2,6 +2,7 @@ services:
   comfyui:
     env_file:
       - ./.env
+      - ./comfyui/override.env
     container_name: ${HARBOR_CONTAINER_PREFIX}.comfyui
     image: ghcr.io/ai-dock/comfyui:${HARBOR_COMFYUI_VERSION}
     environment:
