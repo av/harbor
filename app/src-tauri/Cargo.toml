@@ -1,6 +1,6 @@
 [package]
 name = "harbor-app"
-version = "0.2.1"
+version = "0.2.2"
 description = "A companion app for Harbor LLM toolkit"
 authors = ["av"]
 edition = "2021"
