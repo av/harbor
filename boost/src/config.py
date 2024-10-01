@@ -398,7 +398,39 @@ ELI5_STRAT = Config[str](
 ELI5_STRAT_PARAMS = Config[ConfigDict](
   name='HARBOR_ELI5_STRAT_PARAMS',
   type=ConfigDict,
-  # Default - last user message
+    # Default - last user message
   default='role=user,index=-1',
   description='Parameters for eli5 message selection'
+)
+
+# ----------- SUPERSUMMER ----------------
+
+SUPERSUMMER_STRAT = Config[str](
+  name='HARBOR_SUPERSUMMER_STRAT',
+  type=str,
+  default='match',
+  description=
+  'The strategy that selects messages to target for the supersummer module'
+)
+
+SUPERSUMMER_STRAT_PARAMS = Config[ConfigDict](
+  name='HARBOR_SUPERSUMMER_STRAT_PARAMS',
+  type=ConfigDict,
+    # Default - last user message
+  default='role=user,index=-1',
+  description='Parameters for supersummer message selection'
+)
+
+SUPERSUMMER_NUM_QUESTIONS = Config[int](
+  name='HARBOR_SUPERSUMMER_NUM_QUESTIONS',
+  type=int,
+  default='5',
+  description='The number of questions to generate for the summarisation'
+)
+
+SUPERSUMMER_LENGTH = Config[str](
+  name='HARBOR_BOOST_SUPERSUMMER_LENGTH',
+  type=str,
+  default='few paragraphs',
+  description='Desired length of the summary'
 )
