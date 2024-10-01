@@ -171,4 +171,7 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
     webui: {
         tags: [HST.frontend],
     },
+    litlytics: {
+        tags: [HST.satellite, HST.partial],
+    }
 };

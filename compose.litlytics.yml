@@ -1,0 +1,11 @@
+services:
+  litlytics:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.litlytics
+    env_file:
+      - ./.env
+      - ./litlytics/override.env
+    image: ghcr.io/yamalight/litlytics:${HARBOR_LITLYTICS_VERSION}
+    ports:
+      - ${HARBOR_LITLYTICS_HOST_PORT}:3000
+    networks:
+      - harbor-network
