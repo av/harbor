@@ -1,0 +1,19 @@
+services:
+  anythingllm:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.anythingllm
+    env_file:
+      - ./.env
+      - ./anythingllm/override.env
+    image: ${HARBOR_ANYTHINGLLM_IMAGE}:${HARBOR_ANYTHINGLLM_VERSION}
+    ports:
+      - ${HARBOR_ANYTHINGLLM_HOST_PORT}:3001
+    volumes:
+      - ./anythingllm/storage:/app/server/storage
+    cap_add:
+      - SYS_ADMIN
+    environment:
+      - STORAGE_DIR=/app/server/storage
+      - VECTOR_DB=lancedb
+      - PASSWORDMINCHAT=8
+    networks:
+      - harbor-network

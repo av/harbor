@@ -1637,6 +1637,7 @@ fix_fs_acl() {
     docker_fsacl ./bench
     docker_fsacl ./jupyter
     docker_fsacl ./ktransformers
+    docker_fsacl ./anythingllm
 
     docker_fsacl $(eval echo "$(env_manager get hf.cache)")
     docker_fsacl $(eval echo "$(env_manager get vllm.cache)")
@@ -3340,7 +3341,7 @@ run_stt_command() {
 # ========================================================================
 
 # Globals
-version="0.2.3"
+version="0.2.4"
 harbor_repo_url="https://github.com/av/harbor.git"
 harbor_release_url="https://api.github.com/repos/av/harbor/releases/latest"
 delimiter="|"

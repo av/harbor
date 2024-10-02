@@ -1,0 +1,7 @@
+services:
+  anythingllm:
+    environment:
+      - LLM_PROVIDER=ollama
+      - OLLAMA_BASE_PATH=${HARBOR_OLLAMA_INTERNAL_URL}
+      - EMBEDDING_ENGINE=ollama
+      - EMBEDDING_BASE_PATH=${HARBOR_OLLAMA_INTERNAL_URL}

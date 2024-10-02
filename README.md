@@ -12,7 +12,7 @@ Harbor is a containerized LLM toolkit that allows you to run LLMs and additional
 
 ##### UIs
 
-[Open WebUI](https://github.com/av/harbor/wiki/2.1.1-Frontend:-Open-WebUI) ⦁︎ [ComfyUI](https://github.com/av/harbor/wiki/2.1.2-Frontend:-ComfyUI) ⦁︎ [LibreChat](https://github.com/av/harbor/wiki/2.1.3-Frontend:-LibreChat) ⦁︎ [HuggingFace ChatUI](https://github.com/av/harbor/wiki/2.1.4-Frontend:-ChatUI) ⦁︎ [Lobe Chat](https://github.com/av/harbor/wiki/2.1.5-Frontend:-Lobe-Chat) ⦁︎ [Hollama](https://github.com/av/harbor/wiki/2.1.6-Frontend:-hollama) ⦁︎ [parllama](https://github.com/av/harbor/wiki/2.1.7-Frontend:-parllama) ⦁︎ [BionicGPT](https://github.com/av/harbor/wiki/2.1.8-Frontend:-BionicGPT)
+[Open WebUI](https://github.com/av/harbor/wiki/2.1.1-Frontend:-Open-WebUI) ⦁︎ [ComfyUI](https://github.com/av/harbor/wiki/2.1.2-Frontend:-ComfyUI) ⦁︎ [LibreChat](https://github.com/av/harbor/wiki/2.1.3-Frontend:-LibreChat) ⦁︎ [HuggingFace ChatUI](https://github.com/av/harbor/wiki/2.1.4-Frontend:-ChatUI) ⦁︎ [Lobe Chat](https://github.com/av/harbor/wiki/2.1.5-Frontend:-Lobe-Chat) ⦁︎ [Hollama](https://github.com/av/harbor/wiki/2.1.6-Frontend:-hollama) ⦁︎ [parllama](https://github.com/av/harbor/wiki/2.1.7-Frontend:-parllama) ⦁︎ [BionicGPT](https://github.com/av/harbor/wiki/2.1.8-Frontend:-BionicGPT) ⦁︎ [AnythingLLM](https://github.com/av/harbor/wiki/2.1.9-Frontend:-AnythingLLM)
 
 ##### Backends
 

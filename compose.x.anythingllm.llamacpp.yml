@@ -1,0 +1,6 @@
+services:
+  anythingllm:
+    environment:
+      - LLM_PROVIDER=generic-openai
+      - GENERIC_OPEN_AI_BASE_PATH=http://llamacpp:8080/v1
+      - GENERIC_OPEN_AI_API_KEY=sk-llamacpp

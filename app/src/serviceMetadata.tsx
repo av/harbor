@@ -173,5 +173,8 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
     },
     litlytics: {
         tags: [HST.satellite, HST.partial],
+    },
+    anythingllm: {
+        tags: [HST.frontend, HST.partial]
     }
 };

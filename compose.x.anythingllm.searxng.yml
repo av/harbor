@@ -1,0 +1,4 @@
+services:
+  anythingllm:
+    environment:
+      - AGENT_SEARXNG_API_URL=http://searxng:8080
