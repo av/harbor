@@ -11,7 +11,7 @@ export const LoaderElements = {
     ),
 }
 
-export const Loader = ({ loading, loader = "linear" }: { loading: boolean, loader: keyof typeof LoaderElements }) => {
+export const Loader = ({ loading, loader = "linear" }: { loading: boolean, loader?: keyof typeof LoaderElements }) => {
     const [showLoader, setShowLoader] = useState(false);
     const loaderComponent = LoaderElements[loader];
 
