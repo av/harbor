@@ -1,7 +1,7 @@
 import { IconPlaneLanding, IconRocketLaunch } from "./Icons";
 
 export const ACTION_ICONS = {
-    loading: <span className="loading loading-ring loading-xs"></span>,
+    loading: <span className="loading loading-spinner loading-xs"></span>,
     up: <IconRocketLaunch />,
     down: <IconPlaneLanding />,
 };
@@ -18,6 +18,14 @@ export enum HST {
     eval = 'Eval',
     audio = 'Audio',
 };
+
+export const HSTColors: Partial<Record<HST, string>> = {
+    [HST.backend]: 'from-primary/10',
+    [HST.frontend]: 'from-secondary/10',
+    [HST.satellite]: 'from-accent/10',
+};
+
+export const HSTColorOpts = Object.keys(HSTColors) as HST[];
 
 export type HarborService = {
     handle: string;
@@ -176,5 +184,8 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
     },
     anythingllm: {
         tags: [HST.frontend, HST.partial]
-    }
+    },
+    nexa: {
+        tags: [HST.backend, HST.partial],
+    },
 };

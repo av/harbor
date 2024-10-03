@@ -1,0 +1,11 @@
+{
+  "openai": {
+		"api_base_urls": [
+			"http://nexa-proxy:8000/v1"
+		],
+		"api_keys": [
+			"sk-nexa"
+		],
+		"enabled": true
+	}
+}

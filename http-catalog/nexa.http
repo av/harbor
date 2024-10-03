@@ -1,0 +1,27 @@
+@host = http://localhost:34181
+
+
+###
+
+GET {{host}}/health
+
+###
+
+GET {{host}}/v1/models
+
+###
+
+POST {{host}}/v1/chat/completions
+Content-Type: application/json
+Authorization: sk-fake
+
+{
+  "model": "anything",
+  "messages": [
+    {"role": "user", "content": "How many heads Girrafes have?"}
+  ],
+  "options": {
+    "temperature": 0.2
+  },
+  "stream": false
+}

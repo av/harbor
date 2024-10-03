@@ -21,7 +21,7 @@ export const ROUTES: Record<string, HarborRoute> = {
     },
     config: {
         id: 'config',
-        name: <span className="flex items-center gap-2"><IconBolt/>Profiles</span>,
+        name: <span className="flex items-center gap-2"><IconBolt />Profiles</span>,
         path: '/config',
         element: <Config />,
     },

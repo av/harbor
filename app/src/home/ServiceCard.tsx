@@ -6,7 +6,7 @@ import {
     IconBandage,
     IconExternalLink,
 } from "../Icons";
-import { ACTION_ICONS, HarborService, HST } from "../serviceMetadata";
+import { ACTION_ICONS, HarborService, HST, HSTColorOpts, HSTColors } from "../serviceMetadata";
 import { runHarbor } from "../useHarbor";
 import { toasted } from "../utils";
 
@@ -40,7 +40,7 @@ export const ServiceCard = (
     const toggleService = () => {
         const msg = (str: string) => (
             <span>
-                <span className="kbd kbd-sm mr-2">{service.handle}</span>
+                <span className="font-bold mr-2">{service.handle}</span>
                 <span>{str}</span>
             </span>
         );
@@ -75,9 +75,12 @@ export const ServiceCard = (
         : ACTION_ICONS.up;
 
     const canLaunch = !service.tags.includes(HST.cli);
+    const gradientTag = service.tags.find(t => HSTColorOpts.includes(t as HST));
+
+    const gradientClass = gradientTag ? `bg-gradient-to-tr from-0% to-50% ${HSTColors[gradientTag]}` : "";
 
     return (
-        <div className="p-4 rounded-box cursor-default bg-base-300/35">
+        <div className={`p-4 rounded-box cursor-default bg-base-200/50 relative ${gradientClass}`}>
             <h2 className="flex items-center gap-1 text-2xl pb-2">
                 <span className="font-bold">{service.handle}</span>
 

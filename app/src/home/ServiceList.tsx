@@ -5,7 +5,7 @@ import { Section } from "../Section";
 import { ServiceCard } from "./ServiceCard";
 import { useServiceList } from "./useServiceList";
 import { useArrayState } from "../useArrayState";
-import { LinearLoader } from "../LinearLoading";
+import { Loader } from "../Loading";
 import { IconButton } from "../IconButton";
 import { ACTION_ICONS, HarborService, HST } from "../serviceMetadata";
 import { runHarbor } from "../useHarbor";
@@ -122,8 +122,8 @@ export const ServiceList = () => {
                 </div>
             }
             children={
-                <>
-                    <LinearLoader loading={loading} />
+                <div className='relative rounded-box'>
+                    <Loader loading={loading} loader='overlay' />
                     {error && <div className="my-2">{error.message}</div>}
                     {services && (
                         <ul className="flex gap-4 flex-wrap">
@@ -142,7 +142,7 @@ export const ServiceList = () => {
                             })}
                         </ul>
                     )}
-                </>
+                </div>
             }
         />
     );

@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { Section } from "../Section";
 import { useHarbor } from "../useHarbor";
-import { LinearLoader } from "../LinearLoading";
+import { Loader } from "../Loading";
 import { IconButton } from "../IconButton";
 import { IconRotateCW } from "../Icons";
 
@@ -56,7 +56,7 @@ export const Doctor = () => {
             }
             children={
                 <>
-                    <LinearLoader loading={loading} />
+                    <Loader loading={loading} />
                     {error && <span>{error.message}</span>}
                     <span>{output}</span>
                 </>

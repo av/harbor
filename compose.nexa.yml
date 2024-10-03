@@ -1,0 +1,38 @@
+services:
+  nexa:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.nexa
+    build:
+      context: ./nexa
+      dockerfile: Dockerfile
+      # This can (and will) be overriden by .x.nvidia file
+      args:
+        - HARBOR_NEXA_IMAGE=ubuntu:22.04
+    networks:
+      - harbor-network
+    volumes:
+      - ${HARBOR_OLLAMA_CACHE}:/root/.ollama
+      - ${HARBOR_HF_CACHE}:/root/.cache/huggingface
+      - ${HARBOR_LLAMACPP_CACHE}:/root/.cache/llama.cpp
+      - ${HARBOR_VLLM_CACHE}:/root/.cache/vllm
+      - ${HARBOR_NEXA_CACHE}:/root/.cache/nexa
+      - ./nexa/openai_models.py:/usr/local/lib/python3.9/dist-packages/nexa/openai_models.py
+    env_file:
+      - ./.env
+      - ./nexa/override.env
+    command: >
+      server
+      --host 0.0.0.0
+      --port 8000
+      ${HARBOR_NEXA_MODEL}
+
+  nexa-proxy:
+    build:
+      context: ./nexa
+      dockerfile: proxy.Dockerfile
+    container_name: ${HARBOR_CONTAINER_PREFIX}.nexa-proxy
+    ports:
+      - ${HARBOR_NEXA_HOST_PORT}:8000
+    volumes:
+      - ./nexa/proxy_server.py:/app/proxy_server.py
+    networks:
+      - harbor-network

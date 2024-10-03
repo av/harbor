@@ -251,7 +251,7 @@ compose_with_options() {
                 local all_matched=true
 
                 for part in "${filename_parts[@]}"; do
-                    if [[ ! " ${options[*]} " =~ " ${part} " ]]; then
+                    if [[ ! " ${options[*]} " =~ " ${part} " ]] && [[ ! " ${options[*]} " =~ " * " ]]; then
                         all_matched=false
                         break
                     fi
@@ -1647,6 +1647,7 @@ fix_fs_acl() {
     docker_fsacl $(eval echo "$(env_manager get opint.config.path)")
     docker_fsacl $(eval echo "$(env_manager get fabric.config.path)")
     docker_fsacl $(eval echo "$(env_manager get txtai.cache)")
+    docker_fsacl $(eval echo "$(env_manager get nexa.cache)")
 }
 
 open_home_code() {
@@ -3336,12 +3337,43 @@ run_stt_command() {
     esac
 }
 
+run_nexa_command() {
+    case "$1" in
+    model)
+        shift
+        env_manager_alias nexa.model "$@"
+        return 0
+        ;;
+    -h | --help)
+        echo "Please note that this is not Nexa CLI, but a Harbor CLI to manage nexa service."
+        echo
+        echo "Usage: harbor [nexa] <command>"
+        echo
+        echo "Commands:"
+        echo "  harbor nexa model   - Alias for 'harbor lmeval args get|set model'"
+        echo
+        echo "Original CLI help:"
+        ;;
+    esac
+
+    local services=$(get_active_services)
+
+    $(compose_with_options $services "nexa") run \
+        --rm \
+        --name $default_container_prefix.nexa-cli \
+        --service-ports \
+        -e "TERM=xterm-256color" \
+        -v "$original_dir:$original_dir" \
+        --workdir "$original_dir" \
+        nexa "$@"
+}
+
 # ========================================================================
 # == Main script
 # ========================================================================
 
 # Globals
-version="0.2.4"
+version="0.2.5"
 harbor_repo_url="https://github.com/av/harbor.git"
 harbor_release_url="https://api.github.com/repos/av/harbor/releases/latest"
 delimiter="|"
@@ -3616,6 +3648,10 @@ main_entrypoint() {
     boost)
         shift
         run_boost_command "$@"
+        ;;
+    nexa)
+        shift
+        run_nexa_command "$@"
         ;;
     tunnel | t)
         shift

@@ -1,4 +1,4 @@
-import { LinearLoader } from "../LinearLoading";
+import { Loader } from "../Loading";
 import { Section } from "../Section";
 import { useHarbor } from "../useHarbor";
 
@@ -11,7 +11,7 @@ export const Version = () => {
             header="Version"
             children={
                 <>
-                    <LinearLoader loading={loading} />
+                    <Loader loading={loading} />
                     {error && <span>{error.message}</span>}
                     <span>{result?.stdout}</span>
                 </>

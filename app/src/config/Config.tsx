@@ -1,7 +1,7 @@
 import { FC } from "react";
 import { useHarborConfig } from "./useHarborConfig";
 import { ProfileSelector } from "../settings/ProfileSelector";
-import { LinearLoader } from "../LinearLoading";
+import { Loader } from "../Loading";
 import { ScrollToTop } from "../ScrollToTop";
 
 export const Config: FC = () => {
@@ -9,7 +9,7 @@ export const Config: FC = () => {
 
   return (
     <>
-      <LinearLoader loading={loading} />
+      <Loader loading={loading} />
       <ProfileSelector configs={profiles} />
       <ScrollToTop />
     </>
