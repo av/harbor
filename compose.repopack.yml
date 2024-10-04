@@ -1,0 +1,11 @@
+services:
+  repopack:
+    build:
+      context: ./repopack
+      dockerfile: Dockerfile
+    container_name: ${HARBOR_CONTAINER_PREFIX}.repopack
+    env_file:
+      - ./.env
+      - ./repopack/override.env
+    networks:
+      - harbor-network

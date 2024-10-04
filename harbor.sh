@@ -62,6 +62,8 @@ show_help() {
     echo "  parllama          - Launch Parllama - TUI for chatting with Ollama models"
     echo "  bench             - Run and manage Harbor Bench"
     echo "  openhands|oh      - Run OpenHands service"
+    echo "  repopack          - Run the Repopack CLI"
+    echo "  nexa              - Run the Nexa CLI, configure the service"
     echo "  hf                - Run the Harbor's Hugging Face CLI. Expanded with a few additional commands."
     echo "    hf dl           - HuggingFaceModelDownloader CLI"
     echo "    hf parse-url    - Parse file URL from Hugging Face"
@@ -3368,6 +3370,18 @@ run_nexa_command() {
         nexa "$@"
 }
 
+run_repopack_command() {
+    local services=$(get_active_services)
+
+    $(compose_with_options $services "repopack") run \
+        --rm \
+        --name $default_container_prefix.repopack \
+        -e "TERM=xterm-256color" \
+        -v "$original_dir:$original_dir" \
+        --workdir "$original_dir" \
+        repopack "$@"
+}
+
 # ========================================================================
 # == Main script
 # ========================================================================
@@ -3652,6 +3666,10 @@ main_entrypoint() {
     nexa)
         shift
         run_nexa_command "$@"
+        ;;
+    repopack)
+        shift
+        run_repopack_command "$@"
         ;;
     tunnel | t)
         shift
