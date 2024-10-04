@@ -15,7 +15,7 @@ import { HarborConfigSectionEditor } from "./HarborConfigSectionEditor";
 import { useOverlays } from "../OverlayContext";
 import { ConfigNameModal } from "./ConfigNameModal";
 import { useSelectedProfile } from "../useSelectedProfile";
-import { KEY_CODES, Shortcuts, useGlobalKeydown } from "../useGlobalKeydown";
+import { Shortcuts, useGlobalKeydown } from "../useGlobalKeydown";
 import { orderByPredefined, toasted } from "../utils";
 import { ConfirmModal } from "../ConfirmModal";
 import { SearchInput } from "../SearchInput";
