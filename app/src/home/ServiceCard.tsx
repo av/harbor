@@ -123,7 +123,7 @@ export const ServiceCard = (
                         return (
                             <span
                                 key={tag}
-                                className="badge bg-base-content/5"
+                                className="badge bg-base-content/5 text-base-content/80"
                             >
                                 {maybeAdornment}
                                 {tag}

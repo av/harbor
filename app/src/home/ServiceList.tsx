@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { ChangeEvent, useState } from "react";
 
 import { IconRotateCW } from "../Icons";
 import { Section } from "../Section";
@@ -10,6 +10,9 @@ import { IconButton } from "../IconButton";
 import { ACTION_ICONS, HarborService, HST } from "../serviceMetadata";
 import { runHarbor } from "../useHarbor";
 import { toasted } from "../utils";
+import { SearchInput } from "../SearchInput";
+import { useSearch } from "../useSearch";
+import { LostSquirrel } from "../LostSquirrel";
 
 const serviceOrderBy = (a: HarborService, b: HarborService) => {
     if ((a.isRunning || a.isDefault) && !(b.isRunning || b.isDefault)) {
@@ -26,6 +29,7 @@ const serviceOrderBy = (a: HarborService, b: HarborService) => {
 };
 
 export const ServiceList = () => {
+    const serviceSearch = useSearch("services");
     const { services, loading, error, rerun } = useServiceList();
     const { toggle, items } = useArrayState(useState<string[]>([]));
     const [changing, setChanging] = useState(false);
@@ -40,14 +44,19 @@ export const ServiceList = () => {
     };
 
     const filteredServices = services?.filter((service) => {
-        if (!items.length) {
-            return true;
-        }
-
-        return service.tags.some((tag) => {
+        const matchesTags = items.length === 0 || service.tags.some((tag) => {
             return items.includes(tag);
         });
+
+        const matchesSearch = [
+            serviceSearch.matches(service.handle),
+            serviceSearch.matches(service.tags.join(" ")),
+        ].some((match) => !!match);
+
+        return matchesTags && matchesSearch;
     });
+
+    const filtered = services.length - filteredServices.length;
 
     const orderedServices = filteredServices?.sort(serviceOrderBy);
     const anyRunning = orderedServices?.some((service) => service.isRunning);
@@ -69,7 +78,9 @@ export const ServiceList = () => {
                 anyRunning ? "down" : "up",
             ]);
         };
-        const ok = anyRunning ? msg("All services stopped") : msg("Started default services");
+        const ok = anyRunning
+            ? msg("All services stopped")
+            : msg("Started default services");
         const error = anyRunning
             ? msg("Failed to stop all services")
             : msg("Failed to start default services");
@@ -119,11 +130,17 @@ export const ServiceList = () => {
                     <span className="tooltip tooltip-bottom" data-tip="Refresh">
                         <IconButton icon={<IconRotateCW />} onClick={rerun} />
                     </span>
+
+                    <SearchInput
+                        defaultValue={serviceSearch.query}
+                        onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                            serviceSearch.setQuery(e.target.value)}
+                    />
                 </div>
             }
             children={
-                <div className='relative rounded-box'>
-                    <Loader loading={loading} loader='overlay' />
+                <div className="relative rounded-box">
+                    <Loader loading={loading} loader="overlay" />
                     {error && <div className="my-2">{error.message}</div>}
                     {services && (
                         <ul className="flex gap-4 flex-wrap">
@@ -140,6 +157,15 @@ export const ServiceList = () => {
                                     </li>
                                 );
                             })}
+
+                            {filtered > 0 && !loading && (
+                                <li className="p-6 rounded-box cursor-default bg-base-200/50 relative flex items-center">
+                                    {filtered === services.length && <LostSquirrel className="text-base-content/40 text-2xl mr-4" />}
+                                    {filtered < services.length
+                                        ? filtered
+                                        : "Everything"} filtered out
+                                </li>
+                            )}
                         </ul>
                     )}
                 </div>

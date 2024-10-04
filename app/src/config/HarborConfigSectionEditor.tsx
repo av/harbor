@@ -1,4 +1,5 @@
 import { SECTIONS_EXTRA } from "../configMetadata";
+import { useSearch } from "../useSearch";
 import { useStoredState } from "../useStoredState";
 import { HarborConfigSection } from "./HarborConfig";
 import { HarborConfigEntryEditor } from "./HarborConfigEntryEditor";
@@ -6,8 +7,24 @@ import { HarborConfigEntryEditor } from "./HarborConfigEntryEditor";
 export const HarborConfigSectionEditor = (
     { section }: { section: HarborConfigSection },
 ) => {
-    const [open, setOpen] = useStoredState(`section:${section.name}`, false);
+    const search = useSearch("config");
+    let [open, setOpen] = useStoredState(`section:${section.name}`, false);
     const maybeExtra = SECTIONS_EXTRA[section.name];
+
+    const filteredEntries = section.entries.filter((entry) => {
+        return search.matches(entry.id);
+    });
+
+    // Keep sections open when searching
+    if (!!search.query) {
+        open = true;
+    }
+
+    if (filteredEntries.length === 0) {
+        return null;
+    }
+
+    const filtered = section.entries.length - filteredEntries.length;
 
     return (
         <>
@@ -27,7 +44,7 @@ export const HarborConfigSectionEditor = (
                     )}
                 </div>
                 <div className="collapse-content flex flex-col gap-4 rounded-box">
-                    {section.entries.map((entry) => {
+                    {filteredEntries.map((entry) => {
                         return (
                             <HarborConfigEntryEditor
                                 key={entry.id}
@@ -35,6 +52,12 @@ export const HarborConfigSectionEditor = (
                             />
                         );
                     })}
+
+                    {filtered > 0 && (
+                        <div className="text-sm text-base-content/40">
+                            {filtered} more filtered out
+                        </div>
+                    )}
                 </div>
             </div>
         </>

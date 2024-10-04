@@ -92,3 +92,56 @@ export const noSpaces = (value: string) => {
         return "The value should not contain spaces";
     }
 };
+
+export type DebounceOptions = {
+    leading?: boolean
+    trailing?: boolean
+    maxWait?: number
+}
+
+export type ControlFunctions = {
+    (...args: any): any
+    cancel: () => void
+    flush: () => void
+}
+
+export const debounce = <T extends (...args: any) => ReturnType<T>>(
+    func: T,
+    wait: number,
+    options?: DebounceOptions,
+): ControlFunctions => {
+    let timeout: number | undefined;
+
+    const debounced = (...args: Parameters<T>) => {
+        const later = () => {
+            timeout = undefined;
+            func(...args);
+        };
+
+        const callNow = options?.leading && !timeout;
+        if (timeout) {
+            clearTimeout(timeout);
+        }
+
+        timeout = setTimeout(later, wait);
+
+        if (callNow) {
+            func(...args);
+        }
+    };
+
+    debounced.cancel = () => {
+        if (timeout) {
+            clearTimeout(timeout);
+        }
+    };
+
+    debounced.flush = () => {
+        if (timeout) {
+            clearTimeout(timeout);
+            func();
+        }
+    };
+
+    return debounced;
+}

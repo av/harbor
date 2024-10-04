@@ -15,9 +15,12 @@ import { HarborConfigSectionEditor } from "./HarborConfigSectionEditor";
 import { useOverlays } from "../OverlayContext";
 import { ConfigNameModal } from "./ConfigNameModal";
 import { useSelectedProfile } from "../useSelectedProfile";
-import { KEY_CODES, useGlobalKeydown } from "../useGlobalKeydown";
+import { KEY_CODES, Shortcuts, useGlobalKeydown } from "../useGlobalKeydown";
 import { orderByPredefined, toasted } from "../utils";
 import { ConfirmModal } from "../ConfirmModal";
+import { SearchInput } from "../SearchInput";
+import { useSearch } from "../useSearch";
+import { ChangeEvent } from "react";
 
 export const HarborConfigEditor = (
     { config }: { config: HarborConfig },
@@ -26,6 +29,7 @@ export const HarborConfigEditor = (
 
     const overlays = useOverlays();
     const [, setSelectedProfile] = useSelectedProfile();
+    const search = useSearch("config");
 
     const maybeExtra = EXTRA[config.profile.name];
     const handleFileOpen = async () => {
@@ -103,10 +107,7 @@ export const HarborConfigEditor = (
     const canReset = !config.isDefault;
     const canDelete = !(config.isDefault || config.isCurrent);
 
-    useGlobalKeydown({
-        key: KEY_CODES.S,
-        ctrlKey: true,
-    }, (e) => {
+    useGlobalKeydown(Shortcuts.save, (e) => {
         e.preventDefault();
 
         if (canSave) {
@@ -124,7 +125,7 @@ export const HarborConfigEditor = (
 
     return (
         <>
-            <ul className="menu menu-horizontal bg-base-300/50 rounded-box max-w-2xl text-xl sticky top-4 z-10 text-base-content/80 backdrop-blur">
+            <ul className="menu menu-horizontal bg-base-300/50 rounded-box max-w-2xl text-xl sticky top-4 z-10 text-base-content/80 backdrop-blur items-center gap-4">
                 {canApply && (
                     <li
                         className="tooltip tooltip-bottom"
@@ -136,7 +137,7 @@ export const HarborConfigEditor = (
                     </li>
                 )}
                 {canSave && (
-                    <li className="tooltip tooltip-bottom" data-tip="Save">
+                    <li className="tooltip tooltip-bottom" data-tip="Save (Ctrl+S)">
                         <a onClick={handleSave}>
                             <IconSave />
                         </a>
@@ -167,6 +168,14 @@ export const HarborConfigEditor = (
                         </a>
                     </li>
                 )}
+
+                <div className="flex-1"></div>
+
+                <SearchInput
+                    defaultValue={search.query}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                        search.setQuery(e.target.value)}
+                />
             </ul>
 
             {maybeExtra && (
@@ -180,7 +189,7 @@ export const HarborConfigEditor = (
 
             {!config.isReadonly && (
                 <div className="flex gap-2 items-center rounded-box p-4 bg-base-200 max-w-2xl">
-                    <pre><code>{config.profile.file}</code></pre>
+                    <pre className="break-all overflow-hidden"><code>{config.profile.file}</code></pre>
                     <div className="flex-1"></div>
                     <IconButton
                         className="text-xl text-base-content/30"
@@ -192,7 +201,7 @@ export const HarborConfigEditor = (
 
             {sortedSections.map((sectionId) => {
                 const section = sectionMap.get(sectionId)!;
-                
+
                 return (
                     <HarborConfigSectionEditor
                         key={section.name}

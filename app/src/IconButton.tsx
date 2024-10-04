@@ -10,7 +10,7 @@ export const IconButton = (
     return (
         <button
             type="button"
-            className={`btn btn-sm btn-circle ${className}`}
+            className={`btn btn-sm btn-circle text-base-content/70 ${className}`}
             {...rest}
         >
             {icon}

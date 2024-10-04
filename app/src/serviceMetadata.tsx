@@ -188,4 +188,7 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
     nexa: {
         tags: [HST.backend, HST.partial],
     },
+    repopack: {
+        tags: [HST.satellite, HST.cli],
+    },
 };

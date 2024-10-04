@@ -4,14 +4,26 @@ export const KEY_CODES = {
     ESC: "Escape",
     ENTER: "Enter",
     S: "s",
+    F: "f",
 };
 
-type KeyMatch = {
+export type KeyMatch = {
     key: string;
     ctrlKey?: boolean;
     shiftKey?: boolean;
     metaKey?: boolean;
     altKey?: boolean;
+};
+
+export const Shortcuts = {
+    save: {
+        key: KEY_CODES.S,
+        ctrlKey: true,
+    },
+    find: {
+        key: KEY_CODES.F,
+        ctrlKey: true,
+    },
 };
 
 export const matches = (event: KeyboardEvent, match: KeyMatch) => {
