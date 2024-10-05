@@ -80,7 +80,7 @@ async def get_boost_models(api_key: str = Depends(get_api_key)):
 async def post_boost_chat_completion(request: Request, api_key: str = Depends(get_api_key)):
   body = await request.body()
 
-  logger.debug(f"Request body: {body}")
+  logger.debug(f"Request body: {body[:256]}...")
 
   try:
     decoded = body.decode("utf-8")

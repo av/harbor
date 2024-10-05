@@ -155,6 +155,7 @@ class LLM:
     async def apply_mod():
       logger.debug(f"Applying '{self.module}' to '{self.model}'")
       try:
+        self.chat.llm = self
         await mod.apply(chat=self.chat, llm=self)
       except Exception as e:
         logger.error(f"Failed to apply module '{self.module}': {e}")
