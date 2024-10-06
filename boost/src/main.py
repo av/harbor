@@ -22,10 +22,13 @@ auth_header = APIKeyHeader(name="Authorization", auto_error=False)
 async def get_api_key(api_key_header: str = Security(auth_header)):
   if len(BOOST_AUTH) == 0:
     return
-  # Bearer/plain versions
-  value = api_key_header.replace("Bearer ", "").replace("bearer ", "")
-  if value in BOOST_AUTH:
-    return value
+
+  if api_key_header is not None:
+    # Bearer/plain versions
+    value = api_key_header.replace("Bearer ", "").replace("bearer ", "")
+    if value in BOOST_AUTH:
+      return value
+
   raise HTTPException(status_code=403, detail="Unauthorized")
 
 
@@ -67,6 +70,7 @@ async def get_boost_models(api_key: str = Depends(get_api_key)):
 
     if should_filter:
       should_serve = selection.matches_filter(model, MODEL_FILTER.value)
+      print(model['id'], MODEL_FILTER.value['id.regex'], should_serve)
 
     if should_serve:
       final.append(model)
@@ -122,7 +126,7 @@ async def post_boost_chat_completion(request: Request, api_key: str = Depends(ge
 
 logger.info(f"Boosting: {config.BOOST_APIS}")
 if len(BOOST_AUTH) == 0:
-    logger.warn("No API keys specified - boost will accept all requests")
+  logger.warn("No API keys specified - boost will accept all requests")
 
 if __name__ == "__main__":
   import uvicorn

@@ -14,6 +14,8 @@ import mods
 
 logger = log.setup_logger(__name__)
 
+BOOST_PARAM_PREFIX="@boost_"
+
 
 class LLM:
   url: str
@@ -21,6 +23,7 @@ class LLM:
 
   model: str
   params: dict
+  boost_params: dict
   module: str
 
   queue: asyncio.Queue
@@ -34,7 +37,7 @@ class LLM:
     self.headers = kwargs.get('headers', {})
 
     self.model = kwargs.get('model')
-    self.params = kwargs.get('params', {})
+    self.split_params(kwargs.get('params', {}))
 
     self.chat = self.resolve_chat(**kwargs)
     self.messages = self.chat.history()
@@ -50,6 +53,14 @@ class LLM:
   @property
   def chat_completion_endpoint(self):
     return f"{self.url}/chat/completions"
+
+  def split_params(self, params: dict):
+    self.params = {
+      k: v for k, v in params.items() if not k.startswith(BOOST_PARAM_PREFIX)
+    }
+    self.boost_params = {
+      k[len(BOOST_PARAM_PREFIX):]: v for k, v in params.items() if k.startswith(BOOST_PARAM_PREFIX)
+    }
 
   def generate_system_fingerprint(self):
     return "fp_boost"

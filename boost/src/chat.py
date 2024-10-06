@@ -15,6 +15,10 @@ class Chat:
     tail = ChatNode.from_conversation(messages)
     return Chat(tail=tail)
 
+  def from_tail(chat):
+    new_tail = ChatNode(role=chat.tail.role, content=chat.tail.content)
+    return Chat(tail=new_tail)
+
   def __init__(self, **kwargs):
     self.tail = kwargs.get('tail')
     self.llm = kwargs.get('llm')
@@ -82,6 +86,18 @@ class Chat:
 
     response = await self.llm.stream_chat_completion(chat=self)
     self.assistant(response)
+
+  async def emit_status(self, status):
+    """
+    Emit a status message
+
+    Will be streamed back to the client
+    """
+
+    if not self.llm:
+      raise ValueError("Chat: unable to emit status without an LLM")
+
+    await self.llm.emit_status(status)
 
   def __str__(self):
     return '\n'.join([str(msg) for msg in self.plain()])

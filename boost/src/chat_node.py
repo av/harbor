@@ -5,6 +5,7 @@ import log
 
 logger = log.setup_logger(__name__)
 
+
 class ChatNode:
   id: str
   content: str
@@ -70,6 +71,12 @@ class ChatNode:
 
     return parents[::-1]
 
+  def message(self):
+    return {
+      "role": self.role,
+      "content": self.content,
+    }
+
   def ancestor(self):
     node = self
     while node.parent:
@@ -78,17 +85,11 @@ class ChatNode:
 
   def history(self):
     node = self
-    messages = [{
-      "role": node.role,
-      "content": node.content,
-    }]
+    messages = [node.message()]
 
     while node.parent:
       node = node.parent
-      messages.append({
-        "role": node.role,
-        "content": node.content,
-      })
+      messages.append(node.message())
 
     return messages[::-1]
 
