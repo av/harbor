@@ -1,6 +1,7 @@
 import { config } from "./config.ts";
 import { omit, sleep } from './utils.ts';
 import { log } from './log.ts';
+import { prompts } from './judge.ts';
 
 export type LLMOptions = {
   max_tokens?: number;
@@ -11,12 +12,12 @@ export type LLMConfig = {
   model: string;
   apiUrl: string;
   apiKey?: string;
-  prompt?: string;
+  prompt?: keyof typeof prompts;
   options?: LLMOptions;
 };
 
 export class LLM {
-  private llm: LLMConfig;
+  llm: LLMConfig;
 
   constructor(llm: LLMConfig) {
     this.llm = llm;

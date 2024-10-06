@@ -25,17 +25,17 @@ Correct response: Yes
 
 Question: Who wrote "Romeo and Juliet"?
 Answer: Shakespeare.
-Criterion: The answer names Shakespeare as the author
+Criterion: Answer is Shakespeare
 Correct response: Yes
 
 Question: What is the capital of France?
-Answer: Paris
-Criterion: Answer mentions Paris being a capital of France
-Correct response: Yes
+Answer: London
+Criterion: Answer is Paris
+Correct response: No
 
-Question:
+Question: What is the EU capital?
 Answer: Paris
-Criterion: Answer mentions Paris
+Criterion: Answer mentions Brussels
 Correct response: No
 </instructions>
 
@@ -102,7 +102,36 @@ ${criteria}
 Please accurately evaluate the task. Strictly adhere to the evaluation criteria and rubric.
 `.trim();
 
+
+export const short = ({
+    question,
+    answer,
+    criteria,
+}) => `
+<instructions>
+You are an impartial evaluator.
+You will be given a question, an answer, and a specific criteria to evaluate that answer.
+Respond with "Yes" if and only if the criterion is met.
+Respond with "No" if the criterion is not met or only partially met.
+Your response must be either "Yes" or "No" only, everything else will be ignored.
+</instructions>
+
+<question>
+${question}
+</question>
+
+<answer>
+${answer}
+</answer>
+
+<criteria>
+${criteria}
+</criteria>
+`;
+
+
 export const prompts = {
     default: prompt,
     flow,
+    short,
 };

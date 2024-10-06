@@ -1,4 +1,4 @@
-import { prompt } from "./judge.ts";
+import { prompts } from "./judge.ts";
 
 import type { Task } from "./tasks.ts";
 import type { LLM } from "./llm.ts";
@@ -30,6 +30,7 @@ export class BenchTask implements Task {
 
   async eval(judge: LLM) {
     for (const [key, value] of Object.entries(this.criteria)) {
+      const prompt = prompts[judge.llm.prompt ?? 'default'] ?? prompts.default;
       const result = await judge.chat(
         prompt({
           question: this.question,

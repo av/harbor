@@ -24,6 +24,7 @@ export const config = {
         apiUrl: Deno.env.get('HARBOR_BENCH_JUDGE_API'),
         apiKey: Deno.env.get('HARBOR_BENCH_JUDGE_API_KEY'),
         prompt: Deno.env.get('HARBOR_BENCH_JUDGE_PROMPT') ?? 'default',
+        max_tokens: Deno.env.get('HARBOR_BENCH_JUDGE_MAX_TOKENS') ?? 2048,
         temperature: 0,
         seed: 42,
     } as LLMConfig,

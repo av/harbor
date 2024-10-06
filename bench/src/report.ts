@@ -1,4 +1,4 @@
-import { prompt } from './judge.ts';
+import { prompts } from './judge.ts';
 
 export const summaryTemplate = (data: unknown) => `
 <!DOCTYPE html>
@@ -313,6 +313,7 @@ export const runsTemplate = (runs: unknown) => {
                 <ul>
                     ${Object.entries(task.criteria).map(([key, value]) => {
                         const result = task.results[key];
+                        const prompt = prompts[judge.llm.prompt ?? 'default'] ?? prompts.default;
                         const judgePrompt = prompt({ question: task.question, answer: task.answer, criteria: value })
                         return `
                     <li>
