@@ -2959,6 +2959,11 @@ run_bench_command() {
         env_manager_alias bench.judge_prompt "$@"
         return 0
         ;;
+    judge_tokens)
+        shift
+        env_manager_alias bench.judge_max_tokens "$@"
+        return 0
+        ;;
     variants)
         shift
         env_manager_alias bench.variants "$@"
