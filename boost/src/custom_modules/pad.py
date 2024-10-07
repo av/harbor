@@ -184,7 +184,7 @@ async def apply(chat: 'ch.Chat', llm: 'llm.LLM'):
     f"""
 Before addresing my request, I need you to take your time and think for a while.
 It's very important for you to utilise this time to concentrate on the task at hand.
-"""
+""".strip()
   )
 
   await chat.emit_status('Thinking...')
@@ -193,14 +193,14 @@ It's very important for you to utilise this time to concentrate on the task at h
     f"""
 Thank you for letting me think for a bit! I will use this time to concentrate on the task at hand.
 {pad}
-  """
+  """.strip()
   )
   await llm.emit_message(chat.tail.content)
 
   chat.user(
     f"""
 Ok, I think we're ready now. Please answer my previous request.
-  """
+  """.strip()
   )
 
   await chat.emit_status('Final')
