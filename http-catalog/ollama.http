@@ -141,3 +141,35 @@ Authorization: sk-fake
   ],
   "temperature": 1.0
 }
+
+### FIM
+
+POST {{host}}/api/generate
+
+{
+  "model": "qwen2.5-coder:7b-base",
+  // "prompt": "Today is a ",
+  // "suffix": "day.",
+  // "template": "\{\{- if .Suffix \}\}<|fim_prefix|>\{\{ .Prompt \}\}<|fim_suffix|>\{\{ .Suffix \}\}<|fim_middle|>",
+  "prompt": "<|fim_prefix|>Today is a <|fim_suffix|> day.<|fim_middle|>",
+  "options": {
+    "max_tokens": 20,
+    "stop": ["<|endoftext|>"]
+  },
+  "raw": true,
+  "stream": false
+}
+
+###
+
+POST {{host}}/api/generate
+
+{
+  "model": "q7FIM",
+  "prompt": "Today is a ",
+  "suffix": "day.",
+  "stream": false,
+  "options": {
+    "temperature": 0
+  }
+}

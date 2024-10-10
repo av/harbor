@@ -2880,7 +2880,7 @@ run_ollama_command() {
     $(compose_with_options $services "ollama") run \
         --rm \
         -e "OLLAMA_HOST=$ollama_host" \
-        --name harbor.ollama-cli \
+        --name harbor.ollama-cli-$RANDOM \
         -e "TERM=xterm-256color" \
         -v "$original_dir:$original_dir" \
         --workdir "$original_dir" \
