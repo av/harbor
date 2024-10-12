@@ -1,6 +1,12 @@
 ![Harbor project logo](./docs/harbor-2.png)
 
-![GitHub Tag](https://img.shields.io/github/v/tag/av/harbor) ![GitHub repo size](https://img.shields.io/github/repo-size/av/harbor) ![GitHub repo file or directory count](https://img.shields.io/github/directory-file-count/av/harbor?type=file&extension=yml&label=compose%20files&color=orange) [![Visitors](https://api.visitorbadge.io/api/visitors?path=av%2Fharbor&countColor=%23263759&style=flat)](https://visitorbadge.io/status?path=av%2Fharbor) ![GitHub language count](https://img.shields.io/github/languages/count/av/harbor)
+![GitHub Tag](https://img.shields.io/github/v/tag/av/harbor)
+![NPM Version](https://img.shields.io/npm/v/%40avcodes%2Fharbor?labelColor=red&color=white)
+![PyPI - Version](https://img.shields.io/pypi/v/llm-harbor?labelColor=blue)
+![GitHub repo size](https://img.shields.io/github/repo-size/av/harbor)
+![GitHub repo file or directory count](https://img.shields.io/github/directory-file-count/av/harbor?type=file&extension=yml&label=compose%20files&color=orange)
+[![Visitors](https://api.visitorbadge.io/api/visitors?path=av%2Fharbor&countColor=%23263759&style=flat)](https://visitorbadge.io/status?path=av%2Fharbor)
+![GitHub language count](https://img.shields.io/github/languages/count/av/harbor)
 
 Effortlessly run LLM backends, APIs, frontends, and services with one command.
 

@@ -2,7 +2,7 @@ import * as toml from 'jsr:@std/toml';
 import * as path from 'jsr:@std/path';
 import * as collections from "jsr:@std/collections/deep-merge";
 
-const VERSION = "0.2.8";
+const VERSION = "0.2.11";
 
 type ValueSeed = {
   // Path relative to the project root
@@ -16,6 +16,7 @@ const targets: ValueSeed[] = [{
   value: {
     tool: {
       poetry: {
+        version: VERSION,
         include: await resolveIncludes(),
       },
     },

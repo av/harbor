@@ -12,7 +12,6 @@ Includes:
 deno run -A ./.scripts/seed.ts
 ```
 
-
 ### Publish to npm
 
 ```bash
@@ -37,3 +36,7 @@ twine check dist/*
 # Publish
 twine upload dist/*
 ```
+
+### App/Docker builds
+
+- Actions on GH, attached to a tag
