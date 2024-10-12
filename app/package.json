@@ -32,6 +32,6 @@
     "@vitejs/plugin-react": "^4.2.1",
     "typescript": "^5.2.2",
     "vite": "^5.3.1",
-    "@tauri-apps/cli": ">=2.0.0-rc.0"
+    "@tauri-apps/cli": "2.0.2"
   }
 }
