@@ -96,3 +96,9 @@ boost/src/**/__pycache__/
 
 # AnythingLLM
 anythingllm/storage/
+
+# Build
+dist/
+
+# Aider
+.aider.chat.history.md

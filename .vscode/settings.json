@@ -6,5 +6,6 @@
     {
       "file": ".copilot-instructions.md"
     }
-  ]
+  ],
+  "deno.enable": true
 }
