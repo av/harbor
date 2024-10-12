@@ -1,5 +1,5 @@
 {
-  "name": "@av/harbor-app",
+  "name": "@avcodes/harbor-app",
   "private": true,
   "version": "0.2.7",
   "type": "module",
