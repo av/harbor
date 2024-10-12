@@ -1,4 +1,4 @@
-![Harbor project logo](./docs/harbor-2.png)
+![Harbor project logo](https://github.com/av/harbor/raw/main/docs/harbor-2.png)
 
 ![GitHub Tag](https://img.shields.io/github/v/tag/av/harbor)
 ![NPM Version](https://img.shields.io/npm/v/%40avcodes%2Fharbor?labelColor=red&color=white)
