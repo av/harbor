@@ -1629,6 +1629,7 @@ fix_fs_acl() {
     docker_fsacl ./searxng
     docker_fsacl ./tabbyapi
     docker_fsacl ./litellm
+    docker_fsacl ./plandex
     docker_fsacl ./dify
     docker_fsacl ./textgrad
     docker_fsacl ./aider
