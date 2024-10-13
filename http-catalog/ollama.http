@@ -173,3 +173,18 @@ POST {{host}}/api/generate
     "temperature": 0
   }
 }
+
+### Logprobs
+
+POST {{host}}/v1/chat/completions
+
+{
+  "model": "vanilj/supernova-medius:q6_k",
+  "messages": [{
+    "role": "user",
+    "content": "What is the capital of France?"
+  }],
+  "logprobs": true,
+  "top_logprobs": 5,
+  "stream": false
+}
