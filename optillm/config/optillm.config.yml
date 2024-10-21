@@ -1,0 +1,12 @@
+# OptiLLM Configuration File
+
+# Define necessary configuration parameters
+optillm:
+  model: "meta-llama/Meta-Llama-3.1-8B-Instruct"
+  max_length: 128
+  temperature: 1.0
+  top_p: 1.0
+  n: 1
+  stop: null
+  compression: "4bit"
+  port: 5000

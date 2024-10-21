@@ -1,0 +1,13 @@
+services:
+  optillm:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.optillm
+    image: ${HARBOR_OPTILLM_IMAGE}:${HARBOR_OPTILLM_VERSION}
+    env_file:
+      - ./.env
+    networks:
+      - harbor-network
+    volumes:
+      - ${HARBOR_OPTILLM_CONFIG_PATH}:/root/.config/optillm
+    ports:
+      - ${HARBOR_OPTILLM_HOST_PORT}:${HARBOR_OPTILLM_HOST_PORT}
+    entrypoint: ["/app/start_optillm.sh"]

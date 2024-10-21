@@ -1,0 +1,3 @@
+flask
+pydantic
+httpx
