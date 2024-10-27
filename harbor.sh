@@ -3507,7 +3507,7 @@ run_repopack_command() {
 # ========================================================================
 
 # Globals
-version="0.2.13"
+version="0.2.14"
 harbor_repo_url="https://github.com/av/harbor.git"
 harbor_release_url="https://api.github.com/repos/av/harbor/releases/latest"
 delimiter="|"

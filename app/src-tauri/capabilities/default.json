@@ -36,6 +36,9 @@
       "identifier": "fs:scope",
       "allow": [
         {
+          "path": "$HOME/**"
+        },
+        {
           "path": "**"
         },
         {
@@ -49,6 +52,9 @@
     {
       "identifier": "fs:write-all",
       "allow": [
+        {
+          "path": "$HOME/**"
+        },
         {
           "path": "**"
         },
