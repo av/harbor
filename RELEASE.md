@@ -29,12 +29,8 @@ npm publish --access public
 poetry env use system
 # Build
 poetry build -v
-
-python setup.py sdist
-twine check dist/*
-
 # Publish
-twine upload dist/*
+poetry publish -v
 ```
 
 ### App/Docker builds
