@@ -1,0 +1,18 @@
+services:
+  bolt:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.bolt
+    image: ${HARBOR_BOLT_IMAGE}:${HARBOR_BOLT_VERSION}
+    ports:
+      - ${HARBOR_BOLT_HOST_PORT}:3000
+    environment:
+      - NODE_ENV=production
+    env_file:
+      - ./.env
+      - ./bolt/override.env
+    # this repo can't work with actual env variables,
+    # so a .env.local file has to be supplied and it'll be
+    # bundled into the FE and CloudFlare workers
+    volumes:
+      - ./bolt/.env.local:/app/.env.local
+      # - ./bolt/model.ts:/app/app/lib/.server/llm/model.ts
+    command: bash -c "pnpm run build && pnpm run start"

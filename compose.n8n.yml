@@ -1,0 +1,51 @@
+services:
+  n8n:
+    image: ${HARBOR_N8N_IMAGE}:${HARBOR_N8N_VERSION}
+    container_name: ${HARBOR_CONTAINER_PREFIX}.n8n
+    user: root
+    ports:
+      - ${HARBOR_N8N_HOST_PORT}:5678
+    volumes:
+      - ${HARBOR_N8N_WORKSPACE}/storage:/home/node/.n8n
+      - ${HARBOR_N8N_WORKSPACE}/backup:/backup
+      - ${HARBOR_N8N_WORKSPACE}/shared:/data/shared
+    depends_on:
+      n8n-db:
+        condition: service_healthy
+    env_file:
+      - ./.env
+      - ./n8n/override.env
+    environment:
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=n8n-db
+      - DB_POSTGRESDB_USER=${HARBOR_N8N_PG_USER}
+      - DB_POSTGRESDB_PASSWORD=${HARBOR_N8N_PG_PASSWORD}
+      - DB_POSTGRESDB_DATABASE=${HARBOR_N8N_PG_DB}
+      - N8N_DIAGNOSTICS_ENABLED=false
+      - N8N_PERSONALIZATION_ENABLED=false
+      - N8N_ENCRYPTION_KEY=${HARBOR_N8N_ENCRYPTION_KEY}
+      - N8N_USER_MANAGEMENT_JWT_SECRET=${HARBOR_N8N_JWT_SECRET}
+    networks:
+      - harbor-network
+
+  n8n-db:
+    image: ${HARBOR_N8N_PG_IMAGE}:${HARBOR_N8N_PG_VERSION}
+    container_name: ${HARBOR_CONTAINER_PREFIX}.n8n-db
+    networks:
+      - harbor-network
+    ports:
+      - ${HARBOR_N8N_PG_HOST_PORT}:5432
+    env_file:
+      - ./.env
+      - ${HARBOR_N8N_WORKSPACE}/override.env
+    environment:
+      - POSTGRES_USER=${HARBOR_N8N_PG_USER}
+      - POSTGRES_PASSWORD=${HARBOR_N8N_PG_PASSWORD}
+      - POSTGRES_DB=${HARBOR_N8N_PG_DB}
+    volumes:
+      - ${HARBOR_N8N_WORKSPACE}/db:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -h localhost -U ${HARBOR_N8N_PG_USER} -d ${HARBOR_N8N_PG_DB}']
+      interval: 5s
+      timeout: 5s
+      retries: 10

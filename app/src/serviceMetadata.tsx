@@ -191,4 +191,10 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
     repopack: {
         tags: [HST.satellite, HST.cli],
     },
+    n8n: {
+        tags: [HST.satellite],
+    },
+    bolt: {
+        tags: [HST.satellite, HST.partial],
+    }
 };

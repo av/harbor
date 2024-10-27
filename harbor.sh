@@ -1754,26 +1754,7 @@ docker_fsacl() {
 }
 
 fix_fs_acl() {
-    docker_fsacl ./ollama
-    docker_fsacl ./langfuse
-    docker_fsacl ./open-webui
-    docker_fsacl ./tts
-    docker_fsacl ./librechat
-    docker_fsacl ./searxng
-    docker_fsacl ./tabbyapi
-    docker_fsacl ./litellm
-    docker_fsacl ./plandex
-    docker_fsacl ./dify
-    docker_fsacl ./textgrad
-    docker_fsacl ./aider
-    docker_fsacl ./chatui
-    docker_fsacl ./comfyui
-    docker_fsacl ./bionicgpt
-    docker_fsacl ./omnichain
-    docker_fsacl ./bench
-    docker_fsacl ./jupyter
-    docker_fsacl ./ktransformers
-    docker_fsacl ./anythingllm
+    docker_fsacl .
 
     docker_fsacl $(eval echo "$(env_manager get hf.cache)")
     docker_fsacl $(eval echo "$(env_manager get vllm.cache)")
@@ -3526,7 +3507,7 @@ run_repopack_command() {
 # ========================================================================
 
 # Globals
-version="0.2.12"
+version="0.2.13"
 harbor_repo_url="https://github.com/av/harbor.git"
 harbor_release_url="https://api.github.com/repos/av/harbor/releases/latest"
 delimiter="|"

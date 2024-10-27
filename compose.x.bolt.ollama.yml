@@ -1,0 +1,4 @@
+services:
+  bolt:
+    environment:
+      - OLLAMA_API_BASE_URL=http://localhost:${HARBOR_OLLAMA_HOST_PORT}
