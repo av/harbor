@@ -15,7 +15,9 @@ show_help() {
     echo "Usage: $0 <command> [options]"
     echo
     echo "Compose Setup Commands:"
-    echo "  up|u [handle]           - Start the containers"
+    echo "  up|u [handle(s)]           - Start the service(s)"
+    echo "    up --tail             - Start and tail the logs"
+    echo "    up --open             - Start and open in the browser"
     echo "  down|d                  - Stop and remove the containers"
     echo "  restart|r [handle]      - Down then up"
     echo "  ps                      - List the running containers"
@@ -23,9 +25,11 @@ show_help() {
     echo "  exec <handle> [command] - Execute a command in a running service"
     echo "  pull <handle>           - Pull the latest images"
     echo "  dive <handle>           - Run the Dive CLI to inspect Docker images"
+    echo "  run <alias>             - Run a command defined as an alias"
     echo "  run <handle> [command]  - Run a one-off command in a service container"
     echo "  shell <handle>          - Load shell in the given service main container"
     echo "  build <handle>          - Build the given service"
+    echo "  stats                   - Show resource usage statistics"
     echo "  cmd <handle>            - Print the docker compose command"
     echo
     echo "Setup Management Commands:"
@@ -102,6 +106,12 @@ show_help() {
     echo "    profile add|save <name>     - Add current config as a profile"
     echo "    profile set|use|load <name> - Use a profile"
     echo
+    echo "  alias|aliases|a [ls|get|set|rm] - Manage Harbor aliases"
+    echo "    alias ls|list               - List all aliases"
+    echo "    alias get <name>            - Get an alias"
+    echo "    alias set <name> <command>  - Set an alias"
+    echo "    alias rm|remove <name>      - Remove an alias"
+    echo
     echo "  history|h [ls|rm|add]  - Harbor command history."
     echo "                           When run without arguments, launches interactive selector."
     echo "    history clear   - Clear the history"
@@ -153,27 +163,27 @@ run_harbor_doctor() {
         return 1
     fi
 
-    # Check if the .env file exists and is readable
-    if [ -f ".env" ] && [ -r ".env" ]; then
-        log_info "${ok} .env file exists and is readable"
+    # Check if the Harbor workspace directory exists
+    if [ -d "$harbor_home" ]; then
+        log_info "${ok} Harbor home: $harbor_home"
     else
-        log_error "${nok} .env file is missing or not readable. Please ensure it exists and has the correct permissions."
+        log_error "${nok} Harbor home does not exist or is not reachable."
         return 1
     fi
 
     # Check if the default profile file exists and is readable
     if [ -f $default_profile ] && [ -r $default_profile ]; then
-        log_info "${ok} default profile exists and is readable"
+        log_info "${ok} Default profile exists and is readable"
     else
-        log_error "${nok} default profile is missing or not readable. Please ensure it exists and has the correct permissions."
+        log_error "${nok} Default profile is missing or not readable. Please ensure it exists and has the correct permissions."
         return 1
     fi
 
-    # Check if the Harbor workspace directory exists
-    if [ -d "$harbor_home" ]; then
-        log_info "${ok} Harbor workspace directory exists"
+    # Check if the .env file exists and is readable
+    if [ -f ".env" ] && [ -r ".env" ]; then
+        log_info "${ok} Current profile (.env) exists and is readable"
     else
-        log_error "${nok} Harbor workspace directory $harbor_home does not exist."
+        log_error "${nok} Current profile (.env) is missing or not readable. Please ensure it exists and has the correct permissions."
         return 1
     fi
 
@@ -223,6 +233,10 @@ compose_with_options() {
         case $1 in
         --dir=*)
             base_dir="${1#*=}"
+            shift
+            ;;
+        --no-defaults)
+            options=()
             shift
             ;;
         *)
@@ -320,19 +334,50 @@ resolve_compose_command() {
     fi
 }
 
-harbor_up() {
-    $(compose_with_options "$@") up -d --wait
+run_up() {
+    local should_tail=false
+    local should_open=false
+    local filtered_args=()
+    local up_args=()
+
+    for arg in "$@"; do
+        case "$arg" in
+        --no-defaults)
+            up_args+=("$arg")
+            ;;
+        --open | -o)
+            should_open=true
+            ;;
+        --tail | -t)
+            should_tail=true
+            ;;
+        *)
+            filtered_args+=("$arg") # Add to filtered arguments
+            ;;
+        esac
+    done
+
+    log_debug "Running 'up' for services: ${up_args[@]} ${filtered_args[@]}"
+    $(compose_with_options "${up_args[@]}" "${filtered_args[@]}") up -d --wait
 
     if [ "$default_autoopen" = "true" ]; then
-        open_service "$default_open"
+        run_open "$default_open"
     fi
 
     for service in "${default_tunnels[@]}"; do
         establish_tunnel "$service"
     done
+
+    if $should_tail; then
+        run_logs "$filtered_args"
+    fi
+
+    if $should_open; then
+        run_open "$filtered_args"
+    fi
 }
 
-run_harbor_down() {
+run_down() {
     local services=$(get_active_services)
     local matched_services=()
 
@@ -351,6 +396,87 @@ run_harbor_down() {
 
     matched_services_str=$(printf " %s" "${matched_services[@]}")
     $(compose_with_options "*") down --remove-orphans "$@" $matched_services_str
+}
+
+run_restart() {
+    run_down "$@"
+    run_up "$@"
+}
+
+run_ps() {
+    $(compose_with_options "*") ps
+}
+
+run_build() {
+    service=$1
+    shift
+
+    if [ -z "$service" ]; then
+        log_error "Usage: harbor build <service>"
+        return 1
+    fi
+
+    local services=$(get_services)
+
+    log_debug "Checking if service '$service' has subservices..."
+    matched_service=$(echo "$services" | grep "^$service-")
+    if [ -n "$matched_service" ]; then
+        log_debug "Matched service: $matched_service"
+        matched_services+=("$matched_service")
+    fi
+
+    matched_services_str=$(printf " %s" "${matched_services[@]}")
+    log_debug "Building" "$service" "$@" $matched_services_str
+    $(compose_with_options "*") build "$service" "$@" $matched_services_str
+}
+
+run_shell() {
+    service=$1
+    shift
+
+    if [ -z "$service" ]; then
+        log_error "Usage: harbor shell <service>"
+        exit 1
+    fi
+
+    local shell="bash"
+
+    if [ -n "$1" ]; then
+        shell="$1"
+    fi
+
+    $(compose_with_options "*") run -it --entrypoint "$shell" "$service"
+}
+
+
+run_logs() {
+    $(compose_with_options "*") logs -n 20 -f "$@"
+}
+
+run_pull() {
+    $(compose_with_options "$@") pull
+}
+
+run_run() {
+    service=$1
+    shift
+
+    # Check if it is an alias first
+    local maybe_cmd=$(env_manager_dict aliases --silent get "$service")
+
+    if [ -n "$maybe_cmd" ]; then
+        log_info "Running alias $service -> \"$maybe_cmd\""
+        eval "$maybe_cmd"
+        return 0
+    fi
+
+    log_debug "'harbor run': no alias found for $service, running as service"
+    local services=$(get_active_services)
+    $(compose_with_options $services "$service") run --rm "$service" "$@"
+}
+
+run_stats() {
+    $(compose_with_options "*") stats
 }
 
 run_hf_open() {
@@ -621,7 +747,7 @@ sys_open() {
     fi
 }
 
-open_service() {
+run_open() {
     local service_url
 
     if service_url=$(get_url "$1"); then
@@ -653,7 +779,7 @@ eject() {
     $(compose_with_options "$@") config
 }
 
-run_in_service() {
+run_exec() {
     local service_name=""
     local before_args=()
     local after_args=()
@@ -1241,11 +1367,16 @@ env_manager_dict() {
     shift
 
     local delimiter=","
+    local silent=false
 
     local get_command=""
     local set_command=""
 
     case "$1" in
+    --silent | -s)
+        silent=true
+        shift
+        ;;
     --help | -h)
         echo "Harbor dict: $field"
         echo
@@ -1287,6 +1418,8 @@ env_manager_dict() {
     # Helper function to set the dictionary
     set_dict() {
         local new_dict=$1
+        # Escape double quotes before setting
+        new_dict=$(echo "$new_dict" | sed 's/"/\\\\"/g')
         env_manager set "$field" "$new_dict"
         if [ -n "$set_command" ]; then
             eval "$set_command"
@@ -1298,7 +1431,7 @@ env_manager_dict() {
         # Show all key/value pairs
         local dict=$(get_dict)
         if [ -z "$dict" ]; then
-            log_info "Config $field is empty"
+            $silent || log_info "Config $field is empty"
         else
             echo "$dict" | tr "$delimiter" "\n" | sed 's/=/: /'
         fi
@@ -1308,7 +1441,7 @@ env_manager_dict() {
         ;;
     get)
         if [ -z "$key" ]; then
-            echo "Usage: env_dict_manager $field get <key>"
+            $silent || echo "Usage: env_dict_manager $field get <key>"
             return 1
         fi
         local dict=$(get_dict)
@@ -1324,7 +1457,7 @@ env_manager_dict() {
         if [ -n "$value" ]; then
             echo "$value"
         else
-            log_info "Key $key not found in $field"
+            $silent || log_info "Key $key not found in $field"
         fi
         if [ -n "$get_command" ]; then
             eval "$get_command"
@@ -1352,7 +1485,7 @@ env_manager_dict() {
                 print $0
             }')
         set_dict "$new_dict"
-        log_info "Key '$key' set in $field"
+        $silent || log_info "Key '$key' set in $field"
         ;;
     rm)
         if [ -z "$key" ]; then
@@ -1373,7 +1506,7 @@ env_manager_dict() {
                 }
             }')
         set_dict "$new_dict"
-        log_info "Key '$key' removed from $field"
+        $silent || log_info "Key '$key' removed from $field"
         ;;
     -h | --help | help)
         echo "Usage: $field [--on-get <command>] [--on-set <command>] {ls|get|set|rm} [key] [value]"
@@ -1824,7 +1957,7 @@ record_history_entry() {
     fi
 }
 
-run_harbor_history() {
+run_history() {
     case "$1" in
     ls | list)
         shift
@@ -2769,14 +2902,14 @@ run_comfyui_workspace_command() {
     sync)
         shift
         log_info "Cleaning up ComfyUI environment..."
-        run_in_service comfyui rm -rf /workspace/environments/python/comfyui
+        run_exec comfyui rm -rf /workspace/environments/python/comfyui
         log_info "Syncing installed custom nodes to persistent storage..."
-        run_in_service comfyui venv-sync comfyui
+        run_exec comfyui venv-sync comfyui
         ;;
     clear)
         shift
         log_info "Cleaning up ComfyUI workspace..."
-        run_gum confirm "This operation will delete all stored ComfyUI configuration. Continue?" && run_in_service comfyui rm -rf /workspace/* || echo "Cleanup aborted."
+        run_gum confirm "This operation will delete all stored ComfyUI configuration. Continue?" && run_exec comfyui rm -rf /workspace/* || echo "Cleanup aborted."
         log_info "Restart Harbor to re-init Comfy UI"
         ;;
     *)
@@ -3393,7 +3526,7 @@ run_repopack_command() {
 # ========================================================================
 
 # Globals
-version="0.2.11"
+version="0.2.12"
 harbor_repo_url="https://github.com/av/harbor.git"
 harbor_release_url="https://api.github.com/repos/av/harbor/releases/latest"
 delimiter="|"
@@ -3428,59 +3561,47 @@ main_entrypoint() {
     case "$1" in
     up | u)
         shift
-        harbor_up "$@"
+        run_up "$@"
         ;;
     down | d)
         shift
-        run_harbor_down "$@"
+        run_down "$@"
         ;;
     restart | r)
         shift
-        $(compose_with_options "*") down --remove-orphans "$@"
-        $(compose_with_options "$@") up -d
+        run_restart "$@"
         ;;
     ps)
         shift
-        $(compose_with_options "*") ps
+        run_ps "$@"
         ;;
     build)
         shift
-        service=$1
-        shift
-        $(compose_with_options "*") build "$service" "$@"
+        run_build "$@"
         ;;
     shell)
         shift
-        service=$1
-        shift
-
-        if [ -z "$service" ]; then
-            echo "Usage: harbor shell <service>"
-            exit 1
-        fi
-
-        $(compose_with_options "*") run -it --entrypoint bash "$service"
+        run_shell "$@"
         ;;
     logs | l)
         shift
-        # Only pass "*" to the command if no options are provided
-        $(compose_with_options "*") logs -n 20 -f "$@"
+        run_logs "$@"
         ;;
     pull)
         shift
-        $(compose_with_options "$@") pull
+        run_pull "$@"
         ;;
     exec)
         shift
-        run_in_service "$@"
+        run_exec "$@"
         ;;
     run)
         shift
-        service=$1
+        run_run "$@"
+        ;;
+    stats)
         shift
-
-        local services=$(get_active_services)
-        $(compose_with_options $services "$service") run --rm "$service" "$@"
+        run_stats "$@"
         ;;
     cmd)
         shift
@@ -3497,6 +3618,10 @@ main_entrypoint() {
         shift
         env_manager_arr services.default "$@"
         ;;
+    alias | aliases | a)
+        shift
+        env_manager_dict aliases "$@"
+        ;;
     link | ln)
         shift
         link_cli "$@"
@@ -3507,7 +3632,7 @@ main_entrypoint() {
         ;;
     open | o)
         shift
-        open_service "$@"
+        run_open "$@"
         ;;
     url)
         shift
@@ -3735,7 +3860,7 @@ main_entrypoint() {
         ;;
     history | h)
         shift
-        run_harbor_history "$@"
+        run_history "$@"
         ;;
     size)
         shift

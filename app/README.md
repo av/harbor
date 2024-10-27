@@ -18,3 +18,10 @@ bun install
 # Run the app in development mode
 bun tauri dev
 ```
+
+## Build
+
+```bash
+# For the currnet targets
+bun tauri build
+```

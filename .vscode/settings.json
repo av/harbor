@@ -7,5 +7,5 @@
       "file": ".copilot-instructions.md"
     }
   ],
-  "deno.enable": true
+  "deno.enable": false
 }

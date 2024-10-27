@@ -3,10 +3,11 @@ import { IconCirclePlus } from "../Icons";
 import { HarborConfig } from "../config/HarborConfig";
 import { HarborConfigEditor } from "../config/HarborConfigEditor";
 import { orderByPredefined } from "../utils";
-import { EXTRA, SORT_ORDER } from "../configMetadata";
+import { CURRENT_PROFILE, EXTRA, SORT_ORDER } from "../configMetadata";
 import { useSelectedProfile } from "../useSelectedProfile";
 import { useOverlays } from "../OverlayContext";
 import { ConfigNameModal } from "../config/ConfigNameModal";
+import { useEffect } from "react";
 
 export const ProfileSelector = (
     { configs }: { configs: HarborConfig[] },
@@ -17,6 +18,15 @@ export const ProfileSelector = (
     const configMap = new Map(
         configs.map((config) => [config.profile.name, config]),
     );
+
+    useEffect(() => {
+        if (!configMap.has(selected)) {
+            // We lost previously selected
+            // profile in one way or another
+            setSelected(CURRENT_PROFILE);
+        }
+    }, [configs]);
+
     const currentConfig = configMap.get(selected);
     const sorted = orderByPredefined(
         configs.map((c) => c.profile.name),

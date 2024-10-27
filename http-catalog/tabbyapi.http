@@ -41,7 +41,7 @@ curl {{host}}/v1/chat/completions -H "Content-Type: application/json" -H "Author
 ###
 
 curl {{host}}/v1/chat/completions -H "Content-Type: application/json" -H "Authorization: Bearer {{apiKey}}" -d '{
-  "model": "gguf",
+  "model": "hf",
   "messages": [
     {
         "role": "user",
@@ -50,3 +50,25 @@ curl {{host}}/v1/chat/completions -H "Content-Type: application/json" -H "Author
   ],
   "max_tokens": 60
 }'
+
+### Models
+
+GET {{host}}/v1/models
+Authorization: Bearer {{apiKey}}
+
+### Chat Completion
+
+POST {{host}}/v1/chat/completions
+Content-Type: application/json
+Authorization: Bearer {{apiKey}}
+
+{
+  "model": "hf",
+  "messages": [
+    {
+        "role": "user",
+        "content": "How to eat cake?"
+    }
+  ],
+  "max_tokens": 60
+}
