@@ -1,0 +1,6 @@
+@host = http://localhost:{{HARBOR_COMFYUI_HOST_PORT}}
+
+###
+
+GET {{host}}
+Authorization: Bearer sk-comfyui
