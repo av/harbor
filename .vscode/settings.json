@@ -2,10 +2,10 @@
   "files.exclude": {
     "**/.git": false
   },
-  "github.copilot.chat.experimental.codeGeneration.instructions": [
+  "deno.enable": false,
+  "github.copilot.chat.codeGeneration.instructions": [
     {
       "file": ".copilot-instructions.md"
     }
-  ],
-  "deno.enable": false
+  ]
 }

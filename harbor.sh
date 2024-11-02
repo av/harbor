@@ -416,7 +416,7 @@ run_build() {
         return 1
     fi
 
-    local services=$(get_services)
+    local services=$(get_services --silent)
 
     log_debug "Checking if service '$service' has subservices..."
     matched_service=$(echo "$services" | grep "^$service-")
@@ -447,7 +447,6 @@ run_shell() {
 
     $(compose_with_options "*") run -it --entrypoint "$shell" "$service"
 }
-
 
 run_logs() {
     $(compose_with_options "*") logs -n 20 -f "$@"
@@ -1033,7 +1032,7 @@ set_default_log_levels() {
     default_log_levels_WARN=2
     default_log_levels_ERROR=3
 
-    default_logl_labels_DEBUG="DEBUG"
+    default_logl_labels_DEBUG="${c_gray}DEBUG${c_nc}"
     default_logl_labels_INFO="INFO"
     default_logl_labels_WARN="WARN"
     default_logl_labels_ERROR="${c_r}ERROR${c_nc}"
@@ -1066,7 +1065,7 @@ log() {
 }
 
 # Convenience functions for different log levels
-log_debug() { log "DEBUG" "$@"; }
+log_debug() { log "DEBUG" "${c_gray}$@${c_nc}"; }
 log_info() { log "INFO" "$@"; }
 log_warn() { log "WARN" "$@"; }
 log_error() { log "ERROR" "$@"; }
@@ -1826,10 +1825,14 @@ is_service_running() {
 
 get_services() {
     local is_active=false
+    local is_silent=false
     local filtered_args=()
 
     for arg in "$@"; do
         case "$arg" in
+        --silent | -s)
+            is_silent=true
+            ;;
         --active | -a)
             is_active=true
             ;;
@@ -1845,11 +1848,11 @@ get_services() {
         if [ -z "$active_services" ]; then
             log_warn "Harbor has no active services."
         else
-            log_info "Harbor active services:"
+            $is_silent || log_info "Harbor active services:"
             echo "$active_services"
         fi
     else
-        log_info "Harbor services:"
+        $is_silent || log_info "Harbor services:"
         $(compose_with_options "*") config --services
     fi
 }
@@ -2602,18 +2605,22 @@ run_cmdh_command() {
     model)
         shift
         env_manager_alias cmdh.model "$@"
+        return 0
         ;;
     host)
         shift
         env_manager_alias cmdh.llm.host "$@"
+        return 0
         ;;
     key)
         shift
         env_manager_alias cmdh.llm.key "$@"
+        return 0
         ;;
     url)
         shift
         env_manager_alias cmdh.llm.url "$@"
+        return 0
         ;;
     -h | --help | help)
         echo "Please note that this is not cmdh CLI, but a Harbor CLI to manage cmdh service."
@@ -2627,16 +2634,18 @@ run_cmdh_command() {
         echo "  harbor cmdh key [key]            - Get or set the cmdh OpenAI LLM key"
         echo "  harbor cmdh url [url]            - Get or set the cmdh OpenAI LLM URL"
         ;;
-    *)
-        local services=$(get_active_services)
-        # Mount the current directory and set it as the working directory
-        $(compose_with_options $services "cmdh") run \
-            --rm \
-            -v "$original_dir:$original_dir" \
-            --workdir "$original_dir" \
-            cmdh "$*"
-        ;;
     esac
+
+    local services=$(get_active_services)
+
+    # Mount the current directory and set it as the working directory
+    $(compose_with_options $services "cmdh") run \
+        --rm \
+        -e "TERM=xterm-256color" \
+        --name $default_container_prefix.cmdh-cli \
+        -v "$original_dir:$original_dir" \
+        --workdir "$original_dir" \
+        cmdh "$*"
 }
 
 run_harbor_cmdh_command() {

@@ -3,13 +3,13 @@ The expected output from you has to be:
 {
   "setupCommands": string[],
   "desiredCommand": string,
-  "nonInteractive": "yes" | "no",
+  "nonInteractive": "true" | "false",
   "safetyLevel": "delete" | "overwrite" | "safe",
   "assistantMessage": string,
 }
 Fill "setupCommands" field to an array containing all package installation commands. If there are no setup commands, make it an empty array.
 Fill "desiredCommand" field to the Linux command the user is describing.
-Fill "nonInteractive" to "yes" if the command can be run in the non-interactive shell the same as it would in the interactive shell. Set it to "no" if the command explicitly requires the interactive shell to run at all.
+Fill "nonInteractive" to "true" if the command can be run in the non-interactive shell the same as it would in the interactive shell. Set it to "false" if the command explicitly requires the interactive shell to run at all.
 Fill "safetyLevel" field with:
   - "delete" if the command deletes one or more files.
   - "overwrite" if the command overwrites a file or adds content to an existing file.

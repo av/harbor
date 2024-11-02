@@ -10,7 +10,6 @@ COPY ./ollama.ts /app/cmdh/src/api/ollama.ts
 
 RUN cd /app/cmdh && ./install.sh
 # Warm up pkgx
-RUN pkgx /app/cmdh/dist/run.js
+RUN pkgx /app/cmdh/dist/src/system.js
 # RUN ls /app/cmdh
-
-ENTRYPOINT [ "node", "/app/cmdh/dist/index.js" ]
+ENTRYPOINT [ "node", "/app/cmdh/dist/src/cmdh.js" ]
