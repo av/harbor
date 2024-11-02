@@ -2,7 +2,9 @@ services:
   tabbyapi:
     image: nschle/tabbyapi:12.4.1-runtime-ubuntu22.04-runpod
     container_name: ${HARBOR_CONTAINER_PREFIX}.tabbyapi
-    env_file: ./.env
+    env_file:
+      - ./.env
+      - ./tabbyapi/override.env
     ports:
       - ${HARBOR_TABBYAPI_HOST_PORT}:5000
     environment:

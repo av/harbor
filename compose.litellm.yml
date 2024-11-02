@@ -1,7 +1,9 @@
 services:
   litellm:
     image: ghcr.io/berriai/litellm:main-stable
-    env_file: ./.env
+    env_file:
+      - ./.env
+      - ./litellm/override.env
     container_name: ${HARBOR_CONTAINER_PREFIX}.litellm
     volumes:
     # Additional config file volumes will be appended when

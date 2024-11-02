@@ -2,7 +2,9 @@ services:
   parler:
     container_name: ${HARBOR_CONTAINER_PREFIX}.parler
     image: fedirz/parler-tts-server
-    env_file: ./.env
+    env_file:
+      - ./.env
+      - ./parler/override.env
     ports:
       - ${HARBOR_PARLER_HOST_PORT}:8000
     volumes:

@@ -4,7 +4,9 @@ services:
       context: ./openinterpreter
       dockerfile: Dockerfile
     container_name: ${HARBOR_CONTAINER_PREFIX}.opint
-    env_file: ./.env
+    env_file:
+      - ./.env
+      - ./openinterpreter/override.env
     volumes:
       - ./openinterpreter/configs:/app/configs
       - ${HARBOR_OPINT_CONFIG_PATH}:/root/.config/open-interpreter

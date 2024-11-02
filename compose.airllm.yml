@@ -4,7 +4,9 @@ services:
       context: ./airllm
       dockerfile: ./Dockerfile
     container_name: ${HARBOR_CONTAINER_PREFIX}.airllm
-    env_file: ./.env
+    env_file:
+      - ./.env
+      - ./airllm/override.env
     environment:
       - HF_TOKEN=${HARBOR_HF_TOKEN}
       - MODEL=${HARBOR_AIRLLM_MODEL}

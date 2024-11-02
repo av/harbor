@@ -4,7 +4,9 @@ services:
       context: ./hf
       dockerfile: Dockerfile
     container_name: ${HARBOR_CONTAINER_PREFIX}.hf
-    env_file: ./.env
+    env_file:
+      - ./.env
+      - ./hf/override.env
     volumes:
       - ${HARBOR_HF_CACHE}:/root/.cache/huggingface
     environment:

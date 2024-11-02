@@ -1,7 +1,9 @@
 services:
   langfuse:
     image: langfuse/langfuse
-    env_file: ./.env
+    env_file:
+      - ./.env
+      - ./langfuse/override.env
     container_name: ${HARBOR_CONTAINER_PREFIX}.langfuse
     ports:
       - ${HARBOR_LANGFUSE_HOST_PORT}:3000

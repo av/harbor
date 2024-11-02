@@ -1,7 +1,9 @@
 services:
   ollama:
     container_name: ${HARBOR_CONTAINER_PREFIX}.ollama
-    env_file: ./.env
+    env_file:
+      - ./.env
+      - ./ollama/override.env
     volumes:
       - ${HARBOR_OLLAMA_CACHE}:/root/.ollama
       - ${HARBOR_HF_CACHE}:/root/.cache/huggingface

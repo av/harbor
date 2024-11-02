@@ -5,7 +5,9 @@ services:
       context: ./plandex
       dockerfile: Dockerfile
     container_name: ${HARBOR_CONTAINER_PREFIX}.plandex
-    env_file: ./.env
+    env_file:
+      - ./.env
+      - ./plandex/override.env
     # When running "harbor plandex <cmd>", Harbor will also
     #  dynamically mount closest .git directory to serve
     # as a volume for plandex to work in
@@ -33,7 +35,9 @@ services:
       - /etc/localtime:/etc/localtime:ro
     ports:
       - ${HARBOR_PLANDEX_HOST_PORT}:8080
-    env_file: ./.env
+    env_file:
+      - ./.env
+      - ./plandex/override.env
     environment:
       GOENV: development
       DATABASE_URL: postgresql://postgres:postgres@plandex-db:5432/postgres?sslmode=disable
@@ -53,7 +57,9 @@ services:
   plandex-db:
     image: postgres
     container_name: ${HARBOR_CONTAINER_PREFIX}.plandex-db
-    env_file: ./.env
+    env_file:
+      - ./.env
+      - ./plandex/override.env
     ports:
       - ${HARBOR_PLANDEX_DB_HOST_PORT}:5432
     volumes:

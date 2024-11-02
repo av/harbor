@@ -100,6 +100,11 @@ show_help() {
     echo "    config reset                - Reset Harbor configuration to default .env"
     echo "    config update               - Merge upstream config changes from default .env"
     echo
+    echo "  env <service> [key] [value]   - Manage override.env variables for a service"
+    echo "    env <service>               - List all variables for a service"
+    echo "    env <service> <key>         - Get a specific variable for a service"
+    echo "    env <service> <key> <value> - Set a specific variable for a service"
+    echo
     echo "  profile|profiles|p [ls|rm|add] - Manage Harbor profiles"
     echo "    profile ls|list             - List all profiles"
     echo "    profile rm|remove <name>    - Remove a profile"

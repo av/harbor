@@ -7,7 +7,9 @@ services:
       context: ./hfdownloader
       dockerfile: Dockerfile
     container_name: ${HARBOR_CONTAINER_PREFIX}.hfdownloader
-    env_file: ./.env
+    env_file:
+      - ./.env
+      - ./hfdownloader/override.env
     volumes:
       - ${HARBOR_HF_CACHE}:/app/hf
       - ${HARBOR_LLAMACPP_CACHE}:/app/llama.cpp

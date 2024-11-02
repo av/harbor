@@ -9,6 +9,9 @@ services:
     volumes:
       - ./bionicgpt/start_envoy.sh:/start_envoy.sh
     command: /start_envoy.sh
+    env_file:
+      - ./.env
+      - ./bionicgpt/override.env
 
   bionicgpt-app:
     image: ghcr.io/bionic-gpt/bionicgpt:1.7.41
