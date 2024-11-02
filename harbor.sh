@@ -1078,11 +1078,27 @@ env_manager() {
     local prefix="HARBOR_"
     local silent=false
 
-    # Check for --silent flag
-    if [[ "$1" == "--silent" ]]; then
-        silent=true
-        shift
-    fi
+    # Parse options
+    while [[ "$1" == --* ]]; do
+        case "$1" in
+            --silent)
+                silent=true
+                shift
+                ;;
+            --env-file)
+                env_file="$2"
+                shift 2
+                ;;
+            --prefix)
+                prefix="$2"
+                shift 2
+                ;;
+            *)
+                $silent || echo "Unknown option: $1"
+                return 1
+                ;;
+        esac
+    done
 
     case "$1" in
     get)
@@ -1096,7 +1112,6 @@ env_manager() {
         value="${value%\"}" # Remove trailing quote if present
         echo "$value"
         ;;
-
     set)
         if [[ -z "$2" ]]; then
             $silent || log_info "Usage: env_manager set <key> <value>"
@@ -1106,7 +1121,6 @@ env_manager() {
         shift 2          # Remove 'set' and the key from the arguments
         local value="$*" # Capture all remaining arguments as the value
         if grep -q "^$prefix$upper_key=" "$env_file"; then
-            # Remove trailing newlines from the temp file
             if [[ "$(uname)" == "Darwin" ]]; then
                 sed -i '' "s|^$prefix$upper_key=.*|$prefix$upper_key=\"$value\"|" "$env_file"
             else
@@ -1117,7 +1131,6 @@ env_manager() {
         fi
         $silent || log_info "Set $prefix$upper_key to: \"$value\""
         ;;
-
     list | ls)
         grep "^$prefix" "$env_file" | sed "s/^$prefix//" | while read -r line; do
             key=${line%%=*}
@@ -1126,7 +1139,6 @@ env_manager() {
             printf "%-30s %s\n" "$key" "$value"
         done
         ;;
-
     reset)
         shift
         if $silent; then
@@ -1135,31 +1147,30 @@ env_manager() {
             run_gum confirm "Are you sure you want to reset Harbor configuration?" && reset_env_file || log_warn "Reset cancelled"
         fi
         ;;
-
     update)
         shift
         merge_env_files
         ;;
-
     --help | -h)
         echo "Harbor configuration management"
         echo
-        echo "Usage: harbor config [--silent] {get|set|ls|list|reset|update} [key] [value]"
+        echo "Usage: harbor config [--silent] [--env-file <file>] [--prefix <prefix>] {get|set|ls|list|reset|update} [key] [value]"
         echo
         echo "Options:"
-        echo " --silent - Suppress all non-essential output"
+        echo " --silent        Suppress all non-essential output"
+        echo " --env-file      Specify a different environment file (default: .env)"
+        echo " --prefix        Specify a different variable prefix (default: HARBOR_)"
         echo
         echo "Commands:"
-        echo " get <key> - Get the value of a configuration key"
-        echo " set <key> <value> - Set the value of a configuration key"
-        echo " ls|list - List all configuration keys and values"
-        echo " reset - Reset Harbor configuration to default .env"
-        echo " update - Merge upstream config changes from default .env"
+        echo " get <key>       Get the value of a configuration key"
+        echo " set <key> <value> Set the value of a configuration key"
+        echo " ls|list         List all configuration keys and values"
+        echo " reset           Reset Harbor configuration to default .env"
+        echo " update          Merge upstream config changes from default .env"
         return 0
         ;;
-
     *)
-        $silent || echo "Usage: harbor config [--silent] {get|set|ls|reset} [key] [value]"
+        $silent || echo "Usage: harbor config [--silent] [--env-file <file>] [--prefix <prefix>] {get|set|ls|reset} [key] [value]"
         return $scramble_exit_code
         ;;
     esac
@@ -2016,6 +2027,34 @@ run_harbor_size() {
             echo "$dir: Directory not found"
         fi
     done <<<"$cache_dirs"
+}
+
+run_harbor_env() {
+    local service=$1
+
+    # Check folder
+    if [ -z "$service" ]; then
+        log_error "Please provide a service name."
+        return 1
+    fi
+
+    shift
+    local env_var=$1
+    local env_val=$2
+    local mgr_cmd="ls"
+
+    if [ -n "$env_var" ]; then
+        if [ -n "$env_val" ]; then
+            mgr_cmd="set"
+        else
+            mgr_cmd="get"
+        fi
+    fi
+
+    local env_file="$service/override.env"
+
+    log_debug "'env' $env_file - $mgr_cmd $env_var $env_val"
+    env_manager --env-file "$env_file" --prefix "" "$mgr_cmd" "$env_var" "$env_val"
 }
 
 # shellcheck disable=SC2034
@@ -3855,6 +3894,10 @@ main_entrypoint() {
     size)
         shift
         run_harbor_size "$@"
+        ;;
+    env)
+        shift
+        run_harbor_env "$@"
         ;;
     *)
         return $scramble_exit_code
