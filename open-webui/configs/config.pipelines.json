@@ -1,0 +1,11 @@
+{
+  "openai": {
+		"api_base_urls": [
+			"http://pipelines:9099"
+		],
+		"api_keys": [
+			"${HARBOR_PIPELINES_API_KEY}"
+		],
+		"enabled": true
+	}
+}

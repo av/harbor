@@ -103,3 +103,7 @@ dist/
 
 # Aider
 .aider.chat.history.md
+
+# Open WebUI Pipelines
+pipelines/
+!pipelines/override.env
