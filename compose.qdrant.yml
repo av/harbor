@@ -1,0 +1,27 @@
+services:
+  qdrant:
+    image: qdrant/qdrant:${HARBOR_QDRANT_VERSION}
+    env_file:
+      - ./.env
+      - ./qdrant/override.env
+    container_name: ${HARBOR_CONTAINER_PREFIX}.qdrant
+    volumes:
+      - ./qdrant/storage:/qdrant/storage
+    entrypoint: ["/qdrant/entrypoint.sh"]
+    ports:
+      - ${HARBOR_QDRANT_HOST_PORT}:6333
+      - ${HARBOR_QDRANT_HOST_GRPC_PORT}:6334
+    environment:
+      - QDRANT__SERVICE__API_KEY=${HARBOR_QDRANT_API_KEY}
+      - QDRANT__SERVICE__READ_ONLY_API_KEY=${HARBOR_QDRANT_READ_ONLY_API_KEY}
+      - QDRANT__SERVICE__JWT_RBAC=${HARBOR_QDRANT_JWT_RBAC}
+      - QDRANT__TELEMETRY_DISABLED=${HARBOR_QDRANT_DISABLE_TELEMETRY}
+      - QDRANT__LOG_LEVEL=${HARBOR_QDRANT_LOG_LEVEL}
+    healthcheck:
+      test: ["CMD", "bash", "-c", ":> /dev/tcp/127.0.0.1/6333"]
+      interval: 1s
+      timeout: 3s
+      retries: 10
+      start_period: 20s
+    networks:
+      - harbor-network
