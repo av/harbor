@@ -14,6 +14,7 @@ open-webui/config.json
 !open-webui/configs/
 !open-webui/extras/
 !open-webui/start_webui.sh
+!open-webui/override.env
 
 # Ollama
 /ollama/ollama/
