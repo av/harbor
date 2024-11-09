@@ -76,6 +76,7 @@ show_help() {
     echo "    hf find <query> - Open HF Hub with a query (trending by default)"
     echo "    hf path <spec>  - Print a folder in HF cache for a given model spec"
     echo "    hf *            - Anything else is passed to the official Hugging Face CLI"
+    echo "  k6                - Run K6 CLI"
     echo
     echo "Harbor CLI Commands:"
     echo "  open handle                   - Open a service in the default browser"
@@ -752,11 +753,23 @@ sys_open() {
 }
 
 run_open() {
+    local service_handle=$1
     local service_url
 
+    # Check if the service has a custom URL
+    local config_url=$(env_manager get "$service_handle.open_url")
+    if [ -n "$config_url" ]; then
+        if sys_open "$config_url"; then
+            log_info "Opened $config_url in your default browser."
+            return 0
+        fi
+    fi
+
+    # Use docker port for the final fallback
     if service_url=$(get_url "$1"); then
         sys_open "$service_url"
         log_info "Opened $service_url in your default browser."
+        return 0
     else
         log_error "Failed to get service URL for '$1'"
         return 1
@@ -3555,6 +3568,33 @@ run_repopack_command() {
         repopack "$@"
 }
 
+run_k6_command() {
+    local services=$(get_active_services)
+    echo "Active services: $services"
+
+    # Check if the specified service is running
+    if ! echo "$services" | grep -q "k6"; then
+        log_debug "K6 backend stopped, launching..."
+        harbor up --no-defaults k6
+    else
+        log_debug "K6 backend already running."
+    fi
+
+    log_info "--------------------------------------"
+    log_info "${c_y}🔗 Harbor K6: ${c_b}$(get_url k6-grafana)${c_nc}"
+    log_info "--------------------------------------"
+
+    $(compose_with_options --no-defaults "k6") run \
+        --rm \
+        -it \
+        --user "$(id -u):$(id -g)" \
+        --name $default_container_prefix.k6-cli-$RANDOM \
+        -e "TERM=xterm-256color" \
+        -v "$original_dir:$original_dir" \
+        --workdir "$original_dir" \
+        k6 run "$@"
+}
+
 # ========================================================================
 # == Main script
 # ========================================================================
@@ -3568,6 +3608,7 @@ scramble_exit_code=42
 harbor_home=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
 profiles_dir="$harbor_home/profiles"
 default_profile="$profiles_dir/default.env"
+default_current_env="$harbor_home/.env"
 default_gum_image="ghcr.io/charmbracelet/gum"
 
 original_dir=$PWD
@@ -3835,6 +3876,10 @@ main_entrypoint() {
     repopack)
         shift
         run_repopack_command "$@"
+        ;;
+    k6)
+        shift
+        run_k6_command "$@"
         ;;
     tunnel | t)
         shift

@@ -205,5 +205,8 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
     },
     qdrant: {
         tags: [HST.satellite],
+    },
+    k6: {
+        tags: [HST.satellite, HST.cli],
     }
 };
