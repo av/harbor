@@ -7,6 +7,7 @@
 ![GitHub repo file or directory count](https://img.shields.io/github/directory-file-count/av/harbor?type=file&extension=yml&label=compose%20files&color=orange)
 [![Visitors](https://api.visitorbadge.io/api/visitors?path=av%2Fharbor&countColor=%23263759&style=flat)](https://visitorbadge.io/status?path=av%2Fharbor)
 ![GitHub language count](https://img.shields.io/github/languages/count/av/harbor)
+[![Discord](https://img.shields.io/badge/Discord-Harbor-blue?logo=discord&logoColor=white)](https://discord.gg/8nDRphrhSF)
 
 Effortlessly run LLM backends, APIs, frontends, and services with one command.
 
