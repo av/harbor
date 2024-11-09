@@ -107,3 +107,6 @@ dist/
 # Open WebUI Pipelines
 pipelines/
 !pipelines/override.env
+
+# Qdrant
+qdrant/storage
