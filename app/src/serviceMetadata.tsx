@@ -199,5 +199,11 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
     },
     pipelines: {
         tags: [HST.satellite, HST.api],
+    },
+    chatnio: {
+        tags: [HST.frontend],
+    },
+    qdrant: {
+        tags: [HST.satellite],
     }
 };
