@@ -1,0 +1,37 @@
+channel:
+  - id: 1
+    name: Ollama
+    type: openai
+    priority: 0
+    weight: 1
+    models:
+      - llama3.1:8b
+    retry: 1
+    secret: sk-ollama
+    endpoint: http://ollama:11434
+    mapper: ""
+    state: true
+    group:
+      - anonymous
+      - normal
+      - basic
+      - standard
+      - pro
+    proxy:
+      proxytype: 0
+      proxy: ""
+      username: ""
+      password: ""
+    reflect: {}
+    hitmodels:
+      - llama3.1:8b
+    excludemodels: []
+    currentsecret: null
+market:
+  - id: llama3.1:8b
+    name: Llama3.1:8b
+    description: ""
+    default: true
+    highcontext: false
+    avatar: llama2.webp
+    tag: []

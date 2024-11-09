@@ -1,0 +1,5 @@
+# This config can be used to
+# permanently override the settings set by Harbor
+# Note that it'll also override the settings you configure
+# via the UI itself
+{}

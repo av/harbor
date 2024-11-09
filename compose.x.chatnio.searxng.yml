@@ -1,0 +1,4 @@
+services:
+  chatnio:
+    volumes:
+      - ./chatnio/config/config.searxng.yml:/configs/config.searxng.yml

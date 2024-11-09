@@ -1,0 +1,75 @@
+services:
+  chatnio:
+    # image: ${HARBOR_CHATNIO_IMAGE}:${HARBOR_CHATNIO_VERSION}
+    # We add a few of extra dependencies to the image
+    build:
+      context: ./chatnio
+      dockerfile: Dockerfile
+      args:
+        HARBOR_CHATNIO_IMAGE: ${HARBOR_CHATNIO_IMAGE}
+        HARBOR_CHATNIO_VERSION: ${HARBOR_CHATNIO_VERSION}
+    container_name: ${HARBOR_CONTAINER_PREFIX}.chatnio
+    ports:
+      - ${HARBOR_CHATNIO_HOST_PORT}:8094
+    depends_on:
+      - chatnio-mysql
+      - chatnio-redis
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
+    env_file:
+      - ./.env
+      - ./chatnio/override.env
+    environment:
+      MYSQL_HOST: chatnio-mysql
+      MYSQL_USER: ${HARBOR_CHATNIO_MYSQL_USER}
+      MYSQL_PASSWORD: ${HARBOR_CHATNIO_MYSQL_PASSWORD}
+      MYSQL_DB: ${HARBOR_CHATNIO_MYSQL_DATABASE}
+      REDIS_HOST: chatnio-redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ""
+      REDIS_DB: 0
+      SERVE_STATIC: "true"
+    volumes:
+      - ${HARBOR_CHATNIO_WORKPSACE}/config:/config
+      - ${HARBOR_CHATNIO_WORKPSACE}/logs:/logs
+      - ${HARBOR_CHATNIO_WORKPSACE}/storage:/storage
+      - ./chatnio/config/config.base.yml:/configs/config.base.yml
+      - ./chatnio/config/config.override.yml:/configs/config.z.override.yml
+      - ./chatnio/start_chatnio.sh:/app/start_chatnio.sh
+      - ./shared/yaml_config_merger.py:/app/yaml_config_merger.py
+    entrypoint: ["/app/start_chatnio.sh"]
+    networks:
+      - harbor-network
+
+  chatnio-mysql:
+    image: ${HARBOR_CHATNIO_MYSQL_IMAGE}:${HARBOR_CHATNIO_MYSQL_VERSION}
+    container_name: ${HARBOR_CONTAINER_PREFIX}.chatnio-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${HARBOR_CHATNIO_MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${HARBOR_CHATNIO_MYSQL_DATABASE}
+      MYSQL_USER: ${HARBOR_CHATNIO_MYSQL_USER}
+      MYSQL_PASSWORD: ${HARBOR_CHATNIO_MYSQL_PASSWORD}
+    env_file:
+      - ./.env
+      - ./chatnio/override.env
+    ports:
+      - ${HARBOR_CHATNIO_MYSQL_HOST_PORT}:3306
+    volumes:
+      - ${HARBOR_CHATNIO_WORKPSACE}/db:/var/lib/mysql
+    networks:
+      - harbor-network
+
+  chatnio-redis:
+    image: ${HARBOR_CHATNIO_REDIS_IMAGE}:${HARBOR_CHATNIO_REDIS_VERSION}
+    container_name: ${HARBOR_CONTAINER_PREFIX}.chatnio-redis
+    env_file:
+      - ./.env
+      - ./chatnio/override.env
+    ports:
+      - ${HARBOR_CHATNIO_REDIS_HOST_PORT}:6379
+    volumes:
+      - ${HARBOR_CHATNIO_WORKPSACE}/redis:/data
+    networks:
+      - harbor-network

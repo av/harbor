@@ -1768,7 +1768,7 @@ docker_fsacl() {
     sudo setfacl --recursive -m user:1000:rwx $folder && sudo setfacl --recursive -m user:1002:rwx $folder && sudo setfacl --recursive -m user:1001:rwx $folder
 }
 
-fix_fs_acl() {
+run_fixfs() {
     docker_fsacl .
 
     docker_fsacl $(eval echo "$(env_manager get hf.cache)")
@@ -3858,7 +3858,7 @@ main_entrypoint() {
         ;;
     fixfs)
         shift
-        fix_fs_acl
+        run_fixfs
         ;;
     info)
         shift

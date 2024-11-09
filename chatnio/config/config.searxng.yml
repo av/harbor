@@ -1,0 +1,18 @@
+system:
+  search:
+    endpoint: http://searxng:8080/search
+    crop: false
+    croplen: 1000
+    engines:
+      - wikipedia
+      - duckduckgo
+  imageproxy: false
+  safesearch: 0
+  common:
+    article: []
+    generation: []
+    cache: []
+    expire: 0
+    size: 0
+    imagestore: false
+    promptstore: false
