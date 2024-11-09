@@ -6,7 +6,7 @@ services:
       - ./.env
       - ./pipelines/override.env
     volumes:
-      - ./pipelines/default:/app/pipelines
+      - ./pipelines/persistent:${HARBOR_PIPELINES_DIR}
     entrypoint: [ "/bin/bash", "/app/start.sh" ]
     # NOTE: Currently pipelines doesn't have an `/health` endpoint and logs requests to `/`.
     # Consider disabling healthcheck if you need clear logs.
