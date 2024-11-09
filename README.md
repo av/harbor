@@ -17,15 +17,35 @@ Harbor is a containerized LLM toolkit that allows you to run LLMs and additional
 ## Services
 
 ##### UIs
-
-[Open WebUI](https://github.com/av/harbor/wiki/2.1.1-Frontend:-Open-WebUI) ⦁︎ [ComfyUI](https://github.com/av/harbor/wiki/2.1.2-Frontend:-ComfyUI) ⦁︎ [LibreChat](https://github.com/av/harbor/wiki/2.1.3-Frontend:-LibreChat) ⦁︎ [HuggingFace ChatUI](https://github.com/av/harbor/wiki/2.1.4-Frontend:-ChatUI) ⦁︎ [Lobe Chat](https://github.com/av/harbor/wiki/2.1.5-Frontend:-Lobe-Chat) ⦁︎ [Hollama](https://github.com/av/harbor/wiki/2.1.6-Frontend:-hollama) ⦁︎ [parllama](https://github.com/av/harbor/wiki/2.1.7-Frontend:-parllama) ⦁︎ [BionicGPT](https://github.com/av/harbor/wiki/2.1.8-Frontend:-BionicGPT) ⦁︎ [AnythingLLM](https://github.com/av/harbor/wiki/2.1.9-Frontend:-AnythingLLM)
+[Open WebUI](https://github.com/av/harbor/wiki/2.1.1-Frontend:-Open-WebUI) ⦁︎
+[ComfyUI](https://github.com/av/harbor/wiki/2.1.2-Frontend:-ComfyUI) ⦁︎
+[LibreChat](https://github.com/av/harbor/wiki/2.1.3-Frontend:-LibreChat) ⦁︎
+[HuggingFace ChatUI](https://github.com/av/harbor/wiki/2.1.4-Frontend:-ChatUI) ⦁︎
+[Lobe Chat](https://github.com/av/harbor/wiki/2.1.5-Frontend:-Lobe-Chat) ⦁︎
+[Hollama](https://github.com/av/harbor/wiki/2.1.6-Frontend:-hollama) ⦁︎
+[parllama](https://github.com/av/harbor/wiki/2.1.7-Frontend:-parllama) ⦁︎
+[BionicGPT](https://github.com/av/harbor/wiki/2.1.8-Frontend:-BionicGPT) ⦁︎
+[AnythingLLM](https://github.com/av/harbor/wiki/2.1.9-Frontend:-AnythingLLM) ⦁︎
+[Chat Nio](https://github.com/av/harbor/wiki/2.1.10-Frontend:-Chat-Nio)
 
 ##### Backends
-
-[Ollama](https://github.com/av/harbor/wiki/2.2.1-Backend:-Ollama) ⦁︎ [llama.cpp](https://github.com/av/harbor/wiki/2.2.2-Backend:-llama.cpp) ⦁︎ [vLLM](https://github.com/av/harbor/wiki/2.2.3-Backend:-vLLM) ⦁︎ [TabbyAPI](https://github.com/av/harbor/wiki/2.2.4-Backend:-TabbyAPI) ⦁︎ [Aphrodite Engine](https://github.com/av/harbor/wiki/2.2.5-Backend:-Aphrodite-Engine) ⦁︎ [mistral.rs](https://github.com/av/harbor/wiki/2.2.6-Backend:-mistral.rs) ⦁︎ [openedai-speech](https://github.com/av/harbor/wiki/2.2.7-Backend:-openedai-speech) ⦁︎ [faster-whisper-server](https://github.com/av/harbor/wiki/2.2.14-Backend:-Faster-Whisper) ⦁︎ [Parler](https://github.com/av/harbor/wiki/2.2.8-Backend:-Parler) ⦁︎ [text-generation-inference](https://github.com/av/harbor/wiki/2.2.9-Backend:-text-generation-inference) ⦁︎ [LMDeploy](https://github.com/av/harbor/wiki/2.2.10-Backend:-lmdeploy) ⦁︎ [AirLLM](https://github.com/av/harbor/wiki/2.2.11-Backend:-AirLLM) ⦁︎ [SGLang](https://github.com/av/harbor/wiki/2.2.12-Backend:-SGLang) ⦁︎ [KTransformers](https://github.com/av/harbor/wiki/2.2.13-Backend:-KTransformers) ⦁︎ [Nexa SDK](https://github.com/av/harbor/wiki/2.2.15-Backend:-Nexa-SDK)
+[Ollama](https://github.com/av/harbor/wiki/2.2.1-Backend:-Ollama) ⦁︎
+[llama.cpp](https://github.com/av/harbor/wiki/2.2.2-Backend:-llama.cpp) ⦁︎
+[vLLM](https://github.com/av/harbor/wiki/2.2.3-Backend:-vLLM) ⦁︎
+[TabbyAPI](https://github.com/av/harbor/wiki/2.2.4-Backend:-TabbyAPI) ⦁︎
+[Aphrodite Engine](https://github.com/av/harbor/wiki/2.2.5-Backend:-Aphrodite-Engine) ⦁︎
+[mistral.rs](https://github.com/av/harbor/wiki/2.2.6-Backend:-mistral.rs) ⦁︎
+[openedai-speech](https://github.com/av/harbor/wiki/2.2.7-Backend:-openedai-speech) ⦁︎
+[faster-whisper-server](https://github.com/av/harbor/wiki/2.2.14-Backend:-Faster-Whisper) ⦁︎
+[Parler](https://github.com/av/harbor/wiki/2.2.8-Backend:-Parler) ⦁︎
+[text-generation-inference](https://github.com/av/harbor/wiki/2.2.9-Backend:-text-generation-inference) ⦁︎
+[LMDeploy](https://github.com/av/harbor/wiki/2.2.10-Backend:-lmdeploy) ⦁︎
+[AirLLM](https://github.com/av/harbor/wiki/2.2.11-Backend:-AirLLM) ⦁︎
+[SGLang](https://github.com/av/harbor/wiki/2.2.12-Backend:-SGLang) ⦁︎
+[KTransformers](https://github.com/av/harbor/wiki/2.2.13-Backend:-KTransformers) ⦁︎
+[Nexa SDK](https://github.com/av/harbor/wiki/2.2.15-Backend:-Nexa-SDK)
 
 ##### Satellites
-
 [Harbor Bench](https://github.com/av/harbor/wiki/5.1.-Harbor-Bench) ⦁︎
 [Harbor Boost](https://github.com/av/harbor/wiki/5.2.-Harbor-Boost) ⦁︎
 [SearXNG](https://github.com/av/harbor/wiki/2.3.1-Satellite:-SearXNG) ⦁︎
