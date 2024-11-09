@@ -196,5 +196,8 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
     },
     bolt: {
         tags: [HST.satellite, HST.partial],
+    },
+    pipelines: {
+        tags: [HST.satellite, HST.api],
     }
 };
