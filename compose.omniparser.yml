@@ -1,0 +1,13 @@
+services:
+  omniparser:
+    build:
+      context: ./omniparser
+      dockerfile: Dockerfile
+    container_name: ${HARBOR_CONTAINER_PREFIX}.omniparser
+    env_file:
+      - ./.env
+      - ./omniparser/override.env
+    ports:
+      - ${HARBOR_OMNIPARSER_HOST_PORT}:7861
+    networks:
+      - harbor-network

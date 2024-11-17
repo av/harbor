@@ -1,0 +1,64 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+# Learn more about building a configuration: https://promptfoo.dev/docs/configuration/guide
+
+description: "My eval"
+
+prompts:
+  - "Write a concise, funny tweet about {{topic}}"
+
+providers:
+  - id: ollama:llama3.1:8b
+    label: "l3.1-0.0"
+    config:
+      temperature: 0.0
+  - id: ollama:llama3.1:8b
+    label: "l3.1-0.1"
+    config:
+      temperature: 0.1
+  - id: ollama:llama3.1:8b
+    label: "l3.1-0.2"
+    config:
+      temperature: 0.2
+  - id: ollama:llama3.1:8b
+    label: "l3.1-0.3"
+    config:
+      temperature: 0.3
+  - id: ollama:llama3.1:8b
+    label: "l3.1-0.4"
+    config:
+      temperature: 0.4
+  - id: ollama:llama3.1:8b
+    label: "l3.1-0.5"
+    config:
+      temperature: 0.5
+  - id: ollama:llama3.1:8b
+    label: "l3.1-0.6"
+    config:
+      temperature: 0.6
+  - id: ollama:llama3.1:8b
+    label: "l3.1-0.7"
+    config:
+      temperature: 0.7
+  - id: ollama:llama3.1:8b
+    label: "l3.1-0.8"
+    config:
+      temperature: 0.8
+  - id: ollama:llama3.1:8b
+    label: "l3.1-0.9"
+    config:
+      temperature: 0.9
+  - id: ollama:llama3.1:8b
+    label: "l3.1-1.0"
+    config:
+      temperature: 1.0
+
+tests:
+  - vars:
+      topic: new york city
+    assert:
+      # For more information on model-graded evals, see https://promptfoo.dev/docs/configuration/expected-outputs/model-graded
+      - type: llm-rubric
+        value: ensure that the output is funny
+        provider: ollama:llama3.1:8b
+

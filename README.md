@@ -74,7 +74,10 @@ Harbor is a containerized LLM toolkit that allows you to run LLMs and additional
 [Bolt.new](https://github.com/av/harbor/wiki/2.3.24-Satellite:-Bolt.new) ⦁︎
 [Open WebUI Pipelines](https://github.com/av/harbor/wiki/2.3.25-Satellite:-Open-WebUI-Pipelines) ⦁︎
 [Qdrant](https://github.com/av/harbor/wiki/2.3.26-Satellite:-Qdrant) ⦁︎
-[K6](https://github.com/av/harbor/wiki/2.3.26-Satellite:-K6)
+[K6](https://github.com/av/harbor/wiki/2.3.27-Satellite:-K6) ⦁︎
+[Promptfoo](https://github.com/av/harbor/wiki/2.3.28-Satellite:-Promptfoo) ⦁︎
+[Webtop](https://github.com/av/harbor/wiki/2.3.29-Satellite:-Webtop) ⦁︎
+[OmniParser](https://github.com/av/harbor/wiki/2.3.30-Satellite:-OmniParser) ⦁︎
 
 ## Blitz Tour
 

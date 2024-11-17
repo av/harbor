@@ -1,0 +1,33 @@
+services:
+  webtop:
+    # We add a few of extra dependencies to the image
+    build:
+      context: ./webtop
+      dockerfile: Dockerfile
+      args:
+        HARBOR_WEBTOP_IMAGE: ${HARBOR_WEBTOP_IMAGE}
+        HARBOR_WEBTOP_VERSION: ${HARBOR_WEBTOP_VERSION}
+    container_name: ${HARBOR_CONTAINER_PREFIX}.webtop
+    env_file:
+      - ./.env
+      - ./webtop/override.env
+    environment:
+      - HARBOR_HOME=/harbor
+      - PUID=${HARBOR_USER_ID}
+    volumes:
+      # Mount Host's Harbor home, very important for the interop
+      - .:/harbor
+      # Webtop homedir, can be cleared with "harbor webtop reset"
+      - ${HARBOR_WEBTOP_WORKSPACE}:/config
+      # Docker access
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Pre-provision docker groups
+      - ./webtop/init:/custom-cont-init.d:ro
+    ports:
+      - ${HARBOR_WEBTOP_HOST_PORT}:3000
+      # There's also HTTPS port, but we're not using it
+      # - ${HARBOR_WEBTOP_HOST_PORT}:3001
+    # Avoid crashes in modern browsers
+    shm_size: "1gb"
+    networks:
+      - harbor-network

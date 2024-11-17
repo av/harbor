@@ -1778,7 +1778,16 @@ hf_spec_2_folder_spec() {
 
 docker_fsacl() {
     local folder=$1
-    sudo setfacl --recursive -m user:1000:rwx $folder && sudo setfacl --recursive -m user:1002:rwx $folder && sudo setfacl --recursive -m user:1001:rwx $folder
+    log_debug "fsacl: $folder"
+
+    # 1000, 1001, 1002 - most frequent default users on Debian
+    # 100 - most frequent default on Alpine
+    # 911 - "abc" user from LinuxServer.io images
+    sudo setfacl --recursive -m user:1000:rwx $folder \
+    && sudo setfacl --recursive -m user:1002:rwx $folder \
+    && sudo setfacl --recursive -m user:1001:rwx $folder \
+    && sudo setfacl --recursive -m user:100:rwx $folder \
+    && sudo setfacl --recursive -m user:911:rwx $folder
 }
 
 run_fixfs() {
@@ -2072,6 +2081,13 @@ run_harbor_env() {
     local env_file="$service/override.env"
 
     log_debug "'env' $env_file - $mgr_cmd $env_var $env_val"
+
+    if [ ! -f "$env_file" ]; then
+        log_error "Unknown service: $service. Please provide a valid service name."
+        return 1
+    fi
+
+
     env_manager --env-file "$env_file" --prefix "" "$mgr_cmd" "$env_var" "$env_val"
 }
 
@@ -3595,17 +3611,83 @@ run_k6_command() {
         k6 run "$@"
 }
 
+run_promptfoo_command() {
+    local services=$(get_active_services)
+    log_debug "Active services: $services"
+
+    # Check if the specified service is running
+    if ! echo "$services" | grep -q "promptfoo"; then
+        log_debug "Promptfoo backend stopped, launching..."
+        run_up --no-defaults promptfoo
+    else
+        log_debug "Promptfoo backend already running."
+    fi
+
+    case "$1" in
+        view|open|o)
+            shift
+            run_open promptfoo
+            ;;
+    esac
+
+    $(compose_with_options $services "promptfoo") run \
+        --rm \
+        -it \
+        --name $default_container_prefix.promptfoo-cli-$RANDOM \
+        -e "TERM=xterm-256color" \
+        -v "$original_dir:$original_dir" \
+        --workdir "$original_dir" \
+        --entrypoint promptfoo \
+        promptfoo "$@"
+}
+
+run_webtop_command() {
+    local services=$(get_active_services)
+    local is_running=false
+
+    if echo "$services" | grep -q "webtop"; then
+        is_running=true
+    fi
+
+    case "$1" in
+        reset)
+            shift
+            # Just in case
+            run_down webtop
+            # Cleanup data directory
+            local data_dir=$(env_manager get webtop.workspace)
+            log_info "Deleting Webtop workspace at '$data_dir'"
+            rm -rf $data_dir
+            return 0
+            ;;
+    esac
+
+    if [ "$is_running" = true ] ; then
+        log_error "Webtop is already running, use 'harbor exec webtop' to interact with it."
+        return 1
+    fi
+
+    $(compose_with_options $services "webtop") run \
+        --rm \
+        --service-ports \
+        --name $default_container_prefix.webtop-cli-$RANDOM \
+        -e "TERM=xterm-256color" \
+        -v "$original_dir:$original_dir" \
+        --workdir "$original_dir" \
+        webtop with-contenv "$@"
+}
+
 # ========================================================================
 # == Main script
 # ========================================================================
 
 # Globals
-version="0.2.16"
+version="0.2.17"
 harbor_repo_url="https://github.com/av/harbor.git"
 harbor_release_url="https://api.github.com/repos/av/harbor/releases/latest"
 delimiter="|"
 scramble_exit_code=42
-harbor_home=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
+harbor_home=${HARBOR_HOME:-$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")}
 profiles_dir="$harbor_home/profiles"
 default_profile="$profiles_dir/default.env"
 default_current_env="$harbor_home/.env"
@@ -3880,6 +3962,14 @@ main_entrypoint() {
     k6)
         shift
         run_k6_command "$@"
+        ;;
+    promptfoo|pf)
+        shift
+        run_promptfoo_command "$@"
+        ;;
+    webtop)
+        shift
+        run_webtop_command "$@"
         ;;
     tunnel | t)
         shift

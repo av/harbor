@@ -35,6 +35,9 @@ search:
   autocomplete: ""
   # minimun characters to type before autocompleter starts
   autocomplete_min: 4
+  # backend for the favicon near URL in search results.
+  # Available resolvers: "allesedv", "duckduckgo", "google", "yandex" - leave blank to turn it off by default.
+  favicon_resolver: ""
   # Default search language - leave blank to detect from browser information or
   # use codes from 'languages.py'
   default_lang: "auto"
@@ -88,7 +91,7 @@ server:
   # If your instance owns a /etc/searxng/settings.yml file, then set the following
   # values there.
 
-  secret_key: "c6ece0a034f24958b6bda05542fb4d6e6f3a4d66cdb42d455222ce526e6ed038"  # Is overwritten by ${SEARXNG_SECRET}
+  secret_key: "e77a4285a0681629c9c5f39336850d9b228d4f92580e08584a42b13be03b5bcf"  # Is overwritten by ${SEARXNG_SECRET}
   # Proxy image results through SearXNG. Is overwritten by ${SEARXNG_IMAGE_PROXY}
   image_proxy: false
   # 1.0 and 1.1 are supported
@@ -219,19 +222,16 @@ outgoing:
 #
 # enabled_plugins:
 #   # these plugins are enabled if nothing is configured ..
+#   - 'Basic Calculator'
 #   - 'Hash plugin'
 #   - 'Self Information'
 #   - 'Tracker URL remover'
+#   - 'Unit converter plugin'
 #   - 'Ahmia blacklist'  # activation depends on outgoing.using_tor_proxy
 #   # these plugins are disabled if nothing is configured ..
 #   - 'Hostnames plugin'  # see 'hostnames' configuration below
-#   - 'Basic Calculator'
 #   - 'Open Access DOI rewrite'
 #   - 'Tor check plugin'
-#   # Read the docs before activate: auto-detection of the language could be
-#   # detrimental to users expectations / users can activate the plugin in the
-#   # preferences if they want.
-#   - 'Autodetect search language'
 
 # Configuration of the "Hostnames plugin":
 #
@@ -482,6 +482,23 @@ engines:
     # to show premium or plus results too:
     # skip_premium: false
 
+  - name: cloudflareai
+    engine: cloudflareai
+    shortcut: cfai
+    # get api token and accont id from https://developers.cloudflare.com/workers-ai/get-started/rest-api/
+    cf_account_id: 'your_cf_accout_id'
+    cf_ai_api: 'your_cf_api'
+    # create your ai gateway by https://developers.cloudflare.com/ai-gateway/get-started/creating-gateway/
+    cf_ai_gateway: 'your_cf_ai_gateway_name'
+    # find the model name from https://developers.cloudflare.com/workers-ai/models/#text-generation
+    cf_ai_model: 'ai_model_name'
+    # custom your preferences
+    # cf_ai_model_display_name: 'Cloudflare AI'
+    # cf_ai_model_assistant: 'prompts_for_assistant_role'
+    # cf_ai_model_system: 'prompts_for_system_role'
+    timeout: 30
+    disabled: true
+
   # - name: core.ac.uk
   #   engine: core
   #   categories: science
@@ -561,33 +578,6 @@ engines:
     engine: currency_convert
     categories: general
     shortcut: cc
-
-  - name: bahnhof
-    engine: json_engine
-    search_url: https://www.bahnhof.de/api/stations/search/{query}
-    url_prefix: https://www.bahnhof.de/
-    url_query: slug
-    title_query: name
-    content_query: state
-    shortcut: bf
-    disabled: true
-    about:
-      website: https://www.bahn.de
-      wikidata_id: Q22811603
-      use_official_api: false
-      require_api_key: false
-      results: JSON
-      language: de
-    tests:
-      bahnhof:
-        matrix:
-          query: berlin
-          lang: en
-        result_container:
-          - not_empty
-          - ['one_title_contains', 'Berlin Hauptbahnhof']
-        test:
-          - unique_results
 
   - name: deezer
     engine: deezer
@@ -834,24 +824,21 @@ engines:
     timeout: 10
 
   - name: gitlab
-    engine: json_engine
-    paging: true
-    search_url: https://gitlab.com/api/v4/projects?search={query}&page={pageno}
-    url_query: web_url
-    title_query: name_with_namespace
-    content_query: description
-    page_size: 20
-    categories: [it, repos]
+    engine: gitlab
+    base_url: https://gitlab.com
     shortcut: gl
-    timeout: 10.0
     disabled: true
     about:
-      website: https://about.gitlab.com/
+      website: https://gitlab.com/
       wikidata_id: Q16639197
-      official_api_documentation: https://docs.gitlab.com/ee/api/
-      use_official_api: false
-      require_api_key: false
-      results: JSON
+
+  # - name: gnome
+  #   engine: gitlab
+  #   base_url: https://gitlab.gnome.org
+  #   shortcut: gn
+  #   about:
+  #     website: https://gitlab.gnome.org
+  #     wikidata_id: Q44316
 
   - name: github
     engine: github
@@ -929,26 +916,6 @@ engines:
     categories: images
     shortcut: mi
     disabled: true
-
-  - name: gpodder
-    engine: json_engine
-    shortcut: gpod
-    timeout: 4.0
-    paging: false
-    search_url: https://gpodder.net/search.json?q={query}
-    url_query: url
-    title_query: title
-    content_query: description
-    page_size: 19
-    categories: music
-    disabled: true
-    about:
-      website: https://gpodder.net
-      wikidata_id: Q3093354
-      official_api_documentation: https://gpoddernet.readthedocs.io/en/latest/api/
-      use_official_api: false
-      requires_api_key: false
-      results: JSON
 
   - name: habrahabr
     engine: xpath
@@ -1313,6 +1280,12 @@ engines:
       require_api_key: false
       results: JSON
 
+  - name: openlibrary
+    engine: openlibrary
+    shortcut: ol
+    timeout: 5
+    disabled: true
+
   - name: openmeteo
     engine: open_meteo
     shortcut: om
@@ -1575,6 +1548,24 @@ engines:
     page_size: 25
     disabled: true
 
+  - name: right dao
+    engine: xpath
+    paging: true
+    page_size: 12
+    search_url: https://rightdao.com/search?q={query}&start={pageno}
+    results_xpath: //div[contains(@class, "description")]
+    url_xpath: ../div[contains(@class, "title")]/a/@href
+    title_xpath: ../div[contains(@class, "title")]
+    content_xpath: .
+    categories: general
+    shortcut: rd
+    disabled: true
+    about:
+      website: https://rightdao.com/
+      use_official_api: false
+      require_api_key: false
+      results: HTML
+
   - name: rottentomatoes
     engine: rottentomatoes
     shortcut: rt
@@ -1814,6 +1805,22 @@ engines:
     engine: unsplash
     shortcut: us
 
+  - name: yandex
+    engine: yandex
+    categories: general
+    search_type: web
+    shortcut: yd
+    disabled: true
+    inactive: true
+
+  - name: yandex images
+    engine: yandex
+    categories: images
+    search_type: images
+    shortcut: ydi
+    disabled: true
+    inactive: true
+
   - name: yandex music
     engine: yandex_music
     shortcut: ydm
@@ -1861,25 +1868,6 @@ engines:
     disabled: true
     about:
       website: https://wiby.me/
-
-  - name: alexandria
-    engine: json_engine
-    shortcut: alx
-    categories: general
-    paging: true
-    search_url: https://api.alexandria.org/?a=1&q={query}&p={pageno}
-    results_query: results
-    title_query: title
-    url_query: url
-    content_query: snippet
-    timeout: 1.5
-    disabled: true
-    about:
-      website: https://alexandria.org/
-      official_api_documentation: https://github.com/alexandria-org/alexandria-api/raw/master/README.md
-      use_official_api: true
-      require_api_key: false
-      results: JSON
 
   - name: wikibooks
     engine: mediawiki
@@ -2048,6 +2036,16 @@ engines:
   #    limit: 10
   #    query_str: 'SELECT * from mytable WHERE fieldname=%(query)s'
   #    shortcut: mysql
+
+  # Required dependency: mariadb
+  #  - name: mariadb
+  #    engine: mariadb_server
+  #    database: mydatabase
+  #    username: user
+  #    password: pass
+  #    limit: 10
+  #    query_str: 'SELECT * from mytable WHERE fieldname=%(query)s'
+  #    shortcut: mdb
 
   - name: 1337x
     engine: 1337x

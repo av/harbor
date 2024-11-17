@@ -1,0 +1,137 @@
+services:
+  # Proxy to work around the secure cookies
+  # and cors for localhost deployment
+  perplexideez:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.perplexideez
+    image: nginx:alpine
+    ports:
+      - ${HARBOR_PERPLEXIDEEZ_HOST_PORT}:80
+    configs:
+      - source: perplexideez_proxy_config
+        target: /etc/nginx/conf.d/default.conf
+    depends_on:
+      perplexideez-service:
+        condition: service_healthy
+    networks:
+      - harbor-network
+
+  perplexideez-service:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.perplexideez-service
+    image: ${HARBOR_PERPLEXIDEEZ_IMAGE}:${HARBOR_PERPLEXIDEEZ_VERSION}
+    env_file:
+      - ./.env
+      - ./perplexideez/override.env
+    healthcheck:
+      # TODO:
+      # https://github.com/brunostjohn/perplexideez/issues/12
+      test: ["CMD", "true"]
+      interval: 2s
+      timeout: 60s
+      retries: 5
+      start_period: 10s
+    depends_on:
+      perplexideez-db:
+        condition: service_healthy
+      perplexideez-migrate:
+        condition: service_completed_successfully
+    networks:
+      - harbor-network
+
+  perplexideez-db:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.perplexideez-db
+    image: postgres:16-alpine
+    restart: unless-stopped
+    volumes:
+      - ./perplexideez/pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: "pg_isready -d postgres -U postgres -h localhost"
+      interval: 2s
+      timeout: 60s
+      retries: 5
+    env_file:
+      - ./.env
+      - ./perplexideez/override.env
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=postgres
+    networks:
+      - harbor-network
+
+  perplexideez-migrate:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.perplexideez-migrate
+    image: ${HARBOR_PERPLEXIDEEZ_MIGRATE_IMAGE}
+    env_file:
+      - ./.env
+      - ./perplexideez/override.env
+    depends_on:
+      perplexideez-db:
+        condition: service_healthy
+    networks:
+      - harbor-network
+
+configs:
+  perplexideez_proxy_config:
+    content: |
+      server {
+          listen 80;
+          gzip_static off;
+          server_name perplexideez.com;
+
+          location / {
+              proxy_pass http://perplexideez-service:3000;
+              proxy_set_header Host perplexideez.com;
+              proxy_set_header X-Real-IP $$remote_addr;
+              proxy_set_header X-Forwarded-For $$proxy_add_x_forwarded_for;
+              proxy_set_header X-Forwarded-Proto https;
+
+              # Disable CSRF protection in Nginx
+              proxy_set_header X-Forwarded-Host $$host;
+              proxy_set_header Origin https://perplexideez.com;
+              proxy_set_header Referer https://perplexideez.com;
+
+              # Rewrite Location header to use localhost
+              proxy_redirect https://perplexideez.com/ http://localhost:34261/;
+              proxy_redirect http://perplexideez.com/ http://localhost:34261/;
+
+              # Cookie rewriting
+              proxy_cookie_domain perplexideez.com localhost;
+              proxy_cookie_path / /;
+              proxy_cookie_flags ~ -secure;
+
+              # Force uncompressed response to allow substitutions
+              proxy_set_header Accept-Encoding "";
+
+              # Rewrite Secure-prefixed cookies
+              proxy_hide_header set-cookie;
+              proxy_set_header Accept-Encoding "";
+              sub_filter_types *;
+              sub_filter_once off;
+              sub_filter '__Secure-' '';
+              sub_filter '; Secure' '';
+              sub_filter 'perplexideez.com' 'localhost:34261';
+              sub_filter "https://localhost:34261" "http://localhost:34261";
+              sub_filter "https%3A%2F%2Flocalhost%3A34261" "http%3A%2F%2Flocalhost%3A34261";
+              sub_filter 'href="https://localhost:34261' 'href="http://localhost:34261';
+              sub_filter 'content="https://localhost:34261' 'content="http://localhost:34261';
+
+              # CORS headers
+              add_header 'Access-Control-Allow-Origin' '*';
+              add_header 'Access-Control-Allow-Methods' 'GET, POST, OPTIONS';
+              add_header 'Access-Control-Allow-Headers' 'DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization';
+
+              # Handle OPTIONS method
+              if ($$request_method = 'OPTIONS') {
+                  add_header 'Access-Control-Allow-Origin' '*';
+                  add_header 'Access-Control-Allow-Methods' 'GET, POST, OPTIONS';
+                  add_header 'Access-Control-Allow-Headers' 'DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization';
+                  add_header 'Access-Control-Max-Age' 1728000;
+                  add_header 'Content-Type' 'text/plain; charset=utf-8';
+                  add_header 'Content-Length' 0;
+                  return 204;
+              }
+
+              # Force processing of response
+              proxy_force_ranges on;
+          }
+      }

@@ -1,0 +1,5 @@
+services:
+  perplexideez:
+    environment:
+      - LLM_MODE="ollama"
+      - OLLAMA_URL=${HARBOR_OLLAMA_INTERNAL_URL}

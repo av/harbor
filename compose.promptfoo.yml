@@ -1,0 +1,28 @@
+services:
+  promptfoo:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.promptfoo
+    env_file:
+      - ./.env
+      - ./promptfoo/override.env
+    environment:
+      - PROMPTFOO_REMOTE_API_BASE_URL=${HARBOR_PROMPTFOO_REMOTE_API_BASE_URL}
+      - PROMPTFOO_REMOTE_APP_BASE_URL=http://localhost:${HARBOR_PROMPTFOO_REMOTE_APP_BASE_URL}
+      - PROMPTFOO_DISABLE_TELEMETRY=1
+      - PROMPTFOO_DISABLE_UPDATE=1
+    image: ${HARBOR_PROMPTFOO_IMAGE}:${HARBOR_PROMPTFOO_VERSION}
+    ports:
+      - ${HARBOR_PROMPTFOO_HOST_PORT}:3000
+    volumes:
+      - ${HARBOR_PROMPTFOO_WORKSPACE}:/home/promptfoo/.promptfoo
+    # Original healthcheck is very
+    # slow, server starts in ~2s, so overriding
+    healthcheck:
+      test: [ "CMD-SHELL", "exit 0" ]
+      interval: 2s
+      timeout: 1s
+      start_period: 1s
+      retries: 5
+    # Avoiding issues with SIGTERM in the original
+    command: ["ash", "-c", "node /app/dist/src/server/index.js"]
+    networks:
+      - harbor-network

@@ -1,0 +1,10 @@
+@host = http://localhost:34261
+
+###
+
+POST /auth/signUp?email=perplexideez%40gmail.com&password=perplexideez&username=perplexideez
+Content-Type: application/x-www-form-urlencoded
+
+###
+
+GET /
