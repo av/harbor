@@ -211,5 +211,11 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
     },
     promptfoo: {
         tags: [HST.satellite, HST.cli],
+    },
+    webtop: {
+        tags: [HST.satellite],
+    },
+    omniparser: {
+        tags: [HST.satellite],
     }
 };
