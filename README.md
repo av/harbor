@@ -1,8 +1,8 @@
 ![Harbor project logo](https://github.com/av/harbor/raw/main/docs/harbor-2.png)
 
-![GitHub Tag](https://img.shields.io/github/v/tag/av/harbor)
-![NPM Version](https://img.shields.io/npm/v/%40avcodes%2Fharbor?labelColor=red&color=white)
-![PyPI - Version](https://img.shields.io/pypi/v/llm-harbor?labelColor=blue)
+[![GitHub Tag](https://img.shields.io/github/v/tag/av/harbor)](https://github.com/av/harbor/releases)
+[![NPM Version](https://img.shields.io/npm/v/%40avcodes%2Fharbor?labelColor=red&color=white)](https://www.npmjs.com/package/@avcodes/harbor)
+[![PyPI - Version](https://img.shields.io/pypi/v/llm-harbor?labelColor=blue)](https://pypi.org/project/llm-harbor/)
 ![GitHub repo size](https://img.shields.io/github/repo-size/av/harbor)
 ![GitHub repo file or directory count](https://img.shields.io/github/directory-file-count/av/harbor?type=file&extension=yml&label=compose%20files&color=orange)
 [![Visitors](https://api.visitorbadge.io/api/visitors?path=av%2Fharbor&countColor=%23263759&style=flat)](https://visitorbadge.io/status?path=av%2Fharbor)
