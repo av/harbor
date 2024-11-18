@@ -1,0 +1,59 @@
+services:
+  k6:
+    container_name: k6
+    environment:
+      K6_OUT: influxdb=http://k6-influxdb:8086/k6
+    extra_hosts:
+      - host.docker.internal=host-gateway
+    image: grafana/k6:latest
+    ports:
+      - mode: ingress
+        target: 6565
+        published: "34231"
+        protocol: tcp
+    volumes:
+      - type: bind
+        source: ./scripts
+        target: /scripts
+        bind:
+          create_host_path: true
+
+  k6-grafana:
+    container_name: k6-grafana
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_BASIC_ENABLED: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: '"/var/lib/grafana/dashboards/k6-load-testing-results_rev3.json"'
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+    image: grafana/grafana:10.2.4
+    ports:
+      - mode: ingress
+        target: 3000
+        published: "34233"
+        protocol: tcp
+    volumes:
+      - type: bind
+        source: ./dashboards
+        target: /var/lib/grafana/dashboards
+        bind:
+          create_host_path: true
+      - type: bind
+        source: ./grafana-dashboard.yaml
+        target: /etc/grafana/provisioning/dashboards/dashboard.yaml
+        bind:
+          create_host_path: true
+      - type: bind
+        source: ./grafana-datasource.yaml
+        target: /etc/grafana/provisioning/datasources/datasource.yaml
+        bind:
+          create_host_path: true
+
+  k6-influxdb:
+    container_name: k6-influxdb
+    image: influxdb:1.8
+    ports:
+      - mode: ingress
+        target: 8086
+        published: "34232"
+        protocol: tcp
