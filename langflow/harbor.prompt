@@ -1,0 +1,11 @@
+#!/bin/bash
+# langflow/harbor.prompt
+# This is the prompt file for Langflow integration
+
+__HARBOR_LANGFLOW_DESCRIPTION="Langflow: A LangChain Flow UI"
+__HARBOR_LANGFLOW_DOCS="https://docs.langflow.org"
+__HARBOR_LANGFLOW_MAIN_PORT=7860
+__HARBOR_LANGFLOW_HELP="Langflow is a UI for LangChain, designed to help you prototype and build LLM applications."
+
+main() {
+    return 0

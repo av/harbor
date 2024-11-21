@@ -37,6 +37,7 @@ show_help() {
     echo "  llamacpp  - Configure llamacpp service"
     echo "  tgi       - Configure text-generation-inference service"
     echo "  litellm   - Configure LiteLLM service"
+    echo "  langflow  - Configure Langflow UI Service"
     echo "  openai    - Configure OpenAI API keys and URLs"
     echo "  vllm      - Configure VLLM service"
     echo "  aphrodite - Configure Aphrodite service"
@@ -3505,6 +3506,96 @@ run_boost_command() {
     esac
 }
 
+run_langflow_command() {
+    case "$1" in
+        ui | open)
+            shift
+            local port=${HARBOR_LANGFLOW_HOST_PORT:-7860}
+            local url="http://localhost:$port"
+            if sys_open "$url"; then
+                log_info "Opened Langflow UI at $url"
+            else
+                log_error "Failed to open Langflow UI. Try visiting $url manually."
+                return 1
+            fi
+            ;;
+        url)
+            shift
+            local port=${HARBOR_LANGFLOW_HOST_PORT:-7860}
+            echo "http://localhost:$port"
+            ;;        version)
+            shift
+            env_manager_alias langflow.version "$@"
+            ;;
+        auth)
+            shift
+            case "$1" in
+                username)
+                    shift
+                    env_manager_alias langflow.superuser "$@"
+                    ;;
+                password)
+                    shift
+                    env_manager_alias langflow.password "$@"
+                    ;;
+                autologin)
+                    shift
+                    env_manager_alias langflow.auto_login "$@"
+                    ;;
+                *)
+                    echo "Usage: harbor langflow auth {username|password|autologin}"
+                    return 1
+                    ;;
+            esac
+            ;;
+        workspace)
+            shift
+            execute_and_process "env_manager get langflow.data" "sys_open {{output}}" "No langflow.data set"
+            ;;
+        ui)
+            shift
+            if service_url=$(get_url langflow 2>&1); then
+                sys_open "$service_url"
+            else
+                log_error "Failed to get service URL for langflow: $service_url"
+                exit 1
+            fi
+            ;;
+        -h | --help | help)
+            echo "Langflow - LangChain Flow UI"
+            echo
+            echo "Langflow provides a visual way to build and prototype LangChain applications."
+            echo
+            echo "Usage: harbor langflow <command>"
+            echo
+            echo "Commands:"
+            echo "  version [version]     - Get or set Langflow version"
+            echo "  auth username [user]  - Get or set admin username"
+            echo "  auth password [pass]  - Get or set admin password"
+            echo "  auth autologin [bool] - Enable/disable auto login"
+            echo "  workspace             - Open Langflow workspace directory"
+            echo "  ui                    - Open Langflow UI in browser"
+            echo
+            echo "Quick Start:"
+            echo "  harbor up langflow               - Start Langflow"
+            echo "  harbor up langflow langflow-db   - Start with PostgreSQL"
+            echo "  harbor open langflow             - Open the UI"
+            echo
+            echo "Default Configuration:"
+            echo "  Admin User: admin@admin.com"
+            echo "  Password:   admin"
+            echo "  Port:      7860"
+            echo
+            echo "Database Options:"
+            echo "  SQLite (default) - No additional configuration needed"
+            echo "  PostgreSQL       - Start with 'harbor up langflow langflow-db'"
+            ;;
+        *)
+            return $scramble_exit_code
+            ;;
+    esac
+}
+
 run_openhands_command() {
     local services=$(get_active_services)
 
@@ -3971,6 +4062,10 @@ main_entrypoint() {
         shift
         run_webtop_command "$@"
         ;;
+    langflow)
+        shift
+        run_langflow_command "$@"
+        ;;    
     tunnel | t)
         shift
         establish_tunnel "$@"
