@@ -1,0 +1,15 @@
+
+services:
+  flowise:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.flowise
+    image: ${HARBOR_FLOWISE_IMAGE}:${HARBOR_FLOWISE_VERSION}
+    ports:
+      - ${HARBOR_FLOWISE_HOST_PORT}:3000
+    volumes:
+      # Persistence
+      - ${HARBOR_FLOWISE_WORKSPACE}:/root/.flowise
+    env_file:
+      - ./.env
+      - flowise/override.env
+    networks:
+      - harbor-network
