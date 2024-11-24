@@ -130,7 +130,6 @@ harbor exec llamacpp ./scripts/llama-bench --help
 harbor shell vllm
 
 # Tell your shell exactly what you think about it
-# courtesy of Open Interpreter
 harbor opint
 harbor aider
 harbor aichat
