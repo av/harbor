@@ -2,8 +2,6 @@ services:
   langflow:
     container_name: ${HARBOR_CONTAINER_PREFIX:-harbor}.langflow
     image: langflowai/langflow:${HARBOR_LANGFLOW_VERSION:-latest}
-    user: root
-    restart: unless-stopped
     ports:
       - "${HARBOR_LANGFLOW_HOST_PORT:-7860}:7860"
     volumes:
@@ -17,21 +15,8 @@ services:
       - LANGFLOW_CONFIG_DIR=/var/lib/langflow
       - LANGFLOW_HOST=0.0.0.0
       - LANGFLOW_PORT=7860
-      - PYTHONUNBUFFERED=1
     networks:
-      - harbor_net
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:7860/health || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
-    # Make sure we specify port bindings correctly for Harbor detection
+      - harbor-network
     labels:
-      - "com.docker.compose.service=langflow"
       - "harbor.service=langflow"
       - "harbor.port=7860"
-
-networks:
-  harbor_net:
-    external: true
