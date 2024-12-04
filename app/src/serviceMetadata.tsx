@@ -195,7 +195,7 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         tags: [HST.satellite],
     },
     bolt: {
-        tags: [HST.satellite, HST.partial],
+        tags: [HST.satellite],
     },
     pipelines: {
         tags: [HST.satellite, HST.api],
@@ -216,6 +216,9 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         tags: [HST.satellite],
     },
     omniparser: {
+        tags: [HST.satellite],
+    },
+    flowise: {
         tags: [HST.satellite],
     }
 };

@@ -3,9 +3,7 @@ services:
     container_name: ${HARBOR_CONTAINER_PREFIX}.bolt
     image: ${HARBOR_BOLT_IMAGE}:${HARBOR_BOLT_VERSION}
     ports:
-      - ${HARBOR_BOLT_HOST_PORT}:3000
-    environment:
-      - NODE_ENV=production
+      - ${HARBOR_BOLT_HOST_PORT}:5173
     env_file:
       - ./.env
       - ./bolt/override.env
@@ -15,4 +13,4 @@ services:
     volumes:
       - ./bolt/.env.local:/app/.env.local
       # - ./bolt/model.ts:/app/app/lib/.server/llm/model.ts
-    command: bash -c "pnpm run build && pnpm run start"
+    command: bash -c "pnpm run build && pnpm run dockerstart"
