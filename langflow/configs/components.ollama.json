@@ -1,0 +1,21 @@
+{
+  "llms": [
+    {
+      "provider": "ollama",
+      "models": [
+        {
+          "name": "llama2",
+          "base_url": "${LANGFLOW_OLLAMA_API_BASE}"
+        },
+        {
+          "name": "mistral",
+          "base_url": "${LANGFLOW_OLLAMA_API_BASE}"
+        },
+        {
+          "name": "codellama",
+          "base_url": "${LANGFLOW_OLLAMA_API_BASE}"
+        }
+      ]
+    }
+  ]
+}

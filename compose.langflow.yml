@@ -1,0 +1,13 @@
+services:
+  langflow:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.langflow
+    image: langflowai/langflow:${HARBOR_LANGFLOW_VERSION}
+    ports:
+      - "${HARBOR_LANGFLOW_HOST_PORT}:7860"
+    volumes:
+      - ${HARBOR_LANGFLOW_DATA}:/var/lib/langflow
+    networks:
+      - harbor-network
+    labels:
+      - "harbor.service=langflow"
+      - "harbor.port=7860"
