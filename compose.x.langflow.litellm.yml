@@ -1,0 +1,4 @@
+services:
+  langflow:
+    environment:
+      - langflow_openai_api_base=http://${harbor_container_prefix:-harbor}.litellm:8000/v1
