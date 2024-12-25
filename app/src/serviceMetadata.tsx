@@ -12,7 +12,7 @@ export type HarborService = {
     isRunning: boolean;
     isDefault: boolean;
     tags: HST[] | `${HST}`[];
-    wikiUrl: string;
+    wikiUrl?: string;
 }
 
 export const serviceMetadata: Record<string, Partial<HarborService>> = {

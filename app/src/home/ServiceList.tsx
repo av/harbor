@@ -8,7 +8,7 @@ import { useArrayState } from "../useArrayState";
 import { Loader } from "../Loading";
 import { IconButton } from "../IconButton";
 import { ACTION_ICONS, HarborService } from "../serviceMetadata";
-import { HSTTooltips, ServiceTag } from "../ServiceTags";
+import { ServiceTag } from "../ServiceTags";
 import { HST } from "../ServiceTags";
 import { runHarbor } from "../useHarbor";
 import { toasted } from "../utils";
