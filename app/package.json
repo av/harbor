@@ -1,7 +1,7 @@
 {
   "name": "@avcodes/harbor-app",
   "private": true,
-  "version": "0.2.18",
+  "version": "0.2.19",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -11,12 +11,12 @@
   },
   "dependencies": {
     "@tailwindcss/typography": "^0.5.15",
-    "@tauri-apps/api": ">=2.0.0-rc.0",
-    "@tauri-apps/plugin-autostart": "^2.0.0-rc",
-    "@tauri-apps/plugin-fs": "^2.0.0-rc",
-    "@tauri-apps/plugin-shell": "^2.0.0-rc",
-    "@tauri-apps/plugin-store": "^2.0.0-rc",
-    "@tauri-apps/plugin-window-state": "^2.0.0-rc",
+    "@tauri-apps/api": "^2.1.1",
+    "@tauri-apps/plugin-autostart": "2.2.0",
+    "@tauri-apps/plugin-fs": "2.2.0",
+    "@tauri-apps/plugin-shell": "2.2.0",
+    "@tauri-apps/plugin-store": "2.2.0",
+    "@tauri-apps/plugin-window-state": "2.2.0",
     "autoprefixer": "^10.4.20",
     "daisyui": "^4.12.10",
     "postcss": "^8.4.47",
@@ -32,6 +32,6 @@
     "@vitejs/plugin-react": "^4.2.1",
     "typescript": "^5.2.2",
     "vite": "^5.3.1",
-    "@tauri-apps/cli": "2.0.2"
+    "@tauri-apps/cli": "^2.1.0"
   }
 }

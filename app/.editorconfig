@@ -10,4 +10,3 @@ insert_final_newline = true
 [*.{py,yml,yaml,json,js,ts,jsx,tsx,html,css,scss,md}]
 indent_style = space
 indent_size = 2
-

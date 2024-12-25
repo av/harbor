@@ -1,7 +1,7 @@
 
 [package]
 name = "harbor-app"
-version = "0.2.18"
+version = "0.2.19"
 description = "A companion app for Harbor LLM toolkit"
 authors = ["av"]
 edition = "2021"
@@ -11,17 +11,17 @@ name = "harbor_lib"
 crate-type = ["staticlib","cdylib","rlib"]
 
 [build-dependencies.tauri-build]
-version = "2.0.0-rc"
+version = "2.0.3"
 features = []
 
 [dependencies]
-tauri-plugin-shell = "2.0.0-rc"
+tauri-plugin-shell = "2.2.0"
 serde_json = "1"
-tauri-plugin-store = "2.0.0-rc"
-tauri-plugin-fs = "2.0.0-rc"
+tauri-plugin-store = "2.2.0"
+tauri-plugin-fs = "2.2.0"
 
 [dependencies.tauri]
-version = "2.0.0-rc"
+version = "2.1.1"
 features = ["tray-icon"]
 
 [dependencies.serde]
@@ -32,6 +32,6 @@ features = ["derive"]
 git = "https://github.com/tauri-apps/fix-path-env-rs"
 
 [target."cfg(not(any(target_os = \"android\", target_os = \"ios\")))".dependencies]
-tauri-plugin-autostart = "2.0.0-rc"
-tauri-plugin-single-instance = "2.0.0-rc"
-tauri-plugin-window-state = "2.0.0-rc"
+tauri-plugin-autostart = "2.2.0"
+tauri-plugin-single-instance = "2.2.0"
+tauri-plugin-window-state = "2.2.0"

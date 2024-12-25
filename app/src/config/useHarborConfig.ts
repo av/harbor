@@ -45,7 +45,7 @@ export const useHarborConfig = () => {
                     targets
                         .map(async (profile) => {
                             const content = await readTextFile(profile.path);
-
+                            
                             return HarborConfig.cached({
                                 name: profile.name.replace(".env", ""),
                                 file: profile.path,

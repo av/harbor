@@ -189,7 +189,7 @@ export const HarborConfigEditor = (
 
             {!config.isReadonly && (
                 <div className="flex gap-2 items-center rounded-box p-4 bg-base-200 max-w-2xl">
-                    <pre className="break-all overflow-hidden"><code>{config.profile.file}</code></pre>
+                    <pre className="break-all overflow-hidden">{config.profile.file}</pre>
                     <div className="flex-1"></div>
                     <IconButton
                         className="text-xl text-base-content/30"

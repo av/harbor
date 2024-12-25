@@ -1,0 +1,3 @@
+.service-tag:has(+ input:checked) {
+    background: red;
+}

@@ -69,5 +69,5 @@ export const SECTIONS_EXTRA: Partial<Record<string, { content: ReactNode }>> = {
                 </span>
             </>
         ),
-    }
+    },
 };
