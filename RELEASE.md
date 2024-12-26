@@ -19,6 +19,7 @@ deno run -A ./.scripts/seed.ts
 npm publish --dry-run
 
 # Publish
+npm whoami
 npm publish --access public
 ```
 
