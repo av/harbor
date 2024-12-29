@@ -20,8 +20,7 @@ services:
 `;
 };
 
-const envTemplate = (handle: string) => `
-# This file can be used for additional environment variables
+const envTemplate = (handle: string) => `# This file can be used for additional environment variables
 # specifically for the '${handle}' service.
 # You can also use the "harbor env" command to set these variables.
 `;

@@ -265,5 +265,9 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
     langflow: {
         tags: [HST.satellite, HST.workflows],
         wikiUrl: 'https://github.com/av/harbor/wiki/2.3.32-Satellite:-LangFlow',
-    }
+    },
+    optillm: {
+        tags: [HST.satellite, HST.api],
+        wikiUrl: 'https://github.com/av/harbor/wiki/2.3.33-Satellite:-OptiLLM',
+    },
 };

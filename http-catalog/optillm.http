@@ -1,0 +1,27 @@
+@host=http://localhost:{{HARBOR_OPTILLM_HOST_PORT}}
+
+###
+
+GET {{host}}/v1/models
+
+###
+
+POST {{host}}/v1/chat/completions
+Content-Type: application/json
+
+{
+  "model": "llama3.1:8b-instruct-q8_0",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Which is heavier, 1 kilogram of feathers or 1 pound of steel?"
+    }
+  ],
+  "temperature": 0,
+  "max_tokens": 100,
+  // "optillm_approach": "plansearch"
+  // "optillm_approach": "bon"
+  // "optillm_approach": "re2"
+  // "optillm_approach": "self_consistency"
+  "optillm_approach": "z3"
+}

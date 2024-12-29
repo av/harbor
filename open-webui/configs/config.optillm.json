@@ -1,0 +1,11 @@
+{
+  "openai": {
+		"api_base_urls": [
+			"http://optillm:8000/v1"
+		],
+		"api_keys": [
+			"sk-optillm"
+		],
+		"enabled": true
+	}
+}

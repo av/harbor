@@ -1,0 +1,5 @@
+services:
+  optillm:
+    environment:
+      - OPTILLM_BASE_URL=http://pipelines:9099
+      - OPENAI_API_KEY=${HARBOR_PIPELINES_API_KEY}

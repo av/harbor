@@ -1,0 +1,5 @@
+services:
+  optillm:
+    environment:
+      - OPTILLM_BASE_URL=http://boost:8000/v1
+      - OPENAI_API_KEY=${HARBOR_BOOST_API_KEY}

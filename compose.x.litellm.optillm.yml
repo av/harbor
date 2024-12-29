@@ -1,0 +1,4 @@
+services:
+  litellm:
+    volumes:
+      - ./litellm/litellm.optillm.yaml:/app/litellm/optillm.yaml

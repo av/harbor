@@ -1,0 +1,5 @@
+services:
+  optillm:
+    environment:
+      - OPTILLM_BASE_URL=http://litellm:4000/v1
+      - OPENAI_API_KEY=${HARBOR_LITELLM_MASTER_KEY}

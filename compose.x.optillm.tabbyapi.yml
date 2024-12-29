@@ -1,0 +1,5 @@
+services:
+  optillm:
+    environment:
+      - OPTILLM_BASE_URL=http://tabbyapi:5000/v1
+      - OPENAI_API_KEY=${HARBOR_TABBYAPI_ADMIN_KEY}

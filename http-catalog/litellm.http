@@ -1,4 +1,4 @@
-@host = http://localhost:33841
+@host = http://localhost:{{HARBOR_LITELLM_HOST_PORT}}
 @apiKey = sk-litellm
 
 ###
@@ -59,3 +59,24 @@ curl {{host}}/v1/chat/completions -H 'Content-Type: application/json' -H 'Author
 ###
 
 curl {{host}}/health  -H 'Authorization: Bearer {{apiKey}}'
+
+###
+
+GET {{host}}/v1/models
+Authorization: Bearer {{apiKey}}
+
+###
+
+POST {{host}}/v1/chat/completions
+Content-Type: application/json
+Authorization: Bearer {{apiKey}}
+
+{
+  "model": "optillm",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Where Paris is located?"
+    }
+  ]
+}

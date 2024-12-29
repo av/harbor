@@ -1,0 +1,5 @@
+services:
+  optillm:
+    environment:
+      - OPTILLM_BASE_URL=http://ktransformers:12456/v1
+      - OPENAI_API_KEY=sk-ktransformers

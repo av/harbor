@@ -1,0 +1,5 @@
+services:
+  optillm:
+    environment:
+      - OPTILLM_BASE_URL=${HARBOR_OLLAMA_INTERNAL_URL}/v1
+      - OPENAI_API_KEY=sk-ollama

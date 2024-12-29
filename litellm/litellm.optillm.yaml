@@ -1,0 +1,6 @@
+model_list:
+  - model_name: optillm
+    litellm_params:
+      model: openai/llama3.1:8b
+      api_base: http://optillm:8000/v1
+      api_key: sk-optillm

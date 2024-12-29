@@ -1,0 +1,16 @@
+
+services:
+  optillm:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.optillm
+    build:
+      context: https://github.com/codelion/optillm.git#main
+      dockerfile: Dockerfile
+    env_file:
+      - ./.env
+      - optillm/override.env
+    volumes:
+      - ${HARBOR_OPTILLM_WORKSPACE}:/root/.config/optillm
+    ports:
+      - ${HARBOR_OPTILLM_HOST_PORT}:8000
+    networks:
+      - harbor-network
