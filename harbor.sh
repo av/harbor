@@ -1784,11 +1784,13 @@ docker_fsacl() {
     # 1000, 1001, 1002 - most frequent default users on Debian
     # 100 - most frequent default on Alpine
     # 911 - "abc" user from LinuxServer.io images
+    # 101 - clickhouse
     sudo setfacl --recursive -m user:1000:rwx $folder \
     && sudo setfacl --recursive -m user:1002:rwx $folder \
     && sudo setfacl --recursive -m user:1001:rwx $folder \
     && sudo setfacl --recursive -m user:100:rwx $folder \
-    && sudo setfacl --recursive -m user:911:rwx $folder
+    && sudo setfacl --recursive -m user:911:rwx $folder \
+    && sudo setfacl --recursive -m user:101:rwx $folder
 }
 
 run_fixfs() {
@@ -4065,7 +4067,7 @@ main_entrypoint() {
     langflow)
         shift
         run_langflow_command "$@"
-        ;;    
+        ;;
     tunnel | t)
         shift
         establish_tunnel "$@"

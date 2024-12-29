@@ -1,25 +1,36 @@
 services:
   langfuse:
-    image: langfuse/langfuse
+    image: langfuse/langfuse:3
+    container_name: ${HARBOR_CONTAINER_PREFIX}.langfuse
+    depends_on: &langfuse-depends-on
+      langfuse-db:
+        condition: service_healthy
+      langfuse-minio:
+        condition: service_healthy
+      langfuse-redis:
+        condition: service_healthy
+      langfuse-clickhouse:
+        condition: service_healthy
     env_file:
       - ./.env
       - ./langfuse/override.env
-    container_name: ${HARBOR_CONTAINER_PREFIX}.langfuse
     ports:
       - ${HARBOR_LANGFUSE_HOST_PORT}:3000
-    depends_on:
-      langfuse-db:
-        condition: service_healthy
-    environment:
-      - DATABASE_URL=postgresql://postgres:postgres@langfuse-db:5432/postgres
-      - NEXTAUTH_URL=http://localhost:${HARBOR_LANGFUSE_HOST_PORT}
-      - NEXTAUTH_SECRET=${HARBOR_LANGFUSE_NEXTAUTH_SECRET}
-      - SALT=${HARBOR_LANGFUSE_SALT}
+    networks:
+      - harbor-network
+
+  langfuse-worker:
+    image: langfuse/langfuse-worker:3
+    env_file:
+      - ./.env
+      - ./langfuse/override.env
+    container_name: ${HARBOR_CONTAINER_PREFIX}.langfuse-worker
+    depends_on: *langfuse-depends-on
     networks:
       - harbor-network
 
   langfuse-db:
-    image: postgres
+    image: postgres:16
     restart: always
     container_name: ${HARBOR_CONTAINER_PREFIX}.langfuse-db
     healthcheck:
@@ -27,15 +38,72 @@ services:
       interval: 1s
       timeout: 5s
       retries: 10
-    environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=postgres
+    env_file:
+      - ./.env
+      - ./langfuse/override.env
     ports:
       - ${HARBOR_LANGFUSE_DB_HOST_PORT}:5432
     volumes:
-      - ./langfuse/db:/var/lib/postgresql/data
+      - ${HARBOR_LANGFUSE_WORKSPACE}/db:/var/lib/postgresql/data
     networks:
       - harbor-network
 
+  langfuse-clickhouse:
+    image: clickhouse/clickhouse-server
+    restart: always
+    user: "101:101"
+    container_name: ${HARBOR_CONTAINER_PREFIX}.langfuse-clickhouse
+    hostname: langfuse-clickhouse
+    env_file:
+      - ./.env
+      - ./langfuse/override.env
+    volumes:
+      - ${HARBOR_LANGFUSE_WORKSPACE}/clickhouse-data:/var/lib/clickhouse
+      - ${HARBOR_LANGFUSE_WORKSPACE}/clickhouse-logs:/var/log/clickhouse-server
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 1s
+    networks:
+      - harbor-network
+
+  langfuse-minio:
+    image: minio/minio
+    restart: always
+    container_name: ${HARBOR_CONTAINER_PREFIX}.langfuse-minio
+    entrypoint: sh
+    # create the 'langfuse' bucket before starting the service
+    command: -c 'mkdir -p /data/langfuse && minio server --address ":9000" --console-address ":9001" /data'
+    env_file:
+      - ./.env
+      - ./langfuse/override.env
+    volumes:
+      - ${HARBOR_LANGFUSE_WORKSPACE}/minio:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 1s
+      timeout: 5s
+      retries: 5
+      start_period: 1s
+    networks:
+      - harbor-network
+
+  langfuse-redis:
+    image: redis:7
+    container_name: ${HARBOR_CONTAINER_PREFIX}.langfuse-redis
+    restart: always
+    command: >
+      --requirepass ${REDIS_AUTH:-myredissecret}
+    env_file:
+      - ./.env
+      - ./langfuse/override.env
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 10s
+      retries: 10
+    networks:
+      - harbor-network
 

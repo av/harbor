@@ -1,7 +1,7 @@
 services:
   litellm:
     volumes:
-      - ./litellm/litellm.languse.yaml:/app/litellm/langfuse.yaml
+      - ./litellm/litellm.langfuse.yaml:/app/litellm/langfuse.yaml
     environment:
       - LANGFUSE_HOST=http://langfuse:3000
       - LANGFUSE_PUBLIC_KEY=${HARBOR_LANGFUSE_PUBLIC_KEY}
