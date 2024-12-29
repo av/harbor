@@ -1,7 +1,7 @@
 
 [tool.poetry]
 name = "llm-harbor"
-version = "0.2.20"
+version = "0.2.21"
 description = "Effortlessly run LLM backends, APIs, frontends, and services with one command."
 repository = "https://github.com/av/harbor"
 documentation = "https://github.com/av/harbor/wiki"
