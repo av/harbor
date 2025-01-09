@@ -6,17 +6,16 @@ log() {
   fi
 }
 
-log "Provisioning docker groups"
-sudo groupadd -g 999 docker-ubuntu
-sudo groupadd -g 992 docker-lsio
-sudo groupadd -g 130 docker-plex
+# Retrieve the correct GID from the mounted docker.sock
+DOCKER_GROUP_GID=$(stat -c '%g' /var/run/docker.sock)
 
-log "Adding lsio user to docker groups"
-sudo usermod -aG docker-ubuntu abc
-sudo usermod -aG 999 abc
+log "Ensuring Docker group has correct GID: $DOCKER_GROUP_GID"
 
-sudo usermod -aG docker-lsio abc
-sudo usermod -aG 992 abc
+# Recreate the docker group with the correct GID
+sudo groupdel docker || true  # Remove the existing docker group
+sudo groupadd -g $DOCKER_GROUP_GID docker || true  # Add the correct group
 
-sudo usermod -aG docker-plex abc
-sudo usermod -aG 130 abc
+# Add abc to the docker group
+log "Adding abc user to Docker group with GID $DOCKER_GROUP_GID"
+sudo usermod -aG docker abc
+
