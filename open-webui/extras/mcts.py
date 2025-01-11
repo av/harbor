@@ -3,9 +3,10 @@ title: mcts
 author: av
 author_url: https://github.com/av
 description: mcts - Monte Carlo Tree Search
-version: 0.0.5
+version: 0.0.6
 """
 
+from fastapi import Request
 import logging
 import random
 import math
@@ -23,7 +24,8 @@ from typing import (
   Iterator,
 )
 from open_webui.constants import TASKS
-from open_webui.apps.ollama import main as ollama
+import open_webui.routers.ollama as ollama
+from open_webui.main import app
 
 # ==============================================================================
 
@@ -125,6 +127,11 @@ def setup_logger():
   return logger
 
 
+class AdminUserMock:
+    def __init__(self):
+        self.role = 'admin'
+
+admin = AdminUserMock()
 logger = setup_logger()
 
 # ==============================================================================
@@ -371,7 +378,7 @@ class Pipe:
 
   def pipes(self) -> list[dict[str, str]]:
     ollama.get_all_models()
-    models = ollama.app.state.MODELS
+    models = app.state.OLLAMA_MODELS
 
     out = [
       {
@@ -496,7 +503,7 @@ class Pipe:
     model: str,
     messages,
   ) -> AsyncGenerator[str, None]:
-    response = await ollama.generate_openai_chat_completion(
+    response = await self.call_ollama_endpoint_function(
       {
         "model": model,
         "messages": messages,
@@ -518,7 +525,7 @@ class Pipe:
       yield chunk
 
   async def get_completion(self, model: str, messages):
-    response = await ollama.generate_openai_chat_completion(
+    response = await self.call_ollama_endpoint_function(
       {
         "model": model,
         "messages": messages,
@@ -527,6 +534,36 @@ class Pipe:
     )
 
     return self.get_response_content(response)
+
+  async def call_ollama_endpoint_function(self, payload):
+    async def receive():
+      return {
+          "type": "http.request",
+          "body": json.dumps(payload).encode('utf-8')
+      }
+
+    mock_request = Request(
+      scope={
+        'type': 'http',
+        'headers': [],
+        'method': 'POST',
+        'scheme': 'http',
+        'server': ('localhost', 8000),
+        'path': '/v1/chat/completions',
+        'query_string': b'',
+        'client': ('127.0.0.1', 8000),
+        'app': app,
+      },
+      receive=receive
+    )
+
+    # mock_request.app = app
+    return await ollama.generate_openai_chat_completion(
+      request=mock_request,
+      form_data=payload,
+      user=admin
+    )
+
 
   async def stream_prompt_completion(self, prompt, **format_args):
     complete = ""
