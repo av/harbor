@@ -44,7 +44,8 @@ Harbor is a containerized LLM toolkit that allows you to run LLMs and additional
 [AirLLM](https://github.com/av/harbor/wiki/2.2.11-Backend:-AirLLM) ⦁︎
 [SGLang](https://github.com/av/harbor/wiki/2.2.12-Backend:-SGLang) ⦁︎
 [KTransformers](https://github.com/av/harbor/wiki/2.2.13-Backend:-KTransformers) ⦁︎
-[Nexa SDK](https://github.com/av/harbor/wiki/2.2.15-Backend:-Nexa-SDK)
+[Nexa SDK](https://github.com/av/harbor/wiki/2.2.15-Backend:-Nexa-SDK) ⦁︎
+[KoboldCpp](https://github.com/av/harbor/wiki/2.2.16-Backend:-KoboldCpp)
 
 ##### Satellites
 [Harbor Bench](https://github.com/av/harbor/wiki/5.1.-Harbor-Bench) ⦁︎

@@ -1,0 +1,20 @@
+services:
+  kobold:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.kobold
+    image: ${HARBOR_KOBOLD_IMAGE}:${HARBOR_KOBOLD_VERSION}
+    env_file:
+      - ./.env
+      - kobold/override.env
+    volumes:
+      - ${HARBOR_KOBOLD_WORKSPACE}:/workspace/:rw
+      - ${HARBOR_OLLAMA_CACHE}:/ollama
+      - ${HARBOR_HF_CACHE}:/hf
+      - ${HARBOR_LLAMACPP_CACHE}:/llamacpp
+      - ${HARBOR_VLLM_CACHE}:/vllm
+    ports:
+      - ${HARBOR_KOBOLD_HOST_PORT}:5001
+    environment:
+      - KCPP_MODEL=${HARBOR_KOBOLD_MODEL}
+      - KCPP_ARGS=${HARBOR_KOBOLD_ARGS}
+    networks:
+      - harbor-network

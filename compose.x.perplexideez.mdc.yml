@@ -1,0 +1,65 @@
+configs:
+  perplexideez_proxy_config:
+    content: |
+      server {
+          listen 80;
+          gzip_static off;
+          server_name perplexideez.com;
+
+          location / {
+              proxy_pass http://perplexideez-service:3000;
+              proxy_set_header Host perplexideez.com;
+              proxy_set_header X-Real-IP $$remote_addr;
+              proxy_set_header X-Forwarded-For $$proxy_add_x_forwarded_for;
+              proxy_set_header X-Forwarded-Proto https;
+
+              # Disable CSRF protection in Nginx
+              proxy_set_header X-Forwarded-Host $$host;
+              proxy_set_header Origin https://perplexideez.com;
+              proxy_set_header Referer https://perplexideez.com;
+
+              # Rewrite Location header to use localhost
+              proxy_redirect https://perplexideez.com/ http://localhost:34261/;
+              proxy_redirect http://perplexideez.com/ http://localhost:34261/;
+
+              # Cookie rewriting
+              proxy_cookie_domain perplexideez.com localhost;
+              proxy_cookie_path / /;
+              proxy_cookie_flags ~ -secure;
+
+              # Force uncompressed response to allow substitutions
+              proxy_set_header Accept-Encoding "";
+
+              # Rewrite Secure-prefixed cookies
+              proxy_hide_header set-cookie;
+              proxy_set_header Accept-Encoding "";
+              sub_filter_types *;
+              sub_filter_once off;
+              sub_filter '__Secure-' '';
+              sub_filter '; Secure' '';
+              sub_filter 'perplexideez.com' 'localhost:34261';
+              sub_filter "https://localhost:34261" "http://localhost:34261";
+              sub_filter "https%3A%2F%2Flocalhost%3A34261" "http%3A%2F%2Flocalhost%3A34261";
+              sub_filter 'href="https://localhost:34261' 'href="http://localhost:34261';
+              sub_filter 'content="https://localhost:34261' 'content="http://localhost:34261';
+
+              # CORS headers
+              add_header 'Access-Control-Allow-Origin' '*';
+              add_header 'Access-Control-Allow-Methods' 'GET, POST, OPTIONS';
+              add_header 'Access-Control-Allow-Headers' 'DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization';
+
+              # Handle OPTIONS method
+              if ($$request_method = 'OPTIONS') {
+                  add_header 'Access-Control-Allow-Origin' '*';
+                  add_header 'Access-Control-Allow-Methods' 'GET, POST, OPTIONS';
+                  add_header 'Access-Control-Allow-Headers' 'DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization';
+                  add_header 'Access-Control-Max-Age' 1728000;
+                  add_header 'Content-Type' 'text/plain; charset=utf-8';
+                  add_header 'Content-Length' 0;
+                  return 204;
+              }
+
+              # Force processing of response
+              proxy_force_ranges on;
+          }
+      }

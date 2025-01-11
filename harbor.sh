@@ -153,13 +153,14 @@ show_help() {
 
 run_harbor_doctor() {
     log_info "Running Harbor Doctor..."
+    has_errors=false
 
     # Check if Docker is installed and running
     if command -v docker &>/dev/null && docker info &>/dev/null; then
         log_info "${ok} Docker is installed and running"
     else
         log_error "${nok} Docker is not installed or not running. Please install or start Docker."
-        return 1
+        has_errors=true
     fi
 
     # Check if Docker Compose (v2) is installed
@@ -167,7 +168,14 @@ run_harbor_doctor() {
         log_info "${ok} Docker Compose (v2) is installed"
     else
         log_error "${nok} Docker Compose (v2) is not installed. Please install Docker Compose (v2)."
-        return 1
+        has_errors=true
+    fi
+
+    if ! has_modern_compose; then
+        log_error "${nok} Docker Compose version is older than $desired_compose_major.$desired_compose_minor.$desired_compose_patch. Please update Docker Compose (v2)."
+        has_errors=true
+    else
+        log_info "${ok} Docker Compose (v2) version is newer than $desired_compose_major.$desired_compose_minor.$desired_compose_patch"
     fi
 
     # Check if the Harbor workspace directory exists
@@ -175,7 +183,7 @@ run_harbor_doctor() {
         log_info "${ok} Harbor home: $harbor_home"
     else
         log_error "${nok} Harbor home does not exist or is not reachable."
-        return 1
+        has_errors=true
     fi
 
     # Check if the default profile file exists and is readable
@@ -183,7 +191,7 @@ run_harbor_doctor() {
         log_info "${ok} Default profile exists and is readable"
     else
         log_error "${nok} Default profile is missing or not readable. Please ensure it exists and has the correct permissions."
-        return 1
+        has_errors=true
     fi
 
     # Check if the .env file exists and is readable
@@ -191,7 +199,7 @@ run_harbor_doctor() {
         log_info "${ok} Current profile (.env) exists and is readable"
     else
         log_error "${nok} Current profile (.env) is missing or not readable. Please ensure it exists and has the correct permissions."
-        return 1
+        has_errors=true
     fi
 
     # Check if CLI is linked
@@ -199,17 +207,63 @@ run_harbor_doctor() {
         log_info "${ok} CLI is linked"
     else
         log_error "${nok} CLI is not linked. Run 'harbor link' to create a symlink."
-        return 1
+        has_errors=true
+    fi
+
+    if has_nvidia; then
+        log_info "${ok} NVIDIA GPU is available"
+    else
+        log_warn "${nok} NVIDIA GPU is not available. NVIDIA GPU support may not work."
     fi
 
     # Check if nvidia-container-toolkit is installed
-    if command -v nvidia-container-toolkit &>/dev/null; then
+    if has_nvidia_ctk; then
         log_info "${ok} NVIDIA Container Toolkit is installed"
     else
         log_warn "${nok} NVIDIA Container Toolkit is not installed. NVIDIA GPU support may not work."
     fi
 
-    log_info "Harbor Doctor checks completed successfully."
+    if $has_errors; then
+        log_error "Harbor Doctor checks failed. Please resolve the issues above."
+        return 1
+    else
+        log_info "Harbor Doctor checks completed successfully."
+        return 0
+    fi
+}
+
+has_nvidia() {
+    command -v nvidia-smi &>/dev/null
+}
+
+has_nvidia_ctk() {
+    command -v nvidia-container-toolkit &>/dev/null
+}
+
+has_modern_compose() {
+    local compose_version=$(docker compose version --short)
+    local major_version=$(echo "$compose_version" | cut -d. -f1)
+    local minor_version=$(echo "$compose_version" | cut -d. -f2)
+    local patch_version=$(echo "$compose_version" | cut -d. -f3)
+
+    # log_debug "Docker Compose version: $major_version $minor_version $patch_version"
+
+    if [ "$major_version" -lt "$desired_compose_major" ]; then
+        # log_debug "Major version is less than $desired_compose_major"
+        return 1
+    fi
+
+    if [ "$minor_version" -lt "$desired_compose_minor" ]; then
+        # log_debug "Minor version is less than $desired_compose_minor"
+        return 1
+    fi
+
+    if [ "$patch_version" -lt "$desired_compose_patch" ]; then
+        # log_debug "Patch version is less than $desired_compose_patch"
+        return 1
+    fi
+
+    return 0
 }
 
 # shellcheck disable=SC2034
@@ -253,9 +307,12 @@ compose_with_options() {
         esac
     done
 
-    # Check for NVIDIA GPU and drivers
-    if command -v nvidia-smi &>/dev/null && command -v nvidia-container-toolkit &>/dev/null; then
+    if has_nvidia && has_nvidia_ctk; then
         options+=("nvidia")
+    fi
+
+    if has_modern_compose; then
+        options+=("mdc")
     fi
 
     for file in $(resolve_compose_files); do
@@ -1100,22 +1157,22 @@ env_manager() {
     # Parse options
     while [[ "$1" == --* ]]; do
         case "$1" in
-            --silent)
-                silent=true
-                shift
-                ;;
-            --env-file)
-                env_file="$2"
-                shift 2
-                ;;
-            --prefix)
-                prefix="$2"
-                shift 2
-                ;;
-            *)
-                $silent || echo "Unknown option: $1"
-                return 1
-                ;;
+        --silent)
+            silent=true
+            shift
+            ;;
+        --env-file)
+            env_file="$2"
+            shift 2
+            ;;
+        --prefix)
+            prefix="$2"
+            shift 2
+            ;;
+        *)
+            $silent || echo "Unknown option: $1"
+            return 1
+            ;;
         esac
     done
 
@@ -1785,12 +1842,12 @@ docker_fsacl() {
     # 100 - most frequent default on Alpine
     # 911 - "abc" user from LinuxServer.io images
     # 101 - clickhouse
-    sudo setfacl --recursive -m user:1000:rwx $folder \
-    && sudo setfacl --recursive -m user:1002:rwx $folder \
-    && sudo setfacl --recursive -m user:1001:rwx $folder \
-    && sudo setfacl --recursive -m user:100:rwx $folder \
-    && sudo setfacl --recursive -m user:911:rwx $folder \
-    && sudo setfacl --recursive -m user:101:rwx $folder
+    sudo setfacl --recursive -m user:1000:rwx $folder &&
+        sudo setfacl --recursive -m user:1002:rwx $folder &&
+        sudo setfacl --recursive -m user:1001:rwx $folder &&
+        sudo setfacl --recursive -m user:100:rwx $folder &&
+        sudo setfacl --recursive -m user:911:rwx $folder &&
+        sudo setfacl --recursive -m user:101:rwx $folder
 }
 
 run_fixfs() {
@@ -2089,7 +2146,6 @@ run_harbor_env() {
         log_error "Unknown service: $service. Please provide a valid service name."
         return 1
     fi
-
 
     env_manager --env-file "$env_file" --prefix "" "$mgr_cmd" "$env_var" "$env_val"
 }
@@ -3510,91 +3566,92 @@ run_boost_command() {
 
 run_langflow_command() {
     case "$1" in
-        ui | open)
+    ui | open)
+        shift
+        local port=${HARBOR_LANGFLOW_HOST_PORT:-7860}
+        local url="http://localhost:$port"
+        if sys_open "$url"; then
+            log_info "Opened Langflow UI at $url"
+        else
+            log_error "Failed to open Langflow UI. Try visiting $url manually."
+            return 1
+        fi
+        ;;
+    url)
+        shift
+        local port=${HARBOR_LANGFLOW_HOST_PORT:-7860}
+        echo "http://localhost:$port"
+        ;;
+    version)
+        shift
+        env_manager_alias langflow.version "$@"
+        ;;
+    auth)
+        shift
+        case "$1" in
+        username)
             shift
-            local port=${HARBOR_LANGFLOW_HOST_PORT:-7860}
-            local url="http://localhost:$port"
-            if sys_open "$url"; then
-                log_info "Opened Langflow UI at $url"
-            else
-                log_error "Failed to open Langflow UI. Try visiting $url manually."
-                return 1
-            fi
+            env_manager_alias langflow.superuser "$@"
             ;;
-        url)
+        password)
             shift
-            local port=${HARBOR_LANGFLOW_HOST_PORT:-7860}
-            echo "http://localhost:$port"
-            ;;        version)
-            shift
-            env_manager_alias langflow.version "$@"
+            env_manager_alias langflow.password "$@"
             ;;
-        auth)
+        autologin)
             shift
-            case "$1" in
-                username)
-                    shift
-                    env_manager_alias langflow.superuser "$@"
-                    ;;
-                password)
-                    shift
-                    env_manager_alias langflow.password "$@"
-                    ;;
-                autologin)
-                    shift
-                    env_manager_alias langflow.auto_login "$@"
-                    ;;
-                *)
-                    echo "Usage: harbor langflow auth {username|password|autologin}"
-                    return 1
-                    ;;
-            esac
-            ;;
-        workspace)
-            shift
-            execute_and_process "env_manager get langflow.data" "sys_open {{output}}" "No langflow.data set"
-            ;;
-        ui)
-            shift
-            if service_url=$(get_url langflow 2>&1); then
-                sys_open "$service_url"
-            else
-                log_error "Failed to get service URL for langflow: $service_url"
-                exit 1
-            fi
-            ;;
-        -h | --help | help)
-            echo "Langflow - LangChain Flow UI"
-            echo
-            echo "Langflow provides a visual way to build and prototype LangChain applications."
-            echo
-            echo "Usage: harbor langflow <command>"
-            echo
-            echo "Commands:"
-            echo "  version [version]     - Get or set Langflow version"
-            echo "  auth username [user]  - Get or set admin username"
-            echo "  auth password [pass]  - Get or set admin password"
-            echo "  auth autologin [bool] - Enable/disable auto login"
-            echo "  workspace             - Open Langflow workspace directory"
-            echo "  ui                    - Open Langflow UI in browser"
-            echo
-            echo "Quick Start:"
-            echo "  harbor up langflow               - Start Langflow"
-            echo "  harbor up langflow langflow-db   - Start with PostgreSQL"
-            echo "  harbor open langflow             - Open the UI"
-            echo
-            echo "Default Configuration:"
-            echo "  Admin User: admin@admin.com"
-            echo "  Password:   admin"
-            echo "  Port:      7860"
-            echo
-            echo "Database Options:"
-            echo "  SQLite (default) - No additional configuration needed"
-            echo "  PostgreSQL       - Start with 'harbor up langflow langflow-db'"
+            env_manager_alias langflow.auto_login "$@"
             ;;
         *)
-            return $scramble_exit_code
+            echo "Usage: harbor langflow auth {username|password|autologin}"
+            return 1
             ;;
+        esac
+        ;;
+    workspace)
+        shift
+        execute_and_process "env_manager get langflow.data" "sys_open {{output}}" "No langflow.data set"
+        ;;
+    ui)
+        shift
+        if service_url=$(get_url langflow 2>&1); then
+            sys_open "$service_url"
+        else
+            log_error "Failed to get service URL for langflow: $service_url"
+            exit 1
+        fi
+        ;;
+    -h | --help | help)
+        echo "Langflow - LangChain Flow UI"
+        echo
+        echo "Langflow provides a visual way to build and prototype LangChain applications."
+        echo
+        echo "Usage: harbor langflow <command>"
+        echo
+        echo "Commands:"
+        echo "  version [version]     - Get or set Langflow version"
+        echo "  auth username [user]  - Get or set admin username"
+        echo "  auth password [pass]  - Get or set admin password"
+        echo "  auth autologin [bool] - Enable/disable auto login"
+        echo "  workspace             - Open Langflow workspace directory"
+        echo "  ui                    - Open Langflow UI in browser"
+        echo
+        echo "Quick Start:"
+        echo "  harbor up langflow               - Start Langflow"
+        echo "  harbor up langflow langflow-db   - Start with PostgreSQL"
+        echo "  harbor open langflow             - Open the UI"
+        echo
+        echo "Default Configuration:"
+        echo "  Admin User: admin@admin.com"
+        echo "  Password:   admin"
+        echo "  Port:      7860"
+        echo
+        echo "Database Options:"
+        echo "  SQLite (default) - No additional configuration needed"
+        echo "  PostgreSQL       - Start with 'harbor up langflow langflow-db'"
+        ;;
+    *)
+        return $scramble_exit_code
+        ;;
     esac
 }
 
@@ -3717,10 +3774,10 @@ run_promptfoo_command() {
     fi
 
     case "$1" in
-        view|open|o)
-            shift
-            run_open promptfoo
-            ;;
+    view | open | o)
+        shift
+        run_open promptfoo
+        ;;
     esac
 
     $(compose_with_options $services "promptfoo") run \
@@ -3743,19 +3800,19 @@ run_webtop_command() {
     fi
 
     case "$1" in
-        reset)
-            shift
-            # Just in case
-            run_down webtop
-            # Cleanup data directory
-            local data_dir=$(env_manager get webtop.workspace)
-            log_info "Deleting Webtop workspace at '$data_dir'"
-            rm -rf $data_dir
-            return 0
-            ;;
+    reset)
+        shift
+        # Just in case
+        run_down webtop
+        # Cleanup data directory
+        local data_dir=$(env_manager get webtop.workspace)
+        log_info "Deleting Webtop workspace at '$data_dir'"
+        rm -rf $data_dir
+        return 0
+        ;;
     esac
 
-    if [ "$is_running" = true ] ; then
+    if [ "$is_running" = true ]; then
         log_error "Webtop is already running, use 'harbor exec webtop' to interact with it."
         return 1
     fi
@@ -3768,6 +3825,30 @@ run_webtop_command() {
         -v "$original_dir:$original_dir" \
         --workdir "$original_dir" \
         webtop with-contenv "$@"
+}
+
+run_kobold_command() {
+    case "$1" in
+        model)
+            shift
+            env_manager_alias kobold.model "$@"
+            ;;
+        args)
+            shift
+            env_manager_alias kobold.args "$@"
+            ;;
+        -h | --help | help)
+            echo "Please note that this is not Kobold CLI, but a Harbor CLI to manage Kobold service."
+            echo
+            echo "Usage: harbor kobold <command>"
+            echo
+            echo "Commands:"
+            echo "  harbor kobold model [user/repo] - Get or set the Kobold model repository to run"
+            ;;
+        *)
+            return $scramble_exit_code
+            ;;
+    esac
 }
 
 # ========================================================================
@@ -3785,6 +3866,11 @@ profiles_dir="$harbor_home/profiles"
 default_profile="$profiles_dir/default.env"
 default_current_env="$harbor_home/.env"
 default_gum_image="ghcr.io/charmbracelet/gum"
+
+# Desired compose version
+desired_compose_major="2"
+desired_compose_minor="23"
+desired_compose_patch="1"
 
 original_dir=$PWD
 cd "$harbor_home" || exit
@@ -4056,7 +4142,7 @@ main_entrypoint() {
         shift
         run_k6_command "$@"
         ;;
-    promptfoo|pf)
+    promptfoo | pf)
         shift
         run_promptfoo_command "$@"
         ;;
@@ -4067,6 +4153,10 @@ main_entrypoint() {
     langflow)
         shift
         run_langflow_command "$@"
+        ;;
+    kobold)
+        shift
+        run_kobold_command "$@"
         ;;
     tunnel | t)
         shift

@@ -270,4 +270,8 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         tags: [HST.satellite, HST.api],
         wikiUrl: 'https://github.com/av/harbor/wiki/2.3.33-Satellite:-OptiLLM',
     },
+    kobold: {
+        tags: [HST.satellite, HST.frontend, HST.backend],
+        wikiUrl: 'https://github.com/av/harbor/wiki/2.2.16-Backend:-KoboldCpp',
+    }
 };

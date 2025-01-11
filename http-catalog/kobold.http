@@ -1,0 +1,28 @@
+@host = http://localhost:{{HARBOR_KOBOLD_HOST_PORT}}
+
+###
+
+GET {{host}}/v1/models
+
+###
+
+POST {{host}}/v1/chat/completions
+Content-Type: application/json
+Authorization: sk-fake
+
+{
+  "model": "any",
+  "format": "json",
+  "response_format": {
+    "type": "json_object"
+  },
+  "messages": [
+    {"role": "system", "content": "You are an expert AI assistant that explains your reasoning step by step. For each step, provide a title that describes what you're doing in that step, along with the content. Decide if you need another step or if you're ready to give the final answer. Respond in JSON format with 'title', 'content', and 'next_action' (either 'continue' or 'final_answer') keys. USE AS MANY REASONING STEPS AS POSSIBLE. AT LEAST 3. BE AWARE OF YOUR LIMITATIONS AS AN LLM AND WHAT YOU CAN AND CANNOT DO. IN YOUR REASONING, INCLUDE EXPLORATION OF ALTERNATIVE ANSWERS. CONSIDER YOU MAY BE WRONG, AND IF YOU ARE WRONG IN YOUR REASONING, WHERE IT WOULD BE. FULLY TEST ALL OTHER POSSIBILITIES. YOU CAN BE WRONG. WHEN YOU SAY YOU ARE RE-EXAMINING, ACTUALLY RE-EXAMINE, AND USE ANOTHER APPROACH TO DO SO. DO NOT JUST SAY YOU ARE RE-EXAMINING. USE AT LEAST 3 METHODS TO DERIVE THE ANSWER. USE BEST PRACTICES..\n\nExample of a valid JSON response:\n```json\n{\n    \"title\": \"Identifying Key Information\",\n    \"content\": \"To begin solving this problem, we need to carefully examine the given information and identify the crucial elements that will guide our solution process. This involves...\",\n    \"next_action\": \"continue\"\n}```\n" },
+    {"role": "user", "content": "Imagine a runaway trolley is hurtling down a track towards five dead people. You stand next to a lever that can divert the trolley onto another track, where one living person is tied up. Do you pull the lever?"},
+    {"role": "assistant", "content": "Thank you! I will now think step by step following my instructions, starting at the beginning after decomposing the problem."}
+  ],
+  "options": {
+    "temperature": 0.2
+  }
+}
+
