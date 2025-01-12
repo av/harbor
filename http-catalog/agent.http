@@ -21,12 +21,6 @@ Authorization: Bearer {{HARBOR_AGENT_API_KEY}}
   "model": "any",
   "messages": [{
     "role": "user",
-    "content": "Hey"
-  }, {
-    "role": "assistant",
-    "content": "Hello, how can I help you?"
-  }, {
-    "role": "user",
     "content": "How much do I need to earn to buy an average house in Poland?"
   }],
   "stream": false

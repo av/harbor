@@ -11,8 +11,9 @@ class Plan(BaseModel):
   steps: List[Step] = Field(description = "A list of steps to take")
 
 plan_prompt = """
-Write a plan to accomplish the objective using a computer.
+Write a plan of actions to achieve the objective using a computer.
 The plan must be detailed and clear, it'll be given to someone barely familiar with the subject.
+When objective is unrelated to computer use - reply with a single step explaining how to achieve it.
 
 Objective:
 {objective}
