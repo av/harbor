@@ -1,0 +1,11 @@
+{
+  "openai": {
+		"api_base_urls": [
+			"http://agent:8000/v1"
+		],
+		"api_keys": [
+			"${HARBOR_AGENT_API_KEY}"
+		],
+		"enabled": true
+	}
+}

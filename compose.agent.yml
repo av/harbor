@@ -1,0 +1,23 @@
+services:
+  agent:
+    build:
+      context: ./agent
+      dockerfile: Dockerfile
+      args:
+        HARBOR_AGENT_IMAGE: ${HARBOR_AGENT_IMAGE}
+        HARBOR_AGENT_VERSION: ${HARBOR_AGENT_VERSION}
+    container_name: ${HARBOR_CONTAINER_PREFIX}.agent
+    env_file:
+      - ./.env
+      - ./webtop/override.env
+    volumes:
+      # Webtop homedir, can be cleared with "harbor webtop reset"
+      - ${HARBOR_AGENT_WORKSPACE}/data:/config
+      # Override bundled agent with local sources
+      - ${HARBOR_AGENT_WORKSPACE}/src:/config/agent/src
+    ports:
+      - ${HARBOR_AGENT_HOST_PORT}:8000
+    # Avoid crashes in modern browsers
+    shm_size: "2gb"
+    networks:
+      - harbor-network

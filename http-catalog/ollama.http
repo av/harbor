@@ -188,3 +188,71 @@ POST {{host}}/v1/chat/completions
   "top_logprobs": 5,
   "stream": false
 }
+
+# JSON Schema
+POST {{host}}/v1/chat/completions
+
+{
+  "model": "llama3.1:8b",
+  "response_format": {
+    "type": "json_schema",
+    "json_schema": {
+      "name": "CapitalsArray",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "asia_capitals": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  },
+  "temperature": 0,
+  "messages": [
+    {
+      "role": "user",
+      "content": "Name three Asian capitals. Reply in JSON format."
+    }
+  ]
+}
+
+# Agent sample
+POST {{host}}/v1/chat/completions
+
+{
+  "model": "llama3.2-vision:11b-instruct-q8_0",
+  "response_format": {
+    "type": "json_schema",
+    "json_schema": {
+      "name": "ResponseSchema",
+      "schema": {
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "action": {
+            "title": "Action",
+            "type": "string"
+          }
+        },
+        "required": [
+          "description",
+          "action"
+        ],
+        "title": "Action",
+        "type": "object"
+      }
+    }
+  },
+  "messages": [
+    {
+      "role": "user",
+      "content": "Name three Asian capitals. Reply in JSON format."
+    }
+  ]
+}
