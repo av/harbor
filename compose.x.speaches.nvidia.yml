@@ -1,0 +1,18 @@
+services:
+  speaches:
+    image: ghcr.io/speaches-ai/speaches:${HARBOR_SPEACHES_VERSION}-cuda
+    # Alternative to image - build in place
+    # However, service's Dockerfile only compatible with ubuntu24.04, so
+    # you won't be able to use significantly older CUDA versions
+    # build:
+    #   context: https://github.com/speaches-ai/speaches.git
+    #   dockerfile: Dockerfile
+    #   args:
+    #     BASE_IMAGE: nvidia/cuda:12.6.3-cudnn-runtime-ubuntu24.04
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

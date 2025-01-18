@@ -37,7 +37,7 @@ Harbor is a containerized LLM toolkit that allows you to run LLMs and additional
 [Aphrodite Engine](https://github.com/av/harbor/wiki/2.2.5-Backend:-Aphrodite-Engine) ⦁︎
 [mistral.rs](https://github.com/av/harbor/wiki/2.2.6-Backend:-mistral.rs) ⦁︎
 [openedai-speech](https://github.com/av/harbor/wiki/2.2.7-Backend:-openedai-speech) ⦁︎
-[faster-whisper-server](https://github.com/av/harbor/wiki/2.2.14-Backend:-Faster-Whisper) ⦁︎
+[Speaches](https://github.com/av/harbor/wiki/2.2.14-Backend:-Speaches) ⦁︎
 [Parler](https://github.com/av/harbor/wiki/2.2.8-Backend:-Parler) ⦁︎
 [text-generation-inference](https://github.com/av/harbor/wiki/2.2.9-Backend:-text-generation-inference) ⦁︎
 [LMDeploy](https://github.com/av/harbor/wiki/2.2.10-Backend:-lmdeploy) ⦁︎
@@ -99,6 +99,10 @@ harbor up
 # Running SearXNG automatically enables Web RAG in Open WebUI
 harbor up searxng
 
+# Speaches includes OpenAI-compatible SST and TTS
+# and connected to Open WebUI out of the box
+harbor up speaches
+
 # Run additional/alternative LLM Inference backends
 # Open Webui is automatically connected to them.
 harbor up llamacpp tgi litellm vllm tabbyapi aphrodite sglang ktransformers
@@ -115,6 +119,12 @@ harbor up comfyui
 
 # Use custom models for supported backends
 harbor llamacpp model https://huggingface.co/user/repo/model.gguf
+
+# Access service CLIs without installing them
+# Caches are shared between services where possible
+harbor hf scan-cache
+harbor hf download google/gemma-2-2b-it
+harbor ollama list
 
 # Shortcut to HF Hub to find the models
 harbor hf find gguf gemma-2
@@ -145,17 +155,13 @@ harbor cmdh
 # Use fabric to LLM-ify your linux pipes
 cat ./file.md | harbor fabric --pattern extract_extraordinary_claims | grep "LK99"
 
-# Access service CLIs without installing them
-harbor hf scan-cache
-harbor ollama list
-
 # Open services from the CLI
 harbor open webui
 harbor open llamacpp
 # Print yourself a QR to quickly open the
 # service on your phone
 harbor qr
-# Feeling adventurous? Expose your harbor
+# Feeling adventurous? Expose your Harbor
 # to the internet
 harbor tunnel
 

@@ -3691,6 +3691,38 @@ run_stt_command() {
     esac
 }
 
+run_speaches_command() {
+    case "$1" in
+    stt_model)
+        shift
+        env_manager_alias speaches.stt.model "$@"
+        ;;
+    tts_model)
+        shift
+        env_manager_alias speaches.tts.model "$@"
+        ;;
+    tts_voice)
+        shift
+        env_manager_alias speaches.tts.voice "$@"
+        ;;
+    version)
+        shift
+        env_manager_alias speaches.version "$@"
+        ;;
+    -h | --help | help)
+        echo "Usage: harbor speaches <command>"
+        echo
+        echo "Commands:"
+        echo "  harbor speaches stt_model [user/repo] - Get or set the STT model to run"
+        echo "  harbor speaches tts_model [user/repo] - Get or set the TTS model to run"
+        echo "  harbor speaches tts_voice [voice]     - Get or set the TTS voice to use"
+        ;;
+    *)
+        return $scramble_exit_code
+        ;;
+    esac
+}
+
 run_nexa_command() {
     case "$1" in
     model)
@@ -4125,6 +4157,10 @@ main_entrypoint() {
     stt)
         shift
         run_stt_command "$@"
+        ;;
+    speaches)
+        shift
+        run_speaches_command "$@"
         ;;
     boost)
         shift

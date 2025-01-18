@@ -1,0 +1,14 @@
+@host=http://localhost:{{HARBOR_SPEACHES_HOST_PORT}}
+
+###
+
+GET {{host}}/v1/models
+
+###
+
+POST {{host}}/v1/audio/speech
+Content-Type: application/json
+
+{
+  "input": "The quick brown fox jumped over the lazy dog."
+}

@@ -1,0 +1,21 @@
+{
+  "audio": {
+    "tts": {
+			"openai": {
+				"api_base_url": "http://speaches:8000/v1",
+				"api_key": "sk-speaches"
+			},
+			"engine": "openai",
+			"model": "${HARBOR_SPEACHES_TTS_MODEL}",
+			"voice": "${HARBOR_SPEACHES_TTS_VOICE}"
+		},
+    "stt": {
+      "openai": {
+        "api_base_url": "http://speaches:8000/v1",
+        "api_key": "sk-speaches"
+      },
+      "engine": "openai",
+      "model": "${HARBOR_SPEACHES_STT_MODEL}"
+    }
+	}
+}
