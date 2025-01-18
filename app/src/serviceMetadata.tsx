@@ -176,8 +176,12 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         wikiUrl: 'https://github.com/av/harbor/wiki/2.2.12-Backend:-SGLang',
     },
     stt: {
+        tags: [HST.backend, HST.audio, HST.partial],
+        wikiUrl: 'https://github.com/av/harbor/wiki/2.2.14-Backend:-Speaches',
+    },
+    speaches: {
         tags: [HST.backend, HST.audio],
-        wikiUrl: 'https://github.com/av/harbor/wiki/2.2.14-Backend:-Faster-Whisper',
+        wikiUrl: 'https://github.com/av/harbor/wiki/2.2.14-Backend:-Speaches',
     },
     tabbyapi: {
         tags: [HST.backend],
