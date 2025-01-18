@@ -70,7 +70,6 @@ async def get_boost_models(api_key: str = Depends(get_api_key)):
 
     if should_filter:
       should_serve = selection.matches_filter(model, MODEL_FILTER.value)
-      print(model['id'], MODEL_FILTER.value['id.regex'], should_serve)
 
     if should_serve:
       final.append(model)

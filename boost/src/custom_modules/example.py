@@ -1,3 +1,5 @@
+from pydantic import BaseModel, Field
+
 import llm
 import log
 import chat as ch
@@ -5,6 +7,10 @@ import chat as ch
 ID_PREFIX = 'example'
 logger = log.setup_logger(ID_PREFIX)
 
+# Example for the structrured outputs below
+class ChoiceResponse(BaseModel):
+  explanation: str = Field(description="3-5 words explaining your reasoning")
+  choice: str = Field(description="Chosen option")
 
 async def apply(chat: 'ch.Chat', llm: 'llm.LLM'):
   """
@@ -64,6 +70,22 @@ async def apply(chat: 'ch.Chat', llm: 'llm.LLM'):
       }
     ]
   )
+
+  """
+  2. Working with structured outputs
+  You can pass pydantic models to the llm instance
+  for structured outputs. If the "resolve" flag is set,
+  the output will also be resolved to an actual dict
+  (otherwise it will be a JSON string).
+  """
+  await llm.emit_status('Structured output examples')
+  choice = await llm.chat_completion(
+    prompt="""What is the best topping for a pizza?""",
+    schema=ChoiceResponse,
+    resolve=True
+  )
+  logger.debug(f"Choice: {choice}")
+
   """
   3.1 Programmatic messages and statuses
   programmatic "public" messages that are streamed
@@ -175,4 +197,4 @@ async def apply(chat: 'ch.Chat', llm: 'llm.LLM'):
   present the user with the final result.
   """
   await llm.emit_status('Final completion')
-  await llm.stream_final_completion(prompt="Wish me a good luck!",)
+  await llm.stream_final_completion(prompt="Wish me a good luck!")

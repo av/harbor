@@ -1,0 +1,5 @@
+# FROM hf.co/bartowski/Replete-LLM-V2.5-Qwen-7b-GGUF:Q6_K_L
+# FROM hf.co/bartowski/Qwen2.5-14B-Instruct-GGUF:Q4_K_M
+FROM hf.co/bartowski/Qwen2.5.1-Coder-7B-Instruct-GGUF:Q8_0
+
+PARAMETER num_ctx 32000

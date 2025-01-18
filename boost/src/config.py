@@ -193,6 +193,13 @@ BOOST_KEYS = [
   *HARBOR_BOOST_EXTRA_OPENAI_KEYS.value
 ]
 
+EXTRA_LLM_PARAMS = Config[ConfigDict](
+  name='HARBOR_BOOST_EXTRA_LLM_PARAMS',
+  type=ConfigDict,
+  default='temperature=0,num_ctx=32000',
+  description='Extra parameters to always add to the LLM API requests for the downstream APIs (subset of chat completion payload)'
+)
+
 # ----------------- MODULES -----------------
 
 BOOST_MODS = Config[StrList](

@@ -6,7 +6,7 @@ import asyncio
 import time
 import httpx
 
-from config import INTERMEDIATE_OUTPUT
+from config import INTERMEDIATE_OUTPUT, EXTRA_LLM_PARAMS
 import chat as ch
 import log
 import format
@@ -56,7 +56,7 @@ class LLM:
 
   def split_params(self, params: dict):
     self.params = {
-      k: v for k, v in params.items() if not k.startswith(BOOST_PARAM_PREFIX)
+      k: v for k, v in {**EXTRA_LLM_PARAMS.value, **params}.items() if not k.startswith(BOOST_PARAM_PREFIX)
     }
     self.boost_params = {
       k[len(BOOST_PARAM_PREFIX):]: v for k, v in params.items() if k.startswith(BOOST_PARAM_PREFIX)
@@ -68,8 +68,14 @@ class LLM:
   def generate_chunk_id(self):
     return f"chatcmpl-{++self.cpl_id}"
 
-  def get_response_content(self, response):
-    return response['choices'][0]['message']['content']
+  def get_response_content(self, params: dict, response: dict):
+    content = response['choices'][0]['message']['content']
+
+    if 'response_format' in params and 'type' in params['response_format']:
+      if params['response_format']['type'] == 'json_schema' or params['response_format']['type'] == 'json':
+        return json.loads(content)
+
+    return content
 
   def get_chunk_content(self, chunk):
     return chunk["choices"][0]["delta"]["content"]
@@ -213,12 +219,32 @@ class LLM:
     self.is_final_stream = True
     return await self.stream_chat_completion(**kwargs)
 
+  async def resolve_request_params(self, **kwargs):
+    params = {
+      "model": kwargs.get("model", self.model),
+      **self.params,
+    }
+
+    if kwargs.get("schema"):
+      params['response_format'] = {
+        'type': 'json_schema',
+        'json_schema': {
+          'name': 'StructuredResponseSchema',
+          'schema': kwargs['schema'].model_json_schema()
+        }
+      }
+
+    return params
+
   async def stream_chat_completion(self, **kwargs):
     chat = self.resolve_chat(**kwargs)
+    params = await self.resolve_request_params(**kwargs)
 
     logger.debug(
       f"Streaming Chat Completion for '{self.chat_completion_endpoint}"
     )
+    logger.debug(f"Params: {params}")
+    logger.debug(f"Chat: {str(chat):.256}")
 
     if chat is None:
       chat = self.chat
@@ -233,7 +259,7 @@ class LLM:
         json={
           "model": self.model,
           "messages": chat.history(),
-          **self.params,
+          **params,
           "stream": True,
         }
       ) as response:
@@ -251,10 +277,12 @@ class LLM:
 
   async def chat_completion(self, **kwargs):
     chat = self.resolve_chat(**kwargs)
+    params = await self.resolve_request_params(**kwargs)
     should_resolve = kwargs.get("resolve", False)
 
     logger.debug(f"Chat Completion for '{self.chat_completion_endpoint}'")
-    logger.debug(f"Chat: {chat}")
+    logger.debug(f"Params: {params}")
+    logger.debug(f"Chat: {str(chat):.256}...")
     if chat is None:
       chat = self.chat
 
@@ -262,14 +290,14 @@ class LLM:
       body = {
         "model": self.model,
         "messages": chat.history(),
-        **self.params, "stream": False
+        **params, "stream": False
       }
       response = await client.post(
         self.chat_completion_endpoint, headers=self.headers, json=body
       )
       result = response.json()
       if should_resolve:
-        return self.get_response_content(result)
+        return self.get_response_content(params, result)
       return result
 
   async def consume_stream(self, stream: AsyncGenerator[bytes, None]):

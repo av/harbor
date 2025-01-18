@@ -10,6 +10,10 @@ Fill the middle section of the plan that achieves a given objective using normal
 Objective:
 {objective}
 
+Context:
+- Linux desktop, Ubuntu with XFCE desktop environment
+- No applications are open
+
 Plan:
 - Blank desktop with no applications open
 - ...
@@ -41,8 +45,7 @@ repeat_expansion_prompt = """
 Please expand the non-atomic actions in the plan further.
 """.strip()
 
-
-async def apply(chat: 'ch.Chat', llm: 'llm.LLM'):
+async def call(chat: 'ch.Chat', llm: 'llm.LLM'):
   objective = chat.tail.content
   side_chat = ch.Chat(
     tail=ch.ChatNode(
@@ -61,4 +64,9 @@ async def apply(chat: 'ch.Chat', llm: 'llm.LLM'):
     await side_chat.emit_advance()
     side_chat.user(repeat_expansion_prompt)
 
-  await llm.stream_final_completion(chat=side_chat)
+  return side_chat
+
+async def apply(chat: 'ch.Chat', llm: 'llm.LLM'):
+  final_chat = await call(chat, llm)
+  await llm.stream_final_completion(chat=final_chat)
+
