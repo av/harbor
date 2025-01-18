@@ -287,7 +287,7 @@ resolve_compose_files() {
 compose_with_options() {
     local base_dir="$PWD"
     local compose_files=("$base_dir/compose.yml") # Always include the base compose file
-    local options=("${default_options[@]}")
+    local options=("${default_options[@]}" "${default_capabilities[@]}")
 
     # Parse arguments
     while [[ $# -gt 0 ]]; do
@@ -307,12 +307,14 @@ compose_with_options() {
         esac
     done
 
-    if has_nvidia && has_nvidia_ctk; then
-        options+=("nvidia")
-    fi
+    if [ "$default_auto_capabilities" = "true" ]; then
+        if has_nvidia && has_nvidia_ctk; then
+            options+=("nvidia")
+        fi
 
-    if has_modern_compose; then
-        options+=("mdc")
+        if has_modern_compose; then
+            options+=("mdc")
+        fi
     fi
 
     for file in $(resolve_compose_files); do
@@ -3918,6 +3920,8 @@ ensure_env_file
 env_manager --silent set user.id "$(id -u)"
 default_options=($(env_manager get services.default | tr ';' ' '))
 default_tunnels=($(env_manager get services.tunnels | tr ';' ' '))
+default_capabilities=($(env_manager get capabilities.default | tr ';' ' '))
+default_auto_capabilities=$(env_manager get capabilities.autodetect)
 default_open=$(env_manager get ui.main)
 default_autoopen=$(env_manager get ui.autoopen)
 default_container_prefix=$(env_manager get container.prefix)

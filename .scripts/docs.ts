@@ -36,10 +36,7 @@ async function copyDocsToWiki() {
   const readmePath = `${wikiLocation}/README.md`
   const homePath = `${wikiLocation}/Home.md`
   await Deno.rename(readmePath, homePath)
-
-  // Remove README.md
-  await Deno.remove(readmePath)
 }
 
 // await copyDocsFromWiki()
-// await copyDocsToWiki()
+await copyDocsToWiki()
