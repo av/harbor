@@ -102,10 +102,10 @@ async def post_boost_chat_completion(request: Request, api_key: str = Depends(ge
   proxy_config = mapper.resolve_request_config(json_body)
   proxy = llm.LLM(**proxy_config)
 
-  # We don't want to trigger potentially
-  # expensive workflows for title generation
-  if mapper.is_title_generation_task(proxy):
-    logger.debug("Detected title generation task, skipping boost")
+  # WebUI will send a few additional workflows
+  # that we simply want to delegate to the underlying model as is, without boosting
+  if mapper.is_direct_task(proxy):
+    logger.debug("Detected direct task, skipping boost")
     return JSONResponse(content=await proxy.chat_completion(), status_code=200)
 
   # This is where the "boost" happens

@@ -8,6 +8,10 @@
 
 ###
 
+GET {{host}}/v1/models
+
+###
+
 curl {{2do_host}}/v1/models
 
 ###

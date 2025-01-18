@@ -103,3 +103,16 @@ def resolve_request_config(body: Dict) -> Dict:
 def is_title_generation_task(llm: 'LLM'):
   # TODO: Better way to identify?
   return llm.chat.has_substring("3-5 word title")
+
+DIRECT_TASK_PROMPTS = [
+    # Open WebUI prompts related to system tasks
+  'Create a concise, 3-5 word title with an emoji as a title for the chat history',
+  'Based on the chat history, determine whether a search is necessary',
+  'Generate 1-3 broad tags categorizing the main themes of the chat history',
+  'You are an autocompletion system. Continue the text in `<text>` based on the **completion type**',
+  # Custom for the test
+  '[{DIRECT}]'
+]
+
+def is_direct_task(llm: 'LLM'):
+  return any(llm.chat.has_substring(prompt) for prompt in DIRECT_TASK_PROMPTS)
