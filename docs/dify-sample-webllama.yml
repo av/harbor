@@ -1,0 +1,339 @@
+app:
+  description: ''
+  icon: "\U0001F578\uFE0F"
+  icon_background: '#EFF1F5'
+  mode: advanced-chat
+  name: Web Llama
+kind: app
+version: 0.1.0
+workflow:
+  environment_variables: []
+  features:
+    file_upload:
+      image:
+        enabled: false
+        number_limits: 3
+        transfer_methods:
+        - local_file
+        - remote_url
+    opening_statement: ''
+    retriever_resource:
+      enabled: true
+    sensitive_word_avoidance:
+      enabled: false
+    speech_to_text:
+      enabled: false
+    suggested_questions: []
+    suggested_questions_after_answer:
+      enabled: false
+    text_to_speech:
+      enabled: false
+      language: ''
+      voice: ''
+  graph:
+    edges:
+    - data:
+        sourceType: llm
+        targetType: answer
+      id: llm-answer
+      source: llm
+      sourceHandle: source
+      target: answer
+      targetHandle: target
+      type: custom
+    - data:
+        isInIteration: false
+        sourceType: start
+        targetType: question-classifier
+      id: 1722987216488-source-1722987270683-target
+      source: '1722987216488'
+      sourceHandle: source
+      target: '1722987270683'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        sourceType: question-classifier
+        targetType: tool
+      id: 1722987270683-1-1722987349026-target
+      source: '1722987270683'
+      sourceHandle: '1'
+      target: '1722987349026'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        sourceType: tool
+        targetType: variable-aggregator
+      id: 1722987349026-source-1722987538804-target
+      source: '1722987349026'
+      sourceHandle: source
+      target: '1722987538804'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        sourceType: variable-aggregator
+        targetType: llm
+      id: 1722987538804-source-llm-target
+      source: '1722987538804'
+      sourceHandle: source
+      target: llm
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        sourceType: question-classifier
+        targetType: template-transform
+      id: 1722987270683-2-1722987867779-target
+      source: '1722987270683'
+      sourceHandle: '2'
+      target: '1722987867779'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        sourceType: template-transform
+        targetType: variable-aggregator
+      id: 1722987867779-source-1722987538804-target
+      source: '1722987867779'
+      sourceHandle: source
+      target: '1722987538804'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    nodes:
+    - data:
+        desc: ''
+        selected: false
+        title: Start
+        type: start
+        variables: []
+      height: 53
+      id: '1722987216488'
+      position:
+        x: 30
+        y: 323.5
+      positionAbsolute:
+        x: 30
+        y: 323.5
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 243
+    - data:
+        context:
+          enabled: false
+          variable_selector: []
+        desc: ''
+        memory:
+          role_prefix:
+            assistant: ''
+            user: ''
+          window:
+            enabled: false
+            size: 10
+        model:
+          completion_params:
+            temperature: 0.7
+          mode: chat
+          name: llama3.1:8b-instruct-q6_K
+          provider: ollama
+        prompt_config:
+          jinja2_variables:
+          - value_selector:
+            - '1722987349026'
+            - text
+            variable: text
+          - value_selector:
+            - '1722987538804'
+            - output
+            variable: output
+        prompt_template:
+        - edition_type: basic
+          id: 359790fc-caa0-439d-9f87-59981b1de8de
+          jinja2_text: "{% if text is defined %}\n    {{{ text }}}\n{% else %}\n \
+            \   variable is not defined\n{% endif %}"
+          role: system
+          text: 'Answer the user question.
+
+
+            Additional data (might be empty):
+
+            {{#1722987538804.output#}}'
+        - id: 03560397-f691-45e2-bfea-50310cadb9e4
+          role: user
+          text: '
+
+            {{#sys.query#}}'
+        selected: false
+        title: LLM
+        type: llm
+        variables: []
+        vision:
+          enabled: false
+      height: 97
+      id: llm
+      position:
+        x: 1242
+        y: 323.5
+      positionAbsolute:
+        x: 1242
+        y: 323.5
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 243
+    - data:
+        answer: '{{#llm.text#}}'
+        desc: ''
+        selected: false
+        title: Answer
+        type: answer
+        variables: []
+      height: 107
+      id: answer
+      position:
+        x: 1545
+        y: 323.5
+      positionAbsolute:
+        x: 1545
+        y: 323.5
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 243
+    - data:
+        classes:
+        - id: '1'
+          name: Question requires a web search to be answered. User might be asking
+            about some products, for example.
+        - id: '2'
+          name: Question does not require a web search. It's about some general concepts.
+        desc: ''
+        instructions: ''
+        model:
+          completion_params:
+            temperature: 0.7
+          mode: chat
+          name: llama3.1:8b-instruct-q6_K
+          provider: ollama
+        query_variable_selector:
+        - '1722987216488'
+        - sys.query
+        selected: false
+        title: Question Classifier
+        topics: []
+        type: question-classifier
+      height: 247
+      id: '1722987270683'
+      position:
+        x: 333
+        y: 323.5
+      positionAbsolute:
+        x: 333
+        y: 323.5
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 243
+    - data:
+        desc: ''
+        provider_id: e84bbbcd-13a9-49e6-89ad-55c60c667be7
+        provider_name: Advanced Web RAG
+        provider_type: workflow
+        selected: false
+        title: Advanced Web RAG
+        tool_configurations: {}
+        tool_label: Advanced Web RAG
+        tool_name: advancedWebSearch
+        tool_parameters:
+          Question:
+            type: mixed
+            value: '{{#sys.query#}}'
+        type: tool
+      height: 53
+      id: '1722987349026'
+      position:
+        x: 636
+        y: 323.5
+      positionAbsolute:
+        x: 636
+        y: 323.5
+      selected: true
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 243
+    - data:
+        advanced_settings:
+          group_enabled: false
+          groups:
+          - groupId: d7f9eb4e-3817-4226-bebe-15ed85b7d39d
+            group_name: Group1
+            output_type: string
+            variables:
+            - - '1722987349026'
+              - text
+            - - '1722987270683'
+              - class_name
+        desc: ''
+        output_type: string
+        selected: false
+        title: Variable Aggregator
+        type: variable-aggregator
+        variables:
+        - - '1722987349026'
+          - text
+        - - '1722987867779'
+          - output
+      height: 137
+      id: '1722987538804'
+      position:
+        x: 939
+        y: 323.5
+      positionAbsolute:
+        x: 939
+        y: 323.5
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 243
+    - data:
+        desc: ''
+        selected: false
+        template: '-'
+        title: Nothing
+        type: template-transform
+        variables:
+        - value_selector:
+          - '1722987270683'
+          - class_name
+          variable: arg1
+      height: 53
+      id: '1722987867779'
+      position:
+        x: 636
+        y: 416.5
+      positionAbsolute:
+        x: 636
+        y: 416.5
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 243
+    viewport:
+      x: 13
+      y: -122
+      zoom: 0.7

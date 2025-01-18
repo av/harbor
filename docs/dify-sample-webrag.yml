@@ -1,0 +1,501 @@
+app:
+  description: ''
+  icon: "\U0001F578\uFE0F"
+  icon_background: '#E0F2FE'
+  mode: workflow
+  name: Advanced Web RAG
+kind: app
+version: 0.1.0
+workflow:
+  environment_variables: []
+  features:
+    file_upload:
+      image:
+        enabled: false
+        number_limits: 3
+        transfer_methods:
+        - local_file
+        - remote_url
+    opening_statement: ''
+    retriever_resource:
+      enabled: false
+    sensitive_word_avoidance:
+      enabled: false
+    speech_to_text:
+      enabled: false
+    suggested_questions: []
+    suggested_questions_after_answer:
+      enabled: false
+    text_to_speech:
+      enabled: false
+      language: ''
+      voice: ''
+  graph:
+    edges:
+    - data:
+        isInIteration: false
+        sourceType: code
+        targetType: iteration
+      id: 1713262060182-source-1716911333343-target
+      source: '1713262060182'
+      sourceHandle: source
+      target: '1716911333343'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: true
+        iteration_id: '1716911333343'
+        sourceType: llm
+        targetType: template-transform
+      id: 1716959261724-source-1720758555344-target
+      source: '1716959261724'
+      sourceHandle: source
+      target: '1720758555344'
+      targetHandle: target
+      type: custom
+      zIndex: 1002
+    - data:
+        isInIteration: false
+        sourceType: iteration
+        targetType: code
+      id: 1716911333343-source-1720759755103-target
+      source: '1716911333343'
+      sourceHandle: source
+      target: '1720759755103'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        sourceType: code
+        targetType: template-transform
+      id: 1720759755103-source-1720761482451-target
+      source: '1720759755103'
+      sourceHandle: source
+      target: '1720761482451'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        sourceType: template-transform
+        targetType: end
+      id: 1720761482451-source-1713262577750-target
+      source: '1720761482451'
+      sourceHandle: source
+      target: '1713262577750'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        sourceType: start
+        targetType: tool
+      id: 1713261835258-source-1722985487677-target
+      source: '1713261835258'
+      sourceHandle: source
+      target: '1722985487677'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        sourceType: tool
+        targetType: code
+      id: 1722985487677-source-1713262060182-target
+      source: '1722985487677'
+      sourceHandle: source
+      target: '1713262060182'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: true
+        iteration_id: '1716911333343'
+        sourceType: tool
+        targetType: llm
+      id: 1722985591562-source-1716959261724-target
+      source: '1722985591562'
+      sourceHandle: source
+      target: '1716959261724'
+      targetHandle: target
+      type: custom
+      zIndex: 1002
+    nodes:
+    - data:
+        desc: ''
+        selected: false
+        title: Start
+        type: start
+        variables:
+        - label: "\u8CEA\u554F"
+          max_length: 148
+          options: []
+          required: true
+          type: text-input
+          variable: Question
+      height: 89
+      id: '1713261835258'
+      position:
+        x: 30
+        y: 388.5
+      positionAbsolute:
+        x: 30
+        y: 388.5
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 243
+    - data:
+        code: "import re\nimport time\ndef main(arg1) -> dict:\n    urls = re.findall(r'http[s]?://[^\\\
+          s)]+', arg1)\n    return {\n        \"result\": urls,\n    }"
+        code_language: python3
+        desc: ''
+        outputs:
+          result:
+            children: null
+            type: array[string]
+        selected: false
+        title: Code
+        type: code
+        variables:
+        - value_selector:
+          - '1722985487677'
+          - text
+          variable: arg1
+      height: 53
+      id: '1713262060182'
+      position:
+        x: 636
+        y: 388.5
+      positionAbsolute:
+        x: 636
+        y: 388.5
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 243
+    - data:
+        desc: ''
+        outputs:
+        - value_selector:
+          - '1720761482451'
+          - output
+          variable: text
+        selected: false
+        title: End
+        type: end
+      height: 89
+      id: '1713262577750'
+      position:
+        x: 2590
+        y: 388.5
+      positionAbsolute:
+        x: 2590
+        y: 388.5
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 243
+    - data:
+        desc: ''
+        height: 377
+        iterator_selector:
+        - '1713262060182'
+        - result
+        output_selector:
+        - '1720758555344'
+        - output
+        output_type: array[string]
+        selected: false
+        startNodeType: tool
+        start_node_id: '1722985591562'
+        title: Iteration
+        type: iteration
+        width: 985
+      height: 377
+      id: '1716911333343'
+      position:
+        x: 939
+        y: 388.5
+      positionAbsolute:
+        x: 939
+        y: 388.5
+      selected: true
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 985
+      zIndex: 1
+    - data:
+        desc: ''
+        isInIteration: true
+        isIterationStart: true
+        iteration_id: '1716911333343'
+        provider_id: webscraper
+        provider_name: webscraper
+        provider_type: builtin
+        selected: false
+        title: Web Scraper
+        tool_configurations:
+          generate_summary: null
+          user_agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+            (KHTML, like Gecko) Chrome/100.0.1000.0 Safari/537.36
+        tool_label: Web Scraper
+        tool_name: webscraper
+        tool_parameters:
+          url:
+            type: mixed
+            value: '{{#1716911333343.item#}}'
+        type: tool
+      extent: parent
+      height: 115
+      id: '1722985591562'
+      parentId: '1716911333343'
+      position:
+        x: 117
+        y: 85
+      positionAbsolute:
+        x: 1056
+        y: 473.5
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 243
+      zIndex: 1001
+    - data:
+        context:
+          enabled: false
+          variable_selector: []
+        desc: ''
+        isInIteration: true
+        iteration_id: '1716911333343'
+        model:
+          completion_params:
+            temperature: 0.1
+          mode: chat
+          name: llama3.1:8b-instruct-q6_K
+          provider: ollama
+        prompt_template:
+        - id: 1c7eeb97-1ebc-4579-b1ec-d0d649d57d2d
+          role: system
+          text: '<instruction>
+
+            Write a clear and concise summary of the provided web scraper output,
+            removing any unnecessary information and formatting to produce a clean
+            and readable text.
+
+
+            Step 1: Review the input data to identify key points and relevant information.
+
+            Step 2: Remove any redundant or irrelevant data, such as XML tags, to
+            create a clean and focused summary.
+
+            Step 3: Organize the remaining information in a logical and coherent manner,
+            using proper grammar and punctuation.
+
+            Step 4: Ensure that the output does not contain any XML tags.
+
+
+            The goal is to produce a well-structured and easy-to-understand summary
+            that effectively conveys the main points of the original data.
+
+            </instruction>
+
+
+
+            <examples>
+
+            Example 1:
+
+            Input: "This is an example of noisy web scraper output with unnecessary
+            information <xml>...</xml>"
+
+            Output: "This is an example of noisy web scraper output"
+
+
+            Example 2:
+
+            Input: "The following data was extracted from a website, but it contains
+            irrelevant information <xml>...</xml>"
+
+            Output: "Data extracted from a website"
+
+
+            Example 3:
+
+            Input: "A summary of the provided data is as follows: <xml>...</xml>"
+
+            Output: "Summary of the provided data"
+
+            </examples>
+
+
+
+            <requirements>
+
+            The output should be a clean and concise summary, free from any XML tags
+            or unnecessary information. Use proper grammar and punctuation to ensure
+            that the output is easy to read and understand. Respond with a summary
+            only and nothing else.
+
+            </requirements>'
+        - role: user
+          text: '{{#1722985591562.text#}}'
+        selected: false
+        title: LLM 2
+        type: llm
+        variables: []
+        vision:
+          enabled: false
+      extent: parent
+      height: 97
+      id: '1716959261724'
+      parentId: '1716911333343'
+      position:
+        x: 422.8358361911669
+        y: 85
+      positionAbsolute:
+        x: 1361.835836191167
+        y: 473.5
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 243
+      zIndex: 1002
+    - data:
+        desc: ''
+        isInIteration: true
+        iteration_id: '1716911333343'
+        selected: false
+        template: '{{ arg1 }}\SP{{ text }}'
+        title: Combine URL and Summary
+        type: template-transform
+        variables:
+        - value_selector:
+          - '1716911333343'
+          - item
+          variable: arg1
+        - value_selector:
+          - '1716959261724'
+          - text
+          variable: text
+      extent: parent
+      height: 53
+      id: '1720758555344'
+      parentId: '1716911333343'
+      position:
+        x: 723.3186124006406
+        y: 85
+      positionAbsolute:
+        x: 1662.3186124006406
+        y: 473.5
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 243
+      zIndex: 1002
+    - data:
+        code: "import time\n\ndef main(arg1) -> dict:\n    result = []\n    for item\
+          \ in arg1:\n        url, text = item.split('\\\\SP')\n        text = text.replace('\\\
+          n', ' ')\n        result.append({'url':url, 'text':text})\n    return {\n\
+          \        \"result\": result,\n    }\n"
+        code_language: python3
+        desc: ''
+        outputs:
+          result:
+            children: null
+            type: array[object]
+        selected: false
+        title: Split URL and Text Summary
+        type: code
+        variables:
+        - value_selector:
+          - '1716911333343'
+          - output
+          variable: arg1
+      height: 53
+      id: '1720759755103'
+      position:
+        x: 1984
+        y: 388.5
+      positionAbsolute:
+        x: 1984
+        y: 388.5
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 243
+    - data:
+        desc: ''
+        selected: false
+        template: '{% for data in arg1 -%}
+
+          URL: {{data.url}}
+
+          Text: {{data.text}}
+
+          {% endfor -%}'
+        title: Result in Table
+        type: template-transform
+        variables:
+        - value_selector:
+          - '1720759755103'
+          - result
+          variable: arg1
+      height: 53
+      id: '1720761482451'
+      position:
+        x: 2287
+        y: 388.5
+      positionAbsolute:
+        x: 2287
+        y: 388.5
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 243
+    - data:
+        desc: ''
+        provider_id: searxng
+        provider_name: searxng
+        provider_type: builtin
+        selected: false
+        title: SearXNG Search
+        tool_configurations:
+          num_results: 4
+          result_type: link
+          search_type: Page
+        tool_label: SearXNG Search
+        tool_name: searxng_search
+        tool_parameters:
+          query:
+            type: mixed
+            value: '{{#1713261835258.Question#}}'
+        type: tool
+      height: 141
+      id: '1722985487677'
+      position:
+        x: 333
+        y: 388.5
+      positionAbsolute:
+        x: 333
+        y: 388.5
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 243
+    viewport:
+      x: 111.96783820755036
+      y: 285.3394095263041
+      zoom: 0.3546000649897844
