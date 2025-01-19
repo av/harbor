@@ -2,12 +2,20 @@ import { useCallback, useEffect, useState } from "react";
 import { ChildProcess, Command } from "@tauri-apps/plugin-shell";
 import { join } from "@tauri-apps/api/path";
 
-import { once } from "./utils";
+import { isWindows, once, resolveResultLines } from "./utils";
 import { PROFILES_DIR } from "./configMetadata";
 
 export const resolveHarborHome = once(async function __resolveHarborHome() {
     const result = await runHarbor(["home"]);
-    return result?.stdout?.trim();
+    const path = resolveResultLines(result).join('\n');
+
+    if (await isWindows()) {
+        // On windows, we need to resolve the path first via WSL
+        const wslResult = await Command.create("wsl.exe", ["-e", "wslpath", "-w", path]).execute();
+        return resolveResultLines(wslResult).join('\n');
+    }
+
+    return path;
 });
 
 export const resolveProfilesDir = once(async function __resolveProfilesDir() {
@@ -16,7 +24,11 @@ export const resolveProfilesDir = once(async function __resolveProfilesDir() {
 });
 
 export async function runHarbor(args: string[]) {
-    return await Command.create("harbor", args).execute();
+    if (await isWindows()) {
+        return await Command.create("wsl.exe", ["-e", "bash", "-lic", `harbor ${args.join(' ')}`]).execute();
+    } else {
+        return await Command.create("harbor", args).execute();
+    }
 }
 
 export const useHarborTrigger = (args: string[]) => {

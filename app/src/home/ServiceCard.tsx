@@ -6,15 +6,18 @@ import { HST, ServiceTags } from "../ServiceTags";
 import { HSTColors } from "../ServiceTags";
 import { HSTColorOpts } from "../ServiceTags";
 import { runHarbor } from "../useHarbor";
-import { toasted } from "../utils";
+import { resolveResultLines, toasted } from "../utils";
+import { runOpen } from "../useOpen";
 
 export const ServiceCard = (
   { service, onUpdate }: { service: HarborService; onUpdate: () => void },
 ) => {
   const [loading, setLoading] = useState(false);
 
-  const openService = () => {
-    runHarbor(["open", service.handle]);
+  const openService = async () => {
+    const urlResult = await runHarbor(["url", service.handle]);
+    const url = resolveResultLines(urlResult).join("");
+    await runOpen([url]);
   };
 
   const toggleService = () => {
@@ -71,11 +74,11 @@ export const ServiceCard = (
         {canLaunch && (
           <>
             {service.isRunning && (
-              <span className="inline-block bg-success w-2 h-2 rounded-full">
+              <span className="inline-block bg-success shrink-0 w-2 h-2 rounded-full">
               </span>
             )}
             {!service.isRunning && (
-              <span className="inline-block bg-base-content/20 w-2 h-2 rounded-full">
+              <span className="inline-block bg-base-content/20 shrink-0 w-2 h-2 rounded-full">
               </span>
             )}
             <IconButton

@@ -1,9 +1,11 @@
 import { Loader } from "../Loading";
 import { Section } from "../Section";
 import { useHarbor } from "../useHarbor";
+import { resolveResultLines } from "../utils";
 
 export const Version = () => {
     const { result, loading, error } = useHarbor(["--version"]);
+    const output = resolveResultLines(result);
 
     return (
         <Section
@@ -13,7 +15,7 @@ export const Version = () => {
                 <>
                     <Loader loading={loading} />
                     {error && <span>{error.message}</span>}
-                    <span>{result?.stdout}</span>
+                    <span>{output}</span>
                 </>
             }
         />

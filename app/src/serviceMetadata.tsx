@@ -277,5 +277,9 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
     kobold: {
         tags: [HST.satellite, HST.frontend, HST.backend],
         wikiUrl: 'https://github.com/av/harbor/wiki/2.2.16-Backend:-KoboldCpp',
+    },
+    agent: {
+        tags: [HST.builtIn, HST.cli],
+        wikiUrl: ''
     }
 };

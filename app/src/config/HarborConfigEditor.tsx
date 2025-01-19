@@ -21,6 +21,7 @@ import { ConfirmModal } from "../ConfirmModal";
 import { SearchInput } from "../SearchInput";
 import { useSearch } from "../useSearch";
 import { ChangeEvent } from "react";
+import { runOpen } from "../useOpen";
 
 export const HarborConfigEditor = (
     { config }: { config: HarborConfig },
@@ -33,7 +34,7 @@ export const HarborConfigEditor = (
 
     const maybeExtra = EXTRA[config.profile.name];
     const handleFileOpen = async () => {
-        await Command.create("open", [config.profile.file]).execute();
+        await runOpen([config.profile.file]);
     };
 
     const handleSave = async () => {

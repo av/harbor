@@ -10,6 +10,10 @@
     "shell:allow-open",
     "shell:default",
     "shell:allow-spawn",
+    "os:default",
+    "store:default",
+    "fs:default",
+    "autostart:default",
     {
       "identifier": "shell:allow-execute",
       "allow": [
@@ -24,14 +28,32 @@
       "identifier": "shell:allow-execute",
       "allow": [
         {
+          "name": "wsl.exe",
+          "cmd": "wsl.exe",
+          "args": true
+        }
+      ]
+    },
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        {
           "name": "open",
           "cmd": "open",
           "args": true
         }
       ]
     },
-    "store:default",
-    "fs:default",
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        {
+          "name": "cmd",
+          "cmd": "cmd",
+          "args": true
+        }
+      ]
+    },
     {
       "identifier": "fs:scope",
       "allow": [
@@ -65,7 +87,6 @@
           "path": "**/.env"
         }
       ]
-    },
-    "autostart:default"
+    }
   ]
 }

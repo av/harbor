@@ -8,7 +8,7 @@ edition = "2021"
 
 [lib]
 name = "harbor_lib"
-crate-type = ["staticlib","cdylib","rlib"]
+crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies.tauri-build]
 version = "2.0.3"
@@ -19,6 +19,7 @@ tauri-plugin-shell = "2.2.0"
 serde_json = "1"
 tauri-plugin-store = "2.2.0"
 tauri-plugin-fs = "2.2.0"
+tauri-plugin-os = "2"
 
 [dependencies.tauri]
 version = "2.1.1"

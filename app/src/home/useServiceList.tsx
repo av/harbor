@@ -2,6 +2,7 @@ import { useMemo } from "react";
 
 import { useHarbor } from "../useHarbor";
 import { HarborService, serviceMetadata } from "../serviceMetadata";
+import { resolveResultLines } from "../utils";
 
 export const isCoreService = (handle: string) => {
     return !handle.includes('-');
@@ -19,10 +20,10 @@ export const useServiceList = () => {
         ]
 
     const services: HarborService[] = useMemo(() => {
-        const runningResult = running?.result?.stdout ?? '';
-        const defaultsResult = defaults?.result?.stdout ?? '';
+        const runningResult = resolveResultLines(running.result)
+        const defaultsResult = resolveResultLines(defaults.result)
 
-        return all?.result?.stdout.split('\n').filter(s => s.trim()).sort().map(line => {
+        return resolveResultLines(all.result).filter(s => s.trim()).sort().map(line => {
             const handle = line.trim();
             const maybeMetadata = serviceMetadata[handle] ?? {};
 

@@ -1,3 +1,6 @@
+import { platform } from '@tauri-apps/plugin-os';
+import { ChildProcess } from "@tauri-apps/plugin-shell";
+
 import toast from "react-hot-toast";
 import { IconCheck, IconOctagonAlert } from "./Icons";
 
@@ -144,4 +147,23 @@ export const debounce = <T extends (...args: any) => ReturnType<T>>(
     };
 
     return debounced;
+}
+
+export const getOSPlatform = once(async () => {
+    return platform();
+});
+
+export const isWindows = once(async () => {
+    const platform = await getOSPlatform();
+    return platform === "windows";
+});
+
+const outputBlock = [
+    'To run a command as administrator (user "root"), use "sudo <command>".',
+    'See "man sudo_root" for details.',
+]
+
+export function resolveResultLines(process: ChildProcess<string> | undefined | null) {
+    const stdout = process?.stdout ?? '';
+    return stdout.split('\n').filter(Boolean).filter(line => !outputBlock.includes(line));
 }
