@@ -12,6 +12,12 @@ Includes:
 deno run -A ./.scripts/seed.ts
 ```
 
+### Sync docs to wiki
+
+```bash
+deno run -A ./.scripts/docs.ts
+```
+
 ### Publish to npm
 
 ```bash
