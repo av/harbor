@@ -69,7 +69,7 @@ export const ServiceCard = (
       className={`p-4 rounded-box cursor-default bg-base-200/50 relative ${gradientClass}`}
     >
       <h2 className="flex items-center gap-1 text-2xl pb-2">
-        <span className="font-bold">{service.handle}</span>
+        <span className="font-bold shrink-1">{service.handle}</span>
 
         {canLaunch && (
           <>

@@ -5,7 +5,7 @@ export const TOGGLE_DELAY = 250;
 export const LoaderElements = {
     linear: <progress className="progress my-2 max-w-56"></progress>,
     overlay: (
-        <div className="absolute inset-0 p-6 flex items-center justify-center bg-base-200/60 pointer-events-none rounded-box">
+        <div className="absolute inset-0 p-6 flex items-center justify-center bg-base-200/60 pointer-events-none rounded-box z-10">
             <progress className="progress"></progress>
         </div>
     ),

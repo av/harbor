@@ -143,7 +143,7 @@ export const ServiceList = () => {
         </div>
       }
       children={
-        <div className="relative rounded-box">
+        <div className="rounded-box">
           <Loader loading={loading} loader="overlay" />
           {error && <div className="my-2">{error.message}</div>}
           {services && (

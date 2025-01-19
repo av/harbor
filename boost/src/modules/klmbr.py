@@ -94,17 +94,37 @@ def diacritic(chars, idx):
   return chars[idx]
 
 
+def is_standalone_vowel(chars, idx):
+    if not chars or idx < 0 or idx >= len(chars):
+        return False
+
+    vowels = 'aeiouAEIOU'
+    if chars[idx] not in vowels:
+        return False
+
+    prev_is_space = idx == 0 or chars[idx-1].isspace()
+    next_is_space = idx == len(chars)-1 or chars[idx+1].isspace()
+
+    return prev_is_space or next_is_space
+
+
 def leetspeak(chars, idx):
+  if is_standalone_vowel(chars, idx):
+    return chars[idx]
+
   return leetspeak_map.get(chars[idx].lower(), chars[idx])
 
-
 def remove_vowel(chars, idx):
-  if chars[idx].lower() in "aeiou":
+  if not is_standalone_vowel(chars, idx) and chars[idx].lower() in "aeiou":
     return ""
+
   return chars[idx]
 
 
 def invert_180(chars, idx):
+  if is_standalone_vowel(chars, idx):
+    return chars[idx]
+
   return invert_map.get(chars[idx], chars[idx])
 
 
