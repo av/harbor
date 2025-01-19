@@ -10,7 +10,7 @@ async function copyDocsFromWiki() {
   for (const file of wikiFiles) {
     if (file.isFile) {
       const source = `${wikiPath}/${file.name}`
-      const dest = `${docsLocation}/${file.name}`
+      const dest = `${docsLocation}/${toRepoFileName(file.name)}`
       await Deno.copyFile(source, dest)
     }
   }
@@ -27,7 +27,7 @@ async function copyDocsToWiki() {
   for (const file of docsFiles) {
     if (file.isFile) {
       const source = `${docsPath}/${file.name}`
-      const dest = `${wikiLocation}/${file.name}`
+      const dest = `${wikiLocation}/${toWikiFileName(file.name)}`
       await Deno.copyFile(source, dest)
     }
   }
@@ -38,5 +38,13 @@ async function copyDocsToWiki() {
   await Deno.rename(readmePath, homePath)
 }
 
-// await copyDocsFromWiki()
-await copyDocsToWiki()
+function toRepoFileName(name: string) {
+  return name.replaceAll(':', '&colon')
+}
+
+function toWikiFileName(name: string) {
+  return name.replaceAll('&colon', ':')
+}
+
+await copyDocsFromWiki()
+// await copyDocsToWiki()
