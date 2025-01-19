@@ -46,5 +46,5 @@ function toWikiFileName(name: string) {
   return name.replaceAll('&colon', ':')
 }
 
-await copyDocsFromWiki()
-// await copyDocsToWiki()
+// await copyDocsFromWiki()
+await copyDocsToWiki()
