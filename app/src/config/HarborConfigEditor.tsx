@@ -1,5 +1,3 @@
-import { Command } from "@tauri-apps/plugin-shell";
-
 import { CURRENT_PROFILE, EXTRA, SECTIONS_ORDER } from "../configMetadata";
 import { IconButton } from "../IconButton";
 import {
