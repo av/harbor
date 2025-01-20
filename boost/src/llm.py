@@ -223,6 +223,7 @@ class LLM:
     params = {
       "model": kwargs.get("model", self.model),
       **self.params,
+      **kwargs.get("params", {}),
     }
 
     if kwargs.get("schema"):

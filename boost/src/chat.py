@@ -73,8 +73,9 @@ class Chat:
 
     response = await self.llm.chat_completion(chat=self)
     self.assistant(self.llm.get_response_content(response))
+    return response
 
-  async def emit_advance(self):
+  async def emit_advance(self, **kwargs):
     """
     Emit the next step in the chat completion
 
@@ -84,8 +85,9 @@ class Chat:
     if not self.llm:
       raise ValueError("Chat: unable to advance without an LLM")
 
-    response = await self.llm.stream_chat_completion(chat=self)
+    response = await self.llm.stream_chat_completion(chat=self, **kwargs)
     self.assistant(response)
+    return response
 
   async def emit_status(self, status):
     """
