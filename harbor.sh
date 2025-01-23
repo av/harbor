@@ -2186,7 +2186,7 @@ run_llamacpp_command() {
         ;;
     gguf)
         shift
-        env_manager_alias llamacpp.gguf "$@"
+        env_manager_alias llamacpp.gguf --on-set update_model_spec "$@"
         ;;
     args)
         shift
