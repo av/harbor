@@ -1,5 +1,6 @@
 services:
   ollama:
+    image: ollama/ollama:${HARBOR_OLLAMA_VERSION}
     container_name: ${HARBOR_CONTAINER_PREFIX}.ollama
     env_file:
       - ./.env
@@ -11,8 +12,32 @@ services:
       - ${HARBOR_VLLM_CACHE}:/root/.cache/vllm
       - ./ollama/modelfiles:/modelfiles
     tty: true
-    image: ollama/ollama:${HARBOR_OLLAMA_VERSION}
     ports:
       - ${HARBOR_OLLAMA_HOST_PORT}:11434
+    healthcheck:
+      test:  [ "CMD-SHELL", "bash", "-c", "{ printf >&3 'GET / HTTP/1.0\\r\\n\\r\\n'; cat <&3; } 3<>/dev/tcp/localhost/11434 | grep 'Ollama is' || exit 1"  ]
+      interval: 1s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - harbor-network
+
+  # Runs an "init" script once during the first start
+  # of ollama service
+  ollama-init:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.ollama-init
+    depends_on:
+      ollama:
+        condition: service_healthy
+    image: ollama/ollama:${HARBOR_OLLAMA_VERSION}
+    env_file:
+      - ./.env
+      - ./ollama/override.env
+    volumes:
+      - ${HARBOR_OLLAMA_CACHE}:/root/.ollama
+      - ./ollama/init_entrypoint.sh:/init_entrypoint.sh
+    entrypoint: /init_entrypoint.sh
+    tty: true
     networks:
       - harbor-network
