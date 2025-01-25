@@ -1786,6 +1786,7 @@ run_harbor_find() {
         $(eval echo "$(env_manager get llamacpp.cache)") \
         $(eval echo "$(env_manager get ollama.cache)") \
         $(eval echo "$(env_manager get vllm.cache)") \
+        $(eval echo "$(env_manager get comfyui.workspace)") \
         -xtype f -wholename "*$**"
 }
 
