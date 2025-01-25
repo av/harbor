@@ -2,7 +2,7 @@ import * as toml from 'jsr:@std/toml';
 import * as path from 'jsr:@std/path';
 import * as collections from "jsr:@std/collections/deep-merge";
 
-const VERSION = "0.2.24";
+const VERSION = "0.2.25";
 
 type ValueSeed = {
   // Path relative to the project root
