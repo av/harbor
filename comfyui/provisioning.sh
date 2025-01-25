@@ -1,9 +1,13 @@
 #!/bin/bash
 
+# Adapted from
+# the original script in the
+# https://github.com/ai-dock/comfyui/blob/main/config/provisioning/flux.sh
+
 echo "Running ComfyUI provisioning..."
 echo "WORKSPACE: $WORKSPACE"
 
-DEFAULT_WORKFLOW="https://raw.githubusercontent.com/ai-dock/comfyui/main/config/workflows/flux-comfyui-example.json"
+DEFAULT_WORKFLOW="https://raw.githubusercontent.com/av/harbor/refs/heads/main/comfyui/default-workflow.json"
 
 APT_PACKAGES=(
 )
