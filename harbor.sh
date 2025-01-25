@@ -2100,7 +2100,9 @@ run_history() {
 
 run_harbor_size() {
     # Get the cache directories
-    cache_dirs=$(h config ls | grep CACHE | awk '{print $NF}' | sed "s|~|$HOME|g")
+    cache_dirs=$(harbor config ls | grep CACHE | awk '{print $NF}' | sed "s|~|$HOME|g")
+    # Add workspace dirs to the list
+    cache_dirs+=$'\n'"$(harbor config ls | grep WORKSPACE | awk '{print $NF}' | sed "s|~|$HOME|g")"
     # Add $(harbor home) to the list
     cache_dirs+=$'\n'"$(harbor home)"
 
