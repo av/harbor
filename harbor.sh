@@ -2797,7 +2797,6 @@ run_harbor_cmdh_command() {
     # Mount the current directory and set it as the working directory
     $(compose_with_options $services "cmdh" "harbor") run \
         --rm \
-        -v "$harbor_home/cmdh/harbor.prompt:/app/cmdh/system.prompt" \
         -v "$original_dir:$original_dir" \
         --workdir "$original_dir" \
         cmdh "$*"

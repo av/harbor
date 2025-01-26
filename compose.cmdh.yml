@@ -6,9 +6,11 @@ services:
     container_name: ${HARBOR_CONTAINER_PREFIX}.cmdh
     env_file:
       - ./.env
+      - ./cmdh/override.env
     volumes:
+      - ./cmdh/ollama.ts:/app/cmdh/src/api/ollama.ts
       - ./cmdh/override.env:/app/.env
-      - ./cmdh/system.prompt:/app/cmdh/system.prompt
+      - ./cmdh/system.prompt:/app/system.prompt
     networks:
       - harbor-network
     environment:

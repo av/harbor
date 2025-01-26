@@ -1,15 +1,13 @@
-FROM pkgxdev/pkgx
+FROM node:lts
+
+RUN apt-get update && apt-get install -y git && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-
-RUN pkgx install node@20 npm git
 RUN git clone https://github.com/pgibler/cmdh.git && cd cmdh
 
 # Little switcheroo
 COPY ./ollama.ts /app/cmdh/src/api/ollama.ts
-
 RUN cd /app/cmdh && ./install.sh
-# Warm up pkgx
-RUN pkgx /app/cmdh/dist/src/system.js
-# RUN ls /app/cmdh
-ENTRYPOINT [ "node", "/app/cmdh/dist/src/cmdh.js" ]
+RUN npm i tsx zod zod-to-json-schema
+
+ENTRYPOINT [ "/app/node_modules/.bin/tsx", "/app/cmdh/src/cmdh.ts" ]

@@ -70,7 +70,7 @@ Content-Type: application/json
 Authorization: sk-fake
 
 {
-  "model": "llama3.1:8b-instruct-q6_K",
+  "model": "llama3.1:8b-instruct-q8_0",
   "format": "json",
   "response_format": {
     "type": "json_object"
