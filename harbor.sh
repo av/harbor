@@ -2800,6 +2800,11 @@ run_harbor_cmdh_command() {
     log_debug "cmdh_model: $cmdh_model"
     log_debug "ollama_has_model: $ollama_has_model"
 
+    if [ "$ollama_has_model" == "false" ]; then
+        log_error "Please pull cmdh model to use 'harbor how': harbor ollama pull \$(harbor cmdh model)"
+        exit 1
+    fi
+
     # Mount the current directory and set it as the working directory
     $(compose_with_options $services "cmdh" "harbor") run \
         --rm \
