@@ -2793,11 +2793,19 @@ run_harbor_cmdh_command() {
     fi
 
     local services=$(get_active_services)
+    local cmdh_model=$(env_manager get cmdh.model)
+    local ollama_has_model=$(harbor ollama ls | grep -q "$cmdh_model" && echo "true" || echo "false")
+
+    log_debug "services: $services"
+    log_debug "cmdh_model: $cmdh_model"
+    log_debug "ollama_has_model: $ollama_has_model"
 
     # Mount the current directory and set it as the working directory
     $(compose_with_options $services "cmdh" "harbor") run \
         --rm \
+        -e "TERM=xterm-256color" \
         -v "$original_dir:$original_dir" \
+        --name $default_container_prefix.harbor-how \
         --workdir "$original_dir" \
         cmdh "$*"
 }
@@ -3920,6 +3928,7 @@ set_default_log_levels
 ensure_env_file
 # Current user ID - FS + UIDs for containers (where applicable)
 env_manager --silent set user.id "$(id -u)"
+env_manager --silent set group.id "$(id -g)"
 default_options=($(env_manager get services.default | tr ';' ' '))
 default_tunnels=($(env_manager get services.tunnels | tr ';' ' '))
 default_capabilities=($(env_manager get capabilities.default | tr ';' ' '))
