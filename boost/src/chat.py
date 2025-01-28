@@ -15,7 +15,7 @@ class Chat:
     tail = ChatNode.from_conversation(messages)
     return Chat(tail=tail)
 
-  def from_tail(chat):
+  def from_tail(chat: 'Chat'):
     new_tail = ChatNode(role=chat.tail.role, content=chat.tail.content)
     return Chat(tail=new_tail)
 
@@ -26,6 +26,9 @@ class Chat:
 
     self.Chat = Chat
     self.ChatNode = self.chat_node_type
+
+  def clone(self):
+    return Chat.from_conversation(self.history())
 
   def has_substring(self, substring):
     return any(substring in msg.content for msg in self.plain())
@@ -45,13 +48,19 @@ class Chat:
     return self.add_message('assistant', content)
 
   def system(self, content):
-    return self.add_message('system', content)
+    self.tail.ancestor().add_parent(
+      self.__create_node(role="system", content=content)
+    )
+    return self.tail
 
   def plain(self):
     return self.tail.parents()
 
   def history(self):
     return self.tail.history()
+
+  def root(self):
+    return self.tail.ancestor()
 
   def text(self):
     # __str__ already does exactly this

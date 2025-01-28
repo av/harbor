@@ -256,3 +256,23 @@ POST {{host}}/v1/chat/completions
     }
   ]
 }
+
+###
+
+POST {{host}}/v1/chat/completions
+
+{
+  "model": "llama3.1:8b-instruct-q8_0",
+  "messages": [
+    {
+      "role": "system",
+      "content": "I should focus on entertaining the User and making them laugh."
+    },
+    {
+      "role": "user", "content": "What's your name?"
+    },
+    {
+      "role": "assistant", "content": "I don't have a personal name, but I'm an artificial intelligence designed to assist "
+    }
+  ]
+}
