@@ -241,7 +241,7 @@ has_nvidia_ctk() {
 }
 
 has_modern_compose() {
-    local compose_version=$(docker compose version --short)
+    local compose_version=$(docker compose version --short | sed -e 's/-desktop//' )
     local major_version=$(echo "$compose_version" | cut -d. -f1)
     local minor_version=$(echo "$compose_version" | cut -d. -f2)
     local patch_version=$(echo "$compose_version" | cut -d. -f3)
