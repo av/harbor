@@ -11,7 +11,7 @@
 
 Effortlessly run LLM backends, APIs, frontends, and services with one command.
 
-Harbor is a containerized LLM toolkit that allows you to run LLMs and additional services. It consists of a CLI and a companion App that allows you to manage and run AI services with ease.
+Hi, I'm clduab11 and Hahbah-Fork is my fork of Harbor, a containerized LLM toolkit that allows you to run LLMs and additional services. It consists of a CLI and a companion App that allows you to manage and run AI services with ease. Note that I'm NOT the designer/architect of this app, nor am I a contributing member or an advanced developer. I've just been looking for a tool like this for awhile now, and I want to use the codebase as coding practice to tweak the configuration to my own needs. Please reach out to the official Harbor GitHub at https://github.com/av/harbor with any questions or issues that you have!
 
 ![Screenshot of Harbor CLI and App together](https://github.com/av/harbor/wiki/harbor-app-3.png)
 
