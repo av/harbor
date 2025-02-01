@@ -12,5 +12,4 @@ services:
     # bundled into the FE and CloudFlare workers
     volumes:
       - ./bolt/.env.local:/app/.env.local
-      # - ./bolt/model.ts:/app/app/lib/.server/llm/model.ts
     command: bash -c "pnpm run build && pnpm run dockerstart"
