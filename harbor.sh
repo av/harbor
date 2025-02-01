@@ -241,25 +241,40 @@ has_nvidia_ctk() {
 }
 
 has_modern_compose() {
-    local compose_version=$(docker compose version --short)
-    local major_version=$(echo "$compose_version" | cut -d. -f1)
-    local minor_version=$(echo "$compose_version" | cut -d. -f2)
-    local patch_version=$(echo "$compose_version" | cut -d. -f3)
+    local compose_version=$(docker compose version --short | sed -e 's/-desktop//')
 
-    # log_debug "Docker Compose version: $major_version $minor_version $patch_version"
-
-    if [ "$major_version" -lt "$desired_compose_major" ]; then
-        # log_debug "Major version is less than $desired_compose_major"
+    # Handle potential empty or invalid version string
+    if [ -z "$compose_version" ]; then
+        log_debug "Could not detect Docker Compose version"
         return 1
     fi
 
-    if [ "$minor_version" -lt "$desired_compose_minor" ]; then
-        # log_debug "Minor version is less than $desired_compose_minor"
+    # Split version into components, defaulting to 0 if not present
+    local major_version=$(echo "$compose_version" | cut -d. -f1 || echo "0")
+    local minor_version=$(echo "$compose_version" | cut -d. -f2 || echo "0")
+    local patch_version=$(echo "$compose_version" | cut -d. -f3 || echo "0")
+
+    log_debug "Docker Compose version: $major_version.$minor_version.$patch_version"
+
+    # Compare major version first
+    if [ "$major_version" -gt "$desired_compose_major" ]; then
+        return 0
+    elif [ "$major_version" -lt "$desired_compose_major" ]; then
+        log_debug "Major version is less than $desired_compose_major"
         return 1
     fi
 
+    # If major versions are equal, compare minor versions
+    if [ "$minor_version" -gt "$desired_compose_minor" ]; then
+        return 0
+    elif [ "$minor_version" -lt "$desired_compose_minor" ]; then
+        log_debug "Minor version is less than $desired_compose_minor"
+        return 1
+    fi
+
+    # If minor versions are equal, compare patch versions
     if [ "$patch_version" -lt "$desired_compose_patch" ]; then
-        # log_debug "Patch version is less than $desired_compose_patch"
+        log_debug "Patch version is less than $desired_compose_patch"
         return 1
     fi
 
