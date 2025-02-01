@@ -4,11 +4,12 @@ services:
     env_file:
       - ./.env
       - ./openhands/override.env
-    image: ghcr.io/all-hands-ai/openhands:${HARBOR_OPENHANDS_VERSION}
+    image: docker.all-hands.dev/all-hands-ai/openhands:${HARBOR_OPENHANDS_VERSION}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - ./openhands/state:/.openhands-state
     environment:
-      - SANDBOX_RUNTIME_CONTAINER_IMAGE=ghcr.io/all-hands-ai/runtime:${HARBOR_OPENHANDS_VERSION}-nikolaik
+      - SANDBOX_RUNTIME_CONTAINER_IMAGE=docker.all-hands.dev/all-hands-ai/runtime:${HARBOR_OPENHANDS_VERSION}-nikolaik
       - SANDBOX_USER_ID=${HARBOR_USER_ID}
     networks:
       - harbor-network
