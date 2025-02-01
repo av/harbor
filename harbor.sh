@@ -348,9 +348,18 @@ compose_with_options() {
                 local all_matched=true
 
                 for part in "${filename_parts[@]}"; do
-                    if [[ ! " ${options[*]} " =~ " ${part} " ]] && [[ ! " ${options[*]} " =~ " * " ]]; then
-                        all_matched=false
-                        break
+                    # Skip capability files for wildcard match
+                    if is_capability "$part"; then
+                        # Capabilities must match exactly, no wildcards
+                        if [[ ! " ${options[*]} " =~ " ${part} " ]]; then
+                            all_matched=false
+                            break
+                        fi
+                    else
+                        if [[ ! " ${options[*]} " =~ " ${part} " ]] && [[ ! " ${options[*]} " =~ " * " ]]; then
+                            all_matched=false
+                            break
+                        fi
                     fi
                 done
 
@@ -394,6 +403,19 @@ compose_with_options() {
 
     # Return the command string
     echo "$cmd"
+}
+
+is_capability() {
+    local capability="$1"
+    local capabilities=("nvidia" "mdc" "${default_capabilities[@]}")
+
+    for cap in "${capabilities[@]}"; do
+        if [ "$cap" = "$capability" ]; then
+            return 0
+        fi
+    done
+
+    return 1
 }
 
 is_capability_file() {
