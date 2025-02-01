@@ -1,0 +1,13 @@
+
+services:
+  lollms:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.lollms
+    build:
+      context: https://github.com/ba2512005/lollms-webui.git
+    ports:
+      - ${HARBOR_LOLLMS_HOST_PORT}:9600
+    env_file:
+      - ./.env
+      - lollms/override.env
+    networks:
+      - harbor-network
