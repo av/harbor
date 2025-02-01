@@ -2,7 +2,30 @@ import fs from 'fs';
 import yaml from 'js-yaml';
 import path from 'path';
 import argparse from 'argparse';
-import _ from 'lodash';
+
+function mergeWith(object, source, customizer) {
+  if (!customizer) {
+    return Object.assign({}, object, source);
+  }
+
+  const result = { ...object };
+
+  for (const key in source) {
+    const customValue = customizer(result[key], source[key], key, result, source);
+
+    if (customValue === undefined) {
+      if (typeof result[key] === 'object' && typeof source[key] === 'object') {
+        result[key] = mergeWith(result[key], source[key], customizer);
+      } else {
+        result[key] = source[key];
+      }
+    } else {
+      result[key] = customValue;
+    }
+  }
+
+  return result;
+}
 
 function readYaml(filePath) {
   return yaml.load(fs.readFileSync(filePath, 'utf8'));
@@ -40,9 +63,9 @@ function mergeYamlFiles(directory, pattern, outputFile) {
       const filePath = path.join(directory, filename);
       let yamlData = readYaml(filePath);
       yamlData = renderEnvVars(yamlData);
-      mergedData = _.mergeWith(
+      mergedData = mergeWith(
         mergedData, yamlData, (objValue, srcValue) => {
-          if (_.isArray(objValue)) {
+          if (Array.isArray(objValue)) {
             return objValue.concat(srcValue);
           }
         }
