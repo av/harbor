@@ -366,7 +366,11 @@ compose_with_options() {
             # Check if file matches any of the options
             for option in "${options[@]}"; do
                 if [[ $option == "*" ]]; then
-                    match=true
+                    # Capabilities should not be matched by "*", otherwise
+                    # we'll run "nvidia" or "mdc" when we don't want to
+                    if ! is_capability "$option"; then
+                        match=true
+                    fi
                     break
                 fi
 
@@ -376,10 +380,6 @@ compose_with_options() {
                 fi
             done
 
-            # Include the file if:
-            # 1. It matches an option and is not an NVIDIA file
-            # 2. It matches an option, is an NVIDIA file, and NVIDIA is supported
-            # if $match && (! $is_nvidia_file || ($is_nvidia_file && $has_nvidia)); then
             if $match; then
                 compose_files+=("$file")
             fi
@@ -394,6 +394,23 @@ compose_with_options() {
 
     # Return the command string
     echo "$cmd"
+}
+
+is_capability() {
+    local capability="$1"
+    local built_in_capabilities=("nvidia" "mdc")
+
+    # Combine both arrays using array concatenation
+    local all_capabilities=("${built_in_capabilities[@]}" "${default_capabilities[@]}")
+
+    # Single loop over combined array
+    for cap in "${all_capabilities[@]}"; do
+        if [ "$cap" = "$capability" ]; then
+            return 0
+        fi
+    done
+
+    return 1
 }
 
 resolve_compose_command() {
