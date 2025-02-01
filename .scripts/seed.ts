@@ -1,3 +1,6 @@
+// deno run -A ./.scripts/seed.ts
+// Also see RELEASE.md
+
 import * as toml from 'jsr:@std/toml';
 import * as path from 'jsr:@std/path';
 import * as collections from "jsr:@std/collections/deep-merge";

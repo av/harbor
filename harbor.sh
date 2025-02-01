@@ -240,6 +240,16 @@ has_nvidia_ctk() {
     command -v nvidia-container-toolkit &>/dev/null
 }
 
+has_nvidia_cdi() {
+    # Check if nvidia.yaml is present in either
+    # /etc/cdi or /var/run/cdi
+    if [ -f /etc/cdi/nvidia.yaml ] || [ -f /var/run/cdi/nvidia.yaml ]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
 has_modern_compose() {
     local compose_version=$(docker compose version --short | sed -e 's/-desktop//')
 
@@ -325,6 +335,10 @@ compose_with_options() {
     if [ "$default_auto_capabilities" = "true" ]; then
         if has_nvidia && has_nvidia_ctk; then
             options+=("nvidia")
+        fi
+
+        if has_nvidia_cdi; then
+            options+=("cdi")
         fi
 
         if has_modern_compose; then
