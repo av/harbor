@@ -1,10 +1,71 @@
 services:
   lobechat:
-    image: lobehub/lobe-chat:${HARBOR_LOBECHAT_VERSION}
+    image: lobehub/lobe-chat-database:${HARBOR_LOBECHAT_VERSION}
     container_name: ${HARBOR_CONTAINER_PREFIX}.lobechat
     env_file:
       - ./.env
+      - ./lobechat/override.env
     ports:
       - ${HARBOR_LOBECHAT_HOST_PORT}:3210
+    networks:
+      - harbor-network
+    depends_on:
+      - lobechat-db
+      - lobechat-minio
+      - lobechat-casdoor
+
+  lobechat-db:
+    image: pgvector/pgvector:pg16
+    container_name: ${HARBOR_CONTAINER_PREFIX}.lobechat-db
+    env_file:
+      - ./.env
+      - ./lobechat/override.env
+    ports:
+      - ${HARBOR_LOBECHAT_DB_HOST_PORT}:5432
+    volumes:
+      - ./lobechat/data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=lobe
+      - POSTGRES_PASSWORD=${HARBOR_LOBECHAT_DB_PASSWORD}
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - harbor-network
+
+  lobechat-minio:
+    image: minio/minio
+    container_name: ${HARBOR_CONTAINER_PREFIX}.lobechat-minio
+    env_file:
+      - ./.env
+      - ./lobechat/override.env
+    ports:
+      - ${HARBOR_LOBECHAT_MINIO_HOST_PORT}:9000
+    volumes:
+      - ./lobechat/files:/etc/minio/data
+    environment:
+      - MINIO_API_CORS_ALLOW_ORIGIN=http://localhost:${HARBOR_LOBECHAT_HOST_PORT}
+    command: >
+      server /etc/minio/data --address ":9000" --console-address ":9001"
+    networks:
+      - harbor-network
+
+  lobechat-casdoor:
+    image: casbin/casdoor
+    container_name: ${HARBOR_CONTAINER_PREFIX}.lobechat-casdoor
+    entrypoint: /bin/sh -c './server --createDatabase=true'
+    depends_on:
+      lobechat-db:
+        condition: service_healthy
+    environment:
+      RUNNING_IN_DOCKER: 'true'
+      driverName: 'postgres'
+      dataSourceName: 'user=postgres password=${HARBOR_LOBECHAT_DB_PASSWORD} host=lobechat-db port=5432 sslmode=disable dbname=casdoor'
+      origin: 'http://localhost:${HARBOR_LOBECHAT_CASDOOR_HOST_PORT}'
+      runmode: 'dev'
+    volumes:
+      - ./lobechat/init_data.json:/init_data.json
     networks:
       - harbor-network
