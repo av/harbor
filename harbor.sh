@@ -3958,7 +3958,7 @@ run_kobold_command() {
 # ========================================================================
 
 # Globals
-version="0.2.25"
+version="0.2.26"
 harbor_repo_url="https://github.com/av/harbor.git"
 harbor_release_url="https://api.github.com/repos/av/harbor/releases/latest"
 delimiter="|"
