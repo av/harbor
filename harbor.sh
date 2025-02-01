@@ -368,7 +368,7 @@ compose_with_options() {
                 if [[ $option == "*" ]]; then
                     # Capabilities should not be matched by "*", otherwise
                     # we'll run "nvidia" or "mdc" when we don't want to
-                    if ! is_capability "$option"; then
+                    if ! is_capability_file "$filename"; then
                         match=true
                     fi
                     break
@@ -396,16 +396,12 @@ compose_with_options() {
     echo "$cmd"
 }
 
-is_capability() {
-    local capability="$1"
-    local built_in_capabilities=("nvidia" "mdc")
+is_capability_file() {
+    local filename="$1"
+    local capabilities=("nvidia" "mdc" "${default_capabilities[@]}")
 
-    # Combine both arrays using array concatenation
-    local all_capabilities=("${built_in_capabilities[@]}" "${default_capabilities[@]}")
-
-    # Single loop over combined array
-    for cap in "${all_capabilities[@]}"; do
-        if [ "$cap" = "$capability" ]; then
+    for cap in "${capabilities[@]}"; do
+        if [[ $filename == *".$cap."* ]]; then
             return 0
         fi
     done
