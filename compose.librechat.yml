@@ -9,7 +9,6 @@ services:
       - librechat-search
       - librechat-vector
     image: ghcr.io/danny-avila/librechat-dev:latest
-    user: ${HARBOR_USER_ID}
     networks:
       - harbor-network
     env_file:
@@ -93,7 +92,6 @@ services:
   librechat-rag:
     container_name: ${HARBOR_CONTAINER_PREFIX}.librechat-rag
     image: ghcr.io/danny-avila/librechat-rag-api-dev-lite:latest
-    user: ${HARBOR_USER_ID}
     environment:
       - DB_HOST=librechat-vector
       - RAG_PORT=${HARBOR_LIBRECHAT_RAG_HOST_PORT}
