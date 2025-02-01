@@ -5,11 +5,11 @@ services:
       - ./.env
       - ./aider/override.env
     container_name: ${HARBOR_CONTAINER_PREFIX}.aider
-    entrypoint: ["/root/.aider/start_aider.sh"]
+    entrypoint: ["/home/appuser/.aider/start_aider.sh"]
     volumes:
-      - ./aider/configs/aider.config.yml:/root/.aider/config.yaml
-      - ./aider/start_aider.sh:/root/.aider/start_aider.sh
-      - ./shared/yaml_config_merger.py:/root/.aider/yaml_config_merger.py
+      - ./aider/configs/aider.config.yml:/home/appuser/.aider/config.yaml
+      - ./aider/start_aider.sh:/home/appuser/.aider/start_aider.sh
+      - ./shared/yaml_config_merger.py:/home/appuser/.aider/yaml_config_merger.py
     ports:
       - ${HARBOR_AIDER_HOST_PORT}:8501
     networks:

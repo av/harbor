@@ -254,7 +254,7 @@ has_modern_compose() {
     local minor_version=$(echo "$compose_version" | cut -d. -f2 || echo "0")
     local patch_version=$(echo "$compose_version" | cut -d. -f3 || echo "0")
 
-    log_debug "Docker Compose version: $major_version.$minor_version.$patch_version"
+    # log_debug "Docker Compose version: $major_version.$minor_version.$patch_version"
 
     # Compare major version first
     if [ "$major_version" -gt "$desired_compose_major" ]; then
@@ -400,6 +400,9 @@ compose_with_options() {
     for file in "${compose_files[@]}"; do
         cmd+=" -f $file"
     done
+
+    # Log amount fo matched files
+    log_debug "Matched compose files: ${#compose_files[@]}"
 
     # Return the command string
     echo "$cmd"
@@ -3052,8 +3055,8 @@ run_aider_command() {
         -e "TERM=xterm-256color" \
         -e "PYTHONUNBUFFERED=1" \
         -e "PYTHONIOENCODING=utf-8" \
-        -v "$original_dir:/root/workspace" \
-        --workdir "/root/workspace" \
+        -v "$original_dir:/home/appuser/workspace" \
+        --workdir "/home/appuser/workspace" \
         aider "$@"
 }
 
