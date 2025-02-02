@@ -243,7 +243,7 @@ has_nvidia_ctk() {
 has_nvidia_cdi() {
     # Check if nvidia.yaml is present in either
     # /etc/cdi or /var/run/cdi
-    if [ -f /etc/cdi/nvidia.yaml ] || [ -f /var/run/cdi/nvidia.yaml ]; then
+    if [ -f /etc/cdi/nvidia.yaml ] || [ -f /var/run/cdi/nvidia.yaml ] || [ -f /var/run/cdi/nvidia-container-toolkit.json ]; then
         return 0
     else
         return 1
