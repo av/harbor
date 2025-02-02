@@ -10,26 +10,28 @@ curl {{host}}/docs
 
 ###
 
-curl {{host}}/v1/models
+GET {{host}}/v1/models
 
 ###
 
-curl {{host}}/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer EMPTY" \
-  -d '{
-    "model": "",
-    "messages": [
-      {
-          "role": "system",
-          "content": "You are Mistral.rs, an AI assistant."
-      },
-      {
-          "role": "user",
-          "content": "Write a story about Rust error handling."
-      }
-    ]
-  }'
+POST {{host}}/v1/chat/completions
+Content-Type: application/json
+Authorization: Bearer EMPTY
+
+{
+  "model": "microsoft/Phi-3.5-mini-instruct",
+  "messages": [
+    {
+        "role": "system",
+        "content": "You are Mistral.rs, an AI assistant."
+    },
+    {
+        "role": "user",
+        "content": "Write a story about Rust error handling."
+    }
+  ],
+  "stream": false
+}
 
 ###
 
