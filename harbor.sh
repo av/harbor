@@ -335,9 +335,7 @@ compose_with_options() {
     if [ "$default_auto_capabilities" = "true" ]; then
         if has_nvidia && has_nvidia_ctk; then
             options+=("nvidia")
-        fi
-
-        if has_nvidia_cdi; then
+        elif has_nvidia_cdi; then
             options+=("cdi")
         fi
 
