@@ -3,6 +3,7 @@ from typing import Optional
 from chat_node import ChatNode
 import llm
 import log
+import selection
 
 logger = log.setup_logger(__name__)
 
@@ -33,12 +34,22 @@ class Chat:
   def has_substring(self, substring):
     return any(substring in msg.content for msg in self.plain())
 
+  def match(self, **kwargs):
+    return selection.match(self, **kwargs)
+
+  def match_one(self, **kwargs):
+    candidates = self.match(**kwargs)
+    if not candidates:
+      return None
+    return candidates[0]
+
   def add_message(self, role, content):
     logger.debug(f"Chat message: {role}: {content[:50]}")
 
-    self.tail = self.tail.add_child(
-      self.__create_node(role=role, content=content)
-    )
+    child = self.__create_node(role=role, content=content)
+    self.tail.add_child(child)
+    self.tail = child
+
     return self.tail
 
   def user(self, content):
@@ -51,6 +62,15 @@ class Chat:
     self.tail.ancestor().add_parent(
       self.__create_node(role="system", content=content)
     )
+    return self.tail
+
+  def insert(self, after: ChatNode, role, content):
+    new_node = self.__create_node(role=role, content=content)
+    after.insert_child(new_node)
+
+    if self.tail == after:
+      self.tail = new_node
+
     return self.tail
 
   def plain(self):

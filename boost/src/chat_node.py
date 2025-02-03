@@ -23,9 +23,9 @@ class ChatNode:
     node = ChatNode(role=root_message['role'], content=root_message['content'])
 
     for message in messages[1:]:
-      node = node.add_child(
-        ChatNode(role=message['role'], content=message['content'])
-      )
+      child = ChatNode(role=message['role'], content=message['content'])
+      node.add_child(child)
+      node = child
 
     return node
 
@@ -44,15 +44,54 @@ class ChatNode:
 
     self.meta = kwargs.get('meta', {})
 
-  def add_parent(self, parent: 'ChatNode'):
-    parent.children.append(self)
-    self.parent = parent
+  def add_parent(self, new_parent: 'ChatNode'):
+    # Guard against None and self-reference
+    if new_parent is None or self == new_parent:
+      return self
+
+    # Remove from current parent if exists
+    if self.parent:
+      self.parent.children.remove(self)
+
+    # Set new parent
+    self.parent = new_parent
+    if self not in new_parent.children:
+      new_parent.children.append(self)
+
     return self
 
+  # add child - similar to adding another branch
+  # to the conversation from this node
   def add_child(self, child: 'ChatNode'):
+    # Guard against None and duplicates
+    if child is None or child in self.children:
+      return self
+
+    for c in self.children:
+      c.add_parent(child)
+
+    # Update child's parent
+    if child.parent:
+      child.parent.children.remove(child)
     child.parent = self
+
+    # Add to children
     self.children.append(child)
-    return child
+    return self
+
+  # insert child - similar to adding a new node
+  # in the middle of the conversation
+  def insert_child(self, child: 'ChatNode'):
+    self.add_child(child)
+    for c in self.children:
+      c.add_parent(child)
+    return self
+
+  def remove_child(self, child: 'ChatNode'):
+    if child in self.children:
+      self.children.remove(child)
+      child.parent = None
+    return self
 
   def best_child(self):
     if not self.children:
