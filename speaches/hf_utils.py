@@ -11,6 +11,7 @@ import typing
 from typing import Any, Literal
 
 import httpx
+import tqdm
 import huggingface_hub
 from huggingface_hub.constants import HF_HUB_CACHE
 from pydantic import BaseModel
@@ -220,31 +221,67 @@ def read_piper_voice_config(voice: str) -> PiperVoiceConfig:
         raise FileNotFoundError(f"Could not find config file for '{voice}' voice")
     return PiperVoiceConfig.model_validate_json(model_config_file.read_text())
 
+# Original
+# def get_kokoro_model_path() -> Path:
+#     download_kokoro_model()
+#     file_name = "kokoro-v0_19.onnx"
+#     onnx_files = list(list_model_files("hexgrad/Kokoro-82M", glob_pattern=f"**/{file_name}"))
+#     if len(onnx_files) == 0:
+#         raise ValueError(f"Could not find {file_name} file for 'hexgrad/Kokoro-82M' model")
+#     return onnx_files[0]
+#
+# def download_kokoro_model() -> None:
+#     model_id = "hexgrad/Kokoro-82M"
+#     model_repo_path = Path(
+#         huggingface_hub.snapshot_download(model_id, repo_type="model", allow_patterns=["kokoro-v1_0.onnx"])
+#     )
+#     voices_path = model_repo_path / "voices.json"
+#     if not voices_path.exists():
+#         # HACK
+#         res = httpx.get(
+#             "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices.json", follow_redirects=True
+#         )
+#         res.raise_for_status()
+#         voices_path.touch(exist_ok=True)
+#         voices_path.write_bytes(res.content)
+
+KOKORO_ONNX_REPO = "https://github.com/thewh1teagle/kokoro-onnx"
+KOKORO_ONNX_RELEASE = "model-files-v1.0"
+KOKORO_CACHE_DIR = Path(f"{HF_HUB_CACHE}/models--speaches-kokoro")
+KOKORO_DOWNLOADS = {
+    "model.onnx": f"{KOKORO_ONNX_REPO}/releases/download/{KOKORO_ONNX_RELEASE}/kokoro-v1.0.fp16-gpu.onnx",
+    "voices.bin": f"{KOKORO_ONNX_REPO}/releases/download/{KOKORO_ONNX_RELEASE}/voices-v1.0.bin"
+}
 
 def get_kokoro_model_path() -> Path:
+    KOKORO_CACHE_DIR.mkdir(parents=True, exist_ok=True)
     download_kokoro_model()
-    file_name = "kokoro-v0_19.onnx"
-    onnx_files = list(list_model_files("hexgrad/Kokoro-82M", glob_pattern=f"**/{file_name}"))
-    if len(onnx_files) == 0:
-        raise ValueError(f"Could not find {file_name} file for 'hexgrad/Kokoro-82M' model")
-    return onnx_files[0]
-
+    return KOKORO_CACHE_DIR / "model.onnx"
 
 def download_kokoro_model() -> None:
-    model_id = "hexgrad/Kokoro-82M"
-    model_repo_path = Path(
-        huggingface_hub.snapshot_download(model_id, repo_type="model", allow_patterns=["kokoro-v0_19.onnx"])
-    )
-    voices_path = model_repo_path / "voices.json"
-    if not voices_path.exists():
-        # HACK
-        res = httpx.get(
-            "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files/voices.json", follow_redirects=True
-        )
-        res.raise_for_status()
-        voices_path.touch(exist_ok=True)
-        voices_path.write_bytes(res.content)
+    files = list(KOKORO_DOWNLOADS.keys())
 
+    for file_name in files:
+        file_path = KOKORO_CACHE_DIR / file_name
+        if file_path.exists():
+            continue
+
+        logger.debug(f"Downloading {file_name} from {KOKORO_ONNX_REPO}")
+        url = KOKORO_DOWNLOADS[file_name]
+
+        with httpx.stream("GET", url, follow_redirects=True, timeout=300.0) as response:
+            response.raise_for_status()
+            total_size = int(response.headers.get('content-length', 0))
+
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(file_path, 'wb') as file, \
+                 tqdm.tqdm(total=total_size, unit='iB', unit_scale=True, desc=file_name) as progress_bar:
+
+                for chunk in response.iter_bytes(chunk_size=8192):
+                    size = file.write(chunk)
+                    progress_bar.update(size)
+
+        logger.debug(f"Successfully downloaded {file_name}")
 
 # alternative implementation that uses `huggingface_hub.scan_cache_dir`. Slightly cleaner but much slower
 # def list_local_model_ids() -> list[str]:

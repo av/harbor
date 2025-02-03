@@ -13,7 +13,8 @@ services:
       - ${HARBOR_LLAMACPP_CACHE}:/home/ubuntu/.cache/llama.cpp
       - ${HARBOR_VLLM_CACHE}:/home/ubuntu/.cache/vllm
       # Temporary override, remove
-      # when https://github.com/speaches-ai/speaches/pull/256/files is merged
+      # when support for Kokoro v1.0 is added
       - ./speaches/hf_utils.py:/home/ubuntu/speaches/speaches/hf_utils.py
+      - ./speaches/kokoro_utils.py:/home/ubuntu/speaches/speaches/kokoro_utils.py
     networks:
       - harbor-network

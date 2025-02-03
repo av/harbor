@@ -10,5 +10,10 @@ POST {{host}}/v1/audio/speech
 Content-Type: application/json
 
 {
+  "voice": "af_heart",
   "input": "The quick brown fox jumped over the lazy dog."
 }
+
+###
+
+GET {{host}}/v1/audio/speech/voices
