@@ -243,7 +243,7 @@ has_nvidia_ctk() {
 has_nvidia_cdi() {
     # Check if nvidia.yaml is present in either
     # /etc/cdi or /var/run/cdi
-    if [ -f /etc/cdi/nvidia.yaml ] || [ -f /var/run/cdi/nvidia.yaml ]; then
+    if [ -f /etc/cdi/nvidia.yaml ] || [ -f /var/run/cdi/nvidia.yaml ] || [ -f /var/run/cdi/nvidia-container-toolkit.json ]; then
         return 0
     else
         return 1
@@ -335,9 +335,7 @@ compose_with_options() {
     if [ "$default_auto_capabilities" = "true" ]; then
         if has_nvidia && has_nvidia_ctk; then
             options+=("nvidia")
-        fi
-
-        if has_nvidia_cdi; then
+        elif has_nvidia_cdi; then
             options+=("cdi")
         fi
 
