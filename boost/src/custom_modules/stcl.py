@@ -2,6 +2,7 @@ import chat as ch
 import log
 import llm
 import selection
+from modules.klmbr import modify_text
 
 # STCL - Single Token Completion Loop
 ID_PREFIX = 'stcl'
@@ -73,6 +74,8 @@ async def assistant_guidance(**kwargs):
   guidance = await llm.chat_completion(
     prompt=prompt, conversation=mutable_chat, resolve=True
   )
+  guidance, _map = modify_text(text=guidance, percentage=15, mods=["capitalize", "diacritic"])
+
   # To avoid issues with the generation, we want the guidance to be
   # after last user message, but before the actual assistant message
   last_user_message = mutable_chat.match_one(role="user", index=-1)
@@ -192,6 +195,7 @@ Conversation:
 """
   )
 
+
 async def self_predict_guidance(chat: 'ch.Chat', llm: 'llm.LLM'):
   return await assistant_guidance(
     chat=chat,
@@ -207,6 +211,7 @@ Conversation:
 """,
   )
 
+
 async def reasoning_guidance(chat: 'ch.Chat', llm: 'llm.LLM'):
   return await assistant_guidance(
     chat=chat,
@@ -220,6 +225,7 @@ Conversation:
 {conversation}
 """,
   )
+
 
 async def self_guidance(chat: 'ch.Chat', llm: 'llm.LLM'):
   return await assistant_guidance(
@@ -237,6 +243,90 @@ Conversation:
   )
 
 
+async def smart_guidance(chat: 'ch.Chat', llm: 'llm.LLM'):
+  return await direct_system_guidance(
+    chat=chat,
+    llm=llm,
+    prompt="""
+Given the conversation, write a hint that will prevent the assistant's next wrong answer.
+Think of a critique for what assistant is about to say.
+Based on the critique, produce an instruction that will make assistant avoid their mistakes.
+
+Conversation:
+{conversation}
+""",
+    guidance_prompt="""
+You are a helpful assistant. You're smart, clever, and able to clearly articulate your argument using specific language that accurately reflects the issues at hand. To demonstrate a deeper understanding of the issue, please use the following reasoning format:
+
+* Clearly define two to three premises that can be used as the foundation for your argument.
+* When evaluating complex scenarios like the one presented, make sure to consider a more nuanced understanding of the context by incorporating additional details such as speed, obstacles, and other factors that might influence the outcome.
+* Consider incorporating a more nuanced discussion of probability into your reasoning. This will help you better weigh the potential risks and benefits of different courses of action.
+* When presenting your arguments, make sure to consider and present alternative perspectives or counterarguments to demonstrate that you have thoughtfully considered different viewpoints.
+* Explicitly connect your reasoning to moral principles like 'do no harm' by showing how they are applied in the scenario.
+* Consider not only the immediate outcomes but also the potential long-term consequences of different courses of action.
+* Use clear and concise language that accurately reflects the issues at hand and avoids vague or ambiguous statements.
+
+When thinking about your response consider the following:
+{guidance}
+""",
+  )
+
+
+async def medium_msm_guide(chat: 'ch.Chat', llm: 'llm.LLM'):
+  return await direct_system_guidance(
+    chat=chat,
+    llm=llm,
+    prompt="""
+Read the unfinished conversation between the user and assistant below.
+Think about what the assistant is about to say. Critique their next words.
+Based on the critique, produce a short BUT STRONG instruction that will make assistant avoid their mistakes.
+
+Conversation:
+{conversation}
+""",
+    guidance_prompt="""
+You are a helpful assistant. You're smart, clever, and able to clearly articulate your argument using specific language that accurately reflects the issues at hand.
+Before saying what you're about to say, you'll consider the following:
+{guidance}
+""",
+  )
+
+
+async def contstrained_choice(chat: 'ch.Chat', llm: 'llm.LLM'):
+  return await assistant_guidance(
+    chat=chat,
+    llm=llm,
+    prompt="""
+Read the unfinished conversation between the user and assistant below.
+Think of three different words that the assistant could use to continue the conversation.
+Now think about another three.
+And one more time.
+Reply only with these nine words and nothing else.
+
+Conversation:
+{conversation}
+""",
+    guidance_prompt="""
+{guidance}
+""",
+  )
+
+async def cpl_choice(chat: 'ch.Chat', llm: 'llm.LLM'):
+  return await assistant_guidance(
+    chat=chat,
+    llm=llm,
+    prompt="""
+Oh no, the assistant is about to make a mistake.
+Reply with three seemingly unrelated words that will actually guide them to the correct answer.
+
+Conversation:
+{conversation}
+""",
+    guidance_prompt="""
+{guidance}
+""",
+  )
+
 async def apply(chat: 'ch.Chat', llm: 'llm.LLM'):
   generated = 0
   accumulated_guidance = []
@@ -245,13 +335,13 @@ async def apply(chat: 'ch.Chat', llm: 'llm.LLM'):
   guidance_chat.assistant("")
   assistant_message = guidance_chat.tail
 
-  while generated < 1024:
-    next_token, guidance = await self_guidance(guidance_chat, llm)
+  while generated < 2048:
+    next_token, guidance = await cpl_choice(guidance_chat, llm)
     if next_token == '':
       break
     assistant_message.content += next_token + ''
-    await llm.emit_message(f'\n{guidance}\n### {next_token}\n')
-    # await llm.emit_message(next_token)
+    # await llm.emit_message(f'\n{guidance}\n### {next_token}\n')
+    await llm.emit_message(next_token)
     if accumulated_guidance.count(guidance) == 0:
       accumulated_guidance.append(guidance)
     generated += 1
