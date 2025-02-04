@@ -1,112 +1,32 @@
-# Local .env
-.env
-
-# Python
-.venv
-
-# Node
+# Dependencies
 node_modules/
+package-lock.json
+yarn.lock
 
-# Open WebUI
-open-webui/*
-open-webui/config.json
-
-!open-webui/configs/
-!open-webui/extras/
-!open-webui/start_webui.sh
-!open-webui/override.env
-
-# Ollama
-/ollama/ollama/
-
-# Openedai Speech
-tts/voices/
-
-# General
-node_modules/
-
-# langfuse
-langfuse/db/
-
-# LibreChat
-librechat/data/
-librechat/meili_data_v1.7/
-librechat/logs/
-librechat/vectordb/
-librechat/images/
-
-# Local scripts
-scripts/
-
-# LiteLLM
-litellm/db
-
-# Plandex
-plandex/data
-plandex/db
-
-# Dify
-dify/volumes/
-dify/nginx/conf.d/default.conf
-
-# TextGrad
-textgrad/workspace/*
-!textgrad/workspace/000-sample.ipynb
-
-# ChatUI
-chatui/data/
-
-# ComfyUI
-comfyui/workspace/
-
-# Perplexica
-perplexica/data/
-perplexica/config.toml
-
-# AutoGPT
-autogpt/data/
-autogpt/workspace/
-autogpt/logs/
-
-# Bionicgpt
-bionicgpt/db
-
-# Omnichain
-omnichain/data/
-
-# Bench
-bench/results/
-
-# lm_eval
-lmeval/cache/
-lmeval/results/
-
-# profiles
-profiles/*
-!profiles/default.env
-
-# Jupyter
-jupyter/workspace/*
-!jupyter/workspace/000-sample.ipynb
-
-# History
-.history
-
-# Boost
-boost/src/**/__pycache__/
-
-# AnythingLLM
-anythingllm/storage/
-
-# Build
+# Build outputs
 dist/
+target/
 
-# Aider
-.aider.chat.history.md
+# Data directories
+litellm_data/
+ollama_models/
 
-# Open WebUI Pipelines
-pipelines/
-!pipelines/override.env
+# Binary files
+*.exe
+*.dll
+*.so
+*.dylib
 
-# Qdrant
-qdrant/storage
+# Environment files
+.env.local
+.env.*.local
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
