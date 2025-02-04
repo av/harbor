@@ -1,0 +1,135 @@
+services:
+  watchtower:
+    image: containrrr/watchtower
+    container_name: watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      WATCHTOWER_CLEANUP: "true"
+      WATCHTOWER_POLL_INTERVAL: "300"
+    networks:
+      - harbor-network
+    restart: unless-stopped
+
+  searxng:
+    image: searxng/searxng:latest
+    container_name: searxng
+    ports:
+      - "8888:8080"
+    networks:
+      - harbor-network
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    runtime: nvidia
+    ports:
+      - "11434:11434"
+    volumes:
+      - ./ollama_models:/root/.ollama
+    networks:
+      - harbor-network
+    restart: unless-stopped
+
+  litellm:
+      image: ghcr.io/berriai/litellm:main
+      container_name: litellm
+      environment:
+        DATABASE_URL: postgresql://llmproxy:dbpassword@db:5432/litellm
+        OPENAI_API_KEY: ${OPENAI_API_KEY}
+        PORT: 8000
+        HOST: 0.0.0.0
+        model: azure/chatgpt-v-2
+        api_base: https://openai-gpt-4-test-v-1.openai.azure.com/
+        api_version: 2023-05-15
+        api_key: ${OPENAI_API_KEY}
+      volumes:
+        - ./litellm_data:/app/data
+      networks:
+        - harbor-network
+      ports:
+        - "8000:8000"
+      depends_on:
+        - db
+      restart: unless-stopped
+
+  mcp_bridge:
+    image: mcp-bridge:latest
+    container_name: mcp_bridge
+    environment:
+      WEBUI_BASE_URL: http://open-webui:8080
+    depends_on:
+      - open-webui
+    networks:
+      - harbor-network
+    restart: unless-stopped
+
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:latest
+    container_name: open-webui
+    depends_on:
+      - litellm
+      - ollama
+    ports:
+      - "3000:8080"
+    environment:
+      LITELLM_BASE_URL: http://litellm:8000
+      OLLAMA_BASE_URL: http://ollama:11434
+    volumes:
+      - ./open_webui_data:/app/data
+    networks:
+      - harbor-network
+    restart: unless-stopped
+
+  pipelines:
+    image: ghcr.io/open-webui/pipelines:latest
+    container_name: pipelines
+    ports:
+      - "9099:9099"
+    environment:
+      - PIPELINES_API_KEY=${PIPELINES_API_KEY:-default-key}
+    volumes:
+      - ./pipelines_data:/app/pipelines
+    networks:
+      - harbor-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9099"]
+      interval: 120s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  tika:
+    image: apache/tika:latest
+    container_name: tika
+    ports:
+      - "9998:9998"
+    networks:
+      - harbor-network
+    restart: unless-stopped
+
+  db:
+    image: postgres:14
+    container_name: db
+    environment:
+      POSTGRES_DB: litellm
+      POSTGRES_USER: llmproxy
+      POSTGRES_PASSWORD: dbpassword
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - harbor-network
+    restart: unless-stopped
+
+networks:
+  harbor-network:
+    name: harbor-network
+    driver: bridge
+    external: true
+    labels:
+      com.docker.compose.network: harbor-network
+
+volumes:
+  postgres_data:
