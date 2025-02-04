@@ -1,5 +1,0 @@
-services:
-  promptfoo:
-    environment:
-      - OLLAMA_BASE_URL=${HARBOR_OLLAMA_INTERNAL_URL}
-      - OLLAMA_API_KEY=sk-ollama

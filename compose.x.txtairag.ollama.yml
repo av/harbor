@@ -1,5 +1,0 @@
-services:
-  txtairag:
-    environment:
-      - OLLAMA_API_BASE=${HARBOR_OLLAMA_INTERNAL_URL}
-      - LLM=ollama/${HARBOR_TXTAI_RAG_MODEL}

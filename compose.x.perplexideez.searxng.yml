@@ -1,4 +1,0 @@
-services:
-  perplexideez:
-    environment:
-      - SEARXNG_URL=http://searxng:8080

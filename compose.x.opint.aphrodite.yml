@@ -1,7 +1,0 @@
-services:
-  opint:
-    entrypoint: >
-      interpreter
-        --api_base http://aphrodite:2242/v1
-        --api_key sk-aphrodite
-        ${HARBOR_OPINT_CMD}

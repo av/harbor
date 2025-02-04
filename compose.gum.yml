@@ -1,5 +1,0 @@
-services:
-  gum:
-    build:
-      context: ./gum
-      dockerfile: Dockerfile

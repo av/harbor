@@ -1,4 +1,0 @@
-services:
-  chatui:
-    volumes:
-      - ./chatui/configs/chatui.mistralrs.yml:/app/configs/chatui.mistralrs.yml

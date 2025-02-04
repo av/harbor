@@ -1,6 +1,0 @@
-services:
-  cmdh:
-    environment:
-      - LLM_HOST=${HARBOR_CMDH_LLM_HOST}
-      - OLLAMA_HOST=${HARBOR_OLLAMA_INTERNAL_URL}
-      - OLLAMA_MODEL_NAME=${HARBOR_CMDH_MODEL}

@@ -1,4 +1,0 @@
-services:
-  webui:
-    volumes:
-      - ./open-webui/configs/config.mistralrs.json:/app/configs/config.mistralrs.json

@@ -1,4 +1,0 @@
-services:
-  webui:
-    volumes:
-      - ./open-webui/configs/config.parler.json:/app/configs/config.parler.json

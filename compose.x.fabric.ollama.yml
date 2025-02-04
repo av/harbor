@@ -1,7 +1,0 @@
-services:
-  fabric:
-    environment:
-      - DEFAULT_VENDOR=Ollama
-      - DEFAULT_MODEL=${HARBOR_FABRIC_MODEL}
-      - OLLAMA_API_URL=${HARBOR_OLLAMA_INTERNAL_URL}
-

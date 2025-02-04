@@ -1,4 +1,0 @@
-services:
-  aider:
-    volumes:
-      - ./aider/configs/aider.mistralrs.yml:/root/.aider/mistralrs.yml

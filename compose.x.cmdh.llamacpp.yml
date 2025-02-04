@@ -1,6 +1,0 @@
-services:
-  cmdh:
-    environment:
-      - LLM_HOST=OpenAI
-      - OPENAI_API_KEY=sk-llamacpp
-      - OPENAI_BASE_URL=http://llamacpp:8080/v1

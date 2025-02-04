@@ -1,4 +1,0 @@
-services:
-  openhands:
-    environment:
-      - LLM_BASE_URL=${HARBOR_OLLAMA_INTERNAL_URL}

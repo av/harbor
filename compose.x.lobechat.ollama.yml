@@ -1,4 +1,0 @@
-services:
-  lobechat:
-    environment:
-      - OLLAMA_PROXY_URL=${HARBOR_OLLAMA_INTERNAL_URL}

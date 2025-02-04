@@ -1,4 +1,0 @@
-services:
-  perplexica-be:
-    environment:
-      - OLLAMA_API_ENDPOINT=${HARBOR_OLLAMA_INTERNAL_URL}
