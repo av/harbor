@@ -1,3 +1,4 @@
+// h dev scaffold <handle>
 // deno run -A ./.scripts/scaffold.ts <handle>
 
 import { parse } from "https://deno.land/std/flags/mod.ts";

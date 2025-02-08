@@ -1,11 +1,12 @@
 // deno run -A ./.scripts/seed.ts
+// h dev seed
 // Also see RELEASE.md
 
 import * as toml from 'jsr:@std/toml';
 import * as path from 'jsr:@std/path';
 import * as collections from "jsr:@std/collections/deep-merge";
 
-const VERSION = "0.2.26";
+const VERSION = "0.2.27";
 
 type ValueSeed = {
   // Path relative to the project root

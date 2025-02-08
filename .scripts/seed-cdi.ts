@@ -1,3 +1,4 @@
+// h dev seed-cdi
 // deno run -A ./.scripts/seed-cdi.ts
 
 async function main() {

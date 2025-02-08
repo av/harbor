@@ -81,7 +81,10 @@ Harbor is a containerized LLM toolkit that allows you to run LLMs and additional
 [OmniParser](https://github.com/av/harbor/wiki/2.3.30-Satellite:-OmniParser) ⦁︎
 [Flowise](https://github.com/av/harbor/wiki/2.3.31-Satellite:-Flowise) ⦁︎
 [Langflow](https://github.com/av/harbor/wiki/2.3.32-Satellite:-LangFlow) ⦁︎
-[OptiLLM](https://github.com/av/harbor/wiki/2.3.33-Satellite:-OptiLLM)
+[OptiLLM](https://github.com/av/harbor/wiki/2.3.33-Satellite:-OptiLLM) ⦁︎
+[Morphic](https://github.com/av/harbor/wiki/2.3.34-Satellite-Morphic) ⦁︎
+[SQL Chat](https://github.com/av/harbor/wiki/2.3.35-Satellite-SQL-Chat) ⦁︎
+[gptme](https://github.com/av/harbor/wiki/2.3.36-Satellite-gptme)
 
 
 See [services documentation](https://github.com/av/harbor/wiki/2.-Services) for a brief overview of each.

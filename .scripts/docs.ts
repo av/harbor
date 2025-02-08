@@ -1,4 +1,5 @@
 // Sync for wiki <-> docs in the repo
+// h dev docs
 // deno run -A ./.scripts/docs.ts
 
 const wikiLocation = "../harbor.wiki"
