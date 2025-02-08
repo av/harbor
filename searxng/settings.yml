@@ -33,7 +33,7 @@ search:
   # "seznam", "startpage", "stract", "swisscows", "qwant", "wikipedia" - leave blank to turn it off
   # by default.
   autocomplete: ""
-  # minimun characters to type before autocompleter starts
+  # minimum characters to type before autocompleter starts
   autocomplete_min: 4
   # Default search language - leave blank to detect from browser information or
   # use codes from 'languages.py'
@@ -968,7 +968,7 @@ engines:
 
   - name: invidious
     engine: invidious
-    # Instanes will be selected randomly, see https://api.invidious.io/ for
+    # Instances will be selected randomly, see https://api.invidious.io/ for
     # instances that are stable (good uptime) and close to you.
     base_url:
       - https://invidious.io.lol

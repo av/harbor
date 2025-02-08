@@ -33,7 +33,7 @@ search:
   # "seznam", "startpage", "stract", "swisscows", "qwant", "wikipedia" - leave blank to turn it off
   # by default.
   autocomplete: ""
-  # minimun characters to type before autocompleter starts
+  # minimum characters to type before autocompleter starts
   autocomplete_min: 4
   # backend for the favicon near URL in search results.
   # Available resolvers: "allesedv", "duckduckgo", "google", "yandex" - leave blank to turn it off by default.
@@ -485,7 +485,7 @@ engines:
   - name: cloudflareai
     engine: cloudflareai
     shortcut: cfai
-    # get api token and accont id from https://developers.cloudflare.com/workers-ai/get-started/rest-api/
+    # get api token and account id from https://developers.cloudflare.com/workers-ai/get-started/rest-api/
     cf_account_id: 'your_cf_accout_id'
     cf_ai_api: 'your_cf_api'
     # create your ai gateway by https://developers.cloudflare.com/ai-gateway/get-started/creating-gateway/
@@ -993,7 +993,7 @@ engines:
 
   - name: invidious
     engine: invidious
-    # Instanes will be selected randomly, see https://api.invidious.io/ for
+    # Instances will be selected randomly, see https://api.invidious.io/ for
     # instances that are stable (good uptime) and close to you.
     base_url:
       - https://invidious.io.lol

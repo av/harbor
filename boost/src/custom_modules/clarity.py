@@ -51,7 +51,7 @@ Clarify the ambiguity you mentioned.
 
   side_chat.user(
     """
-Think trough the response you just gave. Is there anything wrong? If so, please correct it.
+Think through the response you just gave. Is there anything wrong? If so, please correct it.
 Otherwise, write down your final answer to my request.
     """.strip()
   )

@@ -92,7 +92,7 @@ model:
   # All API based loads do NOT inherit these settings unless specified in use_as_default
 
   # Names of args to use as a default fallback for API load requests (default: [])
-  # For example, if you always want cache_mode to be Q4 instead of on the inital model load,
+  # For example, if you always want cache_mode to be Q4 instead of on the initial model load,
   # Add "cache_mode" to this array
   # Ex. ["max_seq_len", "cache_mode"]
   #use_as_default: []

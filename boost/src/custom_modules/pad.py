@@ -182,7 +182,7 @@ async def apply(chat: 'ch.Chat', llm: 'llm.LLM'):
 
   chat.user(
     f"""
-Before addresing my request, I need you to take your time and think for a while.
+Before addressing my request, I need you to take your time and think for a while.
 It's very important for you to utilise this time to concentrate on the task at hand.
 """.strip()
   )
