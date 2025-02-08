@@ -289,5 +289,9 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
     sqlchat: {
         tags: [HST.satellite],
         wikiUrl: 'https://github.com/av/harbor/wiki/2.3.35-Satellite-SQL-Chat'
+    },
+    gptme: {
+        tags: [HST.satellite, HST.cli],
+        wikiUrl: 'https://github.com/av/harbor/wiki/2.3.36-Satellite-gptme'
     }
 };
