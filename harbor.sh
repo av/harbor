@@ -2220,6 +2220,12 @@ run_harbor_env() {
     env_manager --env-file "$env_file" --prefix "" "$mgr_cmd" "$env_var" "$env_val"
 }
 
+# Corresponds to the ".scripts" folder
+run_harbor_dev() {
+    local script=$1
+    deno run -A "./.scripts/$script.ts" "${@:2}"
+}
+
 # shellcheck disable=SC2034
 __anchor_service_clis=true
 
@@ -3965,6 +3971,32 @@ run_kobold_command() {
     esac
 }
 
+run_morphic_command() {
+    case "$1" in
+    model)
+        shift
+        # harbor env morphic NEXT_PUBLIC_OLLAMA_MODEL "$@"
+        env_manager_alias morphic.model "$@"
+        ;;
+    tool_model)
+        shift
+        # harbor env morphic NEXT_PUBLIC_OLLAMA_TOOL_CALL_MODEL "$@"
+        env_manager_alias morphic.tool_model "$@"
+        ;;
+    -h | --help | help)
+        echo "Please note that this is not Morphic CLI, but a Harbor CLI to manage Morphic service."
+        echo
+        echo "Usage: harbor morphic <command>"
+        echo
+        echo "Commands:"
+        echo "  harbor morphic model [user/repo] - Get or set the Morphic model repository to run"
+        ;;
+    *)
+        return $scramble_exit_code
+        ;;
+    esac
+}
+
 # ========================================================================
 # == Main script
 # ========================================================================
@@ -4279,6 +4311,10 @@ main_entrypoint() {
         shift
         run_kobold_command "$@"
         ;;
+    morphic)
+        shift
+        run_morphic_command "$@"
+        ;;
     tunnel | t)
         shift
         establish_tunnel "$@"
@@ -4346,6 +4382,10 @@ main_entrypoint() {
     env)
         shift
         run_harbor_env "$@"
+        ;;
+    dev)
+        shift
+        run_harbor_dev "$@"
         ;;
     *)
         return $scramble_exit_code

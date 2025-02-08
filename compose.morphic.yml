@@ -1,0 +1,23 @@
+
+services:
+  morphic:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.morphic
+    build:
+      context: https://github.com/miurla/morphic.git#main
+      dockerfile: Dockerfile
+    ports:
+      - ${HARBOR_MORPHIC_HOST_PORT}:3000
+    env_file:
+      - ./.env
+      - morphic/override.env
+    networks:
+      - harbor-network
+
+  morphic-redis:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.morphic-redis
+    image: redis:alpine
+    volumes:
+      - ./morphic/redis:/data
+    command: redis-server --appendonly yes
+    networks:
+      - harbor-network
