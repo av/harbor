@@ -281,5 +281,13 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
     agent: {
         tags: [HST.builtIn, HST.cli],
         wikiUrl: ''
+    },
+    morphic: {
+        tags: [HST.satellite],
+        wikiUrl: 'https://github.com/av/harbor/wiki/2.3.34-Satellite-Morphic'
+    },
+    sqlchat: {
+        tags: [HST.satellite],
+        wikiUrl: 'https://github.com/av/harbor/wiki/2.3.35-Satellite-SQL-Chat'
     }
 };

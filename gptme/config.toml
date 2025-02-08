@@ -1,0 +1,26 @@
+# Empty by default
+# See official reference:
+# https://gptme.org/docs/config.html
+
+[prompt]
+# about_user = "I am a curious human programmer."
+# response_preference = "Don't explain basic concepts"
+
+[env]
+# Uncomment to use Claude 3.5 Sonnet by default
+#MODEL = "anthropic/claude-3-5-sonnet-20240620"
+
+# One of these need to be set
+# If none of them are, they will be prompted for on first start
+# OPENAI_API_KEY = ""
+# ANTHROPIC_API_KEY = ""
+# OPENROUTER_API_KEY = ""
+# XAI_API_KEY = ""
+# GEMINI_API_KEY = ""
+# GROQ_API_KEY = ""
+# DEEPSEEK_API_KEY = ""
+
+# Uncomment to change tool configuration
+#TOOL_FORMAT = "markdown" # Select the tool formal. One of `markdown`, `xml`, `tool`
+#TOOL_ALLOWLIST = "save,append,patch,ipython,shell,browser"  # Comma separated list of allowed tools
+#TOOL_MODULES = "gptme.tools,custom.tools" # List of python comma separated python module path

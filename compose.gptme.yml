@@ -1,0 +1,13 @@
+services:
+  gptme:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.gptme
+    build:
+      context: ./gptme
+      dockerfile: Dockerfile
+    env_file:
+      - ./.env
+      - gptme/override.env
+    volumes:
+      - ./gptme/config.toml:/root/.config/gptme/config.toml
+    networks:
+      - harbor-network

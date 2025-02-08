@@ -3997,6 +3997,37 @@ run_morphic_command() {
     esac
 }
 
+run_gptme_command() {
+    case "$1" in
+    model)
+        shift
+        env_manager_alias gptme.model "$@"
+        return
+        ;;
+    -h | --help | help)
+        echo "Please note that this is not GPTme CLI, but a Harbor CLI to manage GPTme service."
+        echo
+        echo "Usage: harbor gptme <command>"
+        echo
+        echo "Commands:"
+        echo "  harbor gptme model [user/repo] - Get or set the GPTme model repository to run"
+        ;;
+    esac
+
+    local services=$(get_active_services)
+    local model_id=$(env_manager get gptme.model)
+    local model_spec="local/$model_id"
+
+    $(compose_with_options $services "gptme") run \
+        --rm \
+        --name harbor.gptme-cli-$RANDOM \
+        --service-ports \
+        -e "TERM=xterm-256color" \
+        -v "$original_dir:$original_dir" \
+        --workdir "$original_dir" \
+        gptme -m $model_spec "$@"
+}
+
 # ========================================================================
 # == Main script
 # ========================================================================
@@ -4314,6 +4345,10 @@ main_entrypoint() {
     morphic)
         shift
         run_morphic_command "$@"
+        ;;
+    gptme)
+        shift
+        run_gptme_command "$@"
         ;;
     tunnel | t)
         shift
