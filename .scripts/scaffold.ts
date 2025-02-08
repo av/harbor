@@ -17,7 +17,7 @@ services:
       - ${handle}/override.env
     networks:
       - harbor-network
-`;
+`.trimStart();
 };
 
 const envTemplate = (handle: string) => `# This file can be used for additional environment variables

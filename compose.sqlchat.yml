@@ -1,0 +1,11 @@
+services:
+  sqlchat:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.sqlchat
+    image: ${HARBOR_SQLCHAT_IMAGE}:${HARBOR_SQLCHAT_VERSION}
+    ports:
+      - ${HARBOR_SQLCHAT_HOST_PORT}:3000
+    env_file:
+      - ./.env
+      - sqlchat/override.env
+    networks:
+      - harbor-network
