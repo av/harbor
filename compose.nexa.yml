@@ -4,7 +4,7 @@ services:
     build:
       context: ./nexa
       dockerfile: Dockerfile
-      # This can (and will) be overriden by .x.nvidia file
+      # This can (and will) be overridden by .x.nvidia file
       args:
         - HARBOR_NEXA_IMAGE=ubuntu:22.04
     networks:

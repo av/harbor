@@ -9,7 +9,7 @@
 
 # Hence, below, aka "trust me bro"
 
-# Our base iamge
+# Our base image
 IMAGE=${HARBOR_NEXA_IMAGE}
 if [[ $IMAGE == *"nvidia"* ]]; then
   echo "Writing fake nvidia-smi file"

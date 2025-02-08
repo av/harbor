@@ -203,7 +203,7 @@ async def self_predict_guidance(chat: 'ch.Chat', llm: 'llm.LLM'):
     prompt="""
 Read the unfinished conversation between the user and assistant below.
 Think of flaws and mistakes in the assistant's last message.
-Reply with a message that should preceed the current assistant message to prevent the mistake.
+Reply with a message that should proceed the current assistant message to prevent the mistake.
 Do not add any comments or annotations to your reply.
 
 Conversation:
@@ -218,7 +218,7 @@ async def reasoning_guidance(chat: 'ch.Chat', llm: 'llm.LLM'):
     llm=llm,
     prompt="""
 Read the unfinished conversation between the user and assistant below.
-Reply with a message that should preceed the current assistant message to make them reason better.
+Reply with a message that should proceed the current assistant message to make them reason better.
 Reply with that sentence and nothing else.
 
 Conversation:

@@ -10,8 +10,8 @@ logger = log.setup_logger(ID_PREFIX)
 eli5_prompt = """
 My friend asked me this question: "{question}".
 Explain it to me like I'm stupid. Explain every word and its specific impact on the question.
-Do not asnwer the question, though, I want to figure it out myself.
-I just need a simpler explanation thats easy to understand and follow.
+Do not answer the question, though, I want to figure it out myself.
+I just need a simpler explanation that's easy to understand and follow.
 """.strip()
 
 answer_prompt = """

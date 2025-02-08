@@ -180,7 +180,7 @@ harbor history
 # Will export related services and variables into a standalone file.
 harbor eject searxng llamacpp > docker-compose.harbor.yml
 
-# Run a build-in LLM benchmark with
+# Run a built-in LLM benchmark with
 # your own tasks
 harbor bench run
 
@@ -207,7 +207,7 @@ harbor how to ping ollama container from the webui?
 
 https://github.com/user-attachments/assets/a5cd2ef1-3208-400a-8866-7abd85808503
 
-In the demo, Harbor App is used to launch a default stack with [Ollama](./2.2.1-Backend:-Ollama) and [Open WebUI](./2.1.1-Frontend:-Open-WebUI) services. Later, [SearXNG](./2.3.1-Satellite:-SearXNG) is also started, and WebUI can connect to it for the Web RAG right out of the box. After that, [Harbor Boost](./5.2.-Harbor-Boost) is also started and connected to the WebUI automatically to induce more creative outputs. As a final step, Harbor config is adjusted in the App for the [`klmbr`](./5.2.-Harbor-Boost#klmbr---boost-llm-creativity) module in the [Harbor Boost](./5.2.-Harbor-Boost), which makes the output unparseable for the LLM (yet still undetstandable for humans).
+In the demo, Harbor App is used to launch a default stack with [Ollama](./2.2.1-Backend:-Ollama) and [Open WebUI](./2.1.1-Frontend:-Open-WebUI) services. Later, [SearXNG](./2.3.1-Satellite:-SearXNG) is also started, and WebUI can connect to it for the Web RAG right out of the box. After that, [Harbor Boost](./5.2.-Harbor-Boost) is also started and connected to the WebUI automatically to induce more creative outputs. As a final step, Harbor config is adjusted in the App for the [`klmbr`](./5.2.-Harbor-Boost#klmbr---boost-llm-creativity) module in the [Harbor Boost](./5.2.-Harbor-Boost), which makes the output unparsable for the LLM (yet still undetstandable for humans).
 
 ## Documentation
 
@@ -246,7 +246,7 @@ You can later eject from Harbor and use the services in your own setup, or conti
 
 ## Overview and Features
 
-This project consists of a fairly large shell CLI, fairly small `.env` file and enourmous (for one repo) amount of `docker-compose` files.
+This project consists of a fairly large shell CLI, fairly small `.env` file and enormous (for one repo) amount of `docker-compose` files.
 
 #### Features
 

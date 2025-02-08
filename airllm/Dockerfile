@@ -1,5 +1,5 @@
 # This is a base image for "parler" service,
-# so trying to increase the likelyhood of the layers
+# so trying to increase the likelihood of the layers
 # already being cached and reused
 FROM pytorch/pytorch:2.3.0-cuda12.1-cudnn8-runtime
 

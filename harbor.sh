@@ -123,7 +123,7 @@ show_help() {
     echo "                           When run without arguments, launches interactive selector."
     echo "    history clear   - Clear the history"
     echo "    history size    - Get/set the history size"
-    echo "    history list|ls - List recored history"
+    echo "    history list|ls - List recorded history"
     echo
     echo "  defaults [ls|rm|add]          - List default services"
     echo "    defaults rm <handle|index>  - Remove, also accepts handle or index"
@@ -413,7 +413,7 @@ compose_with_options() {
         cmd+=" -f $file"
     done
 
-    # Log amount fo matched files
+    # Log amount of matched files
     log_debug "Matched compose files: ${#compose_files[@]}"
 
     # Return the command string
