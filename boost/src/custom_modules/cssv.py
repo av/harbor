@@ -7,13 +7,13 @@ import llm
 import selection
 
 # PDSV - Personality-Driven Selection and Validation
-ID_PREFIX = 'pdsv'
+ID_PREFIX = 'cssv'
 logger = log.setup_logger(ID_PREFIX)
 
 continue_params = {
   "max_tokens": 4,
-  "temperature": 0,
-  "top_p": 0.5,
+  "temperature": 0.3,
+  "top_p": 0.9,
 }
 
 selection_prompt = """
@@ -109,46 +109,67 @@ class Choice(BaseModel):
   )
 
 async def continue_generation(**kwargs):
-  chat = kwargs['chat']
-  llm = kwargs['llm']
+    chat = kwargs['chat']
+    llm = kwargs['llm']
 
-  tasks = []
-  for _, prompt in system_prompts.items():
-      side_chat = chat.clone()
-      side_chat.system(prompt)
-      task = llm.chat_completion(
-          chat=side_chat, params=continue_params, resolve=True
-      )
-      tasks.append(task)
+    # Generate a meaningful chunk to analyze
+    preview_chat = chat.clone()
+    preview_response = await llm.chat_completion(
+        chat=preview_chat,
+        params={"max_tokens": 64, "temperature": 0.8},
+        resolve=True
+    )
 
-  options = await asyncio.gather(*tasks)
-  rendered_options = "\n\n\n".join([f"{i}. {option}" for i, option in enumerate(options, 1)])
+    # Analyze this potential response through different lenses
+    analysis_tasks = []
+    for name, prompt in system_prompts.items():
+        analysis_chat = chat.clone()
+        analysis_chat.system(prompt)
+        analysis_chat.user(f"Analyze this potential response: {preview_response}\n\nWhat critical issues or improvements do you identify?")
+        task = llm.chat_completion(chat=analysis_chat, resolve=True)
+        analysis_tasks.append(task)
 
-  result = await llm.chat_completion(
-    prompt=selection_prompt,
-    schema=Choice,
-    conversation=chat,
-    options=rendered_options,
-    resolve=True,
-  )
+    analyses = await asyncio.gather(*analysis_tasks)
 
-  logger.debug(f"Opts: {options}, Choice: {result['choice']}")
+    # Select the most critical/valuable analysis
+    selection = await llm.chat_completion(
+        prompt=selection_prompt,
+        schema=Choice,
+        conversation=chat,
+        options=analyses,
+        resolve=True
+    )
 
-  next_token = options[result['choice'] - 1]
-  return next_token, rendered_options
+    # Generate improved response incorporating the chosen criticism
+    improvement_chat = chat.clone()
+    improvement_chat.system(f"""
+    Improve this response: {preview_response}
+
+    Based on this critical feedback: {analyses[selection['choice'] - 1]}
+
+    Generate only the next natural segment of improved response.
+    """)
+
+    improved_chunk = await llm.chat_completion(
+        chat=improvement_chat,
+        params={"max_tokens": 128, "temperature": 0.7},
+        resolve=True
+    )
+
+    return improved_chunk, analyses
 
 async def apply(chat: 'ch.Chat', llm: 'llm.LLM'):
-  generated = 0
-  guidance_chat = chat.clone()
-  guidance_chat.assistant("")
-  assistant_message = guidance_chat.tail
+    guidance_chat = chat.clone()
+    guidance_chat.assistant("")
+    assistant_message = guidance_chat.tail
 
-  # while generated < 512:
-  while True:
-    next_token, options = await continue_generation(chat=guidance_chat, llm=llm)
-    if next_token == '':
-      break
-    assistant_message.content += next_token + ''
-    # await llm.emit_message(f'\n{options}\n### {next_token}\n')
-    await llm.emit_message(next_token)
-    generated += 1
+    while True:
+        next_chunk, analyses = await continue_generation(
+            chat=guidance_chat,
+            llm=llm
+        )
+        if not next_chunk.strip():
+            break
+
+        assistant_message.content += next_chunk
+        await llm.emit_message(next_chunk)
