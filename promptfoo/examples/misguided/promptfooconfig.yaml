@@ -1,0 +1,78 @@
+description: Misguided attention
+
+prompts:
+  - "{{question}}"
+
+providers:
+  # - id: openai:chat:llama3.2:3b-instruct-q8_0
+  #   config:
+  #     apiBaseUrl: http://172.17.0.1:33821/v1
+  #     apiKey: sk-ollama
+  #     temperature: 0
+  # - id: openai:chat:pdsv-llama3.2:3b-instruct-q8_0
+  #   config:
+  #     apiBaseUrl: http://172.17.0.1:34131/v1
+  #     apiKey: sk-boost
+  #     temperature: 0
+
+  - id: openai:chat:llama3.1:8b-instruct-q8_0
+    config:
+      apiBaseUrl: http://172.17.0.1:33821/v1
+      apiKey: sk-ollama
+      temperature: 0
+  - id: openai:chat:pdsv-llama3.1:8b-instruct-q8_0
+    config:
+      apiBaseUrl: http://172.17.0.1:34131/v1
+      apiKey: sk-boost
+      temperature: 0
+  - id: openai:chat:deepseek-r1:8b-llama-distill-q8_0
+    config:
+      apiBaseUrl: http://172.17.0.1:33821/v1
+      apiKey: sk-boost
+      temperature: 0
+  # - id: openai:chat:qwen2.5:3b-instruct-q8_0
+  #   config:
+  #     apiBaseUrl: http://172.17.0.1:33821/v1
+  #     apiKey: sk-ollama
+  #     temperature: 0
+  # - id: openai:chat:qwen2.5:7b-instruct-q8_0
+  #   config:
+  #     apiBaseUrl: http://172.17.0.1:33821/v1
+  #     apiKey: sk-ollama
+  #     temperature: 0
+  # - id: openai:chat:deepseek-r1:1.5b-qwen-distill-q8_0
+  #   config:
+  #     apiBaseUrl: http://172.17.0.1:33821/v1
+  #     apiKey: sk-ollama
+  #     temperature: 0
+
+
+defaultTest:
+  options:
+    provider: openrouter:meta-llama/llama-3.3-70b-instruct
+
+tests:
+  - vars:
+      question: 9.11 or 9.9 which number is larger?
+    assert:
+      - type: model-graded-closedqa
+        value: Mentions that 9.9 is larger
+  - vars:
+      question: I'm tall when I'm young, and I'm taller when I'm old. What am I?
+    assert:
+      - type: model-graded-closedqa
+        value: The answer is not a candle
+      - type: model-graded-closedqa
+        value: The answer is something that gets taller/larger as it gets older/used
+  - vars:
+      question: What goes up but never comes up again?
+    assert:
+      - type: model-graded-closedqa
+        value: The answer is not age
+      - type: model-graded-closedqa
+        value: The answer is not something that goes up indefinitely
+  - vars:
+      question: What occurs once in a second, twice in a moment, but never in a thousand years?
+    assert:
+      - type: model-graded-closedqa
+        value: The answer is not letter "M"

@@ -106,9 +106,9 @@ def is_title_generation_task(llm: 'LLM'):
 
 DIRECT_TASK_PROMPTS = [
     # Open WebUI prompts related to system tasks
-  'Create a concise, 3-5 word title with an emoji as a title for the chat history',
+  'Generate a concise, 3-5 word title',
   'Based on the chat history, determine whether a search is necessary',
-  'Generate 1-3 broad tags categorizing the main themes of the chat history',
+  'Generate 1-3 broad tags categorizing',
   'You are an autocompletion system. Continue the text in `<text>` based on the **completion type**',
   # Custom for the test
   '[{DIRECT}]'
