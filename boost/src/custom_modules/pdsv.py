@@ -12,7 +12,8 @@ logger = log.setup_logger(ID_PREFIX)
 
 continue_params = {
   "max_tokens": 4,
-  "temperature": 0,
+  "temperature": 0.3,
+  "top_p": 0.9,
 }
 
 selection_prompt = """
@@ -20,7 +21,10 @@ Below is an unfinished conversation between the User and their assistant.
 Choose how the conversation should continue.
 
 You will reply with a JSON object in a format like this:
-{{ "choice": 0 }}, where the number is the index of the chosen option.
+{{ "choice": 1, "confidence": 0.3 }}
+"choice" is the index of the option you choose
+"confidence" is a score of confident you are in your choice, from 0.0 to 1.0
+
 
 Conversation:
 {conversation}
@@ -32,6 +36,7 @@ Options:
 system_prompts = {
     "overfit": """
 You challenge common assumptions. For each problem:
+- You never jump to conclusions
 - Consider if you're jumping to familiar but wrong answers
 - Look for cases where obvious answers fail
 - Test multiple interpretations
@@ -40,7 +45,8 @@ You challenge common assumptions. For each problem:
 """,
 
     "tracker": """
-You ensure complete solutions. For each puzzle:
+You ensure complete solutions:
+- You never jump to conclusions
 - Track each requirement as a separate test case
 - Mark requirements as pass/fail for each proposed solution
 - Reject partial matches that don't satisfy all conditions
@@ -49,7 +55,8 @@ You ensure complete solutions. For each puzzle:
 """,
 
     "bias": """
-You identify hidden biases. For each challenge:
+You identify hidden biases:
+- You never jump to conclusions
 - List your initial assumptions explicitly
 - Question why you jumped to those conclusions
 - Look for alternative interpretations
@@ -58,7 +65,8 @@ You identify hidden biases. For each challenge:
 """,
 
     "edge": """
-You actively seek edge cases. For each scenario:
+You actively seek edge cases:
+- You never jump to conclusions
 - Test boundary conditions systematically
 - Consider empty/null/extreme inputs
 - Look for assumption-breaking examples
@@ -67,7 +75,8 @@ You actively seek edge cases. For each scenario:
 """,
 
     "meta": """
-You examine your own reasoning process. While solving:
+You examine your own reasoning process:
+- You never jump to conclusions
 - Monitor your confidence levels
 - Notice when you're rushing to conclusions
 - Identify emotional attachments to certain solutions
@@ -76,7 +85,8 @@ You examine your own reasoning process. While solving:
 """,
 
     "steel": """
-You steelman opposing views. For each position:
+You steelman opposing views:
+- You never jump to conclusions
 - Construct strongest possible counter-arguments
 - Identify merits in alternative approaches
 - Challenge your preferred solution rigorously
@@ -91,6 +101,11 @@ class Choice(BaseModel):
     description = "The index of the chosen option",
     ge=1,
     le=len(system_prompts)
+  )
+  confidence: float = Field(
+    description = "The confidence in the choice",
+    ge=0.0,
+    le=1.0,
   )
 
 async def continue_generation(**kwargs):
