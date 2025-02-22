@@ -524,6 +524,14 @@ Chat completions endpoint.
   - Supports all parameters from the downstream API, for example `json` format for Ollama
   - Supports streaming completions
 
+**`GET /events/:stream_id`**
+
+Listen to a specific stream of events (associated with a single completion workflow). The stream ID is a unique identifier of the LLM instance processing the request (you may decide to advertise/pass it to the client in the workflow's code).
+
+**`GET /health`**
+
+Health check endpoint. Returns `{ status: 'ok' }` if the service is running.
+
 ### Custom Modules
 
 It's possible to create custom modules for `boost`, using the built-in abstractions.
