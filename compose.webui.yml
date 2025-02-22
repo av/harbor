@@ -10,6 +10,7 @@ services:
       - ./open-webui/start_webui.sh:/app/start_webui.sh
       - ./shared/json_config_merger.py:/app/json_config_merger.py
       - ./open-webui/configs/config.override.json:/app/configs/config.z.override.json
+      - /etc/localtime:/etc/localtime:ro
     entrypoint: ["/app/start_webui.sh"]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
