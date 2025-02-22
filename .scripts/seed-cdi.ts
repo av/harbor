@@ -20,7 +20,7 @@ services:
               capabilities: [gpu]
               device_ids:
               - nvidia.com/gpu=all
-    `.trimStart();
+    `.trim() + "\n";
 
     console.log(`Writing ${outName}...`);
     await Deno.writeTextFile(outName, content);

@@ -388,7 +388,7 @@ compose_with_options() {
             for option in "${options[@]}"; do
                 if [[ $option == "*" ]]; then
                     # Capabilities should not be matched by "*", otherwise
-                    # we'll run "nvidia" or "mdc" when we don't want to
+                    # we'll run "nvidia" or "mdc" or "cdi" when we don't want to
                     if ! is_capability_file "$filename"; then
                         match=true
                     fi
@@ -420,9 +420,10 @@ compose_with_options() {
     echo "$cmd"
 }
 
+
 is_capability() {
     local capability="$1"
-    local capabilities=("nvidia" "mdc" "${default_capabilities[@]}")
+    local capabilities=("nvidia" "mdc" "cdi" "${default_capabilities[@]}")
 
     for cap in "${capabilities[@]}"; do
         if [ "$cap" = "$capability" ]; then
@@ -435,7 +436,7 @@ is_capability() {
 
 is_capability_file() {
     local filename="$1"
-    local capabilities=("nvidia" "mdc" "${default_capabilities[@]}")
+    local capabilities=("nvidia" "mdc" "cdi" "${default_capabilities[@]}")
 
     for cap in "${capabilities[@]}"; do
         if [[ $filename == *".$cap."* ]]; then
