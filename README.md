@@ -27,7 +27,8 @@ Harbor is a containerized LLM toolkit that allows you to run LLMs and additional
 [parllama](https://github.com/av/harbor/wiki/2.1.7-Frontend:-parllama) ⦁︎
 [BionicGPT](https://github.com/av/harbor/wiki/2.1.8-Frontend:-BionicGPT) ⦁︎
 [AnythingLLM](https://github.com/av/harbor/wiki/2.1.9-Frontend:-AnythingLLM) ⦁︎
-[Chat Nio](https://github.com/av/harbor/wiki/2.1.10-Frontend:-Chat-Nio)
+[Chat Nio](https://github.com/av/harbor/wiki/2.1.10-Frontend:-Chat-Nio) ⦁︎
+[mikupad](https://github.com/av/harbor/wiki/2.1.11-Frontend:-Mikupad)
 
 ##### Backends
 [Ollama](https://github.com/av/harbor/wiki/2.2.1-Backend:-Ollama) ⦁︎

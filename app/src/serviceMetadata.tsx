@@ -293,5 +293,9 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
     gptme: {
         tags: [HST.satellite, HST.cli],
         wikiUrl: 'https://github.com/av/harbor/wiki/2.3.36-Satellite-gptme'
-    }
+    },
+    mikupad: {
+        tags: [HST.frontend],
+        wikiUrl: 'https://github.com/av/harbor/wiki/2.1.11-Frontend:-Mikupad',
+    },
 };
