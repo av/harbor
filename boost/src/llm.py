@@ -5,8 +5,10 @@ import json
 import asyncio
 import time
 import httpx
+import uuid
 
 from config import INTERMEDIATE_OUTPUT, EXTRA_LLM_PARAMS
+from llm_registry import llm_registry
 import chat as ch
 import log
 import format
@@ -15,7 +17,6 @@ import mods
 logger = log.setup_logger(__name__)
 
 BOOST_PARAM_PREFIX="@boost_"
-
 
 class LLM:
   url: str
@@ -33,6 +34,7 @@ class LLM:
   cpl_id: int
 
   def __init__(self, **kwargs):
+    self.id = str(uuid.uuid4())
     self.url = kwargs.get('url')
     self.headers = kwargs.get('headers', {})
 
@@ -45,6 +47,7 @@ class LLM:
     self.module = kwargs.get('module')
 
     self.queue = asyncio.Queue()
+    self.queues = []
     self.is_streaming = False
     self.is_final_stream = False
 
@@ -66,7 +69,8 @@ class LLM:
     return "fp_boost"
 
   def generate_chunk_id(self):
-    return f"chatcmpl-{++self.cpl_id}"
+    self.cpl_id += 1
+    return f"chatcmpl-{self.cpl_id}"
 
   def get_response_content(self, params: dict, response: dict):
     content = response['choices'][0]['message']['content']
@@ -156,8 +160,18 @@ class LLM:
 
     return chunk
 
+  def event_to_string(self, event, data):
+    payload = {
+      'object': 'boost.listener.event',
+      'event': event,
+      'data': data
+    }
+
+    return f"data: {json.dumps(payload)}\n\n"
+
   async def serve(self):
     logger.debug('Serving boosted LLM...')
+    llm_registry.register(self)
 
     if self.module is None:
       logger.debug("No module specified")
@@ -202,17 +216,41 @@ class LLM:
       if INTERMEDIATE_OUTPUT.value or self.is_final_stream:
         yield chunk
 
+  async def listen(self):
+    queue = asyncio.Queue()
+    self.queues.append(queue)
+
+    while True:
+      chunk = await queue.get()
+      if chunk is None:
+        break
+      yield chunk
+
   async def emit_status(self, status):
     await self.emit_message(format.format_status(status))
+
+  async def emit_artifact(self, artifact):
+    await self.emit_message(format.format_artifact(artifact))
 
   async def emit_message(self, message):
     await self.emit_chunk(self.chunk_from_message(message))
 
   async def emit_chunk(self, chunk):
-    await self.queue.put(self.chunk_to_string(chunk))
+    await self.emit_data(self.chunk_to_string(chunk))
+
+  async def emit_data(self, data):
+    await self.queue.put(data)
+    await self.emit_to_listeners(data)
+
+  async def emit_to_listeners(self, data):
+    for queue in self.queues:
+      await queue.put(data)
+
+  async def emit_listener_event(self, event, data):
+    await self.emit_to_listeners(self.event_to_string(event, data))
 
   async def emit_done(self):
-    await self.queue.put(None)
+    await self.emit_data(None)
     self.is_streaming = False
 
   async def stream_final_completion(self, **kwargs):

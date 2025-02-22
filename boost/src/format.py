@@ -16,3 +16,6 @@ def format_status(status: str):
     desired_format = "md:codeblock"
 
   return status_formatters[desired_format].format(status=status)
+
+def format_artifact(artifact: str):
+  return f"\n```html\n{artifact}\n```\n"

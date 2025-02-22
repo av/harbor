@@ -6,7 +6,7 @@ import log
 import llm
 import selection
 
-# PDSV - Personality-Driven Selection and Validation
+# CSSV - Choice Selection for Systematic Validation
 ID_PREFIX = 'cssv'
 logger = log.setup_logger(ID_PREFIX)
 

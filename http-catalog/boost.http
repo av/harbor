@@ -116,3 +116,18 @@ Authorization: sk-boost
   "temperature": 0,
   "stream": false
 }
+
+###
+
+POST {{host}}/v1/chat/completions
+Content-Type: application/json
+Authorization: sk-boost
+
+{
+  "model": "webui_artifact-llama3.1:8b",
+  "messages": [
+    {"role": "user", "content": "Hi"}
+  ],
+  "temperature": 0,
+  "stream": true
+}

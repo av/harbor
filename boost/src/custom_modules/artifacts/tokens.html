@@ -1,0 +1,158 @@
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    padding: 2rem;
+    background: #222;
+    color: #ddd;
+  }
+
+  .completion {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .stats {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid #444;
+  }
+
+  .token {
+    display: inline-block;
+    padding: 0.25rem 0.5rem;
+    background: #333;
+    border-radius: 0.25rem;
+  }
+</style>
+<script>
+  const elements = {}
+  const tokenColors = {}
+  const tokenStats = {}
+
+  const handlers = {
+    'boost.listener.event': handleBoostEvent,
+    'chat.completion.chunk': handleCompletionChunk
+  }
+
+  entrypoint().catch(console.error)
+
+  async function entrypoint() {
+    if (!window.__init) {
+      window.__init = true
+      main()
+    }
+  }
+
+  async function main() {
+    const stats = document.createElement('div')
+    stats.classList.add('stats')
+    document.body.appendChild(stats)
+    elements.stats = stats
+
+    const completion = document.createElement('div')
+    completion.classList.add('completion')
+    document.body.appendChild(completion)
+    elements.completion = completion
+
+    const listenerId = '<<listener_id>>'
+    const response = await fetch(`http://localhost:34131/events/${listenerId}`, {
+      headers: {
+        'Authorization': 'Bearer sk-boost'
+      }
+    })
+    const reader = response.body.getReader()
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) {
+        break
+      }
+
+      try {
+        const blob = new TextDecoder().decode(value)
+        const chunks = blob.split('\n\n')
+
+        for (const chunk of chunks) {
+          processChunk(chunk)
+        }
+      } catch (e) {
+        console.error(e)
+      }
+    }
+  }
+
+  function processChunk(chunk) {
+    const data = JSON.parse(chunk.replace(/data: /, ''))
+    const text = data.object
+    const handler = handlers[text]
+
+    if (handler) {
+      console.log('Processing chunk:', data)
+      handler(data)
+    }
+  }
+
+  function handleCompletionChunk(chunk) {
+    const token = getChunkContent(chunk)
+    const count = tokenStats[token] || 0
+    tokenStats[token] = count + 1
+
+    renderToken(token)
+    renderStats()
+  }
+
+  function handleBoostEvent() {
+    // Noop
+  }
+
+  function getChunkContent(chunk) {
+    return chunk.choices.map((choice) => choice.delta.content).join("\n");
+  }
+
+  function randomColor() {
+    return 'rgba(' + [0, 0, 0].map(() => Math.floor(Math.random() * 128) + 64).join(', ') + ')'
+  }
+
+  function getTokenColor(token) {
+    if (!tokenColors[token]) {
+      tokenColors[token] = randomColor()
+    }
+
+    return tokenColors[token]
+  }
+
+  function renderToken(token) {
+    const el = document.createElement('div')
+    el.classList.add('token')
+    el.innerHTML = token
+    el.style.backgroundColor = getTokenColor(token)
+    el.style.opacity = 1 / tokenStats[token]
+    elements.completion.appendChild(el)
+  }
+
+  function renderStats() {
+    const stats = elements.stats
+    stats.innerHTML = ''
+
+    for (const [token, count] of Object.entries(tokenStats).sort((a, b) => b[1] - a[1])) {
+      if (count < 2) {
+        continue
+      }
+
+      if (token.trim().length === 1) {
+        continue
+      }
+
+      const el = document.createElement('div')
+      el.classList.add('token')
+      el.innerHTML = `${token}: ${count}`
+      stats.appendChild(el)
+    }
+  }
+</script>

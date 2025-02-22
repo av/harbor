@@ -110,6 +110,7 @@ DIRECT_TASK_PROMPTS = [
   'Based on the chat history, determine whether a search is necessary',
   'Generate 1-3 broad tags categorizing',
   'You are an autocompletion system. Continue the text in `<text>` based on the **completion type**',
+  'determine the necessity of generating search queries',
   # Custom for the test
   '[{DIRECT}]'
 ]
