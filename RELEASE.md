@@ -9,13 +9,17 @@ Includes:
 - project scope for poetry for PyPi publishing
 
 ```bash
+# Either
 deno run -A ./.scripts/seed.ts
+harbor dev seed
 ```
 
 ### Sync docs to wiki
 
 ```bash
+# Either
 deno run -A ./.scripts/docs.ts
+harbor dev docs
 ```
 
 ### Publish to npm
@@ -43,3 +47,8 @@ poetry publish -v
 ### App/Docker builds
 
 - Actions on GH, attached to a tag
+
+### Script
+
+1. Update version in `./.scripts/seed.ts`
+2. Run the script `./.scripts/release.sh`

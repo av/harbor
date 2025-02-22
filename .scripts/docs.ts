@@ -5,6 +5,17 @@
 const wikiLocation = "../harbor.wiki"
 const docsLocation = "./docs"
 
+const targets = {
+  './docs/5.2.-Harbor-Boost.md': './boost/README.md'
+}
+
+main().catch(console.error)
+
+async function main() {
+  await copyDocsToWiki()
+  await copyTargets()
+}
+
 async function copyDocsFromWiki() {
   const wikiPath = Deno.realPathSync(wikiLocation)
   const wikiFiles = Deno.readDirSync(wikiPath)
@@ -23,6 +34,8 @@ async function copyDocsFromWiki() {
 }
 
 async function copyDocsToWiki() {
+  console.debug('Copying docs to wiki...')
+
   const docsPath = Deno.realPathSync(docsLocation)
   const docsFiles = Deno.readDirSync(docsPath)
   for (const file of docsFiles) {
@@ -47,5 +60,9 @@ function toWikiFileName(name: string) {
   return name.replaceAll('&colon', ':')
 }
 
-// await copyDocsFromWiki()
-await copyDocsToWiki()
+async function copyTargets() {
+  for (const [source, dest] of Object.entries(targets)) {
+    console.debug(`Copying ${source} to ${dest}`)
+    await Deno.copyFile(source, dest)
+  }
+}

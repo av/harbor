@@ -1,0 +1,18 @@
+services:
+  mikupad:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.mikupad
+    ports:
+      - ${HARBOR_MIKUPAD_HOST_PORT}:8080
+    build:
+      context: https://github.com/lmg-anon/mikupad.git#main
+      dockerfile_inline: |
+        FROM node:lts-alpine
+        WORKDIR /app
+        RUN npm install -g http-server
+        COPY mikupad.html index.html
+        CMD ["http-server"]
+    env_file:
+      - ./.env
+      - mikupad/override.env
+    networks:
+      - harbor-network
