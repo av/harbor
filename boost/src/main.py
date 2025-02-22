@@ -58,9 +58,9 @@ async def root():
 async def health():
   return JSONResponse(content={"status": "ok"}, status_code=200)
 
-@app.get("/events/{event_id}")
-async def get_event(event_id: str, api_key: str = Depends(get_api_key)):
-  llm = llm_registry.get(event_id)
+@app.get("/events/{stream_id}")
+async def get_event(stream_id: str, api_key: str = Depends(get_api_key)):
+  llm = llm_registry.get(stream_id)
 
   if llm is None:
     raise HTTPException(status_code=404, detail="Event not found")
