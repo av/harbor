@@ -28,13 +28,6 @@ node_modules/
 # langfuse
 langfuse/db/
 
-# LibreChat
-librechat/data/
-librechat/meili_data_v1.7/
-librechat/logs/
-librechat/vectordb/
-librechat/images/
-
 # Local scripts
 scripts/
 

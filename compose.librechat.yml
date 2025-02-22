@@ -13,6 +13,7 @@ services:
       - harbor-network
     env_file:
       - ./.env
+      - ./librechat/.env
       - ./librechat/override.env
     environment:
       - HOST=0.0.0.0
@@ -53,6 +54,7 @@ services:
     image: mongo
     env_file:
       - ./.env
+      - ./librechat/.env
       - ./librechat/override.env
     volumes:
       - ./librechat/data:/data/db
@@ -62,15 +64,16 @@ services:
 
   librechat-search:
     container_name: ${HARBOR_CONTAINER_PREFIX}.librechat-search
-    image: getmeili/meilisearch:v1.7.3
+    image: getmeili/meilisearch:v1.12.3
     env_file:
       - ./.env
+      - ./librechat/.env
       - ./librechat/override.env
     environment:
       - MEILI_HOST=http://librechat-search:7700
       - MEILI_NO_ANALYTICS=true
     volumes:
-      - ./librechat/meili_data_v1.7:/meili_data
+      - ./librechat/meili_data_v1.12:/meili_data
     networks:
       - harbor-network
 
@@ -79,6 +82,7 @@ services:
     image: ankane/pgvector:latest
     env_file:
       - ./.env
+      - ./librechat/.env
       - ./librechat/override.env
     environment:
       POSTGRES_DB: mydatabase
@@ -97,11 +101,12 @@ services:
       - RAG_PORT=${HARBOR_LIBRECHAT_RAG_HOST_PORT}
       - EMBEDDINGS_PROVIDER=ollama
       - OLLAMA_BASE_URL=${HARBOR_OLLAMA_INTERNAL_URL}
-      - EMBEDDINGS_MODEL=nomic-embed-text
+      - EMBEDDINGS_MODEL=mxbai-embed-large
     depends_on:
       - librechat-vector
     env_file:
       - .env
+      - ./librechat/.env
       - ./librechat/override.env
     networks:
       - harbor-network
