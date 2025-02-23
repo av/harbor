@@ -2646,7 +2646,7 @@ run_plandex_command() {
     case "$1" in
     health)
         shift
-        execute_and_process "get_url plandexserver" "curl {{output}}/health" "No plandexserver URL:"
+        execute_and_process "get_url plandex-server" "curl {{output}}/health" "No plandexserver URL:"
         ;;
     pwd)
         shift
