@@ -14,22 +14,21 @@ providers:
   #     apiBaseUrl: http://172.17.0.1:34131/v1
   #     apiKey: sk-boost
   #     temperature: 0
-
-  - id: openai:chat:llama3.1:8b-instruct-q8_0
-    config:
-      apiBaseUrl: http://172.17.0.1:33821/v1
-      apiKey: sk-ollama
-      temperature: 0
-  - id: openai:chat:pdsv-llama3.1:8b-instruct-q8_0
-    config:
-      apiBaseUrl: http://172.17.0.1:34131/v1
-      apiKey: sk-boost
-      temperature: 0
-  - id: openai:chat:deepseek-r1:8b-llama-distill-q8_0
-    config:
-      apiBaseUrl: http://172.17.0.1:33821/v1
-      apiKey: sk-boost
-      temperature: 0
+  # - id: openai:chat:llama3.1:8b-instruct-q8_0
+  #   config:
+  #     apiBaseUrl: http://172.17.0.1:33821/v1
+  #     apiKey: sk-ollama
+  #     temperature: 0
+  # - id: openai:chat:pdsv-llama3.1:8b-instruct-q8_0
+  #   config:
+  #     apiBaseUrl: http://172.17.0.1:34131/v1
+  #     apiKey: sk-boost
+  #     temperature: 0
+  # - id: openai:chat:deepseek-r1:8b-llama-distill-q8_0
+  #   config:
+  #     apiBaseUrl: http://172.17.0.1:33821/v1
+  #     apiKey: sk-boost
+  #     temperature: 0
   # - id: openai:chat:qwen2.5:3b-instruct-q8_0
   #   config:
   #     apiBaseUrl: http://172.17.0.1:33821/v1
@@ -56,19 +55,19 @@ tests:
       question: 9.11 or 9.9 which number is larger?
     assert:
       - type: model-graded-closedqa
-        value: Mentions that 9.9 is larger
+        value: Answer mentions that 9.9 is larger
   - vars:
       question: I'm tall when I'm young, and I'm taller when I'm old. What am I?
     assert:
       - type: model-graded-closedqa
-        value: The answer is not a candle
+        value: Given answer is NOT a candle
       - type: model-graded-closedqa
-        value: The answer is something that gets taller/larger as it gets older/used
+        value: Given answer is something that gets taller/larger as it gets older/used, NOT VICE VERSA
   - vars:
       question: What goes up but never comes up again?
     assert:
       - type: model-graded-closedqa
-        value: The answer is not age
+        value: The answer is NOT "Your Age" in any form
       - type: model-graded-closedqa
         value: The answer is not something that goes up indefinitely
   - vars:

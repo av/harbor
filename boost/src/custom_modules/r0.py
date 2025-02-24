@@ -6,28 +6,45 @@ import llm
 ID_PREFIX = 'r0'
 
 THOUGHT_ENTRIES = [
-  "Let's start with thinking about ",
-  'Let me think about ',
-  'Let me consider ',
-  "As a first thought - ",
-  'First, let me think about ',
+  'What ',
+  'Let me ',
+  'Considering ',
+  'As a first thought - ',
+  'Wow, ',
+  'I think ',
+  'Granted ',
+  'Given ',
+  'Since ',
+  'In light of ',
 ]
 
 THOUGHT_LOOP = [
-  'Let me reconsider...',
-  'Another thought:',
-  'Wait a moment!',
-  'Wait, what about ',
-  'Let me think of other possibilities...',
-  'But wait, could there be another answer?',
+  'So ',
+  'Hmm, ',
+  'But wait, ',
+  'I think ',
+  'This is ',
+  'Another angle ',
   'Alternatively, ',
-  'What if ',
-  'Wait! I just thought of ',
+  'Perhaps ',
+  'This ',
+  'Unless ',
   'From another perspective, ',
   'On a second thought, ',
-  'Another idea:',
-  'But what if we consider ',
-  'Additionally, ',
+  'Wait a minute, ',
+  'Maybe ',
+  'This seems ',
+  'But since ',
+  'Let me try ',
+  'What ',
+  'Let me ',
+  'Considering ',
+  'As a first thought - ',
+  'I think ',
+  'Granted ',
+  'Given ',
+  'Since ',
+  'In light of ',
 ]
 
 THOUGHT_FINAL = [
@@ -41,18 +58,33 @@ THOUGHT_FINAL = [
 
 THOUGHTS = 5
 
+
 def random_element(arr):
   return arr[random.randint(0, len(arr) - 1)]
+
 
 async def ensure_completion(chat: 'ch.Chat', **kwargs):
   response = ''
   while response.strip() == '':
     response = await chat.emit_advance(**kwargs)
 
-async def apply(chat: 'ch.Chat', llm: 'llm.LLM'):
-  extra_params = {}
 
-  await chat.emit_status('Intro')
+async def apply(chat: 'ch.Chat', llm: 'llm.LLM'):
+  extra_params = {
+    'temperature': 1.0
+  }
+
+  await llm.emit_message('\n<think>\n')
+  chat.system(
+    '''
+When you see an incomplete message from yourself, you will complete it into a coherent thought exactly where it left off.
+You will use that as a chance to be critical of your own thoughts.
+Being aware of your own limitations helps you avoiding them.
+Think completely freely, you'll be given a chance to revise your thoughts.
+You will not repeat previous conclusions blindly.
+'''
+  )
+  # await chat.emit_status('Intro')
   intro = random_element(THOUGHT_ENTRIES)
   chat.assistant(intro)
   await llm.emit_message(intro)
@@ -61,20 +93,18 @@ async def apply(chat: 'ch.Chat', llm: 'llm.LLM'):
   })
 
   for i in range(THOUGHTS):
-    await chat.emit_status('Thought ' + str(i + 1))
     starter = random_element(THOUGHT_LOOP)
     chat.assistant(starter)
-    await llm.emit_message(starter)
+    await llm.emit_message('\n' + starter + ' ')
     await ensure_completion(chat, params=extra_params)
 
-  await chat.emit_status('Closing thought')
   final = random_element(THOUGHT_FINAL)
   chat.assistant(final)
   await llm.emit_message(final)
   await ensure_completion(chat, params=extra_params)
 
-  await chat.emit_status('Final')
   chat.user(
-    'Now, rewrite all messages above into a single coherent answer. Reply only with the revised answer and nothing else.'
+    'Now, rewrite all messages above into a single coherent answer. Reply only with the revised answer and nothing else. You can give a longer answer if you want.'
   )
+  await llm.emit_message('\n</think>\n')
   await llm.stream_final_completion(chat=chat)
