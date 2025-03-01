@@ -298,4 +298,12 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         tags: [HST.frontend],
         wikiUrl: 'https://github.com/av/harbor/wiki/2.1.11-Frontend:-Mikupad',
     },
+    traefik: {
+        tags: [HST.satellite, HST.api],
+        wikiUrl: 'https://github.com/av/harbor/wiki/2.3.37-Satellite-traefik',
+    },
+    latentscope: {
+        tags: [HST.satellite],
+        wikiUrl: 'https://github.com/av/harbor/wiki/2.3.38-Satellite-Latent-Scope',
+    },
 };
