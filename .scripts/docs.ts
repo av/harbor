@@ -6,7 +6,8 @@ const wikiLocation = "../harbor.wiki"
 const docsLocation = "./docs"
 
 const targets = {
-  './docs/5.2.-Harbor-Boost.md': './boost/README.md'
+  './docs/5.2.-Harbor-Boost.md': './boost/README.md',
+  './docs/2.3.28-Satellite&colon-Promptfoo.md': './promptfoo/README.md',
 }
 
 main().catch(console.error)

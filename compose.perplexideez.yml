@@ -6,9 +6,6 @@ services:
     image: nginx:alpine
     ports:
       - ${HARBOR_PERPLEXIDEEZ_HOST_PORT}:80
-    configs:
-      - source: perplexideez_proxy_config
-        target: /etc/nginx/conf.d/default.conf
     depends_on:
       perplexideez-service:
         condition: service_healthy

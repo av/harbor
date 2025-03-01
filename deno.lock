@@ -5,6 +5,7 @@
     "jsr:@std/collections@*": "1.0.8",
     "jsr:@std/collections@^1.0.5": "1.0.8",
     "jsr:@std/csv@*": "1.0.3",
+    "jsr:@std/fmt@*": "1.0.2",
     "jsr:@std/fmt@^1.0.2": "1.0.2",
     "jsr:@std/fs@^1.0.3": "1.0.3",
     "jsr:@std/io@~0.224.7": "0.224.7",
@@ -39,7 +40,7 @@
     "@std/log@0.224.7": {
       "integrity": "021941e5cd16de60cb11599c9b36f892aea95987fe66c753922808da27909e18",
       "dependencies": [
-        "jsr:@std/fmt",
+        "jsr:@std/fmt@^1.0.2",
         "jsr:@std/fs",
         "jsr:@std/io"
       ]

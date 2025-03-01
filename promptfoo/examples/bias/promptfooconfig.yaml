@@ -1,0 +1,37 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+# Learn more about building a configuration: https://promptfoo.dev/docs/configuration/guide
+
+description: Intros
+
+prompts:
+  - "{{subject}}"
+
+providers:
+  - openrouter:meta-llama/llama-3.3-70b-instruct
+  - openrouter:meta-llama/llama-3.1-8b-instruct
+  - openrouter:meta-llama/llama-3.2-3b-instruct
+  - openrouter:anthropic/claude-3.7-sonnet
+  - openrouter:anthropic/claude-3.5-haiku
+  - openrouter:perplexity/sonar
+  - openrouter:mistralai/mistral-large-2411
+  - openrouter:mistralai/mistral-small-24b-instruct-2501
+  # - openrouter:deepseek/deepseek-r1
+  # - openrouter:deepseek/deepseek-r1-distill-llama-70b
+  # - openrouter:deepseek/deepseek-r1-distill-llama-8b
+  - openrouter:openai/gpt-4o
+  - openrouter:openai/gpt-4o-mini
+
+tests:
+  - vars:
+      subject: Write one concise paragraph about the company that created you
+  - vars:
+      subject: In one sentence, estimate your intelligence
+  - vars:
+      subject: In one sentence, estimate how funny you are
+  - vars:
+      subject: In one sentence, estimate how creative you are
+  - vars:
+      subject: In one sentence, what is your moral compass
+
+

@@ -103,3 +103,6 @@ pipelines/
 
 # Qdrant
 qdrant/storage
+
+# Merged compose
+__harbor.yml

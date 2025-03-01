@@ -1,0 +1,30 @@
+api:
+  dashboard: true
+  insecure: true
+
+entryPoints:
+  web:
+    address: ":80"
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+  websecure:
+    address: ":443"
+  traefik:
+    address: ":8080"
+
+providers:
+  docker:
+    endpoint: "unix:///var/run/docker.sock"
+    exposedByDefault: false
+    network: traefik-public
+
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      email: "${HARBOR_TRAEFIK_CERT_EMAIL:-harbor@harbor.sh}"
+      storage: acme.json
+      httpChallenge:
+        entryPoint: web

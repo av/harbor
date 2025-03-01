@@ -1,0 +1,23 @@
+services:
+  traefik:
+    image: ${HARBOR_TRAEFIK_IMAGE}:${HARBOR_TRAEFIK_VERSION}
+    container_name: ${HARBOR_CONTAINER_PREFIX}.traefik
+    env_file:
+      - ./.env
+      - ./traefik/override.env
+    ports:
+      - ${HARBOR_TRAEFIK_HOST_PORT}:80
+      - ${HARBOR_TRAEFIK_METRICS_HOST_PORT}:443
+      - ${HARBOR_TRAEFIK_DASHBOARD_HOST_PORT}:8080
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ${HARBOR_TRAEFIK_CONFIG}:/etc/traefik/traefik.yml:ro
+      - ./traefik/acme.json:/acme.json:rw # For Let's Encrypt certificates
+    networks:
+      - traefik-public
+    labels:
+      - "traefik.enable=true"
+
+networks:
+  traefik-public:
+    external: false

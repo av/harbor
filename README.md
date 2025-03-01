@@ -236,6 +236,8 @@ In the demo, Harbor App is used to launch a default stack with [Ollama](./2.2.1-
   Read about the way Harbor uses Docker Compose to manage services.
 - [Adding A New Service](https://github.com/av/harbor/wiki/7.-Adding-A-New-Service)<br/>
   Documentation on bringing more services into the Harbor toolkit.
+- [Join our Discord](https://discord.gg/8nDRphrhSF0)<br/>
+  Get help, share your experience, and contribute to the project.
 
 ## Why?
 

@@ -309,7 +309,57 @@ resolve_compose_files() {
         cut -d' ' -f2-
 }
 
+run_routine() {
+    local routine_name="$1"
+
+    if [ -z "$routine_name" ]; then
+        log_error "run_routine requires a routine name"
+        return 1
+    fi
+
+    local routine_path="$harbor_home/routines/$routine_name.js"
+
+    if [ ! -f $routine_path ]; then
+        log_error "Routine '$routine_name' not identified"
+        return 1
+    fi
+
+    shift
+
+    log_debug "Running routine: $routine_name"
+    docker run --rm \
+        -v "$harbor_home:$harbor_home" \
+        -v harbor-deno-cache:/deno-dir:rw \
+        -w "$harbor_home" \
+        denoland/deno:distroless \
+        run -A --unstable-sloppy-imports \
+        $routine_path "$@"
+}
+
+routine_compose_with_options() {
+    local options=("${default_options[@]}" "${default_capabilities[@]}")
+
+    if [ "$default_auto_capabilities" = "true" ]; then
+        if has_nvidia && has_nvidia_ctk; then
+            options+=("nvidia")
+        elif has_nvidia_cdi; then
+            options+=("cdi")
+        fi
+
+        if has_modern_compose; then
+            options+=("mdc")
+        fi
+    fi
+
+    run_routine mergeComposeFiles "$@" "${options[@]}"
+}
+
 compose_with_options() {
+    if [[ $default_legacy_cli == 'false' ]]; then
+        routine_compose_with_options "$@"
+        return
+    fi
+
     local base_dir="$PWD"
     local compose_files=("$base_dir/compose.yml") # Always include the base compose file
     local options=("${default_options[@]}" "${default_capabilities[@]}")
@@ -884,6 +934,7 @@ run_open() {
 
     # Check if the service has a custom URL
     local config_url=$(env_manager get "$service_handle.open_url")
+    log_debug "Custom URL for $service_handle: $config_url"
     if [ -n "$config_url" ]; then
         if sys_open "$config_url"; then
             log_info "Opened $config_url in your default browser."
@@ -4073,6 +4124,7 @@ default_container_prefix=$(env_manager get container.prefix)
 default_log_level=$(env_manager get log.level)
 default_history_file=$(env_manager get history.file)
 default_history_size=$(env_manager get history.size)
+default_legacy_cli=${HARBOR_LEGACY_CLI:-$(env_manager get legacy.cli)}
 
 main_entrypoint() {
     case "$1" in

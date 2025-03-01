@@ -1,3 +1,9 @@
+services:
+  perplexideez:
+    configs:
+    - source: perplexideez_proxy_config
+      target: /etc/nginx/conf.d/default.conf
+
 configs:
   perplexideez_proxy_config:
     content: |
