@@ -1,0 +1,18 @@
+services:
+  latentscope:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.latentscope
+    build:
+      context: ./latentscope
+      dockerfile: Dockerfile
+    environment:
+      - LATENT_SCOPE_DATA=/root/latentscope-data
+    env_file:
+      - ./.env
+      - latentscope/override.env
+    ports:
+      - ${HARBOR_LATENTSCOPE_HOST_PORT}:5001
+    volumes:
+      - ${HARBOR_HF_CACHE}:/root/.cache/huggingface
+      - ${HARBOR_LATENTSCOPE_WORKSPACE}:/root/latentscope-data
+    networks:
+      - harbor-network
