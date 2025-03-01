@@ -1,4 +1,4 @@
-import qrcode from 'qrcode-terminal';
+import qrcode from 'npm:qrcode-terminal';
 
 // Get the URL from the command line arguments
 const url = Deno.args[0];
