@@ -10,4 +10,3 @@ services:
               capabilities: [gpu]
               device_ids:
               - nvidia.com/gpu=all
-    
