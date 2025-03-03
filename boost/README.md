@@ -31,6 +31,7 @@ Moreover, boost is scriptable, you can provision your own modules with the workf
 ### Table of Contents
 
 * [Starting](#starting)
+* [Standalone Usage](#standalone-usage)
 * [Configuration](#configuration)
   * [Boost configuration](#boost-configuration)
 * [Modules](#boost-modules--configuration)
