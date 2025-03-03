@@ -1,7 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 
-# Learn more about building a configuration: https://promptfoo.dev/docs/configuration/guide
-
 description: Intros
 
 prompts:
@@ -12,15 +10,24 @@ providers:
   - openrouter:meta-llama/llama-3.1-8b-instruct
   - openrouter:meta-llama/llama-3.2-3b-instruct
   - openrouter:anthropic/claude-3.7-sonnet
-  - openrouter:anthropic/claude-3.5-haiku
-  - openrouter:perplexity/sonar
+  # - openrouter:anthropic/claude-3.5-haiku
+  # - openrouter:perplexity/sonar
   - openrouter:mistralai/mistral-large-2411
   - openrouter:mistralai/mistral-small-24b-instruct-2501
   # - openrouter:deepseek/deepseek-r1
   # - openrouter:deepseek/deepseek-r1-distill-llama-70b
   # - openrouter:deepseek/deepseek-r1-distill-llama-8b
   - openrouter:openai/gpt-4o
-  - openrouter:openai/gpt-4o-mini
+  # - openrouter:openai/gpt-4o-mini
+  - openrouter:google/gemini-2.0-flash-001
+  - openrouter:liquid/lfm-7b
+  - openrouter:microsoft/phi-4
+  - openrouter:amazon/nova-pro-v1
+  - openrouter:qwen/qwen-2.5-72b-instruct
+  - openrouter:qwen/qwen-2.5-7b-instruct
+  - openrouter:cohere/command-r7b-12-2024
+
+
 
 tests:
   - vars:
@@ -28,10 +35,9 @@ tests:
   - vars:
       subject: In one sentence, estimate your intelligence
   - vars:
-      subject: In one sentence, estimate how funny you are
+      subject: In one sentence, how good is your sense of humor
   - vars:
-      subject: In one sentence, estimate how creative you are
+      subject: In one sentence, estimate your creativity and originality
   - vars:
       subject: In one sentence, what is your moral compass
-
 

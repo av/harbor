@@ -1,51 +1,51 @@
 > Handle: `boost`
-> URL: [http://localhost:34131/](http://localhost:34131/)
+> URL: <http://localhost:34131/>
 
-![Screenshot of boost bench](./boost.png)
-<small>`g1` and `rcn` optimizer modules compared to original LLMs. [BBH256](https://gist.github.com/av/18cc8138a0acbe1b30f51e8bb19add90) task, run with [Harbor Bench](./5.1.-Harbor-Bench)</small>
+![Screenshot of boost bench](../docs/boost.png) <small>`g1` and `rcn` optimizer modules compared to original LLMs. [BBH256](https://gist.github.com/av/18cc8138a0acbe1b30f51e8bb19add90) task, run with [Harbor Bench](../docs/5.1.-Harbor-Bench)</small>
 
 `boost` is a service that acts as an optimizing LLM proxy. It takes your inputs, and pre-processes them before sending them to the downstream API.
 
 Features that make Harbor's `boost` special:
-- 🥇 First-class support for streaming completions
-- 🗣️ `boost` modules can provide intermediate output, like status messages or internal monologue
-- 🎭 `boost` can serve as a plain LLM proxy (multiple downstream APIs behind a single endpoint)
-- ✍️ `boost` is scriptable, you can write your own modules
+
+* 🥇 First-class support for streaming completions
+* 🗣️ `boost` modules can provide intermediate output, like status messages or internal monologue
+* 🎭 `boost` can serve as a plain LLM proxy (multiple downstream APIs behind a single endpoint)
+* ✍️ `boost` is scriptable, you can write your own modules
 
 The main focus, of course are the workflows that can help improve the LLM output in specific scenarios. Here are some examples of what's possible with `boost`:
-- When "random" is mentioned in the message, `klmbr` will rewrite 35% of message characters to increase the entropy and produce more diverse completion
-- Launch self-reflection reasoning chain when the message ends with a question mark
-- Expand the conversation context with the "inner monologue" of the model, where it can iterate over your question a few times before giving the final answer
-- Apply a specific LLM personality if the message contains a specific keyword
+
+* When "random" is mentioned in the message, `klmbr` will rewrite 35% of message characters to increase the entropy and produce more diverse completion
+* Launch self-reflection reasoning chain when the message ends with a question mark
+* Expand the conversation context with the "inner monologue" of the model, where it can iterate over your question a few times before giving the final answer
+* Apply a specific LLM personality if the message contains a specific keyword
 
 Moreover, boost is scriptable, you can provision your own modules with the workflows suitable for your needs. See [Custom Modules](#custom-modules) section for more information.
 
 `boost` operates at the OpenAI-compatible API level, so can be used with any LLM backend that accepts OpenAI API requests. You can also plug `boost` into the UIs that are compatible with OpenAI API.
 
-> [!IMPORTANT]
+> \[!IMPORTANT]
 > You don't have to use Harbor to run `boost`. See the [Standalone Usage section](#standalone-usage) for more information.
 
----
+***
 
 ### Table of Contents
 
-- [Starting](#starting)
-- [Configuration](#configuration)
-  - [Boost configuration](#boost-configuration)
-- [Modules](#boost-modules--configuration)
-  - [`klmbr` - boost llm creativity](#klmbr---boost-llm-creativity)
-  - [`rcn` - recursive certainty validation](#rcn---recursive-certainty-validation)
-  - [`g1` - o1-like reasoning chains](#g1---o1-like-reasoning-chains)
-  - [`mcts` - Monte Carlo Tree Search](#mcts---monte-carlo-tree-search)
-  - [`eli5` - Explain Like I'm 5](#eli5---explain-like-im-5)
-  - [`supersummer` - Super Summarization](#supersummer---super-summarization)
-  - Custom Modules (not configurable, mostly examples, but can still be enabled)
-    - [discussurl](https://github.com/av/harbor/blob/main/boost/src/custom_modules/discussurl.py) - parse mentioned URLs and add them to the context
-    - [meow](https://github.com/av/harbor/blob/main/boost/src/custom_modules/meow.py) - the model ignores all previous instructions and just meows
-    - [unstable](https://github.com/av/harbor/blob/main/boost/src/custom_modules/unstable.py) - a random personality is generated for every response, model is asked to follow it
-- [API](#api)
-- [Custom Modules](#custom-modules)
-
+* [Starting](#starting)
+* [Configuration](#configuration)
+  * [Boost configuration](#boost-configuration)
+* [Modules](#boost-modules--configuration)
+  * [`klmbr` - boost llm creativity](#klmbr---boost-llm-creativity)
+  * [`rcn` - recursive certainty validation](#rcn---recursive-certainty-validation)
+  * [`g1` - o1-like reasoning chains](#g1---o1-like-reasoning-chains)
+  * [`mcts` - Monte Carlo Tree Search](#mcts---monte-carlo-tree-search)
+  * [`eli5` - Explain Like I'm 5](#eli5---explain-like-im-5)
+  * [`supersummer` - Super Summarization](#supersummer---super-summarization)
+  * Custom Modules (not configurable, mostly examples, but can still be enabled)
+    * [discussurl](https://github.com/av/harbor/blob/main/boost/src/custom_modules/discussurl.py) - parse mentioned URLs and add them to the context
+    * [meow](https://github.com/av/harbor/blob/main/boost/src/custom_modules/meow.py) - the model ignores all previous instructions and just meows
+    * [unstable](https://github.com/av/harbor/blob/main/boost/src/custom_modules/unstable.py) - a random personality is generated for every response, model is asked to follow it
+* [API](#api)
+* [Custom Modules](#custom-modules)
 
 ### Starting
 
@@ -71,7 +71,7 @@ When running with Harbor's Open WebUI, "boosted" models will be available there 
 
 ### Configuration
 
-Configuration is done via the Harbor CLI, [`harbor config`](./3.-Harbor-CLI-Reference#harbor-config) or the `.env` file. All three ways are interchangeable, you can read more about them in the [User Guide](1.-Harbor-User-Guide#configuring-services).
+Configuration is done via the Harbor CLI, [`harbor config`](../docs/3.-Harbor-CLI-Reference#harbor-config) or the `.env` file. All three ways are interchangeable, you can read more about them in the [User Guide](1.-Harbor-User-Guide#configuring-services).
 
 ```bash
 # Enable/Disable a module
@@ -113,7 +113,7 @@ harbor boost keys rm 0 # by index
 harbor boost keys ls
 ```
 
-Below are additional configuration options that do not have an alias in the Harbor CLI (so you need to use [`harbor config`](./3.-Harbor-CLI-Reference#harbor-config) directly). For example `harbor config set boost.intermediate_output true`.
+Below are additional configuration options that do not have an alias in the Harbor CLI (so you need to use [`harbor config`](../docs/3.-Harbor-CLI-Reference#harbor-config) directly). For example `harbor config set boost.intermediate_output true`.
 
 **`boost.api.key`**
 
@@ -145,14 +145,15 @@ Example of the intermediate output from the `g1` module - underlying reasoning s
 A module can call `llm.emit_status` during its processing, which will be streamed as a "status" or "progress" message to the user. This setting controls the format of this message, which will be dependent on what's supported by the frontend where boost response is displayed.
 
 Options:
-```bash
+
+````bash
 md:codeblock "\n```boost\n{status}\n```\n",
 md:h1        "\n\n# {status}\n\n",
 md:h2        "\n\n## {status}\n\n",
 md:h3        "\n\n### {status}\n\n",
 plain        "\n\n{status}\n\n",
 none         ""
-```
+````
 
 The default is `md:codeblock` and looks like this in the WebUI:
 
@@ -183,7 +184,7 @@ harbor config set boost.model_filter "id.regex=.*(llama3.1:8b|llama3.2:3b|qwen2.
 harbor config set boost.model_filter id=llama3.1:8b
 ```
 
-This filter runs _after_ the boosted models (per module) are added, so you can filter them out as well.
+This filter runs *after* the boosted models (per module) are added, so you can filter them out as well.
 
 **Modules configuration**
 
@@ -198,7 +199,7 @@ harbor boost modules rm <module>
 harbor boost modules ls
 ```
 
-Note that new Harbor releases might introduce new modules, so the default value of this setting could change in the future. Check out [Harbor Profiles](./3.-Harbor-CLI-Reference#harbor-profile) for a way to save and restore your configuration.
+Note that new Harbor releases might introduce new modules, so the default value of this setting could change in the future. Check out [Harbor Profiles](../docs/3.-Harbor-CLI-Reference#harbor-profile) for a way to save and restore your configuration.
 
 **Host Port**
 
@@ -224,8 +225,9 @@ harbor boost modules add <module>
 harbor boost modules rm <module>
 ```
 
-> [!TIP]
+> \[!TIP]
 > You can use Harbor profiles to quickly rollback to the default configuration.
+>
 > ```bash
 > # Save current changes, if needed
 > harbor profile save <name>
@@ -233,10 +235,9 @@ harbor boost modules rm <module>
 > harbor profile use default
 > ```
 
-
 #### `rcn` - recursive certainty validation
 
-RCN is an original technique based on two principles: _context expansion_ and _self-validation_. It works by first expanding the context of the input by asking the model to explain the meaning of the every word in the prompt. Then, a completion is generated, then model is asked to validate how sure it is that the answer is correct. After two iterations, model is asked to give a final answer.
+RCN is an original technique based on two principles: *context expansion* and *self-validation*. It works by first expanding the context of the input by asking the model to explain the meaning of the every word in the prompt. Then, a completion is generated, then model is asked to validate how sure it is that the answer is correct. After two iterations, model is asked to give a final answer.
 
 ```bash
 # Enable the module
@@ -245,19 +246,19 @@ harbor boost modules add rcn
 
 **Parameters**
 
-- `strat` - strategy for selection of the messages to rewrite. Default is `match`
-  - `all` - match all messages
-  - `first` - match first message regardless of the role
-  - `last` - match last message regardless of the role
-  - `any` - match one random message
-  - `percentage` - match a percentage of random messages from the conversation
-  - `user` - match all user messages
-  - `match` - use a filter to match messages
-- `strat_params` - parameters (filter) for the selection strategy. Default matches all user messages
-  - `percentage` - for `percentage` strat - the percentage of messages to match, default is `50`
-  - `index` - for `match` strat - the index of the message to match
-  - `role` - for `match` strat - the role of the message to match
-  - `substring` - for `match` strat - will match messages containing the substring
+* `strat` - strategy for selection of the messages to rewrite. Default is `match`
+  * `all` - match all messages
+  * `first` - match first message regardless of the role
+  * `last` - match last message regardless of the role
+  * `any` - match one random message
+  * `percentage` - match a percentage of random messages from the conversation
+  * `user` - match all user messages
+  * `match` - use a filter to match messages
+* `strat_params` - parameters (filter) for the selection strategy. Default matches all user messages
+  * `percentage` - for `percentage` strat - the percentage of messages to match, default is `50`
+  * `index` - for `match` strat - the index of the message to match
+  * `role` - for `match` strat - the role of the message to match
+  * `substring` - for `match` strat - will match messages containing the substring
 
 **Example**
 
@@ -281,25 +282,25 @@ Every LLM will respond to rewrites in a different way. Some models will generate
 
 **Parameters**
 
-- `percentage` - amount of characters to rewrite in the input. Default is `35`
-- `mods` - types of rewrites to apply. Default is `all`, available options:
-  - `capitalize` - swaps character capitalization
-  - `diacritic` - adds a random diacritic to the character
-  - `leetspeak` - replaces characters with leetspeak equivalents
-  - `remove_vowel` - removes vowels from the input
-- `strat` - strategy for selection of the messages to rewrite. Default is `match`
-  - `all` - match all messages
-  - `first` - match first message regardless of the role
-  - `last` - match last message regardless of the role
-  - `any` - match one random message
-  - `percentage` - match a percentage of random messages from the conversation
-  - `user` - match all user messages
-  - `match` - use a filter to match messages
-- `strat_params` - parameters (filter) for the selection strategy. Default matches all user messages
-  - `percentage` - for `percentage` strat - the percentage of messages to match, default is `50`
-  - `index` - for `match` strat - the index of the message to match
-  - `role` - for `match` strat - the role of the message to match
-  - `substring` - for `match` strat - will match messages containing the substring
+* `percentage` - amount of characters to rewrite in the input. Default is `35`
+* `mods` - types of rewrites to apply. Default is `all`, available options:
+  * `capitalize` - swaps character capitalization
+  * `diacritic` - adds a random diacritic to the character
+  * `leetspeak` - replaces characters with leetspeak equivalents
+  * `remove_vowel` - removes vowels from the input
+* `strat` - strategy for selection of the messages to rewrite. Default is `match`
+  * `all` - match all messages
+  * `first` - match first message regardless of the role
+  * `last` - match last message regardless of the role
+  * `any` - match one random message
+  * `percentage` - match a percentage of random messages from the conversation
+  * `user` - match all user messages
+  * `match` - use a filter to match messages
+* `strat_params` - parameters (filter) for the selection strategy. Default matches all user messages
+  * `percentage` - for `percentage` strat - the percentage of messages to match, default is `50`
+  * `index` - for `match` strat - the index of the message to match
+  * `role` - for `match` strat - the role of the message to match
+  * `substring` - for `match` strat - will match messages containing the substring
 
 **Examples**
 
@@ -330,7 +331,7 @@ harbor boost klmbr strat_params substring "random"
 
 Dynamic Chain-of-Thought pattern.
 
-See [original implementation for Grok](https://github.com/bklieger-groq/g1). Harbor also has a [dedicated `ol1` service](./2.3.19-Satellite:-ol1) (UI only) that implements the same technique.
+See [original implementation for Grok](https://github.com/bklieger-groq/g1). Harbor also has a [dedicated `ol1` service](../docs/2.3.19-Satellite:-ol1) (UI only) that implements the same technique.
 
 ```bash
 # Enable the module
@@ -339,20 +340,20 @@ harbor boost modules add g1
 
 **Parameters**
 
-- `max_steps` - Maximum amount of iterations for self-reflection, default is 15
-- `strat` - strategy for selection of the messages to rewrite. Default is `match`
-  - `all` - match all messages
-  - `first` - match first message regardless of the role
-  - `last` - match last message regardless of the role
-  - `any` - match one random message
-  - `percentage` - match a percentage of random messages from the conversation
-  - `user` - match all user messages
-  - `match` - use a filter to match messages
-- `strat_params` - parameters (filter) for the selection strategy. Default matches all user messages
-  - `percentage` - for `percentage` strat - the percentage of messages to match, default is `50`
-  - `index` - for `match` strat - the index of the message to match
-  - `role` - for `match` strat - the role of the message to match
-  - `substring` - for `match` strat - will match messages containing the substring
+* `max_steps` - Maximum amount of iterations for self-reflection, default is 15
+* `strat` - strategy for selection of the messages to rewrite. Default is `match`
+  * `all` - match all messages
+  * `first` - match first message regardless of the role
+  * `last` - match last message regardless of the role
+  * `any` - match one random message
+  * `percentage` - match a percentage of random messages from the conversation
+  * `user` - match all user messages
+  * `match` - use a filter to match messages
+* `strat_params` - parameters (filter) for the selection strategy. Default matches all user messages
+  * `percentage` - for `percentage` strat - the percentage of messages to match, default is `50`
+  * `index` - for `match` strat - the index of the message to match
+  * `role` - for `match` strat - the role of the message to match
+  * `substring` - for `match` strat - will match messages containing the substring
 
 #### `mcts` - Monte Carlo Tree Search
 
@@ -369,23 +370,22 @@ harbor boost modules add mcts
 
 All parameters below are prefixed with `boost.mcts.` in `harbor config`
 
-- `strat` - strategy for selection of the messages to rewrite. Default is `match`, other values:
-  - `all` - match all messages
-  - `first` - match first message regardless of the role
-  - `last` - match last message regardless of the role
-  - `any` - match one random message
-  - `percentage` - match a percentage of random messages from the conversation
-  - `user` - match all user messages
-  - `match` - use a filter to match messages
-- `strat_params` - parameters (filter) for the selection strategy. Default matches all user messages, fields:
-  - `percentage` - for `percentage` strat - the percentage of messages to match, default is `50`
-  - `index` - for `match` strat - the index of the message to match
-  - `role` - for `match` strat - the role of the message to match
-  - `substring` - for `match` strat - will match messages containing the substring
-- `max_iterations` - Maximum amount of Monte Carlo iterations to run (same tree), default is `2`
-- `max_simulations` - Improvement steps per iteration, default is `2`
-- `max_thoughts` - This number + 1 will be amount of improved variants to generate per node
-
+* `strat` - strategy for selection of the messages to rewrite. Default is `match`, other values:
+  * `all` - match all messages
+  * `first` - match first message regardless of the role
+  * `last` - match last message regardless of the role
+  * `any` - match one random message
+  * `percentage` - match a percentage of random messages from the conversation
+  * `user` - match all user messages
+  * `match` - use a filter to match messages
+* `strat_params` - parameters (filter) for the selection strategy. Default matches all user messages, fields:
+  * `percentage` - for `percentage` strat - the percentage of messages to match, default is `50`
+  * `index` - for `match` strat - the index of the message to match
+  * `role` - for `match` strat - the role of the message to match
+  * `substring` - for `match` strat - will match messages containing the substring
+* `max_iterations` - Maximum amount of Monte Carlo iterations to run (same tree), default is `2`
+* `max_simulations` - Improvement steps per iteration, default is `2`
+* `max_thoughts` - This number + 1 will be amount of improved variants to generate per node
 
 ```bash
 # Strategy to find the message to start from
@@ -457,25 +457,23 @@ Here're sample questions and summary that `supersummer` generated from Harbor's 
 **Can Harbor be used in conjunction with existing Docker setups, or is it intended to replace them entirely?**
 (This question highlights important facts or evidence about Harbor's purpose and scope, such as its ability to co-exist with existing Docker setups and provide added value through its convenience features.)
 
-
 ### Summary
 
 Harbor is a containerized Long-Short-Memory (LLM) toolkit that enables effortless management of LLM backends, APIs, frontends, and services. Developed as an open-source project, Harbor consists of a Command-Line Interface (CLI) and a companion application to help manage and run AI services in a unified manner.
 
 Harbor offers several key features:
 
-- **Managed Services**: The platform allows users to easily manage various LLM-related services, such as UIs (User Interfaces), Backends, Frontends, and Satellites.
-- **Unified CLI Interface**: Harbor provides a single command-line interface for managing multiple services, eliminating the need for manual configuration and streamlining development workflows.
-- **Convenience Utilities**: A range of convenience tools helps users manage LLM-related tasks efficiently, such as setting up services, debugging, creating URLs, and establishing network tunnels.
-- **Cache Sharing and Reuse**: Harbor shares and reuses host caches, significantly enhancing model performance and reducing memory consumption across supported services (e.g., Hugging Face models, Ollama).
-- **Config Profiles**: The application allows users to manage multiple configuration profiles for different development tasks or projects.
+* **Managed Services**: The platform allows users to easily manage various LLM-related services, such as UIs (User Interfaces), Backends, Frontends, and Satellites.
+* **Unified CLI Interface**: Harbor provides a single command-line interface for managing multiple services, eliminating the need for manual configuration and streamlining development workflows.
+* **Convenience Utilities**: A range of convenience tools helps users manage LLM-related tasks efficiently, such as setting up services, debugging, creating URLs, and establishing network tunnels.
+* **Cache Sharing and Reuse**: Harbor shares and reuses host caches, significantly enhancing model performance and reducing memory consumption across supported services (e.g., Hugging Face models, Ollama).
+* **Config Profiles**: The application allows users to manage multiple configuration profiles for different development tasks or projects.
 
 Harbor's purpose is not only to provide a convenient platform but also to simplify local LLM development by making it easier to setup and experiment with various LLM-related services. As such, Harbor can perfectly align with existing Docker setups and offers several benefits over manual Linux administration commands, like ease of use and streamlined configurations management.
 
 As the author implies, the main benefit of using Harbor lies in its ability to simplify local LLM development and reduce time required for experiments and prototyping steps in a unified and convenient setup.
 
 </details>
-
 
 ### API
 
@@ -521,8 +519,9 @@ List boosted models. `boost` will serve additional models as per enabled modules
 **`POST /v1/chat/completions`**
 
 Chat completions endpoint.
-  - Supports all parameters from the downstream API, for example `json` format for Ollama
-  - Supports streaming completions
+
+* Supports all parameters from the downstream API, for example `json` format for Ollama
+* Supports streaming completions
 
 **`GET /events/:stream_id`**
 
@@ -546,7 +545,7 @@ def apply(llm, chat):
   await llm.emit_message(prompt=chat.tail.content)
 ```
 
-Read more on a dedicated [Custom Modules](./5.2.-Harbor-Boost-Custom-Modules) page.
+Read more on a dedicated [Custom Modules](../docs/5.2.-Harbor-Boost-Custom-Modules) page.
 
 ### Standalone usage
 

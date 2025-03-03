@@ -1,9 +1,9 @@
 ### [Promptfoo](https://github.com/promptfoo/promptfoo)
 
 > Handle: `promptfoo`<br/>
-> URL: [http://localhost:34233](http://localhost:34233)<br/>
+> URL: <http://localhost:34233><br/>
 
-![Promptfoo example screenshot](./promptfoo.png)
+![Promptfoo example screenshot](../docs/promptfoo.png)
 
 [![npm](https://img.shields.io/npm/v/promptfoo)](https://npmjs.com/package/promptfoo)
 [![npm](https://img.shields.io/npm/dm/promptfoo)](https://npmjs.com/package/promptfoo)
@@ -15,12 +15,12 @@
 
 With promptfoo, you can:
 
-- **Build reliable prompts, models, and RAGs** with benchmarks specific to your use-case
-- **Secure your apps** with automated [red teaming](https://www.promptfoo.dev/docs/red-team/) and pentesting
-- **Speed up evaluations** with caching, concurrency, and live reloading
-- **Score outputs automatically** by defining [metrics](https://www.promptfoo.dev/docs/configuration/expected-outputs)
-- Use as a [CLI](https://www.promptfoo.dev/docs/usage/command-line), [library](https://www.promptfoo.dev/docs/usage/node-package), or in [CI/CD](https://www.promptfoo.dev/docs/integrations/github-action)
-- Use OpenAI, Anthropic, Azure, Google, HuggingFace, open-source models like Llama, or integrate custom API providers for [any LLM API](https://www.promptfoo.dev/docs/providers)
+* **Build reliable prompts, models, and RAGs** with benchmarks specific to your use-case
+* **Secure your apps** with automated [red teaming](https://www.promptfoo.dev/docs/red-team/) and pentesting
+* **Speed up evaluations** with caching, concurrency, and live reloading
+* **Score outputs automatically** by defining [metrics](https://www.promptfoo.dev/docs/configuration/expected-outputs)
+* Use as a [CLI](https://www.promptfoo.dev/docs/usage/command-line), [library](https://www.promptfoo.dev/docs/usage/node-package), or in [CI/CD](https://www.promptfoo.dev/docs/integrations/github-action)
+* Use OpenAI, Anthropic, Azure, Google, HuggingFace, open-source models like Llama, or integrate custom API providers for [any LLM API](https://www.promptfoo.dev/docs/providers)
 
 #### Starting
 
@@ -30,6 +30,7 @@ harbor pull promptfoo
 ```
 
 You'll be running Promptfoo CLI most of the time, it's available as:
+
 ```bash
 # Full name
 harbor promptfoo --help
@@ -78,14 +79,15 @@ harbor pf eval
 harbor pf view
 ```
 
-> [!NOTE]
-> If you're seeing any kind of file system permission errors you'll need to ensure that files written from within a container are [accessible to your user](./1.-Harbor-User-Guide#file-system-permissions).
+> \[!NOTE]
+> If you're seeing any kind of file system permission errors you'll need to ensure that files written from within a container are [accessible to your user](../docs/1.-Harbor-User-Guide#file-system-permissions).
 
 #### Configuration
 
 Harbor pre-configures `promptfoo` to run against `ollama` out of the box (must be started before `pf eval`). Any other providers can be configured via:
-- env vars (see [`harbor env`](./3.-Harbor-CLI-Reference#harbor-env))
-- directly in promptfooconfig files (see [Providers reference](https://www.promptfoo.dev/docs/providers/) in the official documentation)
+
+* env vars (see [`harbor env`](../docs/3.-Harbor-CLI-Reference#harbor-env))
+* directly in promptfooconfig files (see [Providers reference](https://www.promptfoo.dev/docs/providers/) in the official documentation)
 
 ```bash
 # For example, use vLLM API
@@ -115,7 +117,7 @@ harbor pf view
 
 ##### Promptfoo temp-test
 
-![Promptfoo temp-test example screenshot](./promptfoo-2.png)
+![Promptfoo temp-test example screenshot](../docs/promptfoo-2.png)
 
 Evaluate a model across a range of temperatures to see if there's a sweet spot for a given prompt.
 
