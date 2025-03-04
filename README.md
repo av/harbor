@@ -8,12 +8,34 @@
 [![Visitors](https://api.visitorbadge.io/api/visitors?path=av%2Fharbor&countColor=%23263759&style=flat)](https://visitorbadge.io/status?path=av%2Fharbor)
 ![GitHub language count](https://img.shields.io/github/languages/count/av/harbor)
 [![Discord](https://img.shields.io/badge/Discord-Harbor-blue?logo=discord&logoColor=white)](https://discord.gg/8nDRphrhSF)
+![Harbor Ko-fi](https://img.shields.io/badge/support_Harbor_on_Ko--fi-white?style=social&logo=kofi)
 
 Effortlessly run LLM backends, APIs, frontends, and services with one command.
 
 Harbor is a containerized LLM toolkit that allows you to run LLMs and additional services. It consists of a CLI and a companion App that allows you to manage and run AI services with ease.
 
 ![Screenshot of Harbor CLI and App together](https://github.com/av/harbor/wiki/harbor-app-3.png)
+
+## What can Harbor do?
+
+![Diagram outlining Harbor's service structure](https://raw.githubusercontent.com/wiki/av/harbor/harbor-arch-diag.png)
+
+| What | Overview | Links |
+|---|---|---|
+|Local LLMs | Run LLMs and related services locally, with no or minimal configuration, typically in a single command or click. | [Harbor CLI](https://github.com/av/harbor/wiki/3.-Harbor-CLI-Reference), [Harbor App](https://github.com/av/harbor/wiki/1.1-Harbor-App)|
+|Cutting Edge Inference|Harbor supports most of the major inference engines as well as a few of the lesser-known ones. | [Inference Backends](#backends) |
+|Talk to your LLM| Setup voice chats with your LLM in a single command. Open WebUI + Speaches  | [`harbor up speaches`](./docs/2.2.14-Backend&colon-Speaches) |
+|Generate Images| ComfyUI + Flux + Open WebUI integration. | [`harbor up comfyui`](./docs/2.1.2-Frontend&colon-ComfyUI) |
+| Local Perplexity | Harbor includes SearXNG that is pre-connected to a lot of services out of the box. Connect your LLM to the Web. | [`harbor up searxng`](./docs/2.3.1-Satellite&colon-SearXNG) |
+| LLM Workflows | Harbor includes multiple services for build LLM-based data and chat workflows: [Dify](./docs/2.3.3-Satellite&colon-Dify), [LitLytics](./docs/2.3.21-Satellite&colon-LitLytics), [n8n](./docs/2.3.23-Satellite&colon-n8n), [Open WebUI Pipelines](./docs/2.3.25-Satellite&colon-Open-WebUI-Pipelines), [FloWise](./docs/2.3.31-Satellite&colon-Flowise), [LangFlow](./docs/2.3.32-Satellite&colon-LangFlow) | [`harbor up dify`](./docs/2.3.3-Satellite&colon-Dify) |
+| Chat from the phone | You can access Harbor services from your phone with a QR code. Easily get links for local, LAN or Docker access. | [`harbor qr`](./docs/3.-Harbor-CLI-Reference#harbor-qr), [`harbor url`](./docs/3.-Harbor-CLI-Reference#harbor-url-service) |
+| Chat from anywhere | Harbor includes a built-in tunneling service to expose your Harbor to the internet. | [`harbor tunnel`](./docs/3.-Harbor-CLI-Reference#harbor-tunnels) |
+| LLM Scripting | [Harbor Boost](./docs/5.2.-Harbor-Boost) allows you to [easily script workflows](./docs/5.2.-Harbor-Boost-Custom-Modules) and interactions with downstream LLMs. | [`harbor up boost`](./docs/5.2.-Harbor-Boost) |
+| Config Profiles | Save and manage configuration profiles for different scenarios. For example - save [llama.cpp](./docs/2.2.2-Backend&colon-llama.cpp) args for different models and contexts and switch between them easily. | [`harbor profile`](./docs/3.-Harbor-CLI-Reference#harbor-profile), [Harbor App](https://github.com/av/harbor/wiki/1.1-Harbor-App) |
+| Command History | Harbor keeps a local-only history of recent commands. Look up and re-run easily, standalone from the system shell history. | [`harbor history`](./docs/3.-Harbor-CLI-Reference#harbor-history) |
+| Eject | Ready to move to your own setup? Harbor will give you a docker-compose file replicating your setup. | [`harbor eject`](./docs/3.-Harbor-CLI-Reference#harbor-eject) |
+|  | Harbor includes a lot more services and features. Check the [Documentation](#documentation) links below. | |
+
 
 ## Services
 
@@ -91,9 +113,7 @@ Harbor is a containerized LLM toolkit that allows you to run LLMs and additional
 
 See [services documentation](https://github.com/av/harbor/wiki/2.-Services) for a brief overview of each.
 
-## Blitz Tour
-
-![Diagram outlining Harbor's service structure](https://raw.githubusercontent.com/wiki/av/harbor/harbor-arch-diag.png)
+## CLI Tour
 
 ```bash
 # Run Harbor with default services:
@@ -242,27 +262,12 @@ In the demo, Harbor App is used to launch a default stack with [Ollama](./2.2.1-
 
 ## Why?
 
-- Convenience factor
-- Workflow/setup centralisation
+- If you're comfortable with Docker and Linux administration - you likely don't need Harbor to manage your local LLM environment. However, while growing it - you're also likely to eventually arrive to a similar solution. I know this for a fact, since that's exactly how Harbor came to be.
+- Harbor is not designed as a deployment solution, but rather as a helper for the local LLM development environment. It's a good starting point for experimenting with LLMs and related services.
+- Workflow/setup centralisation - you can be sure where to find a specific config or service, logs, data and configuration files.
+- Convenience factor - single CLI with a lot of services and features, accessible from anywhere on your host.
 
-If you're comfortable with Docker and Linux administration - you likely don't need Harbor per se to manage your local LLM environment. However, you're also likely to eventually arrive to a similar solution. I know this for a fact, since I was rocking pretty much similar setup, just without all the whistles and bells.
+## Supporters
 
-Harbor is not designed as a deployment solution, but rather as a helper for the local LLM development environment. It's a good starting point for experimenting with LLMs and related services.
-
-You can later eject from Harbor and use the services in your own setup, or continue using Harbor as a base for your own configuration.
-
-## Overview and Features
-
-This project consists of a fairly large shell CLI, fairly small `.env` file and enormous (for one repo) amount of `docker-compose` files.
-
-#### Features
-
-- Manage local LLM stack with a concise CLI
-- Convenience utilities for common tasks (model management, configuration, service debug, URLs, tunnels, etc.)
-- Access service CLIs (`hf`, `ollama`, etc.) via Docker without install
-- Services are pre-configured to work together (contributions welcome)
-- Host cache is shared and reused - Hugging Face, ollama, etc.
-- Co-located service configs
-- Built-in LLM benchmarking service
-- Manage configuration profiles for different use cases
-- Eject to run without harbor with `harbor eject`
+![@av's wife](https://ui-avatars.com/api/?size=32&name=KN&rounded=true&background=ffaaaa&color=ff4444)
+![@burnth3heretic](https://ui-avatars.com/api/?size=32&name=BTH&rounded=true)
