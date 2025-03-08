@@ -316,7 +316,7 @@ RCN_STRAT = Config[str](
 )
 
 RCN_STRAT_PARAMS = Config[ConfigDict](
-  name='HARBOR_RCN_STRAT',
+  name='HARBOR_RCN_STRAT_PARAMS',
   type=ConfigDict,
     # Default - last user message
   default='role=user,index=-1',
@@ -440,4 +440,13 @@ SUPERSUMMER_LENGTH = Config[str](
   type=str,
   default='few paragraphs',
   description='Desired length of the summary'
+)
+
+# ----------------- R0 -----------------
+
+R0_THOUGHTS = Config[int](
+  name='HARBOR_BOOST_R0_THOUGHTS',
+  type=int,
+  default='5',
+  description='The amount of thoughts to generate for the r0 module'
 )

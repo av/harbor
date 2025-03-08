@@ -3663,6 +3663,15 @@ run_boost_g1_command() {
     esac
 }
 
+run_boost_r0_module() {
+    case "$1" in
+    thoughts)
+        shift
+        env_manager_alias boost.r0.thoughts "$@"
+        ;;
+    esac
+}
+
 run_boost_command() {
     case "$1" in
     urls)
@@ -3689,6 +3698,10 @@ run_boost_command() {
         shift
         run_boost_g1_command "$@"
         ;;
+    r0)
+        shift
+        run_boost_r0_command "$@"
+        ;;
     -h | --help | help)
         echo "Please note that this is not Boost CLI, but a Harbor CLI to manage Boost service."
         echo
@@ -3700,6 +3713,7 @@ run_boost_command() {
         echo "  harbor boost klmbr       - Manage klmbr module"
         echo "  harbor boost rcn         - Manage rcn module"
         echo "  harbor boost g1          - Manage g1 module"
+        echo "  harbor boost r0          - Manage r0 module"
         ;;
     esac
 }
