@@ -1,0 +1,343 @@
+<style>
+  body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    overflow: hidden;
+    background: #222;
+  }
+
+  svg {
+    width: 100vw;
+    height: 100vh;
+    display: block;
+  }
+
+  .node {
+    cursor: pointer;
+  }
+
+  .link {
+    stroke-opacity: 0.7;
+  }
+
+  .node text {
+    pointer-events: none;
+    font-size: 10px;
+    fill: #fff;
+    font-weight: bold;
+    text-shadow: 0 0 3px #000;
+    opacity: 1;
+  }
+</style>
+
+<script type="module">
+  import * as d3 from "https://cdn.jsdelivr.net/npm/d3@7/+esm";
+
+  // Initialize the graph
+  const width = window.innerWidth;
+  const height = window.innerHeight;
+
+  const svg = d3.select("body").append("svg")
+    .attr("width", width)
+    .attr("height", height);
+
+  // Create a group for the graph elements
+  const g = svg.append("g");
+
+  // Add zoom behavior
+  const zoom = d3.zoom()
+    .scaleExtent([0.1, 10])
+    .on("zoom", (event) => {
+      g.attr("transform", event.transform);
+    });
+
+  svg.call(zoom);
+
+  // Initialize data structures
+  let nodes = [];
+  let links = [];
+  let lastNodeId = null;
+
+  // Create a color scale based on frequency groups
+  const colorScale = d3.scaleOrdinal(d3.schemeObservable10);
+
+  // Create the graph elements
+  const link = g.append("g")
+    .attr("class", "links")
+    .selectAll("line");
+
+  const node = g.append("g")
+    .attr("class", "nodes")
+    .selectAll("g");
+
+  // Function to calculate node degree (number of connections)
+  function getNodeDegree(nodeId) {
+    return links.filter(l => l.source.id === nodeId || l.target.id === nodeId).length;
+  }
+
+  // Initialize the simulation
+  const simulation = d3.forceSimulation()
+    .force("link", d3.forceLink().id(d => d.id).distance(d => {
+      // Distance based on node degrees and sizes
+      const sourceConnections = getNodeDegree(d.source.id);
+      const targetConnections = getNodeDegree(d.target.id);
+      return 30 + Math.sqrt(sourceConnections + targetConnections) * 10;
+    }))
+    .force("charge", d3.forceManyBody().strength(d => {
+      // Stronger repulsion for nodes with more connections
+      const connections = getNodeDegree(d.id);
+      return -100 - (connections * 30) - (d.radius * 5);
+    }))
+    .force("center", d3.forceCenter(width / 2, height / 2))
+    .force("collision", d3.forceCollide().radius(d => d.radius + 10))
+    .force("x", d3.forceX(width / 2).strength(0.05))
+    .force("y", d3.forceY(height / 2).strength(0.05));
+
+  // Function to update the graph
+  function updateGraph() {
+    // Group nodes by frequency and calculate connection counts
+    nodes.forEach(node => {
+      const frequencyGroup = Math.floor(node.radius / 5);
+      node.group = frequencyGroup;
+      node.connections = getNodeDegree(node.id);
+    });
+
+    // Update links with varying thickness based on connection strength
+    const linkElements = g.select(".links")
+      .selectAll("line")
+      .data(links, d => `${d.source.id}-${d.target.id}`);
+
+    linkElements.exit().remove();
+
+    const linkEnter = linkElements.enter().append("line")
+      .attr("class", "link")
+      .attr("stroke-width", d => {
+        // Calculate link strength based on node sizes
+        return Math.max(1.5, Math.min(4, (d.source.radius + d.target.radius) / 15));
+      })
+      .attr("stroke", d => {
+        // Use gradient color between source and target nodes
+        if (typeof d.source === 'object' && typeof d.target === 'object') {
+          return d3.interpolateRgb(
+            d3.color(colorScale(d.source.group)),
+            d3.color(colorScale(d.target.group))
+          )(0.5);
+        }
+        return "#999";
+      });
+
+    // Update nodes
+    const nodeElements = g.select(".nodes")
+      .selectAll("g")
+      .data(nodes, d => d.id);
+
+    nodeElements.exit().remove();
+
+    const nodeEnter = nodeElements.enter().append("g")
+      .attr("class", "node")
+      .call(d3.drag()
+        .on("start", dragstarted)
+        .on("drag", dragged)
+        .on("end", dragended));
+
+    nodeEnter.append("circle")
+      .attr("r", d => d.radius)
+      .attr("fill", d => {
+        // Color based on group and connection count
+        const baseColor = d3.color(colorScale(d.group));
+        // Adjust brightness based on connections
+        const brightness = Math.min(1, 0.7 + (d.connections / 20));
+        baseColor.opacity = brightness;
+        return baseColor;
+      });
+
+    nodeEnter.append("text")
+      .attr("dy", d => d.radius + 10)
+      .attr("text-anchor", "middle")
+      .text(d => d.id);
+
+    // Update existing nodes
+    nodeElements.select("circle")
+      .attr("r", d => d.radius)
+      .attr("fill", d => {
+        const baseColor = d3.color(colorScale(d.group));
+        const brightness = Math.min(1, 0.7 + (d.connections / 20));
+        baseColor.opacity = brightness;
+        return baseColor;
+      });
+
+    // Update simulation
+    simulation.nodes(nodes);
+    simulation.force("link").links(links);
+    simulation.alpha(1).restart();
+  }
+
+  // Simulation tick function
+  simulation.on("tick", () => {
+    g.selectAll(".link")
+      .attr("x1", d => d.source.x)
+      .attr("y1", d => d.source.y)
+      .attr("x2", d => d.target.x)
+      .attr("y2", d => d.target.y);
+
+    g.selectAll(".node")
+      .attr("transform", d => `translate(${d.x},${d.y})`);
+  });
+
+  // Drag functions
+  function dragstarted(event, d) {
+    if (!event.active) simulation.alphaTarget(0.3).restart();
+    d.fx = d.x;
+    d.fy = d.y;
+  }
+
+  function dragged(event, d) {
+    d.fx = event.x;
+    d.fy = event.y;
+  }
+
+  function dragended(event, d) {
+    if (!event.active) simulation.alphaTarget(0);
+    d.fx = null;
+    d.fy = null;
+  }
+
+  // Add a token to the graph
+  function addToken(token) {
+    if (!token || token.trim() === '') return;
+
+    // Check if the token already exists
+    let nodeIndex = nodes.findIndex(n => n.id === token);
+
+    if (nodeIndex === -1) {
+      // Add new node
+      const newNode = {
+        id: token,
+        radius: 10,
+        index: nodes.length,
+        connections: 0
+      };
+      nodes.push(newNode);
+      nodeIndex = nodes.length - 1;
+    } else {
+      // Increase size of existing node
+      nodes[nodeIndex].radius += 5;
+    }
+
+    // Add link if there was a previous token
+    if (lastNodeId !== null && lastNodeId !== token) {
+      // Check if this link already exists
+      let existingLink = links.find(l =>
+        (l.source.id === lastNodeId && l.target.id === token) ||
+        (l.source.id === token && l.target.id === lastNodeId)
+      );
+
+      if (!existingLink) {
+        links.push({
+          source: lastNodeId,
+          target: token,
+          weight: 1
+        });
+      } else {
+        // Increase link weight if it already exists
+        existingLink.weight = (existingLink.weight || 1) + 1;
+      }
+    }
+
+    lastNodeId = token;
+    updateGraph();
+  }
+
+  // Event handling setup
+  const handlers = {
+    'boost.listener.event': handleBoostEvent,
+    'chat.completion.chunk': handleCompletionChunk
+  };
+
+  function processChunk(chunk) {
+    try {
+      const data = JSON.parse(chunk.replace(/data: /, ''));
+      const text = data.object;
+      const handler = handlers[text];
+
+      if (handler) {
+        console.log('Processing chunk:', data);
+        handler(data);
+      }
+    } catch (e) {
+      console.error('Error processing chunk:', e);
+    }
+  }
+
+  function isDisplayedToken(token) {
+    // Ignore empty, single char, punctuation-only, and common articles
+    const commonArticles = new Set(['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'as', 'from', 'into', 'onto', 'upon', 'out']);
+    const trimmed = token.trim().toLowerCase();
+    const isPunctuation = trimmed.replace(/[.,!?;:"'()\[\]{}\/\\\-_+=<>#\$\*]+$/g, '').length === 0;
+    const multichar = trimmed.length > 1;
+
+    return multichar && !isPunctuation && !commonArticles.has(trimmed);
+  }
+
+  function handleCompletionChunk(chunk) {
+    const token = getChunkContent(chunk);
+
+    if (isDisplayedToken(token)) {
+      addToken(token);
+    }
+  }
+
+  function handleBoostEvent() {
+    // Noop
+  }
+
+  function getChunkContent(chunk) {
+    return chunk.choices.map((choice) => choice.delta.content).join("\n");
+  }
+
+  // Start listening for events
+  async function startListening() {
+    try {
+      const listenerId = '<<listener_id>>';
+      const response = await fetch(`http://localhost:34131/events/${listenerId}`, {
+        headers: {
+          'Authorization': 'Bearer sk-boost'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const reader = response.body.getReader();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          console.log('Stream complete');
+          break;
+        }
+
+        try {
+          const blob = new TextDecoder().decode(value);
+          const chunks = blob.split('\n\n');
+
+          for (const chunk of chunks) {
+            if (chunk.trim()) {
+              processChunk(chunk);
+            }
+          }
+        } catch (e) {
+          console.error('Error processing data:', e);
+        }
+      }
+    } catch (error) {
+      console.error('Error connecting to event stream:', error);
+    }
+  }
+
+  // Start listening automatically when the page loads
+  document.addEventListener('DOMContentLoaded', () => {
+    startListening();
+  });
+</script>
