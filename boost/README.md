@@ -41,6 +41,8 @@ Moreover, boost is scriptable, you can provision your own modules with the workf
   * [`mcts` - Monte Carlo Tree Search](#mcts---monte-carlo-tree-search)
   * [`eli5` - Explain Like I'm 5](#eli5---explain-like-im-5)
   * [`supersummer` - Super Summarization](#supersummer---super-summarization)
+  * [`r0` - R1-like reasoning chains](#r0---r1-like-reasoning-chains)
+  * [`markov` - token completion graph](#markov---token-completion-graph)
   * Custom Modules (not configurable, mostly examples, but can still be enabled)
     * [discussurl](https://github.com/av/harbor/blob/main/boost/src/custom_modules/discussurl.py) - parse mentioned URLs and add them to the context
     * [meow](https://github.com/av/harbor/blob/main/boost/src/custom_modules/meow.py) - the model ignores all previous instructions and just meows
@@ -476,6 +478,38 @@ As the author implies, the main benefit of using Harbor lies in its ability to s
 
 </details>
 
+#### `r0` - R1-like reasoning chains
+
+![Boost R0](boost-r0.png)
+
+This workflow allows you to add R1-like reasoning to any LLM (including [older ones, like Llama 2, or Gemma 1](https://www.reddit.com/r/LocalLLaMA/comments/1ixckba/making_older_llms_llama_2_and_gemma_1_reason/)). Of course, it won't show the same performance as an actually GRPO-boosted model, but it can still provide some interesting results as well as being a very flexible base to experiment with.
+
+```bash
+# Enable the module
+harbor boost modules add r0
+```
+
+**Parameters**
+
+```bash
+# Get/set the amount of thoughts to generate
+harbor boost r0 thoughts 5
+```
+
+#### `markov` - token completion graph
+
+![screenshot of markov module in action](boost-markov.png)
+
+⚠️ This module is experimental and only compatible with Open WebUI as a client due to its support of custom artifacts.
+When serving LLM completion, it'll emit an artifact for Open WebUI that'll connect back to the Harbor Boost server and display emitted tokens in a graph where each token is connected to the one preceding it.
+
+```bash
+# Enable the module
+harbor boost modules add markov
+```
+
+There's no configuration for this module yet.
+
 ### API
 
 `boost` works as an OpenAI-compatible API proxy. It'll query configured downstream services for which models they serve and provide "boosted" wrappers in its own API.
@@ -626,6 +660,9 @@ HARBOR_BOOST_RCN_STRAT_PARAMS         role=user,index=-1
 HARBOR_BOOST_G1_STRAT                 match
 HARBOR_BOOST_G1_STRAT_PARAMS          role=user,index=-1
 HARBOR_BOOST_G1_MAX_STEPS             15
+
+# R0
+HARBOR_BOOST_R0_THOUGHTS              5
 ```
 
 See the main portion of the guide for detailed explanation of these variables. You can also find the most complete overview of the supported variables in the [source](https://github.com/av/harbor/blob/main/boost/src/config.py#L141).
