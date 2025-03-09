@@ -1,10 +1,36 @@
 {
   "version": "4",
   "specifiers": {
+    "jsr:@std/collections@*": "1.0.8",
+    "jsr:@std/collections@^1.0.5": "1.0.8",
+    "jsr:@std/fmt@*": "1.0.5",
+    "jsr:@std/path@*": "1.0.6",
+    "jsr:@std/toml@*": "1.0.1",
+    "jsr:@std/yaml@*": "1.0.5",
     "npm:remark-parse@*": "11.0.0",
     "npm:remark-stringify@*": "11.0.0",
     "npm:unified@*": "11.0.5",
     "npm:unist-util-visit@*": "5.0.0"
+  },
+  "jsr": {
+    "@std/collections@1.0.8": {
+      "integrity": "de76692f9121838711b1d2fb5042619c074db26905a87b58cff56cfe1bd6d6d0"
+    },
+    "@std/fmt@1.0.5": {
+      "integrity": "0cfab43364bc36650d83c425cd6d99910fc20c4576631149f0f987eddede1a4d"
+    },
+    "@std/path@1.0.6": {
+      "integrity": "ab2c55f902b380cf28e0eec501b4906e4c1960d13f00e11cfbcd21de15f18fed"
+    },
+    "@std/toml@1.0.1": {
+      "integrity": "b55b407159930f338d384b1f8fd317c8e8a35e27ebb8946155f49e3a158d16c4",
+      "dependencies": [
+        "jsr:@std/collections@^1.0.5"
+      ]
+    },
+    "@std/yaml@1.0.5": {
+      "integrity": "71ba3d334305ee2149391931508b2c293a8490f94a337eef3a09cade1a2a2742"
+    }
   },
   "npm": {
     "@types/debug@4.1.12": {

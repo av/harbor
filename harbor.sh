@@ -4099,7 +4099,7 @@ run_gptme_command() {
 # ========================================================================
 
 # Globals
-version="0.3.0"
+version="0.3.1"
 harbor_repo_url="https://github.com/av/harbor.git"
 harbor_release_url="https://api.github.com/repos/av/harbor/releases/latest"
 delimiter="|"

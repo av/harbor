@@ -645,6 +645,11 @@ HARBOR_BOOST_API_KEYS                 ""
 # or inverse - emit them even if this setting is off
 HARBOR_BOOST_INTERMEDIATE_OUTPUT      true
 
+# Allows choosing how the status messages will be formatted
+# when emitted by the boost modules
+# See boost.status.style section for more info
+HARBOR_BOOST_STATUS_STYLE             md:codeblock
+
 # Module specific configs:
 # Klmbr
 HARBOR_BOOST_KLMBR_PERCENTAGE         35
@@ -660,6 +665,24 @@ HARBOR_BOOST_RCN_STRAT_PARAMS         role=user,index=-1
 HARBOR_BOOST_G1_STRAT                 match
 HARBOR_BOOST_G1_STRAT_PARAMS          role=user,index=-1
 HARBOR_BOOST_G1_MAX_STEPS             15
+
+# MCTS
+HARBOR_BOOST_MCTS_STRAT               match
+HARBOR_BOOST_MCTS_STRAT_PARAMS        role=user,index=-1
+HARBOR_BOOST_MCTS_MAX_SIMULATIONS     2
+HARBOR_BOOST_MCTS_MAX_ITERATIONS      2
+HARBOR_BOOST_MCTS_THOUGHTS            2
+BOOST_MCTS_EXPLORATION_CONSTANT       1.414
+
+# eli5
+HARBOR_BOOST_ELI5_STRAT               match
+HARBOR_BOOST_ELI5_STRAT_PARAMS        role=user,index=-1
+
+# Supersummer
+HARBOR_BOOST_SUPERSUMMER_STRAT        match
+HARBOR_BOOST_SUPERSUMMER_STRAT_PARAMS role=user,index=-1
+HARBOR_BOOST_SUPERSUMMER_NUM_QUESTIONS 5
+HARBOR_BOOST_SUPERSUMMER_LENGTH       one short paragraph
 
 # R0
 HARBOR_BOOST_R0_THOUGHTS              5
