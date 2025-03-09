@@ -7,6 +7,7 @@ GET {{host}}/health
 ###
 
 GET {{host}}/v1/models
+Authorization: Bearer sk-boost
 
 ###
 
@@ -127,6 +128,21 @@ Authorization: sk-boost
   "model": "webui_artifact-llama3.1:8b",
   "messages": [
     {"role": "user", "content": "Hi"}
+  ],
+  "temperature": 0,
+  "stream": true
+}
+
+### Groq
+
+POST {{host}}/v1/chat/completions
+Content-Type: application/json
+Authorization: sk-boost
+
+{
+  "model": "r0-llama-3.1-8b-instant",
+  "messages": [
+    {"role": "user", "content": "What is the capital of France?"}
   ],
   "temperature": 0,
   "stream": true

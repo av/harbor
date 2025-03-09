@@ -16,7 +16,8 @@ import mods
 
 logger = log.setup_logger(__name__)
 
-BOOST_PARAM_PREFIX="@boost_"
+BOOST_PARAM_PREFIX = "@boost_"
+
 
 class LLM:
   url: str
@@ -59,10 +60,15 @@ class LLM:
 
   def split_params(self, params: dict):
     self.params = {
-      k: v for k, v in {**EXTRA_LLM_PARAMS.value, **params}.items() if not k.startswith(BOOST_PARAM_PREFIX)
+      k: v for k, v in {
+        **EXTRA_LLM_PARAMS.value,
+        **params
+      }.items() if not k.startswith(BOOST_PARAM_PREFIX)
     }
     self.boost_params = {
-      k[len(BOOST_PARAM_PREFIX):]: v for k, v in params.items() if k.startswith(BOOST_PARAM_PREFIX)
+      k[len(BOOST_PARAM_PREFIX):]: v
+      for k, v in params.items()
+      if k.startswith(BOOST_PARAM_PREFIX)
     }
 
   def generate_system_fingerprint(self):
@@ -76,13 +82,18 @@ class LLM:
     content = response['choices'][0]['message']['content']
 
     if 'response_format' in params and 'type' in params['response_format']:
-      if params['response_format']['type'] == 'json_schema' or params['response_format']['type'] == 'json':
+      if params['response_format']['type'] == 'json_schema' or params[
+        'response_format']['type'] == 'json':
         return json.loads(content)
 
     return content
 
   def get_chunk_content(self, chunk):
-    return chunk["choices"][0]["delta"]["content"]
+    try:
+      return chunk["choices"][0]["delta"]["content"]
+    except (KeyError, IndexError):
+      logger.error(f"Unexpected chunk format: {chunk}")
+      return ""
 
   def parse_chunk(self, chunk):
     if isinstance(chunk, dict):
@@ -98,8 +109,8 @@ class LLM:
     try:
       return json.loads(chunk_str)
     except json.JSONDecodeError:
-      logger.error(f"Failed to parse chunk: {chunk_str}")
-      return {}
+      logger.error(f"Failed to parse chunk: ->{chunk_str}")
+      raise ValueError(f"Unable to parse chunk: {chunk_str}")
 
   def output_from_chunk(self, chunk):
     return {
@@ -161,11 +172,7 @@ class LLM:
     return chunk
 
   def event_to_string(self, event, data):
-    payload = {
-      'object': 'boost.listener.event',
-      'event': event,
-      'data': data
-    }
+    payload = {'object': 'boost.listener.event', 'event': event, 'data': data}
 
     return f"data: {json.dumps(payload)}\n\n"
 
@@ -267,10 +274,11 @@ class LLM:
     if kwargs.get("schema"):
       params['response_format'] = {
         'type': 'json_schema',
-        'json_schema': {
-          'name': 'StructuredResponseSchema',
-          'schema': kwargs['schema'].model_json_schema()
-        }
+        'json_schema':
+          {
+            'name': 'StructuredResponseSchema',
+            'schema': kwargs['schema'].model_json_schema()
+          }
       }
 
     return params
@@ -302,8 +310,37 @@ class LLM:
           "stream": True,
         }
       ) as response:
+        chunk_buffer = []
+
         async for chunk in response.aiter_bytes():
-          parsed = self.parse_chunk(chunk)
+          chunk_buffer.append(chunk)
+          if len(chunk_buffer) > 5:
+              chunk_buffer.pop(0)
+
+          try:
+              parsed = self.parse_chunk(chunk)
+              chunk_buffer.clear()    # Clear buffer on successful parse
+          except ValueError as e:
+              print(f'Single chunk parse failed: {e}')
+              # Try parsing combined chunks
+              try:
+                  print(f'Buffer contents: {[c[:20] for c in chunk_buffer]}')
+
+                  combined = ''
+                  for c in chunk_buffer:
+                      try:
+                          decoded = c.decode('utf-8', errors='replace')
+                          cleaned = decoded.replace('data: ', '')
+                          combined += cleaned
+                      except Exception as decode_err:
+                          print(f'Error decoding chunk: {decode_err}')
+
+                  parsed = self.parse_chunk(combined)
+                  chunk_buffer.clear()
+              except Exception as combine_err:
+                  print(f'Combined parse failed: {combine_err}')
+                  # Don't clear buffer here, might need more chunks
+
           content = self.get_chunk_content(parsed)
           result += content
 
