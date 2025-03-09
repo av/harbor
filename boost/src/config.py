@@ -309,14 +309,14 @@ KLMBR_STRAT_PARAMS = Config[ConfigDict](
 # ----------------- RCN -----------------
 
 RCN_STRAT = Config[str](
-  name='HARBOR_RCN_STRAT',
+  name='HARBOR_BOOST_RCN_STRAT',
   type=str,
   default='match',
   description='The strategy that selects messages to modify for the rcn module'
 )
 
 RCN_STRAT_PARAMS = Config[ConfigDict](
-  name='HARBOR_RCN_STRAT_PARAMS',
+  name='HARBOR_BOOST_RCN_STRAT_PARAMS',
   type=ConfigDict,
     # Default - last user message
   default='role=user,index=-1',
@@ -326,14 +326,14 @@ RCN_STRAT_PARAMS = Config[ConfigDict](
 # ----------------- G1 -----------------
 
 G1_STRAT = Config[str](
-  name='HARBOR_G1_STRAT',
+  name='HARBOR_BOOST_G1_STRAT',
   type=str,
   default='match',
   description='The strategy that selects messages to modify for the g1 module'
 )
 
 G1_STRAT_PARAMS = Config[ConfigDict](
-  name='HARBOR_G1_STRAT_PARAMS',
+  name='HARBOR_BOOST_G1_STRAT_PARAMS',
   type=ConfigDict,
     # Default - last user message
   default='role=user,index=-1',
@@ -341,7 +341,7 @@ G1_STRAT_PARAMS = Config[ConfigDict](
 )
 
 G1_MAX_STEPS = Config[int](
-  name='HARBOR_G1_MAX_STEPS',
+  name='HARBOR_BOOST_G1_MAX_STEPS',
   type=int,
   default='15',
   description='The maximum number of reasoning steps to generate'
@@ -350,14 +350,14 @@ G1_MAX_STEPS = Config[int](
 # ----------------- MCTS -----------------
 
 MCTS_STRAT = Config[str](
-  name='HARBOR_MCTS_STRAT',
+  name='HARBOR_BOOST_MCTS_STRAT',
   type=str,
   default='match',
   description='The strategy that selects messages to target for the mcts module'
 )
 
 MCTS_STRAT_PARAMS = Config[ConfigDict](
-  name='HARBOR_MCTS_STRAT_PARAMS',
+  name='HARBOR_BOOST_MCTS_STRAT_PARAMS',
   type=ConfigDict,
     # Default - last user message
   default='role=user,index=-1',
@@ -365,21 +365,21 @@ MCTS_STRAT_PARAMS = Config[ConfigDict](
 )
 
 MCTS_MAX_SIMULATIONS = Config[int](
-  name='HARBOR_MCTS_MAX_SIMULATIONS',
+  name='HARBOR_BOOST_MCTS_MAX_SIMULATIONS',
   type=int,
   default='2',
   description='The maximum number of simulations to run (per iteration)'
 )
 
 MCTS_MAX_ITERATIONS = Config[int](
-  name='HARBOR_MCTS_MAX_ITERATIONS',
+  name='HARBOR_BOOST_MCTS_MAX_ITERATIONS',
   type=int,
   default='2',
   description='The maximum number of iterations to run'
 )
 
 MCTS_THOUGHTS = Config[int](
-  name='HARBOR_MCTS_THOUGHTS',
+  name='HARBOR_BOOST_MCTS_THOUGHTS',
   type=int,
   default='2',
   description=
@@ -387,7 +387,7 @@ MCTS_THOUGHTS = Config[int](
 )
 
 MCTS_EXPLORATION_CONSTANT = Config[float](
-  name='HARBOR_MCTS_EXPLORATION_CONSTANT',
+  name='HARBOR_BOOST_MCTS_EXPLORATION_CONSTANT',
   type=float,
   default='1.414',
   description='The exploration constant for the MCTS algorithm'
@@ -396,14 +396,14 @@ MCTS_EXPLORATION_CONSTANT = Config[float](
 # ----------------- ELI5 -----------------
 
 ELI5_STRAT = Config[str](
-  name='HARBOR_ELI5_STRAT',
+  name='HARBOR_BOOST_ELI5_STRAT',
   type=str,
   default='match',
   description='The strategy that selects messages to target for the eli5 module'
 )
 
 ELI5_STRAT_PARAMS = Config[ConfigDict](
-  name='HARBOR_ELI5_STRAT_PARAMS',
+  name='HARBOR_BOOST_ELI5_STRAT_PARAMS',
   type=ConfigDict,
     # Default - last user message
   default='role=user,index=-1',
@@ -413,7 +413,7 @@ ELI5_STRAT_PARAMS = Config[ConfigDict](
 # ----------- SUPERSUMMER ----------------
 
 SUPERSUMMER_STRAT = Config[str](
-  name='HARBOR_SUPERSUMMER_STRAT',
+  name='HARBOR_BOOST_SUPERSUMMER_STRAT',
   type=str,
   default='match',
   description=
@@ -421,7 +421,7 @@ SUPERSUMMER_STRAT = Config[str](
 )
 
 SUPERSUMMER_STRAT_PARAMS = Config[ConfigDict](
-  name='HARBOR_SUPERSUMMER_STRAT_PARAMS',
+  name='HARBOR_BOOST_SUPERSUMMER_STRAT_PARAMS',
   type=ConfigDict,
     # Default - last user message
   default='role=user,index=-1',
@@ -429,7 +429,7 @@ SUPERSUMMER_STRAT_PARAMS = Config[ConfigDict](
 )
 
 SUPERSUMMER_NUM_QUESTIONS = Config[int](
-  name='HARBOR_SUPERSUMMER_NUM_QUESTIONS',
+  name='HARBOR_BOOST_SUPERSUMMER_NUM_QUESTIONS',
   type=int,
   default='5',
   description='The number of questions to generate for the summarisation'
