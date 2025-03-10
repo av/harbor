@@ -223,6 +223,13 @@ run_harbor_doctor() {
         log_warn "${nok} NVIDIA Container Toolkit is not installed. NVIDIA GPU support may not work."
     fi
 
+    # Check if rocm is installed
+    if has_rocm; then
+        log_info "${ok} ROCm is installed"
+    else
+	log_warn "${nok} ROCm in not installed.  AMD GPU support may not work."
+    fi
+
     if $has_errors; then
         log_error "Harbor Doctor checks failed. Please resolve the issues above."
         return 1
@@ -248,6 +255,10 @@ has_nvidia_cdi() {
     else
         return 1
     fi
+}
+
+has_rocm() {
+    command -v rocm-smi &>/dev/null
 }
 
 has_modern_compose() {
@@ -346,6 +357,10 @@ routine_compose_with_options() {
             options+=("cdi")
         fi
 
+        if has_rocm; then
+            options+=("rocm")
+        fi
+
         if has_modern_compose; then
             options+=("mdc")
         fi
@@ -387,6 +402,10 @@ compose_with_options() {
             options+=("nvidia")
         elif has_nvidia_cdi; then
             options+=("cdi")
+        fi
+
+        if has_rocm; then
+            options+=("rocm")
         fi
 
         if has_modern_compose; then
