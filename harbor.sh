@@ -227,7 +227,7 @@ run_harbor_doctor() {
     if has_rocm; then
         log_info "${ok} ROCm is installed"
     else
-	log_warn "${nok} ROCm in not installed.  AMD GPU support may not work."
+	log_warn "${nok} ROCm in not installed. AMD GPU support may not work."
     fi
 
     if $has_errors; then
