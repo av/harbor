@@ -106,11 +106,7 @@ class LLM:
     if chunk_str.startswith("data: "):
       chunk_str = chunk_str[6:]
 
-    try:
-      return json.loads(chunk_str)
-    except json.JSONDecodeError:
-      logger.error(f"Failed to parse chunk: ->{chunk_str}")
-      raise ValueError(f"Unable to parse chunk: {chunk_str}")
+    return json.loads(chunk_str)
 
   def output_from_chunk(self, chunk):
     return {
@@ -310,44 +306,33 @@ class LLM:
           "stream": True,
         }
       ) as response:
-        chunk_buffer = []
+        response.raise_for_status()
+        buffer = b''
 
         async for chunk in response.aiter_bytes():
-          chunk_buffer.append(chunk)
-          if len(chunk_buffer) > 5:
-              chunk_buffer.pop(0)
+          buffer += chunk
 
-          try:
-              parsed = self.parse_chunk(chunk)
-              chunk_buffer.clear()    # Clear buffer on successful parse
-          except ValueError as e:
-              print(f'Single chunk parse failed: {e}')
-              # Try parsing combined chunks
+          while b'\n' in buffer:
+            line, buffer = buffer.split(b'\n', 1)
+            line = line.decode('utf-8').strip()
+
+            if not line or line.startswith(':'):
+              continue
+
+            if line == 'data: [DONE]':
+              continue
+
+            if line.startswith('data:'):
               try:
-                  print(f'Buffer contents: {[c[:20] for c in chunk_buffer]}')
-
-                  combined = ''
-                  for c in chunk_buffer:
-                      try:
-                          decoded = c.decode('utf-8', errors='replace')
-                          cleaned = decoded.replace('data: ', '')
-                          combined += cleaned
-                      except Exception as decode_err:
-                          print(f'Error decoding chunk: {decode_err}')
-
-                  parsed = self.parse_chunk(combined)
-                  chunk_buffer.clear()
-              except Exception as combine_err:
-                  print(f'Combined parse failed: {combine_err}')
-                  # Don't clear buffer here, might need more chunks
-
-          content = self.get_chunk_content(parsed)
-          result += content
+                parsed = self.parse_chunk(line)
+                content = self.get_chunk_content(parsed)
+                result += content
+              except json.JSONDecodeError:
+                logger.error(f"Failed to parse chunk: \"{line}\"")
 
           # We emit done after the module
           # application has completed
-          if not '[DONE]' in f"{chunk}":
-            await self.emit_chunk(chunk)
+          await self.emit_chunk(chunk)
 
     return result
 
