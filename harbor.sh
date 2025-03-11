@@ -3283,6 +3283,18 @@ run_aichat_command() {
 }
 
 run_ollama_command() {
+    update_ollama_env() {
+        harbor env ollama OLLAMA_CONTEXT_LENGTH $(harbor config get ollama.context_length)
+    }
+
+    case "$1" in
+    ctx)
+        shift
+        env_manager_alias ollama.context_length --on-set update_ollama_env "$@"
+        return 0
+        ;;
+    esac
+
     local services=$(get_active_services)
     local ollama_host=$(env_manager get ollama.internal.url)
 
