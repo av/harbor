@@ -6,7 +6,7 @@ services:
     ports:
       - ${HARBOR_N8N_HOST_PORT}:5678
     volumes:
-      - ${HARBOR_N8N_WORKSPACE}/storage:/home/node/.n8n
+      - ${HARBOR_N8N_WORKSPACE}/storage:/root/.n8n
       - ${HARBOR_N8N_WORKSPACE}/backup:/backup
       - ${HARBOR_N8N_WORKSPACE}/shared:/data/shared
     depends_on:
