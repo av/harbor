@@ -2293,8 +2293,36 @@ run_harbor_env() {
 
 # Corresponds to the ".scripts" folder
 run_harbor_dev() {
-    local script=$1
-    deno run -A "./.scripts/$script.ts" "${@:2}"
+    local filtered_args=()
+
+    for arg in "$@"; do
+        case "$arg" in
+        --container)
+            use_container=true
+            ;;
+        *)
+            filtered_args+=("$arg") # Add to filtered arguments
+            ;;
+        esac
+    done
+
+    local script="${filtered_args[0]}"
+    local script_args=("${filtered_args[@]:1}")
+    local use_container=false
+
+    if $use_container; then
+        log_debug "running in container: $script"
+        docker run --rm \
+            -v "$harbor_home:$harbor_home" \
+            -v harbor-deno-cache:/deno-dir:rw \
+            -w "$harbor_home" \
+            denoland/deno:distroless \
+            run -A --unstable-sloppy-imports \
+            "./.scripts/$script.ts" $script_args[@]
+    else
+        log_debug "running on host: $script"
+        deno run -A "./.scripts/$script.ts" "${script_args[@]}"
+    fi
 }
 
 # shellcheck disable=SC2034
@@ -4159,6 +4187,7 @@ ensure_env_file
 # Current user ID - FS + UIDs for containers (where applicable)
 env_manager --silent set user.id "$(id -u)"
 env_manager --silent set group.id "$(id -g)"
+env_manager --silent set home.volume "$harbor_home"
 default_options=($(env_manager get services.default | tr ';' ' '))
 default_tunnels=($(env_manager get services.tunnels | tr ';' ' '))
 default_capabilities=($(env_manager get capabilities.default | tr ';' ' '))

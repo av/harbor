@@ -12,11 +12,11 @@ services:
       - ./.env
       - ./webtop/override.env
     environment:
-      - HARBOR_HOME=/harbor
+      - HARBOR_HOME=${HARBOR_HOME_VOLUME}
       - PUID=${HARBOR_USER_ID}
     volumes:
       # Mount Host's Harbor home, very important for the interop
-      - .:/harbor
+      - ${HARBOR_HOME_VOLUME}:${HARBOR_HOME_VOLUME}
       # Webtop homedir, can be cleared with "harbor webtop reset"
       - ${HARBOR_WEBTOP_WORKSPACE}:/config
       # Docker access
