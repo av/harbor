@@ -1,0 +1,450 @@
+<style>
+  html,
+  body {
+    font-family: Avenir, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow: hidden;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    position: relative;
+    text-align: center;
+    background: #222;
+  }
+
+  #dice-box {
+    position: absolute;
+    top: 0;
+    left: 0;
+    box-sizing: border-box;
+    width: 100%;
+    height: 100%;
+    background-image: url(/public/assets/woodgrain2.jpg);
+    background-size: cover;
+  }
+
+  #dice-box canvas {
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+  }
+
+  #check-info {
+    position: fixed;
+    top: 1rem;
+    left: 50%;
+    transform: translateX(-50%);
+    color: #aaa;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+  }
+
+  #check-info>* {
+    margin: 0;
+  }
+
+  /* Result Modal Styles */
+  #result-modal {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(0);
+    z-index: 10;
+    font-size: 3rem;
+    font-weight: bold;
+    text-shadow: 0 0 10px rgba(0, 0, 0, 0.7);
+    transition: transform 0.3s ease-out;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+  }
+
+  #result-modal.show {
+    transform: translate(-50%, -50%) scale(1);
+    animation: pulse 1.5s infinite alternate;
+  }
+
+  .passed {
+    color: #2ecc71;
+    text-shadow: 0 0 20px rgba(46, 204, 113, 0.8);
+  }
+
+  .failed {
+    color: #e74c3c;
+    text-shadow: 0 0 20px rgba(231, 76, 60, 0.8);
+  }
+
+  /* Particles container */
+  #particles-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 9;
+  }
+
+  @keyframes pulse {
+    0% {
+      transform: translate(-50%, -50%) scale(1);
+    }
+
+    100% {
+      transform: translate(-50%, -50%) scale(1.1);
+    }
+  }
+
+  @keyframes fadeOut {
+    0% {
+      opacity: 1;
+    }
+
+    100% {
+      opacity: 0;
+    }
+  }
+</style>
+
+<script type="module">
+  import DiceBox from "https://unpkg.com/@3d-dice/dice-box-threejs@0.0.12/dist/dice-box-threejs.es.js";
+
+  let dice = '<<dice>>';
+  let roll = dice.split('@')[1].split(',').map(Number).reduce((a, b) => a + b, 0);
+  let difficultyThreshold = Number('<<difficulty_class>>');
+  let result = '<<result>>';
+  let passed = result === 'passed';
+
+  let Box = new DiceBox("#dice-box", {
+    scale: 5,
+    throwForce: 5,
+    gravity: 1,
+    mass: 1,
+    spinForce: 6,
+  });
+
+  Box.initialize().then(async (world) => {
+    Box.roll(dice).then(() => {
+      showResultModal(passed);
+    });
+  });
+
+  const colors = [
+    "#348888",
+    "#22BABB",
+    "#9EF8EE",
+    "#FA7F08",
+    "#F24405",
+    "#F25EB0",
+    "#B9BF04",
+    "#F2B705",
+    "#F27405",
+    "#F23005",
+  ];
+
+  function get_random(list) {
+    return list[Math.floor(Math.random() * list.length)];
+  }
+
+  document.addEventListener("click", (e) => {
+    const existingModal = document.getElementById('result-modal');
+    if (existingModal) {
+      existingModal.classList.remove('show');
+      setTimeout(() => {
+        existingModal.remove();
+      }, 300);
+    }
+
+    const particlesContainer = document.getElementById('particles-container');
+    if (particlesContainer) {
+      particlesContainer.innerHTML = '';
+    }
+
+    Box.roll(dice);
+  });
+
+  function showResultModal(passed) {
+    // Create particles container if it doesn't exist
+    let particlesContainer = document.getElementById('particles-container');
+    if (!particlesContainer) {
+      particlesContainer = document.createElement('div');
+      particlesContainer.id = 'particles-container';
+      document.body.appendChild(particlesContainer);
+    }
+
+    // Create result modal
+    const resultModal = document.createElement('div');
+    resultModal.id = 'result-modal';
+    resultModal.className = passed ? 'passed' : 'failed';
+    resultModal.innerHTML = `
+  <span>${passed ? 'PASSED' : 'FAILED'}</span>
+  <span>(${roll} vs ${difficultyThreshold})</span>
+      `
+    document.body.appendChild(resultModal);
+
+    // Create particles
+    createParticles(passed, particlesContainer);
+
+    // Show the modal with animation
+    setTimeout(() => {
+      resultModal.classList.add('show');
+    }, 500);
+  }
+
+
+  function createParticles(passed, container) {
+    // Increased particle count for more visual impact
+    const particleCount = 50;
+
+    // Enhanced color palettes with more variety
+    const colors = passed ?
+      ['#2ecc71', '#27ae60', '#a9dfbf', '#7dcea0', '#1abc9c', '#16a085', '#76d7c4'] :
+      ['#e74c3c', '#c0392b', '#f5b7b1', '#cd6155', '#e67e22', '#d35400', '#f39c12'];
+
+    // Add subtle glowing effect to container
+    container.style.position = 'relative';
+    container.style.overflow = 'hidden';
+    container.style.boxShadow = passed ?
+      '0 0 20px rgba(46, 204, 113, 0.4)' :
+      '0 0 20px rgba(231, 76, 60, 0.4)';
+
+    // Create particle pool for better performance
+    const particlePool = document.createDocumentFragment();
+    const styleSheet = document.createElement('style');
+    styleSheet.type = 'text/css';
+    let keyframesCSS = '';
+
+    // Add background pulse animation (more subtle)
+    keyframesCSS += `
+      @keyframes background-pulse {
+        0%, 100% { background-color: ${passed ? 'rgba(46, 204, 113, 0.02)' : 'rgba(231, 76, 60, 0.02)'}; }
+        50% { background-color: ${passed ? 'rgba(46, 204, 113, 0.08)' : 'rgba(231, 76, 60, 0.08)'}; }
+      }
+    `;
+
+    container.style.animation = 'background-pulse 3s infinite';
+
+    // Particle shapes - add variety beyond just circles
+    const shapes = ['50%', '5%', '30% 70% 70% 30% / 30% 30% 70% 70%', '50% 50% 0 0', '0 50% 50% 0'];
+
+    for (let i = 0; i < particleCount; i++) {
+      const particle = document.createElement('div');
+
+      // More variety in size
+      const size = Math.random() * 80 + 10;
+      const isSpecial = Math.random() > 0.8; // 20% chance for special particles
+
+      // Base particle styling
+      particle.style.position = 'absolute';
+      particle.style.width = `${size}px`;
+      particle.style.height = `${size}px`;
+
+      // Randomly select particle color
+      const color = colors[Math.floor(Math.random() * colors.length)];
+
+      // Add variety with different shapes and styles
+      if (isSpecial) {
+        // Special particles with gradients and different shapes
+        const gradientAngle = Math.floor(Math.random() * 360);
+        const secondColor = colors[Math.floor(Math.random() * colors.length)];
+        particle.style.background = `linear-gradient(${gradientAngle}deg, ${color}, ${secondColor})`;
+        particle.style.borderRadius = shapes[Math.floor(Math.random() * shapes.length)];
+        particle.style.boxShadow = `0 0 ${Math.random() * 8 + 3}px ${color}`;
+      } else {
+        // Regular particles
+        particle.style.backgroundColor = color;
+        particle.style.borderRadius = Math.random() > 0.3 ? '50%' : shapes[Math.floor(Math.random() * shapes.length)];
+        particle.style.opacity = Math.random() * 0.7 + 0.3;
+      }
+
+      // Z-index for layering effect
+      particle.style.zIndex = Math.floor(Math.random() * 10);
+
+      // Starting positions centered properly
+      const startX = (Math.random() - 0.5) * 30;
+      const startY = (Math.random() - 0.5) * 30;
+
+      // More varied ending positions with some particles moving in curves
+      const endX = (Math.random() - 0.5) * 2.5 * window.innerWidth;
+      const endY = (Math.random() - 0.5) * 2.5 * window.innerHeight;
+
+      // Control points for bezier curves (for some particles)
+      const cp1x = startX + (Math.random() - 0.5) * window.innerWidth * 0.5;
+      const cp1y = startY + (Math.random() - 0.5) * window.innerHeight * 0.5;
+
+      // Random animation properties
+      const duration = Math.random() * 2 + 0.8;
+      const delay = Math.random() * 0.2; // Shorter delay for more immediate effect
+      const easing = ['ease-out', 'cubic-bezier(0.25, 0.1, 0.25, 1)', 'cubic-bezier(0.34, 1.56, 0.64, 1)'][Math.floor(Math.random() * 3)];
+
+      // Set initial position - properly centered
+      particle.style.top = '50%';
+      particle.style.left = '50%';
+      particle.style.transform = `translate(calc(-50% + ${startX}px), calc(-50% + ${startY}px)) rotate(0deg)`;
+
+      // Apply animation with delay
+      particle.style.animation = `particle-animation-${i} ${duration}s ${easing} ${delay}s forwards`;
+
+      // Create more complex keyframes with rotation and scaling
+      const useBezier = Math.random() > 0.7; // 30% chance for bezier curve paths
+      const rotationAmount = (Math.random() - 0.5) * 720; // -360 to 360 degrees
+
+      if (useBezier) {
+        // Bezier curve path
+        keyframesCSS += `
+          @keyframes particle-animation-${i} {
+            0% {
+              transform: translate(calc(-50% + ${startX}px), calc(-50% + ${startY}px)) rotate(0deg) scale(1);
+              opacity: ${isSpecial ? 0.9 : 0.7};
+            }
+            50% {
+              opacity: ${isSpecial ? 0.95 : 0.5};
+              transform: translate(
+                calc(-50% + ${startX}px + (${cp1x}px - ${startX}px) * 2),
+                calc(-50% + ${startY}px + (${cp1y}px - ${startY}px) * 2)
+              ) rotate(${rotationAmount / 2}deg) scale(${Math.random() * 0.5 + 0.8});
+            }
+            100% {
+              transform: translate(calc(-50% + ${endX}px), calc(-50% + ${endY}px)) rotate(${rotationAmount}deg) scale(${Math.random() * 0.5 + 0.2});
+              opacity: 0;
+            }
+          }
+        `;
+      } else {
+        // Linear path with rotation and scaling
+        keyframesCSS += `
+          @keyframes particle-animation-${i} {
+            0% {
+              transform: translate(calc(-50% + ${startX}px), calc(-50% + ${startY}px)) rotate(0deg) scale(1);
+              opacity: ${isSpecial ? 0.9 : 0.7};
+            }
+            ${Math.random() * 30 + 20}% {
+              opacity: ${isSpecial ? 0.95 : 0.6};
+              transform: translate(
+                calc(-50% + ${startX}px + (${endX}px - ${startX}px) * 0.3),
+                calc(-50% + ${startY}px + (${endY}px - ${startY}px) * 0.3)
+              ) rotate(${rotationAmount * 0.3}deg) scale(${Math.random() * 0.4 + 1.1});
+            }
+            100% {
+              transform: translate(calc(-50% + ${endX}px), calc(-50% + ${endY}px)) rotate(${rotationAmount}deg) scale(${Math.random() * 0.5 + 0.2});
+              opacity: 0;
+            }
+          }
+        `;
+      }
+
+      particlePool.appendChild(particle);
+    }
+
+    // Add a few special "burst" particles that expand from center (faster and smoother)
+    for (let i = 0; i < 12; i++) {
+      const burstParticle = document.createElement('div');
+      const size = Math.random() * 150 + 50;
+      const color = colors[Math.floor(Math.random() * colors.length)];
+
+      burstParticle.style.position = 'absolute';
+      burstParticle.style.width = `${size}px`;
+      burstParticle.style.height = `${size}px`;
+      burstParticle.style.borderRadius = '50%';
+      burstParticle.style.border = `1px solid ${color}`;
+      burstParticle.style.backgroundColor = 'transparent';
+      burstParticle.style.top = '50%';
+      burstParticle.style.left = '50%';
+      burstParticle.style.transform = 'translate(-50%, -50%) scale(0)';
+      burstParticle.style.opacity = 0.5;
+
+      const delay = Math.random() * 0.2;
+      const duration = Math.random() * 0.6 + 0.4; // Faster burst
+
+      burstParticle.style.animation = `burst-animation-${i} ${duration}s ease-out ${delay}s forwards`;
+
+      keyframesCSS += `
+        @keyframes burst-animation-${i} {
+          0% {
+            transform: translate(-50%, -50%) scale(0);
+            opacity: 0.5;
+          }
+          70% {
+            opacity: 0.3;
+          }
+          100% {
+            transform: translate(-50%, -50%) scale(${Math.random() * 1.5 + 1});
+            opacity: 0;
+          }
+        }
+      `;
+
+      particlePool.appendChild(burstParticle);
+    }
+
+    // Add a central glow effect with smoother fade-out
+    const centralGlow = document.createElement('div');
+    centralGlow.style.position = 'absolute';
+    centralGlow.style.width = '100px';
+    centralGlow.style.height = '100px';
+    centralGlow.style.borderRadius = '50%';
+    centralGlow.style.backgroundColor = passed ? 'rgba(46, 204, 113, 0.2)' : 'rgba(231, 76, 60, 0.2)';
+    centralGlow.style.boxShadow = passed ?
+      '0 0 50px 25px rgba(46, 204, 113, 0.5)' :
+      '0 0 50px 25px rgba(231, 76, 60, 0.5)';
+    centralGlow.style.top = '50%';
+    centralGlow.style.left = '50%';
+    centralGlow.style.transform = 'translate(-50%, -50%)';
+    centralGlow.style.animation = 'central-glow 3s ease-in-out forwards';
+
+    keyframesCSS += `
+      @keyframes central-glow {
+        0% {
+          transform: translate(-50%, -50%) scale(0.8);
+          opacity: 0.9;
+        }
+        40% {
+          transform: translate(-50%, -50%) scale(1.2);
+          opacity: 0.8;
+        }
+        100% {
+          transform: translate(-50%, -50%) scale(1.5);
+          opacity: 0;
+        }
+      }
+    `;
+
+    particlePool.appendChild(centralGlow);
+
+    // Apply all keyframes at once for better performance
+    styleSheet.innerHTML = keyframesCSS;
+    document.head.appendChild(styleSheet);
+
+    // Add all particles to container at once
+    container.appendChild(particlePool);
+
+    // Optional: Remove particles after animation completes to clean up DOM
+    setTimeout(() => {
+      while (container.firstChild) {
+        container.removeChild(container.firstChild);
+      }
+      document.head.removeChild(styleSheet);
+    }, 3500); // Slightly longer than the longest possible animation
+  }
+
+  document.getElementById('skill-name').innerText = '<<skill_name>>';
+  document.getElementById('difficulty-class').innerText = '<<difficulty_class>>';
+</script>
+
+<div id="dice-box"></div>
+<div id="check-info">
+  <span>Skill check</span>
+  <h1 id="skill-name"></h1>
+  <span>Difficulty class</span>
+  <h1 id="difficulty-class"></h1>
+</div>
+<div id="particles-container"></div>
