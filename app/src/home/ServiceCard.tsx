@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { IconButton } from "../IconButton";
 import { IconBookMarked, IconExternalLink } from "../Icons";
 import { ACTION_ICONS, HarborService } from "../serviceMetadata";
@@ -8,9 +8,14 @@ import { HSTColorOpts } from "../ServiceTags";
 import { runHarbor } from "../useHarbor";
 import { resolveResultLines, toasted } from "../utils";
 import { runOpen } from "../useOpen";
+import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm'
+import remarkDirective from "remark-directive";
+import remarkGithubAdmonitionsToDirectives from "remark-github-admonitions-to-directives";
+import remarkStripHtml from 'remark-strip-html'
 
 export const ServiceCard = (
-  { service, onUpdate }: { service: HarborService; onUpdate: () => void },
+  { service, onUpdate, showDocs }: { service: HarborService; onUpdate: () => void; showDocs: boolean },
 ) => {
   const [loading, setLoading] = useState(false);
 
@@ -64,6 +69,15 @@ export const ServiceCard = (
     ? `bg-gradient-to-tr from-0% to-50% ${HSTColors[gradientTag]}`
     : "";
 
+  const [shortDoc, setShortDoc] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    if (service.shortDoc) {
+      service.shortDoc.then((doc) => {
+        setShortDoc(doc);
+      });
+    }
+  }, [service]);
+
   return (
     <div
       className={`p-4 rounded-box cursor-default bg-base-200/50 relative ${gradientClass}`}
@@ -81,11 +95,13 @@ export const ServiceCard = (
               <span className="inline-block bg-base-content/20 shrink-0 w-2 h-2 rounded-full">
               </span>
             )}
-            <IconButton
-              disabled={loading}
-              icon={actionIcon}
-              onClick={toggleService}
-            />
+            <div className="tooltip tooltip-bottom" data-tip="Toggle service">
+              <IconButton
+                disabled={loading}
+                icon={actionIcon}
+                onClick={toggleService}
+              />
+            </div>
           </>
         )}
 
@@ -97,16 +113,31 @@ export const ServiceCard = (
           />
         )}
         {service.wikiUrl && (
-          <a
-            className="text-base-content/50 btn btn-sm btn-circle"
-            href={service.wikiUrl}
-            target="_blank"
-            rel="noreferrer"
-          >
-            <IconBookMarked />
-          </a>
-        )}
+
+          <div className="tooltip tooltip-bottom text-label" data-tip="Go to documentation">
+            <a
+              className="text-base-content/50 btn btn-sm btn-circle"
+              href={service.wikiUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <IconBookMarked />
+            </a>
+          </div>
+        )
+        }
       </h2>
+      {showDocs &&
+        <div className="mb-2 overflow-y-auto overscroll-none max-h-28 max-w-64" >
+          {service.shortDoc ? (
+            <Markdown
+              remarkPlugins={[remarkGfm, remarkDirective, remarkGithubAdmonitionsToDirectives, remarkStripHtml]}
+              components={{
+                ul(props) {
+                  return <ul className="list-disc list-inside">{props.children}</ul>
+                }
+              }}>{shortDoc}</Markdown>) : "Documentation not available."}
+        </div>}
       <ServiceTags service={service} />
     </div>
   );
