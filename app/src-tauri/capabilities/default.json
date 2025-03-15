@@ -58,6 +58,9 @@
       "identifier": "fs:scope",
       "allow": [
         {
+          "path": "$HOME/.harbor/docs/*"
+        },
+        {
           "path": "$HOME/**"
         },
         {

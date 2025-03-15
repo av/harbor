@@ -96,6 +96,8 @@ export const ServiceList = () => {
     });
   };
 
+  const [showDocs, setShowDocs] = useState(false);
+
   return (
     <Section
       header={
@@ -140,6 +142,8 @@ export const ServiceList = () => {
             onChange={(e: ChangeEvent<HTMLInputElement>) =>
               serviceSearch.setQuery(e.target.value)}
           />
+          <input type="checkbox" checked={showDocs} className="checkbox" onChange={() => setShowDocs(b => !b)} />
+          Show Docs
         </div>
       }
       children={
@@ -157,6 +161,7 @@ export const ServiceList = () => {
                     <ServiceCard
                       service={service}
                       onUpdate={handleServiceUpdate}
+                      showDocs={showDocs}
                     />
                   </li>
                 );

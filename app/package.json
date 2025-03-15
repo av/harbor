@@ -20,11 +20,17 @@
     "@tauri-apps/plugin-window-state": "2.2.0",
     "autoprefixer": "^10.4.20",
     "daisyui": "^4.12.10",
+    "marked": "^15.0.7",
     "postcss": "^8.4.47",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-hot-toast": "^2.4.1",
+    "react-markdown": "^10.1.0",
     "react-router-dom": "^6.26.2",
+    "remark-directive": "^4.0.0",
+    "remark-gfm": "^4.0.1",
+    "remark-github-admonitions-to-directives": "^2.1.0",
+    "remark-strip-html": "^1.0.2",
     "tailwindcss": "^3.4.13"
   },
   "devDependencies": {
