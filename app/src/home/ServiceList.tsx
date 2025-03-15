@@ -7,9 +7,10 @@ import { useServiceList } from "./useServiceList";
 import { useArrayState } from "../useArrayState";
 import { Loader } from "../Loading";
 import { IconButton } from "../IconButton";
-import { ACTION_ICONS, HarborService } from "../serviceMetadata";
+import { HarborService } from "../serviceMetadata";
+import { ACTION_ICONS } from "../serviceActions";
 import { ServiceTag } from "../ServiceTags";
-import { HST } from "../ServiceTags";
+import { HST } from '../serviceMetadata';
 import { runHarbor } from "../useHarbor";
 import { toasted } from "../utils";
 import { SearchInput } from "../SearchInput";
@@ -51,7 +52,7 @@ export const ServiceList = () => {
     });
 
     const matchesSearch = [
-      serviceSearch.matches(service.handle),
+      serviceSearch.matches(service.name ?? service.handle),
       serviceSearch.matches(service.tags.join(" ")),
     ].some((match) => !!match);
 

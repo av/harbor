@@ -1,20 +1,6 @@
 import { IconAudioLines, IconAward, IconBandage } from "./Icons";
-import { HarborService } from "./serviceMetadata";
+import { HarborService, HST } from "./serviceMetadata";
 import './tags.css';
-
-// aka Harbor Service Tag
-export enum HST {
-  backend = "Backend",
-  frontend = "Frontend",
-  satellite = "Satellite",
-  api = "API",
-  cli = "CLI",
-  partial = "Partial Support",
-  builtIn = "Built-in",
-  eval = "Eval",
-  audio = "Audio",
-  workflows = "Workflows",
-}
 
 export const HSTColors: Partial<Record<HST, string>> = {
   [HST.backend]: "from-primary/5",

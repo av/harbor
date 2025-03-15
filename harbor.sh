@@ -2321,7 +2321,7 @@ run_harbor_dev() {
             "./.scripts/$script.ts" $script_args[@]
     else
         log_debug "running on host: $script"
-        deno run -A "./.scripts/$script.ts" "${script_args[@]}"
+        deno run -A --unstable-sloppy-imports "./.scripts/$script.ts" "${script_args[@]}"
     fi
 }
 

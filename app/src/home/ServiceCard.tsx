@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { IconButton } from "../IconButton";
 import { IconBookMarked, IconExternalLink } from "../Icons";
-import { ACTION_ICONS, HarborService } from "../serviceMetadata";
-import { HST, ServiceTags } from "../ServiceTags";
+import { HarborService } from "../serviceMetadata";
+import { ACTION_ICONS } from "../serviceActions";
+import { ServiceTags } from "../ServiceTags";
+import { HST } from '../serviceMetadata';
 import { HSTColors } from "../ServiceTags";
 import { HSTColorOpts } from "../ServiceTags";
 import { runHarbor } from "../useHarbor";
@@ -66,10 +68,11 @@ export const ServiceCard = (
 
   return (
     <div
-      className={`p-4 rounded-box cursor-default bg-base-200/50 relative ${gradientClass}`}
+      className={`p-4 rounded-box cursor-default bg-base-200/50 relative ${gradientClass} tooltip tooltip-top label-text`}
+      data-tip={service.tooltip}
     >
       <h2 className="flex items-center gap-1 text-2xl pb-2">
-        <span className="font-bold shrink-1">{service.handle}</span>
+        <span className="font-bold shrink-1">{service.name ?? service.handle}</span>
 
         {canLaunch && (
           <>
