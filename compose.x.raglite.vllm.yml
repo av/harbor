@@ -1,0 +1,4 @@
+services:
+  raglite:
+    environment:
+      - VLLM_BASE_URL=http://vllm:8000

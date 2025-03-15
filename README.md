@@ -50,7 +50,8 @@ Harbor is a containerized LLM toolkit that allows you to run LLMs and additional
 [BionicGPT](https://github.com/av/harbor/wiki/2.1.8-Frontend:-BionicGPT) ⦁︎
 [AnythingLLM](https://github.com/av/harbor/wiki/2.1.9-Frontend:-AnythingLLM) ⦁︎
 [Chat Nio](https://github.com/av/harbor/wiki/2.1.10-Frontend:-Chat-Nio) ⦁︎
-[mikupad](https://github.com/av/harbor/wiki/2.1.11-Frontend:-Mikupad)
+[mikupad](https://github.com/av/harbor/wiki/2.1.11-Frontend:-Mikupad) ⦁︎
+[oterm](https://github.com/av/harbor/wiki/2.1.12-Frontend-oterm)
 
 ##### Backends
 [Ollama](https://github.com/av/harbor/wiki/2.2.1-Backend:-Ollama) ⦁︎
@@ -109,7 +110,8 @@ Harbor is a containerized LLM toolkit that allows you to run LLMs and additional
 [SQL Chat](https://github.com/av/harbor/wiki/2.3.35-Satellite-SQL-Chat) ⦁︎
 [gptme](https://github.com/av/harbor/wiki/2.3.36-Satellite-gptme) ⦁︎
 [traefik](https://github.com/av/harbor/wiki/2.3.37-Satellite-traefik) ⦁︎
-[Latent Scope](https://github.com/av/harbor/wiki/2.3.38-Satellite-Latent-Scope)
+[Latent Scope](https://github.com/av/harbor/wiki/2.3.38-Satellite-Latent-Scope) ⦁︎
+[RAGLite](https://github.com/av/harbor/wiki/2.3.39-Satellite-RAGLite)
 
 See [services documentation](https://github.com/av/harbor/wiki/2.-Services) for a brief overview of each.
 

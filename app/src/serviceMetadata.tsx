@@ -306,4 +306,12 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         tags: [HST.satellite],
         wikiUrl: 'https://github.com/av/harbor/wiki/2.3.38-Satellite-Latent-Scope',
     },
+    oterm: {
+        tags: [HST.cli, HST.frontend],
+        wikiUrl: 'https://github.com/av/harbor/wiki/2.1.12-Frontend-oterm'
+    },
+    raglite: {
+        tags: [HST.satellite, HST.frontend],
+        wikiUrl: 'https://github.com/av/harbor/wiki/2.3.39-Satellite-RAGLite',
+    }
 };

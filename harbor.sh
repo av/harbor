@@ -2740,6 +2740,10 @@ run_parllama_command() {
     $(compose_with_options "parllama") run --rm -it --entrypoint bash parllama -c parllama
 }
 
+run_oterm_command() {
+    $(compose_with_options "oterm") run --rm -it oterm
+}
+
 run_plandex_command() {
     case "$1" in
     health)
@@ -4348,6 +4352,10 @@ main_entrypoint() {
     parllama)
         shift
         run_parllama_command "$@"
+        ;;
+    oterm)
+        shift
+        run_oterm_command "$@"
         ;;
     plandex | pdx)
         shift

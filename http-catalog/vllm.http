@@ -1,8 +1,8 @@
-@host = http://localhost:33911
+@host = http://localhost:{{HARBOR_VLLM_HOST_PORT}}
 
 ###
 
-curl {{host}}/v1/models
+GET {{host}}/v1/models
 
 ###
 
@@ -101,3 +101,20 @@ curl {{host}}/v1/chat/completions -H 'Content-Type: application/json' -H "Author
   ],
   "max_tokens": 8
 }'
+
+###
+
+POST {{host}}/v1/chat/completions
+Content-Type: application/json
+Authorization: Bearer sk-vllm
+
+{
+  "model": "microsoft/Phi-3.5-mini-instruct",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Bobby was born in Paris. How old is Bobby?"
+    }
+  ],
+  "max_tokens": 200
+}

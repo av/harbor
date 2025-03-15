@@ -1,0 +1,39 @@
+services:
+  raglite:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.raglite
+    build:
+      context: ./raglite
+      dockerfile: Dockerfile
+    ports:
+      - ${HARBOR_RAGLIT_HOST_PORT}:8000
+    env_file:
+      - ./.env
+      - raglite/override.env
+    volumes:
+      - ${HARBOR_HF_CACHE}:/root/.cache/huggingface
+      - ${HARBOR_RAGLITE_WORKSPACE}/raglite:/root/raglite
+      - ${HARBOR_RAGLITE_WORKSPACE}/chainlit:/.chainlit
+    environment:
+      - HF_TOKEN=${HARBOR_HF_TOKEN}
+      - CHAINLIT_HOST=0.0.0.0
+      - ANYSCALE_API_KEY=${HARBOR_ANYSCALE_KEY}
+      - APIPIE_API_KEY=${HARBOR_APIPIE_KEY}
+      - COHERE_API_KEY=${HARBOR_COHERE_KEY}
+      - FIREWORKS_API_KEY=${HARBOR_FIREWORKS_API_KEY}
+      - GROQ_API_KEY=${HARBOR_GROQ_KEY}
+      - MISTRAL_API_KEY=${HARBOR_MISTRAL_KEY}
+      - OPENROUTER_API_KEY=${HARBOR_OPENROUTER_KEY}
+      - PERPLEXITY_API_KEY=${HARBOR_PERPLEXITY_KEY}
+      - SHUTTLEAI_API_KEY=${HARBOR_SHUTTLEAI_KEY}
+      - TOGETHERAI_API_KEY=${HARBOR_TOGETHERAI_KEY}
+      - ANTHROPIC_API_KEY=${HARBOR_ANTHROPIC_KEY}
+      - BINGAI_TOAPI_KEN=${HARBOR_BINGAI_TOKEN}
+      - GOOGLE_API_KEY=${HARBOR_GOOGLE_KEY}
+      - ASSISTANTS_API_KEY=${HARBOR_ASSISTANTS_KEY}
+    command: >
+      raglite
+      --llm ${HARBOR_RAGLITE_MODEL}
+      --embedder ${HARBOR_RAGLITE_EMBEDDER}
+      chainlit
+    networks:
+      - harbor-network

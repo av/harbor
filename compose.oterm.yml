@@ -1,0 +1,13 @@
+services:
+  oterm:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.oterm
+    build:
+      context: ./oterm
+      dockerfile: Dockerfile
+    env_file:
+      - ./.env
+      - oterm/override.env
+    networks:
+      - harbor-network
+    volumes:
+      - ${HARBOR_OTERM_WORKSPACE}:/root/.local/share/oterm
