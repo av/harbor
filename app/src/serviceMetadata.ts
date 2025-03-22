@@ -477,6 +477,7 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
     llamaswap: {
         name: 'llama-swap',
         tags: [HST.satellite, HST.api],
-        wikiUrl: '',
+        wikiUrl: 'https://github.com/av/harbor/wiki/2.3.40-Satellite-llamaswap',
+        tooltip: 'Runs multiple llama.cpp servers on demand for seamless switching between them.',
     }
 };
