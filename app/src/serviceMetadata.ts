@@ -464,14 +464,19 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
     },
     oterm: {
         name: 'oterm',
-        tags: [HST.cli, HST.frontend],
+        tags: [HST.frontend, HST.cli],
         wikiUrl: 'https://github.com/av/harbor/wiki/2.1.12-Frontend-oterm',
         tooltip: 'The text-based terminal client for Ollama.',
     },
     raglite: {
         name: 'RAGLite',
-        tags: [HST.satellite, HST.frontend],
+        tags: [HST.satellite],
         wikiUrl: 'https://github.com/av/harbor/wiki/2.3.39-Satellite-RAGLite',
         tooltip: 'Python toolkit for Retrieval-Augmented Generation (RAG)',
+    },
+    llamaswap: {
+        name: 'llama-swap',
+        tags: [HST.satellite, HST.api],
+        wikiUrl: '',
     }
 };

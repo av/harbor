@@ -1,0 +1,17 @@
+services:
+  llamaswap:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.llamaswap
+    image: ${HARBOR_LLAMASWAP_IMAGE}:cpu
+    ports:
+      - ${HARBOR_LLAMASWAP_HOST_PORT}:8080
+    env_file:
+      - ./.env
+      - llamaswap/override.env
+    networks:
+      - harbor-network
+    volumes:
+      - ${HARBOR_OLLAMA_CACHE}:/root/.ollama
+      - ${HARBOR_HF_CACHE}:/root/.cache/huggingface
+      - ${HARBOR_LLAMACPP_CACHE}:/root/.cache/llama.cpp
+      - ${HARBOR_VLLM_CACHE}:/root/.cache/vllm
+      - ./llamaswap/config.yaml:/app/config.yaml

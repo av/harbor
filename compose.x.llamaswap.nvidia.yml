@@ -1,0 +1,10 @@
+services:
+  llamaswap:
+    image: ${HARBOR_LLAMASWAP_IMAGE}:cuda
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

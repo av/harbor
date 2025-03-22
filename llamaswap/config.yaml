@@ -1,0 +1,30 @@
+# This configuration is based on the official example from:
+# https://github.com/mostlygeek/llama-swap/blob/main/config.example.yaml
+
+# Seconds to wait for llama.cpp to be available to serve requests
+# Default (and minimum): 15 seconds
+healthCheckTimeout: 15
+
+# Log HTTP requests helpful for troubleshoot, defaults to False
+logRequests: true
+
+
+models:
+  # llamacpp cache is available at /root/.cache/llama.cpp
+  # Download models according to the llama.cpp wiki instructions
+  "swap-llamacpp":
+    cmd: >
+      ./llama-server
+      --port 9001
+      -m /root/.cache/llama.cpp/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf
+    proxy: http://0.0.0.0:9001
+
+    # list of model name aliases this llama.cpp instance can serve
+    aliases:
+    - gpt-4o-mini
+
+    # check this path for a HTTP 200 response for the server to be ready
+    checkEndpoint: /health
+
+    # unload model after 5 seconds
+    ttl: 5
