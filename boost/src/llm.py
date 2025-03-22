@@ -176,17 +176,19 @@ class LLM:
     logger.debug('Serving boosted LLM...')
     llm_registry.register(self)
 
-    if self.module is None:
-      logger.debug("No module specified")
-      return self.stream_chat_completion()
-
-    mod = mods.registry.get(self.module)
-
-    if mod is None:
-      logger.error(f"Module '{self.module}' not found.")
-      return
-
     async def apply_mod():
+      if self.module is None:
+        logger.debug("No module specified")
+        await self.stream_final_completion()
+        await self.emit_done()
+        return
+
+      mod = mods.registry.get(self.module)
+
+      if mod is None:
+        logger.error(f"Module '{self.module}' not found.")
+        return
+
       logger.debug(f"Applying '{self.module}' to '{self.model}'")
       try:
         self.chat.llm = self

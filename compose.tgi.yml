@@ -7,7 +7,7 @@ services:
     ports:
       - ${HARBOR_TGI_HOST_PORT}:80
     volumes:
-      - ${HARBOR_HF_CACHE}/hub:/data
+      - ${HARBOR_HF_CACHE}:/data
     environment:
       - PORT=80
       - HOSTNAME=0.0.0.0

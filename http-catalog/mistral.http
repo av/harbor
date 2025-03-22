@@ -1,0 +1,52 @@
+@host = https://api.mistral.ai
+@apiKey = {{HARBOR_MISTRAL_KEY}}
+
+###
+
+GET {{host}}/v1/models
+Authorization: Bearer {{apiKey}}
+
+
+###
+
+POST {{host}}/v1/chat/completions
+Authorization: Bearer {{apiKey}}
+Content-Type: application/json
+
+{
+  "model": "mistral-small-2501",
+  "messages": [
+    {
+      "role": "user",
+      "content": "I'm tall when I'm young, and I'm taller when I'm old. What am I?"
+    },
+    {
+      "role": "assistant",
+      "content": "The riddle you've presented is a classic one. The answer is a **candle**. A candle is tall when it is new (young) and even taller when it has burned down to a stub (old)."
+    },
+    {
+      "role": "user",
+      "content": "Are you sure?"
+    }
+  ],
+  "temperature": 0
+}
+
+###
+
+POST {{host}}/v1/chat/completions
+Authorization: Bearer {{apiKey}}
+Content-Type: application/json
+
+{
+  "model": "mistral-small-2501",
+  "messages": [
+    {
+      "role": "user",
+      "content": "What walks on four legs in the morning, four in the afternoon, and four in the evening?"
+    }
+  ],
+  "temperature": 0,
+  "stream": true,
+  "seed": 42
+}
