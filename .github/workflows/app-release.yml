@@ -52,6 +52,9 @@ jobs:
         working-directory: app
         run: bun install
 
+      - name: Ensure docs
+        run: bun ./.scripts/docs-to-app.ts
+
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

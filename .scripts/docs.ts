@@ -7,6 +7,8 @@ import remarkStringify from "npm:remark-stringify";
 import { unified } from "npm:unified";
 import { visit } from "npm:unist-util-visit";
 
+import { copyDocsToApp } from './docs-to-app.ts'
+
 const wikiLocation = "../harbor.wiki";
 const docsLocation = "./docs";
 const appLocation = "./app/src/docs"
@@ -61,23 +63,6 @@ async function copyDocsToWiki() {
   const readmePath = `${wikiLocation}/README.md`;
   const homePath = `${wikiLocation}/Home.md`;
   await Deno.rename(readmePath, homePath);
-}
-
-async function copyDocsToApp() {
-  console.debug("Copying docs to app...");
-
-  const docsPath = Deno.realPathSync(docsLocation);
-  const docsFiles = Deno.readDirSync(docsPath);
-  await Deno.mkdir(appLocation, { recursive: true });
-
-  for (const file of docsFiles) {
-    if (file.isFile) {
-      const source = `${docsPath}/${file.name}`;
-      const dest = `${appLocation}/${file.name}`;
-
-      await Deno.copyFile(source, dest);
-    }
-  }
 }
 
 function toRepoFileName(name: string) {
