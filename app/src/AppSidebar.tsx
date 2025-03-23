@@ -9,6 +9,10 @@ export const AppSidebarContent: FC = () => {
     return (
         <Fragment>
             {ROUTES_LIST.map((route) => {
+                if (route.sidebar === false) {
+                    return null;
+                }
+
                 return (
                     <li key={route.id}>
                         <Link

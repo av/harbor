@@ -1,15 +1,18 @@
 import { ReactNode } from "react";
 import { RouteProps } from "react-router-dom";
 
-import { Config } from "./config/Config";
-import { Home } from "./home/Home";
-import { Settings } from "./settings/Settings";
 import { IconBolt, IconLayoutDashboard, IconSettings, IconTerminal } from "./Icons";
+
+import { Home } from "./home/Home";
+import { Config } from "./config/Config";
+import { Settings } from "./settings/Settings";
 import { CLI } from "./cli/CLI";
+import { ServiceDetails } from "./service/ServiceDetails";
 
 type HarborRoute = {
     id: string;
     name: ReactNode;
+    sidebar?: boolean;
 } & RouteProps;
 
 export const ROUTES: Record<string, HarborRoute> = {
@@ -36,6 +39,13 @@ export const ROUTES: Record<string, HarborRoute> = {
         name: <span className="flex items-center gap-2"><IconSettings />Settings</span>,
         path: '/settings',
         element: <Settings />,
+    },
+    services: {
+        id: 'services',
+        name: 'Service Details',
+        path: '/services/:handle',
+        sidebar: false,
+        element: <ServiceDetails />,
     },
 };
 

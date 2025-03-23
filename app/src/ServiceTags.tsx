@@ -52,7 +52,7 @@ export const ServiceTag = (
     <span className="tooltip tooltip-bottom label-text" data-tip={HSTTooltips[tag]}>
       <span
         key={tag}
-        className="badge bg-base-content/5 text-base-content/80 group-has-[input:checked]:badge-neutral"
+        className="badge bg-base-300/50 text-base-content/80 group-has-[input:checked]:badge-neutral"
       >
         {maybeAdornment}
         {tag}
@@ -67,7 +67,7 @@ export const ServiceTags = (
   return (
     <div className="badges flex gap-2">
       {service.isDefault && (
-        <span className="badge badge-primary">
+        <span className="badge badge-primary tooltip tooltip-bottom" data-tip="Starts by default when no specific service is selected">
           Default
         </span>
       )}

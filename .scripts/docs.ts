@@ -9,6 +9,7 @@ import { visit } from "npm:unist-util-visit";
 
 const wikiLocation = "../harbor.wiki";
 const docsLocation = "./docs";
+const appLocation = "./app/src/docs"
 
 const targets = {
   "./docs/5.2.-Harbor-Boost.md": "./boost/README.md",
@@ -18,9 +19,12 @@ const targets = {
 main().catch(console.error);
 
 async function main() {
-  await renderServiceIndex();
-  await copyDocsToWiki()
-  await copyTargets()
+  await Promise.all([
+    renderServiceIndex(),
+    copyDocsToWiki(),
+    copyDocsToApp(),
+    copyTargets(),
+  ])
 }
 
 async function copyDocsFromWiki() {
@@ -57,6 +61,23 @@ async function copyDocsToWiki() {
   const readmePath = `${wikiLocation}/README.md`;
   const homePath = `${wikiLocation}/Home.md`;
   await Deno.rename(readmePath, homePath);
+}
+
+async function copyDocsToApp() {
+  console.debug("Copying docs to app...");
+
+  const docsPath = Deno.realPathSync(docsLocation);
+  const docsFiles = Deno.readDirSync(docsPath);
+  await Deno.mkdir(appLocation, { recursive: true });
+
+  for (const file of docsFiles) {
+    if (file.isFile) {
+      const source = `${docsPath}/${file.name}`;
+      const dest = `${appLocation}/${file.name}`;
+
+      await Deno.copyFile(source, dest);
+    }
+  }
 }
 
 function toRepoFileName(name: string) {

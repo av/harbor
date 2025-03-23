@@ -167,3 +167,15 @@ export function resolveResultLines(process: ChildProcess<string> | undefined | n
     const stdout = process?.stdout ?? '';
     return stdout.split('\n').filter(Boolean).filter(line => !outputBlock.includes(line));
 }
+
+/**
+ * React handles stopPropagation very poorly in some cases,
+ * this is a workaround
+ */
+export function markHandled(e: React.SyntheticEvent) {
+    Object.assign(e.nativeEvent, { __handled: true });
+}
+
+export function isHandled(e: React.SyntheticEvent) {
+    return '__handled' in e.nativeEvent;
+}

@@ -4,14 +4,17 @@ import { IconArrowUpToLine } from "./Icons";
 
 function getClosestScrollableParent(element: EventTarget) {
     let parent = (element as HTMLElement).parentElement;
+
     while (parent) {
         if (
-            parent.scrollHeight > parent.clientHeight
+            parent.scrollHeight > parent.clientHeight + 1
+            && parent.classList.contains("overflow-y-auto")
         ) {
             return parent;
         }
         parent = parent.parentElement;
     }
+
     return null;
 }
 
