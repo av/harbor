@@ -67,14 +67,6 @@ export const ServiceDocs = ({ service }: { service: HarborService }) => {
         source={content}
         className="p-8 rounded"
         urlTransform={transformUrl}
-        wrapperElement={{
-          // "data-color-mode": "light",
-        }}
-        style={{
-          // @ts-expect-error - css vars mapping
-          // '--color-canvas-default': 'var(--color-primary)',
-          // '--color-fg-default': 'var(--color-primary-content)',
-        }}
       />
     </>
   );
