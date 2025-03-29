@@ -276,3 +276,44 @@ POST {{host}}/v1/chat/completions
     }
   ]
 }
+
+### Tool Call
+
+POST {{host}}/v1/chat/completions
+
+{
+  "model": "llama3.1:8b",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Tell me about av/harbor project"
+    }
+  ],
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+          "name": "web_search",
+          "description": "Perform a web search for the given query",
+          "parameters": {
+              "type": "object",
+              "properties": {
+                  "query": {
+                      "type": "string",
+                      "description": "The search query"
+                  }
+              },
+              "required": [
+                  "query"
+              ],
+              "additionalProperties": false
+          },
+          "strict": true
+      }
+    }
+  ],
+  "stream": true,
+  "stream_options": {
+    "include_usage": true
+  }
+}

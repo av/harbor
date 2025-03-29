@@ -10,6 +10,8 @@ class ChatNode:
   id: str
   content: str
   role: str
+  tool_call_id: Optional[str]
+  tool_calls: Optional[List[dict]]
 
   parent: Optional['ChatNode']
   children: List['ChatNode']
@@ -18,6 +20,7 @@ class ChatNode:
   value: float
   meta: dict
 
+  @staticmethod
   def from_conversation(messages):
     root_message = messages[0]
     node = ChatNode(role=root_message['role'], content=root_message['content'])
@@ -43,6 +46,9 @@ class ChatNode:
     self.value = kwargs.get('value', 0.0)
 
     self.meta = kwargs.get('meta', {})
+
+    self.tool_call_id = kwargs.get('tool_call_id', None)
+    self.tool_calls = kwargs.get('tool_calls', [])
 
   def add_parent(self, new_parent: 'ChatNode'):
     # Guard against None and self-reference
@@ -111,10 +117,18 @@ class ChatNode:
     return parents[::-1]
 
   def message(self):
-    return {
+    result = {
       "role": self.role,
       "content": self.content,
     }
+
+    if self.tool_call_id is not None:
+      result["tool_call_id"] = self.tool_call_id
+
+    if self.tool_calls:
+      result["tool_calls"] = self.tool_calls
+
+    return result
 
   def ancestor(self):
     node = self

@@ -12,10 +12,12 @@ class Chat:
   tail: ChatNode
   llm: Optional['llm.LLM']
 
+  @staticmethod
   def from_conversation(messages):
     tail = ChatNode.from_conversation(messages)
     return Chat(tail=tail)
 
+  @staticmethod
   def from_tail(chat: 'Chat'):
     new_tail = ChatNode(role=chat.tail.role, content=chat.tail.content)
     return Chat(tail=new_tail)
@@ -50,6 +52,16 @@ class Chat:
     self.tail.add_child(child)
     self.tail = child
 
+    return self.tail
+
+  def tool_call(self, tool_call):
+    self.add_message('assistant', '')
+    self.tail.tool_calls = [tool_call]
+    return self.tail
+
+  def tool(self, id, content):
+    self.add_message('tool', content)
+    self.tail.tool_call_id = id
     return self.tail
 
   def user(self, content):
