@@ -1,0 +1,16 @@
+services:
+  libretranslate:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.libretranslate
+    image: ${HARBOR_LIBRETRANSLATE_IMAGE}:${HARBOR_LIBRETRANSLATE_VERSION}
+    ports:
+      - ${HARBOR_LIBRETRANSLATE_HOST_PORT}:5000
+    env_file:
+      - ./.env
+      - libretranslate/override.env
+    volumes:
+      - ${HARBOR_LIBRETRANSLATE_WORKSPACE}/keys:/app/db
+      - ${HARBOR_LIBRETRANSLATE_WORKSPACE}/local:/home/libretranslate/.local
+    tty: true
+    stdin_open: true
+    networks:
+      - harbor-network

@@ -481,5 +481,11 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         tags: [HST.satellite, HST.api],
         wikiUrl: `${wikiUrl}/2.3.40-Satellite-llamaswap`,
         tooltip: 'Runs multiple llama.cpp servers on demand for seamless switching between them.',
+    },
+    libretranslate: {
+        name: 'LibreTranslate',
+        tags: [HST.satellite],
+        wikiUrl: `${wikiUrl}/2.3.41-Satellite-LibreTranslate`,
+        tooltip: 'A free and open-source machine translation.',
     }
 };

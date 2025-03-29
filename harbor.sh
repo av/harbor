@@ -1981,12 +1981,14 @@ docker_fsacl() {
     # 100 - most frequent default on Alpine
     # 911 - "abc" user from LinuxServer.io images
     # 101 - clickhouse
+    # 1032 - libretranslate
     sudo setfacl --recursive -m user:1000:rwx $folder &&
         sudo setfacl --recursive -m user:1002:rwx $folder &&
         sudo setfacl --recursive -m user:1001:rwx $folder &&
         sudo setfacl --recursive -m user:100:rwx $folder &&
         sudo setfacl --recursive -m user:911:rwx $folder &&
-        sudo setfacl --recursive -m user:101:rwx $folder
+        sudo setfacl --recursive -m user:101:rwx $folder &&
+        sudo setfacl --recursive -m user:1032:rwx $folder
 }
 
 run_fixfs() {
