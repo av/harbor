@@ -1,0 +1,80 @@
+services:
+  metamcp:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.metamcp
+    build:
+      context: ${HARBOR_METAMCP_GIT_REF}
+      dockerfile: Dockerfile
+    ports:
+      - ${HARBOR_METAMCP_HOST_PORT}:3000
+    env_file:
+      - ./.env
+      - ./metamcp/override.env
+    depends_on:
+      - metamcp-postgres
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./mcp/cache/uv:/app/.uv_cache
+      - ./mcp/cache/npm:/root/.npm
+    networks:
+      - harbor-network
+
+  metamcp-postgres:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.metamcp-postgres
+    image: postgres:16.2-alpine3.18
+    env_file:
+      - ./.env
+      - ./metamcp/override.env
+    ports:
+      - ${HARBOR_METAMCP_DB_HOST_PORT}:5432
+    volumes:
+      - ./metamcp/data:/var/lib/postgresql/data
+    networks:
+      - harbor-network
+
+  metamcp-migrate:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.metamcp-migrate
+    build:
+      context: ${HARBOR_METAMCP_GIT_REF}
+      dockerfile: Dockerfile
+      target: migrator
+    env_file:
+      - .env
+      - ./metamcp/override.env
+    command: pnpm drizzle-kit migrate
+    depends_on:
+      - metamcp-postgres
+    networks:
+      - harbor-network
+
+  metamcp-sse:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.metamcp-sse
+    build:
+      context: ./mcp
+      dockerfile_inline: |
+        FROM ghcr.io/av/tools:latest
+        RUN echo '{ "dependencies": { "pg": "^18.0.0" } }' > package.json
+        RUN npm install
+    ports:
+      - ${HARBOR_METAMCP_SSE_HOST_PORT}:12006
+    env_file:
+      - .env
+      - ./mcp/override.env
+      - ./metamcp/override.env
+    depends_on:
+      metamcp-migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "npx", "wait-port", "12006"]
+      interval: 1s
+      timeout: 10s
+      retries: 10
+      start_period: 2s
+    volumes:
+      - ./mcp/cache:/app/cache
+      - ./mcp/data:/app/data
+      - ./metamcp/start-sse.mjs:/app/start-sse.mjs
+    command: node /app/start-sse.mjs
+    networks:
+      - harbor-network
+

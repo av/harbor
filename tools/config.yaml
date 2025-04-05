@@ -1,0 +1,10 @@
+tools:
+  time:
+    command: uvx
+    args:
+      - mcp-server-time
+    openapi: true
+    cwd: ~/code/harbor
+
+
+

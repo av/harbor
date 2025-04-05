@@ -6,6 +6,8 @@ Welcome to the harbor wiki!
   Guides to install Harbor CLI and App
 - [Harbor User Guide](https://github.com/av/harbor/wiki/1.-Harbor-User-Guide)<br/>
   High-level overview of working with Harbor
+- [Harbor Tools](https://github.com/av/harbor/wiki/1.2-Tools)<br/>
+  Overview of features and services related to tool use
 - [Harbor App](https://github.com/av/harbor/wiki/1.1-Harbor-App)<br/>
   Overview and manual for the Harbor companion application
 - [Harbor Services](https://github.com/av/harbor/wiki/2.-Services)<br/>

@@ -1,0 +1,19 @@
+services:
+  mcpo:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.mcpo
+    image: ghcr.io/av/tools:latest
+    ports:
+      - ${HARBOR_MCPO_HOST_PORT}:8000
+    volumes:
+      - ./mcp/cache:/app/cache
+      - ./mcp/data:/app/data
+      - ./shared/json_config_merger.py:/app/json_config_merger.py
+      - ./mcpo/start_mcpo.sh:/app/start_mcpo.sh
+      - ./mcpo/configs/mcpo.override.json:/app/configs/z.config.json
+    entrypoint: ["/app/start_mcpo.sh"]
+    env_file:
+      - ./.env
+      - ./mcp/override.env
+      - ./mcpo/override.env
+    networks:
+      - harbor-network

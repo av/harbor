@@ -1,0 +1,21 @@
+services:
+  mcp-inspector:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.mcp-inspector
+    build:
+      context: ./mcp
+      dockerfile_inline: |
+        FROM ghcr.io/av/tools:latest
+        RUN apt-get update && apt-get install -y socat
+    entrypoint: /app/inspector-entrypoint.sh
+    command: npx @modelcontextprotocol/inspector
+    ports:
+      - 6274:6274
+      - 6277:6277
+    volumes:
+      - ./mcp/cache:/app/cache
+      - ./mcp/inspector-entrypoint.sh:/app/inspector-entrypoint.sh
+    env_file:
+      - ./.env
+      - ./mcp/override.env
+    networks:
+      - harbor-network

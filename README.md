@@ -8,7 +8,7 @@
 [![Visitors](https://api.visitorbadge.io/api/visitors?path=av%2Fharbor&countColor=%23263759&style=flat)](https://visitorbadge.io/status?path=av%2Fharbor)
 ![GitHub language count](https://img.shields.io/github/languages/count/av/harbor)
 [![Discord](https://img.shields.io/badge/Discord-Harbor-blue?logo=discord&logoColor=white)](https://discord.gg/8nDRphrhSF)
-![Harbor Ko-fi](https://img.shields.io/badge/support_Harbor_on_Ko--fi-white?style=social&logo=kofi)
+![Harbor Ko-fi](https://img.shields.io/badge/Ko--fi-white?style=social&logo=kofi)
 
 Effortlessly run LLM backends, APIs, frontends, and services with one command.
 
@@ -24,10 +24,11 @@ Harbor is a containerized LLM toolkit that allows you to run LLMs and additional
 |---|---|---|
 |Local LLMs | Run LLMs and related services locally, with no or minimal configuration, typically in a single command or click. | [Harbor CLI](https://github.com/av/harbor/wiki/3.-Harbor-CLI-Reference), [Harbor App](https://github.com/av/harbor/wiki/1.1-Harbor-App)|
 |Cutting Edge Inference|Harbor supports most of the major inference engines as well as a few of the lesser-known ones. | [Inference Backends](#backends) |
-|Talk to your LLM| Setup voice chats with your LLM in a single command. Open WebUI + Speaches  | [`harbor up speaches`](./docs/2.2.14-Backend&colon-Speaches) |
+| Tool Use | Enjoy the benefits of MCP ecosystem, extend it to your use-cases | [`Harbor Tools`](./docs/1.2-Tools) |
 |Generate Images| ComfyUI + Flux + Open WebUI integration. | [`harbor up comfyui`](./docs/2.1.2-Frontend&colon-ComfyUI) |
 | Local Perplexity | Harbor includes SearXNG that is pre-connected to a lot of services out of the box. Connect your LLM to the Web. | [`harbor up searxng`](./docs/2.3.1-Satellite&colon-SearXNG) |
 | LLM Workflows | Harbor includes multiple services for build LLM-based data and chat workflows: [Dify](./docs/2.3.3-Satellite&colon-Dify), [LitLytics](./docs/2.3.21-Satellite&colon-LitLytics), [n8n](./docs/2.3.23-Satellite&colon-n8n), [Open WebUI Pipelines](./docs/2.3.25-Satellite&colon-Open-WebUI-Pipelines), [FloWise](./docs/2.3.31-Satellite&colon-Flowise), [LangFlow](./docs/2.3.32-Satellite&colon-LangFlow) | [`harbor up dify`](./docs/2.3.3-Satellite&colon-Dify) |
+| Talk to your LLM | Setup voice chats with your LLM in a single command. Open WebUI + Speaches  | [`harbor up speaches`](./docs/2.2.14-Backend&colon-Speaches) |
 | Chat from the phone | You can access Harbor services from your phone with a QR code. Easily get links for local, LAN or Docker access. | [`harbor qr`](./docs/3.-Harbor-CLI-Reference#harbor-qr), [`harbor url`](./docs/3.-Harbor-CLI-Reference#harbor-url-service) |
 | Chat from anywhere | Harbor includes a built-in tunneling service to expose your Harbor to the internet. | [`harbor tunnel`](./docs/3.-Harbor-CLI-Reference#harbor-tunnels) |
 | LLM Scripting | [Harbor Boost](./docs/5.2.-Harbor-Boost) allows you to [easily script workflows](./docs/5.2.1.-Harbor-Boost-Custom-Modules) and interactions with downstream LLMs. | [`harbor up boost`](./docs/5.2.-Harbor-Boost) |
@@ -111,7 +112,12 @@ Harbor is a containerized LLM toolkit that allows you to run LLMs and additional
 [gptme](https://github.com/av/harbor/wiki/2.3.36-Satellite-gptme) ⦁︎
 [traefik](https://github.com/av/harbor/wiki/2.3.37-Satellite-traefik) ⦁︎
 [Latent Scope](https://github.com/av/harbor/wiki/2.3.38-Satellite-Latent-Scope) ⦁︎
-[RAGLite](https://github.com/av/harbor/wiki/2.3.39-Satellite-RAGLite)
+[RAGLite](https://github.com/av/harbor/wiki/2.3.39-Satellite-RAGLite) ⦁︎
+[llama-swap](https://github.com/av/harbor/wiki/2.3.40-Satellite-llamaswap) ⦁︎
+[LibreTranslate](https://github.com/av/harbor/wiki/2.3.41-Satellite-LibreTranslate) ⦁︎
+[MetaMCP](https://github.com/av/harbor/wiki/2.3.42-Satellite-MetaMCP) ⦁︎
+[mcpo](https://github.com/av/harbor/wiki/2.3.43-Satellite-mcpo)
+
 
 See [services documentation](https://github.com/av/harbor/wiki/2.-Services) for a brief overview of each.
 

@@ -80,7 +80,7 @@ show_help() {
     echo "  k6                - Run K6 CLI"
     echo
     echo "Harbor CLI Commands:"
-    echo "  open handle                   - Open a service in the default browser"
+    echo "  open <handle>                 - Open a service in the default browser"
     echo
     echo "  url <handle>                  - Get the URL for a service"
     echo "    url <handle>                         - Url on the local host"
@@ -342,6 +342,7 @@ run_routine() {
         -v "$harbor_home:$harbor_home" \
         -v harbor-deno-cache:/deno-dir:rw \
         -w "$harbor_home" \
+        -e "HARBOR_LOG_LEVEL=$default_log_level" \
         denoland/deno:distroless \
         run -A --unstable-sloppy-imports \
         $routine_path "$@"
@@ -2327,6 +2328,10 @@ run_harbor_dev() {
     fi
 }
 
+run_harbor_tools() {
+    run_routine manageTools "$@"
+}
+
 # shellcheck disable=SC2034
 __anchor_service_clis=true
 
@@ -2337,6 +2342,10 @@ run_gum() {
 run_dive() {
     local dive_image=wagoodman/dive
     docker run --rm -it -v /var/run/docker.sock:/var/run/docker.sock $dive_image "$@"
+}
+
+run_av_tools() {
+    docker run --rm -it -p 6274:6274 -p 6277:6277 -v cache:/app/cache ghcr.io/av/tools:latest "$@"
 }
 
 run_llamacpp_command() {
@@ -4159,12 +4168,22 @@ run_gptme_command() {
         gptme -m $model_spec "$@"
 }
 
+run_mcp_command() {
+    case "$1" in
+    inspector)
+        shift
+        run_av_tools npx @modelcontextprotocol/inspector "$@"
+        return 0
+        ;;
+    esac
+}
+
 # ========================================================================
 # == Main script
 # ========================================================================
 
 # Globals
-version="0.3.6"
+version="0.3.7"
 harbor_repo_url="https://github.com/av/harbor.git"
 harbor_release_url="https://api.github.com/repos/av/harbor/releases/latest"
 delimiter="|"
@@ -4487,6 +4506,10 @@ main_entrypoint() {
         shift
         run_gptme_command "$@"
         ;;
+    mcp)
+        shift
+        run_mcp_command "$@"
+        ;;
     tunnel | t)
         shift
         establish_tunnel "$@"
@@ -4558,6 +4581,10 @@ main_entrypoint() {
     dev)
         shift
         run_harbor_dev "$@"
+        ;;
+    tools)
+        shift
+        run_harbor_tools "$@"
         ;;
     *)
         return $scramble_exit_code

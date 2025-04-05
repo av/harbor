@@ -1,176 +1,193 @@
-import { readFileSync, writeFileSync } from 'node:fs';
-import { getArgs, log } from './utils';
+import { CONFIG_PREFIX, log } from "./utils";
+import { paths } from './paths';
 
-function parseArgs(args) {
-  const options = {
-    silent: false,
-    envFile: '.env',
-    prefix: 'HARBOR_',
-  };
+export const TOOLS_CONFIG_KEY = 'tools';
 
-  while (args.length > 0 && args[0].startsWith('--')) {
-    switch (args[0]) {
-      case '--silent':
-        options.silent = true;
-        args.shift();
-        break;
-      case '--env-file':
-        options.envFile = args[1];
-        args.shift();
-        args.shift();
-        break;
-      case '--prefix':
-        options.prefix = args[1];
-        args.shift();
-        args.shift();
-        break;
-      default:
-        if (!options.silent) {
-          log.warn(`Unknown option: ${args[0]}`);
-        }
-        return null;
-    }
+/**
+ * @param {string} input
+ * @returns {string}
+ */
+function decodeBashValue(input) {
+  if (!input) return '';
+
+  // Trim surrounding whitespace
+  input = input.trim();
+
+  // Single-quoted: literal content, no escape sequences interpreted
+  if (input.startsWith("'") && input.endsWith("'")) {
+    return input.slice(1, -1);
   }
 
-  return {
-    options,
-    command: args[0],
-    args: args.slice(1),
-  };
-}
-
-function readEnvFile(filePath) {
-  try {
-    const content = readFileSync(filePath, 'utf8');
-    const envVars = {};
-
-    content.split('\n').forEach(line => {
-      line = line.trim();
-      if (line && !line.startsWith('#')) {
-        const [key, ...valueParts] = line.split('=');
-        const value = valueParts.join('=')
-          .replace(/^"(.*)"$/, '$1') // Remove surrounding quotes
-          .replace(/^'(.*)'$/, '$1');
-        envVars[key.trim()] = value.trim();
+  // Double-quoted: interpret escape sequences
+  if (input.startsWith('"') && input.endsWith('"')) {
+    const inner = input.slice(1, -1);
+    return inner.replace(/\\(["\\$`nrt])/g, (_, ch) => {
+      switch (ch) {
+        case 'n': return '\n';
+        case 'r': return '\r';
+        case 't': return '\t';
+        case '"': return '"';
+        case '\\': return '\\';
+        case '$': return '$';
+        case '`': return '`';
+        default: return ch;
       }
     });
-
-    return envVars;
-  } catch (err) {
-    throw new Error(`Failed to read env file: ${err.message}`);
   }
+
+  // Unquoted: interpret backslash escapes
+  return input.replace(/\\(.)/g, '$1');
 }
 
-function writeEnvFile(filePath, envVars) {
-  try {
-    const content = Object.entries(envVars)
-      .map(([key, value]) => `${key}="${value}"`)
-      .join('\n');
-    writeFileSync(filePath, content + '\n');
-  } catch (err) {
-    throw new Error(`Failed to write env file: ${err.message}`);
+/**
+ * @param {string} value
+ * @returns {string}
+ */
+function encodeBashValue(value) {
+  if (value === '') return '""'; // empty string must be quoted
+
+  // Safe unquoted characters: alphanumerics and a few symbols
+  const safeUnquoted = /^[a-zA-Z0-9._\/-]+$/;
+  if (safeUnquoted.test(value)) {
+    return value;
   }
+
+  // Prefer single quotes unless the string contains single quotes
+  if (!value.includes("'")) {
+    return `'${value}'`;
+  }
+
+  // Fallback: use double quotes and escape necessary characters
+  const escaped = value.replace(/["\\$`]/g, '\\$&')
+    .replace(/\n/g, '\\n')
+    .replace(/\r/g, '\\r')
+    .replace(/\t/g, '\\t');
+
+  return `"${escaped}"`;
 }
 
-function getValue(envVars, prefix, key) {
-  const upperKey = key.toUpperCase().replace(/\./g, '_');
-  const fullKey = prefix + upperKey;
-  return envVars[fullKey];
+/**
+ * @typedef {Object} EnvKey
+ * @property {string} key - The key to convert.
+ * @property {string} [prefix] - Config name prefix to use.
+ */
+
+/**
+ * @typedef {object} EnvProfileKey
+ * @property {string} [profile] - The profile to use.
+ *
+ * @typedef {EnvKey & EnvProfileKey} EnvValuePointer
+ */
+
+/**
+ * @typedef {object} EnvProfileValue
+ * @property {string} value - The value to set.
+ *
+ * @typedef {EnvKey & EnvProfileKey & EnvProfileValue } EnvValueSetter
+ */
+
+/**
+ * @typedef {object} EnvProfileJsonValue
+ * @property {object} value - The value to set.
+ *
+ * @typedef {EnvKey & EnvProfileKey & EnvProfileJsonValue } EnvJsonValueSetter
+ */
+
+/**
+ * Convert input config key into a Harbor profile key.
+ *
+ * @param {Object} config
+ * @param {string} config.key - The input key to convert.
+ * @param {string} [config.prefix] - Config name prefix to use.
+ * @returns {Promise<string>}
+ */
+export async function toEnvKey({
+  key,
+  prefix = CONFIG_PREFIX,
+}) {
+  const envKey = key
+    .replace(/-/g, "_")
+    .replace(/\./g, "_")
+    .toUpperCase();
+
+  return prefix + envKey;
 }
 
-function setValue(envVars, prefix, key, value) {
-  const upperKey = key.toUpperCase().replace(/\./g, '_');
-  const fullKey = prefix + upperKey;
-  envVars[fullKey] = value;
-  return envVars;
+/**
+ * Get given value from the env profile.
+ *
+ * @param {EnvValuePointer} config
+ * @returns {Promise<string>}
+ */
+export async function getValue({
+  profile = paths.currentProfile,
+  prefix = CONFIG_PREFIX,
+  key,
+}) {
+  const finalKey = await toEnvKey({ key, prefix });
+  const contents = await Deno.readTextFile(profile);
+  const line = contents
+    .split("\n")
+    .find((line) => line.startsWith(`${finalKey}=`));
+
+  if (!line) {
+    log.error(`Key ${finalKey} not found in ${profile}`);
+    return '';
+  }
+
+  const value = line.split("=")[1];
+  return decodeBashValue(value);
 }
 
-function listVars(envVars, prefix) {
-  return Object.entries(envVars)
-    .filter(([key]) => key.startsWith(prefix))
-    .map(([key, value]) => ({
-      key: key.replace(prefix, ''),
-      value,
-    }));
-}
+/**
+ * Set given value in the env profile.
+ * @param {EnvValueSetter} config
+ */
+export async function setValue({
+  key,
+  value,
+  profile = paths.currentProfile,
+  prefix = CONFIG_PREFIX,
+}) {
+  const finalKey = await toEnvKey({ key, prefix });
+  const contents = await Deno.readTextFile(profile);
+  const lines = contents.split("\n").map((line) => {
+    const isTarget = line.startsWith(`${finalKey}=`);
 
-export async function envManager(args) {
-  const parsed = parseArgs(args);
-  if (!parsed) return 1;
-
-  const { options, command, args: remainingArgs } = parsed;
-  const envVars = readEnvFile(options.envFile);
-
-  try {
-    switch (command) {
-      case 'get': {
-        const value = getValue(envVars, options.prefix, remainingArgs[0]);
-        if (value !== undefined) {
-          return value;
-        }
-        break;
-      }
-
-      case 'set': {
-        if (remainingArgs.length < 2) {
-          if (!options.silent) {
-            log.warn('Usage: env_manager set <key> <value>');
-          }
-          return 1;
-        }
-        const [key, ...valueParts] = remainingArgs;
-        const newValue = valueParts.join(' ');
-        const newEnvVars = setValue(envVars, options.prefix, key, newValue);
-        writeEnvFile(options.envFile, newEnvVars);
-        if (!options.silent) {
-          log.info(`Set ${options.prefix}${key.toUpperCase()} to: "${newValue}"`);
-        }
-        break;
-      }
-
-      case 'list':
-      case 'ls': {
-        const vars = listVars(envVars, options.prefix);
-        vars.forEach(({ key, value }) => {
-          const padding = ' '.repeat(Math.max(0, 30 - key.length));
-          console.log(`${key}${padding}${value}`);
-        });
-        break;
-      }
-
-      case 'reset': {
-        // Implementation would depend on default.env handling
-        if (!options.silent) {
-          log.warn('Reset not implemented in JS version');
-        }
-        break;
-      }
-
-      case 'update': {
-        // Implementation would depend on merge logic
-        if (!options.silent) {
-          log.warn('Update not implemented in JS version');
-        }
-        break;
-      }
-
-      default: {
-        if (!options.silent) {
-          log.warn('Usage: env_manager [--silent] [--env-file <file>] [--prefix <prefix>] {get|set|ls|list|reset|update} [key] [value]');
-        }
-        return 1;
-      }
+    if (isTarget) {
+      return `${finalKey}="${encodeBashValue(value)}"`;
     }
-    return 0;
-  } catch (err) {
-    if (!options.silent) {
-      log.error(err.message);
-    }
-    return 1;
+
+    return line;
+  });
+
+  await Deno.writeTextFile(profile, lines.join("\n"));
+}
+
+/**
+ * @param {EnvValuePointer} config
+ * @returns {Promise<object>}
+ */
+export async function getJsonValue(config) {
+  const value = await getValue(config);
+
+  if (value === '') {
+    return {};
+  }
+
+  try {
+    return JSON.parse(value);
+  } catch (e) {
+    log.error(`Failed to parse JSON value: ${e}`);
+    process.exit(1);
   }
 }
 
-if (import.meta.main) {
-  const args = getArgs();
-  process.exit(await envManager(args));
+/**
+ * @param {EnvJsonValueSetter} config
+ * @returns {Promise<void>}
+ */
+export async function setJsonValue(config) {
+  const json = JSON.stringify(config.value);
+  await setValue({ ...config, value: json });
 }

@@ -15,7 +15,8 @@ export enum HST {
     builtIn = "Built-in",
     eval = "Eval",
     audio = "Audio",
-    workflows = "Workflows"
+    workflows = "Workflows",
+    tools = "Tools",
 }
 
 export type HarborService = {
@@ -487,5 +488,27 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         tags: [HST.satellite],
         wikiUrl: `${wikiUrl}/2.3.41-Satellite-LibreTranslate`,
         tooltip: 'A free and open-source machine translation.',
+    },
+    metamcp: {
+        name: 'MetaMCP',
+        tags: [HST.satellite, HST.tools],
+        wikiUrl: `${wikiUrl}/2.3.42-Satellite-MetaMCP`,
+        tooltip: 'Allows to manage MCPs via a WebUI, exposes multiple MCPs as a single server.'
+    },
+    mcpo: {
+        name: 'mcpo',
+        tags: [HST.satellite, HST.tools],
+        wikiUrl: `${wikiUrl}/2.3.43-Satellite-mcpo`,
+        tooltip: 'Turn MCP servers into OpenAPI REST APIs - use them anywhere.',
+    },
+    'mcp-inspector': {
+        name: 'MCP Inspector',
+        tags: [HST.satellite, HST.cli, HST.tools],
+    },
+    'supergateway': {
+        name: 'SuperGateway',
+        tags: [HST.satellite, HST.cli, HST.tools],
+        wikiUrl: `${wikiUrl}/2.3.44-Satellite-supergateway`,
+        tooltip: 'A simple and powerful API gateway for LLMs.',
     }
 };

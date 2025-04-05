@@ -1,11 +1,11 @@
 import { listComposeFiles } from './paths';
-import { builtInCapabilities, log } from "./utils";
+import { BUILTIN_CAPS, log } from "./utils";
 
-export function isCapability(capability, defaultCapabilities = builtInCapabilities) {
+export function isCapability(capability, defaultCapabilities = BUILTIN_CAPS) {
   return defaultCapabilities.includes(capability);
 }
 
-export function isCapabilityFile(filename, defaultCapabilities = builtInCapabilities) {
+export function isCapabilityFile(filename, defaultCapabilities = BUILTIN_CAPS) {
   return defaultCapabilities.some(cap => filename.includes(`.${cap}.`));
 }
 

@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "metamcp": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "supergateway",
+        "--sse",
+        "http://metamcp-sse:12006/sse"
+      ]
+    }
+  }
+}

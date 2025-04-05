@@ -1,4 +1,4 @@
-import { IconAudioLines, IconAward, IconBandage } from "./Icons";
+import { IconAudioLines, IconAward, IconBandage, IconPocketKnife } from "./Icons";
 import { HarborService, HST } from "./serviceMetadata";
 import './tags.css';
 
@@ -23,6 +23,7 @@ export const HSTTooltips: Partial<Record<HST, string>> = {
   [HST.eval]: "Service is used for evaluation or benchmarking.",
   [HST.audio]: "Service is oriented towards working with audio.",
   [HST.workflows]: "Service provides visual workflow building functionality.",
+  [HST.tools]: "Service provides tools for LLMs and agents."
 };
 
 export const TAG_ADORNMENTS: Partial<Record<HST, React.ReactNode>> = {
@@ -41,6 +42,11 @@ export const TAG_ADORNMENTS: Partial<Record<HST, React.ReactNode>> = {
       <IconAudioLines />
     </span>
   ),
+  [HST.tools]: (
+    <span className="mr-1 opacity-50">
+      <IconPocketKnife />
+    </span>
+  )
 };
 
 export const ServiceTag = (

@@ -1,0 +1,16 @@
+{
+  "tool_server": {
+    "connections": [
+      {
+        "url": "http://harbor.mcpo:8000/metamcp",
+        "path": "openapi.json",
+        "auth_type": "bearer",
+        "key": "",
+        "config": {
+          "enable": true,
+          "access_control": null
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,7 @@
+services:
+  mcpo:
+    volumes:
+      - ./mcpo/configs/mcpo.metamcp.json:/app/configs/mcpo.metamcp.json
+    depends_on:
+      metamcp-sse:
+        condition: service_healthy

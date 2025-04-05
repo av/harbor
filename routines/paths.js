@@ -8,6 +8,10 @@ export const paths = {
   home: path.resolve(__dirname, '..'),
   routines: path.resolve(__dirname),
   mergedYaml: '__harbor.yml',
+  tools: path.resolve(__dirname, '..', 'tools'),
+  toolsConfig: '__tools.yml',
+  toolsCompose: 'compose.tools.yml',
+  currentProfile: '.env',
 }
 
 export async function listComposeFiles() {

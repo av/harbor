@@ -317,3 +317,37 @@ POST {{host}}/v1/chat/completions
     "include_usage": true
   }
 }
+
+### The Candle Test
+
+POST {{host}}/v1/chat/completions
+
+{
+  "model": "hf.co/bartowski/Llama-3.1-SuperNova-Lite-GGUF:Q8_0",
+  "messages": [
+    // {
+    //   "role": "system",
+    //   "content": "Random nonce: {{ Math.floor(Math.random() * 1000000) }}"
+    // },
+    {
+      "role": "user",
+      "content": "Are candles getting taller or shorter when they burn?"
+    },
+    {
+      "role": "assistant",
+      "content": "When candles burn, they get **shorter** over time. This happens because the wax acts as fuel for the flame, and as the wax melts and vaporizes, the candle gradually decreases in height."
+    },
+    {
+      "role": "user",
+      "content": "Are you sure? Will you be able to recognize this fact in different circumstances?"
+    },
+    {
+      "role": "assistant",
+      "content": "Yes, I'm sure that candles get **shorter** as they burn. Here's why this holds true universally, regardless of how the question is phrased or the circumstances described:\n\n- **How candles work:** The heat from the candle's flame melts the solid wax near the wick, which then gets drawn up through the wick to fuel the flame. The burning process converts the wax into heat, light, water vapor, and carbon dioxide. As this happens, the candle's solid wax diminishes, causing it to grow shorter.\n\nSo in all scenarios where a candle is burning normally, the height of the candle will reduce over time, and it won't get taller. Even if the question is rephrased or asked indirectly, the underlying principle remains the same: burning a candle consumes its wax, making it shorter. Let me know if you'd like further clarification!"
+    },
+    {
+      "role": "user",
+      "content": "Now, consider what you said above and solve the following riddle: I'm tall when I'm young, and I'm taller when I'm old. What am I?"
+    }
+  ]
+}

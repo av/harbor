@@ -15,7 +15,7 @@ services:
     image: \${${envPrefix}IMAGE}:\${${envPrefix}VERSION}
     env_file:
       - ./.env
-      - ${handle}/override.env
+      - ./${handle}/override.env
     networks:
       - harbor-network
 `.trimStart();

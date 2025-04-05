@@ -1,0 +1,13 @@
+services:
+  supergateway:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.supergateway
+    image: ghcr.io/av/tools:latest
+    entrypoint: npx supergateway
+    volumes:
+      - ./mcp/cache/uv:/app/.uv_cache
+      - ./mcp/cache/npm:/root/.npm
+    env_file:
+      - ./.env
+      - ./supergateway/override.env
+    networks:
+      - harbor-network
