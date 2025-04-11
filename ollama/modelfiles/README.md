@@ -16,5 +16,9 @@ harbor ollama create -f <modelfile> <model name>
 ### Snippets
 
 ```bash
+# hargent
 harbor ollama create -f hargent.Modelfile hargent
+
+# Gemma 3 QAT w/ Tools
+harbor ollama create -f gemma3-qat-tools.Modelfile gemma-3:4b-qat
 ```

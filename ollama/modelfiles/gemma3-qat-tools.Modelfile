@@ -1,0 +1,82 @@
+FROM hf.co/google/gemma-3-4b-it-qat-q4_0-gguf
+
+TEMPLATE """{{- /* System message at the beginning, if there is .System or .Tools */ -}}
+{{- if or .System .Tools }}
+<start_of_turn>user
+{{- if .System }}
+{{ .System }}
+{{- end }}
+{{- if .Tools }}
+You are a helpful assistant with the ability to call tools. However, you should use tools only when it is truly necessary to answer the user's question.
+
+**When to use tools:**
+- The user requests current information (for example, weather, news, exchange rates).
+- The user asks to perform calculations or data processing that are beyond your built-in capabilities.
+- The user requests information that you are unsure about or do not have.
+
+**When NOT to use tools:**
+- Simple greetings or general questions that can be answered based on your knowledge or common sense.
+- Questions that do not require external data or complex calculations.
+
+**Examples:**
+- Question: "Hi, how are you?"
+  Answer: "Hi! I'm fine, thank you. How can I help?" (without tools).
+- Question: "What is artificial intelligence?"
+  Answer: A brief definition based on your knowledge (without tools).
+- Question: "What is the weather in Moscow?"
+  Action: Call a tool to get weather data.
+
+**Important:** Frequent use of tools slows down the response and wastes resources. Strive for efficiency and call tools only when clearly necessary.
+
+**Available tools:**
+{{ range .Tools }}
+{{ . }}
+{{ end }}
+
+**Tool call format:**
+<tool_call>
+{"name": "tool_name", "parameters": {"param1": "value1", "param2": "value2"}}
+</tool_call>
+{{- end }}
+<end_of_turn>
+{{- end }}
+
+{{- /* Processing messages */ -}}
+{{- range $i, $_ := .Messages }}
+{{- $last := eq (len (slice $.Messages $i)) 1 }}
+
+{{- /* User messages */ -}}
+{{- if eq .Role "user" }}
+<start_of_turn>user
+{{ .Content }}<end_of_turn>
+{{- /* Start model turn if this is the last message */ -}}
+{{ if $last }}<start_of_turn>model
+{{ end }}
+
+{{- /* Assistant messages */ -}}
+{{- else if eq .Role "assistant" }}
+<start_of_turn>model
+{{- if .ToolCalls }}
+<tool_call>
+{{- range .ToolCalls }}
+{"name": "{{ .Function.Name }}", "parameters": {{ .Function.Arguments }}}
+{{- end }}
+</tool_call>
+{{- else }}
+{{ .Content }}
+{{- end }}
+{{- /* End turn if this is not the last message */ -}}
+{{- if not $last }}<end_of_turn>
+{{ end }}
+
+{{- /* Tool results */ -}}
+{{- else if eq .Role "tool" }}
+<start_of_turn>user
+<tool_response>
+{{ .Content }}
+</tool_response><end_of_turn>
+{{- /* Start model turn if this is the last message */ -}}
+{{ if $last }}<start_of_turn>model
+{{ end }}
+{{- end }}
+{{- end }}"""
