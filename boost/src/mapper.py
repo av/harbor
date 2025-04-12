@@ -1,3 +1,6 @@
+from asyncache import cached
+from cachetools import TTLCache
+
 import httpx
 
 from typing import Dict
@@ -10,6 +13,7 @@ logger = log.setup_logger(__name__)
 
 MODEL_TO_BACKEND: Dict[str, str] = {}
 
+@cached(TTLCache(1024, 60))
 async def list_downstream():
   logger.debug("Listing downstream models")
 

@@ -1,0 +1,301 @@
+<style>
+  * {
+    box-sizing: border-box;
+    scrollbar-width: none;
+  }
+
+  html,
+  body {
+    font-family: Avenir, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow: hidden;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    position: relative;
+    text-align: center;
+    background: #222;
+    color: #bbb;
+  }
+
+  .dot-container {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    gap: 1rem;
+    padding: 1rem;
+  }
+
+  .dot-status {
+    padding: 0.5rem;
+  }
+
+  .dot-plan {
+    overflow-y: auto;
+    border-radius: 0.25rem;
+    max-height: 100vh;
+    text-align: left;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .dot-step {
+    background: rgba(255, 255, 255, 0.05);
+    padding: 1rem;
+    border-radius: 0.25rem;
+    transition: background-color 0.3s ease;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .dot-step p {
+    margin-left: 1.5rem;
+  }
+
+  .dot-step h3 {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin: 0;
+  }
+
+  .dot-step .indicator {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.1);
+    transition: all 0.3s ease;
+  }
+
+  .dot-step.executing .indicator {
+    animation: blink 1s infinite;
+  }
+
+  .dot-step.completed .indicator {
+    background: #44aa44;
+    box-shadow: #44aa44 0 0 0.5rem;
+  }
+
+  .dot-step h3,
+  .dot-step p {
+    margin: 0;
+  }
+
+  @keyframes fadeIn {
+    0% {
+      opacity: 0;
+    }
+
+    100% {
+      opacity: 1;
+    }
+  }
+
+  @keyframes blink {
+    0% {
+      background: rgba(255, 255, 255, 0.5);
+    }
+
+    50% {
+      background: rgba(255, 255, 255, 1);
+    }
+
+    100% {
+      background: rgba(255, 255, 255, 0.5);
+    }
+  }
+
+  .shiny-text {
+    background: linear-gradient(to right, #4d4d4d 0, white 10%, #4d4d4d 20%);
+    background-position: 0;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: shine 3s infinite linear;
+    animation-fill-mode: forwards;
+    -webkit-text-size-adjust: none;
+  }
+
+  @keyframes shine {
+    0% {
+      background-position: -100px;
+    }
+
+    100% {
+      background-position: 1000px;
+    }
+  }
+</style>
+<div class="dot-container">
+  <div class="dot-status"></div>
+  <div class="dot-plan"></div>
+</div>
+<script type="module">
+  import autoAnimate from "https://unpkg.com/@formkit/auto-animate@0.8.2/index.mjs";
+
+  const elements = {
+    status: document.querySelector(".dot-status"),
+    plan: document.querySelector(".dot-plan"),
+  };
+
+  // Event handling setup
+  const handlers = {
+    "boost.listener.event": handleBoostEvent,
+    "dot.status": handleStatus,
+    "dot.plan.step": handlePlanStep,
+    'dot.step.status': handleStepStatus,
+    "dot.step.response": handleStepResponse,
+    "chat.completion.chunk": handleCompletionChunk,
+  };
+
+  const animateConfig = {
+    duration: 150,
+    easing: "ease-in-out",
+  };
+
+  // Start listening automatically when the page loads
+  document.addEventListener("DOMContentLoaded", () => {
+    autoAnimate(elements.status, animateConfig);
+    autoAnimate(elements.plan, animateConfig);
+    startListening();
+  });
+
+  async function setStatus(text) {
+    if (elements.status.firstElementChild) {
+      elements.status.firstElementChild.remove();
+    }
+    const newStatus = document.createElement("span");
+    newStatus.textContent = text;
+    elements.status.appendChild(newStatus);
+  }
+
+  function processChunk(chunk) {
+    try {
+      const data = JSON.parse(chunk.replace(/data: /, ""));
+      const text = data.object;
+      const handler = handlers[text];
+
+      if (handler) {
+        console.log("Processing chunk:", data);
+        handler(data);
+      }
+    } catch (e) {
+      console.error("Error processing chunk:", e);
+    }
+  }
+
+  function handleCompletionChunk(chunk) {
+    // elements.log.textContent += JSON.stringify(chunk);
+  }
+
+  function handleStatus(event) {
+    setStatus(event.status);
+  }
+
+  function handlePlanStep(event) {
+    const step = document.createElement("div");
+    step.classList.add("dot-step");
+    step.setAttribute("data-step-id", event.id);
+
+    const title = document.createElement("h3");
+    const indicator = document.createElement("div");
+    const titleText = document.createElement("span");
+    titleText.textContent = event.step;
+    title.classList.add('shiny-text');
+    title.appendChild(indicator);
+    title.appendChild(titleText);
+
+    indicator.classList.add("indicator");
+
+    step.appendChild(title);
+    elements.plan.appendChild(step);
+    autoAnimate(step, animateConfig);
+  }
+
+  function handleStepStatus(event) {
+    const step = document.querySelector(`.dot-step[data-step-id="${event.id}"]`);
+    step.classList.add(event.status)
+  }
+
+  function handleStepResponse(event) {
+    const step = document.querySelector(`.dot-step[data-step-id="${event.id}"]`);
+    step.classList.remove('executing')
+    step.classList.add('completed')
+    step.scrollIntoView({
+      behavior: 'smooth',
+    });
+
+    if (step) {
+      const title = step.querySelector("h3");
+      title.classList.remove("shiny-text");
+      const response = document.createElement("p");
+      response.textContent = event.response;
+      step.appendChild(response);
+    }
+  }
+
+  function handleBoostEvent(event) {
+    if (handlers[event.event]) {
+      handlers[event.event](event.data);
+    } else {
+      console.warn("Unknown event:", event);
+    }
+  }
+
+  function getChunkContent(chunk) {
+    return chunk.choices.map((choice) => choice.delta.content).join("\n");
+  }
+
+  async function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  // Start listening for events
+  async function startListening() {
+    try {
+      const listenerId = "<<listener_id>>";
+      const response = await fetch(
+        `http://localhost:34131/events/${listenerId}`,
+        {
+          headers: {
+            Authorization: "Bearer sk-boost",
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const reader = response.body.getReader();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          console.log("Stream complete");
+          break;
+        }
+
+        try {
+          const blob = new TextDecoder().decode(value);
+          const chunks = blob.split("\n\n");
+
+          for (const chunk of chunks) {
+            if (chunk.trim()) {
+              processChunk(chunk);
+            }
+          }
+        } catch (e) {
+          console.error("Error processing data:", e);
+        }
+      }
+    } catch (error) {
+      console.error("Error connecting to event stream:", error);
+    }
+  }
+</script>

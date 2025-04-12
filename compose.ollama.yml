@@ -19,7 +19,6 @@ services:
       interval: 1s
       timeout: 5s
       retries: 3
-    restart: unless-stopped
     networks:
       - harbor-network
 

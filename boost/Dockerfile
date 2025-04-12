@@ -1,7 +1,9 @@
-FROM python:3.11
+FROM ghcr.io/av/tools
 
-WORKDIR /app
-COPY /src /app
-RUN pip install -r requirements.txt
+WORKDIR /boost
+COPY /src /boost
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+RUN uv venv
+RUN uv pip install -r requirements.txt
+
+CMD ["uv", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

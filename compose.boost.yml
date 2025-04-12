@@ -8,7 +8,8 @@ services:
       - ./.env
       - ./boost/override.env
     volumes:
-      - ./boost/src:/app
+      - ./boost/src:/boost
+      - /boost/.venv
       - ${HARBOR_OLLAMA_CACHE}:/root/.ollama
       - ${HARBOR_HF_CACHE}:/root/.cache/huggingface
       - ${HARBOR_LLAMACPP_CACHE}:/root/.cache/llama.cpp

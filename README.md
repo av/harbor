@@ -20,23 +20,137 @@ Harbor is a containerized LLM toolkit that allows you to run LLMs and additional
 
 ![Diagram outlining Harbor's service structure](https://raw.githubusercontent.com/wiki/av/harbor/harbor-arch-diag.png)
 
-| What | Overview | Links |
-|---|---|---|
-|Local LLMs | Run LLMs and related services locally, with no or minimal configuration, typically in a single command or click. | [Harbor CLI](https://github.com/av/harbor/wiki/3.-Harbor-CLI-Reference), [Harbor App](https://github.com/av/harbor/wiki/1.1-Harbor-App)|
-|Cutting Edge Inference|Harbor supports most of the major inference engines as well as a few of the lesser-known ones. | [Inference Backends](#backends) |
-| Tool Use | Enjoy the benefits of MCP ecosystem, extend it to your use-cases | [`Harbor Tools`](./docs/1.2-Tools) |
-|Generate Images| ComfyUI + Flux + Open WebUI integration. | [`harbor up comfyui`](./docs/2.1.2-Frontend&colon-ComfyUI) |
-| Local Perplexity | Harbor includes SearXNG that is pre-connected to a lot of services out of the box. Connect your LLM to the Web. | [`harbor up searxng`](./docs/2.3.1-Satellite&colon-SearXNG) |
-| LLM Workflows | Harbor includes multiple services for build LLM-based data and chat workflows: [Dify](./docs/2.3.3-Satellite&colon-Dify), [LitLytics](./docs/2.3.21-Satellite&colon-LitLytics), [n8n](./docs/2.3.23-Satellite&colon-n8n), [Open WebUI Pipelines](./docs/2.3.25-Satellite&colon-Open-WebUI-Pipelines), [FloWise](./docs/2.3.31-Satellite&colon-Flowise), [LangFlow](./docs/2.3.32-Satellite&colon-LangFlow) | [`harbor up dify`](./docs/2.3.3-Satellite&colon-Dify) |
-| Talk to your LLM | Setup voice chats with your LLM in a single command. Open WebUI + Speaches  | [`harbor up speaches`](./docs/2.2.14-Backend&colon-Speaches) |
-| Chat from the phone | You can access Harbor services from your phone with a QR code. Easily get links for local, LAN or Docker access. | [`harbor qr`](./docs/3.-Harbor-CLI-Reference#harbor-qr), [`harbor url`](./docs/3.-Harbor-CLI-Reference#harbor-url-service) |
-| Chat from anywhere | Harbor includes a built-in tunneling service to expose your Harbor to the internet. | [`harbor tunnel`](./docs/3.-Harbor-CLI-Reference#harbor-tunnels) |
-| LLM Scripting | [Harbor Boost](./docs/5.2.-Harbor-Boost) allows you to [easily script workflows](./docs/5.2.1.-Harbor-Boost-Custom-Modules) and interactions with downstream LLMs. | [`harbor up boost`](./docs/5.2.-Harbor-Boost) |
-| Config Profiles | Save and manage configuration profiles for different scenarios. For example - save [llama.cpp](./docs/2.2.2-Backend&colon-llama.cpp) args for different models and contexts and switch between them easily. | [`harbor profile`](./docs/3.-Harbor-CLI-Reference#harbor-profile), [Harbor App](https://github.com/av/harbor/wiki/1.1-Harbor-App) |
-| Command History | Harbor keeps a local-only history of recent commands. Look up and re-run easily, standalone from the system shell history. | [`harbor history`](./docs/3.-Harbor-CLI-Reference#harbor-history) |
-| Eject | Ready to move to your own setup? Harbor will give you a docker-compose file replicating your setup. | [`harbor eject`](./docs/3.-Harbor-CLI-Reference#harbor-eject) |
-|  | Harbor includes a lot more services and features. Check the [Documentation](#documentation) links below. | |
 
+## ✦ Local LLMs
+
+Run LLMs and related services locally, with no or minimal configuration, typically in a single command or click.
+
+```bash
+# Starts fully configured
+# Open WebUI and Ollama
+harbor up
+
+# All backends are pre-connected to Open WebUI
+harbor up vllm
+```
+
+##  Cutting Edge Inference
+
+Harbor supports most of the major inference engines as well as a few of the lesser-known ones.
+
+```bash
+# We sincerely hope you'll never try to run all of them at once
+harbor up vllm llamacpp tgi litellm tabbyapi aphrodite sglang ktransformers mistralrs airllm
+```
+
+## Tool Use
+
+Enjoy the benefits of MCP ecosystem, extend it to your use-cases.
+
+```bash
+# Manage MCPs with a convenient Web UI
+harbor up metamcp
+
+# Connect MCPs to Open WebUI
+harbor up metamcp mcpo
+```
+
+## Generate Images
+
+Harbor includes ComfyUI + Flux + Open WebUI integration.
+
+```bash
+# Use FLUX in Open WebUI in one command
+harbor up comfyui
+```
+
+## Local Perplexity
+
+Harbor includes SearXNG that is pre-connected to a lot of services out of the box. Connect your LLM to the Web.
+
+```bash
+# SearXNG is pre-connected to Open WebUI
+harbor up searxng
+```
+
+## LLM Workflows
+
+Harbor includes multiple services for build LLM-based data and chat workflows: [Dify](./docs/2.3.3-Satellite&colon-Dify), [LitLytics](./docs/2.3.21-Satellite&colon-LitLytics), [n8n](./docs/2.3.23-Satellite&colon-n8n), [Open WebUI Pipelines](./docs/2.3.25-Satellite&colon-Open-WebUI-Pipelines), [FloWise](./docs/2.3.31-Satellite&colon-Flowise), [LangFlow](./docs/2.3.32-Satellite&colon-LangFlow)
+
+```bash
+# Use Dify in Open WebUI
+harbor up dify
+```
+
+## Talk to your LLM
+
+Setup voice chats with your LLM in a single command. Open WebUI + Speaches
+
+```bash
+# Speaches includes OpenAI-compatible SST and TTS
+# and connected to Open WebUI out of the box
+harbor up speaches
+```
+
+## Chat from the phone
+
+You can access Harbor services from your phone with a QR code. Easily get links for local, LAN or Docker access.
+
+```bash
+# Print a QR code to open the service on your phone
+harbor qr
+# Print a link to open the service on your phone
+harbor url webui
+```
+
+## Chat from anywhere
+
+Harbor includes a built-in tunneling service to expose your Harbor to the internet.
+
+```bash
+# Expose your Harbor to the internet
+harbor tunnel
+```
+
+## LLM Scripting
+
+[Harbor Boost](./docs/5.2.-Harbor-Boost) allows you to [easily script workflows](./docs/5.2.1.-Harbor-Boost-Custom-Modules) and interactions with downstream LLMs.
+
+```bash
+# Use Harbor Boost to script LLM workflows
+harbor up boost
+```
+
+## Config Profiles
+
+Save and manage configuration profiles for different scenarios. For example - save [llama.cpp](./docs/2.2.2-Backend&colon-llama.cpp) args for different models and contexts and switch between them easily.
+
+```bash
+# Save and use config profiles
+harbor profile save llama4
+harbor profile use default
+```
+
+## Command History
+
+Harbor keeps a local-only history of recent commands. Look up and re-run easily, standalone from the system shell history.
+
+```bash
+# Lookup recently used harbor commands
+harbor history
+```
+
+## Eject
+
+Ready to move to your own setup? Harbor will give you a docker-compose file replicating your setup.
+
+```bash
+# Eject from Harbor into a standalone Docker Compose setup
+# Will export related services and variables into a standalone file.
+harbor eject searxng llamacpp > docker-compose.harbor.yml
+```
+
+---
 
 ## Services
 

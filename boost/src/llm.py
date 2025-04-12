@@ -296,6 +296,7 @@ class LLM:
     url = request.get("url", self.url)
     headers = request.get("headers", self.headers)
     query_params = request.get("query_params", self.query_params)
+    should_emit = kwargs.get("emit", True)
 
     logger.debug(f"Params: {params}")
     logger.debug(f"Chat: {str(chat):.256}")
@@ -406,7 +407,8 @@ class LLM:
 
                   logger.debug(f"Tool call chunk: {parsed}")
                 else:
-                  await self.emit_chunk(parsed)
+                  if should_emit:
+                    await self.emit_chunk(parsed)
 
               except json.JSONDecodeError:
                 logger.error(f"Failed to parse chunk: \"{line}\"")
