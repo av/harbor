@@ -3,7 +3,7 @@
 
 ![splash](../docs/harbor-boost.png)
 
-`boost` is a service that acts as an optimizing LLM proxy. It takes your inputs, and pre-processes them before sending them to the downstream API.
+`boost` is an optimising LLM proxy. It can be used to create various workflows that'll run between your LLM backend and the client. This can include, reasoning, prompt re-writing, or any other transformation that can help the downstream model to perform better.
 
 Features that make Harbor's `boost` special:
 
@@ -527,6 +527,19 @@ When serving the completion, LLM will first invent a skill check it must pass to
 ```bash
 # Enable the module
 harbor boost modules add dnd
+```
+
+#### `dot` - Draft of Thoughts
+
+![screenshot of dot module in action](../docs/boost-dot.png)
+
+⚠️ The visual part of this module is only compatible with Open WebUI, but the reasoning skeleton will work with any OpenAI-compatible client.
+
+Inspired by [Chain of Draft](https://arxiv.org/abs/2502.18600) paper.
+
+```bash
+# Enable the module
+harbor boost modules add dot
 ```
 
 ### API

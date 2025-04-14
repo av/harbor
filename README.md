@@ -75,7 +75,7 @@ harbor up searxng
 
 ## LLM Workflows
 
-Harbor includes multiple services for build LLM-based data and chat workflows: [Dify](./docs/2.3.3-Satellite&colon-Dify), [LitLytics](./docs/2.3.21-Satellite&colon-LitLytics), [n8n](./docs/2.3.23-Satellite&colon-n8n), [Open WebUI Pipelines](./docs/2.3.25-Satellite&colon-Open-WebUI-Pipelines), [FloWise](./docs/2.3.31-Satellite&colon-Flowise), [LangFlow](./docs/2.3.32-Satellite&colon-LangFlow)
+Harbor includes multiple services for build LLM-based data and chat workflows: [Dify](./docs/2.3.3-Satellite&colon-Dify.md), [LitLytics](./docs/2.3.21-Satellite&colon-LitLytics.md), [n8n](./docs/2.3.23-Satellite&colon-n8n.md), [Open WebUI Pipelines](./docs/2.3.25-Satellite&colon-Open-WebUI-Pipelines.md), [FloWise](./docs/2.3.31-Satellite&colon-Flowise.md), [LangFlow](./docs/2.3.32-Satellite&colon-LangFlow.md)
 
 ```bash
 # Use Dify in Open WebUI
@@ -114,7 +114,7 @@ harbor tunnel
 
 ## LLM Scripting
 
-[Harbor Boost](./docs/5.2.-Harbor-Boost) allows you to [easily script workflows](./docs/5.2.1.-Harbor-Boost-Custom-Modules) and interactions with downstream LLMs.
+[Harbor Boost](./docs/5.2.-Harbor-Boost.md) allows you to [easily script workflows](./docs/5.2.1.-Harbor-Boost-Custom-Modules.md) and interactions with downstream LLMs.
 
 ```bash
 # Use Harbor Boost to script LLM workflows
@@ -123,7 +123,7 @@ harbor up boost
 
 ## Config Profiles
 
-Save and manage configuration profiles for different scenarios. For example - save [llama.cpp](./docs/2.2.2-Backend&colon-llama.cpp) args for different models and contexts and switch between them easily.
+Save and manage configuration profiles for different scenarios. For example - save [llama.cpp](./docs/2.2.2-Backend&colon-llama.cpp.md) args for different models and contexts and switch between them easily.
 
 ```bash
 # Save and use config profiles
