@@ -9,7 +9,7 @@ async def apply(chat: 'ch.Chat', llm: 'llm.LLM'):
   chat.user(
     """
 Before answering the query above, we will first explore the solution space.
-Follow my instructions carefully, do not jump to conclusions.
+Follow my instructions carefully and do not jump to conclusions yet.
   """
   )
   await llm.emit_message('\n\n3 apects:\n')
@@ -24,12 +24,12 @@ Follow my instructions carefully, do not jump to conclusions.
   await chat.emit_advance()
   await llm.emit_message('\n\n3 paragraphs:\n')
   chat.user(
-    "Accounting for the three aspects and pitfalls you just mentioned - explore three possible solutions to my query. Keep an open mind and reply with a paragraph for each."
+    "Now, Explore three possible solutions to my query. Reply with a paragraph for each."
   )
   await chat.emit_advance()
   await llm.emit_message('\n\n</think>\n')
 
   chat.user(
-    "Now, rely on the context you just created to answer my original query."
+    "Finally, please synthesize the three solutions you just created into one practical, well-thought-out solution to my query. Explain your reasoning in a few sentences."
   )
   await llm.stream_final_completion(chat=chat)
