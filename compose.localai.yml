@@ -1,0 +1,24 @@
+services:
+  localai:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.localai
+    image: ${HARBOR_LOCALAI_IMAGE}:${HARBOR_LOCALAI_CPU_VERSION}
+    env_file:
+      - ./.env
+      - ./localai/override.env
+    ports:
+      - ${HARBOR_LOCALAI_HOST_PORT}:8080
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080"]
+      interval: 1s
+      timeout: 10s
+      retries: 10
+      start_period: 2s
+    environment:
+      - HUGGINGFACEHUB_API_TOKEN=${HARBOR_HF_TOKEN}
+    volumes:
+      - ${HARBOR_LOCALAI_WORKSPACE}/models:/build/models
+      - ${HARBOR_HF_CACHE}:/root/.cache/huggingface
+      - ${HARBOR_LLAMACPP_CACHE}:/root/.cache/llama.cpp
+      - ${HARBOR_VLLM_CACHE}:/root/.cache/vllm
+    networks:
+      - harbor-network

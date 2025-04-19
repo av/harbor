@@ -16,12 +16,28 @@ Harbor is a containerized LLM toolkit that allows you to run LLMs and additional
 
 ![Screenshot of Harbor CLI and App together](https://github.com/av/harbor/wiki/harbor-app-3.png)
 
+## Documentation
+
+- [Installing Harbor](https://github.com/av/harbor/wiki/1.0.-Installing-Harbor)<br/>
+  Guides to install Harbor CLI and App
+- [Harbor User Guide](https://github.com/av/harbor/wiki/1.-Harbor-User-Guide)<br/>
+  High-level overview of working with Harbor
+- [Harbor App](https://github.com/av/harbor/wiki/1.1-Harbor-App)<br/>
+  Overview and manual for the Harbor companion application
+- [Harbor Services](https://github.com/av/harbor/wiki/2.-Services)<br/>
+  Catalog of services available in Harbor
+- [Harbor CLI Reference](https://github.com/av/harbor/wiki/3.-Harbor-CLI-Reference)<br/>
+  Read more about Harbor CLI commands and options.
+  Read about supported services and the ways to configure them.
+- [Join our Discord](https://discord.gg/8nDRphrhSF)<br/>
+  Get help, share your experience, and contribute to the project.
+
 ## What can Harbor do?
 
 ![Diagram outlining Harbor's service structure](https://raw.githubusercontent.com/wiki/av/harbor/harbor-arch-diag.png)
 
 
-## ✦ Local LLMs
+#### ✦ Local LLMs
 
 Run LLMs and related services locally, with no or minimal configuration, typically in a single command or click.
 
@@ -34,7 +50,7 @@ harbor up
 harbor up vllm
 ```
 
-##  Cutting Edge Inference
+####  Cutting Edge Inference
 
 Harbor supports most of the major inference engines as well as a few of the lesser-known ones.
 
@@ -43,7 +59,7 @@ Harbor supports most of the major inference engines as well as a few of the less
 harbor up vllm llamacpp tgi litellm tabbyapi aphrodite sglang ktransformers mistralrs airllm
 ```
 
-## Tool Use
+#### Tool Use
 
 Enjoy the benefits of MCP ecosystem, extend it to your use-cases.
 
@@ -55,7 +71,7 @@ harbor up metamcp
 harbor up metamcp mcpo
 ```
 
-## Generate Images
+#### Generate Images
 
 Harbor includes ComfyUI + Flux + Open WebUI integration.
 
@@ -64,7 +80,7 @@ Harbor includes ComfyUI + Flux + Open WebUI integration.
 harbor up comfyui
 ```
 
-## Local Web RAG / Deep Research
+#### Local Web RAG / Deep Research
 
 Harbor includes [SearXNG](./docs/2.3.1-Satellite&colon-SearXNG.md) that is pre-connected to a lot of services out of the box: [Perplexica](./docs/2.3.2-Satellite&colon-Perplexica.md), [ChatUI](./docs/2.1.4-Frontend&colon-ChatUI.md), [Morphic](./docs/2.3.34-Satellite-Morphic.md), [Local Deep Research](./docs/2.3.45-Satellite-Local-Deep-Research.md) and more.
 
@@ -79,7 +95,7 @@ harbor up searxng perplexica
 harbor up searxng ldr
 ```
 
-## LLM Workflows
+#### LLM Workflows
 
 Harbor includes multiple services for build LLM-based data and chat workflows: [Dify](./docs/2.3.3-Satellite&colon-Dify.md), [LitLytics](./docs/2.3.21-Satellite&colon-LitLytics.md), [n8n](./docs/2.3.23-Satellite&colon-n8n.md), [Open WebUI Pipelines](./docs/2.3.25-Satellite&colon-Open-WebUI-Pipelines.md), [FloWise](./docs/2.3.31-Satellite&colon-Flowise.md), [LangFlow](./docs/2.3.32-Satellite&colon-LangFlow.md)
 
@@ -88,7 +104,7 @@ Harbor includes multiple services for build LLM-based data and chat workflows: [
 harbor up dify
 ```
 
-## Talk to your LLM
+#### Talk to your LLM
 
 Setup voice chats with your LLM in a single command. Open WebUI + Speaches
 
@@ -98,7 +114,7 @@ Setup voice chats with your LLM in a single command. Open WebUI + Speaches
 harbor up speaches
 ```
 
-## Chat from the phone
+#### Chat from the phone
 
 You can access Harbor services from your phone with a QR code. Easily get links for local, LAN or Docker access.
 
@@ -109,7 +125,7 @@ harbor qr
 harbor url webui
 ```
 
-## Chat from anywhere
+#### Chat from anywhere
 
 Harbor includes a built-in tunneling service to expose your Harbor to the internet.
 
@@ -118,7 +134,7 @@ Harbor includes a built-in tunneling service to expose your Harbor to the intern
 harbor tunnel
 ```
 
-## LLM Scripting
+#### LLM Scripting
 
 [Harbor Boost](./docs/5.2.-Harbor-Boost.md) allows you to [easily script workflows](./docs/5.2.1.-Harbor-Boost-Custom-Modules.md) and interactions with downstream LLMs.
 
@@ -127,7 +143,7 @@ harbor tunnel
 harbor up boost
 ```
 
-## Config Profiles
+#### Config Profiles
 
 Save and manage configuration profiles for different scenarios. For example - save [llama.cpp](./docs/2.2.2-Backend&colon-llama.cpp.md) args for different models and contexts and switch between them easily.
 
@@ -137,7 +153,7 @@ harbor profile save llama4
 harbor profile use default
 ```
 
-## Command History
+#### Command History
 
 Harbor keeps a local-only history of recent commands. Look up and re-run easily, standalone from the system shell history.
 
@@ -146,7 +162,7 @@ Harbor keeps a local-only history of recent commands. Look up and re-run easily,
 harbor history
 ```
 
-## Eject
+#### Eject
 
 Ready to move to your own setup? Harbor will give you a docker-compose file replicating your setup.
 
@@ -361,32 +377,6 @@ harbor how to ping ollama container from the webui?
 https://github.com/user-attachments/assets/a5cd2ef1-3208-400a-8866-7abd85808503
 
 In the demo, Harbor App is used to launch a default stack with [Ollama](./2.2.1-Backend:-Ollama) and [Open WebUI](./2.1.1-Frontend:-Open-WebUI) services. Later, [SearXNG](./2.3.1-Satellite:-SearXNG) is also started, and WebUI can connect to it for the Web RAG right out of the box. After that, [Harbor Boost](./5.2.-Harbor-Boost) is also started and connected to the WebUI automatically to induce more creative outputs. As a final step, Harbor config is adjusted in the App for the [`klmbr`](./5.2.-Harbor-Boost#klmbr---boost-llm-creativity) module in the [Harbor Boost](./5.2.-Harbor-Boost), which makes the output unparsable for the LLM (yet still undetstandable for humans).
-
-## Documentation
-
-- [Installing Harbor](https://github.com/av/harbor/wiki/1.0.-Installing-Harbor)<br/>
-  Guides to install Harbor CLI and App
-- [Harbor User Guide](https://github.com/av/harbor/wiki/1.-Harbor-User-Guide)<br/>
-  High-level overview of working with Harbor
-- [Harbor App](https://github.com/av/harbor/wiki/1.1-Harbor-App)<br/>
-  Overview and manual for the Harbor companion application
-- [Harbor Services](https://github.com/av/harbor/wiki/2.-Services)<br/>
-  Catalog of services available in Harbor
-- [Harbor CLI Reference](https://github.com/av/harbor/wiki/3.-Harbor-CLI-Reference)<br/>
-  Read more about Harbor CLI commands and options.
-  Read about supported services and the ways to configure them.
-- [Compatibility](https://github.com/av/harbor/wiki/4.-Compatibility)<br/>
-  Known compatibility issues between the services and models as well as possible workarounds.
-- [Harbor Bench](https://github.com/av/harbor/wiki/5.1.-Harbor-Bench)<br/>
-  Documentation for the built-in LLM benchmarking service.
-- [Harbor Boost](https://github.com/av/harbor/wiki/5.2.-Harbor-Boost)<br/>
-  Documentation for the built-in LLM optimiser proxy.
-- [Harbor Compose Setup](https://github.com/av/harbor/wiki/6.-Harbor-Compose-Setup)<br/>
-  Read about the way Harbor uses Docker Compose to manage services.
-- [Adding A New Service](https://github.com/av/harbor/wiki/7.-Adding-A-New-Service)<br/>
-  Documentation on bringing more services into the Harbor toolkit.
-- [Join our Discord](https://discord.gg/8nDRphrhSF)<br/>
-  Get help, share your experience, and contribute to the project.
 
 ## Why?
 

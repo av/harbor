@@ -1,0 +1,10 @@
+services:
+  localai:
+    image: ${HARBOR_LOCALAI_IMAGE}:${HARBOR_LOCALAI_NVIDIA_VERSION}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

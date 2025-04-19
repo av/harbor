@@ -1,0 +1,6 @@
+services:
+  localai:
+    image: ${HARBOR_LOCALAI_IMAGE}:${HARBOR_LOCALAI_ROCM_VERSION}
+    devices:
+      - /dev/kfd
+      - /dev/dri

@@ -505,16 +505,22 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         name: 'MCP Inspector',
         tags: [HST.satellite, HST.cli, HST.tools],
     },
-    'supergateway': {
+    supergateway: {
         name: 'SuperGateway',
         tags: [HST.satellite, HST.cli, HST.tools],
         wikiUrl: `${wikiUrl}/2.3.44-Satellite-supergateway`,
         tooltip: 'A simple and powerful API gateway for LLMs.',
     },
-    'ldr': {
+    ldr: {
         name: 'Local Deep Research',
         tags: [HST.satellite],
         wikiUrl: `${wikiUrl}/2.3.45-Satellite-Local-Deep-Research`,
         tooltip: 'Transforms complex questions into comprehensive, cited reports.',
+    },
+    localai: {
+        name: 'LocalAI',
+        tags: [HST.frontend],
+        wikiUrl: `${wikiUrl}/2.3.46-Satellite-LocalAI`,
+        tooltip: 'Complete AI stack for running AI models locally. Allows downloading variety of LLMs, TTS/STT/Image models and running thme locally via Web UI.',
     }
 };
