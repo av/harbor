@@ -190,7 +190,7 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
     },
     mistralrs: {
         name: 'mistral.rs',
-        tags: [HST.frontend],
+        tags: [HST.backend],
         wikiUrl: `${wikiUrl}/2.2.6-Backend:-mistral.rs`,
         tooltip: 'Blazingly fast LLM inference.',
     },
