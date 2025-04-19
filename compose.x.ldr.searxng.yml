@@ -1,0 +1,5 @@
+services:
+  ldr:
+    environment:
+      - LDR_SEARCH__TOOL=searxng
+      - SEARXNG_INSTANCE=${HARBOR_SEARXNG_INTERNAL_URL}

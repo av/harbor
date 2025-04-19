@@ -1,4 +1,4 @@
 services:
   perplexideez:
     environment:
-      - SEARXNG_URL=http://searxng:8080
+      - SEARXNG_URL=${HARBOR_SEARXNG_INTERNAL_URL}

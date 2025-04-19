@@ -64,13 +64,19 @@ Harbor includes ComfyUI + Flux + Open WebUI integration.
 harbor up comfyui
 ```
 
-## Local Perplexity
+## Local Web RAG / Deep Research
 
-Harbor includes SearXNG that is pre-connected to a lot of services out of the box. Connect your LLM to the Web.
+Harbor includes [SearXNG](./docs/2.3.1-Satellite&colon-SearXNG.md) that is pre-connected to a lot of services out of the box: [Perplexica](./docs/2.3.2-Satellite&colon-Perplexica.md), [ChatUI](./docs/2.1.4-Frontend&colon-ChatUI.md), [Morphic](./docs/2.3.34-Satellite-Morphic.md), [Local Deep Research](./docs/2.3.45-Satellite-Local-Deep-Research.md) and more.
 
 ```bash
 # SearXNG is pre-connected to Open WebUI
 harbor up searxng
+
+# And to many other services
+harbor up searxng chatui
+harbor up searxng morphic
+harbor up searxng perplexica
+harbor up searxng ldr
 ```
 
 ## LLM Workflows

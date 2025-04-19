@@ -1,4 +1,4 @@
 services:
   perplexica-be:
     environment:
-      - SEARXNG_API_ENDPOINT=http://searxng:8080
+      - SEARXNG_API_ENDPOINT=${HARBOR_SEARXNG_INTERNAL_URL}

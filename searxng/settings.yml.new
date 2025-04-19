@@ -12,6 +12,10 @@ general:
   contact_url: false
   # record stats
   enable_metrics: true
+  # expose stats in open metrics format at /metrics
+  # leave empty to disable (no password set)
+  # open_metrics: <password>
+  open_metrics: ''
 
 brand:
   new_issue_url: https://github.com/searxng/searxng/issues/new
@@ -29,11 +33,11 @@ brand:
 search:
   # Filter results. 0: None, 1: Moderate, 2: Strict
   safe_search: 0
-  # Existing autocomplete backends: "dbpedia", "duckduckgo", "google", "yandex", "mwmbl",
-  # "seznam", "startpage", "stract", "swisscows", "qwant", "wikipedia" - leave blank to turn it off
-  # by default.
+  # Existing autocomplete backends: "360search", "baidu", "brave", "dbpedia", "duckduckgo", "google", "yandex",
+  # "mwmbl", "seznam", "sogou", "stract", "swisscows", "quark", "qwant", "wikipedia" -
+  # leave blank to turn it off by default.
   autocomplete: ""
-  # minimum characters to type before autocompleter starts
+  # minimun characters to type before autocompleter starts
   autocomplete_min: 4
   # backend for the favicon near URL in search results.
   # Available resolvers: "allesedv", "duckduckgo", "google", "yandex" - leave blank to turn it off by default.
@@ -79,7 +83,7 @@ server:
   port: 8888
   bind_address: "127.0.0.1"
   # public URL of the instance, to ensure correct inbound links. Is overwritten
-  # by ${SEARXNG_URL}.
+  # by ${SEARXNG_BASE_URL}.
   base_url: http://0.0.0.0:8080/  # "http://example.com/location"
   # rate limit the number of request on the instance, block some bots.
   # Is overwritten by ${SEARXNG_LIMITER}
@@ -91,7 +95,7 @@ server:
   # If your instance owns a /etc/searxng/settings.yml file, then set the following
   # values there.
 
-  secret_key: "47addfd2f4179f6218df8e23ca36e050ea3a0182093d3508312d1714c5b480da"  # Is overwritten by ${SEARXNG_SECRET}
+  secret_key: "92ec056ef601e4660ad2a4c547d847933496c1f9971bb9b0c3fa1d3c7166d07a"  # Is overwritten by ${SEARXNG_SECRET}
   # Proxy image results through SearXNG. Is overwritten by ${SEARXNG_IMAGE_PROXY}
   image_proxy: false
   # 1.0 and 1.1 are supported
@@ -141,15 +145,27 @@ ui:
   search_on_category_select: true
   # Hotkeys: default or vim
   hotkeys: default
+  # URL formatting: pretty, full or host
+  url_formatting: pretty
 
-# Lock arbitrary settings on the preferences page.  To find the ID of the user
-# setting you want to lock, check the ID of the form on the page "preferences".
+# Lock arbitrary settings on the preferences page.
 #
 # preferences:
 #   lock:
+#     - categories
 #     - language
 #     - autocomplete
+#     - favicon
+#     - safesearch
 #     - method
+#     - doi_resolver
+#     - locale
+#     - theme
+#     - results_on_new_tab
+#     - infinite_scroll
+#     - search_on_category_select
+#     - method
+#     - image_proxy
 #     - query_in_title
 
 # searx supports result proxification using an external service:
@@ -210,28 +226,38 @@ outgoing:
   #    - 1.1.1.2
   #    - fe80::/126
 
-# External plugin configuration, for more details see
-#   https://docs.searxng.org/dev/plugins.html
+# Plugin configuration, for more details see
+#   https://docs.searxng.org/admin/settings/settings_plugins.html
 #
-# plugins:
-#   - plugin1
-#   - plugin2
-#   - ...
+plugins:
 
-# Comment or un-comment plugin to activate / deactivate by default.
-#
-# enabled_plugins:
-#   # these plugins are enabled if nothing is configured ..
-#   - 'Basic Calculator'
-#   - 'Hash plugin'
-#   - 'Self Information'
-#   - 'Tracker URL remover'
-#   - 'Unit converter plugin'
-#   - 'Ahmia blacklist'  # activation depends on outgoing.using_tor_proxy
-#   # these plugins are disabled if nothing is configured ..
-#   - 'Hostnames plugin'  # see 'hostnames' configuration below
-#   - 'Open Access DOI rewrite'
-#   - 'Tor check plugin'
+  searx.plugins.calculator.SXNGPlugin:
+    active: true
+
+  searx.plugins.hash_plugin.SXNGPlugin:
+    active: true
+
+  searx.plugins.self_info.SXNGPlugin:
+    active: true
+
+  searx.plugins.unit_converter.SXNGPlugin:
+    active: true
+
+  searx.plugins.ahmia_filter.SXNGPlugin:
+    active: true
+
+  searx.plugins.hostnames.SXNGPlugin:
+    active: true
+
+  searx.plugins.oa_doi_rewrite.SXNGPlugin:
+    active: false
+
+  searx.plugins.tor_check.SXNGPlugin:
+    active: false
+
+  searx.plugins.tracker_url_remover.SXNGPlugin:
+    active: false
+
 
 # Configuration of the "Hostnames plugin":
 #
@@ -320,10 +346,82 @@ categories_as_tabs:
   social media:
 
 engines:
+  - name: 360search
+    engine: 360search
+    shortcut: 360so
+    disabled: true
+
+  - name: 360search videos
+    engine: 360search_videos
+    shortcut: 360sov
+    disabled: true
+
   - name: 9gag
     engine: 9gag
     shortcut: 9g
     disabled: true
+
+  - name: acfun
+    engine: acfun
+    shortcut: acf
+    disabled: true
+
+  - name: adobe stock
+    engine: adobe_stock
+    shortcut: asi
+    categories: ["images"]
+    # https://docs.searxng.org/dev/engines/online/adobe_stock.html
+    adobe_order: relevance
+    adobe_content_types: ["photo", "illustration", "zip_vector", "template", "3d", "image"]
+    timeout: 6
+    disabled: true
+
+  - name: adobe stock video
+    engine: adobe_stock
+    shortcut: asv
+    network: adobe stock
+    categories: ["videos"]
+    adobe_order: relevance
+    adobe_content_types: ["video"]
+    timeout: 6
+    disabled: true
+
+  - name: adobe stock audio
+    engine: adobe_stock
+    shortcut: asa
+    network: adobe stock
+    categories: ["music"]
+    adobe_order: relevance
+    adobe_content_types: ["audio"]
+    timeout: 6
+    disabled: true
+
+  - name: alexandria
+    engine: json_engine
+    shortcut: alx
+    categories: general
+    paging: true
+    search_url: https://api.alexandria.org/?a=1&q={query}&p={pageno}
+    results_query: results
+    title_query: title
+    url_query: url
+    content_query: snippet
+    timeout: 1.5
+    disabled: true
+    about:
+      website: https://alexandria.org/
+      official_api_documentation: https://github.com/alexandria-org/alexandria-api/raw/master/README.md
+      use_official_api: true
+      require_api_key: false
+      results: JSON
+
+  # - name: astrophysics data system
+  #   engine: astrophysics_data_system
+  #   sort: asc
+  #   weight: 5
+  #   categories: [science]
+  #   api_key: your-new-key
+  #   shortcut: ads
 
   - name: alpine linux packages
     engine: alpinelinux
@@ -334,6 +432,11 @@ engines:
     engine: annas_archive
     disabled: true
     shortcut: aa
+
+  - name: ansa
+    engine: ansa
+    shortcut: ans
+    disabled: true
 
   # - name: annas articles
   #   engine: annas_archive
@@ -379,6 +482,14 @@ engines:
     engine: archlinux
     shortcut: al
 
+  - name: nixos wiki
+    engine: mediawiki
+    shortcut: nixw
+    base_url: https://wiki.nixos.org/
+    search_type: text
+    disabled: true
+    categories: [it, software wikis]
+
   - name: artic
     engine: artic
     shortcut: arc
@@ -404,12 +515,32 @@ engines:
     shortcut: bc
     categories: music
 
+  - name: baidu
+    baidu_category: general
+    categories: [general]
+    engine: baidu
+    shortcut: bd
+    disabled: true
+
+  - name: baidu images
+    baidu_category: images
+    categories: [images]
+    engine: baidu
+    shortcut: bdi
+    disabled: true
+
+  - name: baidu kaifa
+    baidu_category: it
+    categories: [it]
+    engine: baidu
+    shortcut: bdk
+    disabled: true
+
   - name: wikipedia
     engine: wikipedia
     shortcut: wp
     # add "list" to the array to get results in the results list
     display_type: ["infobox"]
-    base_url: 'https://{language}.wikipedia.org/'
     categories: [general]
 
   - name: bilibili
@@ -433,6 +564,11 @@ engines:
   - name: bing videos
     engine: bing_videos
     shortcut: biv
+
+  - name: bitchute
+    engine: bitchute
+    shortcut: bit
+    disabled: true
 
   - name: bitbucket
     engine: xpath
@@ -482,10 +618,28 @@ engines:
     # to show premium or plus results too:
     # skip_premium: false
 
+  - name: chinaso news
+    chinaso_category: news
+    engine: chinaso
+    shortcut: chinaso
+    disabled: true
+
+  - name: chinaso images
+    chinaso_category: images
+    engine: chinaso
+    shortcut: chinasoi
+    disabled: true
+
+  - name: chinaso videos
+    chinaso_category: videos
+    engine: chinaso
+    shortcut: chinasov
+    disabled: true
+
   - name: cloudflareai
     engine: cloudflareai
     shortcut: cfai
-    # get api token and account id from https://developers.cloudflare.com/workers-ai/get-started/rest-api/
+    # get api token and accont id from https://developers.cloudflare.com/workers-ai/get-started/rest-api/
     cf_account_id: 'your_cf_accout_id'
     cf_ai_api: 'your_cf_api'
     # create your ai gateway by https://developers.cloudflare.com/ai-gateway/get-started/creating-gateway/
@@ -528,6 +682,8 @@ engines:
     url_query: link
     title_query: title
     content_query: snippet
+    title_html_to_text: true
+    content_html_to_text: true
     disabled: true
     about:
       website: https://crowdview.ai/
@@ -652,17 +808,18 @@ engines:
       results: HTML
 
   # - name: elasticsearch
-  #   shortcut: es
+  #   shortcut: els
   #   engine: elasticsearch
   #   base_url: http://localhost:9200
   #   username: elastic
   #   password: changeme
   #   index: my-index
+  #   enable_http: true
   #   # available options: match, simple_query_string, term, terms, custom
   #   query_type: match
   #   # if query_type is set to custom, provide your query here
-  #   #custom_query_json: {"query":{"match_all": {}}}
-  #   #show_metadata: false
+  #   # custom_query_json: {"query":{"match_all": {}}}
+  #   # show_metadata: false
   #   disabled: true
 
   - name: wikidata
@@ -974,6 +1131,27 @@ engines:
       require_api_key: false
       results: JSON
 
+  - name: il post
+    engine: il_post
+    shortcut: pst
+
+  - name: huggingface
+    engine: huggingface
+    shortcut: hf
+    disabled: true
+
+  - name: huggingface datasets
+    huggingface_endpoint: datasets
+    engine: huggingface
+    shortcut: hfd
+    disabled: true
+
+  - name: huggingface spaces
+    huggingface_endpoint: spaces
+    engine: huggingface
+    shortcut: hfs
+    disabled: true
+
   - name: imdb
     engine: imdb
     shortcut: imdb
@@ -993,19 +1171,23 @@ engines:
 
   - name: invidious
     engine: invidious
-    # Instances will be selected randomly, see https://api.invidious.io/ for
+    # Instanes will be selected randomly, see https://api.invidious.io/ for
     # instances that are stable (good uptime) and close to you.
     base_url:
-      - https://invidious.io.lol
-      - https://invidious.fdn.fr
-      - https://yt.artemislena.eu
-      - https://invidious.tiekoetter.com
-      - https://invidious.flokinet.to
-      - https://vid.puffyan.us
-      - https://invidious.privacydev.net
-      - https://inv.tux.pizza
+      - https://invidious.adminforge.de
+      - https://inv.nadeko.net
     shortcut: iv
     timeout: 3.0
+    disabled: true
+
+  - name: ipernity
+    engine: ipernity
+    shortcut: ip
+    disabled: true
+
+  - name: iqiyi
+    engine: iqiyi
+    shortcut: iq
     disabled: true
 
   - name: jisho
@@ -1082,8 +1264,7 @@ engines:
     engine: libretranslate
     # https://github.com/LibreTranslate/LibreTranslate?tab=readme-ov-file#mirrors
     base_url:
-      - https://translate.terraprint.co
-      - https://trans.zillyhuhn.com
+      - https://libretranslate.com/translate
     # api_key: abc123
     shortcut: lt
     disabled: true
@@ -1157,12 +1338,19 @@ engines:
     disabled: true
     number_of_results: 20
 
+  # https://docs.searxng.org/dev/engines/offline/search-indexer-engines.html#module-searx.engines.meilisearch
   # - name: meilisearch
   #   engine: meilisearch
   #   shortcut: mes
   #   enable_http: true
   #   base_url: http://localhost:7700
   #   index: my-index
+  #   auth_key: Bearer XXXX
+
+  - name: microsoft learn
+    engine: microsoft_learn
+    shortcut: msl
+    disabled: true
 
   - name: mixcloud
     engine: mixcloud
@@ -1197,6 +1385,11 @@ engines:
     engine: mwmbl
     # api_url: https://api.mwmbl.org
     shortcut: mwm
+    disabled: true
+
+  - name: niconico
+    engine: niconico
+    shortcut: nico
     disabled: true
 
   - name: npm
@@ -1240,6 +1433,11 @@ engines:
     shortcut: od
     disabled: true
 
+  - name: ollama
+    engine: ollama
+    shortcut: ollama
+    disabled: true
+
   - name: openairedatasets
     engine: json_engine
     paging: true
@@ -1279,6 +1477,13 @@ engines:
       use_official_api: false
       require_api_key: false
       results: JSON
+
+  - name: openclipart
+    engine: openclipart
+    shortcut: ocl
+    inactive: true
+    disabled: true
+    timeout: 30
 
   - name: openlibrary
     engine: openlibrary
@@ -1364,9 +1569,12 @@ engines:
     frontend_url: https://srv.piped.video
     # Instance will be selected randomly, for more see https://piped-instances.kavin.rocks/
     backend_url:
-      - https://pipedapi.kavin.rocks
-      - https://pipedapi-libre.kavin.rocks
       - https://pipedapi.adminforge.de
+      - https://pipedapi.nosebs.ru
+      - https://pipedapi.ducks.party
+      - https://pipedapi.reallyaweso.me
+      - https://api.piped.private.coffee
+      - https://pipedapi.darkness.services
 
   - name: piped.music
     engine: piped
@@ -1478,6 +1686,10 @@ engines:
       require_api_key: false
       results: HTML
 
+  - name: public domain image archive
+    engine: public_domain_image_archive
+    shortcut: pdia
+
   - name: pubmed
     engine: pubmed
     shortcut: pub
@@ -1486,6 +1698,20 @@ engines:
   - name: pypi
     shortcut: pypi
     engine: pypi
+
+  - name: quark
+    quark_category: general
+    categories: [general]
+    engine: quark
+    shortcut: qk
+    disabled: true
+
+  - name: quark images
+    quark_category: images
+    categories: [images]
+    engine: quark
+    shortcut: qki
+    disabled: true
 
   - name: qwant
     qwant_categ: web
@@ -1548,6 +1774,12 @@ engines:
     page_size: 25
     disabled: true
 
+  - name: reuters
+    engine: reuters
+    shortcut: reu
+    # https://docs.searxng.org/dev/engines/online/reuters.html
+    # sort_order = "relevance"
+
   - name: right dao
     engine: xpath
     paging: true
@@ -1602,9 +1834,35 @@ engines:
     about:
       website: https://searchmysite.net
 
+  - name: selfhst icons
+    engine: selfhst
+    shortcut: si
+    inactive: true
+    disabled: true
+
   - name: sepiasearch
     engine: sepiasearch
     shortcut: sep
+
+  - name: sogou
+    engine: sogou
+    shortcut: sogou
+    disabled: true
+
+  - name: sogou images
+    engine: sogou_images
+    shortcut: sogoui
+    disabled: true
+
+  - name: sogou videos
+    engine: sogou_videos
+    shortcut: sogouv
+    disabled: true
+
+  - name: sogou wechat
+    engine: sogou_wechat
+    shortcut: sogouw
+    disabled: true
 
   - name: soundcloud
     engine: soundcloud
@@ -1621,11 +1879,6 @@ engines:
     shortcut: ubuntu
     api_site: 'askubuntu'
     categories: [it, q&a]
-
-  - name: internetarchivescholar
-    engine: internet_archive_scholar
-    shortcut: ias
-    timeout: 15.0
 
   - name: superuser
     engine: stackexchange
@@ -1701,10 +1954,27 @@ engines:
   - name: startpage
     engine: startpage
     shortcut: sp
-    timeout: 6.0
-    disabled: true
+    startpage_categ: web
+    categories: [general, web]
     additional_tests:
       rosebud: *test_rosebud
+
+  - name: startpage news
+    engine: startpage
+    startpage_categ: news
+    categories: [news, web]
+    shortcut: spn
+
+  - name: startpage images
+    engine: startpage
+    startpage_categ: images
+    categories: [images, web]
+    shortcut: spi
+
+  - name: steam
+    engine: steam
+    shortcut: stm
+    disabled: true
 
   - name: tokyotoshokan
     engine: tokyotoshokan
@@ -1723,15 +1993,15 @@ engines:
   # For this demo of the sqlite engine download:
   #   https://liste.mediathekview.de/filmliste-v2.db.bz2
   # and unpack into searx/data/filmliste-v2.db
-  # Query to test: "!demo concert"
+  # Query to test: "!mediathekview concert"
   #
-  # - name: demo
+  # - name: mediathekview
   #   engine: sqlite
-  #   shortcut: demo
-  #   categories: general
-  #   result_template: default.html
+  #   shortcut: mediathekview
+  #   categories: [general, videos]
+  #   result_type: MainResult
   #   database: searx/data/filmliste-v2.db
-  #   query_str:  >-
+  #   query_str: >-
   #     SELECT title || ' (' || time(duration, 'unixepoch') || ')' AS title,
   #            COALESCE( NULLIF(url_video_hd,''), NULLIF(url_video_sd,''), url_video) AS url,
   #            description AS content
@@ -2204,7 +2474,6 @@ engines:
   - name: wordnik
     engine: wordnik
     shortcut: def
-    base_url: https://www.wordnik.com/
     categories: [dictionaries]
     timeout: 5.0
 
@@ -2248,13 +2517,6 @@ engines:
     shortcut: sevid
     categories: videos
     seekr_category: videos
-    disabled: true
-
-  - name: sjp.pwn
-    engine: sjp
-    shortcut: sjp
-    base_url: https://sjp.pwn.pl/
-    timeout: 5.0
     disabled: true
 
   - name: stract
@@ -2404,6 +2666,12 @@ engines:
   - name: pkg.go.dev
     engine: pkg_go_dev
     shortcut: pgo
+    disabled: true
+
+  - name: senscritique
+    engine: senscritique
+    shortcut: scr
+    timeout: 4.0
     disabled: true
 
 # Doku engine lets you access to any Doku wiki instance:

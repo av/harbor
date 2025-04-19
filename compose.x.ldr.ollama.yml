@@ -1,0 +1,5 @@
+services:
+  ldr:
+    environment:
+      - LDR_LLM__PROVIDER=ollama
+      - OLLAMA_BASE_URL=${HARBOR_OLLAMA_INTERNAL_URL}
