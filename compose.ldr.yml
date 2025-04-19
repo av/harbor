@@ -15,6 +15,7 @@ services:
       - ANTHROPIC_API_KEY=${HARBOR_ANTHROPIC_KEY}
       - LDR_ANTHROPIC_API_KEY=${HARBOR_ANTHROPIC_KEY}
     volumes:
-      - ${HARBOR_LDR_WORKSPACE}:/home/ldrs/data
+      - ${HARBOR_LDR_WORKSPACE}/config:/root/.config/local_deep_research
+      - ${HARBOR_LDR_WORKSPACE}/data:/usr/local/lib/python3.13/site-packages/data
     networks:
       - harbor-network
