@@ -22,8 +22,9 @@ const targets = {
 main().catch(console.error);
 
 async function main() {
+  // Must be first to be ready for the copy
+  await renderServiceIndex()
   await Promise.all([
-    renderServiceIndex(),
     copyDocsToWiki(),
     copyDocsToApp(),
     copyTargets(),
