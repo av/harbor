@@ -519,8 +519,14 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
     },
     localai: {
         name: 'LocalAI',
-        tags: [HST.frontend],
+        tags: [HST.satellite],
         wikiUrl: `${wikiUrl}/2.3.46-Satellite-LocalAI`,
         tooltip: 'Complete AI stack for running AI models locally. Allows downloading variety of LLMs, TTS/STT/Image models and running thme locally via Web UI.',
+    },
+    agentzero: {
+        name: 'Agent Zero',
+        tags: [HST.satellite],
+        wikiUrl: `${wikiUrl}/2.3.47-Satellite-Agent-Zero`,
+        tooltip: `General-purpose personal assistant with Web RAG, persistent memory, tools, browser use and more.`
     }
 };

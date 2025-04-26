@@ -1,0 +1,19 @@
+services:
+  agentzero:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.agentzero
+    image: ${HARBOR_AGENTZERO_IMAGE}:${HARBOR_AGENTZERO_VERSION}
+    ports:
+      - ${HARBOR_AGENTZERO_HOST_PORT}:80
+    volumes:
+      - ${HARBOR_AGENTZERO_WORKSPACE}:/a0
+    environment:
+      - GROQ_API_KEY=${HARBOR_GROQ_KEY}
+      - MISTRALAI_API_KEY=${HARBOR_MISTRAL_KEY}
+      - OPENROUTER_API_KEY=${HARBOR_OPENROUTER_KEY}
+      - ANTHROPIC_API_KEY=${HARBOR_ANTHROPIC_KEY}
+      - GOOGLE_API_KEY=${HARBOR_GOOGLE_KEY}
+    env_file:
+      - ./.env
+      - ./agentzero/override.env
+    networks:
+      - harbor-network
