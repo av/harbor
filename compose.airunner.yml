@@ -1,0 +1,24 @@
+services:
+  airunner:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.airunner
+    image: ${HARBOR_AIRUNNER_IMAGE}:${HARBOR_AIRUNNER_VERSION}
+    user: root
+    environment:
+      - HOST_UID=${HARBOR_USER_ID}
+      - HOST_GID=${HARBOR_GROUP_ID}
+      - HOST_HOME=/home/appuser
+      - AIRUNNER_HOME_DIR=/home/appuser/.local/share/airunner
+      - HF_CACHE_DIR=/root/.cache/huggingface
+      - HF_HOME=/root/.cache/huggingface
+    volumes:
+      - ${HARBOR_AIRUNNER_WORKSPACE}:/home/appuser/.local/share/airunner
+      - ${HARBOR_HF_CACHE}:/root/.cache/huggingface
+    ports:
+      - ${HARBOR_AIRUNNER_HOST_PORT}:8000
+    env_file:
+      - ./.env
+      - ./airunner/override.env
+    entrypoint: ["/app/package/dev/entrypoint.sh"]
+    command: ['airunner']
+    networks:
+      - harbor-network
