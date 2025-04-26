@@ -10,9 +10,17 @@
 [![Discord](https://img.shields.io/badge/Discord-Harbor-blue?logo=discord&logoColor=white)](https://discord.gg/8nDRphrhSF)
 ![Harbor Ko-fi](https://img.shields.io/badge/Ko--fi-white?style=social&logo=kofi)
 
-Effortlessly run LLM backends, APIs, frontends, and services with one command.
+Setup your local LLM stack effortlessly.
 
-Harbor is a containerized LLM toolkit that allows you to run LLMs and additional services. It consists of a CLI and a companion App that allows you to manage and run AI services with ease.
+```bash
+# Starts fully configured Open WebUI and Ollama
+harbor up
+
+# Now, Open WebUI can do Web RAG and TTS/STT
+harbor up searxng speaches
+```
+
+Harbor is a containerized LLM toolkit that allows you to run LLM backends, frontends and related useful services. It consists of a CLI and a companion App.
 
 ![Screenshot of Harbor CLI and App together](https://github.com/av/harbor/wiki/harbor-app-3.png)
 
@@ -42,12 +50,13 @@ Harbor is a containerized LLM toolkit that allows you to run LLMs and additional
 Run LLMs and related services locally, with no or minimal configuration, typically in a single command or click.
 
 ```bash
-# Starts fully configured
-# Open WebUI and Ollama
-harbor up
-
 # All backends are pre-connected to Open WebUI
+harbor up ollama
+harbor up llamacpp
 harbor up vllm
+
+# Set and remember args for llama.cpp
+harbor llamacpp args -ngl 32
 ```
 
 ####  Cutting Edge Inference
@@ -127,11 +136,22 @@ harbor url webui
 
 #### Chat from anywhere
 
-Harbor includes a built-in tunneling service to expose your Harbor to the internet.
+Harbor includes a [built-in tunneling service](./docs/3.-Harbor-CLI-Reference.md#harbor-tunnel-service) to expose your Harbor to the internet.
+
+> [!WARN]
+> Be careful exposing your computer to the Internet, it's not safe.
 
 ```bash
-# Expose your Harbor to the internet
+# Expose default UI to the internet
 harbor tunnel
+
+# Expose a specific service to the internet
+# ⚠️ Ensure to configure authentication for the service
+harbor tunnel vllm
+
+# Harbor comes with traefik built-in and pre-configured
+# for all included services
+harbor up traefik
 ```
 
 #### LLM Scripting
@@ -155,7 +175,7 @@ harbor profile use default
 
 #### Command History
 
-Harbor keeps a local-only history of recent commands. Look up and re-run easily, standalone from the system shell history.
+Harbor keeps a [local-only history of recent commands](./docs/3.-Harbor-CLI-Reference.md#harbor-history). Look up and re-run easily, standalone from the system shell history.
 
 ```bash
 # Lookup recently used harbor commands
@@ -164,7 +184,7 @@ harbor history
 
 #### Eject
 
-Ready to move to your own setup? Harbor will give you a docker-compose file replicating your setup.
+Ready to move to your own setup? Harbor [will give you](./docs/3.-Harbor-CLI-Reference.md#harbor-eject) a docker-compose file replicating your setup.
 
 ```bash
 # Eject from Harbor into a standalone Docker Compose setup
@@ -252,7 +272,11 @@ harbor eject searxng llamacpp > docker-compose.harbor.yml
 [llama-swap](https://github.com/av/harbor/wiki/2.3.40-Satellite-llamaswap) ⦁︎
 [LibreTranslate](https://github.com/av/harbor/wiki/2.3.41-Satellite-LibreTranslate) ⦁︎
 [MetaMCP](https://github.com/av/harbor/wiki/2.3.42-Satellite-MetaMCP) ⦁︎
-[mcpo](https://github.com/av/harbor/wiki/2.3.43-Satellite-mcpo)
+[mcpo](https://github.com/av/harbor/wiki/2.3.43-Satellite-mcpo) ⦁︎
+[SuperGateway](https://github.com/av/harbor/wiki/2.3.44-Satellite-supergateway) ⦁︎
+[Local Deep Research](https://github.com/av/harbor/wiki/2.3.45-Satellite-Local-Deep-Research) ⦁︎
+[LocalAI](https://github.com/av/harbor/wiki/2.3.46-Satellite-LocalAI) ⦁︎
+[AgentZero](https://github.com/av/harbor/wiki/2.3.47-Satellite-Agent-Zero)
 
 
 See [services documentation](https://github.com/av/harbor/wiki/2.-Services) for a brief overview of each.
