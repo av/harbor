@@ -8,7 +8,9 @@ Here's CLI help:
 Usage: harbor <command> [options]
 
 Compose Setup Commands:
-  up|u [handle]           - Start the containers
+  up|u [handle(s)]        - Start the service(s)
+    up --tail             - Start and tail the logs
+    up --open             - Start and open in the browser
   down|d                  - Stop and remove the containers
   restart|r [handle]      - Down then up
   ps                      - List the running containers
@@ -16,30 +18,42 @@ Compose Setup Commands:
   exec <handle> [command] - Execute a command in a running service
   pull <handle>           - Pull the latest images
   dive <handle>           - Run the Dive CLI to inspect Docker images
+  run <alias>             - Run a command defined as an alias
   run <handle> [command]  - Run a one-off command in a service container
   shell <handle>          - Load shell in the given service main container
   build <handle>          - Build the given service
-  cmd <handle>            - Print the docker-compose command
+  stats                   - Show resource usage statistics
+  cmd <handle>            - Print the docker compose command
 
 Setup Management Commands:
-  ollama     - Run Ollama CLI (docker). Service should be running.
-  smi        - Show NVIDIA GPU information
-  top        - Run nvtop to monitor GPU usage
-  llamacpp   - Configure llamacpp service
-  tgi        - Configure text-generation-inference service
-  litellm    - Configure LiteLLM service
-  openai     - Configure OpenAI API keys and URLs
-  vllm       - Configure VLLM service
-  aphrodite  - Configure Aphrodite service
-  tabbyapi   - Configure TabbyAPI service
-  mistralrs  - Configure mistral.rs service
-  cfd        - Run cloudflared CLI
-  airllm     - Configure AirLLM service
-  txtai      - Configure txtai service
-  chatui     - Configure HuggingFace ChatUI service
-  comfyui    - Configure ComfyUI service
+  webui     - Configure Open WebUI Service
+  llamacpp  - Configure llamacpp service
+  tgi       - Configure text-generation-inference service
+  litellm   - Configure LiteLLM service
+  langflow  - Configure Langflow UI Service
+  openai    - Configure OpenAI API keys and URLs
+  vllm      - Configure VLLM service
+  aphrodite - Configure Aphrodite service
+  tabbyapi  - Configure TabbyAPI service
+  mistralrs - Configure mistral.rs service
+  cfd       - Run cloudflared CLI
+  airllm    - Configure AirLLM service
+  txtai     - Configure txtai service
+  chatui    - Configure HuggingFace ChatUI service
+  comfyui   - Configure ComfyUI service
+  parler    - Configure Parler service
+  sglang    - Configure SGLang CLI
+  omnichain - Work with Omnichain service
+  jupyter   - Configure Jupyter service
+  ol1       - Configure ol1 service
+  ktransformers - Configure ktransformers service
+  kobold    - Configure Koboldcpp service
+  morphic   - Configure Morphic service
+  modularmax - Configure Modular MAX service
+  boost     - Configure Harbor Boost service
 
 Service CLIs:
+  ollama     - Run Ollama CLI (docker). Service should be running.
   aider             - Launch Aider CLI
   aichat            - Run aichat CLI
   interpreter|opint - Launch Open Interpreter CLI
@@ -47,6 +61,11 @@ Service CLIs:
   plandex           - Launch Plandex CLI
   cmdh              - Run cmdh CLI
   parllama          - Launch Parllama - TUI for chatting with Ollama models
+  bench             - Run and manage Harbor Bench
+  openhands|oh      - Run OpenHands service
+  repopack          - Run the Repopack CLI
+  nexa              - Run the Nexa CLI, configure the service
+  gptme             - Run gptme CLI, configure the service
   hf                - Run the Harbor's Hugging Face CLI. Expanded with a few additional commands.
     hf dl           - HuggingFaceModelDownloader CLI
     hf parse-url    - Parse file URL from Hugging Face
@@ -55,9 +74,10 @@ Service CLIs:
     hf find <query> - Open HF Hub with a query (trending by default)
     hf path <spec>  - Print a folder in HF cache for a given model spec
     hf *            - Anything else is passed to the official Hugging Face CLI
+  k6                - Run K6 CLI
 
 Harbor CLI Commands:
-  open handle                   - Open a service in the default browser
+  open <handle>                 - Open a service in the default browser
 
   url <handle>                  - Get the URL for a service
     url <handle>                         - Url on the local host
@@ -76,24 +96,56 @@ Harbor CLI Commands:
     config ls                   - All config values in ENV format
     config get <field>          - Get a specific config value
     config set <field> <value>  - Get a specific config value
-    config reset                - Reset Harbor configuration to default.env
-    config update               - Merge upstream config changes from default.env
+    config reset                - Reset Harbor configuration to default .env
+    config update               - Merge upstream config changes from default .env
+
+  env <service> [key] [value]   - Manage override.env variables for a service
+    env <service>               - List all variables for a service
+    env <service> <key>         - Get a specific variable for a service
+    env <service> <key> <value> - Set a specific variable for a service
+
+  profile|profiles|p [ls|rm|add] - Manage Harbor profiles
+    profile ls|list             - List all profiles
+    profile rm|remove <name>    - Remove a profile
+    profile add|save <name>     - Add current config as a profile
+    profile set|use|load <name> - Use a profile
+
+  alias|aliases|a [ls|get|set|rm] - Manage Harbor aliases
+    alias ls|list               - List all aliases
+    alias get <name>            - Get an alias
+    alias set <name> <command>  - Set an alias
+    alias rm|remove <name>      - Remove an alias
+
+  history|h [ls|rm|add]  - Harbor command history.
+                           When run without arguments, launches interactive selector.
+    history clear   - Clear the history
+    history size    - Get/set the history size
+    history list|ls - List recorded history
 
   defaults [ls|rm|add]          - List default services
     defaults rm <handle|index>  - Remove, also accepts handle or index
     defaults add <handle>       - Add
 
-  find <file>                   - Find a file in the caches visible to Harbor
-  ls|list [--active|-a]         - List available/active Harbor services
-  ln|link [--short]             - Create a symlink to the CLI, --short for 'h' link
-  unlink                        - Remove CLI symlinks
-  eject                         - Eject the Compose configuration, accepts same options as 'up'
-  help|--help|-h                - Show this help message
-  version|--version|-v          - Show the CLI version
-  gum                           - Run the Gum terminal commands
-  fixfs                         - Fix file system ACLs for service volumes
-  info                          - Show system information for debug/issues
-  update [-l|--latest]          - Update Harbor. --latest for the dev version
+  find <file>           - Find a file in the caches visible to Harbor
+  ls|list [--active|-a] - List available/active Harbor services
+  ln|link [--short]     - Create a symlink to the CLI, --short for 'h' link
+  unlink                - Remove CLI symlinks
+  eject                 - Eject the Compose configuration, accepts same options as 'up'
+  help|--help|-h        - Show this help message
+  version|--version|-v  - Show the CLI version
+  gum                   - Run the Gum terminal commands
+  update [-l|--latest]  - Update Harbor. --latest for the dev version
+  info                  - Show system information for debug/issues
+  doctor                - Tiny troubleshooting script
+  how                   - Ask questions about Harbor CLI, uses cmdh under the hood
+  smi                   - Show NVIDIA GPU information
+  top                   - Run nvtop to monitor GPU usage
+  size                  - Print the size of caches Harbor is aware of
+
+Harbor Workspace Commands:
+  home    - Show path to the Harbor workspace
+  vscode  - Open Harbor Workspace in VS Code
+  fixfs   - Fix file system ACLs for service volumes
 ```
 
 Usage examples:

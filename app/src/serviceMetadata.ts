@@ -528,5 +528,11 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         tags: [HST.satellite],
         wikiUrl: `${wikiUrl}/2.3.47-Satellite-Agent-Zero`,
         tooltip: `General-purpose personal assistant with Web RAG, persistent memory, tools, browser use and more.`
+    },
+    modularmax: {
+        name: 'Modular MAX',
+        tags: [HST.backend],
+        wikiUrl: `${wikiUrl}/2.2.17-Backend-Modular-MAX`,
+        tooltip: 'MAX is a platform from Modular (creators of Mojo) for running LLMs.'
     }
 };

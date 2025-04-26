@@ -7,6 +7,7 @@
     "jsr:@std/path@*": "1.0.6",
     "jsr:@std/toml@*": "1.0.1",
     "jsr:@std/yaml@*": "1.0.5",
+    "npm:mdast-util-to-markdown@*": "2.1.2",
     "npm:remark-parse@*": "11.0.0",
     "npm:remark-stringify@*": "11.0.0",
     "npm:unified@*": "11.0.5",

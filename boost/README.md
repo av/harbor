@@ -1,5 +1,5 @@
 > Handle: `boost`<br/>
-> URL: <http://localhost:34131/>
+> URL: [http://localhost:34131/](http://localhost:34131/)
 
 ![splash](../docs/harbor-boost.png)
 
@@ -7,22 +7,22 @@
 
 Features that make Harbor's `boost` special:
 
-* 🥇 First-class support for streaming completions
-* 🗣️ `boost` modules can provide intermediate output, like status messages or internal monologue
-* 🎭 `boost` can serve as a plain LLM proxy (multiple downstream APIs behind a single endpoint)
-* ✍️ `boost` is scriptable, you can write your own modules
+- 🥇 First-class support for streaming completions
+- 🗣️ `boost` modules can provide intermediate output, like status messages or internal monologue
+- 🎭 `boost` can serve as a plain LLM proxy (multiple downstream APIs behind a single endpoint)
+- ✍️ `boost` is scriptable, you can write your own modules
 
 ![Short overview of boost behavior](../docs/boost-behavior.png)
 
 The main focus, of course are the workflows that can help improve the LLM output in specific scenarios. Here are some examples of what's possible with `boost`:
 
-* Add R1-like reasoning to [any LLM](https://www.reddit.com/r/LocalLLaMA/comments/1ixckba/making_older_llms_llama_2_and_gemma_1_reason/)
-* When "random" is mentioned in the message, [`klmbr`](#klmbr---boost-llm-creativity) will rewrite 35% of message characters to increase the entropy and produce more diverse completion
-* Launch [self-reflection reasoning](#rcn---recursive-certainty-validation) chain when the message ends with a question mark
-* Expand the conversation context with the "inner monologue" of the model, where it can iterate over your question a few times before giving the final answer
-* Apply a specific LLM personality if the message contains a specific keyword
-* Add external memory to your interactions with a specific model
-* Make your LLM [pass a skill check](https://www.reddit.com/r/LocalLLaMA/comments/1jaqylp/llm_must_pass_a_skill_check_to_talk_to_me/) before replying to you
+- Add R1-like reasoning to [any LLM](https://www.reddit.com/r/LocalLLaMA/comments/1ixckba/making_older_llms_llama_2_and_gemma_1_reason/)
+- When "random" is mentioned in the message, [`klmbr`](#klmbr---boost-llm-creativity) will rewrite 35% of message characters to increase the entropy and produce more diverse completion
+- Launch [self-reflection reasoning](#rcn---recursive-certainty-validation) chain when the message ends with a question mark
+- Expand the conversation context with the "inner monologue" of the model, where it can iterate over your question a few times before giving the final answer
+- Apply a specific LLM personality if the message contains a specific keyword
+- Add external memory to your interactions with a specific model
+- Make your LLM [pass a skill check](https://www.reddit.com/r/LocalLLaMA/comments/1jaqylp/llm_must_pass_a_skill_check_to_talk_to_me/) before replying to you
 
 Boost is scriptable, you can provision your own modules with the workflows suitable for your needs. See [Custom Modules](#custom-modules) section for more information.
 
@@ -30,33 +30,33 @@ Boost is scriptable, you can provision your own modules with the workflows suita
 
 `boost` operates at the OpenAI-compatible API level, so can be used with any LLM backend that accepts OpenAI API requests. You can also plug `boost` into the UIs that are compatible with OpenAI API.
 
-> \[!IMPORTANT]
+> [!IMPORTANT]
 > You don't have to use Harbor to run `boost`. See the [Standalone Usage section](#standalone-usage) for more information.
 
 ***
 
 ### Table of Contents
 
-* [Starting](#starting)
-* [Standalone Usage](#standalone-usage)
-* [Configuration](#configuration)
-  * [Boost configuration](#boost-configuration)
-* [Modules](#boost-modules--configuration)
-  * [`klmbr` - boost llm creativity](#klmbr---boost-llm-creativity)
-  * [`rcn` - recursive certainty validation](#rcn---recursive-certainty-validation)
-  * [`g1` - o1-like reasoning chains](#g1---o1-like-reasoning-chains)
-  * [`mcts` - Monte Carlo Tree Search](#mcts---monte-carlo-tree-search)
-  * [`eli5` - Explain Like I'm 5](#eli5---explain-like-im-5)
-  * [`supersummer` - Super Summarization](#supersummer---super-summarization)
-  * [`r0` - R1-like reasoning chains](#r0---r1-like-reasoning-chains)
-  * [`markov` - token completion graph](#markov---token-completion-graph)
-  * [`dnd` - skill check](#dnd---skill-check)
-  * Custom Modules (not configurable, mostly examples, but can still be enabled)
-    * [discussurl](https://github.com/av/harbor/blob/main/boost/src/custom_modules/discussurl.py) - parse mentioned URLs and add them to the context
-    * [meow](https://github.com/av/harbor/blob/main/boost/src/custom_modules/meow.py) - the model ignores all previous instructions and just meows
-    * [unstable](https://github.com/av/harbor/blob/main/boost/src/custom_modules/unstable.py) - a random personality is generated for every response, model is asked to follow it
-* [API](#api)
-* [Custom Modules](#custom-modules)
+- [Starting](#starting)
+- [Standalone Usage](#standalone-usage)
+- [Configuration](#configuration)
+  - [Boost configuration](#boost-configuration)
+- [Modules](#boost-modules--configuration)
+  - [`klmbr` - boost llm creativity](#klmbr---boost-llm-creativity)
+  - [`rcn` - recursive certainty validation](#rcn---recursive-certainty-validation)
+  - [`g1` - o1-like reasoning chains](#g1---o1-like-reasoning-chains)
+  - [`mcts` - Monte Carlo Tree Search](#mcts---monte-carlo-tree-search)
+  - [`eli5` - Explain Like I'm 5](#eli5---explain-like-im-5)
+  - [`supersummer` - Super Summarization](#supersummer---super-summarization)
+  - [`r0` - R1-like reasoning chains](#r0---r1-like-reasoning-chains)
+  - [`markov` - token completion graph](#markov---token-completion-graph)
+  - [`dnd` - skill check](#dnd---skill-check)
+  - Custom Modules (not configurable, mostly examples, but can still be enabled)
+    - [discussurl](https://github.com/av/harbor/blob/main/boost/src/custom_modules/discussurl.py) - parse mentioned URLs and add them to the context
+    - [meow](https://github.com/av/harbor/blob/main/boost/src/custom_modules/meow.py) - the model ignores all previous instructions and just meows
+    - [unstable](https://github.com/av/harbor/blob/main/boost/src/custom_modules/unstable.py) - a random personality is generated for every response, model is asked to follow it
+- [API](#api)
+- [Custom Modules](#custom-modules)
 
 ### Starting
 
@@ -236,7 +236,7 @@ harbor boost modules add <module>
 harbor boost modules rm <module>
 ```
 
-> \[!TIP]
+> [!TIP]
 > You can use Harbor profiles to quickly rollback to the default configuration.
 >
 > ```bash
@@ -257,19 +257,19 @@ harbor boost modules add rcn
 
 **Parameters**
 
-* `strat` - strategy for selection of the messages to rewrite. Default is `match`
-  * `all` - match all messages
-  * `first` - match first message regardless of the role
-  * `last` - match last message regardless of the role
-  * `any` - match one random message
-  * `percentage` - match a percentage of random messages from the conversation
-  * `user` - match all user messages
-  * `match` - use a filter to match messages
-* `strat_params` - parameters (filter) for the selection strategy. Default matches all user messages
-  * `percentage` - for `percentage` strat - the percentage of messages to match, default is `50`
-  * `index` - for `match` strat - the index of the message to match
-  * `role` - for `match` strat - the role of the message to match
-  * `substring` - for `match` strat - will match messages containing the substring
+- `strat` - strategy for selection of the messages to rewrite. Default is `match`
+  - `all` - match all messages
+  - `first` - match first message regardless of the role
+  - `last` - match last message regardless of the role
+  - `any` - match one random message
+  - `percentage` - match a percentage of random messages from the conversation
+  - `user` - match all user messages
+  - `match` - use a filter to match messages
+- `strat_params` - parameters (filter) for the selection strategy. Default matches all user messages
+  - `percentage` - for `percentage` strat - the percentage of messages to match, default is `50`
+  - `index` - for `match` strat - the index of the message to match
+  - `role` - for `match` strat - the role of the message to match
+  - `substring` - for `match` strat - will match messages containing the substring
 
 **Example**
 
@@ -293,25 +293,25 @@ Every LLM will respond to rewrites in a different way. Some models will generate
 
 **Parameters**
 
-* `percentage` - amount of characters to rewrite in the input. Default is `35`
-* `mods` - types of rewrites to apply. Default is `all`, available options:
-  * `capitalize` - swaps character capitalization
-  * `diacritic` - adds a random diacritic to the character
-  * `leetspeak` - replaces characters with leetspeak equivalents
-  * `remove_vowel` - removes vowels from the input
-* `strat` - strategy for selection of the messages to rewrite. Default is `match`
-  * `all` - match all messages
-  * `first` - match first message regardless of the role
-  * `last` - match last message regardless of the role
-  * `any` - match one random message
-  * `percentage` - match a percentage of random messages from the conversation
-  * `user` - match all user messages
-  * `match` - use a filter to match messages
-* `strat_params` - parameters (filter) for the selection strategy. Default matches all user messages
-  * `percentage` - for `percentage` strat - the percentage of messages to match, default is `50`
-  * `index` - for `match` strat - the index of the message to match
-  * `role` - for `match` strat - the role of the message to match
-  * `substring` - for `match` strat - will match messages containing the substring
+- `percentage` - amount of characters to rewrite in the input. Default is `35`
+- `mods` - types of rewrites to apply. Default is `all`, available options:
+  - `capitalize` - swaps character capitalization
+  - `diacritic` - adds a random diacritic to the character
+  - `leetspeak` - replaces characters with leetspeak equivalents
+  - `remove_vowel` - removes vowels from the input
+- `strat` - strategy for selection of the messages to rewrite. Default is `match`
+  - `all` - match all messages
+  - `first` - match first message regardless of the role
+  - `last` - match last message regardless of the role
+  - `any` - match one random message
+  - `percentage` - match a percentage of random messages from the conversation
+  - `user` - match all user messages
+  - `match` - use a filter to match messages
+- `strat_params` - parameters (filter) for the selection strategy. Default matches all user messages
+  - `percentage` - for `percentage` strat - the percentage of messages to match, default is `50`
+  - `index` - for `match` strat - the index of the message to match
+  - `role` - for `match` strat - the role of the message to match
+  - `substring` - for `match` strat - will match messages containing the substring
 
 **Examples**
 
@@ -351,20 +351,20 @@ harbor boost modules add g1
 
 **Parameters**
 
-* `max_steps` - Maximum amount of iterations for self-reflection, default is 15
-* `strat` - strategy for selection of the messages to rewrite. Default is `match`
-  * `all` - match all messages
-  * `first` - match first message regardless of the role
-  * `last` - match last message regardless of the role
-  * `any` - match one random message
-  * `percentage` - match a percentage of random messages from the conversation
-  * `user` - match all user messages
-  * `match` - use a filter to match messages
-* `strat_params` - parameters (filter) for the selection strategy. Default matches all user messages
-  * `percentage` - for `percentage` strat - the percentage of messages to match, default is `50`
-  * `index` - for `match` strat - the index of the message to match
-  * `role` - for `match` strat - the role of the message to match
-  * `substring` - for `match` strat - will match messages containing the substring
+- `max_steps` - Maximum amount of iterations for self-reflection, default is 15
+- `strat` - strategy for selection of the messages to rewrite. Default is `match`
+  - `all` - match all messages
+  - `first` - match first message regardless of the role
+  - `last` - match last message regardless of the role
+  - `any` - match one random message
+  - `percentage` - match a percentage of random messages from the conversation
+  - `user` - match all user messages
+  - `match` - use a filter to match messages
+- `strat_params` - parameters (filter) for the selection strategy. Default matches all user messages
+  - `percentage` - for `percentage` strat - the percentage of messages to match, default is `50`
+  - `index` - for `match` strat - the index of the message to match
+  - `role` - for `match` strat - the role of the message to match
+  - `substring` - for `match` strat - will match messages containing the substring
 
 #### `mcts` - Monte Carlo Tree Search
 
@@ -381,22 +381,22 @@ harbor boost modules add mcts
 
 All parameters below are prefixed with `boost.mcts.` in `harbor config`
 
-* `strat` - strategy for selection of the messages to rewrite. Default is `match`, other values:
-  * `all` - match all messages
-  * `first` - match first message regardless of the role
-  * `last` - match last message regardless of the role
-  * `any` - match one random message
-  * `percentage` - match a percentage of random messages from the conversation
-  * `user` - match all user messages
-  * `match` - use a filter to match messages
-* `strat_params` - parameters (filter) for the selection strategy. Default matches all user messages, fields:
-  * `percentage` - for `percentage` strat - the percentage of messages to match, default is `50`
-  * `index` - for `match` strat - the index of the message to match
-  * `role` - for `match` strat - the role of the message to match
-  * `substring` - for `match` strat - will match messages containing the substring
-* `max_iterations` - Maximum amount of Monte Carlo iterations to run (same tree), default is `2`
-* `max_simulations` - Improvement steps per iteration, default is `2`
-* `max_thoughts` - This number + 1 will be amount of improved variants to generate per node
+- `strat` - strategy for selection of the messages to rewrite. Default is `match`, other values:
+  - `all` - match all messages
+  - `first` - match first message regardless of the role
+  - `last` - match last message regardless of the role
+  - `any` - match one random message
+  - `percentage` - match a percentage of random messages from the conversation
+  - `user` - match all user messages
+  - `match` - use a filter to match messages
+- `strat_params` - parameters (filter) for the selection strategy. Default matches all user messages, fields:
+  - `percentage` - for `percentage` strat - the percentage of messages to match, default is `50`
+  - `index` - for `match` strat - the index of the message to match
+  - `role` - for `match` strat - the role of the message to match
+  - `substring` - for `match` strat - will match messages containing the substring
+- `max_iterations` - Maximum amount of Monte Carlo iterations to run (same tree), default is `2`
+- `max_simulations` - Improvement steps per iteration, default is `2`
+- `max_thoughts` - This number + 1 will be amount of improved variants to generate per node
 
 ```bash
 # Strategy to find the message to start from
@@ -474,11 +474,11 @@ Harbor is a containerized Long-Short-Memory (LLM) toolkit that enables effortles
 
 Harbor offers several key features:
 
-* **Managed Services**: The platform allows users to easily manage various LLM-related services, such as UIs (User Interfaces), Backends, Frontends, and Satellites.
-* **Unified CLI Interface**: Harbor provides a single command-line interface for managing multiple services, eliminating the need for manual configuration and streamlining development workflows.
-* **Convenience Utilities**: A range of convenience tools helps users manage LLM-related tasks efficiently, such as setting up services, debugging, creating URLs, and establishing network tunnels.
-* **Cache Sharing and Reuse**: Harbor shares and reuses host caches, significantly enhancing model performance and reducing memory consumption across supported services (e.g., Hugging Face models, Ollama).
-* **Config Profiles**: The application allows users to manage multiple configuration profiles for different development tasks or projects.
+- **Managed Services**: The platform allows users to easily manage various LLM-related services, such as UIs (User Interfaces), Backends, Frontends, and Satellites.
+- **Unified CLI Interface**: Harbor provides a single command-line interface for managing multiple services, eliminating the need for manual configuration and streamlining development workflows.
+- **Convenience Utilities**: A range of convenience tools helps users manage LLM-related tasks efficiently, such as setting up services, debugging, creating URLs, and establishing network tunnels.
+- **Cache Sharing and Reuse**: Harbor shares and reuses host caches, significantly enhancing model performance and reducing memory consumption across supported services (e.g., Hugging Face models, Ollama).
+- **Config Profiles**: The application allows users to manage multiple configuration profiles for different development tasks or projects.
 
 Harbor's purpose is not only to provide a convenient platform but also to simplify local LLM development by making it easier to setup and experiment with various LLM-related services. As such, Harbor can perfectly align with existing Docker setups and offers several benefits over manual Linux administration commands, like ease of use and streamlined configurations management.
 
@@ -587,8 +587,8 @@ List boosted models. `boost` will serve additional models as per enabled modules
 
 Chat completions endpoint.
 
-* Supports all parameters from the downstream API, for example `json` format for Ollama
-* Supports streaming completions
+- Supports all parameters from the downstream API, for example `json` format for Ollama
+- Supports streaming completions
 
 **`GET /events/:stream_id`**
 

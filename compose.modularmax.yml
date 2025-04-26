@@ -1,0 +1,24 @@
+services:
+  modularmax:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.modularmax
+    image: ${HARBOR_MODULARMAX_IMAGE}:${HARBOR_MODULARMAX_VERSION}
+    env_file:
+      - ./.env
+      - ./modularmax/override.env
+    ports:
+      - ${HARBOR_MODULARMAX_HOST_PORT}:8000
+    volumes:
+      - ${HARBOR_HF_CACHE}:/root/.cache/huggingface
+    command: >
+      --model-path ${HARBOR_MODULARMAX_MODEL}
+      ${HARBOR_MODULARMAX_EXTRA_ARGS}
+    networks:
+      - harbor-network
+    # Modular MAX doesn't work without Nvidia GPU (for now)
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

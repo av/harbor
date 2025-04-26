@@ -15,7 +15,7 @@ show_help() {
     echo "Usage: $0 <command> [options]"
     echo
     echo "Compose Setup Commands:"
-    echo "  up|u [handle(s)]           - Start the service(s)"
+    echo "  up|u [handle(s)]        - Start the service(s)"
     echo "    up --tail             - Start and tail the logs"
     echo "    up --open             - Start and open in the browser"
     echo "  down|d                  - Stop and remove the containers"
@@ -54,6 +54,9 @@ show_help() {
     echo "  jupyter   - Configure Jupyter service"
     echo "  ol1       - Configure ol1 service"
     echo "  ktransformers - Configure ktransformers service"
+    echo "  kobold    - Configure Koboldcpp service"
+    echo "  morphic   - Configure Morphic service"
+    echo "  modularmax - Configure Modular MAX service"
     echo "  boost     - Configure Harbor Boost service"
     echo
     echo "Service CLIs:"
@@ -69,6 +72,7 @@ show_help() {
     echo "  openhands|oh      - Run OpenHands service"
     echo "  repopack          - Run the Repopack CLI"
     echo "  nexa              - Run the Nexa CLI, configure the service"
+    echo "  gptme             - Run gptme CLI, configure the service"
     echo "  hf                - Run the Harbor's Hugging Face CLI. Expanded with a few additional commands."
     echo "    hf dl           - HuggingFaceModelDownloader CLI"
     echo "    hf parse-url    - Parse file URL from Hugging Face"
@@ -4178,12 +4182,36 @@ run_mcp_command() {
     esac
 }
 
+run_modularmax_command() {
+    case "$1" in
+    model)
+        shift
+        env_manager_alias modularmax.model "$@"
+        return 0
+        ;;
+    args)
+        shift
+        env_manager_alias modularmax.extra_args "$@"
+        return 0
+        ;;
+    help|-h|--help)
+        echo "Please note that this is not ModularMax CLI, but a Harbor CLI to manage ModularMax service."
+        echo
+        echo "Usage: harbor modularmax <command>"
+        echo
+        echo "Commands:"
+        echo "  harbor modularmax model [user/repo] - Get or set the ModularMax model repository to run"
+        echo "  harbor modularmax args [args]       - Get or set extra args to pass to the ModularMax CLI"
+        ;;
+    esac
+}
+
 # ========================================================================
 # == Main script
 # ========================================================================
 
 # Globals
-version="0.3.9"
+version="0.3.10"
 harbor_repo_url="https://github.com/av/harbor.git"
 harbor_release_url="https://api.github.com/repos/av/harbor/releases/latest"
 delimiter="|"
@@ -4509,6 +4537,10 @@ main_entrypoint() {
     mcp)
         shift
         run_mcp_command "$@"
+        ;;
+    modularmax)
+        shift
+        run_modularmax_command "$@"
         ;;
     tunnel | t)
         shift

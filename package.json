@@ -1,6 +1,6 @@
 {
   "name": "@avcodes/harbor",
-  "version": "0.3.9",
+  "version": "0.3.10",
   "description": "Effortlessly run LLM backends, APIs, frontends, and services with one command.",
   "private": false,
   "author": "av <av@av.codes> (https://av.codes)",

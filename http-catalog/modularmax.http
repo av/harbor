@@ -1,0 +1,19 @@
+@host = http://localhost:34471
+
+### Get Models
+
+GET {{host}}/v1/models
+
+### Chat Completion
+
+POST {{host}}/v1/chat/completions
+Content-Type: application/json
+Authorization: Bearer sk-modularmax
+
+{
+  "model": "cognitivecomputations/Dolphin3.0-Qwen2.5-3b",
+  "messages": [
+    {"role": "user", "content": "Suggest me a random color"}
+  ],
+  "temperature": 0.1
+}

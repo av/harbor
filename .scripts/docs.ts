@@ -9,6 +9,7 @@ import { visit } from "npm:unist-util-visit";
 
 import { copyDocsToApp } from './docs-to-app.ts'
 
+const wikiUrl = 'https://github.com/av/harbor/wiki'
 const wikiLocation = "../harbor.wiki";
 const docsLocation = "./docs";
 const appLocation = "./app/src/docs"
@@ -50,12 +51,24 @@ async function copyDocsToWiki() {
   console.debug("Copying docs to wiki...");
 
   const docsPath = Deno.realPathSync(docsLocation);
-  const docsFiles = Deno.readDirSync(docsPath);
+  const docsFiles = Array.from(Deno.readDirSync(docsPath));
+  const processor = await createProcessor([relativeLinksToWiki])
+  let copied = 0;
+
+
   for (const file of docsFiles) {
     if (file.isFile) {
       const source = `${docsPath}/${file.name}`;
       const dest = `${wikiLocation}/${toWikiFileName(file.name)}`;
-      await Deno.copyFile(source, dest);
+
+      if (source.endsWith('.md')) {
+        await copyWithProcessor(source, dest, processor);
+      } else {
+        await Deno.copyFile(source, dest);
+      }
+
+      console.log(`wiki: [${++copied}/${docsFiles.length}]`)
+
     }
   }
 
@@ -74,17 +87,27 @@ function toWikiFileName(name: string) {
 }
 
 async function copyTargets() {
-  for (const [source, dest] of Object.entries(targets)) {
-    console.debug(`Copying ${source} to ${dest}`);
-    const processor = await unified()
-      .use(remarkParse)
-      .use(replaceRelativeLinks)
-      .use(remarkStringify);
-    const sourceContent = await Deno.readTextFile(source);
-    const destContent = await processor.process(sourceContent);
+  console.debug("Copying targets...");
+  const processor = await createProcessor([replaceRelativeLinks])
 
-    await Deno.writeTextFile(dest, destContent);
+  for (const [source, dest] of Object.entries(targets)) {
+    await copyWithProcessor(
+      source,
+      dest,
+      processor,
+    )
   }
+}
+
+async function copyWithProcessor(
+  source: string,
+  dest: string,
+  processor: (any) => Promise<any>
+) {
+  const sourceContent = await Deno.readTextFile(source);
+  const destContent = await processor(sourceContent);
+
+  await Deno.writeTextFile(dest, destContent);
 }
 
 function replaceRelativeLinks() {
@@ -101,6 +124,64 @@ function replaceRelativeLinks() {
       }
     });
   };
+}
+
+function relativeLinksToWiki() {
+  return (tree: any) => {
+    visit(tree, "link", (node: any) => {
+      if (node.url.startsWith('./') && node.url.includes('.md')) {
+        node.url = node.url.replace(".md", "").replace("./", wikiUrl + '/');
+      }
+    });
+  };
+}
+
+async function createProcessor(
+  plugins: any[] = []
+) {
+  let processor = unified()
+    .use(remarkParse)
+
+  for (const plugin of plugins) {
+    processor = processor.use(plugin);
+  }
+
+  processor = processor.use(remarkStringify, {
+    bullet: "-",
+    handlers: {
+      text: textHandle,
+    },
+    resourceLink: true,
+  })
+  processor = await processor;
+
+  return (doc) => processor.process(doc);
+}
+
+function unsafeFilter(rule: Unsafe): boolean {
+  // We don't want to escape '[' as it's wildly used in - checkbox, backlink, GitHub notes.
+  if (rule.character === '[') {
+    return false
+  }
+
+  if (rule.character === '&') {
+    return false
+  }
+
+  return true
+}
+
+export function text(node, _, state, info) {
+  return state.safe(node.value, info)
+}
+
+function textHandle(node, parent, context, safeOptions) {
+  return text(
+    node,
+    parent,
+    { ...context, unsafe: context.unsafe.filter(unsafeFilter) },
+    safeOptions,
+  )
 }
 
 async function renderServiceIndex() {
