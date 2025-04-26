@@ -53,7 +53,7 @@ services:
       context: ./mcp
       dockerfile_inline: |
         FROM ghcr.io/av/tools:latest
-        RUN echo '{ "dependencies": { "pg": "^18.0.0" } }' > package.json
+        RUN echo '{ "dependencies": { "pg": "^8.0.0" } }' > package.json
         RUN npm install
     ports:
       - ${HARBOR_METAMCP_SSE_HOST_PORT}:12006
