@@ -1,8 +1,9 @@
 services:
   ldr:
-    build:
-      context: https://github.com/LearningCircuit/local-deep-research.git
-      dockerfile: Dockerfile
+    image: localdeepresearch/local-deep-research
+    # build:
+    #   context: https://github.com/LearningCircuit/local-deep-research.git
+    #   dockerfile: Dockerfile
     container_name: ${HARBOR_CONTAINER_PREFIX}.ldr
     ports:
       - ${HARBOR_LDR_HOST_PORT}:5000

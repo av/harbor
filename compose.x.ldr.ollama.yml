@@ -3,3 +3,5 @@ services:
     environment:
       - LDR_LLM__PROVIDER=ollama
       - OLLAMA_BASE_URL=${HARBOR_OLLAMA_INTERNAL_URL}
+      - LDR_LLM_PROVIDER=ollama
+      - LDR_LLM_OLLAMA_URL=${HARBOR_OLLAMA_INTERNAL_URL}
