@@ -1,6 +1,6 @@
 services:
   ldr:
-    image: localdeepresearch/local-deep-research
+    image: ${HARBOR_LDR_IMAGE}:${HARBOR_LDR_VERSION}
     # build:
     #   context: https://github.com/LearningCircuit/local-deep-research.git
     #   dockerfile: Dockerfile
