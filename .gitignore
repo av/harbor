@@ -86,7 +86,7 @@ jupyter/workspace/*
 .history
 
 # Boost
-boost/src/**/__pycache__/
+**/__pycache__/
 
 # AnythingLLM
 anythingllm/storage/

@@ -1,0 +1,137 @@
+services:
+  airweave:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.airweave
+    build:
+      context: ${HARBOR_AIRWEAVE_GIT_REF}:frontend
+      dockerfile: Dockerfile
+    ports:
+      - ${HARBOR_AIRWEAVE_HOST_PORT}:8080
+    environment:
+      - API_URL=http://localhost:${HARBOR_AIRWEAVE_BACKEND_HOST_PORT}
+      - ENABLE_AUTH=false
+    depends_on:
+      airweave-backend:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "wget", "--spider", "-q", "http://localhost:8080" ]
+      interval: 1s
+      timeout: 10s
+      retries: 10
+    env_file:
+      - ./.env
+      - ./airweave/override.env
+    networks:
+      - harbor-network
+
+  airweave-backend:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.airweave-backend
+    build:
+      context: ${HARBOR_AIRWEAVE_GIT_REF}:backend
+      dockerfile: Dockerfile
+    ports:
+      - ${HARBOR_AIRWEAVE_BACKEND_HOST_PORT}:8001
+    environment:
+      - POSTGRES_HOST=airweave-postgres
+      - REDIS_HOST=airweave-redis
+      - QDRANT_HOST=airweave-qdrant
+      - QDRANT_PORT=6333
+      - TEXT2VEC_INFERENCE_URL=http://airweave-embeddings:8080
+      - FRONTEND_LOCAL_DEVELOPMENT_PORT=${HARBOR_AIRWEAVE_HOST_PORT}
+      - API_FULL_URL=http://localhost:${HARBOR_AIRWEAVE_BACKEND_HOST_PORT}
+      - LOCAL_DEVELOPMENT=false
+      - ADDITIONAL_CORS_ORIGINS=http://localhost:${HARBOR_AIRWEAVE_HOST_PORT}
+    depends_on:
+      airweave-postgres:
+        condition: service_healthy
+      airweave-redis:
+        condition: service_healthy
+      airweave-qdrant:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8001/health" ]
+      interval: 1s
+      timeout: 10s
+      retries: 10
+    env_file:
+      - ./.env
+      - ./airweave/override.env
+    networks:
+      - harbor-network
+
+  airweave-postgres:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.airweave-postgres
+    image: postgres:16
+    ports:
+      - ${HARBOR_AIRWEAVE_POSTGRES_HOST_PORT}:5432
+    environment:
+      - POSTGRES_DB=airweave
+      - POSTGRES_USER=airweave
+      - POSTGRES_PASSWORD=airweave1234!
+    healthcheck:
+      test: [ "CMD", "pg_isready", "-U", "airweave" ]
+      interval: 1s
+      timeout: 10s
+      retries: 10
+    volumes:
+      - ${HARBOR_AIRWEAVE_WORKSPACE}/pg:/var/lib/postgresql/data
+    env_file:
+      - ./.env
+      - ./airweave/override.env
+    networks:
+      - harbor-network
+
+  airweave-redis:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.airweave-redis
+    image: redis:7-alpine
+    ports:
+      - ${HARBOR_AIRWEAVE_REDIS_HOST_PORT}:6379
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 1s
+      timeout: 10s
+      retries: 10
+    volumes:
+      - ${HARBOR_AIRWEAVE_WORKSPACE}/redis:/data
+    env_file:
+      - ./.env
+      - ./airweave/override.env
+    networks:
+      - harbor-network
+
+  airweave-embeddings:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.airweave-embeddings
+    image: semitechnologies/transformers-inference:sentence-transformers-all-MiniLM-L6-v2
+    ports:
+      - ${HARBOR_AIRWEAVE_EMBEDDINGS_HOST_PORT}:8080
+    environment:
+      ENABLE_CUDA: 0
+      WORKERS_PER_NODE: 1
+    healthcheck:
+      test: [ "CMD", "wget", "--spider", "-q", "http://localhost:8080/health" ]
+      interval: 1s
+      timeout: 10s
+      retries: 20
+    env_file:
+      - ./.env
+      - ./airweave/override.env
+    networks:
+      - harbor-network
+
+  airweave-qdrant:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.airweave-qdrant
+    image: qdrant/qdrant:latest
+    command: bash -c "apt-get update && apt-get install -y curl && ./entrypoint.sh"
+    ports:
+      - ${HARBOR_AIRWEAVE_QDRANT_HOST_PORT}:6333
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:6333/collections" ]
+      interval: 1s
+      timeout: 10s
+      retries: 10
+    volumes:
+      - ${HARBOR_AIRWEAVE_WORKSPACE}/qdrant:/qdrant/storage
+    env_file:
+      - ./.env
+      - ./airweave/override.env
+    networks:
+      - harbor-network

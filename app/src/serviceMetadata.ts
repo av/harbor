@@ -534,5 +534,11 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         tags: [HST.backend],
         wikiUrl: `${wikiUrl}/2.2.17-Backend-Modular-MAX`,
         tooltip: 'MAX is a platform from Modular (creators of Mojo) for running LLMs.'
+    },
+    airweave: {
+        name: 'Airweave',
+        tags: [HST.satellite],
+        wikiUrl: `${wikiUrl}/2.3.48-Satellite-Airweave`,
+        tooltip: 'Airweave lets agents search any app by transforming its contents into agent-ready knowledge.'
     }
 };
