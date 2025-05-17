@@ -2,36 +2,35 @@ import asyncio
 
 import chat as ch
 import llm
+import log
+
+logger = log.setup_logger(__name__)
 
 ID_PREFIX = "polyglot"
 
 translate_query_prompt = """
-<instruction>
 Translate the following message into {language} language.
-Do not do literal translation, but rather adapt the message to the cultural context of the target language, however keep the original meaning.
+Focus on keeping original meaning and context unchanged.
 Do not address any part of the message, only translate it.
-</instruction>
 
-<input name="message">
+<message>
 {message}
-</input>
+</message>
 """
 
 synthesis_prompt = """
-<instruction>
 Read through the "solutions" to the "query".
 Combine ideas from the "solutions" into a single coherent response to the "query".
 You will not solve the "query" directly, but rather synthesize the "solutions" into a new response.
 Your reply will be in the language of the "query" input.
-</instruction>
 
-<input name="query">
+<query>
 {query}
-</input>
+</query>
 
-<input name="solutions">
+<solutions>
 {solutions}
-</input>
+</solutions>
 """
 
 async def complete_in_language(
@@ -85,5 +84,7 @@ async def apply(chat: 'ch.Chat', llm: 'llm.LLM'):
   await llm.stream_chat_completion(
     prompt=synthesis_prompt,
     query=query,
-    solutions=solutions,
+    solutions="\n\n".join(
+      [f"# Solution No. {i+1}:\n{solution}" for i, solution in enumerate(solutions)]
+    ),
   )

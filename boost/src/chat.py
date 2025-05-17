@@ -113,7 +113,8 @@ class Chat:
       raise ValueError("Chat: unable to advance without an LLM")
 
     response = await self.llm.chat_completion(chat=self)
-    self.assistant(self.llm.get_response_content(response))
+    params = await self.llm.resolve_request_params()
+    self.assistant(self.llm.get_response_content(params, response))
     return response
 
   async def emit_advance(self, **kwargs):
