@@ -14,17 +14,19 @@ entryPoints:
     address: ":443"
   traefik:
     address: ":8080"
+  metrics:
+    address: ":8082"
 
 providers:
   docker:
     endpoint: "unix:///var/run/docker.sock"
     exposedByDefault: false
-    network: traefik-public
+    network: harbor_traefik-public
 
-certificatesResolvers:
-  letsencrypt:
-    acme:
-      email: "${HARBOR_TRAEFIK_CERT_EMAIL:-harbor@harbor.sh}"
-      storage: acme.json
-      httpChallenge:
-        entryPoint: web
+# certificatesResolvers:
+#   letsencrypt:
+#     acme:
+#       email: "${HARBOR_TRAEFIK_CERT_EMAIL:-harbor@harbor.sh}"
+#       storage: acme.json
+#       httpChallenge:
+#         entryPoint: web
