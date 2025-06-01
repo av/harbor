@@ -576,3 +576,9 @@ class LLM:
     results["chat"] = self.resolve_chat(**kwargs)
 
     return results
+
+  async def start_thinking(self):
+    await self.emit_message('\n<think>\n')
+
+  async def stop_thinking(self):
+    await self.emit_message('\n</think>\n')

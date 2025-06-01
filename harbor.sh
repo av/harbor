@@ -2008,6 +2008,7 @@ run_fixfs() {
     docker_fsacl $(eval echo "$(env_manager get fabric.config.path)")
     docker_fsacl $(eval echo "$(env_manager get txtai.cache)")
     docker_fsacl $(eval echo "$(env_manager get nexa.cache)")
+    docker_fsacl $(eval echo "$(env_manager get aichat.config_path)")
 }
 
 open_home_code() {
