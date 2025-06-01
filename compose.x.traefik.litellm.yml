@@ -5,7 +5,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.litellm.rule=Host(`litellm.${HARBOR_TRAEFIK_DOMAIN}`)"
-      - "traefik.http.services.litellm.loadbalancer.server.port=${HARBOR_LITELLM_HOST_PORT}"
+      - "traefik.http.services.litellm.loadbalancer.server.port=4000"
       - "traefik.http.routers.litellm.entrypoints=web"
       - "traefik.http.routers.litellm.service=litellm"
 
