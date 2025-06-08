@@ -100,7 +100,7 @@ export class GraphVis {
           .distance(120)
           .strength(0.01)
       )
-      .force("charge", d3.forceManyBody().strength(-50))
+      .force("charge", d3.forceManyBody().strength(-80))
       .force("x", d3.forceX(this.width / 2).strength(0.01))
       .force("y", d3.forceY(this.height / 2).strength(0.01))
       .force("collide", d3.forceCollide().radius(config.GRAPH_TEXT_SIZE * 2));

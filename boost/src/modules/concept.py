@@ -17,22 +17,19 @@ artifact_path = os.path.join(
   '..',
   'custom_modules',
   'artifacts',
-  # Dev
-  # 'fluid',
-  # 'dist',
-  # 'fluid_built.html',
-  # Built
+    # Dev
+    # 'fluid',
+    # 'dist',
+    # 'fluid_built.html',
+    # Built
   'fluid_mini.html',
 )
 
 concept_explanation = """
 Concepts are short pieces of information (1-3 words) that are relevant to the message.
-They can be topics, emotions, intents, or content types. The goal is to identify the most important concepts in the message and provide a concise description of each concept.
-When generating concept - consider:
-- It's emotional tone or content, and choose a color that reflects it (hex_color)
-  - Most concepts should be neutral, unless they are very specific and have a strong emotional tone.
-- It's importance for the message, and assign a number between 0.0 and 1.0 that indicates how important this concept is for the message (importance)
-  - Only very few concepts should be important (0.8-1.0), most of them should be around 0.5, and some can be even lower (0.0-0.2).
+They can be topics, emotions, intents, or content types.
+The goal is to identify the most important concepts in the message and provide a concise description of each concept.
+Concept color must be gray, except for the concepts identifying the strongest emotions.
 """
 
 concepts_prompt = """
@@ -67,7 +64,7 @@ Message:
 Concept:
 {concept}
 
-Reply with a JSON object describing the concept with the following fields (label, hex_color, importance).
+Reply with a JSON object describing the concept with the following fields (label, hex_color).
 {concept_explanation}
 """.format(
   message='{message}',
@@ -106,20 +103,9 @@ class ConceptSchema(BaseModel):
   hex_color: str = Field(
     description="""
     A valid HEX color that is associated with the concept.
-    Choose color based on the concept's emotional tone or content.
-    Most of the time it should be neutral, unless the concept is very specific and has a strong emotional tone.
+    Must be gray for anything but the strongest emotions.
     """,
     default='#010101',
-  )
-  importance: float = Field(
-    description="""
-    A number between 0.0 and 1.0 that indicates how important this concept is for the message.
-    The higher the number, the more important the concept is.
-    It should be a float, but you can use integers as well.
-    """,
-    default=0.5,
-    ge=0.0,
-    le=1.0,
   )
 
   def normalize_label(self):
@@ -156,7 +142,7 @@ async def apply(chat: 'ch.Chat', llm: 'llm.LLM'):
   await llm.emit_artifact(artifact.replace('<<listener_id>>', llm.id))
   await asyncio.sleep(1.0)
   await llm.emit_listener_event('boost.status', {'status': 'Initializing'})
-  await llm.emit_listener_event('boost.intensity', {'intensity': 0.4})
+  await llm.emit_listener_event('boost.intensity', {'intensity': 1.0})
 
   await llm.start_thinking()
   await llm.emit_message('\n### Concepts\n')
@@ -172,7 +158,7 @@ async def apply(chat: 'ch.Chat', llm: 'llm.LLM'):
   )
   output = ConceptOutputSchema(**raw_output)
 
-  await llm.emit_listener_event('boost.intensity', {'intensity': 0.0})
+  await llm.emit_listener_event('boost.intensity', {'intensity': 0.4})
   await llm.emit_listener_event('boost.status', {'status': 'Thinking'})
 
   logger.error(f'Output: {output}')
@@ -195,13 +181,8 @@ async def apply(chat: 'ch.Chat', llm: 'llm.LLM'):
 
     concepts.add(concept.label)
 
-  intensity = 0.0
-  intensity_step = 0.0
-
   for concept in output.concepts:
     await add_concept(concept)
-    await llm.emit_listener_event('boost.intensity', {'intensity': intensity})
-    intensity += intensity_step
 
   for _ in range(3):
     for concept in output.concepts:

@@ -31,7 +31,7 @@ export class Visualisation {
       node.color = new Color(0.001, 0.001, 0.001);
 
       try {
-        node.color = Color.fromHex(hex_color).mute(0.01);
+        node.color = Color.fromHex(hex_color).mute(0.002);
       } catch (e) {}
     });
 
@@ -57,11 +57,11 @@ export class Visualisation {
       this.fluidSim.pointers = this.graph.nodes.map((n) => {
         const p = new Pointer();
         const position = this.viewport.toUnitCoords(new Point(n.x, n.y));
-        let velocity = this.viewport.toUnitCoords(new Point(n.vx, n.vy));
+        let velocity = this.viewport.toUnitCoords(new Point(n.vx, n.vy)).multiply(3);
 
-        if (velocity.len() < 0.001) {
-          velocity = Point.unitDirection(Math.PI * 0.5).multiply(0.003);
-        }
+        // if (velocity.len() < 0.001) {
+        //   velocity = Point.unitDirection(rnd(Math.PI, Math.PI * 2)).multiply(0.01);
+        // }
 
         p.moved = true;
         p.texcoordX = position.x;
@@ -69,7 +69,7 @@ export class Visualisation {
         p.deltaX = velocity.x;
         p.deltaY = -velocity.y;
         p.color = n.highlighted ? n.color.toGlColor() : p.color;
-        p.radius = 0.005;
+        p.radius = 0.003;
 
         return p;
       });

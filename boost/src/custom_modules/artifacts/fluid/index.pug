@@ -10,6 +10,7 @@ style.
     font-family: Inter, sans-serif;
     overflow: hidden;
     background: #222;
+    -webkit-font-smoothing: antialiased;
   }
 
   canvas, svg {
@@ -21,13 +22,15 @@ style.
   .status {
     position: absolute;
     top: 1rem;
-    left: 1rem;
-    padding: 0.5rem;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 0.75rem 1.5rem;
     color: #222;
     font-size: 14px;
+    font-weight: 600;
     z-index: 1000;
-    background: rgba(255, 255, 255, 0.25);
-    border-radius: 0.5rem;
+    background: rgba(255, 255, 255, 0.75);
+    border-radius: 2rem;
     backdrop-filter: blur(5px);
   }
 

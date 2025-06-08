@@ -173,7 +173,7 @@ export class FluidSim {
           y: rnd(1.0),
         };
         const radius = rnd(0.001, 0.05);
-        const color = lmap(radius, 0.001, 0.05, 0.01, 0.001);
+        const color = lmap(radius, 0.001, 0.05, 0.005, 0.001);
 
         this.splat({
           x: position.x,
