@@ -1,0 +1,5 @@
+{
+  "devDependencies": {
+    "@parcel/transformer-pug": "^2.15.2"
+  }
+}

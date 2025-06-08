@@ -21,15 +21,15 @@ app = FastAPI()
 auth_header = APIKeyHeader(name="Authorization", auto_error=False)
 
 app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins
-    allow_credentials=True,
-    allow_methods=["*"],  # Allows all methods
-    allow_headers=["*"],  # Allows all headers
+  CORSMiddleware,
+  allow_origins=["*"],    # Allows all origins
+  allow_credentials=True,
+  allow_methods=["*"],    # Allows all methods
+  allow_headers=["*"],    # Allows all headers
 )
 
-# ------------------------------
 
+# ------------------------------
 async def get_api_key(api_key_header: str = Security(auth_header)):
   if len(BOOST_AUTH) == 0:
     return
@@ -58,6 +58,7 @@ async def root():
 async def health():
   return JSONResponse(content={"status": "ok"}, status_code=200)
 
+
 @app.get("/events/{stream_id}")
 async def get_event(stream_id: str, api_key: str = Depends(get_api_key)):
   llm = llm_registry.get(stream_id)
@@ -67,7 +68,9 @@ async def get_event(stream_id: str, api_key: str = Depends(get_api_key)):
 
   return StreamingResponse(llm.listen(), status_code=200)
 
+
 # --- OpenAI Compatible ---------------------
+
 
 @app.get("/v1/models")
 async def get_boost_models(api_key: str = Depends(get_api_key)):
@@ -101,7 +104,9 @@ async def get_boost_models(api_key: str = Depends(get_api_key)):
 
 
 @app.post("/v1/chat/completions")
-async def post_boost_chat_completion(request: Request, api_key: str = Depends(get_api_key)):
+async def post_boost_chat_completion(
+  request: Request, api_key: str = Depends(get_api_key)
+):
   body = await request.body()
 
   logger.debug(f"Request body: {body[:256]}...")
@@ -141,6 +146,7 @@ async def post_boost_chat_completion(request: Request, api_key: str = Depends(ge
   else:
     content = await proxy.consume_stream(completion)
     return JSONResponse(content=content, status_code=200)
+
 
 # ------------ Startup ----------------
 

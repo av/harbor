@@ -106,3 +106,8 @@ qdrant/storage
 
 # Merged compose
 __harbor.yml
+
+.cache
+.local
+.npm
+.pkgx

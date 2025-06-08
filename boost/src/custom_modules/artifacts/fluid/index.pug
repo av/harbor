@@ -1,0 +1,46 @@
+style.
+  html, body, canvas, svg {
+    width: 100%;
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    position: fixed;
+    font-family: Inter, sans-serif;
+    overflow: hidden;
+    background: #222;
+  }
+
+  canvas, svg {
+    position: absolute;
+    top: 0;
+    left: 0;
+  }
+
+  .status {
+    position: absolute;
+    top: 1rem;
+    left: 1rem;
+    padding: 0.5rem;
+    color: #222;
+    font-size: 14px;
+    z-index: 1000;
+    background: rgba(255, 255, 255, 0.25);
+    border-radius: 0.5rem;
+    backdrop-filter: blur(5px);
+  }
+
+canvas
+svg
+.status ...
+
+script(
+  src='https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.7.9/dat.gui.min.js'
+  data-inline-ignore
+)
+script(
+  src='https://d3js.org/d3.v7.min.js'
+  data-inline-ignore
+)
+script(src='./index.ts' type='module')
