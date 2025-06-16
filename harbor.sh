@@ -261,6 +261,10 @@ has_nvidia_cdi() {
     fi
 }
 
+has_apple_silicon_gpu() {
+    [[ "$(uname)" == "Darwin" && "$(uname -m)" == "arm64" ]]
+}
+
 has_rocm() {
     command -v rocm-smi &>/dev/null
 }
@@ -543,65 +547,209 @@ resolve_compose_command() {
 run_up() {
     local should_tail=false
     local should_open=false
-    local filtered_args=()
-    local up_args=()
+    local raw_args=("$@") # All arguments passed to harbor up.
+    local explicit_user_services=() # Services explicitly named by the user on the command line.
+    local native_eligible_services=() # Services identified for native execution.
+    local dynamic_compose_content="" # Stores YAML for dynamically generated proxy services.
+    local dynamic_compose_file="${harbor_home}/compose.harbor.native-proxy.yml" # Path to the dynamic Compose file.
 
-    for arg in "$@"; do
+    # Ensure clean state for the dynamic Compose file before starting.
+    rm -f "${dynamic_compose_file}" || true
+
+    # Parse arguments: Identify global flags and explicitly named services.
+    for arg in "${raw_args[@]}"; do
         case "$arg" in
-        --no-defaults)
-            up_args+=("$arg")
+        --no-defaults) # This flag is for the Compose command itself.
+            # It will be included in compose_command_prefix.
             ;;
-        --open | -o)
-            should_open=true
-            ;;
-        --tail | -t)
-            should_tail=true
-            ;;
+        --open | -o) should_open=true;;
+        --tail | -t) should_tail=true;;
         *)
-            filtered_args+=("$arg") # Add to filtered arguments
+            # This is a service handle, add it to explicit_user_services.
+            explicit_user_services+=("$arg")
+            # Check if this service is native-eligible.
+            if ! "${_SKIP_NATIVE}" && _harbor_is_native_eligible "${arg}"; then
+                native_eligible_services+=("$arg")
+                _debug "Service '${arg}' identified as native-eligible."
+            fi
             ;;
         esac
     done
 
-    log_debug "Running 'up' for services: ${up_args[@]} ${filtered_args[@]}"
-    $(compose_with_options "${up_args[@]}" "${filtered_args[@]}") up -d --wait
-
-    if [ "$default_autoopen" = "true" ]; then
-        run_open "$default_open"
+    # Determine the final list of *service handles* that `docker compose up` will attempt to start.
+    # This list includes proxies for native services and regular containers for non-native ones.
+    local services_to_up_docker_compose=()
+    if [[ ${#explicit_user_services[@]} -eq 0 ]]; then
+        # If no explicit services were named by the user, use `default_options` (Harbor's default behavior).
+        services_to_up_docker_compose=("${default_options[@]}")
+    else
+        # If explicit services were named, use those.
+        services_to_up_docker_compose=("${explicit_user_services[@]}")
     fi
 
-    for service in "${default_tunnels[@]}"; do
-        establish_tunnel "$service"
-    done
+    # 1. Start Native Services if any were requested/defaulted and are eligible.
+    if [[ ${#native_eligible_services[@]} -gt 0 ]]; then
+        _info "Processing native services..."
+        dynamic_compose_content+="version: '3.8'\n"
+        dynamic_compose_content+="services:\n"
 
-    if $should_tail; then
-        run_logs "$filtered_args"
+        for service_handle in "${native_eligible_services[@]}"; do
+            _harbor_load_native_config "${service_handle}" || _error "Failed to load native config for ${service_handle}. Cannot start natively."
+
+            # Validate essential config for native service.
+            if [[ -z "${NATIVE_CFG_COMMAND}" || -z "${NATIVE_CFG_PORT}" || -z "${NATIVE_CFG_HEALTH_METHOD}" ]]; then
+                _error "Native configuration for service '${service_handle}' is incomplete. Missing native_command, native_port, or health.method in its harbor_native.yml or .env."
+            fi
+            # Validate essential config for proxy.
+            if [[ -z "${NATIVE_CFG_PROXY_IMAGE}" || -z "${NATIVE_CFG_PROXY_COMMAND}" || -z "${NATIVE_CFG_PROXY_HEALTHCHECK_TEST}" ]]; then
+                 _error "Proxy configuration for service '${service_handle}' is incomplete. Missing proxy_image, proxy_command, or proxy_healthcheck_test in its harbor_native.yml or .env."
+            fi
+
+            # Start the actual native process on the host.
+            _harbor_start_native_service \
+                "${service_handle}" \
+                "${NATIVE_CFG_COMMAND}" \
+                "${NATIVE_CFG_PORT}" \
+                "${NATIVE_CFG_HEALTH_METHOD}" \
+                "${NATIVE_CFG_HEALTH_URL}"
+
+            # Generate the proxy service definition for this native service.
+            # This ensures Docker Compose sees a service with the expected name and port.
+            local proxy_command_templated=$(_run_bash_template "${NATIVE_CFG_PROXY_COMMAND}" "${NATIVE_CFG_PORT}")
+            local proxy_healthcheck_test_templated=$(_run_bash_template "${NATIVE_CFG_PROXY_HEALTHCHECK_TEST}" "${NATIVE_CFG_PORT}")
+
+            # Append the proxy service definition to dynamic_compose_content.
+            dynamic_compose_content+="  ${service_handle}:\n"
+            dynamic_compose_content+="    image: ${NATIVE_CFG_PROXY_IMAGE}\n"
+            dynamic_compose_content+="    container_name: ${HARBOR_CONTAINER_PREFIX}.${service_handle}\n"
+            dynamic_compose_content+="    command: ${proxy_command_templated}\n"
+            dynamic_compose_content+="    ports:\n"
+            dynamic_compose_content+="      - \"${NATIVE_CFG_PORT}:${NATIVE_CFG_PORT}\"\n"
+            dynamic_compose_content+="    healthcheck:\n"
+            dynamic_compose_content+="      test: ${proxy_healthcheck_test_templated}\n"
+            dynamic_compose_content+="      interval: 1s\n"
+            dynamic_compose_content+="      timeout: 5s\n"
+            dynamic_compose_content+="      retries: 10\n"
+            dynamic_compose_content+="    networks:\n"
+            if [[ -n "${NATIVE_CFG_PROXY_NETWORKS}" ]]; then
+                for net in ${NATIVE_CFG_PROXY_NETWORKS}; do
+                    dynamic_compose_content+="      - ${net}\n"
+                done
+            else
+                dynamic_compose_content+="      - default\n" # Fallback to default network if none specified.
+            fi
+        done
+
+        # Write the dynamically generated Compose content to a file.
+        _info "Writing dynamic native proxy Compose file: ${dynamic_compose_file}"
+        echo -e "${dynamic_compose_content}" > "${dynamic_compose_file}" || _error "Failed to write dynamic Compose file."
+
+        _info "All identified native services have been started and their proxies configured."
+    else
+        _debug "No native services requested or eligible for this platform. Skipping native service startup."
     fi
 
-    if $should_open; then
-        run_open "$filtered_args"
+    # 2. Start Docker Compose Services (including any generated proxies).
+    if ! "${_SKIP_DOCKER}"; then
+        # Build the base `docker compose` command prefix. This will correctly handle `--no-defaults`
+        # and other Compose-level flags passed in `raw_args`.
+        local compose_command_prefix=$(compose_with_options "${raw_args[@]}")
+
+        # If a dynamic Compose file was created, include it for correct service overrides.
+        if [[ -f "${dynamic_compose_file}" && -s "${dynamic_compose_file}" ]]; then
+             compose_command_prefix+=" -f ${dynamic_compose_file}"
+        fi
+
+        # Execute `docker compose up -d --wait` with the final list of service names.
+        # This correctly handles:
+        # - `harbor up` (no args): `services_to_up_docker_compose` is `default_options`.
+        # - `harbor up service1 service2`: `services_to_up_docker_compose` is `service1 service2`.
+        # - `harbor up --no-defaults`: `services_to_up_docker_compose` is `explicit_user_services` (empty),
+        #                               so `up -d --wait` is called with no service names.
+        _info "Starting Docker Compose services: ${services_to_up_docker_compose[@]} (including any native proxies)..."
+        (cd "${DOCKER_COMPOSE_PROJECT_DIR}" && "${_DRY_RUN}" || eval "${compose_command_prefix} up -d --wait" "${services_to_up_docker_compose[@]}") \
+            || _error "Failed to start Docker Compose services. Please check Docker logs."
+
+        _info "Docker Compose services processed."
+    else
+        _info "Skipping Docker Compose services startup (--no-docker was set)."
     fi
+
+    # Post-startup actions (tail, open, tunnels).
+    if [ "$default_autoopen" = "true" ]; then run_open "$default_open"; fi
+    for service_handle in "${default_tunnels[@]}"; do establish_tunnel "$service_handle"; done
+    if $should_tail; then run_logs "$raw_args"; fi
+    if $should_open; then run_open "$raw_args"; fi
+
+    _info "Harbor system (native and/or containerized components) is now fully operational."
+    # The native services are `nohup`ed, so they are detached background processes.
 }
 
 run_down() {
-    local services=$(get_active_services)
-    local matched_services=()
+    local user_specified_services_for_down=("$@") # All arguments passed to harbor down
+    local docker_services_to_target_explicitly=()
 
-    log_debug "Active services: $services"
+    if [[ ${#user_specified_services_for_down[@]} -eq 0 ]]; then
+        # Case 1: `harbor down` (no arguments)
+        _info "No specific services provided to 'down'. Stopping all active Docker services and all managed native services."
 
-    services=$(echo "$services" | tr ' ' '\n')
-    for service in "$@"; do
-        log_debug "Checking if service '$service' is in active services list..."
-        matched_service=$(echo "$services" | grep "^$service-")
-        if [ -n "$matched_service" ]; then
-            matched_services+=("$matched_service")
+        # Stop all services that were running in NATIVE mode
+        local potential_native_services_dirs
+        potential_native_services_dirs=$(find "$harbor_home" -maxdepth 2 -name "harbor_native.yml" -print0 | xargs -0 -I {} dirname {})
+
+        for service_dir_path in $potential_native_services_dirs; do
+            local service_handle=$(basename "$service_dir_path")
+            local service_mode
+            service_mode=$(env_manager --silent get "${service_handle}.mode")
+            if [[ "$service_mode" == "NATIVE" ]]; then
+                _harbor_stop_native_service "$service_handle" # This will also reset .mode to CONTAINER
+            fi
+        done
+
+        # Stop all Docker compose services
+        _info "Stopping all Docker Compose services..."
+        $(compose_with_options "*") down --remove-orphans
+    else
+        # Case 2: `harbor down service1 service2 ...`
+        _info "Stopping specified services: ${user_specified_services_for_down[*]}"
+
+        for service_handle in "${user_specified_services_for_down[@]}"; do
+            local service_mode
+            service_mode=$(env_manager --silent get "${service_handle}.mode")
+
+            # Check if it's eligible and was running as native
+            if _harbor_is_native_eligible "$service_handle" && [[ "$service_mode" == "NATIVE" ]]; then
+                _harbor_stop_native_service "$service_handle" # This will also reset .mode to CONTAINER
+            else
+                # If not native eligible OR not in NATIVE mode, assume it's a Docker service.
+                _debug "Service ${service_handle} will be targeted by 'docker compose down'."
+                docker_services_to_target_explicitly+=("$service_handle")
+
+                # Add its sub-services (e.g., service-db for service)
+                # Get all services defined in compose files to find potential sub-services.
+                local all_compose_defined_services
+                all_compose_defined_services=$($(compose_with_options "*") config --services | tr '\n' ' ')
+
+                for srv_in_compose in $all_compose_defined_services; do
+                    if [[ "$srv_in_compose" == "${service_handle}-"* ]]; then
+                         _debug "Identified potential sub-service ${srv_in_compose} for ${service_handle} to be included in Docker down."
+                         docker_services_to_target_explicitly+=("$srv_in_compose")
+                    fi
+                done
+            fi
+        done
+
+        if [[ ${#docker_services_to_target_explicitly[@]} -gt 0 ]]; then
+            # Remove duplicates from the list of Docker services to stop
+            local unique_docker_services_str
+            unique_docker_services_str=$(echo "${docker_services_to_target_explicitly[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' ')
+
+            _info "Targeting Docker Compose services for 'down': $unique_docker_services_str"
+            $(compose_with_options "*") down --remove-orphans $unique_docker_services_str
+        else
+            _info "No Docker Compose services to stop based on specified arguments (they might have all been native or not running)."
         fi
-    done
-
-    log_debug "Matched: ${matched_services[*]}"
-
-    matched_services_str=$(printf " %s" "${matched_services[@]}")
-    $(compose_with_options "*") down --remove-orphans "$@" $matched_services_str
+    fi
 }
 
 run_restart() {
@@ -637,25 +785,50 @@ run_build() {
 }
 
 run_shell() {
-    service=$1
-    shift
+    local service_handle=$1
+    local shell_command="${2:-bash}"
 
-    if [ -z "$service" ]; then
-        log_error "Usage: harbor shell <service>"
-        exit 1
+    if [ -z "$service_handle" ]; then _error "Usage: harbor shell <service_handle> [shell_command]"; fi
+
+    if ! "${_SKIP_NATIVE}" && _harbor_is_native_eligible "${service_handle}"; then
+        _info "Service '${service_handle}' is running natively. Direct shell access is not supported via Harbor CLI."
+        _warn "To interact with native service: SSH into your host machine, or open a new terminal."
+        _info "You can view its logs with: harbor logs ${service_handle}"
+        return 0
     fi
 
-    local shell="bash"
-
-    if [ -n "$1" ]; then
-        shell="$1"
-    fi
-
-    $(compose_with_options "*") run -it --entrypoint "$shell" "$service"
+    $(compose_with_options "*") run -it --entrypoint "${shell_command}" "${service_handle}"
 }
 
 run_logs() {
-    $(compose_with_options "*") logs -n 20 -f "$@"
+    local service_handle="$1" # Assuming the first arg is the service handle for simplicity
+    # More robust argument parsing might be needed if flags can precede service_handle
+
+    if [ -z "$service_handle" ]; then
+        # Original behavior if no specific service is targeted, or handle multiple services
+        $(compose_with_options "*") logs -n 20 -f "$@"
+        return
+    fi
+
+    # Check if the service is native
+    # Use env_manager to check the .mode, which is more reliable after 'up'
+    local service_mode
+    service_mode=$(env_manager --silent get "${service_handle}.mode")
+
+    if [[ "$service_mode" == "NATIVE" ]]; then
+        _harbor_load_native_config "${service_handle}" # Ensure NATIVE_CFG_COMMAND is loaded for log check
+        local native_log_file="${LOG_DIR}/harbor-${service_handle}-native.log"
+        if [[ -f "$native_log_file" ]]; then
+            _info "Tailing native logs for ${service_handle} from ${native_log_file}..."
+            tail -n 20 -f "$native_log_file"
+        else
+            _warn "Native log file not found for ${service_handle} at ${native_log_file}."
+            _info "Is the native service ${service_handle} running and logging correctly?"
+        fi
+    else
+        # Fallback to Docker logs if not native or mode not set
+        $(compose_with_options "*") logs -n 20 -f "$@"
+    fi
 }
 
 run_pull() {
@@ -1023,7 +1196,16 @@ run_exec() {
         return 1
     fi
 
-    # Check if the service is running
+    # Native support: if service is native-eligible, run directly on host
+    if ! "${_SKIP_NATIVE}" && type _harbor_is_native_eligible &>/dev/null && _harbor_is_native_eligible "$service_name"; then
+        log_info "Service '${service_name}' is running natively. Executing command directly on host: ${after_args[*]}"
+
+        # Actually execute the command on the host
+        "${after_args[@]}"
+        return $?
+    fi
+
+    # Check if the service is running (container)
     if docker compose ps --services --filter "status=running" | grep -q "^${service_name}$"; then
         log_info "Service ${service_name} is running. Executing command..."
 
@@ -1265,7 +1447,7 @@ get_default_log_level() {
 
 get_default_log_label() {
     local level="$1"
-    local var_name="default_logl_labels_$level"
+    local var_name="default_log_labels_$level"
     eval echo \$$var_name
 }
 
@@ -1288,6 +1470,361 @@ log_debug() { log "DEBUG" "${c_gray}$@${c_nc}"; }
 log_info() { log "INFO" "$@"; }
 log_warn() { log "WARN" "$@"; }
 log_error() { log "ERROR" "$@"; }
+
+# --- Internal Helper Functions: Argument Parsing and Dependency Checks ---
+# _check_dependencies: Ensures all required external CLI tools are available.
+_check_dependencies() {
+    _info "Checking script dependencies..."
+    local missing_deps=()
+
+    for cmd in docker "docker compose" nc curl pgrep; do
+        if ! command -v "${cmd%% *}" &> /dev/null; then
+            missing_deps+=("${cmd}")
+        fi
+    done
+
+    # Check for Deno explicitly, as it's now used for YAML parsing.
+    if ! command -v deno &> /dev/null; then
+        missing_deps+=("deno (required for native service config parsing)")
+    fi
+
+    if [[ ${#missing_deps[@]} -gt 0 ]]; then
+        _error "Missing required commands: ${missing_deps[*]}. Please install them."
+    fi
+    _info "All required CLI dependencies found."
+}
+
+# _run_bash_template <template_string> <port_value>
+# Simple Bash-based templating function. Replaces `{{.native_port}}` with actual port value.
+_run_bash_template() {
+    local template="$1"
+    local port="$2"
+    echo "$template" | sed "s|{{.native_port}}|$port|g"
+}
+
+
+# --- Internal Helper Functions: Lock Management ---
+_acquire_lock() {
+    _info "Attempting to acquire lock: ${LOCK_FILE}"
+    if ( set -o noclobber; echo "$$" > "${LOCK_FILE}") 2>/dev/null; then
+        _info "Lock acquired. PID: $$"
+    else
+        local lock_pid=$(cat "${LOCK_FILE}" 2>/dev/null || true)
+        if [[ -n "${lock_pid}" ]] && kill -0 "${lock_pid}" 2>/dev/null; then
+            _error "Another instance of Harbor CLI is already running with PID ${lock_pid}. Exiting to prevent conflicts."
+        else
+            _warn "Stale lock file found (previous PID ${lock_pid} is gone or invalid)."
+            if "${_FORCE_CLEANUP}"; then
+                _info "Force cleanup requested. Removing stale lock file: ${LOCK_FILE}."
+                rm -f "${LOCK_FILE}" || _error "Failed to remove stale lock file: ${LOCK_FILE}. Please check permissions."
+                if ( set -o noclobber; echo "$$" > "${LOCK_FILE}") 2>/dev/null; then
+                    _info "Lock re-acquired after force cleanup. PID: $$"
+                else
+                    _error "Failed to acquire lock even after attempting to remove stale lock. Check permissions for ${LOCK_FILE}."
+                fi
+            fi
+        fi
+    fi
+}
+
+_release_lock() {
+    _debug "Releasing lock: ${LOCK_FILE}"
+    if [[ -f "${LOCK_FILE}" ]]; then
+        if [[ "$(cat "${LOCK_FILE}")" == "$$" ]]; then
+            rm -f "${LOCK_FILE}" || _warn "Failed to remove lock file: ${LOCK_FILE}. Manual cleanup might be required."
+        else
+            _warn "Lock file owned by a different PID. Not removing."
+        fi
+    fi
+}
+
+# --- Main `cleanup` function, executed on script exit or signal. ---
+cleanup() {
+    local exit_status=$?
+    # Only log detailed cleanup info if not a normal exit (status 0) or if logging level is DEBUG
+    if [[ "$exit_status" -ne 0 ]] || [[ "$_LOG_LEVEL" == "DEBUG" ]] || [[ "$default_log_level" == "DEBUG" ]]; then # Check both global and .env log level
+        _debug "Harbor CLI exiting (status: ${exit_status}). Running cleanup."
+    fi
+
+    # The primary role of cleanup on EXIT/Signal for the CLI is to release its own lock.
+    # It should NOT stop services; that's an explicit user action (e.g., `harbor down`).
+    _release_lock
+
+    if [[ "$exit_status" -ne 0 ]]; then
+        _debug "Exited with status ${exit_status}."
+    fi
+    # The script will exit with the original exit_status due to `set -e` or explicit exit elsewhere.
+    # If trap is EXIT, it will exit with $exit_status.
+    # If trap is a signal, shell usually exits with 128 + signal number.
+    # No explicit `exit` command here, to allow the trap to respect the original exit cause.
+}
+
+# --- Set traps to call `cleanup` on various exit conditions or signals. ---
+# trap cleanup EXIT
+trap cleanup SIGINT
+trap cleanup SIGTERM
+trap cleanup SIGHUP
+
+
+# --- Internal Native Service Management Functions ---
+_is_harbor_native_running_check() {
+    local command_pattern="$1"
+    pgrep -f "${command_pattern}" >/dev/null 2>&1
+}
+
+_harbor_wait_for_port() {
+    local host="$1"; local port="$2"; local timeout_sec="$3"; local interval_sec="$4"; local waited_time=0
+    _info "Waiting for ${host}:${port}..."
+    while ! nc -z "${host}" "${port}" &>/dev/null; do
+        if (( waited_time >= timeout_sec )); then _error "Timeout: ${host}:${port} did not become available after ${timeout_sec}s."; return 1; fi
+        _debug "Port ${port} not open, sleeping ${interval_sec}s..."; sleep "${interval_sec}"; waited_time=$((waited_time + interval_sec))
+    done; _info "${host}:${port} is open."; return 0
+}
+
+_harbor_wait_for_http_health() {
+    local url="$1"; local timeout_sec="$2"; local interval_sec="$3"; local waited_time=0
+    _info "Waiting for HTTP health check at ${url}..."
+    while ! curl --fail --silent "${url}" &>/dev/null; do
+        if (( waited_time >= timeout_sec )); then _error "Timeout: HTTP health check for ${url} did not pass after ${timeout_sec}s."; return 1; fi
+        _debug "Health check failed for ${url}, sleeping ${interval_sec}s..."; sleep "${interval_sec}"; waited_time=$((waited_time + interval_sec))
+    done; _info "HTTP health check passed for ${url}."; return 0
+}
+
+# _harbor_load_native_config <service_handle>
+# Loads native service configuration from <service_handle>/harbor_native.yml using a Deno routine.
+# Populates global variables (NATIVE_CFG_COMMAND, etc.) for the current service.
+# Returns 0 on success (file found and parsed), 1 if not.
+_harbor_load_native_config() {
+    local service_handle="$1"
+    local config_file="$harbor_home/$service_handle/harbor_native.yml"
+    local routine_path="$harbor_home/routines/loadNativeConfig.js"
+
+    # Reset global config variables for this service.
+    NATIVE_CFG_COMMAND=""
+    NATIVE_CFG_PORT=""
+    NATIVE_CFG_HEALTH_METHOD=""
+    NATIVE_CFG_HEALTH_URL=""
+    NATIVE_CFG_PROXY_IMAGE=""
+    NATIVE_CFG_PROXY_COMMAND=""
+    NATIVE_CFG_PROXY_HEALTHCHECK_TEST=""
+    NATIVE_CFG_PROXY_NETWORKS="" # Reset proxy networks.
+
+    if [[ -f "$config_file" ]]; then
+        _debug "Loading native config from: $config_file using Deno routine."
+        if [[ ! -f "$routine_path" ]]; then
+            _error "Deno routine for native config parsing not found at ${routine_path}. Cannot parse native service config."
+        fi
+
+        # Execute Deno routine to parse YAML and print K=V pairs.
+        # `deno run -A --unstable-sloppy-imports` allows full access and modern syntax.
+        local deno_output
+        deno_output=$(
+            docker run --rm \
+                -v "$harbor_home:$harbor_home" \
+                -v harbor-deno-cache:/deno-dir:rw \
+                -w "$harbor_home" \
+                denoland/deno:distroless \
+                run -A --unstable-sloppy-imports \
+                "$routine_path" "$config_file"
+        )
+
+        # Check if Deno script returned an error (e.g., parsing failed)
+        if [[ $? -ne 0 ]]; then
+            _error "Deno routine failed to parse ${config_file}. Output: ${deno_output}"
+        fi
+
+        # Eval the output to populate global variables.
+        # Example output format from Deno: NATIVE_CFG_COMMAND="ollama serve"
+        eval "$deno_output"
+
+        # Allow .env variables to override YAML configuration (Harbor's env_manager precedence).
+        NATIVE_CFG_COMMAND=$(env_manager get "${service_handle}.native.command" || echo "$NATIVE_CFG_COMMAND")
+        NATIVE_CFG_PORT=$(env_manager get "${service_handle}.native.port" || echo "$NATIVE_CFG_PORT")
+        NATIVE_CFG_HEALTH_METHOD=$(env_manager get "${service_handle}.native.health_check_method" || echo "$NATIVE_CFG_HEALTH_METHOD")
+        NATIVE_CFG_HEALTH_URL=$(env_manager get "${service_handle}.native.health_url" || echo "$NATIVE_CFG_HEALTH_URL")
+        NATIVE_CFG_PROXY_IMAGE=$(env_manager get "${service_handle}.proxy.image" || echo "$NATIVE_CFG_PROXY_IMAGE")
+        NATIVE_CFG_PROXY_COMMAND=$(env_manager get "${service_handle}.proxy.command" || echo "$NATIVE_CFG_PROXY_COMMAND")
+        NATIVE_CFG_PROXY_HEALTHCHECK_TEST=$(env_manager get "${service_handle}.proxy.healthcheck_test" || echo "$NATIVE_CFG_PROXY_HEALTHCHECK_TEST")
+        NATIVE_CFG_PROXY_NETWORKS=$(env_manager get "${service_handle}.proxy.networks" || echo "$NATIVE_CFG_PROXY_NETWORKS")
+
+        _debug "Native config for ${service_handle} loaded (after .env override):"
+        _debug "  Command='${NATIVE_CFG_COMMAND}', Port='${NATIVE_CFG_PORT}', HealthMethod='${NATIVE_CFG_HEALTH_METHOD}', HealthURL='${NATIVE_CFG_HEALTH_URL}'"
+        _debug "  ProxyImage='${NATIVE_CFG_PROXY_IMAGE}', ProxyCommand='${NATIVE_CFG_PROXY_COMMAND}', ProxyHealthcheck='${NATIVE_CFG_PROXY_HEALTHCHECK_TEST}'"
+        _debug "  ProxyNetworks='${NATIVE_CFG_PROXY_NETWORKS}'"
+        return 0 # Config file found and parsed.
+    fi
+    return 1 # No config file found.
+}
+
+_harbor_start_native_service() {
+    local service_handle="$1"
+    local native_script="$harbor_home/$service_handle/native.sh"
+
+    if [[ ! -f "$native_script" ]]; then _error "Native script not found for ${service_handle} at ${native_script}. Cannot start natively."; fi
+    if [[ ! -x "$native_script" ]]; then _error "Native script for ${service_handle} is not executable: ${native_script}. Please `chmod +x`."; fi
+
+    _harbor_load_native_config "${service_handle}" || _error "Failed to load native config for ${service_handle}. Cannot start natively."
+
+    if [[ -z "${NATIVE_CFG_COMMAND}" || -z "${NATIVE_CFG_PORT}" || -z "${NATIVE_CFG_HEALTH_METHOD}" ]]; then
+        _error "Native configuration for service '${service_handle}' is incomplete. Missing native_command, native_port, or health.method in its harbor_native.yml or .env."
+    fi
+
+    local native_log_file="${LOG_DIR}/harbor-${service_handle}-native.log"
+
+    if _is_harbor_native_running_check "${NATIVE_CFG_COMMAND}"; then
+        _warn "Native ${service_handle} already appears to be running on the host. Skipping startup managed by Harbor."
+        env_manager --silent set "${service_handle}.mode" "NATIVE"
+        env_manager --silent set "${service_handle}.host" "${service_handle}"
+        env_manager --silent set "${service_handle}.port" "${NATIVE_CFG_PORT}"
+        return 0
+    fi
+
+    _info "Starting native ${service_handle} service via ${native_script}"
+    if "${_DRY_RUN}"; then
+        _info "DRY RUN: Would execute: nohup bash -c \"${native_script}\" > \"${native_log_file}\" 2>&1 &"
+        return 0
+    fi
+
+    nohup bash -c "${native_script}" > "${native_log_file}" 2>&1 &
+    # $! is the PID of nohup, not necessarily the service itself after nohup detaches.
+    # We won't store it. Instead, we'll check if the command pattern appears.
+    _info "Native ${service_handle} started via nohup. Logs: ${native_log_file}."
+
+    # Brief pause to allow the process to register in the process table.
+    sleep 2
+
+    if ! _is_harbor_native_running_check "${NATIVE_CFG_COMMAND}"; then
+        _error "Native ${service_handle} service failed to start or immediately crashed (command pattern '${NATIVE_CFG_COMMAND}' not found in process list). Check ${native_log_file} for details."
+    else
+        _debug "Native ${service_handle} (command pattern '${NATIVE_CFG_COMMAND}') appears to be running."
+    fi
+
+    if ! "${_SKIP_WAIT}"; then
+        _info "Waiting for native ${service_handle} readiness..."
+        local wait_success=false
+        if [[ "${NATIVE_CFG_HEALTH_METHOD}" == "port" ]]; then
+            if _harbor_wait_for_port "localhost" "${NATIVE_CFG_PORT}" "${HARBOR_WAIT_TIMEOUT_SECONDS}" "${HARBOR_WAIT_INTERVAL_SECONDS}"; then wait_success=true; fi
+        elif [[ "${NATIVE_CFG_HEALTH_METHOD}" == "http" ]]; then
+            if [[ -z "${NATIVE_CFG_HEALTH_URL}" ]]; then _error "Native health check method is 'http' but health.url is not configured."; fi
+            if _harbor_wait_for_http_health "${NATIVE_CFG_HEALTH_URL}" "${HARBOR_WAIT_TIMEOUT_SECONDS}" "${HARBOR_WAIT_INTERVAL_SECONDS}"; then wait_success=true; fi
+        else _error "Invalid health check method for ${service_handle}: ${NATIVE_CFG_HEALTH_METHOD}. Must be 'port' or 'http'."; fi
+
+        if ! "${wait_success}"; then _error "Native ${service_handle} did not become ready within ${HARBOR_WAIT_TIMEOUT_SECONDS} seconds."; fi
+        _info "Native ${service_handle} is ready."
+    else _info "Skipping native ${service_handle} readiness wait (--skip-wait)."; fi
+
+    env_manager --silent set "${service_handle}.mode" "NATIVE"
+    env_manager --silent set "${service_handle}.host" "${service_handle}"
+    env_manager --silent set "${service_handle}.port" "${NATIVE_CFG_PORT}"
+    _info "Set ${service_handle} environment variables in Harbor config for native mode."
+}
+
+_harbor_stop_native_service() {
+    local service_handle="$1"
+    _info "Attempting to stop native service: ${service_handle}"
+
+    # Load config to get NATIVE_CFG_COMMAND, which is crucial for finding the process.
+    # This function populates NATIVE_CFG_COMMAND globally for this call.
+    _harbor_load_native_config "${service_handle}"
+    local native_command_pattern="${NATIVE_CFG_COMMAND:-}" # Use the globally set NATIVE_CFG_COMMAND
+
+    if [[ -z "${native_command_pattern}" ]]; then
+        _warn "No 'native.command' configured for ${service_handle} in its harbor_native.yml or .env. Cannot determine process to stop."
+        # Reset mode even if we can't stop, to prevent repeated failed attempts.
+        env_manager --silent set "${service_handle}.mode" "CONTAINER"
+        env_manager --silent set "${service_handle}.host" ""
+        env_manager --silent set "${service_handle}.port" ""
+        return 1
+    fi
+
+    _info "Native command pattern for stopping ${service_handle}: ${native_command_pattern}"
+
+    local pids_found
+    # pgrep -f matches the full command line.
+    # Using a complex pattern from NATIVE_CFG_COMMAND is generally safer.
+    pids_found=$(pgrep -f "${native_command_pattern}")
+
+    if [[ -z "$pids_found" ]]; then
+        _info "No running processes found matching pattern for ${service_handle} ('${native_command_pattern}')."
+    else
+        local killed_at_least_one=false
+        for pid_to_check in $pids_found; do
+            # Verification: Check if the command for this PID truly matches the expected pattern.
+            # This is a critical safety step.
+            local actual_command_line
+            actual_command_line=$(ps -p "$pid_to_check" -o command= 2>/dev/null || true)
+
+            # Check if the actual command line contains the specific pattern we're looking for.
+            # This helps avoid killing unrelated processes if pgrep -f was too broad.
+            if [[ -n "$actual_command_line" && "$actual_command_line" == *"$native_command_pattern"* ]]; then
+                _info "Found matching process PID: ${pid_to_check} for ${service_handle}. Command: '${actual_command_line}'"
+                if ! "${_DRY_RUN}"; then
+                    _info "Sending SIGTERM to PID ${pid_to_check} (${service_handle})..."
+                    if kill -SIGTERM "${pid_to_check}" 2>/dev/null; then
+                        killed_at_least_one=true
+                        _info "Sent SIGTERM. Waiting up to 10s for graceful termination..."
+                        local countdown=10
+                        while ((countdown > 0)); do
+                            if ! kill -0 "${pid_to_check}" 2>/dev/null; then # Check if process exists
+                                _info "PID ${pid_to_check} (${service_handle}) terminated gracefully."
+                                break
+                            fi
+                            sleep 1
+                            ((countdown--))
+                        done
+                        if kill -0 "${pid_to_check}" 2>/dev/null; then # Still exists?
+                            _warn "PID ${pid_to_check} (${service_handle}) did not terminate after 10s. Sending SIGKILL..."
+                            kill -SIGKILL "${pid_to_check}" || _warn "Failed to send SIGKILL to PID ${pid_to_check} (${service_handle})."
+                        fi
+                    else
+                        _warn "Failed to send SIGTERM to PID ${pid_to_check} (${service_handle}). Process might have already exited or permission issue."
+                    fi
+                else
+                    _info "DRY RUN: Would attempt to kill PID ${pid_to_check} (${service_handle}) for command: ${actual_command_line}"
+                    killed_at_least_one=true # Assume dry run would succeed for logic flow
+                fi
+            else
+                _debug "PID ${pid_to_check} found by pgrep, but its command ('${actual_command_line}') does not precisely match expected pattern ('${native_command_pattern}') for ${service_handle}. Skipping kill."
+            fi
+        done
+        if ! $killed_at_least_one && [[ -n "$pids_found" ]]; then
+             _warn "Found PIDs via pgrep, but none passed command verification for ${service_handle}."
+        fi
+    fi
+
+    # Always reset the mode in .env after attempting to stop
+    env_manager --silent set "${service_handle}.mode" "CONTAINER"
+    env_manager --silent set "${service_handle}.host" ""
+    env_manager --silent set "${service_handle}.port" ""
+    _info "Reset ${service_handle} environment variables in Harbor config to CONTAINER mode."
+}
+
+_harbor_is_native_eligible() {
+    local service_handle="$1"
+    local native_script_path="$harbor_home/$service_handle/${service_handle}-native.sh"
+    local native_config_path="$harbor_home/$service_handle/${service_handle}-native.yml"
+
+    # check if the command exists locally
+    if command -v "${service_handle}" &>/dev/null; then
+        _debug "Service '${service_handle}' has a local command available. Native eligible."
+        return 0
+    fi
+
+    if [[ ! -f "$native_script_path" ]] || ! [[ -f "$native_config_path" ]]; then
+        _debug "Service '${service_handle}' has no native definition files (native.sh or harbor_native.yml). Not native eligible."
+        return 1
+    fi
+
+    # Add other platform-specific checks here if needed (e.g., for Linux with NVIDIA or ROCm)
+    # Example:
+    # if has_nvidia && has_nvidia_ctk; then
+    #    _debug "Platform has NVIDIA GPU. Service '${service_handle}' is native eligible due to NVIDIA."
+    #    return 0
+    # fi
+
+    _debug "Service '${service_handle}' does not have a local command available. Not native eligible."
+    return 1
+}
 
 # shellcheck disable=SC2034
 __anchor_envm=true
@@ -1810,6 +2347,20 @@ override_yaml_value() {
     fi
 }
 
+# Load native service config from harbor_native.yml using Deno
+_harbor_load_native_config() {
+    local service_handle="$1"
+    local config_file="$harbor_home/$service_handle/harbor_native.yml"
+    if [[ ! -f "$config_file" ]]; then
+        log_warn "No harbor_native.yml found for $service_handle"
+        return 1
+    fi
+    # Use Deno routine to parse YAML and export as env vars
+    eval "$(
+        deno run -A \"$harbor_home/routines/loadNativeConfig.js\" \"$config_file\"
+    )"
+}
+
 # shellcheck disable=SC2034
 __anchor_profiles=true
 
@@ -2061,6 +2612,21 @@ get_active_services() {
 }
 
 is_service_running() {
+    local service="$1"
+
+    # Native support: if service is native-eligible, check for native process
+    if ! "${_SKIP_NATIVE}" && type _harbor_is_native_eligible &>/dev/null && _harbor_is_native_eligible "$service"; then
+        # Try to load native config and check for the native command
+        if type _harbor_load_native_config &>/dev/null && _harbor_load_native_config "$service"; then
+            if [[ -n "$NATIVE_CFG_COMMAND" ]]; then
+                if pgrep -f "$NATIVE_CFG_COMMAND" >/dev/null 2>&1; then
+                    return 0
+                fi
+            fi
+        fi
+        # If not running natively, fall through to Docker check
+    fi
+
     if docker compose ps --services --filter "status=running" | grep -q "^$1$"; then
         return 0
     else
@@ -3352,6 +3918,15 @@ run_ollama_command() {
         exit 1
     fi
 
+    # If native-eligible and running natively, run ollama CLI on host
+    if ! "${_SKIP_NATIVE}" && type _harbor_is_native_eligible &>/dev/null && _harbor_is_native_eligible "ollama"; then
+        if pgrep -f "ollama serve" >/dev/null 2>&1; then
+            log_info "Ollama is running natively. Running ollama CLI on host targeting $ollama_api_host:$ollama_api_port"
+            OLLAMA_HOST="http://$ollama_api_host:$ollama_api_port" ollama "$@"
+            return $?
+        fi
+    fi
+
     $(compose_with_options $services "ollama") run \
         --rm \
         -e "OLLAMA_HOST=$ollama_host" \
@@ -4222,11 +4797,39 @@ profiles_dir="$harbor_home/profiles"
 default_profile="$profiles_dir/default.env"
 default_current_env="$harbor_home/.env"
 default_gum_image="ghcr.io/charmbracelet/gum"
+LOG_DIR="$harbor_home/logs"
+mkdir -p "$LOG_DIR"
 
 # Desired compose version
 desired_compose_major="2"
 desired_compose_minor="23"
 desired_compose_patch="1"
+
+# --- Global Variables for CLI-wide Flags (Initialized, then parsed from args) ---
+_SKIP_DOCKER=false          # If true, skip Docker Compose operations.
+_SKIP_NATIVE=false          # If true, skip native service management (e.g., for debugging native issues).
+_SKIP_WAIT=false            # If true, skip readiness waiting for services during `up`.
+_DRY_RUN=false              # If true, only print commands, do not execute.
+_FORCE_CLEANUP=false        # If true, force removal of stale lock files.
+_LOG_LEVEL="INFO"           # Default logging level, can be overridden by argument parsing.
+
+# --- Lock File Configuration ---
+# This fixed path ensures robust single-instance enforcement for the Harbor CLI itself.
+LOCK_FILE="/tmp/harbor_cli_startup.lock"
+
+# --- Global Variables for dynamically loaded native service configuration ---
+# These will be populated by `_harbor_load_native_config` for the current service.
+NATIVE_CFG_COMMAND=""
+NATIVE_CFG_PORT=""
+NATIVE_CFG_HEALTH_METHOD=""
+NATIVE_CFG_HEALTH_URL=""
+NATIVE_CFG_PROXY_IMAGE=""
+NATIVE_CFG_PROXY_COMMAND=""
+NATIVE_CFG_PROXY_HEALTHCHECK_TEST=""
+NATIVE_CFG_PROXY_NETWORKS=""
+
+HARBOR_WAIT_TIMEOUT_SECONDS=60
+HARBOR_WAIT_INTERVAL_SECONDS=5
 
 original_dir=$PWD
 cd "$harbor_home" || exit
@@ -4238,6 +4841,7 @@ set_default_log_levels
 
 # Config
 ensure_env_file
+
 # Current user ID - FS + UIDs for containers (where applicable)
 env_manager --silent set user.id "$(id -u)"
 env_manager --silent set group.id "$(id -g)"
@@ -4253,6 +4857,31 @@ default_log_level=$(env_manager get log.level)
 default_history_file=$(env_manager get history.file)
 default_history_size=$(env_manager get history.size)
 default_legacy_cli=${HARBOR_LEGACY_CLI:-$(env_manager get legacy.cli)}
+
+# --- New: Global Argument Parsing (Runs once at script start) ---
+parse_global_args() {
+    local remaining_args=()
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --no-docker) _SKIP_DOCKER=true; shift ;;
+            --no-native | --no-harbor_native) _SKIP_NATIVE=true; shift ;;
+            --skip-wait) _SKIP_WAIT=true; shift ;;
+            --dry-run) _DRY_RUN=true; _info "DRY RUN mode enabled. No commands will be executed."; shift ;;
+            --force) _FORCE_CLEANUP=true; shift ;;
+            --log-level)
+                if [[ -n "$2" ]]; then
+                    _LOG_LEVEL=$(echo "$2" | tr '[:lower:]' '[:upper:]'); [[ ! "$_LOG_LEVEL" =~ ^(DEBUG|INFO|WARN|ERROR)$ ]] && _error "Invalid log level: $2. Must be DEBUG, INFO, WARN, or ERROR."; shift 2
+                else _error "--log-level requires an argument."; fi ;;
+            *) remaining_args+=("$1"); shift ;;
+        esac
+    done; set -- "${remaining_args[@]}"; return 0
+}
+
+# --- NEW: Check for CLI Dependencies (e.g., `nc`, `curl`, `pgrep`, `deno`) ---
+_check_dependencies
+
+# --- NEW: Acquire Lock File to prevent multiple instances of Harbor CLI ---
+_acquire_lock # This will exit if another instance is running and not forced.
 
 main_entrypoint() {
     case "$1" in

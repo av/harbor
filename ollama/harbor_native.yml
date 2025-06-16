@@ -1,0 +1,52 @@
+# ollama/harbor-native.yml
+#
+# Configuration for running Ollama natively on the host system,
+# and for its corresponding Docker Compose proxy service.
+#
+# Service Handle: ollama
+
+# --- Native Service Configuration ---
+# This section defines how to start and check the *actual* native Ollama binary.
+# These values can be overridden by environment variables like HARBOR_OLLAMA_NATIVE_COMMAND in your .env.
+
+# The full shell command to execute the native Ollama server.
+# This path must be valid and executable on your host system.
+# Example: "ollama serve" (if 'ollama' is in PATH) or "/usr/local/bin/ollama serve"
+native_command: "ollama serve"
+
+# The port the native Ollama server will listen on.
+native_port: 11434
+
+# Health check configuration for the native Ollama service.
+health:
+  # Method to check if the native service is ready.
+  # Options: 'port' (checks if native_port is open)
+  #          'http' (makes a GET request to the 'url' below)
+  method: port
+  # URL for the HTTP health check (only if method is 'http').
+  # Example for Ollama: http://localhost:11434/api/tags
+  url: ""
+
+# --- Proxy Service Configuration (for Docker Compose) ---
+# This section defines the lightweight Docker Compose service that will act as a proxy.
+# This proxy ensures that other Docker Compose services can depend on 'ollama' by name
+# and port, even when the actual Ollama server is running natively.
+# These values can be overridden by environment variables like HARBOR_OLLAMA_PROXY_IMAGE.
+
+# The Docker image to use for the proxy container. 'alpine/socat' is a common choice.
+proxy_image: "alpine/socat"
+
+# The command for the proxy container. This command will be templated by Harbor.
+# Use {{.native_port}} as a placeholder, which Harbor will replace with the `native_port` value.
+# This socat command sets up a listener on `native_port` inside the container,
+# which forwards traffic to `host.docker.internal` on the same `native_port`.
+proxy_command: "tcp-listen:{{.native_port}},fork,reuseaddr tcp-connect:host.docker.internal:{{.native_port}}"
+
+# The healthcheck test for the proxy container. This test should verify the *native* service's health.
+# Use {{.native_port}} as a placeholder. The test runs from *inside* the proxy container.
+proxy_healthcheck_test: ["CMD-SHELL", "nc -z host.docker.internal {{.native_port}}"]
+
+# Networks the proxy container should connect to. This ensures dependent services can reach it.
+# Provide as a YAML array of network names (e.g., ["harbor-network", "my-custom-net"]).
+# If left empty, the proxy will join the default Compose network (`harbor_default`).
+proxy_networks: [] # Example: ["harbor-network"]
