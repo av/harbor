@@ -321,24 +321,55 @@ _harbor_get_running_service_runtime() {
     echo ""
 }
 
-# [v12.0 CORE] Builds a comprehensive "context object" for a given service.
-# This is the heart of the v12.0 efficiency improvement, calling each
-# discovery function only once per service and serializing the result.
-# @return {string} A parsable bash string of local variable assignments.
+# [v13.0 CORE] Builds a comprehensive "context object" for a given service.
+# This version is feature-complete, restoring the ability for users to
+# override native parameters from their .env file. It gathers all static
+# configuration, applies overrides, and adds live runtime state in a single,
+# efficient pass.
 _harbor_build_service_context() {
-    local service_handle="$1"; local context_string=""
+    local service_handle="$1"
+    local context_string=""
+
+    # --- Static Handle and Eligibility ---
     context_string+="local HANDLE='$service_handle';"
-    if has_native_config "$service_handle"; then
-        context_string+="local IS_ELIGIBLE='true';"
-        local static_config; static_config=$(_harbor_load_native_config "$service_handle")
-        context_string+="$static_config"
-    else
+    if ! has_native_config "$service_handle"; then
         context_string+="local IS_ELIGIBLE='false';"
+    else
+        context_string+="local IS_ELIGIBLE='true';"
+
+        # --- Load Baseline Config from YAML ---
+        local static_config; static_config=$(_harbor_load_native_config "$service_handle")
+        # Eval into temporary, suffixed variables to avoid collisions
+        eval "$(echo "$static_config" | sed 's/local /local _from_yaml_/g')"
+
+        # --- Apply .env Overrides and Build Final Config ---
+        # For each native parameter, check for an override in .env. If it exists,
+        # use it. Otherwise, use the value from the YAML file.
+        local final_executable; final_executable=$(env_manager --silent get "${service_handle}.native.executable" || echo "${_from_yaml_NATIVE_EXECUTABLE:-}")
+        context_string+="local NATIVE_EXECUTABLE='$final_executable';"
+
+        local final_daemon_cmd; final_daemon_cmd=$(env_manager --silent get "${service_handle}.native.daemon_command" || echo "${_from_yaml_NATIVE_DAEMON_COMMAND:-}")
+        context_string+="local NATIVE_DAEMON_COMMAND='$final_daemon_cmd';"
+
+        local final_port; final_port=$(env_manager --silent get "${service_handle}.native.port" || echo "${_from_yaml_NATIVE_PORT:-}")
+        context_string+="local NATIVE_PORT='$final_port';"
+
+        # Pass through non-overridable values directly
+        context_string+="local NATIVE_REQUIRES_GPU='${_from_yaml_NATIVE_REQUIRES_GPU:-false}';"
+        context_string+="local NATIVE_PROXY_IMAGE='${_from_yaml_NATIVE_PROXY_IMAGE:-}';"
+        context_string+="local NATIVE_PROXY_COMMAND='${_from_yaml_NATIVE_PROXY_COMMAND:-}';"
+        context_string+="local NATIVE_PROXY_HEALTHCHECK_TEST='${_from_yaml_NATIVE_PROXY_HEALTHCHECK_TEST:-}';"
+        context_string+="local -a NATIVE_ENV_VARS_LIST=(${_from_yaml_NATIVE_ENV_VARS_LIST});"
+        context_string+="local -a NATIVE_DEPENDS_ON_CONTAINERS=(${_from_yaml_NATIVE_DEPENDS_ON_CONTAINERS});"
+        context_string+="local -a NATIVE_ENV_OVERRIDES_ARRAY=(${_from_yaml_NATIVE_ENV_OVERRIDES_ARRAY});"
     fi
+
+    # --- Add Live System State ---
     local preference; preference=$(_harbor_get_configured_execution_preference "$service_handle")
     context_string+="local PREFERENCE='$preference';"
     local runtime; runtime=$(_harbor_get_running_service_runtime "$service_handle")
     context_string+="local RUNTIME='$runtime';"
+
     echo "$context_string"
 }
 
@@ -1841,174 +1872,120 @@ _harbor_load_native_config() {
     return 1 # No config file found.
 }
 
+# [v13.0] Starts a native service daemon process on the host.
+# This function is a non-blocking "launcher". It gets all necessary context,
+# prepares the environment, and starts the background process. It does not wait
+# for the service to become healthy; that is the responsibility of the caller.
 _harbor_start_native_service() {
     local service_handle="$1"
-    local native_script="$harbor_home/$service_handle/native.sh"
 
-    if [[ ! -f "$native_script" ]]; then _error "Native script not found for ${service_handle} at ${native_script}. Cannot start natively."; fi
-    if [[ ! -x "$native_script" ]]; then _error "Native script for ${service_handle} is not executable: ${native_script}. Please `chmod +x`."; fi
+    # 1. Build the full context for this service to get all resolved configuration.
+    local context; context=$(_harbor_build_service_context "$service_handle")
+    eval "$context"
 
-    _harbor_load_native_config "${service_handle}" || _error "Failed to load native config for ${service_handle}. Cannot start natively."
-
-    if [[ -z "${NATIVE_CFG_COMMAND}" || -z "${NATIVE_CFG_PORT}" || -z "${NATIVE_CFG_HEALTH_METHOD}" ]]; then
-        _error "Native configuration for service '${service_handle}' is incomplete. Missing native_command, native_port, or health.method in its harbor_native.yml or .env."
+    # 2. Prerequisite checks.
+    if [[ "$IS_ELIGIBLE" != "true" || -z "$NATIVE_DAEMON_COMMAND" ]]; then
+        log_warn "Cannot start native service '${HANDLE}': it is not native-eligible or is missing 'native_daemon_command' in its contract."
+        return 1
     fi
-
-    local native_log_file="${LOG_DIR}/harbor-${service_handle}-native.log"
-
-    if _is_harbor_native_running_check "${NATIVE_CFG_COMMAND}"; then
-        _warn "Native ${service_handle} already appears to be running on the host. Skipping startup managed by Harbor."
-        env_manager --silent set "${service_handle}.mode" "NATIVE"
-        env_manager --silent set "${service_handle}.host" "${service_handle}"
-        env_manager --silent set "${service_handle}.port" "${NATIVE_CFG_PORT}"
-        return 0
-    fi
-
-    _info "Starting native ${service_handle} service via ${native_script}"
-    if "${_DRY_RUN}"; then
-        _info "DRY RUN: Would execute: nohup bash -c \"${native_script}\" > \"${native_log_file}\" 2>&1 &"
-        return 0
-    fi
-
-    nohup bash -c "${native_script}" > "${native_log_file}" 2>&1 &
-    # $! is the PID of nohup, not necessarily the service itself after nohup detaches.
-    # We won't store it. Instead, we'll check if the command pattern appears.
-    _info "Native ${service_handle} started via nohup. Logs: ${native_log_file}."
-
-    # Brief pause to allow the process to register in the process table.
-    sleep 2
-
-    if ! _is_harbor_native_running_check "${NATIVE_CFG_COMMAND}"; then
-        _error "Native ${service_handle} service failed to start or immediately crashed (command pattern '${NATIVE_CFG_COMMAND}' not found in process list). Check ${native_log_file} for details."
-    else
-        _debug "Native ${service_handle} (command pattern '${NATIVE_CFG_COMMAND}') appears to be running."
-    fi
-
-    if ! "${_SKIP_WAIT}"; then
-        _info "Waiting for native ${service_handle} readiness..."
-        local wait_success=false
-        if [[ "${NATIVE_CFG_HEALTH_METHOD}" == "port" ]]; then
-            if _harbor_wait_for_port "localhost" "${NATIVE_CFG_PORT}" "${HARBOR_WAIT_TIMEOUT_SECONDS}" "${HARBOR_WAIT_INTERVAL_SECONDS}"; then wait_success=true; fi
-        elif [[ "${NATIVE_CFG_HEALTH_METHOD}" == "http" ]]; then
-            if [[ -z "${NATIVE_CFG_HEALTH_URL}" ]]; then _error "Native health check method is 'http' but health.url is not configured."; fi
-            if _harbor_wait_for_http_health "${NATIVE_CFG_HEALTH_URL}" "${HARBOR_WAIT_TIMEOUT_SECONDS}" "${HARBOR_WAIT_INTERVAL_SECONDS}"; then wait_success=true; fi
-        else _error "Invalid health check method for ${service_handle}: ${NATIVE_CFG_HEALTH_METHOD}. Must be 'port' or 'http'."; fi
-
-        if ! "${wait_success}"; then _error "Native ${service_handle} did not become ready within ${HARBOR_WAIT_TIMEOUT_SECONDS} seconds."; fi
-        _info "Native ${service_handle} is ready."
-    else _info "Skipping native ${service_handle} readiness wait (--skip-wait)."; fi
-
-    env_manager --silent set "${service_handle}.mode" "NATIVE"
-    env_manager --silent set "${service_handle}.host" "${service_handle}"
-    env_manager --silent set "${service_handle}.port" "${NATIVE_CFG_PORT}"
-    _info "Set ${service_handle} environment variables in Harbor config for native mode."
-}
-
-_harbor_stop_native_service() {
-    local service_handle="$1"
-    _info "Attempting to stop native service: ${service_handle}"
-
-    # Load config to get NATIVE_CFG_COMMAND, which is crucial for finding the process.
-    # This function populates NATIVE_CFG_COMMAND globally for this call.
-    _harbor_load_native_config "${service_handle}"
-    local native_command_pattern="${NATIVE_CFG_COMMAND:-}" # Use the globally set NATIVE_CFG_COMMAND
-
-    if [[ -z "${native_command_pattern}" ]]; then
-        _warn "No 'native.command' configured for ${service_handle} in its harbor_native.yml or .env. Cannot determine process to stop."
-        # Reset mode even if we can't stop, to prevent repeated failed attempts.
-        env_manager --silent set "${service_handle}.mode" "CONTAINER"
-        env_manager --silent set "${service_handle}.host" ""
-        env_manager --silent set "${service_handle}.port" ""
+    local native_script="$harbor_home/$HANDLE/${HANDLE}_native.sh"
+    if [[ ! -f "$native_script" || ! -x "$native_script" ]]; then
+        log_error "Native bootstrap script for '${HANDLE}' not found or not executable at '${native_script}'."
         return 1
     fi
 
-    _info "Native command pattern for stopping ${service_handle}: ${native_command_pattern}"
+    # 3. Idempotency check: Do not start if already running.
+    if pgrep -f "$NATIVE_DAEMON_COMMAND" >/dev/null; then
+        log_info "Native daemon for '${HANDLE}' is already running."
+        return 0
+    fi
 
-    local pids_found
-    # pgrep -f matches the full command line.
-    # Using a complex pattern from NATIVE_CFG_COMMAND is generally safer.
-    pids_found=$(pgrep -f "${native_command_pattern}")
-
-    if [[ -z "$pids_found" ]]; then
-        _info "No running processes found matching pattern for ${service_handle} ('${native_command_pattern}')."
-    else
-        local killed_at_least_one=false
-        for pid_to_check in $pids_found; do
-            # Verification: Check if the command for this PID truly matches the expected pattern.
-            # This is a critical safety step.
-            local actual_command_line
-            actual_command_line=$(ps -p "$pid_to_check" -o command= 2>/dev/null || true)
-
-            # Check if the actual command line contains the specific pattern we're looking for.
-            # This helps avoid killing unrelated processes if pgrep -f was too broad.
-            if [[ -n "$actual_command_line" && "$actual_command_line" == *"$native_command_pattern"* ]]; then
-                _info "Found matching process PID: ${pid_to_check} for ${service_handle}. Command: '${actual_command_line}'"
-                if ! "${_DRY_RUN}"; then
-                    _info "Sending SIGTERM to PID ${pid_to_check} (${service_handle})..."
-                    if kill -SIGTERM "${pid_to_check}" 2>/dev/null; then
-                        killed_at_least_one=true
-                        _info "Sent SIGTERM. Waiting up to 10s for graceful termination..."
-                        local countdown=10
-                        while ((countdown > 0)); do
-                            if ! kill -0 "${pid_to_check}" 2>/dev/null; then # Check if process exists
-                                _info "PID ${pid_to_check} (${service_handle}) terminated gracefully."
-                                break
-                            fi
-                            sleep 1
-                            ((countdown--))
-                        done
-                        if kill -0 "${pid_to_check}" 2>/dev/null; then # Still exists?
-                            _warn "PID ${pid_to_check} (${service_handle}) did not terminate after 10s. Sending SIGKILL..."
-                            kill -SIGKILL "${pid_to_check}" || _warn "Failed to send SIGKILL to PID ${pid_to_check} (${service_handle})."
-                        fi
-                    else
-                        _warn "Failed to send SIGTERM to PID ${pid_to_check} (${service_handle}). Process might have already exited or permission issue."
-                    fi
-                else
-                    _info "DRY RUN: Would attempt to kill PID ${pid_to_check} (${service_handle}) for command: ${actual_command_line}"
-                    killed_at_least_one=true # Assume dry run would succeed for logic flow
-                fi
-            else
-                _debug "PID ${pid_to_check} found by pgrep, but its command ('${actual_command_line}') does not precisely match expected pattern ('${native_command_pattern}') for ${service_handle}. Skipping kill."
+    # 4. Prepare environment variables to be exported for the native process.
+    local env_exports=""
+    if [[ ${#NATIVE_ENV_VARS_LIST[@]} -gt 0 ]]; then
+        for var_name in "${NATIVE_ENV_VARS_LIST[@]}"; do
+            local value; value=$(env_manager --silent get "$var_name")
+            if [[ -n "$value" ]]; then
+                # The export statement will be part of the command executed by nohup's subshell.
+                env_exports+="export ${var_name}='${value}'; "
             fi
         done
-        if ! $killed_at_least_one && [[ -n "$pids_found" ]]; then
-             _warn "Found PIDs via pgrep, but none passed command verification for ${service_handle}."
-        fi
     fi
 
-    # Always reset the mode in .env after attempting to stop
-    env_manager --silent set "${service_handle}.mode" "CONTAINER"
-    env_manager --silent set "${service_handle}.host" ""
-    env_manager --silent set "${service_handle}.port" ""
-    _info "Reset ${service_handle} environment variables in Harbor config to CONTAINER mode."
+    # 5. Execute the launch command.
+    log_info "Starting native service '${HANDLE}' in the background..."
+    local log_file="${LOG_DIR}/harbor-${HANDLE}-native.log"
+    # Use nohup and a subshell to correctly daemonize the process with its environment.
+    # `exec` replaces the final shell process with the actual application binary.
+    nohup bash -c "${env_exports} exec bash \"${native_script}\"" > "$log_file" 2>&1 &
+
+    # 6. Brief pause and quick verification that the process launched.
+    sleep 2
+    if ! pgrep -f "$NATIVE_DAEMON_COMMAND" >/dev/null; then
+        log_error "Failed to launch native daemon for '${HANDLE}'. Check logs for details: ${log_file}"
+        return 1
+    else
+        log_debug "Native service '${HANDLE}' process has been launched. Logs at ${log_file}"
+    fi
+    return 0
 }
 
-_harbor_is_native_eligible() {
+# [v13.0] Stops a native service daemon process on the host.
+# This function is a self-contained "killer". It gets all necessary context,
+# verifies the process to avoid killing unintended PIDs, and uses a
+# robust TERM/wait/KILL shutdown sequence. It does not mutate configuration.
+_harbor_stop_native_service() {
     local service_handle="$1"
-    local native_script_path="$harbor_home/$service_handle/${service_handle}-native.sh"
-    local native_config_path="$harbor_home/$service_handle/${service_handle}-native.yml"
 
-    # check if the command exists locally
-    if command -v "${service_handle}" &>/dev/null; then
-        _debug "Service '${service_handle}' has a local command available. Native eligible."
-        return 0
-    fi
+    # 1. Build context to get the unique daemon command string.
+    local context; context=$(_harbor_build_service_context "$service_handle")
+    eval "$context"
 
-    if [[ ! -f "$native_script_path" ]] || ! [[ -f "$native_config_path" ]]; then
-        _debug "Service '${service_handle}' has no native definition files (native.sh or harbor_native.yml). Not native eligible."
+    if [[ -z "$NATIVE_DAEMON_COMMAND" ]]; then
+        log_warn "Cannot stop native service '${HANDLE}': no 'native_daemon_command' defined in its contract."
         return 1
     fi
 
-    # Add other platform-specific checks here if needed (e.g., for Linux with NVIDIA or ROCm)
-    # Example:
-    # if has_nvidia && has_nvidia_ctk; then
-    #    _debug "Platform has NVIDIA GPU. Service '${service_handle}' is native eligible due to NVIDIA."
-    #    return 0
-    # fi
+    # 2. Find all PIDs matching the daemon command pattern.
+    local pids_found; pids_found=$(pgrep -f "$NATIVE_DAEMON_COMMAND")
+    if [[ -z "$pids_found" ]]; then
+        log_info "No running native process found for '${HANDLE}'."
+        return 0
+    fi
 
-    _debug "Service '${service_handle}' does not have a local command available. Not native eligible."
-    return 1
+    log_info "Attempting to stop native service '${HANDLE}' (PIDs: ${pids_found})..."
+
+    # 3. Use pkill to send SIGTERM to all matching processes.
+    pkill -f "$NATIVE_DAEMON_COMMAND"
+
+    # 4. Wait for graceful shutdown.
+    local countdown=10
+    log_info "Waiting up to ${countdown}s for graceful termination..."
+    while ((countdown > 0)); do
+        # Re-check if any process still exists.
+        if ! pgrep -f "$NATIVE_DAEMON_COMMAND" >/dev/null; then
+            log_info "Native service '${HANDLE}' terminated gracefully."
+            return 0
+        fi
+        sleep 1
+        ((countdown--))
+    done
+
+    # 5. If still running, escalate to SIGKILL.
+    log_warn "Service '${HANDLE}' did not terminate gracefully. Sending SIGKILL."
+    pkill -9 -f "$NATIVE_DAEMON_COMMAND" || log_warn "Failed to send SIGKILL to '${HANDLE}'. Manual cleanup may be required."
+
+    return 0
+}
+
+# [v13.0] Checks if a service is eligible for native execution.
+# Eligibility is defined strictly by the existence of a native contract file
+# (`<handle>_native.yml`). This is the single source of truth for whether
+# a service can be considered part of the hybrid runtime system.
+_harbor_is_native_eligible() {
+    # This replaces the legacy checks and the `has_native_config` helper
+    # with a single, clear definition of eligibility.
+    [[ -f "$harbor_home/$1/${1}_native.yml" ]]
 }
 
 # shellcheck disable=SC2034
