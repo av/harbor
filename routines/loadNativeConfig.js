@@ -1,59 +1,65 @@
 // routines/loadNativeConfig.js
 //
-// Deno routine to safely parse a harbor-native.yml file and print its contents
-// as Bash-friendly KEY="VALUE" pairs.
-//
-// Usage: deno run -A <path_to_this_script> <path_to_harbor_native_yml>
-//
-// This script is executed by harbor.sh's `_harbor_load_native_config` function.
+// Deno routine to safely parse a <handle>_native.yml file and print its contents
+// as Bash-friendly 'local' variable assignments for use with `eval`.
+// This is the primary and only approved YAML parser for the native feature.
 
 import { parse } from "https://deno.land/std@0.224.0/yaml/parse.ts";
+
+function sanitizeForBash(value) {
+  if (typeof value !== 'string') {
+    // For non-string types, especially arrays from healthchecks, JSON stringify is safe.
+    return JSON.stringify(String(value)).replace(/'/g, "'\\''");
+  }
+  // Escape single quotes for safe inclusion in Bash's single-quoted strings.
+  return value.replace(/'/g, "'\\''");
+}
 
 async function loadNativeConfig(filePath) {
   try {
     const yamlContent = await Deno.readTextFile(filePath);
     const config = parse(yamlContent);
 
-    // Helper to safely get a nested property, returning undefined if not found.
-    const getProp = (obj, path) => {
-      return path.split('.').reduce((acc, part) => (acc && acc[part] !== undefined) ? acc[part] : undefined, obj);
+    // Helper to safely get a nested property, returning a default if not found.
+    const getProp = (obj, path, defaultValue = '') => {
+      const value = path.split('.').reduce((acc, part) => (acc && acc[part] !== undefined) ? acc[part] : undefined, obj);
+      return value ?? defaultValue;
     };
 
-    // Extract values, handling potential nesting and absence.
-    const native_command = getProp(config, 'native_command') || '';
-    const native_port = getProp(config, 'native_port') || '';
-    const health_method = getProp(config, 'health.method') || '';
-    const health_url = getProp(config, 'health.url') || '';
-    const proxy_image = getProp(config, 'proxy_image') || '';
-    const proxy_command = getProp(config, 'proxy_command') || '';
-    const proxy_healthcheck_test = getProp(config, 'proxy_healthcheck_test') || '';
+    // Extract all required values from the YAML contract.
+    const native_executable = getProp(config, 'native_executable');
+    const native_daemon_command = getProp(config, 'native_daemon_command');
+    const native_port = getProp(config, 'native_port');
+    const requires_gpu = getProp(config, 'requires_gpu_passthrough', 'false').toString();
+    const proxy_image = getProp(config, 'proxy_image');
+    const proxy_command = getProp(config, 'proxy_command');
+    const healthcheck_test = getProp(config, 'proxy_healthcheck_test', []);
 
-    // Handle networks array, joining with space for Bash.
-    const proxy_networks_array = getProp(config, 'proxy_networks') || [];
-    const proxy_networks = Array.isArray(proxy_networks_array) ? proxy_networks_array.join(' ') : '';
-
-    // Print as Bash-friendly KEY="VALUE" pairs.
-    console.log(`NATIVE_CFG_COMMAND="${native_command}"`);
-    console.log(`NATIVE_CFG_PORT="${native_port}"`);
-    console.log(`NATIVE_CFG_HEALTH_METHOD="${health_method}"`);
-    console.log(`NATIVE_CFG_HEALTH_URL="${health_url}"`);
-    console.log(`NATIVE_CFG_PROXY_IMAGE="${proxy_image}"`);
-    console.log(`NATIVE_CFG_PROXY_COMMAND="${proxy_command}"`);
-    console.log(`NATIVE_CFG_PROXY_HEALTHCHECK_TEST="${proxy_healthcheck_test}"`);
-    console.log(`NATIVE_CFG_PROXY_NETWORKS="${proxy_networks}"`);
+    // Print as a single line of Bash code for `eval`. Each variable is declared
+    // `local` to prevent polluting the global scope of harbor.sh.
+    // Values are sanitized to handle single quotes and other special characters.
+    console.log(
+      `local NATIVE_EXECUTABLE='${sanitizeForBash(native_executable)}';` +
+      `local NATIVE_DAEMON_COMMAND='${sanitizeForBash(native_daemon_command)}';` +
+      `local NATIVE_PORT='${sanitizeForBash(native_port)}';` +
+      `local NATIVE_REQUIRES_GPU='${sanitizeForBash(requires_gpu)}';` +
+      `local NATIVE_PROXY_IMAGE='${sanitizeForBash(proxy_image)}';` +
+      `local NATIVE_PROXY_COMMAND='${sanitizeForBash(proxy_command)}';` +
+      `local NATIVE_PROXY_HEALTHCHECK_TEST='${sanitizeForBash(healthcheck_test)}';`
+    );
 
   } catch (error) {
-    // Print error to stderr so harbor.sh can catch it.
+    // Print error to stderr so harbor.sh can catch it and report it.
     console.error(`ERROR: Failed to parse YAML file ${filePath}: ${error.message}`);
-    Deno.exit(1); // Exit with error code.
+    Deno.exit(1);
   }
 }
 
-// Get the file path argument.
-const filePath = Deno.args[0];
-if (!filePath) {
+// Main execution block
+if (Deno.args.length === 0) {
   console.error("ERROR: No file path provided to loadNativeConfig.js routine.");
   Deno.exit(1);
 }
 
+const filePath = Deno.args[0];
 await loadNativeConfig(filePath);
