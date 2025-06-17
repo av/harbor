@@ -275,10 +275,18 @@ has_native_config() {
 _harbor_load_native_config() {
     local service_handle="$1"
     local config_file="$harbor_home/$service_handle/${service_handle}_native.yml"
-    if [[ ! -f "$config_file" ]]; then return 1; fi
+    if [[ ! -f "$config_file" ]]; then
+        log_warn "No ${config_file} found for $service_handle, cannot load native config."
+        return 1;
+    fi
     # Using a self-contained Docker run is robust.
-    docker run --rm -v "$harbor_home:$harbor_home" -w "$harbor_home" denoland/deno:distroless \
-        run -A "$harbor_home/routines/loadNativeConfig.js" "$config_file"
+    # docker run --rm -v "$harbor_home:$harbor_home" -w "$harbor_home" denoland/deno:distroless \
+    #     run -A "$harbor_home/routines/loadNativeConfig.js" "$config_file"
+
+    # Use Deno routine to parse YAML and export as env vars
+    eval "$(
+        deno run -A \"$harbor_home/routines/loadNativeConfig.js\" \"$config_file\"
+    )"
 }
 
 # [v12.0] Determines configured execution preference (native or container).
@@ -1806,72 +1814,6 @@ _harbor_wait_for_http_health() {
     done; _info "HTTP health check passed for ${url}."; return 0
 }
 
-# _harbor_load_native_config <service_handle>
-# Loads native service configuration from <service_handle>/harbor_native.yml using a Deno routine.
-# Populates global variables (NATIVE_CFG_COMMAND, etc.) for the current service.
-# Returns 0 on success (file found and parsed), 1 if not.
-_harbor_load_native_config() {
-    local service_handle="$1"
-    local config_file="$harbor_home/$service_handle/harbor_native.yml"
-    local routine_path="$harbor_home/routines/loadNativeConfig.js"
-
-    # Reset global config variables for this service.
-    NATIVE_CFG_COMMAND=""
-    NATIVE_CFG_PORT=""
-    NATIVE_CFG_HEALTH_METHOD=""
-    NATIVE_CFG_HEALTH_URL=""
-    NATIVE_CFG_PROXY_IMAGE=""
-    NATIVE_CFG_PROXY_COMMAND=""
-    NATIVE_CFG_PROXY_HEALTHCHECK_TEST=""
-    NATIVE_CFG_PROXY_NETWORKS="" # Reset proxy networks.
-
-    if [[ -f "$config_file" ]]; then
-        _debug "Loading native config from: $config_file using Deno routine."
-        if [[ ! -f "$routine_path" ]]; then
-            _error "Deno routine for native config parsing not found at ${routine_path}. Cannot parse native service config."
-        fi
-
-        # Execute Deno routine to parse YAML and print K=V pairs.
-        # `deno run -A --unstable-sloppy-imports` allows full access and modern syntax.
-        local deno_output
-        deno_output=$(
-            docker run --rm \
-                -v "$harbor_home:$harbor_home" \
-                -v harbor-deno-cache:/deno-dir:rw \
-                -w "$harbor_home" \
-                denoland/deno:distroless \
-                run -A --unstable-sloppy-imports \
-                "$routine_path" "$config_file"
-        )
-
-        # Check if Deno script returned an error (e.g., parsing failed)
-        if [[ $? -ne 0 ]]; then
-            _error "Deno routine failed to parse ${config_file}. Output: ${deno_output}"
-        fi
-
-        # Eval the output to populate global variables.
-        # Example output format from Deno: NATIVE_CFG_COMMAND="ollama serve"
-        eval "$deno_output"
-
-        # Allow .env variables to override YAML configuration (Harbor's env_manager precedence).
-        NATIVE_CFG_COMMAND=$(env_manager get "${service_handle}.native.command" || echo "$NATIVE_CFG_COMMAND")
-        NATIVE_CFG_PORT=$(env_manager get "${service_handle}.native.port" || echo "$NATIVE_CFG_PORT")
-        NATIVE_CFG_HEALTH_METHOD=$(env_manager get "${service_handle}.native.health_check_method" || echo "$NATIVE_CFG_HEALTH_METHOD")
-        NATIVE_CFG_HEALTH_URL=$(env_manager get "${service_handle}.native.health_url" || echo "$NATIVE_CFG_HEALTH_URL")
-        NATIVE_CFG_PROXY_IMAGE=$(env_manager get "${service_handle}.proxy.image" || echo "$NATIVE_CFG_PROXY_IMAGE")
-        NATIVE_CFG_PROXY_COMMAND=$(env_manager get "${service_handle}.proxy.command" || echo "$NATIVE_CFG_PROXY_COMMAND")
-        NATIVE_CFG_PROXY_HEALTHCHECK_TEST=$(env_manager get "${service_handle}.proxy.healthcheck_test" || echo "$NATIVE_CFG_PROXY_HEALTHCHECK_TEST")
-        NATIVE_CFG_PROXY_NETWORKS=$(env_manager get "${service_handle}.proxy.networks" || echo "$NATIVE_CFG_PROXY_NETWORKS")
-
-        _debug "Native config for ${service_handle} loaded (after .env override):"
-        _debug "  Command='${NATIVE_CFG_COMMAND}', Port='${NATIVE_CFG_PORT}', HealthMethod='${NATIVE_CFG_HEALTH_METHOD}', HealthURL='${NATIVE_CFG_HEALTH_URL}'"
-        _debug "  ProxyImage='${NATIVE_CFG_PROXY_IMAGE}', ProxyCommand='${NATIVE_CFG_PROXY_COMMAND}', ProxyHealthcheck='${NATIVE_CFG_PROXY_HEALTHCHECK_TEST}'"
-        _debug "  ProxyNetworks='${NATIVE_CFG_PROXY_NETWORKS}'"
-        return 0 # Config file found and parsed.
-    fi
-    return 1 # No config file found.
-}
-
 # [v13.0] Starts a native service daemon process on the host.
 # This function is a non-blocking "launcher". It gets all necessary context,
 # prepares the environment, and starts the background process. It does not wait
@@ -2507,20 +2449,6 @@ override_yaml_value() {
         log_error "Failed to update '$key' in $file"
         return 1
     fi
-}
-
-# Load native service config from harbor_native.yml using Deno
-_harbor_load_native_config() {
-    local service_handle="$1"
-    local config_file="$harbor_home/$service_handle/harbor_native.yml"
-    if [[ ! -f "$config_file" ]]; then
-        log_warn "No harbor_native.yml found for $service_handle"
-        return 1
-    fi
-    # Use Deno routine to parse YAML and export as env vars
-    eval "$(
-        deno run -A \"$harbor_home/routines/loadNativeConfig.js\" \"$config_file\"
-    )"
 }
 
 # shellcheck disable=SC2034
@@ -4984,16 +4912,6 @@ _LOG_LEVEL="INFO"           # Default logging level, can be overridden by argume
 LOCK_FILE="/tmp/harbor_cli_startup.lock"
 
 # --- Global Variables for dynamically loaded native service configuration ---
-# These will be populated by `_harbor_load_native_config` for the current service.
-NATIVE_CFG_COMMAND=""
-NATIVE_CFG_PORT=""
-NATIVE_CFG_HEALTH_METHOD=""
-NATIVE_CFG_HEALTH_URL=""
-NATIVE_CFG_PROXY_IMAGE=""
-NATIVE_CFG_PROXY_COMMAND=""
-NATIVE_CFG_PROXY_HEALTHCHECK_TEST=""
-NATIVE_CFG_PROXY_NETWORKS=""
-
 HARBOR_WAIT_TIMEOUT_SECONDS=60
 HARBOR_WAIT_INTERVAL_SECONDS=5
 
