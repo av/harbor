@@ -9,8 +9,8 @@ import * as yaml from "jsr:@std/yaml";
 import { deepMerge } from "jsr:@std/collections/deep-merge";
 import { paths } from "./paths";
 import { getArgs, log } from "./utils";
-import { toArray } from "jsr:@std/streams/to-array";
 import { parseArgs } from "jsr:@std/cli/parse-args";
+import { composeCommand, resolveComposeFiles } from "./docker";
 
 // Custom merger function to concatenate arrays instead of replacing them.
 // This is crucial for correctly merging things like `volumes` or `env_file`.
@@ -52,7 +52,7 @@ async function main() {
     });
 
     // Read file paths from standard input.
-    const stdinContent = new TextDecoder().decode(await Deno.readAll(Deno.stdin));
+    const stdinContent = await new Response(Deno.stdin.readable).text();
     const filePaths = stdinContent.split('\n').filter(line => line.trim() !== '');
 
     await mergeYamlFiles(filePaths, args.output);
