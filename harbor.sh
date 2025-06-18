@@ -271,7 +271,14 @@ has_native_config() {
     [[ -f "$harbor_home/$1/${1}_native.yml" ]]
 }
 
-# [v14.1] Loads native configuration using local Deno if available, otherwise falls back to Docker.
+# [v14.2] Loads native configuration using local Deno if available, otherwise falls back to Docker.
+# This function is responsible for reading a service's native YAML config and returning Bash variable assignments.
+# It ensures only valid Bash assignments are returned, preventing log lines or junk from being passed to eval.
+# Design:
+#   - Prefer local Deno for speed, but fall back to Docker for portability.
+#   - Use run_routine for Docker fallback to ensure consistent environment and cache handling.
+#   - Filter output to only allow lines that are valid Bash assignments (prevents accidental code execution).
+#   - All error and debug output is logged, not returned.
 _harbor_load_native_config() {
     local service_handle="$1"
     local config_file="$harbor_home/$service_handle/${service_handle}_native.yml"
@@ -283,7 +290,7 @@ _harbor_load_native_config() {
     local output
     local exit_code
 
-    # Per user request, try local 'deno' first for performance, then fallback to Docker for robustness.
+    # Try local 'deno' first for performance, then fallback to Docker for robustness.
     if command -v deno &>/dev/null; then
         log_debug "Using host 'deno' to load config for '${service_handle}'."
         # The `2>&1` redirects stderr to stdout, so we capture everything in the 'output' variable.
@@ -291,15 +298,12 @@ _harbor_load_native_config() {
         exit_code=$?
     else
         log_debug "Host 'deno' not found. Using Docker fallback to load config for '${service_handle}'."
-        output=$(docker run --rm \
-            -v "$harbor_home:$harbor_home" \
-            -w "$harbor_home" \
-            denoland/deno:distroless \
-            run -A "$harbor_home/routines/loadNativeConfig.js" "$config_file" 2>&1)
+        # Use run_routine for consistent Docker invocation (handles cache, env, etc.)
+        output=$(run_routine loadNativeConfig "$config_file" 2>&1)
         exit_code=$?
     fi
 
-    # Check if the Deno script (either local or containerized) failed or produced no output.
+    # If the Deno script (either local or containerized) failed or produced no output, log and return error.
     if [[ $exit_code -ne 0 || -z "$output" ]]; then
         log_error "Failed to load native config for '${service_handle}'. Parser output:"
         # Log the captured output, indented for readability. This gives the user the exact error from Deno.
@@ -307,8 +311,9 @@ _harbor_load_native_config() {
         return 1
     fi
 
-    # Return the raw output string for the caller to `eval`. This is part of the "Scoped Eval Loader" pattern.
-    echo "$output"
+    # Only return lines that are valid Bash assignments (prevents log lines or junk from being passed to eval).
+    # This is critical for security and correctness, as Deno may emit log lines or download notices.
+    echo "$output" | grep -E '^(local[[:space:]]+[A-Za-z_][A-Za-z0-9_]*=|[A-Za-z_][A-Za-z0-9_]*=)' || true
 }
 
 # [v12.0] Determines configured execution preference (native or container).
@@ -663,41 +668,79 @@ __compose_get_static_file_list_legacy() {
     done
 }
 
-# [v12.0 UNIFIED COMPOSER] The new, primary composition function.
-# It orchestrates the Planner/Executor model to produce a final command string.
+
+# [v18.0] Robust, modular, and backward-compatible compose file selector and merger.
+# This function builds the correct docker compose command for the requested service context.
+#
+# DESIGN:
+#   - If legacy CLI is requested, delegate to routine_compose_with_options for full backward compatibility.
+#   - Arguments are parsed to support both legacy and modern usage, including --dir=, --no-defaults, and --eject-mode.
+#   - The '*' wildcard is treated as a file-matching option ("all services"), never as a service name.
+#   - Compose file selection is handled by __compose_get_static_file_list_legacy, which respects the wildcard and capability logic.
+#   - Dynamic proxy compose files are generated for native-eligible services, but '*' is never passed as a service name.
+#   - The final merged compose file is built using the Deno merger for performance and correctness.
+#   - The returned command string is always a valid docker compose invocation for downstream use.
 compose_with_options() {
+    # Legacy CLI compatibility: delegate to routine_compose_with_options if requested
+    if [[ $default_legacy_cli == 'false' ]]; then
+        routine_compose_with_options "$@"
+        return
+    fi
+
     local base_dir="$PWD"
-    local -g _COMPOSITION_FILES=() # A temporary global array for this transaction.
+    local -g _COMPOSITION_FILES=() # Temporary global array for this transaction.
     local -a args_for_planner=()
+    local -a options=()
     local eject_mode=false
 
-    for arg in "$@"; do
-        if [[ "$arg" == "--eject-mode" ]]; then
-            eject_mode=true
-        else
-            args_for_planner+=("$arg")
-        fi
+    # Backwards-compatible argument parsing
+    #   --dir=DIR        : set base_dir for compose file search
+    #   --no-defaults    : do not include default options
+    #   --eject-mode     : skip dynamic file generation (for config output)
+    #   *                : wildcard for file matching (not a service name)
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --dir=*)
+                base_dir="${1#*=}"
+                shift
+                ;;
+            --no-defaults)
+                options=()
+                shift
+                ;;
+            --eject-mode)
+                eject_mode=true
+                shift
+                ;;
+            *)
+                options+=("$1")
+                shift
+                ;;
+        esac
     done
 
-    # 1. Plan Part 1: Get static files using the adapted legacy logic.
-    __compose_get_static_file_list_legacy "${args_for_planner[@]}"
+    # If no options specified, use default_options (all default services)
+    if [[ ${#options[@]} -eq 0 ]]; then
+        options=("${default_options[@]}")
+    fi
 
-    # 2. Plan Part 2: Generate dynamic files if not in eject mode.
+    # 1. Static file selection: use legacy logic for robust wildcard/capability handling.
+    #    This ensures '*' is only used for file matching, never as a service name.
+    __compose_get_static_file_list_legacy "${options[@]}"
+
+    # 2. Dynamic file generation: only for non-eject mode, and never for wildcard '*'.
     if ! $eject_mode; then
         local -a native_targets_in_scope=()
-        local services_to_check=("${args_for_planner[@]}")
-        # If no services specified, check defaults for native eligibility.
-        if [[ ${#services_to_check[@]} -eq 0 || ( ${#services_to_check[@]} -eq 1 && " ${services_to_check[0]} " =~ " --no-defaults " ) ]]; then
-           services_to_check=("${default_options[@]}")
-        fi
-
-        for service in "${services_to_check[@]}"; do
-            if [[ "$service" == --* ]]; then continue; fi
+        # Only check for native-eligible services if not using '*'.
+        for service in "${options[@]}"; do
+            # Skip options and wildcard for service checks.
+            if [[ "$service" == --* || "$service" == "*" ]]; then continue; fi
             if [[ "$(_harbor_get_configured_execution_preference "$service")" == "NATIVE" ]]; then
                 native_targets_in_scope+=("$service")
             fi
         done
 
+        # Deduplicate native targets and generate proxy file if needed.
         local unique_native_targets; unique_native_targets=$(echo "${native_targets_in_scope[@]}" | tr ' ' '\n' | sort -u)
         if [[ -n "$unique_native_targets" ]]; then
             local proxy_file_path; proxy_file_path=$(__compose_generate_proxy_file $unique_native_targets)
@@ -707,7 +750,7 @@ compose_with_options() {
         fi
     fi
 
-    # 3. Execute: Pass the final file list to the Deno high-speed merger.
+    # 3. Compose file merging: use Deno for high-speed, robust merging of all selected files.
     local merged_compose_file="$harbor_home/merged.compose.yml"
     printf '%s\n' "${_COMPOSITION_FILES[@]}" | docker run --rm -i \
         -v "$harbor_home:$harbor_home" -v harbor-deno-cache:/deno-dir:rw \
@@ -715,7 +758,7 @@ compose_with_options() {
         run -A --unstable-sloppy-imports "$harbor_home/routines/mergeComposeFiles.js" \
         --output "$merged_compose_file"
 
-    # 4. Construct Final Command String.
+    # 4. Output: return the docker compose command string for downstream use.
     echo "docker compose -f $merged_compose_file"
 }
 
