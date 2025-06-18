@@ -271,22 +271,44 @@ has_native_config() {
     [[ -f "$harbor_home/$1/${1}_native.yml" ]]
 }
 
-# [v12.0] Loads native configuration via the Deno parser.
+# [v14.1] Loads native configuration using local Deno if available, otherwise falls back to Docker.
 _harbor_load_native_config() {
     local service_handle="$1"
     local config_file="$harbor_home/$service_handle/${service_handle}_native.yml"
     if [[ ! -f "$config_file" ]]; then
-        log_warn "No ${config_file} found for $service_handle, cannot load native config."
-        return 1;
+        # Fail silently with an error code. The calling function can decide if this is a warning.
+        return 1
     fi
-    # Using a self-contained Docker run is robust.
-    # docker run --rm -v "$harbor_home:$harbor_home" -w "$harbor_home" denoland/deno:distroless \
-    #     run -A "$harbor_home/routines/loadNativeConfig.js" "$config_file"
 
-    # Use Deno routine to parse YAML and export as env vars
-    eval "$(
-        deno run -A \"$harbor_home/routines/loadNativeConfig.js\" \"$config_file\"
-    )"
+    local output
+    local exit_code
+
+    # Per user request, try local 'deno' first for performance, then fallback to Docker for robustness.
+    if command -v deno &>/dev/null; then
+        log_debug "Using host 'deno' to load config for '${service_handle}'."
+        # The `2>&1` redirects stderr to stdout, so we capture everything in the 'output' variable.
+        output=$(deno run -A "$harbor_home/routines/loadNativeConfig.js" "$config_file" 2>&1)
+        exit_code=$?
+    else
+        log_debug "Host 'deno' not found. Using Docker fallback to load config for '${service_handle}'."
+        output=$(docker run --rm \
+            -v "$harbor_home:$harbor_home" \
+            -w "$harbor_home" \
+            denoland/deno:distroless \
+            run -A "$harbor_home/routines/loadNativeConfig.js" "$config_file" 2>&1)
+        exit_code=$?
+    fi
+
+    # Check if the Deno script (either local or containerized) failed or produced no output.
+    if [[ $exit_code -ne 0 || -z "$output" ]]; then
+        log_error "Failed to load native config for '${service_handle}'. Parser output:"
+        # Log the captured output, indented for readability. This gives the user the exact error from Deno.
+        echo "$output" | sed 's/^/  /' >&2
+        return 1
+    fi
+
+    # Return the raw output string for the caller to `eval`. This is part of the "Scoped Eval Loader" pattern.
+    echo "$output"
 }
 
 # [v12.0] Determines configured execution preference (native or container).
@@ -329,11 +351,19 @@ _harbor_get_running_service_runtime() {
     echo ""
 }
 
-# [v13.0 CORE] Builds a comprehensive "context object" for a given service.
-# This version is feature-complete, restoring the ability for users to
-# override native parameters from their .env file. It gathers all static
-# configuration, applies overrides, and adds live runtime state in a single,
-# efficient pass.
+# [v15.1 CORE] Builds a comprehensive "context object" for a given service.
+# This function is a cornerstone of the hybrid system. It queries all configuration
+# sources (.env file, _native.yml contract) and live system state (docker ps, pgrep)
+# to produce a single, evaluatable string of Bash variables. Downstream functions
+# can then `eval` this context to get a complete, consistent view of a service.
+#
+# DESIGN: This "Context Object" pattern adheres to the DRY principle. Instead of
+# each function making multiple calls to different helpers, they make one call to
+# this function, simplifying their logic immensely. The use of namespacing during
+# eval prevents variable collisions.
+#
+# @param {string} service_handle The service to build context for.
+# @return {string} A string of semicolon-separated `local` variable assignments.
 _harbor_build_service_context() {
     local service_handle="$1"
     local context_string=""
@@ -532,7 +562,7 @@ __compose_generate_transient_env_file() {
     if [ -s "$temp_file" ]; then echo "$temp_file"; else rm "$temp_file"; echo ""; fi
 }
 
-# [v12.0 HELPER] Generates the dynamic proxy compose file for C->N dependency.
+# [v12.0 HELPER] Generates the dynamic proxy docker compose file for C->N dependency.
 __compose_generate_proxy_file() {
     local -a native_targets=("${@}")
     local dynamic_compose_file="${harbor_home}/compose.harbor.native-proxy.yml"
@@ -809,32 +839,71 @@ resolve_compose_command() {
 }
 
 
-# [v12.0 Phased Orchestrator] Main `up` command, now a high-level coordinator.
+
+# [v16.0] Orchestrator for `harbor up`, supporting hybrid runtimes, composition, and "best effort" startup.
+# This is the most complex function in Harbor, responsible for bringing the system to a desired state.
+#
+# DESIGN: The function operates on the principle of "desired state composition". It calculates the
+# full set of services that should be running (a union of what's requested now and what's
+# already active) to ensure all dependencies can be resolved. It then uses an optimized "fast path"
+# for the common container-only case, and a robust "phased orchestrator" for complex hybrid stacks.
+# It explicitly does *not* exit on a container healthcheck failure, adhering to the "best effort"
+# requirement, allowing the user to debug a failing container in a partially-up stack.
 run_up() {
     local temp_native_env_file=""
-    # This trap ensures all temporary artifacts are cleaned up, making `up` atomic.
-    trap 'rm -f "$temp_native_env_file" "$harbor_home/compose.harbor.native-proxy.yml" "$harbor_home/merged.compose.yml" 2>/dev/null; log_debug "v12.0 cleanup trap executed."' EXIT
+    trap 'rm -f "$temp_native_env_file" 2>/dev/null' EXIT
 
     # 1. Argument Parsing
     local -a up_args=(); local -a services_to_run_args=()
     for arg in "$@"; do
         case "$arg" in --no-defaults|--open|-o|--tail|-t) up_args+=("$arg");; *) services_to_run_args+=("$arg");; esac
     done
-    local services_to_run=("${services_to_run_args[@]}"); if [[ ${#services_to_run[@]} -eq 0 ]]; then services_to_run=("${default_options[@]}"); fi
+    local requested_services=("${services_to_run_args[@]}")
+    if [[ ${#requested_services[@]} -eq 0 && ! " ${up_args[*]} " =~ " --no-defaults " ]]; then
+        requested_services=("${default_options[@]}")
+    fi
+    if [[ ${#requested_services[@]} -eq 0 ]]; then
+        log_warn "No services specified to start."
+        return 0
+    fi
 
-    # 2. Planning Phase
-    declare -A execution_plan # Use an associative array to hold the plan
-    log_info "Planning startup sequence for: ${services_to_run[*]}"
-    __up_build_plan execution_plan "${services_to_run[@]}"
+    # 2. Determine Final State for full context resolution.
+    local already_running; read -r -a already_running <<< "$(get_active_services)"
+    local full_context_services_str; full_context_services_str=$(printf '%s\n' "${already_running[@]}" "${requested_services[@]}" | sort -u)
+    local -a full_context_services; readarray -t full_context_services < <(echo "$full_context_services_str")
 
-    # 3. Execution Phases
-    __up_execute_phase1_foundations execution_plan
-    # Phase 2 returns the path to the env file, which is needed by Phase 3.
-    temp_native_env_file=$(__up_execute_phase2_native execution_plan)
-    __up_execute_phase3_main execution_plan "$temp_native_env_file" "${up_args[@]}"
+    # 3. Planning Phase
+    declare -A execution_plan
+    __up_build_plan execution_plan "${full_context_services[@]}"
 
-    # 4. Post-Startup Actions
-    log_info "Harbor system startup is complete and services are running."
+    # 4. Execution Phase
+    local native_targets_str="${execution_plan[native_targets]}"
+    if [[ -z "$native_targets_str" ]]; then
+        # --- FAST PATH for Container-Only ---
+        log_debug "All services are container-based. Using direct startup method."
+        local compose_cmd; compose_cmd=$(compose_with_options "${up_args[@]}" "${full_context_services[@]}")
+        # Run without `|| exit` for "best effort" startup.
+        eval "$compose_cmd up -d --wait ${requested_services[*]}"
+    else
+        # --- HYBRID PATH for complex stacks ---
+        log_debug "Hybrid stack detected. Using phased startup orchestration."
+        __up_execute_phase1_foundations execution_plan
+        # Determine which of the requested services need their native daemons started now.
+        local -a all_native_targets; read -r -a all_native_targets <<< "$native_targets_str"
+        local -a requested_native_targets=()
+        for service in "${requested_services[@]}"; do
+            if [[ " ${all_native_targets[*]} " =~ " ${service} " && ! " ${already_running[*]} " =~ " ${service} " ]]; then
+                requested_native_targets+=("$service")
+            fi
+        done
+        if [[ ${#requested_native_targets[@]} -gt 0 ]]; then
+            __up_execute_phase2_native execution_plan "${requested_native_targets[@]}"
+        fi
+        __up_execute_phase3_main execution_plan "${up_args[@]}" "${requested_services[@]}"
+    fi
+
+    # 5. Post
+    log_debug "Harbor startup command completed."
     local should_open=false; local should_tail=false
     for arg in "${up_args[@]}"; do case "$arg" in --open|-o) should_open=true;; --tail|-t) should_tail=true;; esac; done
     if [ "$default_autoopen" = "true" ] && [[ ${#services_to_run_args[@]} -eq 0 ]]; then run_open "$default_open"; fi
@@ -874,7 +943,7 @@ __up_execute_phase1_foundations() {
     if [[ -n "$foundations" ]]; then
         log_info "Execute Phase 1: Starting foundational container dependencies: $foundations"
         local compose_cmd; compose_cmd=$(compose_with_options $foundations)
-        eval "$compose_cmd up -d --wait" || { log_error "Failed to start foundational containers. Aborting startup."; exit 1; }
+        eval "$compose_cmd up -d --wait" || { log_error "Failed to start foundational containers." }
         log_info "Execute Phase 1: Foundational containers are healthy."
     else
         log_debug "Execute Phase 1: No foundational containers to start."
@@ -889,41 +958,84 @@ __up_execute_phase2_native() {
     if [[ -n "$natives" ]]; then
         log_info "Execute Phase 2: Starting native services and preparing environment: $natives"
         env_file=$(__compose_generate_transient_env_file $natives)
-        for service in $natives; do _harbor_start_native_service "$service"; done
+        for service in $natives; do
+            # Add explicit error handling for consistency with other phases.
+            _harbor_start_native_service "$service" || { log_error "Failed to start native service '${service}'." }
+        done
     else
         log_debug "Execute Phase 2: No native services to start."
     fi
     echo "$env_file" # Return path to env file for Phase 3
 }
 
-# [v12.0 Helper] Phase 3: Executes the main service startup.
+# [v12.1 Helper] Phase 3: Executes the main service startup.
 __up_execute_phase3_main() {
     local -n plan_ref=$1
     local temp_native_env_file="$2"
-    local -a up_args=("${@:3}")
 
-    local phase3_targets_str="${plan_ref[container_targets]} ${plan_ref[native_targets]}"
-    if [[ -n "${phase3_targets_str// /}" ]]; then # Check if string is not empty after removing spaces
-        log_info "Execute Phase 3: Starting main services and native proxies: $phase3_targets_str"
-        local compose_cmd; compose_cmd=$(compose_with_options "${up_args[@]}" $phase3_targets_str)
+    # All remaining arguments are the services to pass to `docker compose up`.
+    # This includes original up_args and the list of services to actually start.
+    local -a services_and_args=("${@:3}")
+
+    # The targets for the compose file context are all services in the plan.
+    local all_context_targets="${plan_ref[container_targets]} ${plan_ref[native_targets]}"
+
+    # The targets for the `up` command are just the ones passed in.
+    local phase3_up_targets_str="${services_and_args[*]}"
+
+    if [[ -n "${phase3_up_targets_str// /}" ]]; then
+        log_debug "Execute Phase 3: Bringing up main services: $phase3_up_targets_str"
+        # Build compose command with the FULL context, but only run `up` on the specified targets.
+        local compose_cmd; compose_cmd=$(compose_with_options $all_context_targets)
         if [[ -n "$temp_native_env_file" ]]; then
             compose_cmd+=" --env-file $temp_native_env_file"
         fi
-        eval "$compose_cmd up -d --wait" || { log_error "Failed to start main services. Check docker logs."; exit 1; }
+
+        # The arguments passed to 'up' are now correctly isolated.
+        eval "$compose_cmd up -d --wait ${services_and_args[*]}" || { log_error "Failed to start main services. Check docker logs."; }
         log_info "Execute Phase 3: Main services are running."
     else
-        log_debug "Execute Phase 3: No main services to start."
+        log_debug "Execute Phase 3: No new services to start in this operation."
     fi
 }
 
-# [v12.0] Orchestrator for `harbor down`, now using the canonical service discovery.
+# [v14.0 HELPER] Expands a list of service handles to include their sub-services.
+# A sub-service is defined by the convention `<handle>-<suffix>`.
+# This restores a key behavior from the original script in a modular way.
+# @param {...string} A list of primary service handles.
+# @return {string} A space-separated list of unique, expanded service handles.
+_resolve_all_service_targets() {
+    local -a initial_targets=("$@")
+    local -a final_targets=()
+    # Get a canonical list of ALL possible services, not just running ones, to search through.
+    local all_services
+    all_services=$(_harbor_get_all_possible_services)
+
+    for target in "${initial_targets[@]}"; do
+        final_targets+=("$target")
+        # Find any service that starts with the target name followed by a hyphen.
+        local sub_services
+        sub_services=$(echo "$all_services" | grep "^${target}-" || true)
+        if [[ -n "$sub_services" ]]; then
+            # The result of grep can be multi-line, so we read it into the array.
+            while read -r sub; do
+                final_targets+=("$sub")
+            done <<< "$sub_services"
+        fi
+    done
+
+    # Return a unique, sorted list of services.
+    echo "${final_targets[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '
+}
+
+# [v12.0, rev. v14.0] Orchestrator for `harbor down`, with sub-service regression fix.
 run_down() {
-    local services_to_stop=("$@")
+    local services_to_stop_args=("$@")
     local dynamic_proxy_file="${harbor_home}/compose.harbor.native-proxy.yml"
     local merged_compose_file="$harbor_home/merged.compose.yml"
     trap 'rm -f "$dynamic_proxy_file" "$merged_compose_file" 2>/dev/null' EXIT
 
-    if [[ ${#services_to_stop[@]} -eq 0 ]]; then
+    if [[ ${#services_to_stop_args[@]} -eq 0 ]]; then
         # Global down: stop everything that is running.
         log_info "Stopping all running Harbor services..."
         local all_services; all_services=$(_harbor_get_all_possible_services)
@@ -932,18 +1044,25 @@ run_down() {
                 _harbor_stop_native_service "$service"
             fi
         done
-        # Finally, bring down all docker containers.
         $(compose_with_options "*") down --remove-orphans
     else
-        # Targeted down.
-        log_info "Stopping specified services: ${services_to_stop[*]}"
-        for service in "${services_to_stop[@]}"; do
+        # Targeted down, now with sub-service resolution.
+        log_info "Resolving service targets and their sub-services..."
+        local -a all_targets_to_stop
+        # Use the helper to expand the list of services to stop (e.g., 'ollama' becomes 'ollama' and 'ollama-init').
+        read -r -a all_targets_to_stop <<< "$(_resolve_all_service_targets "${services_to_stop_args[@]}")"
+
+        log_info "Stopping specified services: ${all_targets_to_stop[*]}"
+        for service in "${all_targets_to_stop[@]}"; do
+            # First, stop any native processes in the target list.
             if [[ "$(_harbor_get_running_service_runtime "$service")" == "NATIVE" ]]; then
                 _harbor_stop_native_service "$service"
             fi
         done
-        # Down the docker components, which will also remove proxies.
-        $(compose_with_options "${services_to_stop[@]}") down --remove-orphans "${services_to_stop[@]}"
+
+        # Then, bring down all container components for the entire expanded list.
+        # This correctly removes main services, sub-services, and any native proxies.
+        $(compose_with_options "${all_targets_to_stop[@]}") down --remove-orphans "${all_targets_to_stop[@]}"
     fi
 }
 
