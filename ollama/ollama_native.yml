@@ -9,10 +9,14 @@
 # This section defines how to start and check the *actual* native Ollama binary.
 # These values can be overridden by environment variables like HARBOR_OLLAMA_NATIVE_COMMAND in your .env.
 
+# The executable command to execute immediate commands e.g. for harbor run.
+# This path must be valid and executable on your host system.
+native_executable: "ollama"
+
 # The full shell command to execute the native Ollama server.
 # This path must be valid and executable on your host system.
 # Example: "ollama serve" (if 'ollama' is in PATH) or "/usr/local/bin/ollama serve"
-native_command: "ollama serve"
+native_daemon_command: "ollama serve"
 
 # The port the native Ollama server will listen on.
 native_port: 11434

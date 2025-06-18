@@ -57,7 +57,7 @@ async function loadNativeConfig(filePath) {
     const native_executable = getProp(config, 'native_executable');
     const native_daemon_command = getProp(config, 'native_daemon_command');
     const native_port = getProp(config, 'native_port');
-    const requires_gpu = getProp(config, 'requires_gpu_passthrough', 'false').toString();
+    const requires_gpu = getProp(config, 'requires_gpu', 'false').toString();
     const proxy_image = getProp(config, 'proxy_image');
     const proxy_command = getProp(config, 'proxy_command');
 
@@ -66,6 +66,8 @@ async function loadNativeConfig(filePath) {
     const native_env_vars = getProp(config, 'native_env_vars', []);
     const native_depends_on = getProp(config, 'native_depends_on_containers', []);
     const env_overrides = getProp(config, 'env_overrides', {});
+    const proxy_networks = getProp(config, 'proxy_networks', []);
+
 
     // --- Sanitize and format for Bash output ---
     // Print as a single line of Bash code for `eval`. Each variable is declared
@@ -82,6 +84,7 @@ async function loadNativeConfig(filePath) {
       `local -a NATIVE_ENV_VARS_LIST=(${sanitizeArrayForBash(native_env_vars)})`,
       `local -a NATIVE_DEPENDS_ON_CONTAINERS=(${sanitizeArrayForBash(native_depends_on)})`,
       `local -a NATIVE_ENV_OVERRIDES_ARRAY=(${sanitizeDictForBash(env_overrides)})`,
+      `local -a NATIVE_PROXY_NETWORKS=(${sanitizeArrayForBash(proxy_networks)})`
     ];
 
     console.log(output.join(';'));

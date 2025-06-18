@@ -302,6 +302,8 @@ _harbor_load_native_config() {
         output=$(run_routine loadNativeConfig "$config_file" 2>&1)
         exit_code=$?
     fi
+    # log info the output
+    log_info "Output from deno "$harbor_home/routines/loadNativeConfig.js" loading native config ${config_file} for '${service_handle}':${output}"
 
     # If the Deno script (either local or containerized) failed or produced no output, log and return error.
     if [[ $exit_code -ne 0 || -z "$output" ]]; then
@@ -356,16 +358,19 @@ _harbor_get_running_service_runtime() {
     echo ""
 }
 
-# [v15.1 CORE] Builds a comprehensive "context object" for a given service.
-# This function is a cornerstone of the hybrid system. It queries all configuration
-# sources (.env file, _native.yml contract) and live system state (docker ps, pgrep)
-# to produce a single, evaluatable string of Bash variables. Downstream functions
-# can then `eval` this context to get a complete, consistent view of a service.
+# [v15.3 CORE] Builds a comprehensive "context object" for a given service.
+# This function queries all configuration sources (.env file, _native.yml contract)
+# and live system state (docker ps, pgrep) to produce a single, evaluatable string
+# of Bash variables. Downstream functions can then `eval` this context to get a
+# complete, consistent view of a service.
 #
-# DESIGN: This "Context Object" pattern adheres to the DRY principle. Instead of
-# each function making multiple calls to different helpers, they make one call to
-# this function, simplifying their logic immensely. The use of namespacing during
-# eval prevents variable collisions.
+# DESIGN:
+# - Uses Deno to parse YAML and emit Bash assignments (e.g., local NATIVE_EXECUTABLE='...').
+# - No longer renames variables with a _from_yaml_ prefix, as Deno output is already safe.
+# - All variable assignments are local to the function scope, preventing global pollution.
+# - After eval, variables like NATIVE_EXECUTABLE, NATIVE_DAEMON_COMMAND, etc. are available.
+# - Maintains backward compatibility: if the Deno output changes, only this function needs updating.
+# - Includes debug logging for troubleshooting.
 #
 # @param {string} service_handle The service to build context for.
 # @return {string} A string of semicolon-separated `local` variable assignments.
@@ -373,39 +378,50 @@ _harbor_build_service_context() {
     local service_handle="$1"
     local context_string=""
 
-    # --- Static Handle and Eligibility ---
     context_string+="local HANDLE='$service_handle';"
-    if ! has_native_config "$service_handle"; then
+    local static_config
+    if ! static_config=$(_harbor_load_native_config "$service_handle"); then
         context_string+="local IS_ELIGIBLE='false';"
-    else
-        context_string+="local IS_ELIGIBLE='true';"
-
-        # --- Load Baseline Config from YAML ---
-        local static_config; static_config=$(_harbor_load_native_config "$service_handle")
-        # Eval into temporary, suffixed variables to avoid collisions
-        eval "$(echo "$static_config" | sed 's/local /local _from_yaml_/g')"
-
-        # --- Apply .env Overrides and Build Final Config ---
-        # For each native parameter, check for an override in .env. If it exists,
-        # use it. Otherwise, use the value from the YAML file.
-        local final_executable; final_executable=$(env_manager --silent get "${service_handle}.native.executable" || echo "${_from_yaml_NATIVE_EXECUTABLE:-}")
-        context_string+="local NATIVE_EXECUTABLE='$final_executable';"
-
-        local final_daemon_cmd; final_daemon_cmd=$(env_manager --silent get "${service_handle}.native.daemon_command" || echo "${_from_yaml_NATIVE_DAEMON_COMMAND:-}")
-        context_string+="local NATIVE_DAEMON_COMMAND='$final_daemon_cmd';"
-
-        local final_port; final_port=$(env_manager --silent get "${service_handle}.native.port" || echo "${_from_yaml_NATIVE_PORT:-}")
-        context_string+="local NATIVE_PORT='$final_port';"
-
-        # Pass through non-overridable values directly
-        context_string+="local NATIVE_REQUIRES_GPU='${_from_yaml_NATIVE_REQUIRES_GPU:-false}';"
-        context_string+="local NATIVE_PROXY_IMAGE='${_from_yaml_NATIVE_PROXY_IMAGE:-}';"
-        context_string+="local NATIVE_PROXY_COMMAND='${_from_yaml_NATIVE_PROXY_COMMAND:-}';"
-        context_string+="local NATIVE_PROXY_HEALTHCHECK_TEST='${_from_yaml_NATIVE_PROXY_HEALTHCHECK_TEST:-}';"
-        context_string+="local -a NATIVE_ENV_VARS_LIST=(${_from_yaml_NATIVE_ENV_VARS_LIST});"
-        context_string+="local -a NATIVE_DEPENDS_ON_CONTAINERS=(${_from_yaml_NATIVE_DEPENDS_ON_CONTAINERS});"
-        context_string+="local -a NATIVE_ENV_OVERRIDES_ARRAY=(${_from_yaml_NATIVE_ENV_OVERRIDES_ARRAY});"
+        local preference; preference=$(_harbor_get_configured_execution_preference "$service_handle")
+        context_string+="local PREFERENCE='$preference';"
+        local runtime; runtime=$(_harbor_get_running_service_runtime "$service_handle")
+        context_string+="local RUNTIME='$runtime';"
+        echo "$context_string"
+        return 0
     fi
+
+    context_string+="local IS_ELIGIBLE='true';"
+    eval "$static_config"
+
+    # --- Debug: Print loaded variables for troubleshooting ---
+    log_debug "Loaded native config for '$service_handle': NATIVE_EXECUTABLE='$NATIVE_EXECUTABLE', NATIVE_DAEMON_COMMAND='$NATIVE_DAEMON_COMMAND', NATIVE_PORT='$NATIVE_PORT'"
+
+    # --- Apply .env Overrides and Build Final Config ---
+    # For each native parameter, check for an override in .env. If it exists,
+    # use it. Otherwise, use the value from the YAML file.
+    local final_executable
+    final_executable=$(env_manager --silent get "${service_handle}.native.executable")
+    final_executable="${final_executable:-$NATIVE_EXECUTABLE}"
+    context_string+="local NATIVE_EXECUTABLE='$final_executable';"
+
+    local final_daemon_cmd
+    final_daemon_cmd=$(env_manager --silent get "${service_handle}.native.daemon_command")
+    final_daemon_cmd="${final_daemon_cmd:-$NATIVE_DAEMON_COMMAND}"
+    context_string+="local NATIVE_DAEMON_COMMAND='$final_daemon_cmd';"
+
+    local final_port
+    final_port=$(env_manager --silent get "${service_handle}.native.port")
+    final_port="${final_port:-$NATIVE_PORT}"
+    context_string+="local NATIVE_PORT='$final_port';"
+
+    # Pass through non-overridable values directly
+    context_string+="local NATIVE_REQUIRES_GPU='${NATIVE_REQUIRES_GPU:-false}';"
+    context_string+="local NATIVE_PROXY_IMAGE='${NATIVE_PROXY_IMAGE:-}';"
+    context_string+="local NATIVE_PROXY_COMMAND='${NATIVE_PROXY_COMMAND:-}';"
+    context_string+="local NATIVE_PROXY_HEALTHCHECK_TEST='${NATIVE_PROXY_HEALTHCHECK_TEST:-}';"
+    context_string+="local -a NATIVE_ENV_VARS_LIST=(${NATIVE_ENV_VARS_LIST[@]:-});"
+    context_string+="local -a NATIVE_DEPENDS_ON_CONTAINERS=(${NATIVE_DEPENDS_ON_CONTAINERS[@]:-});"
+    context_string+="local -a NATIVE_ENV_OVERRIDES_ARRAY=(${NATIVE_ENV_OVERRIDES_ARRAY[@]:-});"
 
     # --- Add Live System State ---
     local preference; preference=$(_harbor_get_configured_execution_preference "$service_handle")
@@ -413,31 +429,138 @@ _harbor_build_service_context() {
     local runtime; runtime=$(_harbor_get_running_service_runtime "$service_handle")
     context_string+="local RUNTIME='$runtime';"
 
+    log_debug "Built context for '$service_handle': $context_string"
     echo "$context_string"
 }
 
-# [v17.0] A new helper to get a canonical list of all services Harbor knows.
+# --- Helper Functions ---
+
+# _harbor_command_exists()
+# Checks if a given command is available on the system's PATH.
+# This function is robust as it uses the `command -v` builtin, which is efficient.
+# Args:
+#   $1 (string): The name of the command to check (e.g., "docker").
+# Returns:
+#   0 (true) if the command exists and is executable.
+#   1 (false) otherwise.
+_harbor_command_exists() {
+    command -v "$1" &>/dev/null
+}
+
+# _harbor_process_service_stream_to_map()
+# Reads newline-separated service names from stdin.
+# Adds each non-empty, unique service name to a specified associative array.
+# This centralizes the deduplication logic, ensuring efficiency and DRY principle.
+# Args:
+#   $1 (string): The name of the associative array to populate (e.g., "my_unique_map").
+# Globals Modified:
+#   The associative array named by $1 will have new keys added.
+# Example:
+#   declare -A unique_map
+#   echo -e "service1\nservice2\nservice1\n" | _harbor_process_service_stream_to_map unique_map
+_harbor_process_service_stream_to_map() {
+    # Nameref to the target associative array. Requires Bash 4.3+.
+    # This allows modifying an array passed by name without global scope issues.
+    local -n _target_map="$1"
+    local service_name
+
+    # Read each line from stdin into 'service_name'.
+    # IFS= ensures no word splitting. -r prevents backslash interpretation.
+    while IFS= read -r service_name; do
+        # Only add non-empty service names to the map.
+        # Associative array keys are inherently unique, handling deduplication.
+        if [[ -n "$service_name" ]]; then
+            _target_map["$service_name"]=1
+        fi
+    done
+}
+
+# --- Core Service Retrieval Functions ---
+
+# _harbor_get_docker_services_list()
+# Retrieves a list of service names defined in Docker Compose files.
+# This function prioritizes robustness by checking for `docker` command availability
+# and efficiently collects services using `mapfile`. It suppresses `docker compose`
+# errors for cleaner output and prevents script exit on non-fatal failures.
+# Returns:
+#   A newline-separated list of Docker Compose service names to stdout.
+_harbor_get_docker_services_list() {
+    local -a services=() # Local array to temporarily hold collected services.
+    if _harbor_command_exists "docker"; then
+        # Capture stdout of `docker compose config --services` into the `services` array.
+        # `2>/dev/null` redirects stderr to null, suppressing potential error messages
+        # (e.g., no docker-compose.yml found).
+        # `|| true` prevents `set -e` or `set -o pipefail` from exiting the script
+        # if `docker compose` exits with a non-zero status (e.g., if no services).
+        mapfile -t services < <(docker compose config --services 2>/dev/null || true)
+    fi
+    # Print each collected service on a new line. This forms the function's output stream.
+    printf '%s\n' "${services[@]}"
+}
+
+# _harbor_get_native_services_list()
+# Retrieves a list of native service names by parsing *_native.yml filenames.
+# This function is highly robust by verifying `$harbor_home` directory existence.
+# It uses `find -print0` and `xargs -0 basename` to safely handle filenames
+# with spaces or special characters, capturing them efficiently into an array via `mapfile`.
+# Returns:
+#   A newline-separated list of native service names to stdout.
+_harbor_get_native_services_list() {
+    local -a services=() # Local array to temporarily hold collected services.
+    if [[ -d "$harbor_home" ]]; then
+        # `find -maxdepth 2 -name "*_native.yml" -print0` finds files up to 2 levels deep
+        # and prints their names separated by null characters (for safety).
+        # `2>/dev/null` suppresses errors from `find` (e.g., permission denied).
+        # `xargs -0 -I {} basename {} _native.yml` processes null-separated input,
+        # extracts the base name, and removes the '_native.yml' suffix.
+        # `mapfile -t` captures the output into the `services` array.
+        mapfile -t services < <(find "$harbor_home" -maxdepth 2 -name "*_native.yml" -print0 2>/dev/null | \
+                                       xargs -0 -I {} basename {} _native.yml)
+    fi
+    # Print each collected service on a new line. This forms the function's output stream.
+    printf '%s\n' "${services[@]}"
+}
+
+# --- Main Orchestration Function ---
+
+# _harbor_get_all_possible_services()
+# [v21.0 - Final Version] The canonical function to return a unique and sorted list
+# of all services Harbor knows about. This design embodies maximal maturity,
+# robustness, efficiency, and cleanliness.
+# It orchestrates calls to specific retrieval functions, streams their output
+# to an in-memory associative array for highly efficient deduplication,
+# and performs a single, final lexicographical sort.
+# Returns:
+#   A newline-separated, unique, and lexicographically sorted list of all service names to stdout.
 _harbor_get_all_possible_services() {
-    local -a docker_services native_services all_services
+    # Declare an associative array to store unique service names.
+    # Keys are service names, values are arbitrary (e.g., '1').
+    local -A unique_services_map
+    local service # Loop variable for iterating through map keys.
 
-    # 1. Get all docker compose services (if docker is available)
-    if command -v docker &>/dev/null; then
-        # Use mapfile/readarray for efficiency and style consistency
-        mapfile -t docker_services < <(docker compose config --services 2>/dev/null)
-    fi
+    # 1. Collect Docker Compose services:
+    # Pipes the newline-separated output of `_harbor_get_docker_services_list`
+    # directly into `_harbor_process_service_stream_to_map` for immediate deduplication.
+    _harbor_get_docker_services_list | _harbor_process_service_stream_to_map unique_services_map
 
-    # 2. Find all native-eligible services (by _native.yml contract)
-    if [ -d "$harbor_home" ]; then
-        while IFS= read -r native_file; do
-            local native_service
-            native_service=$(basename "$native_file" _native.yml)
-            native_services+=("$native_service")
-        done < <(find "$harbor_home" -maxdepth 2 -name "*_native.yml" 2>/dev/null)
-    fi
+    # 2. Collect Native services:
+    # Similarly, pipes the output of `_harbor_get_native_services_list`
+    # for immediate deduplication.
+    _harbor_get_native_services_list | _harbor_process_service_stream_to_map unique_services_map
 
-    # 3. Combine, deduplicate, and filter out empty entries
-    all_services=("${docker_services[@]}" "${native_services[@]}")
-    printf '%s\n' "${all_services[@]}" | grep -v '^$' | sort -u
+    # 3. Extract unique services from the associative map keys:
+    # Iterate through the keys of the associative array (which are unique by definition).
+    # Populate a regular array `final_sorted_services` with these unique names.
+    local -a final_sorted_services=()
+    for service in "${!unique_services_map[@]}"; do
+        final_sorted_services+=("$service")
+    done
+
+    # 4. Sort the final list and print:
+    # `printf '%s\n'` prints each element of the array on a new line.
+    # The output is then piped to the external `sort` command to ensure lexicographical order.
+    # No `-u` is needed for `sort` here, as deduplication is already complete.
+    printf '%s\n' "${final_sorted_services[@]}" | sort
 }
 
 has_rocm() {
@@ -903,15 +1026,25 @@ resolve_compose_command() {
 # for the common container-only case, and a robust "phased orchestrator" for complex hybrid stacks.
 # It explicitly does *not* exit on a container healthcheck failure, adhering to the "best effort"
 # requirement, allowing the user to debug a failing container in a partially-up stack.
+# [v16.1] Orchestrator for `harbor up`, supporting hybrid runtimes, composition, and "best effort" startup.
+# Now supports a -n/--native flag to force native execution where possible.
 run_up() {
     local temp_native_env_file=""
     trap 'rm -f "$temp_native_env_file" 2>/dev/null' EXIT
 
     # 1. Argument Parsing
-    local -a up_args=(); local -a services_to_run_args=()
+    local -a up_args=()
+    local -a services_to_run_args=()
+    local force_native=false
     for arg in "$@"; do
-        case "$arg" in --no-defaults|--open|-o|--tail|-t) up_args+=("$arg");; *) services_to_run_args+=("$arg");; esac
+        case "$arg" in
+            --no-defaults|--open|-o|--tail|-t) up_args+=("$arg");;
+            -n|--native) force_native=true;;
+            *) services_to_run_args+=("$arg");;
+        esac
     done
+
+    # 2. Determine requested services
     local requested_services=("${services_to_run_args[@]}")
     if [[ ${#requested_services[@]} -eq 0 && ! " ${up_args[*]} " =~ " --no-defaults " ]]; then
         requested_services=("${default_options[@]}")
@@ -921,22 +1054,22 @@ run_up() {
         return 0
     fi
 
-    # 2. Determine Final State for full context resolution.
+    # 3. Determine Final State for full context resolution.
     local already_running; read -r -a already_running <<< "$(get_active_services)"
     local full_context_services_str; full_context_services_str=$(printf '%s\n' "${already_running[@]}" "${requested_services[@]}" | sort -u)
     local -a full_context_services; readarray -t full_context_services < <(echo "$full_context_services_str")
 
-    # 3. Planning Phase
+    # 4. Planning Phase
     declare -A execution_plan
     __up_build_plan execution_plan "${full_context_services[@]}"
 
-    # 4. Execution Phase
+    # 5. Execution Phase
     local native_targets_str="${execution_plan[native_targets]}"
     if [[ -z "$native_targets_str" ]]; then
         # --- FAST PATH for Container-Only ---
         log_debug "All services are container-based. Using direct startup method."
         local compose_cmd; compose_cmd=$(compose_with_options "${up_args[@]}" "${full_context_services[@]}")
-        # Run without `|| exit` for "best effort" startup.
+        # Only pass the requested services to the up command!
         eval "$compose_cmd up -d --wait ${requested_services[*]}"
     else
         # --- HYBRID PATH for complex stacks ---
@@ -953,10 +1086,10 @@ run_up() {
         if [[ ${#requested_native_targets[@]} -gt 0 ]]; then
             __up_execute_phase2_native execution_plan "${requested_native_targets[@]}"
         fi
-        __up_execute_phase3_main execution_plan "${up_args[@]}" "${requested_services[@]}"
+        __up_execute_phase3_main execution_plan "$temp_native_env_file" "${up_args[@]}" "${requested_services[@]}"
     fi
 
-    # 5. Post
+    # 6. Post
     log_debug "Harbor startup command completed."
     local should_open=false; local should_tail=false
     for arg in "${up_args[@]}"; do case "$arg" in --open|-o) should_open=true;; --tail|-t) should_tail=true;; esac; done
@@ -1993,10 +2126,13 @@ _harbor_wait_for_http_health() {
 # for the service to become healthy; that is the responsibility of the caller.
 _harbor_start_native_service() {
     local service_handle="$1"
+    log_info "Starting native service: ${service_handle}"
 
     # 1. Build the full context for this service to get all resolved configuration.
     local context; context=$(_harbor_build_service_context "$service_handle")
     eval "$context"
+    # print the context for debugging
+    log_info "Service context for '${HANDLE}':\n$context"
 
     # 2. Prerequisite checks.
     if [[ "$IS_ELIGIBLE" != "true" || -z "$NATIVE_DAEMON_COMMAND" ]]; then
@@ -2004,8 +2140,13 @@ _harbor_start_native_service() {
         return 1
     fi
     local native_script="$harbor_home/$HANDLE/${HANDLE}_native.sh"
-    if [[ ! -f "$native_script" || ! -x "$native_script" ]]; then
-        log_error "Native bootstrap script for '${HANDLE}' not found or not executable at '${native_script}'."
+    if [[ ! -f "$native_script" ]]; then
+        log_error "Native bootstrap script for '${HANDLE}' not found at '${native_script}'."
+        ls -l "$native_script" 2>&1 | log_debug
+        return 1
+    elif [[ ! -x "$native_script" ]]; then
+        log_error "Native bootstrap script for '${HANDLE}' exists at '${native_script}' but is not executable. Run: chmod +x '$native_script'"
+        ls -l "$native_script" 2>&1 | log_debug
         return 1
     fi
 
@@ -2035,7 +2176,7 @@ _harbor_start_native_service() {
     nohup bash -c "${env_exports} exec bash \"${native_script}\"" > "$log_file" 2>&1 &
 
     # 6. Brief pause and quick verification that the process launched.
-    sleep 2
+    sleep 1
     if ! pgrep -f "$NATIVE_DAEMON_COMMAND" >/dev/null; then
         log_error "Failed to launch native daemon for '${HANDLE}'. Check logs for details: ${log_file}"
         return 1
