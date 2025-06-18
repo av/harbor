@@ -907,7 +907,7 @@ run_up() {
     local should_open=false; local should_tail=false
     for arg in "${up_args[@]}"; do case "$arg" in --open|-o) should_open=true;; --tail|-t) should_tail=true;; esac; done
     if [ "$default_autoopen" = "true" ] && [[ ${#services_to_run_args[@]} -eq 0 ]]; then run_open "$default_open"; fi
-    for service in "${default_tunnels[@]}"; do establish_tunnel "$service"; fi
+    for service in "${default_tunnels[@]}"; do establish_tunnel "$service"; done
     if $should_tail; then run_logs "${services_to_run_args[@]}"; fi
     if $should_open; then run_open "${services_to_run_args[@]}"; fi
 }
@@ -943,7 +943,7 @@ __up_execute_phase1_foundations() {
     if [[ -n "$foundations" ]]; then
         log_info "Execute Phase 1: Starting foundational container dependencies: $foundations"
         local compose_cmd; compose_cmd=$(compose_with_options $foundations)
-        eval "$compose_cmd up -d --wait" || { log_error "Failed to start foundational containers." }
+        eval "$compose_cmd up -d --wait" || { log_error "Failed to start foundational containers."; }
         log_info "Execute Phase 1: Foundational containers are healthy."
     else
         log_debug "Execute Phase 1: No foundational containers to start."
@@ -960,7 +960,7 @@ __up_execute_phase2_native() {
         env_file=$(__compose_generate_transient_env_file $natives)
         for service in $natives; do
             # Add explicit error handling for consistency with other phases.
-            _harbor_start_native_service "$service" || { log_error "Failed to start native service '${service}'." }
+            _harbor_start_native_service "$service" || { log_error "Failed to start native service '${service}'."; }
         done
     else
         log_debug "Execute Phase 2: No native services to start."
@@ -1817,7 +1817,7 @@ log_error() { log "ERROR" "$@"; }
 # --- Internal Helper Functions: Argument Parsing and Dependency Checks ---
 # _check_dependencies: Ensures all required external CLI tools are available.
 _check_dependencies() {
-    _info "Checking script dependencies..."
+    log_debug "Checking script dependencies..."
     local missing_deps=()
 
     for cmd in docker "docker compose" nc curl pgrep; do
@@ -1832,9 +1832,9 @@ _check_dependencies() {
     fi
 
     if [[ ${#missing_deps[@]} -gt 0 ]]; then
-        _error "Missing required commands: ${missing_deps[*]}. Please install them."
+        log_error "Missing required commands: ${missing_deps[*]}. Please install them."
     fi
-    _info "All required CLI dependencies found."
+    log_debug "All required CLI dependencies found."
 }
 
 # _run_bash_template <template_string> <port_value>
@@ -1848,9 +1848,9 @@ _run_bash_template() {
 
 # --- Internal Helper Functions: Lock Management ---
 _acquire_lock() {
-    _info "Attempting to acquire lock: ${LOCK_FILE}"
+    log_debug "Attempting to acquire lock: ${LOCK_FILE}"
     if ( set -o noclobber; echo "$$" > "${LOCK_FILE}") 2>/dev/null; then
-        _info "Lock acquired. PID: $$"
+        log_debug "Lock acquired. PID: $$"
     else
         local lock_pid=$(cat "${LOCK_FILE}" 2>/dev/null || true)
         if [[ -n "${lock_pid}" ]] && kill -0 "${lock_pid}" 2>/dev/null; then
@@ -1858,10 +1858,10 @@ _acquire_lock() {
         else
             _warn "Stale lock file found (previous PID ${lock_pid} is gone or invalid)."
             if "${_FORCE_CLEANUP}"; then
-                _info "Force cleanup requested. Removing stale lock file: ${LOCK_FILE}."
+                log_debug "Force cleanup requested. Removing stale lock file: ${LOCK_FILE}."
                 rm -f "${LOCK_FILE}" || _error "Failed to remove stale lock file: ${LOCK_FILE}. Please check permissions."
                 if ( set -o noclobber; echo "$$" > "${LOCK_FILE}") 2>/dev/null; then
-                    _info "Lock re-acquired after force cleanup. PID: $$"
+                    log_debug "Lock re-acquired after force cleanup. PID: $$"
                 else
                     _error "Failed to acquire lock even after attempting to remove stale lock. Check permissions for ${LOCK_FILE}."
                 fi
@@ -1917,20 +1917,20 @@ _is_harbor_native_running_check() {
 
 _harbor_wait_for_port() {
     local host="$1"; local port="$2"; local timeout_sec="$3"; local interval_sec="$4"; local waited_time=0
-    _info "Waiting for ${host}:${port}..."
+    log_debug "Waiting for ${host}:${port}..."
     while ! nc -z "${host}" "${port}" &>/dev/null; do
         if (( waited_time >= timeout_sec )); then _error "Timeout: ${host}:${port} did not become available after ${timeout_sec}s."; return 1; fi
         _debug "Port ${port} not open, sleeping ${interval_sec}s..."; sleep "${interval_sec}"; waited_time=$((waited_time + interval_sec))
-    done; _info "${host}:${port} is open."; return 0
+    done; log_debug "${host}:${port} is open."; return 0
 }
 
 _harbor_wait_for_http_health() {
     local url="$1"; local timeout_sec="$2"; local interval_sec="$3"; local waited_time=0
-    _info "Waiting for HTTP health check at ${url}..."
+    log_debug "Waiting for HTTP health check at ${url}..."
     while ! curl --fail --silent "${url}" &>/dev/null; do
         if (( waited_time >= timeout_sec )); then _error "Timeout: HTTP health check for ${url} did not pass after ${timeout_sec}s."; return 1; fi
         _debug "Health check failed for ${url}, sleeping ${interval_sec}s..."; sleep "${interval_sec}"; waited_time=$((waited_time + interval_sec))
-    done; _info "HTTP health check passed for ${url}."; return 0
+    done; log_debug "HTTP health check passed for ${url}."; return 0
 }
 
 # [v13.0] Starts a native service daemon process on the host.
