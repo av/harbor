@@ -288,20 +288,8 @@ _harbor_load_native_config() {
     fi
 
     local output
-    local exit_code
-
-    # Try local 'deno' first for performance, then fallback to Docker for robustness.
-    if command -v deno &>/dev/null; then
-        log_debug "Using host 'deno' to load config for '${service_handle}'."
-        # The `2>&1` redirects stderr to stdout, so we capture everything in the 'output' variable.
-        output=$(deno run -A "$harbor_home/routines/loadNativeConfig.js" "$config_file" 2>&1)
-        exit_code=$?
-    else
-        log_debug "Host 'deno' not found. Using Docker fallback to load config for '${service_handle}'."
-        # Use run_routine for consistent Docker invocation (handles cache, env, etc.)
-        output=$(run_routine loadNativeConfig "$config_file" 2>&1)
-        exit_code=$?
-    fi
+    output=$(run_routine loadNativeConfig "$config_file" 2>&1)
+    local exit_code=$?
     # log info the output
     log_info "Output from deno "$harbor_home/routines/loadNativeConfig.js" loading native config ${config_file} for '${service_handle}':${output}"
 
@@ -636,22 +624,35 @@ run_routine() {
 
     local routine_path="$harbor_home/routines/$routine_name.js"
 
-    if [ ! -f $routine_path ]; then
+    if [ ! -f "$routine_path" ]; then
         log_error "Routine '$routine_name' not identified"
         return 1
     fi
 
     shift
 
+    # Pass through log level and any other relevant env vars
+    local harbor_log_level="${HARBOR_LOG_LEVEL:-$default_log_level}"
     log_debug "Running routine: $routine_name"
-    docker run --rm \
-        -v "$harbor_home:$harbor_home" \
-        -v harbor-deno-cache:/deno-dir:rw \
-        -w "$harbor_home" \
-        -e "HARBOR_LOG_LEVEL=$default_log_level" \
-        denoland/deno:distroless \
-        run -A --unstable-sloppy-imports \
-        $routine_path "$@"
+
+    if command -v deno &>/dev/null; then
+        (
+            cd "$harbor_home"
+            HARBOR_LOG_LEVEL="$default_log_level" \
+            deno run -A --unstable-sloppy-imports "routines/loadNativeConfig.js" "$config_file"
+        ) 2>&1
+        return $?
+    else
+        docker run --rm \
+            -v "$harbor_home:$harbor_home" \
+            -v harbor-deno-cache:/deno-dir:rw \
+            -w "$harbor_home" \
+            -e "HARBOR_LOG_LEVEL=$harbor_log_level" \
+            denoland/deno:distroless \
+            run -A --unstable-sloppy-imports \
+            "$routine_path" "$@"
+        return $?
+    fi
 }
 
 routine_compose_with_options() {
@@ -873,13 +874,9 @@ compose_with_options() {
         fi
     fi
 
-    # 3. Compose file merging: use Deno for high-speed, robust merging of all selected files.
+    # 3. Compose file merging: use run_routine for robust Deno or Docker execution.
     local merged_compose_file="$harbor_home/merged.compose.yml"
-    printf '%s\n' "${_COMPOSITION_FILES[@]}" | docker run --rm -i \
-        -v "$harbor_home:$harbor_home" -v harbor-deno-cache:/deno-dir:rw \
-        -w "$harbor_home" denoland/deno:distroless \
-        run -A --unstable-sloppy-imports "$harbor_home/routines/mergeComposeFiles.js" \
-        --output "$merged_compose_file"
+    printf '%s\n' "${_COMPOSITION_FILES[@]}" | run_routine mergeComposeFiles --output "$merged_compose_file"
 
     # 4. Output: return the docker compose command string for downstream use.
     echo "docker compose -f $merged_compose_file"
