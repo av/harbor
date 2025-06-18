@@ -5095,7 +5095,7 @@ parse_global_args() {
 _check_dependencies
 
 # --- NEW: Acquire Lock File to prevent multiple instances of Harbor CLI ---
-_acquire_lock # This will exit if another instance is running and not forced.
+# _acquire_lock # This will exit if another instance is running and not forced.
 
 main_entrypoint() {
     case "$1" in
