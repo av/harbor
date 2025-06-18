@@ -411,17 +411,28 @@ _harbor_build_service_context() {
     echo "$context_string"
 }
 
-# [v12.0] A new helper to get a canonical list of all services Harbor knows.
+# [v17.0] A new helper to get a canonical list of all services Harbor knows.
 _harbor_get_all_possible_services() {
-    local all_services
-    # Get all services defined in all possible compose files, in eject mode.
-    all_services=$($(compose_with_options --eject-mode "*") config --services)
-    # Find all services that have a native contract
-    find "$harbor_home" -maxdepth 2 -name "*_native.yml" -print0 2>/dev/null | xargs -0 -I {} basename {} _native.yml | while read -r native_service; do
-        all_services+=$'\n'"$native_service"
-    done
-    # Return a unique, sorted list
-    echo "$all_services" | sort -u
+    local -a docker_services native_services all_services
+
+    # 1. Get all docker compose services (if docker is available)
+    if command -v docker &>/dev/null; then
+        # Use mapfile/readarray for efficiency and style consistency
+        mapfile -t docker_services < <(docker compose config --services 2>/dev/null)
+    fi
+
+    # 2. Find all native-eligible services (by _native.yml contract)
+    if [ -d "$harbor_home" ]; then
+        while IFS= read -r native_file; do
+            local native_service
+            native_service=$(basename "$native_file" _native.yml)
+            native_services+=("$native_service")
+        done < <(find "$harbor_home" -maxdepth 2 -name "*_native.yml" 2>/dev/null)
+    fi
+
+    # 3. Combine, deduplicate, and filter out empty entries
+    all_services=("${docker_services[@]}" "${native_services[@]}")
+    printf '%s\n' "${all_services[@]}" | grep -v '^$' | sort -u
 }
 
 has_rocm() {
