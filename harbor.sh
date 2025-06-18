@@ -1854,16 +1854,16 @@ _acquire_lock() {
     else
         local lock_pid=$(cat "${LOCK_FILE}" 2>/dev/null || true)
         if [[ -n "${lock_pid}" ]] && kill -0 "${lock_pid}" 2>/dev/null; then
-            _error "Another instance of Harbor CLI is already running with PID ${lock_pid}. Exiting to prevent conflicts."
+            log_error "Another instance of Harbor CLI is already running with PID ${lock_pid}. Exiting to prevent conflicts."
         else
-            _warn "Stale lock file found (previous PID ${lock_pid} is gone or invalid)."
+            log_warn "Stale lock file found (previous PID ${lock_pid} is gone or invalid)."
             if "${_FORCE_CLEANUP}"; then
                 log_debug "Force cleanup requested. Removing stale lock file: ${LOCK_FILE}."
-                rm -f "${LOCK_FILE}" || _error "Failed to remove stale lock file: ${LOCK_FILE}. Please check permissions."
+                rm -f "${LOCK_FILE}" || log_error "Failed to remove stale lock file: ${LOCK_FILE}. Please check permissions."
                 if ( set -o noclobber; echo "$$" > "${LOCK_FILE}") 2>/dev/null; then
                     log_debug "Lock re-acquired after force cleanup. PID: $$"
                 else
-                    _error "Failed to acquire lock even after attempting to remove stale lock. Check permissions for ${LOCK_FILE}."
+                    log_error "Failed to acquire lock even after attempting to remove stale lock. Check permissions for ${LOCK_FILE}."
                 fi
             fi
         fi
@@ -1874,9 +1874,9 @@ _release_lock() {
     _debug "Releasing lock: ${LOCK_FILE}"
     if [[ -f "${LOCK_FILE}" ]]; then
         if [[ "$(cat "${LOCK_FILE}")" == "$$" ]]; then
-            rm -f "${LOCK_FILE}" || _warn "Failed to remove lock file: ${LOCK_FILE}. Manual cleanup might be required."
+            rm -f "${LOCK_FILE}" || log_warn "Failed to remove lock file: ${LOCK_FILE}. Manual cleanup might be required."
         else
-            _warn "Lock file owned by a different PID. Not removing."
+            log_warn "Lock file owned by a different PID. Not removing."
         fi
     fi
 }
@@ -1919,7 +1919,7 @@ _harbor_wait_for_port() {
     local host="$1"; local port="$2"; local timeout_sec="$3"; local interval_sec="$4"; local waited_time=0
     log_debug "Waiting for ${host}:${port}..."
     while ! nc -z "${host}" "${port}" &>/dev/null; do
-        if (( waited_time >= timeout_sec )); then _error "Timeout: ${host}:${port} did not become available after ${timeout_sec}s."; return 1; fi
+        if (( waited_time >= timeout_sec )); then log_error "Timeout: ${host}:${port} did not become available after ${timeout_sec}s."; return 1; fi
         _debug "Port ${port} not open, sleeping ${interval_sec}s..."; sleep "${interval_sec}"; waited_time=$((waited_time + interval_sec))
     done; log_debug "${host}:${port} is open."; return 0
 }
@@ -1928,7 +1928,7 @@ _harbor_wait_for_http_health() {
     local url="$1"; local timeout_sec="$2"; local interval_sec="$3"; local waited_time=0
     log_debug "Waiting for HTTP health check at ${url}..."
     while ! curl --fail --silent "${url}" &>/dev/null; do
-        if (( waited_time >= timeout_sec )); then _error "Timeout: HTTP health check for ${url} did not pass after ${timeout_sec}s."; return 1; fi
+        if (( waited_time >= timeout_sec )); then log_error "Timeout: HTTP health check for ${url} did not pass after ${timeout_sec}s."; return 1; fi
         _debug "Health check failed for ${url}, sleeping ${interval_sec}s..."; sleep "${interval_sec}"; waited_time=$((waited_time + interval_sec))
     done; log_debug "HTTP health check passed for ${url}."; return 0
 }
@@ -5069,12 +5069,12 @@ parse_global_args() {
             --no-docker) _SKIP_DOCKER=true; shift ;;
             --no-native | --no-harbor_native) _SKIP_NATIVE=true; shift ;;
             --skip-wait) _SKIP_WAIT=true; shift ;;
-            --dry-run) _DRY_RUN=true; _info "DRY RUN mode enabled. No commands will be executed."; shift ;;
+            --dry-run) _DRY_RUN=true; log_info "DRY RUN mode enabled. No commands will be executed."; shift ;;
             --force) _FORCE_CLEANUP=true; shift ;;
             --log-level)
                 if [[ -n "$2" ]]; then
-                    _LOG_LEVEL=$(echo "$2" | tr '[:lower:]' '[:upper:]'); [[ ! "$_LOG_LEVEL" =~ ^(DEBUG|INFO|WARN|ERROR)$ ]] && _error "Invalid log level: $2. Must be DEBUG, INFO, WARN, or ERROR."; shift 2
-                else _error "--log-level requires an argument."; fi ;;
+                    _LOG_LEVEL=$(echo "$2" | tr '[:lower:]' '[:upper:]'); [[ ! "$_LOG_LEVEL" =~ ^(DEBUG|INFO|WARN|ERROR)$ ]] && log_error "Invalid log level: $2. Must be DEBUG, INFO, WARN, or ERROR."; shift 2
+                else log_error "--log-level requires an argument."; fi ;;
             *) remaining_args+=("$1"); shift ;;
         esac
     done; set -- "${remaining_args[@]}"; return 0
