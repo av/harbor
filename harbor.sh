@@ -1837,10 +1837,10 @@ _check_dependencies() {
         fi
     done
 
-    # Check for Deno explicitly, as it's now used for YAML parsing.
-    if ! command -v deno &> /dev/null; then
-        missing_deps+=("deno (required for native service config parsing)")
-    fi
+    # # Check for Deno explicitly, as it's now used for YAML parsing.
+    # if ! command -v deno &> /dev/null; then
+    #     missing_deps+=("deno (required for native service config parsing)")
+    # fi
 
     if [[ ${#missing_deps[@]} -gt 0 ]]; then
         log_error "Missing required commands: ${missing_deps[*]}. Please install them."
