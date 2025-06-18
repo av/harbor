@@ -1871,7 +1871,7 @@ _acquire_lock() {
 }
 
 _release_lock() {
-    _debug "Releasing lock: ${LOCK_FILE}"
+    log_debug "Releasing lock: ${LOCK_FILE}"
     if [[ -f "${LOCK_FILE}" ]]; then
         if [[ "$(cat "${LOCK_FILE}")" == "$$" ]]; then
             rm -f "${LOCK_FILE}" || log_warn "Failed to remove lock file: ${LOCK_FILE}. Manual cleanup might be required."
@@ -1886,7 +1886,7 @@ cleanup() {
     local exit_status=$?
     # Only log detailed cleanup info if not a normal exit (status 0) or if logging level is DEBUG
     if [[ "$exit_status" -ne 0 ]] || [[ "$_LOG_LEVEL" == "DEBUG" ]] || [[ "$default_log_level" == "DEBUG" ]]; then # Check both global and .env log level
-        _debug "Harbor CLI exiting (status: ${exit_status}). Running cleanup."
+        log_debug "Harbor CLI exiting (status: ${exit_status}). Running cleanup."
     fi
 
     # The primary role of cleanup on EXIT/Signal for the CLI is to release its own lock.
@@ -1894,7 +1894,7 @@ cleanup() {
     _release_lock
 
     if [[ "$exit_status" -ne 0 ]]; then
-        _debug "Exited with status ${exit_status}."
+        log_debug "Exited with status ${exit_status}."
     fi
     # The script will exit with the original exit_status due to `set -e` or explicit exit elsewhere.
     # If trap is EXIT, it will exit with $exit_status.
@@ -1920,7 +1920,7 @@ _harbor_wait_for_port() {
     log_debug "Waiting for ${host}:${port}..."
     while ! nc -z "${host}" "${port}" &>/dev/null; do
         if (( waited_time >= timeout_sec )); then log_error "Timeout: ${host}:${port} did not become available after ${timeout_sec}s."; return 1; fi
-        _debug "Port ${port} not open, sleeping ${interval_sec}s..."; sleep "${interval_sec}"; waited_time=$((waited_time + interval_sec))
+        log_debug "Port ${port} not open, sleeping ${interval_sec}s..."; sleep "${interval_sec}"; waited_time=$((waited_time + interval_sec))
     done; log_debug "${host}:${port} is open."; return 0
 }
 
@@ -1929,7 +1929,7 @@ _harbor_wait_for_http_health() {
     log_debug "Waiting for HTTP health check at ${url}..."
     while ! curl --fail --silent "${url}" &>/dev/null; do
         if (( waited_time >= timeout_sec )); then log_error "Timeout: HTTP health check for ${url} did not pass after ${timeout_sec}s."; return 1; fi
-        _debug "Health check failed for ${url}, sleeping ${interval_sec}s..."; sleep "${interval_sec}"; waited_time=$((waited_time + interval_sec))
+        log_debug "Health check failed for ${url}, sleeping ${interval_sec}s..."; sleep "${interval_sec}"; waited_time=$((waited_time + interval_sec))
     done; log_debug "HTTP health check passed for ${url}."; return 0
 }
 
