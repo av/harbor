@@ -2477,7 +2477,7 @@ _harbor_start_native_service() {
     #
     log_info "Starting native service '${HANDLE}' in the background..."
     local log_file="${LOG_DIR}/harbor-${HANDLE}-native.log"
-    
+
     # Use nohup and a subshell to correctly daemonize the process with its environment.
     # Pass executable + daemon args separately (Docker-style) to the native script.
     # The native script will execute: exec "$NATIVE_EXECUTABLE" "${NATIVE_DAEMON_ARGS[@]}"

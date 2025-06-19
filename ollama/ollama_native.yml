@@ -1,3 +1,36 @@
+# =============================================================================
+# Harbor Native Service Contract: Ollama
+# =============================================================================
+#
+# This file defines the native execution configuration for the Ollama service
+# in Harbor. When Harbor is configured to run Olloma natively (instead of in
+# a container), this contract specifies how to start the service and integrate
+# it with Harbor's hybrid orchestration system.
+#
+# NATIVE SCRIPT INTEGRATION:
+# This YAML file works in conjunction with 'ollama_native.sh', which serves
+# as the entrypoint script. Harbor reads this configuration, then calls the
+# native script with the specified executable and arguments using a Docker-style
+# pattern.
+#
+# EXECUTION FLOW:
+# 1. Harbor reads this YAML file to understand the native service configuration
+# 2. Harbor calls: ollama_native.sh "ollama" "serve"
+# 3. The native script executes: exec ollama serve
+# 4. The process runs natively on the host, with logs redirected to Harbor's log directory
+#
+# REQUIREMENTS:
+# - The 'ollama' binary must be installed and available in the system's PATH
+# - The native script (ollama_native.sh) must be executable
+# - Harbor manages the process lifecycle via PID files and log redirection
+#
+# TROUBLESHOOTING:
+# - Logs are written to: $HARBOR_HOME/app/backend/data/logs/harbor-ollama-native.log
+# - PID file location: $HARBOR_HOME/app/backend/data/pids/ollama.pid
+# - Check binary availability: command -v ollama
+# - Verify script permissions: ls -la ollama_native.sh
+#
+# =============================================================================
 # ========================================================================
 # == Harbor v22.0: Unified Native Contract for 'ollama'
 # ========================================================================
@@ -61,11 +94,11 @@ services:
       # ================================================================
       # == Native Execution Configuration (Docker-Style Pattern)
       # ================================================================
-      # 
+      #
       # Harbor uses a Docker-style ENTRYPOINT + CMD pattern for native services:
       # - 'executable': Like Docker's ENTRYPOINT - the binary to execute
       # - 'daemon_args': Like Docker's CMD - the arguments for daemon startup
-      # 
+      #
       # This design allows:
       # 1. Daemon startup: executable + daemon_args = "ollama serve"
       # 2. User commands: executable + user_args = "ollama list", "ollama pull model"
@@ -74,7 +107,7 @@ services:
       #
       # Harbor calls: native_script.sh "ollama" "serve"
       # Native script executes: exec "$@"  (i.e., exec ollama serve)
-      
+
       # The executable binary name or path for this service.
       # Used for both daemon startup and user commands (e.g., `harbor run ollama list`).
       # Can be just the binary name (if in PATH) or a full path.
