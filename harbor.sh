@@ -290,7 +290,9 @@ _harbor_load_native_config() {
     fi
 
     local output
-    output=$(run_routine loadNativeConfig "$config_file" 2>&1)
+    # Call the robust loadNativeConfig routine with just the file path
+    # The routine will extract the service handle from the filename automatically
+    output=$(run_routine loadNativeConfig "$config_file")
     local exit_code=$?
     # log info the output
     log_info "Output from deno "$harbor_home/routines/loadNativeConfig.js" loading native config ${config_file} for '${service_handle}':${output}"

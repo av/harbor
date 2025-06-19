@@ -63,16 +63,43 @@ function sanitizeDictForBash(obj) {
     .join(' ');
 }
 
-async function loadNativeConfig(filePath, serviceHandle) {
+async function loadNativeConfig(filePath, serviceHandle = null) {
   try {
+    // Extract serviceHandle from filename if not provided
+    if (!serviceHandle) {
+      const fileName = filePath.replace(/.*[/\\]/, ''); // Cross-platform basename
+      serviceHandle = fileName.replace(/_native\.ya?ml$/i, '');
+
+      if (serviceHandle === fileName) {
+        throw new Error(
+          `Cannot extract service handle from filename '${fileName}'. ` +
+          `Expected format: '<service>_native.yml' or '<service>_native.yaml'`
+        );
+      }
+    }
+
+    // Validate service handle
+    if (!serviceHandle?.trim()) {
+      throw new Error('Service handle cannot be empty');
+    }
+
+    serviceHandle = serviceHandle.trim();
+
+    // Read and parse YAML
     const yamlContent = await Deno.readTextFile(filePath);
     const config = parse(yamlContent);
 
-    // Safely access the service's configuration block.
-    const serviceConfig = config?.services?.[serviceHandle];
+    // Validate structure
+    if (!config?.services) {
+      throw new Error(`Missing 'services' section in YAML file`);
+    }
+
+    const serviceConfig = config.services[serviceHandle];
     if (!serviceConfig) {
-      console.error(`ERROR: Service '${serviceHandle}' not found in ${filePath}`);
-      Deno.exit(1);
+      throw new Error(
+        `Service '${serviceHandle}' not found in YAML file. ` +
+        `Available services: ${Object.keys(config.services).join(', ')}`
+      );
     }
 
     // Safely access the Harbor-specific native metadata block.
@@ -133,14 +160,47 @@ async function loadNativeConfig(filePath, serviceHandle) {
     console.log(output.join(';'));
 
   } catch (error) {
-    console.error(`ERROR: Failed to parse native contract ${filePath}: ${error.message}`);
+    const scriptName = 'loadNativeConfig.js';
+    const location = `[${scriptName}]`;
+
+    // Format error message with clear source identification
+    let errorMsg = `${location} ERROR: `;
+
+    if (error instanceof Deno.errors.NotFound) {
+      errorMsg += `File not found: ${filePath}`;
+    } else if (error instanceof Deno.errors.PermissionDenied) {
+      errorMsg += `Permission denied reading: ${filePath}`;
+    } else if (error.name === 'YAMLError' || error.message?.includes('YAML')) {
+      errorMsg += `Invalid YAML syntax in ${filePath}: ${error.message}`;
+    } else {
+      errorMsg += error.message;
+    }
+
+    console.error(errorMsg);
     Deno.exit(1);
   }
 }
 
 // --- Main execution block ---
-if (Deno.args.length < 2) {
-  console.error("Usage: loadNativeConfig.js <file_path> <service_handle>");
+const SCRIPT_NAME = 'loadNativeConfig.js';
+
+function showUsage() {
+  console.error(`Usage: ${SCRIPT_NAME} <file_path> [service_handle]`);
+  console.error('');
+  console.error('Arguments:');
+  console.error('  file_path      Path to the YAML configuration file');
+  console.error('  service_handle Service name (auto-extracted from filename if omitted)');
+  console.error('');
+  console.error('Examples:');
+  console.error(`  ${SCRIPT_NAME} /path/to/ollama_native.yml`);
+  console.error(`  ${SCRIPT_NAME} /path/to/custom.yml ollama`);
+}
+
+if (Deno.args.length === 0 || Deno.args.length > 2) {
+  console.error(`[${SCRIPT_NAME}] ERROR: Invalid number of arguments`);
+  console.error('');
+  showUsage();
   Deno.exit(1);
 }
+
 await loadNativeConfig(Deno.args[0], Deno.args[1]);
