@@ -430,6 +430,14 @@ _harbor_build_service_context() {
     final_daemon_cmd="${final_daemon_cmd:-$NATIVE_DAEMON_COMMAND}"
     context_string+="local NATIVE_DAEMON_COMMAND='$final_daemon_cmd';"
 
+    # Pass through the daemon args array (used for Docker-style execution)
+    local temp_daemon_args=""
+    if [[ ${#NATIVE_DAEMON_ARGS[@]} -gt 0 ]]; then
+        printf -v temp_daemon_args '%q ' "${NATIVE_DAEMON_ARGS[@]}"
+        temp_daemon_args=${temp_daemon_args% }  # Remove trailing space
+    fi
+    context_string+="local -a NATIVE_DAEMON_ARGS=(${temp_daemon_args});"
+
     local final_port
     final_port=$(env_manager --silent get "${service_handle}.native.port")
     final_port="${final_port:-$NATIVE_PORT}"
@@ -2446,12 +2454,34 @@ _harbor_start_native_service() {
         done
     fi
 
-    # 5. Execute the launch command.
+    # 5. Execute the launch command using Docker-style ENTRYPOINT + CMD pattern.
+    # ================================================================
+    # == Native Service Execution (Docker-Style Pattern)
+    # ================================================================
+    #
+    # Harbor now uses a Docker-style pattern for native service execution:
+    # - NATIVE_EXECUTABLE: Like Docker's ENTRYPOINT (the binary to run)
+    # - NATIVE_DAEMON_ARGS: Like Docker's CMD (the arguments for that binary)
+    #
+    # This design allows:
+    # 1. Flexible daemon startup: executable + daemon_args
+    # 2. User commands: executable can be used for CLI commands too
+    # 3. Different executable names: executable can differ from service name
+    # 4. Complex arguments: daemon_args supports arrays with proper quoting
+    #
+    # Example: For Ollama
+    # - NATIVE_EXECUTABLE="ollama"
+    # - NATIVE_DAEMON_ARGS=("serve")
+    # - Harbor calls: native_script.sh "ollama" "serve"
+    # - Native script executes: exec "$@"  (i.e., exec ollama serve)
+    #
     log_info "Starting native service '${HANDLE}' in the background..."
     local log_file="${LOG_DIR}/harbor-${HANDLE}-native.log"
+    
     # Use nohup and a subshell to correctly daemonize the process with its environment.
-    # `exec` replaces the final shell process with the actual application binary.
-    ( ${env_exports} exec "$harbor_home/$HANDLE/${HANDLE}_native.sh" "$NATIVE_DAEMON_COMMAND" ) > "$log_file" 2>&1 &
+    # Pass executable + daemon args separately (Docker-style) to the native script.
+    # The native script will execute: exec "$NATIVE_EXECUTABLE" "${NATIVE_DAEMON_ARGS[@]}"
+    ( ${env_exports} exec "$harbor_home/$HANDLE/${HANDLE}_native.sh" "$NATIVE_EXECUTABLE" "${NATIVE_DAEMON_ARGS[@]}" ) > "$log_file" 2>&1 &
     local pid=$!
     echo "$pid" > "$pid_file"
 
@@ -5587,8 +5617,8 @@ profiles_dir="$harbor_home/profiles"
 default_profile="$profiles_dir/default.env"
 default_current_env="$harbor_home/.env"
 default_gum_image="ghcr.io/charmbracelet/gum"
-PID_DIR="$harbor_home/.pids"
-LOG_DIR="$harbor_home/.logs"
+PID_DIR="$harbor_home/app/backend/data/pids"
+LOG_DIR="$harbor_home/app/backend/data/logs"
 mkdir -p "$LOG_DIR"
 
 # Desired compose version

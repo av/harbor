@@ -58,15 +58,33 @@ services:
     #    Harbor's scripts to manage the native process lifecycle.
     # --------------------------------------------------------------------
     x-harbor-native:
-      # The command to run for interactive, one-off tasks (e.g., `harbor run ollama list`).
-      # This must be an executable available in the host's system PATH.
+      # ================================================================
+      # == Native Execution Configuration (Docker-Style Pattern)
+      # ================================================================
+      # 
+      # Harbor uses a Docker-style ENTRYPOINT + CMD pattern for native services:
+      # - 'executable': Like Docker's ENTRYPOINT - the binary to execute
+      # - 'daemon_args': Like Docker's CMD - the arguments for daemon startup
+      # 
+      # This design allows:
+      # 1. Daemon startup: executable + daemon_args = "ollama serve"
+      # 2. User commands: executable + user_args = "ollama list", "ollama pull model"
+      # 3. Different executable names: executable can be "/usr/local/bin/custom-ollama"
+      # 4. Flexible arguments: daemon_args can be ["serve", "--debug", "--verbose"]
+      #
+      # Harbor calls: native_script.sh "ollama" "serve"
+      # Native script executes: exec "$@"  (i.e., exec ollama serve)
+      
+      # The executable binary name or path for this service.
+      # Used for both daemon startup and user commands (e.g., `harbor run ollama list`).
+      # Can be just the binary name (if in PATH) or a full path.
+      # Examples: "ollama", "/usr/local/bin/ollama", "/opt/custom/ollama-v2"
       executable: "ollama"
 
-      # The exact, full command used to start the long-running background daemon process.
-      # This is used by `harbor up` to start the service and by `pgrep` and the PID
-      # management system to check its status and stop it.
-      # Example: "ollama serve"
-      daemon_command: "ollama serve"
+      # The arguments to pass to the executable when starting the daemon.
+      # This replaces the old 'daemon_command' field and supports complex arguments.
+      # Examples: ["serve"], ["serve", "--debug"], ["start", "--port", "11434"]
+      daemon_args: ["serve"]
 
       # The TCP port that the native daemon process will listen on. This is used
       # by the proxy's command and healthcheck.
