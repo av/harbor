@@ -39,27 +39,34 @@ function sanitizeForBash(value) {
 }
 
 /**
- * Sanitizes an array of strings for safe inclusion in a Bash array expansion.
- * Each element is formatted as a single-quoted, space-separated string.
- * Example: ['a', 'b c'] becomes "'a' 'b c'"
+ * Sanitizes an array of strings for safe inclusion in a Bash array declaration.
+ * Each element is properly quoted and shell metacharacters are escaped.
+ * Example: ['CMD-SHELL', 'nc -z host || exit 1'] becomes '"CMD-SHELL" "nc -z host || exit 1"'
  * @param {Array<unknown>} arr The array to sanitize.
- * @returns {string} A space-separated string of single-quoted, sanitized elements.
+ * @returns {string} A space-separated string of double-quoted, sanitized elements.
  */
 function sanitizeArrayForBash(arr) {
   if (!Array.isArray(arr)) return '';
-  return arr.map(item => `'${sanitizeForBash(item)}'`).join(' ');
+  return arr.map(item => {
+    const str = String(item || '');
+    // Use double quotes and escape internal double quotes and backslashes
+    return '"' + str.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
+  }).join(' ');
 }
 
 /**
- * Sanitizes a JavaScript object for safe inclusion in a Bash array of key='value' pairs.
- * Example: { key1: 'val1', key2: 'val2' } becomes "key1='val1' key2='val2'"
+ * Sanitizes a JavaScript object for safe inclusion in a Bash array of key=value pairs.
+ * Example: { key1: 'val1', key2: 'val2' } becomes '"key1=val1" "key2=val2"'
  * @param {Object} obj The object to sanitize.
- * @returns {string} A space-separated string of key='value' pairs.
+ * @returns {string} A space-separated string of double-quoted key=value pairs.
  */
 function sanitizeDictForBash(obj) {
   if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) return '';
   return Object.entries(obj)
-    .map(([key, value]) => `'${sanitizeForBash(key)}=${sanitizeForBash(value)}'`)
+    .map(([key, value]) => {
+      const pair = `${key}=${value}`;
+      return '"' + pair.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
+    })
     .join(' ');
 }
 

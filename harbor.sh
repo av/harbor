@@ -445,11 +445,41 @@ _harbor_build_service_context() {
 
     # Array variables from the new structure
     # Note: These are now properly parsed as arrays by the updated loadNativeConfig.js
-    context_string+="local -a NATIVE_PROXY_HEALTHCHECK_TEST=(${NATIVE_PROXY_HEALTHCHECK_TEST[@]:-});"
-    context_string+="local -a NATIVE_ENV_VARS_LIST=(${NATIVE_ENV_VARS_LIST[@]:-});"
-    context_string+="local -a NATIVE_DEPENDS_ON_CONTAINERS=(${NATIVE_DEPENDS_ON_CONTAINERS[@]:-});"
-    context_string+="local -a NATIVE_ENV_OVERRIDES_ARRAY=(${NATIVE_ENV_OVERRIDES_ARRAY[@]:-});"
-    context_string+="local -a NATIVE_PROXY_NETWORKS=(${NATIVE_PROXY_NETWORKS[@]:-});"
+    # We use printf %q to properly quote each element for safe eval usage
+    local temp_healthcheck_test=""
+    if [[ ${#NATIVE_PROXY_HEALTHCHECK_TEST[@]} -gt 0 ]]; then
+        printf -v temp_healthcheck_test '%q ' "${NATIVE_PROXY_HEALTHCHECK_TEST[@]}"
+        temp_healthcheck_test=${temp_healthcheck_test% }  # Remove trailing space
+    fi
+    context_string+="local -a NATIVE_PROXY_HEALTHCHECK_TEST=(${temp_healthcheck_test});"
+
+    local temp_env_vars=""
+    if [[ ${#NATIVE_ENV_VARS_LIST[@]} -gt 0 ]]; then
+        printf -v temp_env_vars '%q ' "${NATIVE_ENV_VARS_LIST[@]}"
+        temp_env_vars=${temp_env_vars% }  # Remove trailing space
+    fi
+    context_string+="local -a NATIVE_ENV_VARS_LIST=(${temp_env_vars});"
+
+    local temp_depends_on=""
+    if [[ ${#NATIVE_DEPENDS_ON_CONTAINERS[@]} -gt 0 ]]; then
+        printf -v temp_depends_on '%q ' "${NATIVE_DEPENDS_ON_CONTAINERS[@]}"
+        temp_depends_on=${temp_depends_on% }  # Remove trailing space
+    fi
+    context_string+="local -a NATIVE_DEPENDS_ON_CONTAINERS=(${temp_depends_on});"
+
+    local temp_env_overrides=""
+    if [[ ${#NATIVE_ENV_OVERRIDES_ARRAY[@]} -gt 0 ]]; then
+        printf -v temp_env_overrides '%q ' "${NATIVE_ENV_OVERRIDES_ARRAY[@]}"
+        temp_env_overrides=${temp_env_overrides% }  # Remove trailing space
+    fi
+    context_string+="local -a NATIVE_ENV_OVERRIDES_ARRAY=(${temp_env_overrides});"
+
+    local temp_networks=""
+    if [[ ${#NATIVE_PROXY_NETWORKS[@]} -gt 0 ]]; then
+        printf -v temp_networks '%q ' "${NATIVE_PROXY_NETWORKS[@]}"
+        temp_networks=${temp_networks% }  # Remove trailing space
+    fi
+    context_string+="local -a NATIVE_PROXY_NETWORKS=(${temp_networks});"
 
     # --- Add Live System State ---
     local preference; preference=$(_harbor_get_configured_execution_preference "$service_handle")
@@ -2393,6 +2423,7 @@ _harbor_start_native_service() {
     fi
 
     # 3. Idempotency check: Do not start if already running.
+    local pid_file="$PID_DIR/${HANDLE}.pid"
     if [[ -f "$pid_file" ]] && kill -0 "$(cat "$pid_file")" 2>/dev/null; then
         log_info "Harbor-managed native daemon for '${HANDLE}' is already running."; return 0;
     fi
