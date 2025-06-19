@@ -9,15 +9,27 @@
 #
 # NATIVE SCRIPT INTEGRATION:
 # This YAML file works in conjunction with 'ollama_native.sh', which serves
-# as the entrypoint script. Harbor reads this configuration, then calls the
-# native script with the specified executable and arguments using a Docker-style
-# pattern.
+# as the entrypoint script for this specific service. The script uses the
+# Docker-style pattern where Harbor passes the complete command to execute.
+#
+# SCRIPT DESIGN APPROACH:
+# This particular script uses a simple "exec "$@"" pattern that works well
+# for Ollama's straightforward execution model. Different services may need
+# customized scripts for setup, validation, or special handling requirements.
 #
 # EXECUTION FLOW:
-# 1. Harbor reads this YAML file to understand the native service configuration
+# 1. Harbor reads this YAML to understand native service configuration
 # 2. Harbor calls: ollama_native.sh "ollama" "serve"
-# 3. The native script executes: exec ollama serve
-# 4. The process runs natively on the host, with logs redirected to Harbor's log directory
+# 3. Script executes: exec "$@" → exec ollama serve
+# 4. Process runs natively with logs redirected to Harbor's log directory
+#
+# WHEN SCRIPTS NEED CUSTOMIZATION:
+# While this script is simple, other services might require:
+# - Environment variable setup before execution
+# - Configuration file generation or validation
+# - Binary path resolution and error checking
+# - Service-specific initialization steps
+# - Health checks or readiness verification
 #
 # REQUIREMENTS:
 # - The 'ollama' binary must be installed and available in the system's PATH
@@ -32,7 +44,7 @@
 #
 # =============================================================================
 # ========================================================================
-# == Harbor v22.0: Unified Native Contract for 'ollama'
+# == Harbor Unified Native Contract for 'ollama'
 # ========================================================================
 #
 # This file serves a dual purpose and is the heart of Harbor's hybrid runtime:
@@ -99,14 +111,82 @@ services:
       # - 'executable': Like Docker's ENTRYPOINT - the binary to execute
       # - 'daemon_args': Like Docker's CMD - the arguments for daemon startup
       #
-      # This design allows:
-      # 1. Daemon startup: executable + daemon_args = "ollama serve"
-      # 2. User commands: executable + user_args = "ollama list", "ollama pull model"
-      # 3. Different executable names: executable can be "/usr/local/bin/custom-ollama"
-      # 4. Flexible arguments: daemon_args can be ["serve", "--debug", "--verbose"]
+      # DESIGN PHILOSOPHY:
+      # This pattern separates the "what to run" (executable) from the "how to run it"
+      # (arguments), enabling maximum flexibility for different service architectures.
       #
-      # Harbor calls: native_script.sh "ollama" "serve"
-      # Native script executes: exec "$@"  (i.e., exec ollama serve)
+      # EXECUTABLE vs SERVICE NAME VARIATIONS:
+      # The 'executable' field can differ from the Harbor service handle:
+      #
+      # Case 1 - Same name (like ollama):
+      #   - Service handle: "ollama"
+      #   - Executable: "ollama"
+      #   - Daemon startup: ollama serve
+      #   - User commands: ollama list, ollama pull model
+      #
+      # Case 2 - Different executable name:
+      #   - Service handle: "textgen"
+      #   - Executable: "text-generation-server"
+      #   - Daemon startup: text-generation-server --port 8080
+      #   - User commands: text-generation-server --help
+      #
+      # Case 3 - Custom installation path:
+      #   - Service handle: "ollama"
+      #   - Executable: "/opt/custom/ollama-enterprise"
+      #   - Daemon startup: /opt/custom/ollama-enterprise serve
+      #   - User commands: /opt/custom/ollama-enterprise list
+      #
+      # Case 4 - Separate daemon and client executables:
+      #   - Service handle: "myservice"
+      #   - Executable: "myservice-daemon" (for daemon startup)
+      #   - Client tool: "myservice-cli" (separate binary for user commands)
+      #   - Note: Harbor currently uses 'executable' for both. For separate
+      #     binaries, you'd typically set executable to the daemon binary.
+      #
+      # EXECUTION FLOW:
+      # 1. Daemon startup: Harbor calls: native_script.sh "ollama" "serve"
+      # 2. Native script executes: exec "$@" (i.e., exec ollama serve)
+      # 3. User commands: Harbor calls: executable + user_args directly
+      #    Example: `harbor run ollama list` -> ollama list
+      #
+      # SCRIPT DESIGN:
+      # The native script (ollama_native.sh) uses a simple pattern:
+      #   exec "$@"
+      # This works well for Ollama but other services may need custom scripts.
+      #
+      # CONFIGURATION EXAMPLES:
+      #
+      # 1. SIMPLE DAEMON (like Ollama):
+      # executable: "ollama"
+      # daemon_args: ["serve"]
+      # Results in: ollama serve
+      #
+      # 2. DAEMON WITH OPTIONS:
+      # executable: "ollama"
+      # daemon_args: ["serve", "--host", "0.0.0.0", "--port", "11434"]
+      # Results in: ollama serve --host 0.0.0.0 --port 11434
+      #
+      # 3. CUSTOM INSTALLATION PATH:
+      # executable: "/usr/local/bin/ollama"
+      # daemon_args: ["serve"]
+      # Results in: /usr/local/bin/ollama serve
+      #
+      # 4. DIFFERENT EXECUTABLE NAME:
+      # executable: "text-generation-server"
+      # daemon_args: ["--port", "8080", "--model-id", "model"]
+      # Results in: text-generation-server --port 8080 --model-id model
+      #
+      # SERVICES THAT NEED CUSTOM SCRIPTS:
+      # - Services requiring environment setup (PATH, LD_LIBRARY_PATH, etc.)
+      # - Services needing configuration file generation
+      # - Services with complex initialization or health checks
+      # - Services with multiple binaries or wrapper requirements
+      # - Services needing specific user/permission handling
+      #
+      # ERROR HANDLING APPROACH:
+      # This simple script relies on shell and executable error messages.
+      # For production deployments, you may want custom error handling,
+      # binary validation, or setup verification in the script.
 
       # The executable binary name or path for this service.
       # Used for both daemon startup and user commands (e.g., `harbor run ollama list`).
