@@ -122,7 +122,18 @@ async function loadNativeConfig(filePath, serviceHandle = null) {
     // --- Extract all values from the correct locations in the YAML contract ---
     // Extract metadata for the native process itself from the 'x-harbor-native' block.
     const native_executable = getProp(nativeConfig, 'executable');
-    const native_daemon_command = getProp(nativeConfig, 'daemon_command');
+
+    // Support both old 'daemon_command' (string) and new 'daemon_args' (array) formats
+    let native_daemon_command = getProp(nativeConfig, 'daemon_command');
+    const daemon_args = getProp(nativeConfig, 'daemon_args', []);
+
+    // If daemon_args is provided, construct daemon_command for backward compatibility
+    if (daemon_args.length > 0) {
+      // Join executable + daemon_args to create the full command string
+      // This maintains compatibility with existing harbor.sh logic that expects daemon_command
+      native_daemon_command = [native_executable, ...daemon_args].join(' ');
+    }
+
     const native_port = getProp(nativeConfig, 'port');
     const requires_gpu = getProp(nativeConfig, 'requires_gpu_passthrough', false).toString();
     const native_env_vars = getProp(nativeConfig, 'env_vars', []);
@@ -153,6 +164,7 @@ async function loadNativeConfig(filePath, serviceHandle = null) {
     const output = [
       `local NATIVE_EXECUTABLE='${sanitizeForBash(native_executable)}'`,
       `local NATIVE_DAEMON_COMMAND='${sanitizeForBash(native_daemon_command)}'`,
+      `local -a NATIVE_DAEMON_ARGS=(${sanitizeArrayForBash(daemon_args)})`,
       `local NATIVE_PORT='${sanitizeForBash(native_port)}'`,
       `local NATIVE_REQUIRES_GPU='${sanitizeForBash(requires_gpu)}'`,
       `local NATIVE_PROXY_IMAGE='${sanitizeForBash(proxy_image)}'`,
