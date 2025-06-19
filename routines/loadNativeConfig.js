@@ -1,7 +1,28 @@
 // routines/loadNativeConfig.js
 //
-// Deno routine to safely parse a <handle>_native.yml file and print its contents
-// as Bash-friendly 'local' variable assignments for use with `eval`.
+// [v24.0] Deno routine to safely parse Harbor v22.0+ Unified Native Contract files.
+// Parses <handle>_native.yml files that serve as both Docker Compose override files
+// and native process metadata contracts. Outputs Bash-friendly 'local' variable
+// assignments for use with `eval`.
+//
+// New YAML Structure (v22.0+):
+// services:
+//   <handle>:
+//     # Proxy container definition (used by Docker Compose)
+//     image: alpine/socat:latest
+//     command: tcp-listen:PORT,fork,reuseaddr tcp-connect:host.docker.internal:PORT
+//     healthcheck: ...
+//     networks: ...
+//
+//     # Native process metadata (used by Harbor, ignored by Docker Compose)
+//     x-harbor-native:
+//       executable: "command"
+//       daemon_command: "command serve"
+//       port: 11434
+//       requires_gpu_passthrough: true
+//       env_vars: ["VAR1", "VAR2"]
+//       env_overrides: {KEY: "value"}
+//
 // This is the primary and only approved YAML parser for the native feature.
 
 import { parse } from "https://deno.land/std@0.224.0/yaml/parse.ts";
@@ -13,6 +34,7 @@ import { parse } from "https://deno.land/std@0.224.0/yaml/parse.ts";
  * @returns {string} The sanitized string.
  */
 function sanitizeForBash(value) {
+  if (value === null || typeof value === 'undefined') return '';
   return String(value).replace(/'/g, "'\\''");
 }
 
@@ -37,37 +59,58 @@ function sanitizeArrayForBash(arr) {
 function sanitizeDictForBash(obj) {
   if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) return '';
   return Object.entries(obj)
-    .map(([key, value]) => `'${sanitizeForBash(key)}=${sanitizeForBash(value)}'`) // Each pair is a single element
+    .map(([key, value]) => `'${sanitizeForBash(key)}=${sanitizeForBash(value)}'`)
     .join(' ');
 }
 
-
-async function loadNativeConfig(filePath) {
+async function loadNativeConfig(filePath, serviceHandle) {
   try {
     const yamlContent = await Deno.readTextFile(filePath);
     const config = parse(yamlContent);
 
-    // Helper to safely get a nested property, returning a default if not found.
-    const getProp = (obj, path, defaultValue = '') => {
-      const value = path.split('.').reduce((acc, part) => (acc && acc[part] !== undefined) ? acc[part] : undefined, obj);
-      return value ?? defaultValue;
-    };
+    // Safely access the service's configuration block.
+    const serviceConfig = config?.services?.[serviceHandle];
+    if (!serviceConfig) {
+      console.error(`ERROR: Service '${serviceHandle}' not found in ${filePath}`);
+      Deno.exit(1);
+    }
 
-    // --- Extract all values from the YAML contract ---
-    const native_executable = getProp(config, 'native_executable');
-    const native_daemon_command = getProp(config, 'native_daemon_command');
-    const native_port = getProp(config, 'native_port');
-    const requires_gpu = getProp(config, 'requires_gpu', 'false').toString();
-    const proxy_image = getProp(config, 'proxy_image');
-    const proxy_command = getProp(config, 'proxy_command');
+    // Safely access the Harbor-specific native metadata block.
+    const nativeConfig = serviceConfig['x-harbor-native'];
+    if (!nativeConfig) {
+      console.error(`ERROR: Missing 'x-harbor-native' block in ${filePath} for service '${serviceHandle}'.`);
+      Deno.exit(1);
+    }
 
-    // --- Extract structured data (arrays and objects) ---
-    const proxy_healthcheck_test = getProp(config, 'proxy_healthcheck_test', []);
-    const native_env_vars = getProp(config, 'native_env_vars', []);
-    const native_depends_on = getProp(config, 'native_depends_on_containers', []);
-    const env_overrides = getProp(config, 'env_overrides', {});
-    const proxy_networks = getProp(config, 'proxy_networks', []);
+    // Helper for safe property access.
+    const getProp = (obj, key, defaultValue = '') => obj?.[key] ?? defaultValue;
 
+    // --- Extract all values from the correct locations in the YAML contract ---
+    // Extract metadata for the native process itself from the 'x-harbor-native' block.
+    const native_executable = getProp(nativeConfig, 'executable');
+    const native_daemon_command = getProp(nativeConfig, 'daemon_command');
+    const native_port = getProp(nativeConfig, 'port');
+    const requires_gpu = getProp(nativeConfig, 'requires_gpu_passthrough', false).toString();
+    const native_env_vars = getProp(nativeConfig, 'env_vars', []);
+    const env_overrides = getProp(nativeConfig, 'env_overrides', {});
+
+    // Extract data for the proxy container from the main service definition.
+    const proxy_image = getProp(serviceConfig, 'image');
+    const proxy_command = getProp(serviceConfig, 'command');
+
+    // Extract healthcheck test command from the service's healthcheck block
+    const healthcheck_block = getProp(serviceConfig, 'healthcheck', {});
+    const proxy_healthcheck_test = getProp(healthcheck_block, 'test', []);
+
+    // Extract networks from the service definition
+    const proxy_networks = getProp(serviceConfig, 'networks', []);
+
+    // Extract depends_on if present (though less common in the new structure)
+    const native_depends_on = getProp(serviceConfig, 'depends_on', []);
+    // Handle both array format and object format for depends_on
+    const native_depends_on_array = Array.isArray(native_depends_on)
+      ? native_depends_on
+      : Object.keys(native_depends_on || {});
 
     // --- Sanitize and format for Bash output ---
     // Print as a single line of Bash code for `eval`. Each variable is declared
@@ -82,7 +125,7 @@ async function loadNativeConfig(filePath) {
       `local NATIVE_PROXY_COMMAND='${sanitizeForBash(proxy_command)}'`,
       `local -a NATIVE_PROXY_HEALTHCHECK_TEST=(${sanitizeArrayForBash(proxy_healthcheck_test)})`,
       `local -a NATIVE_ENV_VARS_LIST=(${sanitizeArrayForBash(native_env_vars)})`,
-      `local -a NATIVE_DEPENDS_ON_CONTAINERS=(${sanitizeArrayForBash(native_depends_on)})`,
+      `local -a NATIVE_DEPENDS_ON_CONTAINERS=(${sanitizeArrayForBash(native_depends_on_array)})`,
       `local -a NATIVE_ENV_OVERRIDES_ARRAY=(${sanitizeDictForBash(env_overrides)})`,
       `local -a NATIVE_PROXY_NETWORKS=(${sanitizeArrayForBash(proxy_networks)})`
     ];
@@ -90,16 +133,14 @@ async function loadNativeConfig(filePath) {
     console.log(output.join(';'));
 
   } catch (error) {
-    console.error(`ERROR: Failed to parse YAML file ${filePath}: ${error.message}`);
+    console.error(`ERROR: Failed to parse native contract ${filePath}: ${error.message}`);
     Deno.exit(1);
   }
 }
 
 // --- Main execution block ---
-if (Deno.args.length === 0) {
-  console.error("ERROR: No file path provided to loadNativeConfig.js routine.");
+if (Deno.args.length < 2) {
+  console.error("Usage: loadNativeConfig.js <file_path> <service_handle>");
   Deno.exit(1);
 }
-
-const filePath = Deno.args[0];
-await loadNativeConfig(filePath);
+await loadNativeConfig(Deno.args[0], Deno.args[1]);

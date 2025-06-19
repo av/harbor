@@ -367,42 +367,95 @@ _harbor_get_running_service_runtime() {
     echo "" # Return an empty string.
 }
 
-# [v15.3 CORE] Builds a comprehensive "context object" for a given service.
+# [v24.0 CORE] Builds a comprehensive "context object" for a given service.
 # This function queries all configuration sources (.env file, _native.yml contract)
 # and live system state (docker ps, pgrep) to produce a single, evaluatable string
 # of Bash variables. Downstream functions can then `eval` this context to get a
 # complete, consistent view of a service.
 #
 # DESIGN:
-# - Uses Deno to parse YAML and emit Bash assignments (e.g., local NATIVE_EXECUTABLE='...').
+# - Uses Deno to parse Harbor v22.0+ Unified Native Contract YAML files
+# - Handles both proxy container definitions and x-harbor-native metadata blocks
 # - No longer renames variables with a _from_yaml_ prefix, as Deno output is already safe.
 # - All variable assignments are local to the function scope, preventing global pollution.
 # - After eval, variables like NATIVE_EXECUTABLE, NATIVE_DAEMON_COMMAND, etc. are available.
 # - Maintains backward compatibility: if the Deno output changes, only this function needs updating.
 # - Includes debug logging for troubleshooting.
 #
+# IMPORTANT NOTES:
+# - The RUNTIME variable set here is THE canonical source for determining how to interact
+#   with a service (NATIVE vs CONTAINER vs empty for not running)
+# - Other functions throughout Harbor depend on this RUNTIME determination
+# - The IS_ELIGIBLE flag indicates whether native execution is possible for this service
+# - Array variables (NATIVE_*_ARRAY) require proper handling when eval'd
+# - .env overrides are applied to core native parameters (executable, daemon_command, port)
+#
 # @param {string} service_handle The service to build context for.
 # @return {string} A string of semicolon-separated `local` variable assignments.
 _harbor_build_service_context() {
     local service_handle="$1"
     local context_string=""
+
     context_string+="local HANDLE='$service_handle';"
+    local static_config
+    if ! static_config=$(_harbor_load_native_config "$service_handle"); then
+        context_string+="local IS_ELIGIBLE='false';"
+        local preference; preference=$(_harbor_get_configured_execution_preference "$service_handle")
+        context_string+="local PREFERENCE='$preference';"
+        local runtime; runtime=$(_harbor_get_running_service_runtime "$service_handle")
+        # IMPORTANT: This is where we set the RUNTIME variable, and other functions use it to determine how to interact with the service.
+        context_string+="local RUNTIME='$runtime';"
+        echo "$context_string"
+        return 0
+    fi
+
+    context_string+="local IS_ELIGIBLE='true';"
+    eval "$static_config"
+
+    # --- Debug: Print loaded variables for troubleshooting ---
+    log_debug "Loaded native config for '$service_handle': NATIVE_EXECUTABLE='$NATIVE_EXECUTABLE', NATIVE_DAEMON_COMMAND='$NATIVE_DAEMON_COMMAND', NATIVE_PORT='$NATIVE_PORT'"
+
+    # --- Apply .env Overrides and Build Final Config ---
+    # For each native parameter, check for an override in .env. If it exists,
+    # use it. Otherwise, use the value from the YAML file.
+    local final_executable
+    final_executable=$(env_manager --silent get "${service_handle}.native.executable")
+    final_executable="${final_executable:-$NATIVE_EXECUTABLE}"
+    context_string+="local NATIVE_EXECUTABLE='$final_executable';"
+
+    local final_daemon_cmd
+    final_daemon_cmd=$(env_manager --silent get "${service_handle}.native.daemon_command")
+    final_daemon_cmd="${final_daemon_cmd:-$NATIVE_DAEMON_COMMAND}"
+    context_string+="local NATIVE_DAEMON_COMMAND='$final_daemon_cmd';"
+
+    local final_port
+    final_port=$(env_manager --silent get "${service_handle}.native.port")
+    final_port="${final_port:-$NATIVE_PORT}"
+    context_string+="local NATIVE_PORT='$final_port';"
+
+    # Pass through non-overridable values directly from the parsed YAML
+    # Note: NATIVE_REQUIRES_GPU now comes from 'requires_gpu_passthrough' in the new YAML structure
+    context_string+="local NATIVE_REQUIRES_GPU='${NATIVE_REQUIRES_GPU:-false}';"
+
+    # Proxy container configuration (extracted from main service definition)
+    context_string+="local NATIVE_PROXY_IMAGE='${NATIVE_PROXY_IMAGE:-}';"
+    context_string+="local NATIVE_PROXY_COMMAND='${NATIVE_PROXY_COMMAND:-}';"
+
+    # Array variables from the new structure
+    # Note: These are now properly parsed as arrays by the updated loadNativeConfig.js
+    context_string+="local -a NATIVE_PROXY_HEALTHCHECK_TEST=(${NATIVE_PROXY_HEALTHCHECK_TEST[@]:-});"
+    context_string+="local -a NATIVE_ENV_VARS_LIST=(${NATIVE_ENV_VARS_LIST[@]:-});"
+    context_string+="local -a NATIVE_DEPENDS_ON_CONTAINERS=(${NATIVE_DEPENDS_ON_CONTAINERS[@]:-});"
+    context_string+="local -a NATIVE_ENV_OVERRIDES_ARRAY=(${NATIVE_ENV_OVERRIDES_ARRAY[@]:-});"
+    context_string+="local -a NATIVE_PROXY_NETWORKS=(${NATIVE_PROXY_NETWORKS[@]:-});"
+
+    # --- Add Live System State ---
     local preference; preference=$(_harbor_get_configured_execution_preference "$service_handle")
     context_string+="local PREFERENCE='$preference';"
-    if [[ "$preference" == "NATIVE" ]]; then
-        local static_config; static_config=$(_harbor_load_native_config "$service_handle")
-        if [[ -n "$static_config" ]]; then
-            context_string+="local IS_ELIGIBLE='true';"
-            context_string+="$static_config"
-        else
-            context_string+="local IS_ELIGIBLE='false';"
-        fi
-    else
-        context_string+="local IS_ELIGIBLE='false';"
-    fi
     local runtime; runtime=$(_harbor_get_running_service_runtime "$service_handle")
     # IMPORTANT: This is where we set the RUNTIME variable, and other functions use it to determine how to interact with the service.
     context_string+="local RUNTIME='$runtime';"
+
     log_debug "Built context for '$service_handle': $context_string"
     echo "$context_string"
 }

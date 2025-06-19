@@ -1,56 +1,92 @@
-# ollama/harbor-native.yml
+# ========================================================================
+# == Harbor v22.0: Unified Native Contract for 'ollama'
+# ========================================================================
 #
-# Configuration for running Ollama natively on the host system,
-# and for its corresponding Docker Compose proxy service.
+# This file serves a dual purpose and is the heart of Harbor's hybrid runtime:
 #
-# Service Handle: ollama
+# 1. A Docker Compose Override File: This file defines a lightweight "proxy"
+#    service. When 'ollama' is run in NATIVE mode, Harbor's composer
+#    will EXCLUDE the standard 'compose.ollama.yml' (the container definition)
+#    and INCLUDE this file instead. This effectively REPLACES the real service
+#    with this proxy in the eyes of Docker Compose.
+#
+# 2. A Native Metadata Contract: The 'x-harbor-native' block contains all
+#    the information Harbor needs to start, stop, manage, and configure the
+#    actual native 'ollama' process running on the host machine. Docker
+#    Compose safely ignores fields starting with 'x-'.
+#
+services:
+  # The top-level service key MUST match the Harbor service handle ('ollama').
+  ollama:
+    # --------------------------------------------------------------------
+    # -- Section 1: Proxy Container Definition
+    #    This section defines the lightweight container that will represent
+    #    the native 'ollama' service within the Docker network.
+    # --------------------------------------------------------------------
 
-# --- Native Service Configuration ---
-# This section defines how to start and check the *actual* native Ollama binary.
-# These values can be overridden by environment variables like HARBOR_OLLAMA_NATIVE_COMMAND in your .env.
+    # The Docker image to use for the proxy container. A minimal image with
+    # networking tools is ideal. 'alpine/socat' is a common, robust choice.
+    image: alpine/socat:latest
+    container_name: ${HARBOR_CONTAINER_PREFIX:-harbor}.ollama
 
-# The executable command to execute immediate commands e.g. for harbor run.
-# This path must be valid and executable on your host system.
-native_executable: "ollama"
+    # The command for the proxy container. This uses 'socat' to create a TCP
+    # listener on the specified port inside the container and forward all
+    # traffic to the native service running on the host. 'host.docker.internal'
+    # is the special DNS name that Docker provides for containers to connect
+    # back to the host machine.
+    command: tcp-listen:11434,fork,reuseaddr tcp-connect:host.docker.internal:11434
 
-# The full shell command to execute the native Ollama server.
-# This path must be valid and executable on your host system.
-# Example: "ollama serve" (if 'ollama' is in PATH) or "/usr/local/bin/ollama serve"
-native_daemon_command: "ollama serve"
+    # The healthcheck for the proxy container. This is the KEY to making hybrid
+    # dependencies work. This test does NOT check the proxy itself; it checks
+    # the readiness of the ACTUAL NATIVE SERVICE on the host. This ensures that
+    # any container with `depends_on: ollama` will correctly wait until the
+    # native Ollama daemon is fully initialized and ready to accept connections.
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z host.docker.internal 11434 || exit 1"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+      start_period: 5s
 
-# The port the native Ollama server will listen on.
-native_port: 11434
+    # Ensures the proxy can be discovered by other services in the stack.
+    networks:
+      - harbor-network
 
-# Health check configuration for the native Ollama service.
-health:
-  # Method to check if the native service is ready.
-  # Options: 'port' (checks if native_port is open)
-  #          'http' (makes a GET request to the 'url' below)
-  method: port
-  # URL for the HTTP health check (only if method is 'http').
-  # Example for Ollama: http://localhost:11434/api/tags
-  url: ""
+    # --------------------------------------------------------------------
+    # -- Section 2: Native Process Metadata (The Harbor Contract)
+    #    This custom block is ignored by Docker Compose but is parsed by
+    #    Harbor's scripts to manage the native process lifecycle.
+    # --------------------------------------------------------------------
+    x-harbor-native:
+      # The command to run for interactive, one-off tasks (e.g., `harbor run ollama list`).
+      # This must be an executable available in the host's system PATH.
+      executable: "ollama"
 
-# --- Proxy Service Configuration (for Docker Compose) ---
-# This section defines the lightweight Docker Compose service that will act as a proxy.
-# This proxy ensures that other Docker Compose services can depend on 'ollama' by name
-# and port, even when the actual Ollama server is running natively.
-# These values can be overridden by environment variables like HARBOR_OLLAMA_PROXY_IMAGE.
+      # The exact, full command used to start the long-running background daemon process.
+      # This is used by `harbor up` to start the service and by `pgrep` and the PID
+      # management system to check its status and stop it.
+      # Example: "ollama serve"
+      daemon_command: "ollama serve"
 
-# The Docker image to use for the proxy container. 'alpine/socat' is a common choice.
-proxy_image: "alpine/socat"
+      # The TCP port that the native daemon process will listen on. This is used
+      # by the proxy's command and healthcheck.
+      port: 11434
 
-# The command for the proxy container. This command will be templated by Harbor.
-# Use {{.native_port}} as a placeholder, which Harbor will replace with the `native_port` value.
-# This socat command sets up a listener on `native_port` inside the container,
-# which forwards traffic to `host.docker.internal` on the same `native_port`.
-proxy_command: "tcp-listen:{{.native_port}},fork,reuseaddr tcp-connect:host.docker.internal:{{.native_port}}"
+      # A boolean (true/false) flag that informs Harbor's "auto" execution preference.
+      # If true, `auto` mode will prefer to run this service natively on platforms
+      # where Docker has poor GPU support (i.e., Apple Silicon) to ensure max performance.
+      requires_gpu_passthrough: true
 
-# The healthcheck test for the proxy container. This test should verify the *native* service's health.
-# Use {{.native_port}} as a placeholder. The test runs from *inside* the proxy container.
-proxy_healthcheck_test: ["CMD-SHELL", "nc -z host.docker.internal {{.native_port}}"]
+      # A list of environment variables from Harbor's main .env file that should be
+      # exported into the environment of the native process before it is started.
+      # This allows for consistent configuration of both native and container services.
+      env_vars:
+        - "OLLAMA_DEBUG"
+        - "OLLAMA_KEEP_ALIVE"
 
-# Networks the proxy container should connect to. This ensures dependent services can reach it.
-# Provide as a YAML array of network names (e.g., ["harbor-network", "my-custom-net"]).
-# If left empty, the proxy will join the default Compose network (`harbor_default`).
-proxy_networks: [] # Example: ["harbor-network"]
+      # A map of environment variables that Harbor will inject into OTHER, DEPENDENT
+      # containers during `harbor up`. This allows containerized apps (like a web UI)
+      # to correctly configure themselves to find and connect to the native service.
+      # Example: This sets HARBOR_OLLAMA_INTERNAL_URL for the 'webui' container.
+      env_overrides:
+        HARBOR_OLLAMA_INTERNAL_URL: "http://host.docker.internal:11434"
