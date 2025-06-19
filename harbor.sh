@@ -672,14 +672,14 @@ run_routine() {
 
     # Pass through log level and any other relevant env vars
     local harbor_log_level="${HARBOR_LOG_LEVEL:-$default_log_level}"
-    log_debug "Running routine: $routine_name"
+    log_debug "Running routine: $routine_name with args: $*"
 
     if command -v deno &>/dev/null; then
         (
             cd "$harbor_home"
-            HARBOR_LOG_LEVEL="$default_log_level" \
-            deno run -A --unstable-sloppy-imports "routines/loadNativeConfig.js" "$config_file"
-        ) 2>&1
+            HARBOR_LOG_LEVEL="$harbor_log_level" \
+            deno run -A --unstable-sloppy-imports "$routine_path" "$@"
+        )
         return $?
     else
         docker run --rm \
@@ -774,33 +774,67 @@ EOF
     fi
 }
 
-# [v12.0 PLANNER] The legacy file-discovery loop, adapted to populate an array.
-# This respects the original author's logic while integrating into the new model.
-# It populates the global _COMPOSITION_FILES array.
+# [v32.0 FINAL] Resolves the static Docker Compose files for a given command context.
+#
+# This is a low-level helper function with a highly specific and critical role. It
+# takes a definitive list of "context options" (docker service handles and capabilities)
+# and finds all the `compose.*.yml` files on disk that match this context, based
+# on Harbor's file naming conventions.
+#
+# It also implements the "Precise Exclusion and Conditional Match" pattern, which
+# is the core of the hybrid runtime. This ensures that when a service like `ollama`
+# is running natively, this function will correctly EXCLUDE its defining container
+# file (`compose.ollama.yml`) while still INCLUDING vital integration files
+# (`compose.x.webui.ollama.yml`) and capability files (`compose.ollama.nvidia.yml`).
+#
+# --- What does "Matching the Service Context" mean? ---
+# The "context" is the list of options passed to this function (the `local_options`
+# array). A file "matches" the context based on the following rules, preserved
+# from the original script for 100% backward compatibility:
+#
+# 1. Direct Match: `compose.ollama.yml` matches if "ollama" is in the options.
+# 2. Wildcard Match: If "*" is in the options, files like `compose.webui.yml` match,
+#    but capability-specific files (e.g., `compose.nvidia.yml`) do not.
+# 3. Cross-Service Match (AND logic): `compose.x.webui.ollama.yml` matches only if
+#    BOTH "webui" AND "ollama" are in the options.
+#
+# @param --exclude <handle>...  A list of native services whose defining compose file should be excluded.
+# @param -- <options>...         The definitive list of service and capability options for the context.
+#
+# @globals _COMPOSITION_FILES     This function populates this global array with the final list of file paths.
 __compose_get_static_file_list_legacy() {
     local -a exclude_handles=()
-    # New logic to parse an explicit --exclude flag passed from the caller.
+    # Safely parse the --exclude arguments, which are passed first.
     if [[ "$1" == "--exclude" ]]; then
         shift
         while [[ $# -gt 0 && ! "$1" =~ ^-- ]]; do
-            exclude_handles+=("$1")
-            shift
+            exclude_handles+=("$1"); shift
         done
+        # The `--` token separates the exclude arguments from the main service options.
+        if [[ "$1" == "--" ]]; then shift; fi
     fi
+    # The remaining arguments are the definitive list of options to match against.
+    local -a local_options=("$@")
 
+    # The base compose file is always included.
     _COMPOSITION_FILES=("$base_dir/compose.yml")
-    local -a local_options=("${default_options[@]}" "${default_capabilities[@]}")
-    local -a user_args=("$@")
 
-    if [[ " ${user_args[*]} " =~ " --no-defaults " ]]; then
-        local_options=()
-    fi
-    for arg in "${user_args[@]}"; do
-        if [[ "$arg" != "--no-defaults" ]]; then
-            local_options+=("$arg")
-        fi
-    done
+    # # This block handles defaults and user arguments,
+    # # and the functionality has been moved to
+    # # compose_with_options() for a better separation of concerns.
+    # local -a local_options=("${default_options[@]}" "${default_capabilities[@]}")
+    # local -a user_args=("$@")
 
+    # if [[ " ${user_args[*]} " =~ " --no-defaults " ]]; then
+    #     local_options=()
+    # fi
+    # for arg in "${user_args[@]}"; do
+    #     if [[ "$arg" != "--no-defaults" ]]; then
+    #         local_options+=("$arg")
+    #     fi
+    # done
+
+    # Auto-detected host capabilities are added to the list of options to be matched.
     if [ "$default_auto_capabilities" = "true" ]; then
         if has_nvidia && has_nvidia_ctk; then local_options+=("nvidia"); fi
         if has_nvidia_cdi; then local_options+=("cdi"); fi
@@ -809,19 +843,23 @@ __compose_get_static_file_list_legacy() {
         if has_apple_silicon_gpu; then local_options+=("apple-silicon-gpu"); fi
     fi
 
+    # Iterate through all discoverable .yml files in the base directory.
     for file in $(resolve_compose_files); do
         if [ -f "$file" ]; then
             local filename; filename=$(basename "$file")
 
-            # --- PRECISE EXCLUSION LOGIC (v25.0 Enhancement) ---
+            # Step 1: Determine if this is a DEFINING file for a service running NATIVELY.
+            # This check is surgically precise: it only matches `compose.<handle>.yml`.
             local is_excluded=false
             for excluded in "${exclude_handles[@]}"; do
+                # This check is surgically precise: it only matches `compose.<handle>.yml`.
+                # It will NOT match `compose.x.webui.ollama.yml`, preserving vital integration glue.
                 if [[ "$filename" == "compose.${excluded}.yml" ]]; then
-                    log_debug "Excluding defining compose file '$filename' because '$excluded' is native."
-                    is_excluded=true; break;
+                    is_excluded=true; break
                 fi
             done
-            if $is_excluded; then continue; fi
+
+            # Step 2: Determine if this file matches the current service context
             local match=false
             if [[ $filename == *".x."* ]]; then
                 local cross; cross="${filename#compose.x.}"; cross="${cross%.yml}"
@@ -834,17 +872,25 @@ __compose_get_static_file_list_legacy() {
                         if [[ ! " ${local_options[*]} " =~ " ${part} " ]] && [[ ! " ${local_options[*]} " =~ " * " ]]; then all_matched=false; break; fi
                     fi
                 done
-                if $all_matched; then _COMPOSITION_FILES+=("$file"); fi
-                continue
+                if $all_matched; then match=true; fi
+            else
+                # OR logic for standard service and capability files.
+                for option in "${local_options[@]}"; do
+                    if [[ $option == "*" ]]; then
+                        if ! is_capability_file "$filename"; then match=true; fi
+                        break
+                    fi
+                    if [[ $filename == *".$option."* ]]; then match=true; break; fi
+                done
             fi
-            for option in "${local_options[@]}"; do
-                if [[ $option == "*" ]]; then
-                    if ! is_capability_file "$filename"; then match=true; fi
-                    break
-                fi
-                if [[ $filename == *".$option."* ]]; then match=true; break; fi
-            done
-            if $match; then _COMPOSITION_FILES+=("$file"); fi
+
+            # --- Step 3: The Conditional Match ---
+            # A file is included if it's a match AND it is NOT a file that would create a container for a service we intend to running natively.
+            if $match && ! $is_excluded; then
+                _COMPOSITION_FILES+=("$file")
+            elif $match && $is_excluded; then
+                log_debug "Excluding file '$filename' because that compose file would launch a container when the service should run natively."
+            fi
         fi
     done
 }
@@ -891,7 +937,9 @@ compose_with_options() {
     local -a service_options=(); local -a exclude_handles=()
     local eject_mode=false
 
-    # Backwards-compatible argument parsing, now including our new -x flag.
+    # Step 1: Parse all arguments passed to the function.
+    # the -x or --exclude flag is used to specify native
+    # services to exclude from the static list of docker compose files.
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --dir=*) base_dir="${1#*=}"; shift;;
@@ -907,14 +955,23 @@ compose_with_options() {
         esac
     done
 
-    if [[ ${#service_options[@]} -eq 0 && ! " ${service_options[*]} " =~ " --no-defaults " ]]; then
+    # Step 2: Apply default service logic. This is the ONLY place this happens.
+    # If the user did not provide any service names AND did not specify --no-defaults,
+    # then we populate the service options with the configured defaults. This logic
+    # is the functional replacement for the more complex, redundant code that was
+    # previously in the helper function. It is both simpler and more correct.
+    if [[ ${#service_options[@]} -eq 0 && "$no_defaults" = false ]]; then
+        log_debug "No specific services requested to run; using the default list of services: ${default_options[@]}"
         service_options=("${default_options[@]}")
     fi
 
-    # 1. Static file selection: Pass the exclusion list to the enhanced helper.
+    # Step 3: Call the low-level helper with the final, definitive list of options for
+    # static compose file selection to assemble the config:
+    # Pass the exclusion list to the enhanced helper.
     __compose_get_static_file_list_legacy --exclude "${exclude_handles[@]}" -- "${service_options[@]}"
 
-    # 2. Dynamic file generation -> Now becomes "Dynamic File Inclusion"
+    # Step 4: Include the Unified Native Contract files ("The Replacement" step).
+    # Dynamic file generation -> Now becomes "Dynamic File Inclusion"
     if ! $eject_mode && [[ ${#exclude_handles[@]} -gt 0 ]]; then
         log_debug "Including native override files for: ${exclude_handles[*]}"
         for native_service in "${exclude_handles[@]}"; do
@@ -925,7 +982,7 @@ compose_with_options() {
         done
     fi
 
-    # 3. Compose file merging: Use run_routine for robust execution. This is a regression fix.
+    # Step 5: Merge all resolved docker compose files into a single temporary file for performance.
     local merged_compose_file="$harbor_home/merged.compose.yml"
     printf '%s\n' "${_COMPOSITION_FILES[@]}" | run_routine mergeComposeFiles --output "$merged_compose_file"
 
