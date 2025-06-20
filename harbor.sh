@@ -18,6 +18,7 @@ show_help() {
     echo "  up|u [handle(s)]        - Start the service(s)"
     echo "    up --tail             - Start and tail the logs"
     echo "    up --open             - Start and open in the browser"
+    echo "    up webui -n ollama    - Start webui, run ollama natively"
     echo "  down|d                  - Stop and remove the containers"
     echo "  restart|r [handle]      - Down then up"
     echo "  ps                      - List the running containers"
@@ -1239,17 +1240,29 @@ run_up() {
     local temp_native_env_file=""
     trap 'rm -f "$temp_native_env_file" 2>/dev/null' EXIT
 
-    local -a up_args=(); local -a services_to_run_args=(); local force_native=false
-    for arg in "$@"; do
-        case "$arg" in
-            --no-defaults|--open|-o|--tail|-t) up_args+=("$arg");;
-            -n|--native) force_native=true;;
-            *) services_to_run_args+=("$arg");;
+    local -a up_args=(); local -a services_to_run_args=(); local -a explicit_exclude_handles=(); local force_native=false
+    # Parse all arguments, extracting services and exclusions separately
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --no-defaults|--open|-o|--tail|-t) up_args+=("$1"); shift ;;
+            -n|--native) force_native=true; shift ;;
+            -x|--exclude)
+                shift
+                # Collect services until next flag, delimiter, or end
+                while [[ $# -gt 0 && ! "$1" =~ ^- && "$1" != "--" ]]; do
+                    explicit_exclude_handles+=("$1"); shift
+                done
+                # If we hit a delimiter, consume it and treat remaining args as services
+                if [[ "$1" == "--" ]]; then
+                    shift
+                    services_to_run_args+=("$@")
+                    break
+                fi ;;
+            *) services_to_run_args+=("$1"); shift ;;
         esac
     done
 
     # --- Step 1: Determine User's Immediate Intent ---
-    # `requested_services` is the list of services to pass to `docker compose up`.
     local -a requested_services
     if [[ ${#services_to_run_args[@]} -gt 0 ]]; then requested_services=("${services_to_run_args[@]}");
     elif ! [[ " ${up_args[*]} " =~ " --no-defaults " ]]; then requested_services=("${default_options[@]}"); fi
@@ -1262,20 +1275,35 @@ run_up() {
     local -a full_context_services; readarray -t full_context_services < <(echo "$full_context_services_str")
 
     # The planner is the single source of truth for the native/container split.
-    # It is now correctly passed all the information it needs to make a decision.
     declare -A execution_plan
     __up_build_plan execution_plan "$force_native" "${full_context_services[*]}" "${requested_services[*]}"
     local native_targets_in_context="${execution_plan[native_targets]}"
 
+    # --- v14 FIX: Merge explicit exclusions with planned native services ---
+    local -a final_exclusions=()
+    # Add explicitly excluded services
+    for service in "${explicit_exclude_handles[@]}"; do
+        final_exclusions+=("$service")
+    done
+    # Add services planned to run natively
+    for service in $native_targets_in_context; do
+        # Avoid duplicates by checking if not already in final_exclusions
+        if ! [[ " ${final_exclusions[*]} " =~ " ${service} " ]]; then
+            final_exclusions+=("$service")
+        fi
+    done
+
     # --- Step 3: Choose Execution Path ---
-    if [[ -z "$native_targets_in_context" ]]; then
+    if [[ ${#final_exclusions[@]} -eq 0 ]]; then
         # --- FAST PATH for Container-Only Stacks ---
-        log_info "No native services in context. Using fast path for container-only startup."
+        log_info "No native services or exclusions in context. Using fast path for container-only startup."
         local compose_cmd; compose_cmd=$(compose_with_options "${full_context_services[@]}")
         eval "$compose_cmd up -d --wait ${requested_services[*]}"
     else
         # --- HYBRID PATH for Mixed Stacks ---
         log_info "Hybrid stack detected. Orchestrating native and container services..."
+        log_debug "Services to exclude from containers: ${final_exclusions[*]}"
+        log_debug "Services to run natively: ${native_targets_in_context}"
 
         # Step 3a: Start Newly Requested Native Daemons
         for service in "${requested_services[@]}"; do
@@ -1284,10 +1312,8 @@ run_up() {
             fi
         done
 
-        # Step 3b: Execute the Unified Docker Compose Command
-        # This single command handles all containers and native proxies, with
-        # Docker's engine resolving the entire dependency graph correctly.
-        local compose_cmd; compose_cmd=$(compose_with_options -x ${native_targets_in_context} ${full_context_services[@]})
+        # Step 3b: Execute the Unified Docker Compose Command with proper exclusions
+        local compose_cmd; compose_cmd=$(compose_with_options -x "${final_exclusions[@]}" -- "${full_context_services[@]}")
         temp_native_env_file=$(__up_generate_transient_env_file ${native_targets_in_context})
         if [[ -n "$temp_native_env_file" ]]; then compose_cmd+=" --env-file $temp_native_env_file"; fi
         eval "$compose_cmd up -d --wait ${requested_services[*]}"
