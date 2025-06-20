@@ -9,15 +9,29 @@ export function isCapabilityFile(filename, defaultCapabilities = BUILTIN_CAPS) {
   return defaultCapabilities.some(cap => filename.includes(`.${cap}.`));
 }
 
-export async function resolveComposeFiles(args) {
+export async function resolveComposeFiles(args, excludeServices = []) {
   const options = [...args].filter((s) => !!s);
   const composeFiles = ['compose.yml'];
+
+  log.debug(`Resolving compose files for options: [${options.join(', ')}], excluding: [${excludeServices.join(', ')}]`);
 
   // Find and sort compose files
   const allFiles = await listComposeFiles();
 
   for (const file of allFiles) {
     const filename = file.split("/").pop();
+
+    // EXCLUSION LOGIC: Skip defining files for excluded services
+    // This matches the Bash behavior: exclude `compose.<service>.yml` but preserve cross-service files
+    const isDefiningFile = excludeServices.some(service =>
+      filename === `compose.${service}.yml`
+    );
+
+    if (isDefiningFile) {
+      log.debug(`Excluding defining file for native service: ${filename}`);
+      continue;
+    }
+
     let match = false;
 
     // Handle cross-service files
@@ -65,10 +79,28 @@ export async function resolveComposeFiles(args) {
 
     if (match) {
       composeFiles.push(file);
+      log.debug(`Including matched file: ${filename}`);
+    }
+  }
+
+  // ADD NATIVE PROXY FILES for excluded services
+  // This replaces the excluded defining files with their native proxy contracts
+  for (const service of excludeServices) {
+    const nativeProxyFile = `${service}/${service}_native.yml`;
+    try {
+      const stat = await Deno.stat(nativeProxyFile);
+      if (stat.isFile) {
+        composeFiles.push(nativeProxyFile);
+        log.debug(`Including native proxy file: ${nativeProxyFile}`);
+      }
+    } catch (error) {
+      // File doesn't exist - this is expected for services without native support
+      log.debug(`No native proxy file found for ${service}: ${nativeProxyFile}`);
     }
   }
 
   log.debug("Matched compose files:", composeFiles.length);
+  log.debug("Final file list:", composeFiles);
 
   return composeFiles
 }

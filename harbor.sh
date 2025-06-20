@@ -735,7 +735,29 @@ run_routine() {
 }
 
 routine_compose_with_options() {
-    local options=("${default_options[@]}" "${default_capabilities[@]}")
+    local -a exclude_handles=()
+    local -a service_options=()
+
+    # Parse exclusion flags from user arguments
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -x|--exclude)
+                shift
+                # Collect services until next flag or end
+                while [[ $# -gt 0 && ! "$1" =~ ^- ]]; do
+                    exclude_handles+=("$1")
+                    shift
+                done
+                ;;
+            *)
+                service_options+=("$1")
+                shift
+                ;;
+        esac
+    done
+
+    # Build final options list: user services + defaults + auto-detected capabilities
+    local options=("${service_options[@]}" "${default_options[@]}" "${default_capabilities[@]}")
 
     if [ "$default_auto_capabilities" = "true" ]; then
         if has_nvidia && has_nvidia_ctk; then
@@ -757,7 +779,12 @@ routine_compose_with_options() {
         fi
     fi
 
-    run_routine mergeComposeFiles "$@" "${options[@]}"
+    # Pass structured arguments to Deno with proper exclusion format
+    if [[ ${#exclude_handles[@]} -gt 0 ]]; then
+        run_routine mergeComposeFiles -x "${exclude_handles[@]}" -- "${options[@]}"
+    else
+        run_routine mergeComposeFiles "${options[@]}"
+    fi
 }
 
 # -----------------------------------------------------------------------------
