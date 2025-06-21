@@ -1,4 +1,5 @@
 services:
   webui:
-    volumes:
-      - ./open-webui/configs/config.x.mcpo.metamcp.json:/app/configs/config.x.mcpo.metamcp.json
+    x-harbor-config-templates:
+      - source: ./open-webui/configs/config.mcpo.metamcp.json
+        target: /app/configs/config.mcpo.metamcp.json

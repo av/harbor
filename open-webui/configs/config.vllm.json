@@ -1,7 +1,7 @@
 {
   "openai": {
 		"api_base_urls": [
-			"http://vllm:8000/v1"
+			"${HARBOR_DEP_VLLM_INTERNAL_URL:-http://vllm:8000}/v1"
 		],
 		"api_keys": [
 			"sk-vllm"

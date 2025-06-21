@@ -1,4 +1,5 @@
 services:
   webui:
-    volumes:
-      - ./open-webui/configs/config.litellm.json:/app/configs/config.litellm.json
+    x-harbor-config-templates:
+      - source: ./open-webui/configs/config.litellm.json
+        target: /app/configs/config.litellm.json

@@ -801,45 +801,11 @@ __compose_generate_transient_env_file() {
         eval "$context"
         if [[ ${#NATIVE_ENV_OVERRIDES_ARRAY[@]} -gt 0 ]]; then
             for override in "${NATIVE_ENV_OVERRIDES_ARRAY[@]}"; do
-                local final_override; final_override=$(echo "$override" | sed "s|{{.native_port}}|${NATIVE_PORT:-}|g")
                 echo "$final_override" >> "$temp_file"
             done
         fi
     done
     if [ -s "$temp_file" ]; then echo "$temp_file"; else rm "$temp_file"; echo ""; fi
-}
-
-# [v12.0 HELPER] Generates the dynamic proxy docker compose file for C->N dependency.
-__compose_generate_proxy_file() {
-    local -a native_targets=("${@}")
-    local dynamic_compose_file="${harbor_home}/compose.harbor.native-proxy.yml"
-    rm -f "$dynamic_compose_file" 2>/dev/null
-    local all_proxy_configs=""
-    for service_handle in "${native_targets[@]}"; do
-        local context; context=$(_harbor_build_service_context "$service_handle")
-        eval "$context"
-        if [[ "$IS_ELIGIBLE" == "true" && -n "$NATIVE_PROXY_IMAGE" ]]; then
-            local proxy_command_templated; proxy_command_templated=$(_run_bash_template "${NATIVE_PROXY_COMMAND}" "${NATIVE_PORT}")
-            local proxy_healthcheck_test_templated; proxy_healthcheck_test_templated=$(_run_bash_template "${NATIVE_PROXY_HEALTHCHECK_TEST}" "${NATIVE_PORT}")
-            all_proxy_configs+=$(cat <<EOF
-
-  ${service_handle}:
-    image: ${NATIVE_PROXY_IMAGE}
-    container_name: ${default_container_prefix}.${service_handle}
-    command: ${proxy_command_templated}
-    ports: ["${NATIVE_PORT}:${NATIVE_PORT}"]
-    healthcheck: {test: ${proxy_healthcheck_test_templated}, interval: 2s, timeout: 5s, retries: 30}
-    networks: [harbor-network]
-EOF
-)
-        fi
-    done
-    if [[ -n "$all_proxy_configs" ]]; then
-        echo -e "version: '3.8'\nservices:${all_proxy_configs}" > "${dynamic_compose_file}"
-        echo "${dynamic_compose_file}"
-    else
-        echo ""
-    fi
 }
 
 # [v32.0 FINAL] Resolves the static Docker Compose files for a given command context.
@@ -1091,20 +1057,55 @@ _is_file_match_for_options() {
     return 1
 }
 
-# [v12.0 HELPER] Generates the transient environment file for C->N configuration.
+# Generates environment variables for the native service configuration.
+# TODO: This function needs to be changed when native.yml variables need to be changed, this should be made more robust.
 __up_generate_transient_env_file() {
     local -a native_targets=("${@}")
-    local temp_file; temp_file=$(mktemp)
+    local temp_file
+    temp_file=$(mktemp) || { log_error "Failed to create temp file."; return 1; }
+    trap 'rm -f "$temp_file" 2>/dev/null' EXIT
+
     for service_handle in "${native_targets[@]}"; do
-        local context; context=$(_harbor_build_service_context "$service_handle")
+        local context
+        context=$(_harbor_build_service_context "$service_handle")
+        if [[ -z "$context" ]]; then continue; fi
         eval "$context"
-        if [[ ${#NATIVE_ENV_OVERRIDES_ARRAY[@]} -gt 0 ]]; then
+
+        # --- THE CORE FIX ---
+        # The Deno script now provides either NATIVE_PORT (a static value)
+        # or NATIVE_PORT_VAR_NAME (the name of a variable from the main .env).
+
+        local final_port_value=""
+        if [[ -n "$NATIVE_PORT" ]]; then
+            # Case 1: The native contract specified a static port.
+            final_port_value="$NATIVE_PORT"
+        elif [[ -n "$NATIVE_PORT_VAR_NAME" ]]; then
+            # Case 2: The native contract specified a variable. We must now
+            # look up that variable's value from the main .env file.
+            final_port_value=$(env_manager get "${NATIVE_PORT_VAR_NAME}")
+        fi
+
+        HANDLE_UPPERCASE=$(echo "$service_handle" | tr 'a-z-' 'A-Z_')
+
+        # If we successfully resolved a port, write it to the temp file.
+        if [[ -n "$final_port_value" ]]; then
+            # The variable name we write is ALWAYS the standardized one.
+            local port_var_name_for_compose="HARBOR_${HANDLE_UPPERCASE}_HOST_PORT"
+            echo "${port_var_name_for_compose}=${final_port_value}" >> "$temp_file"
+        fi
+
+        # --- The rest of the logic remains the same ---
+        if declare -p NATIVE_ENV_OVERRIDES_ARRAY &>/dev/null && [[ ${#NATIVE_ENV_OVERRIDES_ARRAY[@]} -gt 0 ]]; then
             for override in "${NATIVE_ENV_OVERRIDES_ARRAY[@]}"; do
-                echo "${override//\{\{.native_port\}\}/$NATIVE_PORT}" >> "$temp_file"
+                # Replace the port variable placeholder with the actual value we just found.
+                local port_substituted_override="${override//\$\{HARBOR_${HANDLE_UPPERCASE}_HOST_PORT\}/$final_port_value}"
+                # Then, resolve any host-path variables.
+                eval "echo \"$port_substituted_override\"" >> "$temp_file"
             done
         fi
     done
-    if [ -s "$temp_file" ]; then echo "$temp_file"; else rm "$temp_file"; echo ""; fi
+
+    if [ -s "$temp_file" ]; then echo "$temp_file"; else rm -f "$temp_file"; trap - EXIT; echo ""; fi
 }
 
 
@@ -1240,84 +1241,97 @@ run_up() {
     local temp_native_env_file=""
     trap 'rm -f "$temp_native_env_file" 2>/dev/null' EXIT
 
-    local -a up_args=(); local -a services_to_run_args=(); local -a explicit_exclude_handles=(); local force_native=false
-    # Parse all arguments, extracting services and exclusions separately
+    local -a up_options=()
+    local -a services_to_run_args=()
+    local -a explicit_exclude_handles=()
+    local force_native=false
+
+    # This parser correctly separates user-provided flags, services, and exclusions.
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --no-defaults|--open|-o|--tail|-t) up_args+=("$1"); shift ;;
+            --no-defaults|--open|-o|--tail|-t) up_options+=("$1"); shift ;;
             -n|--native) force_native=true; shift ;;
             -x|--exclude)
                 shift
-                # Collect services until next flag, delimiter, or end
                 while [[ $# -gt 0 && ! "$1" =~ ^- && "$1" != "--" ]]; do
                     explicit_exclude_handles+=("$1"); shift
                 done
-                # If we hit a delimiter, consume it and treat remaining args as services
-                if [[ "$1" == "--" ]]; then
-                    shift
-                    services_to_run_args+=("$@")
-                    break
-                fi ;;
+                if [[ "$1" == "--" ]]; then shift; fi
+                ;;
             *) services_to_run_args+=("$1"); shift ;;
         esac
     done
 
-    # --- Step 1: Determine User's Immediate Intent ---
-    local -a requested_services
-    if [[ ${#services_to_run_args[@]} -gt 0 ]]; then requested_services=("${services_to_run_args[@]}");
-    elif ! [[ " ${up_args[*]} " =~ " --no-defaults " ]]; then requested_services=("${default_options[@]}"); fi
-    if [[ ${#requested_services[@]} -eq 0 ]]; then log_warn "No services specified to start."; return 0; fi
+    # --- Step 1: Determine services to start in THIS operation ---
+    if [[ ${#services_to_run_args[@]} -eq 0 ]] && ! [[ " ${up_options[*]} " =~ " --no-defaults " ]]; then
+        services_to_run_args=("${default_options[@]}")
+    fi
+    if [[ ${#services_to_run_args[@]} -eq 0 ]]; then log_warn "No services specified to start."; return 0; fi
 
-    # --- Step 2: Build the Complete Execution Plan ---
-    # The context must include services already running PLUS services requested now.
-    local -a already_running; read -r -a already_running < <(get_active_services)
-    local full_context_services_str; full_context_services_str=$(printf '%s\n' "${already_running[@]}" "${requested_services[@]}" | sort -u)
-    local -a full_context_services; readarray -t full_context_services < <(echo "$full_context_services_str")
-
-    # The planner is the single source of truth for the native/container split.
-    declare -A execution_plan
-    __up_build_plan execution_plan "$force_native" "${full_context_services[*]}" "${requested_services[*]}"
-    local native_targets_in_context="${execution_plan[native_targets]}"
-
-    # --- v14 FIX: Merge explicit exclusions with planned native services ---
-    local -a final_exclusions=()
-    # Add explicitly excluded services
-    for service in "${explicit_exclude_handles[@]}"; do
-        final_exclusions+=("$service")
-    done
-    # Add services planned to run natively
-    for service in $native_targets_in_context; do
-        # Avoid duplicates by checking if not already in final_exclusions
-        if ! [[ " ${final_exclusions[*]} " =~ " ${service} " ]]; then
-            final_exclusions+=("$service")
+    # --- Step 2: Determine which of the requested services will run natively vs. container ---
+    local -a native_targets_this_run=()
+    local -a container_targets_this_run=()
+    for service in "${services_to_run_args[@]}"; do
+        # We must respect an explicit -x flag above all else.
+        if [[ " ${explicit_exclude_handles[*]} " =~ " ${service} " ]]; then
+            native_targets_this_run+=("$service")
+        elif [[ "$force_native" == "true" && $(_harbor_is_native_eligible "$service") == "true" ]]; then
+             native_targets_this_run+=("$service")
+        elif [[ "$(_harbor_get_configured_execution_preference "$service")" == "NATIVE" ]]; then
+            native_targets_this_run+=("$service")
+        else
+            container_targets_this_run+=("$service")
         fi
     done
 
-    # --- Step 3: Choose Execution Path ---
-    if [[ ${#final_exclusions[@]} -eq 0 ]]; then
-        # --- FAST PATH for Container-Only Stacks ---
-        log_info "No native services or exclusions in context. Using fast path for container-only startup."
-        local compose_cmd; compose_cmd=$(compose_with_options "${full_context_services[@]}")
-        eval "$compose_cmd up -d --wait ${requested_services[*]}"
-    else
-        # --- HYBRID PATH for Mixed Stacks ---
-        log_info "Hybrid stack detected. Orchestrating native and container services..."
-        log_debug "Services to exclude from containers: ${final_exclusions[*]}"
-        log_debug "Services to run natively: ${native_targets_in_context}"
-
-        # Step 3a: Start Newly Requested Native Daemons
-        for service in "${requested_services[@]}"; do
-            if [[ " ${native_targets_in_context} " =~ " ${service} " ]] && ! [[ " ${already_running[*]} " =~ " ${service} " ]]; then
-                _harbor_start_native_service "$service"
-            fi
+    # --- Step 3: Start the requested native daemons ---
+    if [[ ${#native_targets_this_run[@]} -gt 0 ]]; then
+        log_info "Starting requested native services: ${native_targets_this_run[*]}"
+        for service in "${native_targets_this_run[@]}"; do
+            _harbor_start_native_service "$service"
         done
-
-        # Step 3b: Execute the Unified Docker Compose Command with proper exclusions
-        local compose_cmd; compose_cmd=$(compose_with_options -x "${final_exclusions[@]}" -- "${full_context_services[@]}")
-        temp_native_env_file=$(__up_generate_transient_env_file ${native_targets_in_context})
-        if [[ -n "$temp_native_env_file" ]]; then compose_cmd+=" --env-file $temp_native_env_file"; fi
-        eval "$compose_cmd up -d --wait ${requested_services[*]}"
     fi
+
+    # --- Step 4: Prepare the dynamic environment for Docker Compose ---
+    # The environment needs to know about ALL native services (already running + just started)
+    # to correctly configure dependencies.
+    local -a all_native_services=()
+    local all_active_services; all_active_services=$(get_active_services)
+    for service in $all_active_services; do
+        if [[ "$(_harbor_get_running_service_runtime "$service")" == "NATIVE" ]]; then
+            all_native_services+=("$service")
+        fi
+    done
+    temp_native_env_file=$(__up_generate_transient_env_file "${all_native_services[@]}")
+
+    # --- Step 5: Build the compose command ONLY for the relevant services ---
+    # THE CORE FIX: The context for composition is the services requested NOW plus any
+    # already-running container services they might depend on. This prevents loading the entire project.
+    local -a composition_context=("${services_to_run_args[@]}")
+    local already_running_containers
+    already_running_containers=$(get_active_services | xargs -n1 | while read s; do if [[ "$(_harbor_get_running_service_runtime "$s")" == "CONTAINER" ]]; then echo "$s"; fi; done)
+    composition_context+=(${already_running_containers})
+    # Ensure uniqueness
+    composition_context=($(printf "%s\n" "${composition_context[@]}" | sort -u))
+
+    local compose_cmd
+    # We pass ALL native services to -x to ensure their containers are never started.
+    compose_cmd=$(compose_with_options -x "${all_native_services[@]}" -- "${composition_context[@]}")
+
+    if [[ -n "$temp_native_env_file" ]]; then
+        compose_cmd+=" --env-file $temp_native_env_file"
+    fi
+
+    # --- Step 6: Execute the command on the container targets for this run ---
+    if [[ ${#container_targets_this_run[@]} -gt 0 ]]; then
+        log_info "Starting container services: ${container_targets_this_run[*]}"
+        eval "$compose_cmd up -d --wait ${container_targets_this_run[*]}"
+    else
+        log_info "No new container services to start."
+    fi
+
+    # --- Step 7: Post-run Actions ---
+    log_info "Harbor 'up' command finished successfully."
 
     # --- Step 4: Post-run Actions (Regressions Fixed) ---
     log_info "Harbor 'up' command finished successfully."

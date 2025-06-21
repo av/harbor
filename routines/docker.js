@@ -40,16 +40,19 @@ export async function resolveComposeFiles(args, excludeServices = []) {
       const filenameParts = cross.split(".");
       let allMatched = true;
 
+      // Build complete context: services being run + services being excluded (hybrid context)
+      const allServicesInContext = [...options, ...excludeServices];
+
       for (const part of filenameParts) {
         if (isCapability(part)) {
-          // Capabilities must match exactly
+          // Capabilities must match exactly in options (not exclusions)
           if (!options.includes(part)) {
             allMatched = false;
             break;
           }
         } else {
-          // Services can match wildcards
-          if (!options.includes(part) && !options.includes("*")) {
+          // Services can match wildcards OR be in the complete hybrid context
+          if (!allServicesInContext.includes(part) && !options.includes("*")) {
             allMatched = false;
             break;
           }

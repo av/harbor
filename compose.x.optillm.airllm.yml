@@ -1,5 +1,5 @@
 services:
   optillm:
     environment:
-      - OPTILLM_BASE_URL=http://airllm:5000/v1
+      - OPTILLM_BASE_URL=${HARBOR_DEP_AIRLLM_INTERNAL_URL:-http://airllm:5000}/v1
       - OPENAI_API_KEY=sk-airllm

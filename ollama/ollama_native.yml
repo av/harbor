@@ -79,7 +79,11 @@ services:
     # traffic to the native service running on the host. 'host.docker.internal'
     # is the special DNS name that Docker provides for containers to connect
     # back to the host machine.
-    command: tcp-listen:11434,fork,reuseaddr tcp-connect:host.docker.internal:11434
+    command: tcp-listen:${HARBOR_OLLAMA_HOST_PORT:-11434},fork,reuseaddr tcp-connect:host.docker.internal:${HARBOR_OLLAMA_HOST_PORT:-11434}
+
+    # Expose the port for external access. Template variables allow dynamic port configuration.
+    ports:
+      - "${HARBOR_OLLAMA_HOST_PORT:-11434}:11434"
 
     # The healthcheck for the proxy container. This is the KEY to making hybrid
     # dependencies work. This test does NOT check the proxy itself; it checks
@@ -87,7 +91,7 @@ services:
     # any container with `depends_on: ollama` will correctly wait until the
     # native Ollama daemon is fully initialized and ready to accept connections.
     healthcheck:
-      test: ["CMD-SHELL", "nc -z host.docker.internal 11434 || exit 1"]
+      test: ["CMD-SHELL", "nc -z host.docker.internal ${HARBOR_OLLAMA_HOST_PORT:-11434} || exit 1"]
       interval: 2s
       timeout: 5s
       retries: 30
@@ -163,8 +167,8 @@ services:
       #
       # 2. DAEMON WITH OPTIONS:
       # executable: "ollama"
-      # daemon_args: ["serve", "--host", "0.0.0.0", "--port", "11434"]
-      # Results in: ollama serve --host 0.0.0.0 --port 11434
+      # daemon_args: ["serve", "--host", "0.0.0.0", "--port", "${HARBOR_OLLAMA_HOST_PORT:-11434}"]
+      # Results in: ollama serve --host 0.0.0.0 --port ${HARBOR_OLLAMA_HOST_PORT:-11434}
       #
       # 3. CUSTOM INSTALLATION PATH:
       # executable: "/usr/local/bin/ollama"
@@ -196,7 +200,7 @@ services:
 
       # The arguments to pass to the executable when starting the daemon.
       # This replaces the old 'daemon_command' field and supports complex arguments.
-      # Examples: ["serve"], ["serve", "--debug"], ["start", "--port", "11434"]
+      # Examples: ["serve"], ["serve", "--debug"], ["start", "--port", "${HARBOR_OLLAMA_HOST_PORT:-11434}"]
       daemon_args: ["serve"]
 
       # The TCP port that the native daemon process will listen on. This is used
@@ -218,6 +222,7 @@ services:
       # A map of environment variables that Harbor will inject into OTHER, DEPENDENT
       # containers during `harbor up`. This allows containerized apps (like a web UI)
       # to correctly configure themselves to find and connect to the native service.
-      # Example: This sets HARBOR_OLLAMA_INTERNAL_URL for the 'webui' container.
+      # This replaces hardcoded URLs in cross-service integration files.
+      # Template variables like ${HARBOR_OLLAMA_HOST_PORT:-11434} are replaced with actual values.
       env_overrides:
-        HARBOR_OLLAMA_INTERNAL_URL: "http://host.docker.internal:11434"
+        HARBOR_OLLAMA_INTERNAL_URL: "http://host.docker.internal:${HARBOR_OLLAMA_HOST_PORT:-11434}"

@@ -2,6 +2,6 @@ services:
   opint:
     entrypoint: >
       interpreter
-        --api_base http://tabbyapi:5000/v1
+        --api_base ${HARBOR_DEP_TABBYAPI_INTERNAL_URL:-http://tabbyapi:5000}/v1
         --api_key ${HARBOR_TABBYAPI_ADMIN_KEY}
         ${HARBOR_OPINT_CMD}

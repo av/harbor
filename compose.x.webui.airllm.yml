@@ -1,4 +1,5 @@
 services:
   webui:
-    volumes:
-      - ./open-webui/configs/config.airllm.json:/app/configs/config.airllm.json
+    x-harbor-config-templates:
+      - source: ./open-webui/configs/config.airllm.json
+        target: /app/configs/config.airllm.json

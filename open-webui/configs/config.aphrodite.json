@@ -1,7 +1,7 @@
 {
   "openai": {
 		"api_base_urls": [
-			"http://aphrodite:2242/v1"
+			"${HARBOR_DEP_APHRODITE_INTERNAL_URL:-http://aphrodite:2242}/v1"
 		],
 		"api_keys": [
 			"sk-aphrodite"

@@ -1,4 +1,5 @@
 services:
   webui:
-    volumes:
-      - ./open-webui/configs/config.dify.json:/app/configs/config.dify.json
+    x-harbor-config-templates:
+      - source: ./open-webui/configs/config.dify.json
+        target: /app/configs/config.dify.json
