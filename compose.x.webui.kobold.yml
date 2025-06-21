@@ -1,4 +1,5 @@
 services:
   webui:
-    volumes:
-      - ./open-webui/configs/config.kobold.json:/app/configs/config.kobold.json
+    x-harbor-config-templates:
+      - source: ./open-webui/configs/config.kobold.json
+        target: /app/configs/config.kobold.json

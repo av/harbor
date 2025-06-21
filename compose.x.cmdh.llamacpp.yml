@@ -3,4 +3,4 @@ services:
     environment:
       - LLM_HOST=OpenAI
       - OPENAI_API_KEY=sk-llamacpp
-      - OPENAI_BASE_URL=http://llamacpp:8080/v1
+      - OPENAI_BASE_URL=${HARBOR_DEP_LLAMACPP_INTERNAL_URL:-http://llamacpp:8080}/v1

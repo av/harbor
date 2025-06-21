@@ -1,4 +1,5 @@
 services:
   webui:
-    volumes:
-      - ./open-webui/configs/config.boost.json:/app/configs/config.boost.json
+    x-harbor-config-templates:
+      - source: ./open-webui/configs/config.boost.json
+        target: /app/configs/config.boost.json

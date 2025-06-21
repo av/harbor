@@ -1,4 +1,5 @@
 services:
   webui:
-    volumes:
-      - ./open-webui/configs/config.tts.json:/app/configs/config.tts.json
+    x-harbor-config-templates:
+      - source: ./open-webui/configs/config.tts.json
+        target: /app/configs/config.tts.json

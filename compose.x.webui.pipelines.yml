@@ -1,4 +1,5 @@
 services:
   webui:
-    volumes:
-      - ./open-webui/configs/config.pipelines.json:/app/configs/config.pipelines.json
+    x-harbor-config-templates:
+      - source: ./open-webui/configs/config.pipelines.json
+        target: /app/configs/config.pipelines.json

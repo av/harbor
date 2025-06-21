@@ -1,4 +1,5 @@
 services:
   webui:
-    volumes:
-      - ./open-webui/configs/config.aphrodite.json:/app/configs/config.aphrodite.json
+    x-harbor-config-templates:
+      - source: ./open-webui/configs/config.aphrodite.json
+        target: /app/configs/config.aphrodite.json

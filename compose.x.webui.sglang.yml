@@ -1,4 +1,5 @@
 services:
   webui:
-    volumes:
-      - ./open-webui/configs/config.sglang.json:/app/configs/config.sglang.json
+    x-harbor-config-templates:
+      - source: ./open-webui/configs/config.sglang.json
+        target: /app/configs/config.sglang.json

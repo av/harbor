@@ -1,4 +1,5 @@
 services:
   webui:
-    volumes:
-      - ./open-webui/configs/config.modularmax.json:/app/configs/config.modularmax.json
+    x-harbor-config-templates:
+      - source: ./open-webui/configs/config.modularmax.json
+        target: /app/configs/config.modularmax.json

@@ -1,7 +1,7 @@
 {
   "openai": {
 		"api_base_urls": [
-			"http://litellm:4000/v1"
+			"${HARBOR_DEP_LITELLM_INTERNAL_URL}/v1"
 		],
 		"api_keys": [
 			"${HARBOR_LITELLM_MASTER_KEY}"

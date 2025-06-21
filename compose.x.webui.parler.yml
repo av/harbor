@@ -1,4 +1,5 @@
 services:
   webui:
-    volumes:
-      - ./open-webui/configs/config.parler.json:/app/configs/config.parler.json
+    x-harbor-config-templates:
+      - source: ./open-webui/configs/config.parler.json
+        target: /app/configs/config.parler.json

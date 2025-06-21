@@ -1,4 +1,5 @@
 services:
   webui:
-    volumes:
-      - ./open-webui/configs/config.omnichain.json:/app/configs/config.omnichain.json
+    x-harbor-config-templates:
+      - source: ./open-webui/configs/config.omnichain.json
+        target: /app/configs/config.omnichain.json

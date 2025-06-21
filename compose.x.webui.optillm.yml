@@ -1,4 +1,5 @@
 services:
   webui:
-    volumes:
-      - ./open-webui/configs/config.optillm.json:/app/configs/config.optillm.json
+    x-harbor-config-templates:
+      - source: ./open-webui/configs/config.optillm.json
+        target: /app/configs/config.optillm.json

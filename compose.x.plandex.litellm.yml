@@ -3,4 +3,4 @@ services:
     environment:
       # Point to LiteLLM
       - OPENAI_API_KEY=${HARBOR_LITELLM_MASTER_KEY}
-      - OPENAI_API_BASE=http://litellm:4000/v1
+      - OPENAI_API_BASE=${HARBOR_DEP_LITELLM_INTERNAL_URL:-http://litellm:4000}/v1

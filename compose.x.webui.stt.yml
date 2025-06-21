@@ -1,5 +1,5 @@
 services:
   webui:
-    volumes:
-      # This needs to override default tts settings if run together, hence ".z."
-      - ./open-webui/configs/config.stt.json:/app/configs/config.z.stt.json
+    x-harbor-config-templates:
+      - source: ./open-webui/configs/config.stt.json
+        target: /app/configs/config.stt.json

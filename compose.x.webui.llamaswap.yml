@@ -1,4 +1,5 @@
 services:
   webui:
-    volumes:
-      - ./open-webui/configs/config.llamaswap.json:/app/configs/config.llamaswap.json
+    x-harbor-config-templates:
+      - source: ./open-webui/configs/config.llamaswap.json
+        target: /app/configs/config.llamaswap.json

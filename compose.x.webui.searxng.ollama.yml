@@ -1,4 +1,5 @@
 services:
   webui:
-    volumes:
-      - ./open-webui/configs/config.x.searxng.ollama.json:/app/configs/config.x.searxng.ollama.json
+    x-harbor-config-templates:
+      - source: ./open-webui/configs/config.searxng.ollama.json
+        target: /app/configs/config.searxng.ollama.json

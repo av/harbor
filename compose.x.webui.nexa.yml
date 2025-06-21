@@ -1,4 +1,5 @@
 services:
   webui:
-    volumes:
-      - ./open-webui/configs/config.nexa.json:/app/configs/config.nexa.json
+    x-harbor-config-templates:
+      - source: ./open-webui/configs/config.nexa.json
+        target: /app/configs/config.nexa.json
