@@ -19,11 +19,11 @@ artifact_path = os.path.join(
   'custom_modules',
   'artifacts',
     # Dev
-    'promx',
-    'dist',
-    'index_built.html',
+    # 'promx',
+    # 'dist',
+    # 'index_built.html',
     # Build
-  # 'promx_mini.html'
+  'promx_mini.html'
 )
 
 promx = """

@@ -168,13 +168,12 @@ body {
   left: 50%;
   transform: translateX(-50%);
   padding: 0.75rem 1.5rem;
-  color: #222;
+  color: #999;
   font-size: 14px;
   font-weight: 600;
   z-index: 1000;
-  background: rgba(255, 255, 255, 0.75);
+  background: rgba(255, 255, 255, 0.2);
   border-radius: 14px;
-  backdrop-filter: blur(5px);
 }
 
 .boost-controls {

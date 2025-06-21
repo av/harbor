@@ -280,8 +280,8 @@ function initBackground() {
         x: random(0, canvas.width),
         y: random(0, canvas.height),
         size: random(0.5, 3),
-        speedX: random(-10, 10),
-        speedY: random(-10, 10),
+        speedX: random(-20, 20),
+        speedY: random(-20, 20),
         brightness: random(0.2, 0.4),
         hue: random(0, 360),
         phase: random(0, Math.PI * 2)
