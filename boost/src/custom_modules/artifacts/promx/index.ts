@@ -47,6 +47,7 @@ let state = {
   lastUpdateTime: 0,
   paused: false,
   speed: 'slow',
+  deltaTime: 0,
 };
 
 const emotionAnchors = [];
@@ -152,6 +153,7 @@ function updateValueDisplay(values) {
 
 function draw(currentEmotionValues) {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
+  drawBackground(ctx, canvas);
 
   emotionAnchors.forEach(anchor => {
     const value = currentEmotionValues ? (currentEmotionValues[anchor.name] || 0) : 0;
@@ -254,6 +256,93 @@ function draw(currentEmotionValues) {
   ctx.lineWidth = 2;
   ctx.stroke();
 }
+
+function random(min, max) {
+  if (max === undefined) {
+    max = min;
+    min = 0;
+  }
+
+  return Math.random() * (max - min) + min;
+}
+
+function randomInt(min, max) {
+  return Math.floor(random(min, max));
+}
+
+
+
+function initBackground() {
+  if (!window.stars) {
+    window.stars = [];
+    for (let i = 0; i < 150; i++) {
+      window.stars.push({
+        x: random(0, canvas.width),
+        y: random(0, canvas.height),
+        size: random(0.5, 3),
+        speedX: random(-10, 10),
+        speedY: random(-10, 10),
+        brightness: random(0.2, 0.4),
+        hue: random(0, 360),
+        phase: random(0, Math.PI * 2)
+      });
+    }
+  }
+  if (!window.nebulae) {
+    window.nebulae = [];
+    for (let i = 0; i < 5; i++) {
+      window.nebulae.push({
+        x: random(0, canvas.width),
+        y: random(0, canvas.height),
+        radius: random(500, 1500),
+        color: `hsl(${random(0, 360)}, 70%, 30%)`,
+        opacity: random(0.1, 0.3),
+        angle: random(0, Math.PI * 2),
+        orbitRadius: random(canvas.width, canvas.width * 2),
+        orbitSpeed: random(0.001, 0.002),
+        centerX: random(0, canvas.width),
+        centerY: random(0, canvas.height)
+      });
+    }
+  }
+}
+
+function drawBackground(ctx, canvas) {
+  const nebulae = window.nebulae || [];
+  for (let nebula of nebulae) {
+    ctx.beginPath();
+    nebula.x = nebula.centerX + Math.cos(nebula.angle) * nebula.orbitRadius;
+    nebula.y = nebula.centerY + Math.sin(nebula.angle) * nebula.orbitRadius;
+    nebula.angle += nebula.orbitSpeed;
+    ctx.arc(nebula.x, nebula.y, nebula.radius, 0, Math.PI * 2);
+    const gradient = ctx.createRadialGradient(nebula.x, nebula.y, 0, nebula.x, nebula.y, nebula.radius);
+    gradient.addColorStop(0, `${nebula.color.slice(0, -1)}, ${nebula.opacity * 2})`);
+    gradient.addColorStop(1, `${nebula.color.slice(0, -1)}, 0)`);
+    ctx.fillStyle = gradient;
+    ctx.fill();
+  }
+
+  const stars = window.stars || [];
+  const dt = state.deltaTime || 0;
+  for (let star of stars) {
+    star.brightness = 0.35 * Math.sin(Date.now() * 0.001 + star.phase);
+    ctx.fillStyle = `hsla(${star.hue}, 50%, 90%, ${star.brightness})`;
+    ctx.beginPath();
+    ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
+    ctx.fill();
+    star.x += star.speedX * dt;
+    star.y += star.speedY * dt;
+    if (star.x > canvas.width) star.x = 0;
+    if (star.x < 0) star.x = canvas.width;
+    if (star.y > canvas.height) star.y = 0;
+    if (star.y < 0) star.y = canvas.height;
+    if (star.x === 0 || star.y === 0 || star.x === canvas.width || star.y === canvas.height) {
+      star.hue = Math.random() * 360;
+    }
+  }
+}
+
+
 
 function handleMouseDown(e) {
   const mousePos = getMousePos(e);
@@ -374,6 +463,7 @@ function handleResize() {
 
 function updateLoop(currentTime) {
   const deltaTime = currentTime - state.lastUpdateTime;
+  state.deltaTime = deltaTime / 1000;
   state.lastUpdateTime = currentTime;
   let needsUpdate = false;
 
@@ -421,9 +511,9 @@ function updateLoop(currentTime) {
 
   if (emotionChanged || needsUpdate || state.isDraggingHandle || state.draggedEmotion) {
     updateValueDisplay(currentEmotionValues);
-    draw(state.smoothedEmotionValues);
   }
 
+  draw(state.smoothedEmotionValues);
   requestAnimationFrame(updateLoop);
 }
 
@@ -536,7 +626,10 @@ async function init() {
   }, 100)
 
   await listener.listen();
-  requestAnimationFrame(() => handleResize());
+  requestAnimationFrame(() => {
+    handleResize();
+    initBackground();
+  });
 }
 
 init().catch(console.error);
