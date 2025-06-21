@@ -4,6 +4,7 @@ from chat_node import ChatNode
 import llm
 import log
 import selection
+import format
 
 logger = log.setup_logger(__name__)
 
@@ -142,6 +143,14 @@ class Chat:
       raise ValueError("Chat: unable to emit status without an LLM")
 
     await self.llm.emit_status(status)
+
+  async def sanitise_artifacts(self):
+    tail = self.tail
+
+    while tail:
+      tail_content = tail.content
+      tail.content = format.remove_html_code_blocks(tail_content)
+      tail = tail.parent
 
   def __str__(self):
     return '\n'.join([str(msg) for msg in self.plain()])

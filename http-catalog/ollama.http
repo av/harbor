@@ -351,3 +351,29 @@ POST {{host}}/v1/chat/completions
     }
   ]
 }
+
+### Continuation
+
+POST {{host}}/v1/chat/completions
+
+{
+  // "model": "gemma3:4b-qat",
+  // "model": "llama3.1:8b",
+  "model": "llama3.2:3b-instruct-q8_0",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You will continue your previous messages exactly where you left off."
+    },
+    {
+      "role": "user",
+      "content": "Tell me about dinosaurs."
+    },
+    {
+      "role": "assistant",
+      "content": "Alright, let's con"
+    }
+  ],
+  "max_tokens": 20,
+  "temperature": 0.15
+}

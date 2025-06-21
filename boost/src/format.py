@@ -1,3 +1,4 @@
+import re
 from config import STATUS_STYLE
 
 status_formatters = {
@@ -9,6 +10,7 @@ status_formatters = {
   "none": ""
 }
 
+
 def format_status(status: str):
   desired_format = STATUS_STYLE.value
 
@@ -17,5 +19,21 @@ def format_status(status: str):
 
   return status_formatters[desired_format].format(status=status)
 
+
 def format_artifact(artifact: str):
   return f"\n```html\n{artifact}\n```\n"
+
+
+def remove_html_code_blocks(text_content):
+  """
+    Removes all HTML markdown code blocks (```html...```) from a string.
+
+    Args:
+        text_content (str): The string containing potential HTML code blocks.
+
+    Returns:
+        str: The string with HTML code blocks removed.
+    """
+  regex_pattern = r"```html\n(.*?)\n```"
+  cleaned_text = re.sub(regex_pattern, "", text_content, flags=re.DOTALL)
+  return cleaned_text

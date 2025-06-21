@@ -8,5 +8,8 @@
     "harbor": "./harbor.sh"
   },
   "homepage": "https://github.com/av/harbor",
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "@parcel/transformer-pug": "2.15.2"
+  }
 }

@@ -111,3 +111,6 @@ __harbor.yml
 .local
 .npm
 .pkgx
+
+# Parcel
+.parcel-cache

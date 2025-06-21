@@ -11,7 +11,6 @@ import { Visualisation } from './visualisation';
 
 document.addEventListener("DOMContentLoaded", async () => {
   const vis = new Visualisation();
-
   await vis.init();
 
   // Local test

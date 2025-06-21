@@ -9,6 +9,7 @@ import uuid
 
 from config import INTERMEDIATE_OUTPUT, EXTRA_LLM_PARAMS
 from llm_registry import llm_registry
+from events import AsyncEventEmitter
 import chat as ch
 import log
 import format
@@ -21,7 +22,7 @@ logger = log.setup_logger(__name__)
 BOOST_PARAM_PREFIX = "@boost_"
 
 
-class LLM:
+class LLM(AsyncEventEmitter):
   url: str
   headers: dict
   query_params: dict
@@ -38,6 +39,8 @@ class LLM:
   cpl_id: int
 
   def __init__(self, **kwargs):
+    super().__init__()
+
     self.id = str(uuid.uuid4())
     self.url = kwargs.get('url')
     self.headers = kwargs.get('headers', {})
@@ -281,6 +284,7 @@ class LLM:
   async def emit_done(self):
     await self.emit_data('data: [DONE]')
     await self.emit_data(None)
+    await self.remove_all_listeners()
     self.is_streaming = False
 
   async def stream_final_completion(self, **kwargs):
