@@ -359,7 +359,9 @@ _harbor_get_running_service_runtime() {
     # If there's no evidence of a Harbor-managed native process, we consult
     # our other primary source of truth: the Docker daemon.
     # We ask Docker: "Do you have a container for this service in a 'running' state?"
-    if docker compose ps --services --filter "status=running" | grep -q "^${service_handle}$"; then
+    # We must use Harbor's compose resolution, not raw docker compose, to see all services.
+    local compose_cmd; compose_cmd=$(compose_with_options "*")
+    if eval "$compose_cmd ps --services --status running" | grep -q "^${service_handle}$"; then
         # Docker says yes. The evidence is conclusive.
         echo "CONTAINER"; return 0
     fi
@@ -502,6 +504,48 @@ _harbor_build_service_context() {
 }
 
 # --- Helper Functions ---
+
+# A generic timeout wrapper that gracefully handles systems without the `timeout` command.
+# This makes the script more resilient to hung I/O or Docker daemon operations.
+_run_with_timeout() {
+    local duration="$1"
+    shift
+    if command -v timeout &>/dev/null; then
+        timeout "$duration" "$@"
+    else
+        log_debug "Command 'timeout' not found. Executing without timeout protection."
+        "$@"
+    fi
+}
+
+# Replaces a blind 'sleep' with an intelligent wait, ensuring a native process
+# has fully launched and is not in a defunct state before Harbor proceeds.
+# This mitigates race conditions during rapid start/stop sequences.
+_wait_for_native_process_stability() {
+    local service_handle="$1"
+    local pid="$2"
+    local max_attempts=15 # 4.5 seconds total (15 * 0.3s)
+
+    log_debug "Waiting for process ${pid} of service '${service_handle}' to stabilize..."
+    for ((i=1; i<=max_attempts; i++)); do
+        # Check if the process still exists
+        if ! kill -0 "$pid" 2>/dev/null; then
+            log_error "Process ${pid} for '${service_handle}' disappeared during startup. It may have crashed."
+            return 1
+        fi
+
+        # Check if the process is stable (not defunct) using a portable ps command
+        local cmd; cmd=$(ps -p "$pid" -o command= 2>/dev/null || echo "")
+        if [[ -n "$cmd" && "$cmd" != *"<defunct>"* ]]; then
+            log_debug "Process ${pid} for '${service_handle}' is stable."
+            return 0
+        fi
+        sleep 0.3
+    done
+
+    log_error "Process ${pid} for '${service_handle}' failed to stabilize within the timeout. It may be hung."
+    return 1
+}
 
 # _harbor_command_exists()
 # Checks if a given command is available on the system's PATH.
@@ -1498,57 +1542,89 @@ _resolve_all_service_targets() {
     echo "${final_targets[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '
 }
 
-# [v12.0, rev. v14.0] Orchestrator for `harbor down`.
-# [v25.1 FINAL]: This version is fully runtime-aware. It safely stops any managed
-# native processes via their PID files before invoking `docker compose down` on the
-# remaining containerized stack (including native service proxies). It correctly
-# resolves sub-services for a complete teardown.
+# [v27.0 FINAL] A simple, robust, and parallelized shutdown orchestrator, hardened with timeout protection.
+# This version uses a clean two-phase approach that is both efficient and easy to maintain.
+# Phase 1: Stop all targeted native services in parallel.
+# Phase 2: Hand off to Docker Compose to tear down the container environment.
 run_down() {
     _ensure_pid_dir
-    local services_to_stop_args=("$@")
+    local user_requested_services=("$@")
 
-    if [[ ${#services_to_stop_args[@]} -eq 0 ]]; then
-        # --- Global 'down' ---
-        # Stop everything that is running.
-        log_info "Stopping all running Harbor services..."
-        local all_running_services; all_running_services=$(get_active_services)
-        for service in $all_running_services; do
-            # We only need to check the runtime, not the full context here.
-            if [[ "$(_harbor_get_running_service_runtime "$service")" == "NATIVE" ]]; then
-                _harbor_stop_native_service "$service"
-            fi
-        done
-        # Use "*" to get a context for all possible services to ensure all networks/volumes are removed.
-        local compose_cmd; compose_cmd=$(compose_with_options "*")
-        eval "$compose_cmd down --remove-orphans"
+    # 1. Determine the complete list of services to stop, including sub-services.
+    local -a services_to_process
+    local is_global_shutdown=false
+    if [[ ${#user_requested_services[@]} -eq 0 ]]; then
+        is_global_shutdown=true
+        services_to_process=($(get_active_services))
+        log_info "Shutting down all active Harbor services..."
     else
-        # --- Targeted 'down' ---
-        # Resolve sub-services to ensure a complete teardown (e.g., `harbor down ollama` also stops `ollama-init`).
-        log_info "Resolving service targets and their sub-services..."
-        local -a all_targets_to_stop; read -r -a all_targets_to_stop <<< "$(_resolve_all_service_targets "${services_to_stop_args[@]}")"
-
-        log_info "Stopping specified services: ${all_targets_to_stop[*]}"
-        for service in "${all_targets_to_stop[@]}"; do
-            if [[ "$(_harbor_get_running_service_runtime "$service")" == "NATIVE" ]]; then
-                _harbor_stop_native_service "$service"
-            fi
-        done
-
-        # Build a compose context for all active services to ensure `down` knows about proxies.
-        # This is critical for removing the proxy containers correctly.
-        local active_services_including_native; active_services_including_native=$(get_active_services)
-        local -a native_active=()
-        for s in $active_services_including_native; do
-            if [[ "$(_harbor_get_running_service_runtime "$s")" == "NATIVE" ]]; then
-                native_active+=("$s")
-            fi
-        done
-
-        # Call the composer, excluding the DEFINING yml for any NATIVE services, but including their PROXY yml.
-        local compose_cmd; compose_cmd=$(compose_with_options -x "${native_active[@]}" "${all_targets_to_stop[@]}")
-        # Pass the original user-requested services to `down`.
-        eval "$compose_cmd down --remove-orphans ""$@"""
+        read -r -a services_to_process <<< "$(_resolve_all_service_targets "${user_requested_services[@]}")"
+        log_info "Shutting down specified services and their dependencies: ${services_to_process[*]}"
     fi
+
+    if [[ ${#services_to_process[@]} -eq 0 ]]; then
+        log_info "No active services found to stop."; return 0
+    fi
+
+    # 2. Phase 1: Stop all NATIVE services in parallel.
+    # This is the most critical dependency: host processes must stop before Docker removes their network.
+    local -a native_pids_to_wait_for=()
+    local -a container_targets=()
+    for service in "${services_to_process[@]}"; do
+        if [[ "$(_harbor_get_running_service_runtime "$service")" == "NATIVE" ]]; then
+            _harbor_stop_native_service "$service" &
+            native_pids_to_wait_for+=($!)
+        else
+            # Collect container targets to check if a compose operation is needed.
+            container_targets+=("$service")
+        fi
+    done
+
+    # Wait for all parallel native stop jobs to complete.
+    if [[ ${#native_pids_to_wait_for[@]} -gt 0 ]]; then
+        log_info "Waiting for ${#native_pids_to_wait_for[@]} native process(es) to terminate..."
+        wait "${native_pids_to_wait_for[@]}"
+    fi
+
+    # 3. Phase 2: Stop all CONTAINER services.
+    # We proceed if there were container targets, or if it's a global shutdown (to catch orphans).
+    if [[ ${#container_targets[@]} -gt 0 || "$is_global_shutdown" = true ]]; then
+        log_info "Tearing down container environment..."
+
+        if [[ ${#container_targets[@]} -gt 0 ]]; then
+            # Targeted shutdown: build context with the container services to stop
+            # plus any remaining active services for proper dependency resolution
+            local remaining_active_services; remaining_active_services=$(get_active_services)
+            local -a remaining_native_active=()
+            for s in $remaining_active_services; do
+                if [[ "$(_harbor_get_running_service_runtime "$s")" == "NATIVE" ]]; then
+                    remaining_native_active+=("$s")
+                fi
+            done
+
+            # Build the compose context with ALL services for full definition context
+            # Docker Compose needs to understand the complete project structure
+            local compose_cmd; compose_cmd=$(compose_with_options -x "${remaining_native_active[@]}" "*")
+
+            # Using timeout protection for the potentially long-running docker command
+            log_debug "Running compose command: $compose_cmd down --remove-orphans ${container_targets[*]}"
+            if ! timeout 300s bash -c "$compose_cmd down --remove-orphans ${container_targets[*]}"; then
+                log_error "Docker Compose down command failed or timed out after 5 minutes. Manual cleanup may be required."
+                log_error "Run 'docker ps' and 'docker network ls' to check for lingering resources."
+                return 1
+            fi
+        else
+            # Global shutdown: stop all remaining containers
+            local compose_cmd; compose_cmd=$(compose_with_options "*")
+            if ! timeout 300s bash -c "$compose_cmd down --remove-orphans"; then
+                log_error "Docker Compose down command failed or timed out after 5 minutes. Manual cleanup may be required."
+                log_error "Run 'docker ps' and 'docker network ls' to check for lingering resources."
+                return 1
+            fi
+        fi
+    fi
+
+    log_info "Harbor 'down' command completed successfully."
 }
 
 run_restart() {
@@ -2471,6 +2547,8 @@ _harbor_wait_for_http_health() {
 # This function is a non-blocking "launcher". It gets all necessary context,
 # prepares the environment, and starts the background process. It does not wait
 # for the service to become healthy; that is the responsibility of the caller.
+# [v13.1] Starts a native service daemon process on the host.
+# This version is enhanced with an intelligent wait to ensure process stability after launch.
 _harbor_start_native_service() {
     local service_handle="$1"
     log_info "Starting native service: ${service_handle}"
@@ -2499,7 +2577,7 @@ _harbor_start_native_service() {
 
     # 3. Idempotency check: Do not start if already running.
     local pid_file="$PID_DIR/${HANDLE}.pid"
-    if [[ -f "$pid_file" ]] && kill -0 "$(cat "$pid_file")" 2>/dev/null; then
+    if [[ -f "$pid_file" ]] && kill -0 "$(_run_with_timeout 2s cat "$pid_file" || echo 0)" 2>/dev/null; then
         log_info "Harbor-managed native daemon for '${HANDLE}' is already running."; return 0;
     fi
 
@@ -2552,83 +2630,73 @@ _harbor_start_native_service() {
     local pid=$!
     echo "$pid" > "$pid_file"
 
-    # 6. Brief pause and quick verification that the process launched.
-    sleep 1
-    if ! pgrep -f "$NATIVE_DAEMON_COMMAND" >/dev/null; then
+    # 6. Replace sleep with intelligent, stable wait
+    if ! _wait_for_native_process_stability "$HANDLE" "$pid"; then
         log_error "Failed to launch native daemon for '${HANDLE}'. Check logs for details: ${log_file}"
+        # Attempt to clean up the failed process
+        kill "$pid" 2>/dev/null
+        rm -f "$pid_file"
         return 1
     else
-        log_debug "Native service '${HANDLE}' process has been launched. Logs at ${log_file}"
+        log_debug "Native service '${HANDLE}' process has launched and is stable. Logs at ${log_file}"
     fi
     return 0
 }
 
-# [v13.0] Stops a native service daemon process on the host.
-# This function is a self-contained "killer". It gets all necessary context,
-# verifies the process to avoid killing unintended PIDs, and uses a
-# robust TERM/wait/KILL shutdown sequence. It does not mutate configuration.
+# [v13.2 FINAL] Stops a native service daemon process using its PID file with a safety verification step.
+# This version is hardened with timeout protection and enhanced safety checks.
 _harbor_stop_native_service() {
     local service_handle="$1"
-
-    # 1. Build context to get the unique daemon command string.
-    local context; context=$(_harbor_build_service_context "$service_handle")
-    eval "$context"
-
-    # PID based stop logic first:
     local pid_file="$PID_DIR/${service_handle}.pid"
-    if [[ -f "$pid_file" ]]; then
-        local pid; pid=$(cat "$pid_file")
-        if [[ -z "$pid" ]] || ! kill -0 "$pid" 2>/dev/null; then
-            rm -f "$pid_file"; return 0;
-        fi
-        log_info "Stopping native service '${service_handle}' (PID: ${pid})..."
-        kill -s TERM "$pid"
-        local countdown=10
-        while ((countdown > 0)); do
-            if ! kill -0 "$pid" 2>/dev/null; then
-                log_info "Native service '${service_handle}' terminated gracefully."; rm -f "$pid_file"; return 0;
-            fi
-            sleep 1; ((countdown--));
-        done
-        log_warn "Service '${service_handle}' did not terminate gracefully. Sending SIGKILL."
-        kill -s KILL "$pid"
-        rm -f "$pid_file"
 
-        if [[ -z "$NATIVE_DAEMON_COMMAND" ]]; then
-            log_warn "Cannot stop native service '${HANDLE}': no 'native_daemon_command' defined in its contract."
-            return 1
-        fi
-    fi
-
-    # 2. Find all PIDs matching the daemon command pattern.
-    local pids_found; pids_found=$(pgrep -f "$NATIVE_DAEMON_COMMAND")
-    if [[ -z "$pids_found" ]]; then
-        log_info "No running native process found for '${HANDLE}'."
+    if [[ ! -f "$pid_file" ]]; then
+        log_debug "Native service '${service_handle}' is already stopped (no PID file)."
         return 0
     fi
 
-    log_info "Attempting to stop native service '${HANDLE}' (PIDs: ${pids_found})..."
+    local pid; pid=$(_run_with_timeout 5s cat "$pid_file")
+    if [[ -z "$pid" ]] || ! kill -0 "$pid" 2>/dev/null; then
+        log_warn "Stale PID file found for '${service_handle}'. Process not running or PID file is unreadable. Cleaning up."
+        rm -f "$pid_file"
+        return 0
+    fi
 
-    # 3. Use pkill to send SIGTERM to all matching processes.
-    pkill -f "$NATIVE_DAEMON_COMMAND"
+    # --- Check: Verify the process before signaling ---
+    local context; context=$(_harbor_build_service_context "$service_handle")
+    eval "$context"
+    # The 'executable' from the contract is the most stable identifier we have.
+    local expected_executable_name; expected_executable_name=$(basename "${NATIVE_EXECUTABLE:-unknown}")
 
-    # 4. Wait for graceful shutdown.
+    # 'ps -p $pid -o command=' is a highly portable way to get the full command string.
+    local actual_command; actual_command=$(ps -p "$pid" -o command= 2>/dev/null || echo "ps_failed")
+
+    if [[ "$actual_command" == "ps_failed" || ! "$actual_command" == *"$expected_executable_name"* ]]; then
+        log_error "CRITICAL SAFETY ABORT: PID file for '${service_handle}' may be compromised or process signature has changed."
+        log_error "PID ${pid} appears to be '${actual_command}', which does not match expected executable '${expected_executable_name}'."
+        log_error "This may indicate PID reuse by the OS or manual file modification. Removing stale PID file to prevent further errors."
+        rm -f "$pid_file"
+        return 1
+    fi
+    # --- End Check ---
+
+    log_info "Stopping native service '${service_handle}' (PID: ${pid}, verified)..."
+    kill -s TERM "$pid"
+
     local countdown=10
-    log_info "Waiting up to ${countdown}s for graceful termination..."
     while ((countdown > 0)); do
-        # Re-check if any process still exists.
-        if ! pgrep -f "$NATIVE_DAEMON_COMMAND" >/dev/null; then
-            log_info "Native service '${HANDLE}' terminated gracefully."
+        if ! kill -0 "$pid" 2>/dev/null; then
+            log_info "Native service '${service_handle}' (PID: ${pid}) terminated gracefully."
+            rm -f "$pid_file"
             return 0
         fi
-        sleep 1
-        ((countdown--))
+        sleep 1; ((countdown--));
     done
 
-    # 5. If still running, escalate to SIGKILL.
-    log_warn "Service '${HANDLE}' did not terminate gracefully. Sending SIGKILL."
-    pkill -9 -f "$NATIVE_DAEMON_COMMAND" || log_warn "Failed to send SIGKILL to '${HANDLE}'. Manual cleanup may be required."
-
+    log_warn "Service '${service_handle}' (PID: ${pid}) did not terminate gracefully. Escalating to SIGKILL."
+    kill -s KILL "$pid"
+    sleep 1 # Brief pause for OS to process the kill
+    rm -f "$pid_file"
+    log_info "Forcibly stopped '${service_handle}'."
     return 0
 }
 
@@ -6132,8 +6200,10 @@ main_entrypoint() {
     esac
 }
 
-# Call the main logic with argument swapping
-if ! swap_and_retry main_entrypoint "$@"; then
-    show_help
-    exit 1
+# Call the main logic with argument swapping (only if not sourced)
+if [[ "${HARBOR_SOURCED_MODE:-false}" != "true" ]]; then
+    if ! swap_and_retry main_entrypoint "$@"; then
+        show_help
+        exit 1
+    fi
 fi

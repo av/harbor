@@ -820,7 +820,7 @@ This phase makes all integrations declarative and ready for the new composition 
         *   [x] Validated template naming convention (`.json` extensions) ✅
     *   [x] **4.0.3: Core Implementation Verification**
         *   [x] Verified `harbor.sh` exclusion argument parsing (`-x`, `--exclude`) ✅
-        *   [x] Confirmed `ollama_native.yml` template variable usage (`{{.native_port}}`) ✅
+        *   [x] Confirmed `ollama_native.yml` template variable usage (e.g. `${HARBOR_OLLAMA_HOST_PORT:-11434}`) ✅
         *   [x] Validated Deno composer template processing implementation ✅
         *   [x] Verified Harbor metadata processing (`x-harbor-config-templates`, `x-harbor-shared-volumes`) ✅
 
@@ -832,7 +832,7 @@ This phase makes all integrations declarative and ready for the new composition 
         *   [x] Verify URL standardization follows expected pattern ✅ All URLs now use `${HARBOR_DEP_*_INTERNAL_URL:-fallback}` format
         *   [ ] 🔄 **NEXT**: Run basic hybrid CLI test to validate integration
     *   [ ] **4.1: Full CLI Integration Tests**
-        *   [ ] Test `harbor up -x ollama webui` (hybrid scenario with actual service startup)
+        *   [ ] Test `harbor up webui -x ollama` (hybrid scenario with actual service startup)
         *   [ ] Test `harbor up ollama webui` (container-only scenario for regression)
         *   [ ] Test `harbor down` behavior with hybrid services
         *   [ ] Test `harbor logs`, `harbor exec`, `harbor shell` with hybrid services
@@ -862,7 +862,7 @@ This phase makes all integrations declarative and ready for the new composition 
         *   [ ] Test memory usage with complex hybrid configurations
     *   [ ] **5.3: Additional Native Services**
         *   [ ] Create native contracts for other key services (vllm, tgi, etc.)
-        *   [ ] Test multi-native scenarios (e.g., `harbor up -x ollama -x vllm webui`)
+        *   [ ] Test multi-native scenarios (e.g., `harbor up webui -x ollama speaches`)
         *   [ ] Validate complex dependency chains with multiple native services
 
 ---
