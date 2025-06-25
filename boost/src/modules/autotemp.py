@@ -39,14 +39,15 @@ async def apply(chat: 'ch.Chat', llm: 'llm.LLM'):
       reason (str): Short (3-5 words) explanation of why the temperature is being set.
     """
 
+    desired_temperature = float(temperature)
     current_temperature = llm.params.get('temperature')
 
-    if current_temperature is not None and abs(current_temperature - temperature) < 0.01:
-      return f"Temperature is already set to {temperature}. Are you using the tool correctly?"
+    if current_temperature is not None and abs(current_temperature - desired_temperature) < 0.01:
+      return f"Temperature is already set to {desired_temperature}. Are you using the tool correctly?"
 
-    llm.params['temperature'] = temperature
-    await llm.emit_status(f'Temperature {temperature}\nReason: {reason}')
-    return f"Temperature is now set to {temperature} because: {reason}"
+    llm.params['temperature'] = desired_temperature
+    await llm.emit_status(f'Temperature {desired_temperature}\nReason: {reason}')
+    return f"Temperature is now set to {desired_temperature} because: {reason}"
 
   # Add the tool and the prompt
   tools.registry.set_local_tool('set_temperature', set_temperature)
