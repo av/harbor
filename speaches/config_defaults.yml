@@ -1,0 +1,209 @@
+# =============================================================================
+# Harbor Speaches: Best Practices Default Configuration
+# =============================================================================
+#
+# This file defines the default configuration for Speaches when running
+# natively in Harbor. It follows best practices for performance, security,
+# and cross-platform compatibility.
+#
+# DESIGN PRINCIPLES:
+# - Cross-platform compatibility (macOS, Linux, Windows)
+# - GPU acceleration when available, CPU fallback when not
+# - Robust model management and caching
+# - Secure defaults with optional relaxed modes for development
+# - Minimal resource footprint while maintaining performance
+#
+# USAGE:
+# This configuration is automatically loaded by the Speaches service manager
+# and can be overridden by environment variables following Harbor's naming
+# conventions (HARBOR_SPEACHES_*).
+#
+# =============================================================================
+
+# Server Configuration
+server:
+  host: "0.0.0.0"
+  port: ${HARBOR_SPEACHES_HOST_PORT:-34331}
+  workers: 1  # Single worker for simplicity, can be increased for load
+  max_concurrent_requests: 10
+  timeout: 30
+  log_level: "info"
+
+# Model Configuration
+models:
+  # TTS Model Configuration
+  tts:
+    default_model: "hexgrad/Kokoro-82M"
+    default_voice: "af_bella"
+    cache_dir: "${HARBOR_HF_CACHE}/speaches/tts"
+    # Available voices for Kokoro
+    available_voices:
+      - "af_bella"
+      - "af_sarah"
+      - "am_adam"
+      - "am_michael"
+      - "bf_emma"
+      - "bf_isabella"
+      - "bm_george"
+      - "bm_lewis"
+
+  # STT Model Configuration
+  stt:
+    default_model: "Systran/faster-distil-whisper-large-v3"
+    cache_dir: "${HARBOR_HF_CACHE}/speaches/stt"
+    # Whisper model options by size/quality
+    available_models:
+      - "openai/whisper-tiny"     # ~39MB, fastest
+      - "openai/whisper-base"     # ~74MB, good balance
+      - "openai/whisper-small"    # ~244MB, better quality
+      - "openai/whisper-medium"   # ~769MB, high quality
+      - "openai/whisper-large-v2" # ~1550MB, best quality
+
+# Performance Configuration
+performance:
+  # ONNX Runtime Provider Configuration
+  onnx:
+    # Providers are auto-detected by the service manager, but can be overridden
+    # Format: comma-separated list in preference order
+    providers: "auto"  # auto, cpu, cuda, coreml, rocm
+
+    # CPU optimization
+    cpu:
+      num_threads: "auto"  # auto-detect based on CPU cores
+      optimization_level: "basic"  # basic, extended, all
+
+    # GPU optimization (when available)
+    gpu:
+      memory_limit: "auto"  # auto, or specific like "2GB"
+      memory_growth: true
+
+  # Cache Configuration
+  cache:
+    # Model cache settings
+    model_cache_size: "2GB"
+    audio_cache_size: "500MB"
+    cleanup_threshold: 0.9  # Clean when 90% full
+
+    # Cache directories (relative to HARBOR_HF_CACHE)
+    directories:
+      models: "speaches/models"
+      audio: "speaches/audio"
+      temp: "speaches/temp"
+
+# Audio Processing Configuration
+audio:
+  # Input audio settings
+  input:
+    sample_rate: 16000  # 16kHz for speech
+    bit_depth: 16
+    channels: 1  # Mono for speech
+    max_duration: 300  # 5 minutes max
+
+  # Output audio settings
+  output:
+    sample_rate: 22050  # 22kHz for TTS output
+    bit_depth: 16
+    format: "wav"  # wav, mp3, ogg
+
+  # Processing settings
+  processing:
+    normalization: true
+    noise_reduction: false  # Can be resource intensive
+    silence_removal: true
+
+# Security Configuration
+security:
+  # API Security
+  api:
+    enable_cors: true
+    cors_origins: ["*"]  # Restrict in production
+    max_request_size: "10MB"
+    rate_limiting: false  # Enable for production
+
+  # Model Security
+  models:
+    allow_custom_models: true  # Allow loading custom models
+    verify_checksums: false    # Verify model file integrity
+    sandbox_execution: false   # Run models in sandbox (Linux only)
+
+# Development Configuration
+development:
+  # Debug settings
+  debug_mode: false
+  verbose_logging: false
+  profiling: false
+
+  # Hot reloading
+  auto_reload: false
+  watch_files: false
+
+  # Development helpers
+  mock_models: false  # Use mock models for testing
+  benchmark_mode: false
+
+# Platform-Specific Configuration
+platform:
+  # macOS-specific settings
+  macos:
+    use_metal: true  # Use Metal Performance Shaders
+    accelerate_framework: true
+
+  # Linux-specific settings
+  linux:
+    use_cuda: true   # Use CUDA if available
+    use_rocm: false  # Use ROCm for AMD GPUs
+
+  # Windows-specific settings
+  windows:
+    use_directml: false  # Use DirectML for inference
+
+# Logging Configuration
+logging:
+  level: "info"  # debug, info, warning, error
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+  # File logging
+  file:
+    enabled: true
+    path: "${HARBOR_HOME}/app/backend/data/logs/speaches.log"
+    max_size: "10MB"
+    backup_count: 3
+
+  # Console logging
+  console:
+    enabled: true
+    colored: true
+
+# Health Check Configuration
+health:
+  # Service health checks
+  checks:
+    model_loading: true
+    gpu_acceleration: true
+    disk_space: true
+    memory_usage: true
+
+  # Health check intervals
+  intervals:
+    basic: 30    # Basic health check every 30 seconds
+    detailed: 300 # Detailed check every 5 minutes
+
+  # Thresholds
+  thresholds:
+    memory_warning: 0.8   # 80% memory usage warning
+    disk_warning: 0.9     # 90% disk usage warning
+    response_time: 5.0    # 5 second response time warning
+
+# Integration Configuration
+integration:
+  # Harbor-specific settings
+  harbor:
+    service_discovery: true
+    metrics_export: false
+    auto_registration: true
+
+  # External service integration
+  external:
+    webhook_notifications: false
+    metrics_push: false
+    log_forwarding: false
