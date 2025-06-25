@@ -64,8 +64,9 @@ export class BoostListener {
   async listen() {
     try {
       const listenerId = "<<listener_id>>";
+      const boostUrl = "<<boost_public_url>>".replace('http://', 'ws://').replace('https://', 'wss://');
       this.websocket = new WebSocket(
-        `ws://localhost:34131/events/${listenerId}/ws`,
+        `${boostUrl}/events/${listenerId}/ws`,
         [],
       );
 

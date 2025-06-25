@@ -54,8 +54,10 @@ export class BoostListener {
   async listen() {
     try {
       const listenerId = "<<listener_id>>";
+      const boostUrl = "<<boost_public_url>>";
+
       const response = await fetch(
-        `http://localhost:34131/events/${listenerId}`,
+        `${boostUrl}/events/${listenerId}`,
         {
           headers: {
             Authorization: "Bearer sk-boost",
