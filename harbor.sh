@@ -1363,6 +1363,10 @@ run_up() {
     # We pass ALL native services to -x to ensure their containers are never started.
     compose_cmd=$(compose_with_options -x "${all_native_services[@]}" -- "${composition_context[@]}")
 
+    # CRITICAL FIX: When using --env-file, Docker Compose disables automatic loading of the default .env file.
+    # We must explicitly specify both the main .env file and any transient override file to ensure
+    # a complete environment is available. The order matters for precedence: later files override earlier ones.
+    compose_cmd+=" --env-file .env"
     if [[ -n "$temp_native_env_file" ]]; then
         compose_cmd+=" --env-file $temp_native_env_file"
     fi
@@ -1499,6 +1503,11 @@ __up_execute_phase3_main() {
         # `compose_with_options` can see all relevant services (e.g., `webui` and `ollama`)
         # and include the necessary cross-service integration files (e.g., `compose.x.webui.ollama.yml`).
         local compose_cmd; compose_cmd=$(compose_with_options $all_context_targets)
+
+        # CRITICAL FIX: When using --env-file, Docker Compose disables automatic loading of the default .env file.
+        # We must explicitly specify both the main .env file and any transient override file to ensure
+        # a complete environment is available. The order matters for precedence: later files override earlier ones.
+        compose_cmd+=" --env-file .env"
         if [[ -n "$temp_native_env_file" ]]; then
             compose_cmd+=" --env-file $temp_native_env_file"
         fi
