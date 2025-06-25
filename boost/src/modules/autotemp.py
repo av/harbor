@@ -13,6 +13,9 @@ logger = log.setup_logger(ID_PREFIX)
 
 choose_temperature_prompt = """
 Dynamically adjust your temperature setting during responses using the `set_temperature` tool.
+You must plan ahead a little bit and split your planned response into multiple parts, each with its own temperature setting.
+You will call "set_temperature" and then continue with the part requiring that temperature.
+You will then call "set_temperature" again to adjust the temperature for the next part of your response (if needed).
 
 Temperature Guidelines:
 - **High (0.8-1.0):** For creative tasks (e.g., creative writing, brainstorming).
@@ -43,7 +46,7 @@ async def apply(chat: 'ch.Chat', llm: 'llm.LLM'):
     current_temperature = llm.params.get('temperature')
 
     if current_temperature is not None and abs(current_temperature - desired_temperature) < 0.01:
-      return f"Temperature is already set to {desired_temperature}. Are you using the tool correctly?"
+      return f"Temperature is already set to {desired_temperature}. No change needed."
 
     llm.params['temperature'] = desired_temperature
     await llm.emit_status(f'Temperature {desired_temperature}\nReason: {reason}')
