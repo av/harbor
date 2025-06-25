@@ -11,7 +11,11 @@ LOCAL_TOOL_PREFIX = "__tool_"
 
 
 def get_local_tools():
-  local_state = request.get().state
+  request_var = request.get()
+  if request_var is None:
+    return {}
+
+  local_state = request_var.state
 
   if not hasattr(local_state, "local_tools"):
     local_state.local_tools = {}
