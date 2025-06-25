@@ -9,7 +9,7 @@ You must do your meta-wait process too: Your meta-wait process: After every step
 
 # Your Task:
 
-Do your Meta-Process and Meta-Wait process throughout to efficiently enable the harbor speaches service to launch speaches_service_manager.py as one process as a harbor native process and have it work by default as compose.speaches.yml does with the addition of gpu support on macos (primary), while also providing cross platform support (e.g. linux). You must stay on task and follow the best practices guidelines and complete the plan below
+Do your Meta-Process and Meta-Wait process throughout to efficiently enable the harbor speaches service with the assistance of speaches_service_manager.py based on speaches/compose.speaches.yml and spaches/Dockerfile with the addition of gpu support on macos (primary), while also providing cross platform support (e.g. linux). You must stay on task and follow the best practices guidelines and complete the plan below.
 
 
 ## About speaches:
@@ -280,6 +280,90 @@ When faced with a complex problem, check sepaches_implementation_plan.md and fol
    5.  critique your edits periodically to ensure they are in line with best practices and your goals.
    6.  periodically update this document.
 
+
+### **Key Gotchas & Design Guide for Implementing a Harbor Native Service (e.g., `speaches`)**
+
+This guide outlines the essential patterns and critical lessons learned that must be followed to successfully integrate a new native service into Harbor.
+
+#### **1. The Core Architecture: "Surgical Exclusion & Proxy Replacement"**
+
+*   **What It Is:** When a service like `speaches` is run natively (`harbor up -n speaches` or `harbor up -x speaches`), Harbor's core logic does not just skip the service. Instead, it performs a precise operation:
+    1.  **It EXCLUDES** the main container definition (`compose.speaches.yml`).
+    2.  **It INCLUDES** the native contract file (`speaches/speaches_native.yml`) as a replacement.
+*   **Why It Matters:** This ensures that while the main application runs on the host, a lightweight **proxy container** (defined in the native contract) takes its place in the Docker network. This proxy is the bridge that allows other containers (like `webui`) to communicate with the native service seamlessly.
+
+---
+
+#### **2. The Native Contract (`speaches_native.yml`): The Service's "API"**
+
+This file is the single source of truth for your native service. Getting it right is critical.
+
+*   **The Docker-Style `executable` and `daemon_args` Pattern (CRITICAL GOTCHA):**
+    *   **Problem:** Early designs used a single `daemon_command` string, which was difficult to parse and incompatible with passing user commands (`harbor run ...`).
+    *   **Solution:** The contract **must** separate the command from its arguments, just like a Dockerfile's `ENTRYPOINT` and `CMD`.
+        ```yaml
+        x-harbor-native:
+          executable: "uvicorn"  # The actual binary to run.
+          daemon_args: ["--factory", "speaches.main:create_app"] # The args to start the daemon.
+        ```
+    *   **Benefit:** This allows Harbor to use `executable` for other commands (e.g., `harbor run speaches --version`) while using `daemon_args` for startup.
+
+*   **The Proxy Healthcheck Must Target the *Native* Service:**
+    *   **Problem:** A dependent container (like `webui`) will crash if it starts before the native `speaches` service is ready.
+    *   **Solution:** The `healthcheck` in the proxy definition must test the actual native service on the host, not the proxy container itself.
+        ```yaml
+        healthcheck:
+          # This command runs from INSIDE the proxy container.
+          # It reaches out to the host machine to check if the native port is listening.
+          test: ["CMD-SHELL", "nc -z host.docker.internal 11434 || exit 1"]
+        ```
+
+*   **The `env_overrides` Map is the Key to Integration:**
+    *   **Problem:** How does a container like `webui` know how to connect to the native `speaches` service? Its default configuration points to a Docker service name (`http://speaches:8000`).
+    *   **Solution:** The `env_overrides` section in `speaches_native.yml` is the single source of truth for its dependents. Harbor uses this to create a temporary `.env` file that reconfigures dependent containers on the fly.
+        ```yaml
+        x-harbor-native:
+          env_overrides:
+            # This variable will be injected into the environment of dependent containers.
+            HARBOR_DEP_SPEACHES_INTERNAL_URL: "http://host.docker.internal:34331"
+        ```
+
+---
+
+#### **3. The Native Bootstrap Script (`speaches_native.sh`): Environment & Execution**
+
+This script is the entrypoint for starting the service on the host.
+
+*   **Python Versioning is a Major Blocker (CRITICAL GOTCHA):**
+    *   **Problem:** `speaches` requires Python 3.12, but its dependencies (`librosa` -> `numba` -> `llvmlite`) do not yet support it, requiring Python <= 3.10.
+    *   **Solution:** The bootstrap script **must** be robust. It should first try to install dependencies with `uv`. If it fails due to a Python version mismatch, it must fall back to cloning the problematic dependency, using `sed` to patch its `pyproject.toml` to allow the target Python version, and then retrying the installation from the local, patched source. This is the only way to ensure a reliable installation across different user environments.
+
+*   **The Universal `exec "$@"` Pattern:**
+    *   **Problem:** Hardcoding the launch command (e.g., `exec uvicorn ...`) in the script makes it brittle and specific to one service.
+    *   **Solution:** The script should be a generic "launcher." Its final command should always be `exec "$@"`. This allows Harbor to pass the `executable` and `daemon_args` from the YAML contract directly to the script, making it reusable and ensuring the YAML file is the single source of truth for the command. It should also perform pre-flight checks to ensure the executable is available in the `PATH` before trying to `exec` it.
+
+---
+
+#### **4. Cross-Service Integration (`compose.x.*.yml`): The Declarative Pattern**
+
+To solve the "wall of warnings" and "invalid spec" errors, all integrations must be dynamic.
+
+*   **Problem:** Hardcoded URLs in `environment` sections and static `volumes` mounts break when a dependency runs natively and are not portable.
+*   **Solution:** All integrations must be declarative.
+    *   **For Config Files:** Use the `x-harbor-config-templates` key. Harbor's Deno composer will see this and automatically inject the `volumes` and `command` with `envsubst` to render the configuration at startup.
+        ```yaml
+        # In compose.x.webui.speaches.yml
+        services:
+          webui:
+            x-harbor-config-templates:
+              - source: ./path/to/config.speaches.json.template
+                target: /path/in/container/config.json
+        ```
+    *   **For Shared Data Volumes:** Use the `x-harbor-shared-volumes` key. The composer will only add the volume if the required host path variable (e.g., `${HARBOR_DEP_SPEACHES_MODELS_HOST_PATH}`) is actually present in the environment. This makes the configuration portable and prevents errors in container-only deployments.
+
+*   **Gotcha:** The variable names in the `env_overrides` map of the native contract **must exactly match** the variables used in the integration files. For example, `HARBOR_DEP_SPEACHES_INTERNAL_URL` must be used consistently in both places.
+
+---
 
 # harbor-speaches native install package version dependency issue:
 
