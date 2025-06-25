@@ -7,7 +7,7 @@ import time
 import httpx
 import uuid
 
-from config import INTERMEDIATE_OUTPUT, EXTRA_LLM_PARAMS
+from config import INTERMEDIATE_OUTPUT, EXTRA_LLM_PARAMS, BOOST_PUBLIC_URL
 from llm_registry import llm_registry
 from events import AsyncEventEmitter
 import chat as ch
@@ -269,6 +269,7 @@ class LLM(AsyncEventEmitter):
     await self.emit_message(format.format_status(status))
 
   async def emit_artifact(self, artifact):
+    artifact = artifact.replace('<<boost_public_url>>', BOOST_PUBLIC_URL.value)
     await self.emit_message(format.format_artifact(artifact))
 
   async def emit_message(self, message):

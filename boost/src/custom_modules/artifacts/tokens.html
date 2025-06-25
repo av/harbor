@@ -61,7 +61,8 @@
     elements.completion = completion
 
     const listenerId = '<<listener_id>>'
-    const response = await fetch(`http://localhost:34131/events/${listenerId}`, {
+    const boostUrl = '<<boost_public_url>>';
+    const response = await fetch(`${boostUrl}/events/${listenerId}`, {
       headers: {
         'Authorization': 'Bearer sk-boost'
       }
