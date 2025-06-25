@@ -287,7 +287,7 @@ KLMBR_PERCENTAGE = Config[int](
 KLMBR_MODS = Config[StrList](
   name='HARBOR_BOOST_KLMBR_MODS',
   type=StrList,
-  default='',
+  default='all',
   description=f'The list of modifications klmbr will apply'
 )
 

@@ -6,6 +6,9 @@ from fastapi.security.api_key import APIKeyHeader
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 
+from middleware.request_id import RequestIDMiddleware
+from middleware.request_state import RequestStateMiddleware
+
 from config import MODEL_FILTER, SERVE_BASE_MODELS, BOOST_AUTH
 from log import setup_logger
 
@@ -27,6 +30,9 @@ app.add_middleware(
   allow_methods=["*"],    # Allows all methods
   allow_headers=["*"],    # Allows all headers
 )
+
+app.add_middleware(RequestIDMiddleware)
+app.add_middleware(RequestStateMiddleware)
 
 
 # ------------------------------
@@ -123,7 +129,8 @@ async def get_boost_models(api_key: str = Depends(get_api_key)):
 
     for module in enabled_modules:
       mod = mods.registry.get(module)
-      candidates.append(mapper.get_proxy_model(mod, model))
+      if mod is not None:
+        candidates.append(mapper.get_proxy_model(mod, model))
 
   for model in candidates:
     should_serve = True
@@ -136,7 +143,12 @@ async def get_boost_models(api_key: str = Depends(get_api_key)):
 
   logger.debug(f"Serving {len(final)} models in the API")
 
-  return JSONResponse(content=final, status_code=200)
+  return JSONResponse(
+    content={
+      'object': 'list',
+      'data': final,
+    }, status_code=200
+  )
 
 
 @app.post("/v1/chat/completions")
@@ -192,4 +204,11 @@ if len(BOOST_AUTH) == 0:
 
 if __name__ == "__main__":
   import uvicorn
-  uvicorn.run(app, host="0.0.0.0", port=8000, timeout_graceful_shutdown=5, timeout_keep_alive=5, reload_delay=0.0)
+  uvicorn.run(
+    app,
+    host="0.0.0.0",
+    port=8000,
+    timeout_graceful_shutdown=5,
+    timeout_keep_alive=5,
+    reload_delay=0.0
+  )

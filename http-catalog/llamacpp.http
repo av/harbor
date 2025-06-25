@@ -2,11 +2,14 @@
 
 ###
 
-curl {{host}}/v1/models
+GET {{host}}/v1/models
 
 ###
 
-curl {{host}}/v1/chat/completions -H "Content-Type: application/json" -H "Authorization: Bearer sk-llamacpp" -d '{
+POST {{host}}/v1/chat/completions
+Content-Type: application/json
+
+{
   "model": "any",
   "messages": [
     {
@@ -19,4 +22,4 @@ curl {{host}}/v1/chat/completions -H "Content-Type: application/json" -H "Author
     }
   ],
   "max_tokens": 60
-}'
+}
