@@ -1382,8 +1382,6 @@ run_up() {
     # --- Step 7: Post-run Actions ---
     log_info "Harbor 'up' command finished successfully."
 
-    # --- Step 4: Post-run Actions (Regressions Fixed) ---
-    log_info "Harbor 'up' command finished successfully."
     local should_open=false; local should_tail=false
     for arg in "${up_args[@]}"; do
         case "$arg" in --open|-o) should_open=true;; --tail|-t) should_tail=true;; esac
@@ -1614,7 +1612,12 @@ run_down() {
 
             # Build the compose context with ALL services for full definition context
             # Docker Compose needs to understand the complete project structure
-            local compose_cmd; compose_cmd=$(compose_with_options -x "${remaining_native_active[@]}" "*")
+            local compose_cmd
+            if [[ ${#remaining_native_active[@]} -gt 0 ]]; then
+                compose_cmd=$(compose_with_options -x "${remaining_native_active[@]}" "*")
+            else
+                compose_cmd=$(compose_with_options "*")
+            fi
 
             # Using timeout protection for the potentially long-running docker command
             log_debug "Running compose command: $compose_cmd down --remove-orphans ${container_targets[*]}"
@@ -5612,7 +5615,7 @@ run_webtop_command() {
         # Cleanup data directory
         local data_dir=$(env_manager get webtop.workspace)
         log_info "Deleting Webtop workspace at '$data_dir'"
-        rm -rf $data_dir
+        rm -rf "$data_dir"
         return 0
         ;;
     esac
