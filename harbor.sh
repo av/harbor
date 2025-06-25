@@ -359,9 +359,9 @@ _harbor_get_running_service_runtime() {
     # If there's no evidence of a Harbor-managed native process, we consult
     # our other primary source of truth: the Docker daemon.
     # We ask Docker: "Do you have a container for this service in a 'running' state?"
-    # Use direct docker ps to avoid circular dependency with get_active_services().
+    # Use Harbor's container naming convention to avoid circular dependency with compose_with_options.
     local container_name; container_name=$(get_container_name "$service_handle")
-    if docker ps --filter "name=${container_name}" --filter "status=running" --format "{{.Names}}" 2>/dev/null | grep -q "^${container_name}$"; then
+    if docker ps --filter "name=^${container_name}$" --filter "status=running" --format "{{.Names}}" 2>/dev/null | grep -q "^${container_name}$"; then
         # Docker says yes. The evidence is conclusive.
         echo "CONTAINER"; return 0
     fi
@@ -665,12 +665,12 @@ _harbor_get_all_possible_services() {
     # Avoid pipe subshells by using bash's built-in array operations and here-strings.
     if [[ ${#unique_services_map[@]} -gt 0 ]]; then
         local -a service_list=("${!unique_services_map[@]}")
-        
+
         # Sort the array using bash built-ins without pipes:
         # Use readarray with process substitution to avoid pipes in the main shell
         local -a sorted_services
         readarray -t sorted_services < <(printf '%s\n' "${service_list[@]}" | sort)
-        
+
         # Output the final sorted list:
         printf '%s\n' "${sorted_services[@]}"
     fi
