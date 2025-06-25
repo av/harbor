@@ -359,9 +359,9 @@ _harbor_get_running_service_runtime() {
     # If there's no evidence of a Harbor-managed native process, we consult
     # our other primary source of truth: the Docker daemon.
     # We ask Docker: "Do you have a container for this service in a 'running' state?"
-    # We must use Harbor's compose resolution, not raw docker compose, to see all services.
-    local compose_cmd; compose_cmd=$(compose_with_options "*")
-    if eval "$compose_cmd ps --services --status running" | grep -q "^${service_handle}$"; then
+    # Use direct docker ps to avoid circular dependency with get_active_services().
+    local container_name; container_name=$(get_container_name "$service_handle")
+    if docker ps --filter "name=${container_name}" --filter "status=running" --format "{{.Names}}" 2>/dev/null | grep -q "^${container_name}$"; then
         # Docker says yes. The evidence is conclusive.
         echo "CONTAINER"; return 0
     fi
@@ -590,21 +590,23 @@ _harbor_process_service_stream_to_map() {
 # --- Core Service Retrieval Functions ---
 
 # _harbor_get_docker_services_list()
-# Retrieves a list of service names defined in Docker Compose files.
-# This function prioritizes robustness by checking for `docker` command availability
-# and efficiently collects services using `mapfile`. It suppresses `docker compose`
-# errors for cleaner output and prevents script exit on non-fatal failures.
+# Retrieves a list of service names using Harbor's robust composition logic.
+# This uses compose_with_options() to get the properly merged compose configuration
+# that includes all Harbor's sophisticated file merging, capability detection,
+# cross-service files, and native service handling.
 # Returns:
 #   A newline-separated list of Docker Compose service names to stdout.
 _harbor_get_docker_services_list() {
     local -a services=() # Local array to temporarily hold collected services.
     if _harbor_command_exists "docker"; then
-        # Capture stdout of `docker compose config --services` into the `services` array.
-        # `2>/dev/null` redirects stderr to null, suppressing potential error messages
-        # (e.g., no docker-compose.yml found).
-        # `|| true` prevents `set -e` or `set -o pipefail` from exiting the script
-        # if `docker compose` exits with a non-zero status (e.g., if no services).
-        mapfile -t services < <(docker compose config --services 2>/dev/null || true)
+        # Use Harbor's own composition logic to get the complete merged configuration
+        # The "*" wildcard ensures we get all available services with proper capability detection
+        local compose_cmd; compose_cmd=$(compose_with_options "*")
+        if [[ -n "$compose_cmd" ]]; then
+            # Extract services from Harbor's merged compose configuration
+            # This ensures we get all services including those from cross-service files
+            mapfile -t services < <(eval "$compose_cmd config --services" 2>/dev/null || true)
+        fi
     fi
     # Print each collected service on a new line. This forms the function's output stream.
     printf '%s\n' "${services[@]}"
@@ -636,43 +638,42 @@ _harbor_get_native_services_list() {
 # --- Main Orchestration Function ---
 
 # _harbor_get_all_possible_services()
-# [v21.0 - Final Version] The canonical function to return a unique and sorted list
-# of all services Harbor knows about. This design embodies maximal maturity,
-# robustness, efficiency, and cleanliness.
-# It orchestrates calls to specific retrieval functions, streams their output
-# to an in-memory associative array for highly efficient deduplication,
-# and performs a single, final lexicographical sort.
+# [v22.0 - DRY Refactored Version] The canonical function to return a unique and sorted list
+# of all services Harbor knows about. This version eliminates code duplication by using
+# the existing helper function and follows DRY principles while maintaining robustness.
+# It orchestrates calls to specific retrieval functions, uses a reusable helper for
+# deduplication, and performs efficient in-place sorting without pipe subshell issues.
 # Returns:
 #   A newline-separated, unique, and lexicographically sorted list of all service names to stdout.
 _harbor_get_all_possible_services() {
     # Declare an associative array to store unique service names.
-    # Keys are service names, values are arbitrary (e.g., '1').
     local -A unique_services_map
-    local service # Loop variable for iterating through map keys.
 
-    # 1. Collect Docker Compose services:
-    # Pipes the newline-separated output of `_harbor_get_docker_services_list`
-    # directly into `_harbor_process_service_stream_to_map` for immediate deduplication.
-    _harbor_get_docker_services_list | _harbor_process_service_stream_to_map unique_services_map
+    # 1. Collect Docker Compose services using the existing helper:
+    local docker_services; docker_services=$(_harbor_get_docker_services_list)
+    if [[ -n "$docker_services" ]]; then
+        _harbor_process_service_stream_to_map unique_services_map <<< "$docker_services"
+    fi
 
-    # 2. Collect Native services:
-    # Similarly, pipes the output of `_harbor_get_native_services_list`
-    # for immediate deduplication.
-    _harbor_get_native_services_list | _harbor_process_service_stream_to_map unique_services_map
+    # 2. Collect Native services using the existing helper:
+    local native_services; native_services=$(_harbor_get_native_services_list)
+    if [[ -n "$native_services" ]]; then
+        _harbor_process_service_stream_to_map unique_services_map <<< "$native_services"
+    fi
 
-    # 3. Extract unique services from the associative map keys:
-    # Iterate through the keys of the associative array (which are unique by definition).
-    # Populate a regular array `final_sorted_services` with these unique names.
-    local -a final_sorted_services=()
-    for service in "${!unique_services_map[@]}"; do
-        final_sorted_services+=("$service")
-    done
-
-    # 4. Sort the final list and print:
-    # `printf '%s\n'` prints each element of the array on a new line.
-    # The output is then piped to the external `sort` command to ensure lexicographical order.
-    # No `-u` is needed for `sort` here, as deduplication is already complete.
-    printf '%s\n' "${final_sorted_services[@]}" | sort
+    # 3. Extract unique services and sort them efficiently in bash:
+    # Avoid pipe subshells by using bash's built-in array operations and here-strings.
+    if [[ ${#unique_services_map[@]} -gt 0 ]]; then
+        local -a service_list=("${!unique_services_map[@]}")
+        
+        # Sort the array using bash built-ins without pipes:
+        # Use readarray with process substitution to avoid pipes in the main shell
+        local -a sorted_services
+        readarray -t sorted_services < <(printf '%s\n' "${service_list[@]}" | sort)
+        
+        # Output the final sorted list:
+        printf '%s\n' "${sorted_services[@]}"
+    fi
 }
 
 has_rocm() {
