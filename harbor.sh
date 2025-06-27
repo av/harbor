@@ -2570,28 +2570,28 @@ _harbor_start_native_service() {
     local context; context=$(_harbor_build_service_context "$service_handle")
     eval "$context"
     # print the context for debugging
-    log_info "Service context for '${HANDLE}':\n$context"
+    log_info "Service context for '${service_handle}':\n$context"
 
     # 2. Prerequisite checks.
     if [[ "$IS_ELIGIBLE" != "true" || -z "$NATIVE_DAEMON_COMMAND" ]]; then
-        log_warn "Cannot start native service '${HANDLE}': it is not native-eligible or is missing 'native_daemon_command' in its contract."
+        log_warn "Cannot start native service '${service_handle}': it is not native-eligible or is missing 'native_daemon_command' in its contract."
         return 1
     fi
-    local native_script="$harbor_home/$HANDLE/${HANDLE}_native.sh"
+    local native_script="$harbor_home/$service_handle/${service_handle}_native.sh"
     if [[ ! -f "$native_script" ]]; then
-        log_error "Native bootstrap script for '${HANDLE}' not found at '${native_script}'."
+        log_error "Native bootstrap script for '${service_handle}' not found at '${native_script}'."
         ls -l "$native_script" 2>&1 | log_debug
         return 1
     elif [[ ! -x "$native_script" ]]; then
-        log_error "Native bootstrap script for '${HANDLE}' exists at '${native_script}' but is not executable. Run: chmod +x '$native_script'"
+        log_error "Native bootstrap script for '${service_handle}' exists at '${native_script}' but is not executable. Run: chmod +x '$native_script'"
         ls -l "$native_script" 2>&1 | log_debug
         return 1
     fi
 
     # 3. Idempotency check: Do not start if already running.
-    local pid_file="$PID_DIR/${HANDLE}.pid"
+    local pid_file="$PID_DIR/${service_handle}.pid"
     if [[ -f "$pid_file" ]] && kill -0 "$(_run_with_timeout 2s cat "$pid_file" || echo 0)" 2>/dev/null; then
-        log_info "Harbor-managed native daemon for '${HANDLE}' is already running."; return 0;
+        log_info "Harbor-managed native daemon for '${service_handle}' is already running."; return 0;
     fi
 
     # disabled program name check because it might be a user's custom script that does not use the PID file
@@ -2633,25 +2633,27 @@ _harbor_start_native_service() {
     # - Harbor calls: native_script.sh "ollama" "serve"
     # - Native script executes: exec "$@"  (i.e., exec ollama serve)
     #
-    log_info "Starting native service '${HANDLE}' in the background..."
-    local log_file="${LOG_DIR}/harbor-${HANDLE}-native.log"
+    log_info "Starting native service '${service_handle}' via ${env_exports} exec "'""$native_script"" "$NATIVE_EXECUTABLE" "${NATIVE_DAEMON_ARGS[@]}"'" in the background..."
+    local log_file="${LOG_DIR}/harbor-${service_handle}-native.log"
 
     # Use nohup and a subshell to correctly daemonize the process with its environment.
     # Pass executable + daemon args separately (Docker-style) to the native script.
     # The native script will execute: exec "$NATIVE_EXECUTABLE" "${NATIVE_DAEMON_ARGS[@]}"
-    ( ${env_exports} exec "$harbor_home/$HANDLE/${HANDLE}_native.sh" "$NATIVE_EXECUTABLE" "${NATIVE_DAEMON_ARGS[@]}" ) > "$log_file" 2>&1 &
+    # TODO(ahundt) why is nohup missing here?
+    # TODO(ahundt) enable the harbor log capabilities for native services and/or prevent logs from growing indefinitely
+    ( ${env_exports} exec "$native_script" "$NATIVE_EXECUTABLE" "${NATIVE_DAEMON_ARGS[@]}" ) > "$log_file" 2>&1 &
     local pid=$!
     echo "$pid" > "$pid_file"
 
     # 6. Replace sleep with intelligent, stable wait
-    if ! _wait_for_native_process_stability "$HANDLE" "$pid"; then
-        log_error "Failed to launch native daemon for '${HANDLE}'. Check logs for details: ${log_file}"
+    if ! _wait_for_native_process_stability "$service_handle" "$pid"; then
+        log_error "Failed to launch native daemon for '${service_handle}'. Check logs for details: ${log_file}"
         # Attempt to clean up the failed process
         kill "$pid" 2>/dev/null
         rm -f "$pid_file"
         return 1
     else
-        log_debug "Native service '${HANDLE}' process has launched and is stable. Logs at ${log_file}"
+        log_debug "Native service '${service_handle}' process has launched and is stable. Logs at ${log_file}"
     fi
     return 0
 }
@@ -5468,35 +5470,52 @@ run_stt_command() {
 }
 
 run_speaches_command() {
+    # 1. Handle configuration-only subcommands that do not need the dispatcher.
     case "$1" in
     stt_model)
         shift
         env_manager_alias speaches.stt.model "$@"
+        return 0
         ;;
     tts_model)
         shift
         env_manager_alias speaches.tts.model "$@"
+        return 0
         ;;
     tts_voice)
         shift
         env_manager_alias speaches.tts.voice "$@"
+        return 0
         ;;
     version)
         shift
         env_manager_alias speaches.version "$@"
+        return 0
         ;;
     -h | --help | help)
+        echo "Please note that this is not Speaches CLI, but a Harbor CLI to manage Speaches service."
+        echo "Access Speaches own CLI by running 'harbor exec speaches' when it's running."
+        echo
         echo "Usage: harbor speaches <command>"
         echo
         echo "Commands:"
         echo "  harbor speaches stt_model [user/repo] - Get or set the STT model to run"
         echo "  harbor speaches tts_model [user/repo] - Get or set the TTS model to run"
         echo "  harbor speaches tts_voice [voice]     - Get or set the TTS voice to use"
-        ;;
-    *)
-        return $scramble_exit_code
+        echo "  harbor speaches version [version]     - Get or set the Speaches version docker tag"
+        return 0
         ;;
     esac
+
+    # 2. Define the service-specific parameters and delegate to the generic dispatcher.
+    # For Speaches, we need to set up environment variables for model configuration,
+    # cache paths, and ONNX Runtime providers when running natively.
+    _run_generic_service_cli \
+        --service-handle "speaches" \
+        --container-entrypoint "speaches" \
+        --native-env-vars 'export HF_HUB_CACHE="${HARBOR_HF_CACHE:-$HOME/.cache/huggingface/hub}"; export ONNX_PROVIDER="${HARBOR_ONNX_PROVIDER:-auto}"; export OMP_NUM_THREADS="${HARBOR_OMP_NUM_THREADS:-$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)}"' \
+        --container-env-vars "-e SPEACHES_API_BASE=\${HARBOR_SPEACHES_INTERNAL_URL}" \
+        -- "$@"
 }
 
 run_nexa_command() {

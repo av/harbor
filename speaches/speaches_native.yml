@@ -115,11 +115,12 @@ services:
       # The executable command for this service.
       # The service manager provides a unified entry point that handles
       # environment setup, model management, and service orchestration.
-      executable: "harbor-speaches"
+      executable: "speaches"
 
       # The arguments to pass to the service manager when starting the daemon.
       # The service manager will handle translating these to appropriate Speaches arguments.
-      daemon_args: ["--host", "0.0.0.0", "--port", "${HARBOR_SPEACHES_HOST_PORT:-34331}", "--server"]
+      daemon_args: ["serve", "--host", "${HARBOR_SPEACHES_HOST:-0.0.0.0}", "--port", "${HARBOR_SPEACHES_HOST_PORT:-34331}"]
+      # daemon_args: ["--host", "0.0.0.0", "--port", "${HARBOR_SPEACHES_HOST_PORT:-34331}", "--server"]
 
       # The TCP port that the native daemon process will listen on.
       port: 34331

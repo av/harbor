@@ -312,7 +312,7 @@ fi
 #
 # This launches the uvicorn server via the `speaches` tool, and ensures
 # Harbor directly manages the final service process for clean shutdowns.
-log_info "All setup complete. Handing off to command: speaches $@"
+log_info "Speaches setup complete. Handing off to command: speaches $@"
 
 # include the url of the pull request, and up:
 # https://github.com/speaches-ai/speaches/pull/449
@@ -344,7 +344,8 @@ if [[ -f "$STATE_FILE" ]]; then
 else
     # speaches was already installed, and there was no state file which means the repo was cloned and installed
     # so we can just run the user installed version of speaches
-    exec "speaches" serve "$@"
+    # exec "speaches" serve "$@"
+    exec "$@"
 fi
 
 # https://aistudio.google.com/app/prompts?state=%7B%22ids%22:%5B%221SrK-h2XlgJj0jOyMKSlWKOH8_k6Ikucp%22%5D,%22action%22:%22open%22,%22userId%22:%22113401184214553951890%22,%22resourceKeys%22:%7B%7D%7D&usp=sharing
