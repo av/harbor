@@ -18,6 +18,7 @@
 # and can be overridden by environment variables following Harbor's naming
 # conventions (HARBOR_SPEACHES_*).
 #
+# TODO: simplify or remove the `speaches_defaults.yml` file
 # =============================================================================
 
 # Server Configuration
