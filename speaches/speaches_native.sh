@@ -120,11 +120,11 @@ HARBOR_SPEACHES_FORCE_SETUP="${HARBOR_SPEACHES_FORCE_SETUP:-false}"
 HARBOR_SPEACHES_WORKSPACE="${HARBOR_SPEACHES_WORKSPACE:-$HARBOR_HOME/speaches/workspace}"
 
 # All artifacts (venv, repo) will be placed inside this workspace.
-VENV_DIR="$HARBOR_SPEACHES_WORKSPACE/venv"
 # REPO LOCATION: The speaches git repository will be cloned to this directory.
-REPO_DIR="$HARBOR_SPEACHES_WORKSPACE/speaches_repo"
+REPO_DIR="$HARBOR_SPEACHES_WORKSPACE/speaches"
 # Marker file for fast-path launches.
 STATE_FILE="$HARBOR_SPEACHES_WORKSPACE/.setup_complete"
+VENV_DIR="$REPO_DIR/.venv"
 
 # --- Python Configuration ---
 # User can force a Python command with HARBOR_PYTHON_CMD (e.g., /usr/local/bin/python3.10)
@@ -243,10 +243,12 @@ if [[ "$HARBOR_SPEACHES_FORCE_SETUP" == "true" ]] || ! command_exists speaches; 
     else
         log_info "Virtual environment already exists."
     fi
+
     # Source the venv to ensure correct environment for subsequent commands
     # shellcheck disable=SC1090
-    source "$VENV_DIR/bin/activate"
-    log_info "Using Python: $($VENV_DIR/bin/python --version)"
+    source "$VENV_DIR/bin/activate"    # Set python_executable variable for use in subsequent commands
+    python_executable="$VENV_DIR/bin/python"
+    log_info "Using Python: $($python_executable --version)"
 
     # local pyproject_file="$REPO_DIR/pyproject.toml"
     # if grep -q 'requires-python = ">=3.12' "$pyproject_file"; then
@@ -256,10 +258,10 @@ if [[ "$HARBOR_SPEACHES_FORCE_SETUP" == "true" ]] || ! command_exists speaches; 
 
     log_info "Syncing and upgrading dependencies via 'uv sync'..."
     # NOTE: You can do uv sync --upgrade to ensure latest packages but can occasionally introduce breaking changes. Removed because stability is preferred.
-    "$VENV_DIR/bin/uv" sync --all-extras --python "$python_executable" -f "$REPO_DIR/pyproject.toml"
+    uv sync --all-extras --python "$python_executable" -f "$REPO_DIR/pyproject.toml"
 
     log_info "Installing the 'speaches' command-line tool via 'uv tool install'..."
-    "$VENV_DIR/bin/uv" tool install . --from "$REPO_DIR" --python "$python_executable"
+    uv tool install . --from "$REPO_DIR" --python "$python_executable"
 
     # Step 5: Pre-download Default Models
     log_info "[Step 5/6] Pre-downloading default models for faster first launch..."
