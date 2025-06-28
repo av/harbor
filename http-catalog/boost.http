@@ -186,3 +186,438 @@ Authorization: sk-boost
   // ],
   "stream": true
 }
+
+### Continued call
+
+POST {{host}}/v1/chat/completions
+Content-Type: application/json
+Authorization: sk-boost
+
+{
+  "model": "qwen3:8b",
+  "messages": [
+    {
+      "role": "system",
+      "content": "\nLLMs like yourself have a temperature setting.\nTypically is set by the user for every request, however you're given a unique opportunity to set it yourself.\nMoreover, you can do that dynamically for specific portions of your response.\nYou will be strategic about it:\n- Set extremely high temperature (1.0-1.5+) when you want to be very creative, but incoherent.\n- Set high temperature (0.8-1.0) when you want to be creative but maintain some coherence.\n- Set medium temperature (0.4-0.7) when you want to balance between creativity and precision.\n- Set low temperature (0.0-0.3) when you want to be precise.\nFor every response, start with setting a temperature most suitable for the task.\nWhen replying, change temperature dynamically for specific portions of your response.\nAlways rely on the set temperature tool to enhance the quality of your response.\n"
+    },
+    {
+      "role": "system",
+      "content": "/no_think"
+    },
+    {
+      "role": "system",
+      "content": "User Context:\n\n"
+    },
+    {
+      "role": "user",
+      "content": "How to drink an ocean?"
+    },
+    {
+      "role": "assistant",
+      "content": "",
+      "tool_calls": [
+        {
+          "id": "call_vn005bxp",
+          "function": {
+            "name": "__tool_set_temperature",
+            "arguments": "{\"temperature\":1.2}"
+          },
+          "type": "function"
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "content": "Temperature set to 1.2.",
+      "tool_call_id": "call_vn005bxp"
+    },
+    {
+      "role": "assistant",
+      "content": "",
+      "tool_calls": [
+        {
+          "id": "call_36r67fmf",
+          "function": {
+            "name": "__tool_set_temperature",
+            "arguments": "{\"temperature\":1.2}"
+          },
+          "type": "function"
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "content": "Temperature set to 1.2.",
+      "tool_call_id": "call_36r67fmf"
+    },
+    {
+      "role": "assistant",
+      "content": "",
+      "tool_calls": [
+        {
+          "id": "call_1dsup1de",
+          "function": {
+            "name": "__tool_set_temperature",
+            "arguments": "{\"temperature\":1.2}"
+          },
+          "type": "function"
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "content": "Temperature set to 1.2.",
+      "tool_call_id": "call_1dsup1de"
+    },
+    {
+      "role": "assistant",
+      "content": "",
+      "tool_calls": [
+        {
+          "id": "call_bv483vfy",
+          "function": {
+            "name": "__tool_set_temperature",
+            "arguments": "{\"temperature\":0.7}"
+          },
+          "type": "function"
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "content": "Temperature set to 0.7.",
+      "tool_call_id": "call_bv483vfy"
+    },
+    {
+      "role": "assistant",
+      "content": "",
+      "tool_calls": [
+        {
+          "id": "call_n5jnnpeb",
+          "function": {
+            "name": "__tool_set_temperature",
+            "arguments": "{\"temperature\":0.7}"
+          },
+          "type": "function"
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "content": "Temperature set to 0.7.",
+      "tool_call_id": "call_n5jnnpeb"
+    },
+    {
+      "role": "assistant",
+      "content": "",
+      "tool_calls": [
+        {
+          "id": "call_m34ow0ax",
+          "function": {
+            "name": "__tool_set_temperature",
+            "arguments": "{\"temperature\":0.7}"
+          },
+          "type": "function"
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "content": "Temperature set to 0.7.",
+      "tool_call_id": "call_m34ow0ax"
+    },
+    {
+      "role": "assistant",
+      "content": "",
+      "tool_calls": [
+        {
+          "id": "call_n3ojkycb",
+          "function": {
+            "name": "__tool_set_temperature",
+            "arguments": "{\"temperature\":0.7}"
+          },
+          "type": "function"
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "content": "Temperature set to 0.7.",
+      "tool_call_id": "call_n3ojkycb"
+    },
+    {
+      "role": "assistant",
+      "content": "",
+      "tool_calls": [
+        {
+          "id": "call_iyd3reva",
+          "function": {
+            "name": "__tool_set_temperature",
+            "arguments": "{\"temperature\":0.7}"
+          },
+          "type": "function"
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "content": "Temperature set to 0.7.",
+      "tool_call_id": "call_iyd3reva"
+    },
+    {
+      "role": "assistant",
+      "content": "",
+      "tool_calls": [
+        {
+          "id": "call_grxvemza",
+          "function": {
+            "name": "__tool_set_temperature",
+            "arguments": "{\"temperature\":0.7}"
+          },
+          "type": "function"
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "content": "Temperature set to 0.7.",
+      "tool_call_id": "call_grxvemza"
+    },
+    {
+      "role": "assistant",
+      "content": "",
+      "tool_calls": [
+        {
+          "id": "call_327btzxi",
+          "function": {
+            "name": "__tool_set_temperature",
+            "arguments": "{\"temperature\":0.7}"
+          },
+          "type": "function"
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "content": "Temperature set to 0.7.",
+      "tool_call_id": "call_327btzxi"
+    },
+    {
+      "role": "assistant",
+      "content": "",
+      "tool_calls": [
+        {
+          "id": "call_8jamqi9b",
+          "function": {
+            "name": "__tool_set_temperature",
+            "arguments": "{\"temperature\":0.7}"
+          },
+          "type": "function"
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "content": "Temperature set to 0.7.",
+      "tool_call_id": "call_8jamqi9b"
+    },
+    {
+      "role": "assistant",
+      "content": "",
+      "tool_calls": [
+        {
+          "id": "call_14ybr0qj",
+          "function": {
+            "name": "__tool_set_temperature",
+            "arguments": "{\"temperature\":0.7}"
+          },
+          "type": "function"
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "content": "Temperature set to 0.7.",
+      "tool_call_id": "call_14ybr0qj"
+    },
+    {
+      "role": "assistant",
+      "content": "",
+      "tool_calls": [
+        {
+          "id": "call_2omp6xsh",
+          "function": {
+            "name": "__tool_set_temperature",
+            "arguments": "{\"temperature\":0.7}"
+          },
+          "type": "function"
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "content": "Temperature set to 0.7.",
+      "tool_call_id": "call_2omp6xsh"
+    },
+    {
+      "role": "assistant",
+      "content": "",
+      "tool_calls": [
+        {
+          "id": "call_sgumkeam",
+          "function": {
+            "name": "__tool_set_temperature",
+            "arguments": "{\"temperature\":0.7}"
+          },
+          "type": "function"
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "content": "Temperature set to 0.7.",
+      "tool_call_id": "call_sgumkeam"
+    },
+    {
+      "role": "assistant",
+      "content": "",
+      "tool_calls": [
+        {
+          "id": "call_ohvfebd4",
+          "function": {
+            "name": "__tool_set_temperature",
+            "arguments": "{\"temperature\":0.7}"
+          },
+          "type": "function"
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "content": "Temperature set to 0.7.",
+      "tool_call_id": "call_ohvfebd4"
+    },
+    {
+      "role": "assistant",
+      "content": "",
+      "tool_calls": [
+        {
+          "id": "call_yg6vap01",
+          "function": {
+            "name": "__tool_set_temperature",
+            "arguments": "{\"temperature\":0.7}"
+          },
+          "type": "function"
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "content": "Temperature set to 0.7.",
+      "tool_call_id": "call_yg6vap01"
+    },
+    {
+      "role": "assistant",
+      "content": "",
+      "tool_calls": [
+        {
+          "id": "call_phrruqbo",
+          "function": {
+            "name": "__tool_set_temperature",
+            "arguments": "{\"temperature\":0.7}"
+          },
+          "type": "function"
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "content": "Temperature set to 0.7.",
+      "tool_call_id": "call_phrruqbo"
+    },
+    {
+      "role": "assistant",
+      "content": "",
+      "tool_calls": [
+        {
+          "id": "call_1ylvp1vw",
+          "function": {
+            "name": "__tool_set_temperature",
+            "arguments": "{\"temperature\":0.7}"
+          },
+          "type": "function"
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "content": "Temperature set to 0.7.",
+      "tool_call_id": "call_1ylvp1vw"
+    },
+    {
+      "role": "assistant",
+      "content": "",
+      "tool_calls": [
+        {
+          "id": "call_rt3n5y5a",
+          "function": {
+            "name": "__tool_set_temperature",
+            "arguments": "{\"temperature\":0.7}"
+          },
+          "type": "function"
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "content": "Temperature set to 0.7.",
+      "tool_call_id": "call_rt3n5y5a"
+    },
+    {
+      "role": "assistant",
+      "content": "",
+      "tool_calls": [
+        {
+          "id": "call_jl3ujmd5",
+          "function": {
+            "name": "__tool_set_temperature",
+            "arguments": "{\"temperature\":0.7}"
+          },
+          "type": "function"
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "content": "Temperature set to 0.7.",
+      "tool_call_id": "call_jl3ujmd5"
+    }
+  ],
+  "temperature": 0.35,
+  "stream": true,
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "__tool_set_temperature",
+        "description": "\n    Allows you to choose the temperature for next portion of your response.\n    After calling this tool, you must proceed replying in text, otherwise it's for naught.\n\n    Args:\n      temperature (float): The temperature to set for the next portion of the response. Should be between 0.0 and 1.0.\n    ",
+        "parameters": {
+          "properties": {
+            "temperature": {
+              "title": "Temperature",
+              "type": "number"
+            }
+          },
+          "required": [
+            "temperature"
+          ],
+          "title": "`set_temperature`",
+          "type": "object"
+        }
+      }
+    }
+  ],
+  "stream_options": {
+    "include_usage": true
+  }
+}

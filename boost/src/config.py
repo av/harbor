@@ -275,6 +275,13 @@ BOOST_AUTH = [
   key for key in [API_KEY.value, *API_KEYS.value, *EXTRA_KEYS.value] if key
 ]
 
+BOOST_PUBLIC_URL = Config[str](
+  name='HARBOR_BOOST_PUBLIC_URL',
+  type=str,
+  default='http://localhost:34131',
+  description='URL which boost artifacts should use to access the boost API'
+)
+
 # ------------------ KLMBR ------------------
 
 KLMBR_PERCENTAGE = Config[int](
@@ -287,7 +294,7 @@ KLMBR_PERCENTAGE = Config[int](
 KLMBR_MODS = Config[StrList](
   name='HARBOR_BOOST_KLMBR_MODS',
   type=StrList,
-  default='',
+  default='all',
   description=f'The list of modifications klmbr will apply'
 )
 

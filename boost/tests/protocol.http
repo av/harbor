@@ -1,0 +1,368 @@
+# @import variables.http
+
+### List models
+
+GET {{host}}/v1/models
+...defaultHeaders
+
+?? status == 200
+{{
+  test('should reply with a model list', () => {
+    const body = response.parsedBody;
+
+    if (!body) {
+      throw new Error('Response body is empty');
+    }
+
+    if (body.object !== 'list') {
+      throw new Error(`Expected object to be 'list', but got '${body.object}'`);
+    }
+
+    if (!Array.isArray(body.data)) {
+      throw new Error('Expected data to be an array');
+    }
+
+    const model = body.data[0];
+
+    if (!model.id) {
+      throw new Error('Model id is missing');
+    }
+
+    if (model.object !== 'model') {
+      throw new Error(`Expected model object to be 'model', but got '${model.object}'`);
+    }
+
+    if (!model.created) {
+      throw new Error('Model created timestamp is missing');
+    }
+
+    if (!model.owned_by) {
+      throw new Error('Model owner is missing');
+    }
+  })
+}}
+
+### Chat Completions - non-streaming
+
+POST {{host}}/v1/chat/completions
+...defaultHeaders
+
+{
+  "model": "{{model}}",
+  "messages": [
+    {
+      "role": "user",
+      "content": "What is the capital of France? Answer in one word."
+    }
+  ],
+  "max_tokens": 7
+}
+
+?? status == 200
+{{
+  test('should reply with a chat completion', () => {
+    const body = response.parsedBody;
+
+    if (!body) {
+      throw new Error('Response body is empty');
+    }
+
+    if (body.object !== 'chat.completion') {
+      throw new Error(`Expected object to be 'chat.completion', but got '${body.object}'`);
+    }
+
+    if (!body.choices || !Array.isArray(body.choices) || body.choices.length === 0) {
+      throw new Error('Expected choices to be a non-empty array');
+    }
+
+    const choice = body.choices[0];
+
+    if (!choice.message || !choice.message.content) {
+      throw new Error('Choice message content is missing');
+    }
+  })
+}}
+
+### Chat Completions - streaming
+
+POST {{host}}/v1/chat/completions
+...defaultHeaders
+
+{
+  "model": "{{model}}",
+  "messages": [
+    {
+      "role": "user",
+      "content": "What is the capital of France? Answer in one word."
+    }
+  ],
+  "max_tokens": 7,
+  "stream": true
+}
+
+?? status == 200
+{{
+  test('should reply with a chat completion stream', () => {
+    const chunks = response.body
+      .split('\n')
+      .map(c => c.trim())
+      .filter(c => c && c !== '[DONE]')
+      .map(c => c.replace(/^data:\s*/, ''))
+      .map(c => JSON.parse(c));
+
+    if (!chunks || chunks.length === 0) {
+      throw new Error('Response body is empty');
+    }
+
+    chunks.forEach(chunk => {
+      if (chunk.object !== 'chat.completion.chunk') {
+        throw new Error(`Expected object to be 'chat.completion.chunk', but got '${chunk.object}'`);
+      }
+
+      if (!chunk.choices || !Array.isArray(chunk.choices) || chunk.choices.length === 0) {
+        throw new Error('Expected choices to be a non-empty array');
+      }
+
+      const choice = chunk.choices[0];
+
+      if (!choice.delta || choice.delta.content === undefined) {
+        throw new Error('Choice delta content is missing');
+      }
+    });
+  })
+}}
+
+### Structured Outputs
+
+POST {{host}}/v1/chat/completions
+...defaultHeaders
+
+{
+  "model": "{{model}}",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Where Paris is located?"
+    }
+  ],
+  "response_format": {
+    "type": "json_schema",
+    "json_schema": {
+      "name": "CountryInfoSchema",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "country": {
+            "type": "string",
+            "description": "The name of the country"
+          },
+          "language": {
+            "type": "string",
+            "description": "Language spoken in the country"
+          }
+        },
+        "required": ["country", "language"]
+      }
+    }
+  }
+}
+
+?? status == 200
+{{
+  test('should reply with a structured output', () => {
+    const body = response.parsedBody;
+
+    if (!body) {
+      throw new Error('Response body is empty');
+    }
+
+    if (body.object !== 'chat.completion') {
+      throw new Error(`Expected object to be 'chat.completion', but got '${body.object}'`);
+    }
+
+    if (!body.choices || !Array.isArray(body.choices) || body.choices.length === 0) {
+      throw new Error('Expected choices to be a non-empty array');
+    }
+
+    const choice = body.choices[0];
+
+    if (!choice.message || !choice.message.content) {
+      throw new Error('Choice message content is missing');
+    }
+
+    const content = JSON.parse(choice.message.content);
+
+    if (!content.country || !content.language) {
+      throw new Error('Structured output is missing required fields');
+    }
+  })
+}}
+
+### Tool calling
+
+POST {{host}}/v1/chat/completions
+...defaultHeaders
+
+{
+  "model": "{{model}}",
+  "messages": [
+    {
+      "role": "user",
+      "content": "What is the sum of 2 and 3?"
+    }
+  ],
+  "temperature": 0.15,
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+          "name": "calculate_sum",
+          "description": "Calculate the sum of two numbers",
+          "parameters": {
+              "type": "object",
+              "properties": {
+                  "a": {
+                      "type": "number",
+                      "description": "The first number"
+                  },
+                  "b": {
+                      "type": "number",
+                      "description": "The second number"
+                  }
+              },
+              "required": [
+                  "a",
+                  "b"
+              ],
+              "additionalProperties": false
+          },
+          "strict": true
+      }
+    }
+  ],
+  "stream": false
+}
+
+?? status == 200
+{{
+  test('should reply with a tool call', () => {
+    const body = response.parsedBody;
+
+    if (!body) {
+      throw new Error('Response body is empty');
+    }
+
+    if (body.object !== 'chat.completion') {
+      throw new Error(`Expected object to be 'chat.completion', but got '${body.object}'`);
+    }
+
+    if (!body.choices || !Array.isArray(body.choices) || body.choices.length === 0) {
+      throw new Error('Expected choices to be a non-empty array');
+    }
+
+    const choice = body.choices[0];
+
+    if (!choice.message || !choice.message.tool_calls || !Array.isArray(choice.message.tool_calls)) {
+      throw new Error('Choice message tool calls are missing');
+    }
+
+    if (choice.finish_reason !== 'tool_calls') {
+      throw new Error(`Expected finish reason to be 'tool_calls', but got '${choice.finish_reason}'`);
+    }
+
+    const toolCall = choice.message.tool_calls[0];
+
+    if (toolCall.function.name !== 'calculate_sum') {
+      throw new Error(`Expected tool call function name to be 'calculate_sum', but got '${toolCall.function.name}'`);
+    }
+  })
+}}
+
+### Tool calling - streaming
+
+POST {{host}}/v1/chat/completions
+...defaultHeaders
+
+{
+  "model": "{{model}}",
+  "messages": [
+    {
+      "role": "user",
+      "content": "What is the sum of 2 and 3?"
+    }
+  ],
+  "temperature": 0.15,
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+          "name": "calculate_sum",
+          "description": "Calculate the sum of two numbers",
+          "parameters": {
+              "type": "object",
+              "properties": {
+                  "a": {
+                      "type": "number",
+                      "description": "The first number"
+                  },
+                  "b": {
+                      "type": "number",
+                      "description": "The second number"
+                  }
+              },
+              "required": [
+                  "a",
+                  "b"
+              ],
+              "additionalProperties": false
+          },
+          "strict": true
+      }
+    }
+  ],
+  "stream": true
+}
+
+?? status == 200
+{{
+  test('should reply with a tool call stream', () => {
+    const chunks = response.body
+      .split('\n')
+      .map(c => c.trim())
+      .map(c => c.replace(/^data:\s*/, ''))
+      .filter(c => c && c !== '[DONE]')
+      .map(c => JSON.parse(c));
+
+    if (!chunks || chunks.length === 0) {
+      throw new Error('Response body is empty');
+    }
+
+    let foundToolCall = false;
+
+    chunks.forEach(chunk => {
+      if (chunk.object !== 'chat.completion.chunk') {
+        throw new Error(`Expected object to be 'chat.completion.chunk', but got '${chunk.object}'`);
+      }
+
+      if (!chunk.choices || !Array.isArray(chunk.choices) || chunk.choices.length === 0) {
+        throw new Error('Expected choices to be a non-empty array');
+      }
+
+      const choice = chunk.choices[0];
+
+      if (choice.delta && choice.delta.tool_calls && Array.isArray(choice.delta.tool_calls)) {
+        const toolCall = choice.delta.tool_calls[0];
+
+        if (toolCall.function.name !== 'calculate_sum') {
+          throw new Error(`Expected tool call function name to be 'calculate_sum', but got '${toolCall.function.name}'`);
+        }
+
+        foundToolCall = true;
+      }
+    });
+
+    if (!foundToolCall) {
+      throw new Error('Expected at least one tool call to be present');
+    }
+  })
+}}

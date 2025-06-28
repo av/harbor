@@ -2,9 +2,11 @@ import { sleep } from './utils';
 
 export class BoostListener {
   listeners: Record<string, Function[]>;
+  websocket: WebSocket | null;
 
   constructor() {
     this.listeners = {};
+    this.websocket = null;
   }
 
   on(event, callback) {
@@ -27,9 +29,17 @@ export class BoostListener {
     }
   }
 
+  send(data) {
+    if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+      this.websocket.send(JSON.stringify(data));
+    } else {
+      console.error("WebSocket is not open. Cannot send data.");
+    }
+  }
+
   processChunk(chunk) {
     try {
-      const data = JSON.parse(chunk.replace(/data: /, ""));
+      const data = chunk;
       const text = data.object;
 
       if (text === "boost.listener.event") {
@@ -54,49 +64,29 @@ export class BoostListener {
   async listen() {
     try {
       const listenerId = "<<listener_id>>";
-      const boostUrl = "<<boost_public_url>>";
-
-      const response = await fetch(
-        `${boostUrl}/events/${listenerId}`,
-        {
-          headers: {
-            Authorization: "Bearer sk-boost",
-          },
-        }
+      const boostUrl = "<<boost_public_url>>".replace('http://', 'ws://').replace('https://', 'wss://');
+      this.websocket = new WebSocket(
+        `${boostUrl}/events/${listenerId}/ws`,
+        [],
       );
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
+      this.websocket.onopen = () => {
+        this.emit('local.open', {})
+      };
 
-      const reader = response.body.getReader();
+      this.websocket.onmessage = (event) => {
+        const chunk = event.data;
+        const parsed = JSON.parse(chunk);
+        this.processChunk(parsed);
+      };
 
-      async function consume() {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) {
-            console.log("Stream complete");
-            break;
-          }
+      this.websocket.onclose = () => {
+        this.emit('local.close', {});
+      };
 
-          try {
-            const blob = new TextDecoder().decode(value);
-            const chunks = blob.split("\n\n");
-
-            for (const chunk of chunks) {
-              if (chunk.trim()) {
-                this.processChunk(chunk);
-              }
-            }
-          } catch (e) {
-            console.error("Error processing data:", e);
-          }
-
-          await sleep(10);
-        }
-      }
-
-      await consume.call(this);
+      this.websocket.onerror = (error) => {
+        this.emit('local.error', { error });
+      };
     } catch (error) {
       console.error("Error connecting to event stream:", error);
     }

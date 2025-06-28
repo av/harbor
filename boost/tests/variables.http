@@ -1,0 +1,10 @@
+@apiKey = sk-boost
+@host = http://localhost:34131
+@model = llama3.2:1b-instruct-q8_0
+
+{{
+  exports.defaultHeaders = {
+    'Authorization': `Bearer ${apiKey}`,
+    'Content-Type': 'application/json'
+  }
+}}

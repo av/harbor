@@ -7,8 +7,9 @@ import time
 import httpx
 import uuid
 
-from config import INTERMEDIATE_OUTPUT, EXTRA_LLM_PARAMS
+from config import INTERMEDIATE_OUTPUT, EXTRA_LLM_PARAMS, BOOST_PUBLIC_URL
 from llm_registry import llm_registry
+from events import AsyncEventEmitter
 import chat as ch
 import log
 import format
@@ -21,7 +22,7 @@ logger = log.setup_logger(__name__)
 BOOST_PARAM_PREFIX = "@boost_"
 
 
-class LLM:
+class LLM(AsyncEventEmitter):
   url: str
   headers: dict
   query_params: dict
@@ -38,6 +39,8 @@ class LLM:
   cpl_id: int
 
   def __init__(self, **kwargs):
+    super().__init__()
+
     self.id = str(uuid.uuid4())
     self.url = kwargs.get('url')
     self.headers = kwargs.get('headers', {})
@@ -123,6 +126,9 @@ class LLM:
     if chunk_str.startswith("data: "):
       chunk_str = chunk_str[6:]
 
+    if chunk_str == "[DONE]":
+      return self.chunk_from_message('')
+
     return json.loads(chunk_str)
 
   def output_from_chunk(self, chunk):
@@ -171,6 +177,9 @@ class LLM:
     return self.chunk_from_delta({"role": "assistant", "content": message})
 
   def chunk_from_tool_call(self, tool_call: dict):
+    if 'index' not in tool_call:
+      tool_call['index'] = 0
+
     return self.chunk_from_delta(
       {
         "role": "assistant",
@@ -231,11 +240,12 @@ class LLM:
   async def generator(self):
     self.is_streaming = True
 
-    while self.is_streaming:
+    while self.is_streaming or not self.queue.empty():
       chunk = await self.queue.get()
 
       if chunk is None:
         break
+
       yield chunk
 
   async def response_stream(self):
@@ -259,12 +269,32 @@ class LLM:
     await self.emit_message(format.format_status(status))
 
   async def emit_artifact(self, artifact):
+    artifact = artifact.replace('<<boost_public_url>>', BOOST_PUBLIC_URL.value)
     await self.emit_message(format.format_artifact(artifact))
 
   async def emit_message(self, message):
     await self.emit_chunk(self.chunk_from_message(message))
 
   async def emit_chunk(self, chunk):
+    if (
+      "choices" not in chunk or not chunk["choices"] or
+      "delta" not in chunk["choices"][0] or
+      "content" not in chunk["choices"][0]["delta"]
+    ):
+      if "choices" not in chunk or not chunk["choices"]:
+        chunk["choices"] = [{}]
+      if "delta" not in chunk["choices"][0]:
+        chunk["choices"][0]["delta"] = {}
+      chunk["choices"][0]["delta"]["content"] = ""
+
+    if (
+      "choices" not in chunk or not chunk["choices"] or
+      "index" not in chunk["choices"][0]
+    ):
+      if "choices" not in chunk or not chunk["choices"]:
+        chunk["choices"] = [{}]
+      chunk["choices"][0]["index"] = 0
+
     await self.emit_data(self.chunk_to_string(chunk))
 
   async def emit_data(self, data):
@@ -281,6 +311,7 @@ class LLM:
   async def emit_done(self):
     await self.emit_data('data: [DONE]')
     await self.emit_data(None)
+    await self.remove_all_listeners()
     self.is_streaming = False
 
   async def stream_final_completion(self, **kwargs):
@@ -306,7 +337,16 @@ class LLM:
     first_tool_call_id = None
 
     async with httpx.AsyncClient(timeout=None) as client:
-      while True:    # Loop to handle tool calls and continuations
+      current_stream_content = ""
+
+      while True:
+        # Assistant must remember what it said so far
+        if current_stream_content and current_stream_content != "":
+          if chat.tail.role == 'assistant':
+            chat.tail.content += current_stream_content
+          else:
+            chat.assistant(current_stream_content)
+
         body = {
           "model": model,
           "messages": chat.history(),
@@ -329,12 +369,17 @@ class LLM:
           params=query_params,
           json=body
         ) as response:
-          response.raise_for_status()
+          try:
+            response.raise_for_status()
+          except httpx.HTTPStatusError as e:
+            body = await e.response.aread()
+            logger.error(f"Chat completion error {body.decode('utf-8')}")
+            raise
+
           buffer = b''
 
           async for chunk in response.aiter_bytes():
             buffer += chunk
-            # await self.emit_chunk(chunk)
 
             while b'\n' in buffer:
               line, buffer = buffer.split(b'\n', 1)
@@ -425,7 +470,7 @@ class LLM:
               name = tool_call["function"]["name"]
 
               if not tools.registry.is_local_tool(name):
-                # Passing control back to boost client
+                logger.info(f'Passing back to API client: {tool_call}')
                 await self.emit_chunk(self.chunk_from_tool_call(tool_call))
                 return result
 
@@ -441,7 +486,7 @@ class LLM:
                 args = {"query": args_str}    # Fallback for malformed JSON
 
               chat.tool_call(tool_call)
-              tool_result = await tools.registry.call_tool(name, **args)
+              tool_result = await tools.registry.call_local_tool(name, **args)
               chat.tool(tool_call["id"], tool_result)
 
               logger.info(f"Called name={name}, args={args}")
@@ -516,6 +561,12 @@ class LLM:
       **self.params,
       **kwargs.get("params", {}),
     }
+
+    local_tools = tools.registry.collect_tool_defs()
+
+    if local_tools:
+      params['tools'] = params.get('tools', [])
+      params['tools'].extend(local_tools)
 
     if kwargs.get("schema"):
       params['response_format'] = {

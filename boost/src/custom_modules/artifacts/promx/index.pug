@@ -1,0 +1,21 @@
+doctype html
+html(lang="en")
+  head
+    meta(charset="UTF-8")
+    meta(name="viewport", content="width=device-width, initial-scale=1.0")
+    title Promx Artifact
+    link(rel="stylesheet" href="./index.css")
+  body
+    #controllerContainer
+      canvas#moodCanvas
+    #moodValues
+      ul#emotionValueList
+    .boost-status
+    .boost-controls
+      .boost-control.play-pause
+        img.icon(src="https://unpkg.com/lucide-static@latest/icons/pause.svg" alt="Pause")
+      .boost-control.speed
+        img.icon(src="https://unpkg.com/lucide-static@latest/icons/snail.svg" alt="Speed")
+    .connection-indicator
+
+    script(src='./index.ts' type='module')

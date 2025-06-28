@@ -7,7 +7,7 @@ class LLMRegistry:
   def register(self, instance: 'llm.LLM'):
     self._registry[instance.id] = instance
 
-  def get(self, llm_id):
+  def get(self, llm_id) -> 'llm.LLM':
     return self._registry.get(llm_id)
 
   def unregister(self, instance: 'llm.LLM'):

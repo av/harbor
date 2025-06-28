@@ -1,0 +1,235 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  margin: 0;
+  padding: 0;
+  background: #2a2a2a;
+  overflow: hidden;
+  height: 100vh;
+  width: 100vw;
+  display: flex;
+  flex-direction: column;
+  color: #e0e0e0;
+}
+
+.icon {
+  filter: invert(1) brightness(0.8);
+}
+
+#controllerContainer {
+  background: rgba(25, 25, 25, 0.8);
+  width: 100%;
+  flex: 1;
+  position: relative;
+  min-height: 0;
+  backdrop-filter: blur(10px);
+}
+
+#moodCanvas {
+  border: none;
+  cursor: pointer;
+  display: block;
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 0 20px rgba(255, 255, 255, 0.05));
+}
+
+#moodValues {
+  width: 100%;
+  height: 260px;
+  background: #1e1e1e;
+  padding: 20px 24px;
+  box-sizing: border-box;
+  overflow: hidden;
+  flex-shrink: 0;
+  backdrop-filter: blur(20px);
+}
+
+#moodValues h3 {
+  margin-top: 0;
+  margin-bottom: 16px;
+  color: #f0f0f0;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+#emotionValueList {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px 16px;
+  margin: 0;
+  padding: 0;
+  list-style-type: none;
+  height: calc(100% - 50px);
+  align-content: start;
+}
+
+.emotion-value-item {
+  margin-bottom: 0;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  min-height: 30px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  backdrop-filter: blur(10px);
+  position: relative;
+  overflow: hidden;
+}
+
+.emotion-value-item::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.02);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.emotion-value-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.emotion-value-item:hover::before {
+  opacity: 1;
+}
+
+.emotion-icon {
+  font-size: 18px;
+  margin-right: 10px;
+  width: 20px;
+  display: inline-block;
+  text-align: center;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
+}
+
+.emotion-name {
+  display: inline-block;
+  width: 70px;
+  color: #d0d0d0;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+.emotion-bar-container {
+  flex-grow: 1;
+  height: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  margin: 0 10px;
+  overflow: hidden;
+  position: relative;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.emotion-bar {
+  height: 100%;
+  background: var(--bar-color, #4CAF50);
+  border-radius: 8px;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.emotion-bar::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 8px 8px 0 0;
+}
+
+.emotion-value-text {
+  min-width: 36px;
+  text-align: right;
+  font-weight: 700;
+  color: #f0f0f0;
+  font-size: 12px;
+  letter-spacing: 0.5px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+.boost-status {
+  position: absolute;
+  top: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.75rem 1.5rem;
+  color: #999;
+  font-size: 14px;
+  font-weight: 600;
+  z-index: 1000;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 14px;
+}
+
+.boost-controls {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  display: flex;
+  gap: 1rem;
+}
+
+.boost-control {
+  padding: 0.5rem 1.5rem;
+  font-size: 14px;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  border: none;
+  border-radius: 14px;
+  cursor: pointer;
+  transition: background-color 0.3s ease, transform 0.2s ease;
+}
+
+.boost-control:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.connection-indicator {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background-color: #999;
+  box-shadow: 0 0 5px #99999922;
+  transition: all 0.3s ease;
+}
+
+.connection-indicator.connected {
+  background-color: #4CAF50;
+  box-shadow: 0 0 16px #4CAF50FF;
+}
+
+.connection-indicator.error {
+  background-color: #F44336;
+  box-shadow: 0 0 16px #F44336FF;
+}
+
+
+@media (max-width: 768px) {
+  #emotionValueList {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px 12px;
+  }
+
+  #moodValues {
+    height: 300px;
+  }
+}
