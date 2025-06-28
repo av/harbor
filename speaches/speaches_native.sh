@@ -336,17 +336,15 @@ log_info "Speaches setup complete. Handing off to command: speaches $@"
 # # run the speaches server then open http://localhost:8000 in your web browser to try speaches
 # speaches serve --host 0.0.0.0 --port 8000
 
-# if the state file exists change directory to the workspace, source the env, and run the command; else just run the command
-if [[ -f "$STATE_FILE" ]]; then
+if [[ -f "$VENV_DIR/bin/activate" ]]; then
+    log_info "Activating virtual environment: $VENV_DIR"
     cd "$HARBOR_SPEACHES_WORKSPACE"
+    # shellcheck disable=SC1091
     source "$VENV_DIR/bin/activate"
-    exec "$VENV_DIR/bin/speaches" serve "$@"
-else
-    # speaches was already installed, and there was no state file which means the repo was cloned and installed
-    # so we can just run the user installed version of speaches
-    # exec "speaches" serve "$@"
-    exec "$@"
 fi
+
+ exec "$@"
+
 
 # https://aistudio.google.com/app/prompts?state=%7B%22ids%22:%5B%221SrK-h2XlgJj0jOyMKSlWKOH8_k6Ikucp%22%5D,%22action%22:%22open%22,%22userId%22:%22113401184214553951890%22,%22resourceKeys%22:%7B%7D%7D&usp=sharing
 # continue your process and your wait process, I want to iterate on sub-variations on variation 1, I would like to support brew whenever it is available which can include, I also believe that by integrating a more robust version of the following we can

@@ -2601,12 +2601,30 @@ _harbor_start_native_service() {
     # fi
 
     # 4. Prepare environment variables for the native process using a safe array.
-    local -a env_vars_for_exec=()
-    if [[ ${#NATIVE_ENV_VARS_LIST[@]} -gt 0 ]]; then
+    local -a env_vars_for_exec=("HARBOR_HOME=${harbor_home}")
+    # Standardize the environment passed to native scripts by always including the port and host.
+    # This creates a reliable contract for all native service scripts.
+    local HANDLE_UPPERCASE; HANDLE_UPPERCASE=$(echo "$service_handle" | tr 'a-z-' 'A-Z_')
+    if [[ -n "$NATIVE_PORT" ]]; then
+        env_vars_for_exec+=("HARBOR_${HANDLE_UPPERCASE}_HOST_PORT=${NATIVE_PORT}")
+    fi
+    # Look up the service-specific host from .env and provide a safe default.
+    local host_val; host_val=$(env_manager --silent get "${service_handle}.host")
+    env_vars_for_exec+=("HARBOR_${HANDLE_UPPERCASE}_HOST=${host_val:-0.0.0.0}")
+
+    # The context object provides NATIVE_ENV_VARS_LIST as a proper bash array.
+    # We iterate over this array to build the environment for the native script.
+    if declare -p NATIVE_ENV_VARS_LIST &>/dev/null && [[ ${#NATIVE_ENV_VARS_LIST[@]} -gt 0 ]]; then
         for var_name in "${NATIVE_ENV_VARS_LIST[@]}"; do
-            # Use a subshell to avoid polluting the current environment with 'value'
-            local value; value=$(env_manager --silent get "$var_name")
-            if [[ -n "$value" ]]; then
+            # Directly read the value from the .env file. This is the most robust way
+            # to handle the mixed list of keys provided by the native config.
+            local line; line=$(grep "^${var_name}=" .env 2>/dev/null || true)
+            if [[ -n "$line" ]]; then
+                # Extract the value part after the first '='.
+                local value; value="${line#*=}"
+                # Remove surrounding quotes, if they exist.
+                value="${value#\"}"; value="${value%\"}"
+                # Add the KEY=VALUE pair to the list for the `env` command.
                 env_vars_for_exec+=("${var_name}=${value}")
             fi
         done
@@ -2639,6 +2657,8 @@ _harbor_start_native_service() {
     # Use nohup to ensure the process is not terminated when the shell exits.
     # Use env to safely pass environment variables without risk of injection.
     # The entire command is run in a subshell `( ... )` to correctly handle `&`.
+    # TODO(ahundt) why is nohup missing here?
+    # TODO(ahundt) enable the harbor log capabilities for native services and/or prevent logs from growing indefinitely
     ( nohup env "${env_vars_for_exec[@]}" "$native_script" "$NATIVE_EXECUTABLE" "${NATIVE_DAEMON_ARGS[@]}" ) > "$log_file" 2>&1 &
     local pid=$!
     echo "$pid" > "$pid_file"
