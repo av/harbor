@@ -1,4 +1,5 @@
 services:
   webui:
-    volumes:
-      - ./open-webui/configs/config.agent.json:/app/configs/config.agent.json
+    x-harbor-config-templates:
+      - source: ./open-webui/configs/config.agent.json
+        target: /app/configs/config.agent.json

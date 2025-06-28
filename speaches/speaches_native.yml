@@ -1,0 +1,160 @@
+# =============================================================================
+# Harbor Native Service Contract: Speaches
+# =============================================================================
+#
+# This file defines the native execution configuration for the Speaches service
+# in Harbor. When Harbor is configured to run Speaches natively (instead of in
+# a container), this contract specifies how to start the service and integrate
+# it with Harbor's hybrid orchestration system.
+#
+# NATIVE SCRIPT INTEGRATION:
+# This YAML file works in conjunction with 'speaches_native.sh', which serves
+# as the entrypoint script for this specific service. The script uses the
+# Docker-style pattern where Harbor passes the complete command to execute.
+#
+# SCRIPT DESIGN APPROACH:
+# This script handles multiple installation methods for Speaches (system package,
+# Python package, conda environment) and provides appropriate error messages
+# and fallback mechanisms for a robust user experience.
+#
+# EXECUTION FLOW:
+# 1. Harbor reads this YAML to understand native service configuration
+# 2. Harbor calls: speaches_native.sh "speaches" ["--host", "0.0.0.0", "--port", "8000"]
+# 3. Script validates installation and executes with appropriate method
+# 4. Process runs natively with logs redirected to Harbor's log directory
+#
+# REQUIREMENTS:
+# - The 'speaches' package must be installed (pip, conda, or system package)
+# - OR a 'speaches' binary must be available in the system's PATH
+# - The native script (speaches_native.sh) must be executable
+# - Harbor manages the process lifecycle via PID files and log redirection
+#
+# TROUBLESHOOTING:
+# - Logs are written to: $HARBOR_HOME/app/backend/data/logs/harbor-speaches-native.log
+# - PID file location: $HARBOR_HOME/app/backend/data/pids/speaches.pid
+# - Check installation: python -c "import speaches" or command -v speaches
+# - Verify script permissions: ls -la speaches_native.sh
+#
+# =============================================================================
+
+# ========================================================================
+# == Harbor Unified Native Contract for 'speaches'
+# ========================================================================
+#
+# This file serves a dual purpose:
+# 1. A Docker Compose Override File: Defines a lightweight "proxy" service
+#    that replaces the container definition when running natively
+# 2. A Native Metadata Contract: Contains all information Harbor needs to
+#    manage the native process lifecycle
+#
+services:
+  # The top-level service key MUST match the Harbor service handle ('speaches').
+  speaches:
+    # --------------------------------------------------------------------
+    # -- Section 1: Proxy Container Definition
+    #    This section defines the lightweight container that will represent
+    #    the native 'speaches' service within the Docker network.
+    # --------------------------------------------------------------------
+
+    # The Docker image to use for the proxy container. Using alpine/socat for
+    # reliable TCP forwarding capabilities.
+    image: alpine/socat:latest
+    container_name: ${HARBOR_CONTAINER_PREFIX:-harbor}.speaches
+
+    # The command for the proxy container. This uses 'socat' to create a TCP
+    # listener on port 8000 inside the container and forward all traffic to
+    # the native service running on the host.
+    command: tcp-listen:8000,fork,reuseaddr tcp-connect:host.docker.internal:${HARBOR_SPEACHES_HOST_PORT:-34331}
+
+    # Expose the port for external access. Template variables allow dynamic port configuration.
+    ports:
+      - "${HARBOR_SPEACHES_HOST_PORT:-34331}:8000"
+
+    # The healthcheck for the proxy container. This checks the readiness of the
+    # ACTUAL NATIVE SERVICE on the host, ensuring proper dependency management.
+    # We check both the main API endpoint and a simple TCP connection.
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z host.docker.internal ${HARBOR_SPEACHES_HOST_PORT:-34331} || exit 1"]
+      interval: 3s
+      timeout: 10s
+      retries: 30
+      start_period: 10s
+
+    # Ensures the proxy can be discovered by other services in the stack.
+    networks:
+      - harbor-network
+
+    # --------------------------------------------------------------------
+    # -- Section 2: Native Process Metadata (The Harbor Contract)
+    #    This custom block is ignored by Docker Compose but is parsed by
+    #    Harbor's scripts to manage the native process lifecycle.
+    # --------------------------------------------------------------------
+    x-harbor-native:
+      # ================================================================
+      # == Native Execution Configuration (Docker-Style Pattern)
+      # ================================================================
+      #
+      # SPEACHES EXECUTION PATTERNS:
+      # Speaches can be installed and executed in several ways:
+      #
+      # 1. SYSTEM BINARY:
+      #    - Binary: speaches
+      #    - Execution: speaches --host 0.0.0.0 --port 34331
+      #
+      # 2. PYTHON MODULE:
+      #    - Module: python -m speaches
+      #    - Execution: python -m speaches --host 0.0.0.0 --port 34331
+      #
+      # 3. CONDA ENVIRONMENT:
+      #    - Environment: conda activate speaches-env
+      #    - Execution: speaches --host 0.0.0.0 --port 34331
+      #
+      # The bootstrap script (speaches_native.sh) will detect which method
+      # is available and use the appropriate execution pattern.
+
+      # The executable command for this service.
+      # The service manager provides a unified entry point that handles
+      # environment setup, model management, and service orchestration.
+      executable: "speaches"
+
+      # The arguments to pass to the service manager when starting the daemon.
+      # The service manager will handle translating these to appropriate Speaches arguments.
+      daemon_args: ["serve", "--host", "${HARBOR_SPEACHES_HOST:-0.0.0.0}", "--port", "${HARBOR_SPEACHES_HOST_PORT:-34331}"]
+      # daemon_args: ["--host", "0.0.0.0", "--port", "${HARBOR_SPEACHES_HOST_PORT:-34331}", "--server"]
+
+      # The TCP port that the native daemon process will listen on.
+      port: 34331
+
+      # Speaches benefits from GPU acceleration for model inference, especially for
+      # speech-to-text and text-to-speech processing via ONNX Runtime providers.
+      #
+      # BACKEND SELECTION STRATEGY:
+      # - Apple Silicon (macOS): CoreMLExecutionProvider (automatic via ONNX Runtime)
+      # - NVIDIA GPU (Linux/Windows): CUDAExecutionProvider (automatic via ONNX Runtime)
+      # - CPU Fallback: CPUExecutionProvider (always available)
+      #
+      # Harbor will prefer native execution on Apple Silicon when GPU is requested,
+      # as CoreML/Metal integration provides better performance than container execution.
+      requires_gpu_passthrough: true
+
+      # Environment variables from Harbor's main .env file that should be
+      # exported into the environment of the native process.
+      env_vars:
+        - "HARBOR_SPEACHES_STT_MODEL"
+        - "HARBOR_SPEACHES_TTS_MODEL"
+        - "HARBOR_SPEACHES_TTS_VOICE"
+        - "HARBOR_HF_CACHE"
+        - "HARBOR_OLLAMA_CACHE"
+        - "HARBOR_LLAMACPP_CACHE"
+        - "HARBOR_VLLM_CACHE"
+        - "HF_TOKEN"
+        - "CUDA_VISIBLE_DEVICES"
+        # ONNX Runtime provider configuration
+        - "HARBOR_OMP_NUM_THREADS"
+        - "HARBOR_ONNX_PROVIDER"
+
+      # Environment variables that Harbor will inject into dependent containers.
+      # This allows WebUI and other services to connect to the native Speaches instance.
+      env_overrides:
+        HARBOR_SPEACHES_INTERNAL_URL: "http://host.docker.internal:${HARBOR_SPEACHES_HOST_PORT:-34331}"
+        SPEACHES_API_BASE: "http://host.docker.internal:${HARBOR_SPEACHES_HOST_PORT:-34331}/v1"

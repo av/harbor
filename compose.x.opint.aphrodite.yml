@@ -2,6 +2,6 @@ services:
   opint:
     entrypoint: >
       interpreter
-        --api_base http://aphrodite:2242/v1
+        --api_base ${HARBOR_DEP_APHRODITE_INTERNAL_URL:-http://aphrodite:2242}/v1
         --api_key sk-aphrodite
         ${HARBOR_OPINT_CMD}

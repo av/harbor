@@ -1,4 +1,4 @@
 services:
   raglite:
     environment:
-      - VLLM_BASE_URL=http://vllm:8000
+      - VLLM_BASE_URL=${HARBOR_DEP_VLLM_INTERNAL_URL:-http://vllm:8000}

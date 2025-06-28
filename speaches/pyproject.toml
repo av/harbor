@@ -1,0 +1,150 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "harbor-speaches"
+version = "0.1.0"
+description = "Harbor native speaches service with TTS/STT capabilities"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "Apache-2.0"}
+authors = [
+    {name = "Harbor Contributors", email = "harbor@example.com"}
+]
+keywords = ["tts", "stt", "speech", "onnx", "ai"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+dependencies = [
+    # Core Speaches package - using git+https for latest
+    "speaches[server] @ git+https://github.com/speaches-ai/speaches.git",
+
+    # TTS/STT core dependencies
+    "kokoro-onnx @ git+https://github.com/thewh1teagle/kokoro-onnx.git",
+
+    # Web framework
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+
+    # Data handling
+    "pydantic>=2.0.0",
+    "httpx>=0.24.0",
+    "numpy>=1.21.0",
+    "tqdm>=4.64.0",
+
+    # HuggingFace ecosystem
+    "huggingface-hub>=0.17.0",
+    "transformers>=4.30.0",
+
+    # ONNX Runtime (CPU version by default)
+    "onnxruntime>=1.16.0",
+
+    # Audio processing
+    "librosa>=0.10.0",
+    "soundfile>=0.12.0",
+
+    # Utilities
+    "typer>=0.9.0",
+    "rich>=13.0.0",
+    "psutil>=5.9.0",
+]
+
+[project.optional-dependencies]
+gpu = [
+    "onnxruntime-gpu>=1.16.0",
+]
+apple = [
+    # Apple Silicon specific optimizations if needed
+]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.5.0",
+    "pre-commit>=3.0.0",
+]
+
+[project.scripts]
+harbor-speaches = "speaches_service_manager:main"
+harbor-speaches-server = "speaches_service_manager:start_server"
+harbor-speaches-test = "speaches_test:main"
+
+[project.urls]
+Homepage = "https://github.com/av/harbor"
+Documentation = "https://github.com/av/harbor/wiki"
+Repository = "https://github.com/av/harbor"
+Issues = "https://github.com/av/harbor/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["*.py"]
+
+[tool.setuptools.package-data]
+"*" = ["*.yml", "*.yaml", "*.yml", "*.json", "*.txt"]
+
+[tool.black]
+line-length = 100
+target-version = ['py39']
+include = '\.pyi?$'
+
+[tool.ruff]
+target-version = "py39"
+line-length = 100
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # pyflakes
+    "I",  # isort
+    "B",  # flake8-bugbear
+    "C4", # flake8-comprehensions
+    "UP", # pyupgrade
+]
+ignore = [
+    "E501",  # line too long, handled by black
+    "B008",  # do not perform function calls in argument defaults
+    "C901",  # too complex
+]
+
+[tool.ruff.per-file-ignores]
+"__init__.py" = ["F401"]
+
+[tool.mypy]
+python_version = "3.9"
+check_untyped_defs = true
+disallow_any_generics = true
+disallow_incomplete_defs = true
+disallow_untyped_defs = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_return_any = true
+strict_equality = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "--strict-markers",
+    "--disable-warnings",
+    "-v",
+]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "gpu: marks tests as requiring GPU",
+    "integration: marks tests as integration tests",
+]

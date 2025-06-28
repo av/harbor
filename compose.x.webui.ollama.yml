@@ -1,4 +1,5 @@
 services:
   webui:
-    volumes:
-      - ./open-webui/configs/config.ollama.json:/app/configs/config.ollama.json
+    x-harbor-config-templates:
+      - source: ./open-webui/configs/config.ollama.json
+        target: /app/configs/config.ollama.json

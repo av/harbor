@@ -1,0 +1,228 @@
+# =============================================================================
+# Harbor Native Service Contract: Ollama
+# =============================================================================
+#
+# This file defines the native execution configuration for the Ollama service
+# in Harbor. When Harbor is configured to run Olloma natively (instead of in
+# a container), this contract specifies how to start the service and integrate
+# it with Harbor's hybrid orchestration system.
+#
+# NATIVE SCRIPT INTEGRATION:
+# This YAML file works in conjunction with 'ollama_native.sh', which serves
+# as the entrypoint script for this specific service. The script uses the
+# Docker-style pattern where Harbor passes the complete command to execute.
+#
+# SCRIPT DESIGN APPROACH:
+# This particular script uses a simple "exec "$@"" pattern that works well
+# for Ollama's straightforward execution model. Different services may need
+# customized scripts for setup, validation, or special handling requirements.
+#
+# EXECUTION FLOW:
+# 1. Harbor reads this YAML to understand native service configuration
+# 2. Harbor calls: ollama_native.sh "ollama" "serve"
+# 3. Script executes: exec "$@" → exec ollama serve
+# 4. Process runs natively with logs redirected to Harbor's log directory
+#
+# WHEN SCRIPTS NEED CUSTOMIZATION:
+# While this script is simple, other services might require:
+# - Environment variable setup before execution
+# - Configuration file generation or validation
+# - Binary path resolution and error checking
+# - Service-specific initialization steps
+# - Health checks or readiness verification
+#
+# REQUIREMENTS:
+# - The 'ollama' binary must be installed and available in the system's PATH
+# - The native script (ollama_native.sh) must be executable
+# - Harbor manages the process lifecycle via PID files and log redirection
+#
+# TROUBLESHOOTING:
+# - Logs are written to: $HARBOR_HOME/app/backend/data/logs/harbor-ollama-native.log
+# - PID file location: $HARBOR_HOME/app/backend/data/pids/ollama.pid
+# - Check binary availability: command -v ollama
+# - Verify script permissions: ls -la ollama_native.sh
+#
+# =============================================================================
+# ========================================================================
+# == Harbor Unified Native Contract for 'ollama'
+# ========================================================================
+#
+# This file serves a dual purpose and is the heart of Harbor's hybrid runtime:
+#
+# 1. A Docker Compose Override File: This file defines a lightweight "proxy"
+#    service. When 'ollama' is run in NATIVE mode, Harbor's composer
+#    will EXCLUDE the standard 'compose.ollama.yml' (the container definition)
+#    and INCLUDE this file instead. This effectively REPLACES the real service
+#    with this proxy in the eyes of Docker Compose.
+#
+# 2. A Native Metadata Contract: The 'x-harbor-native' block contains all
+#    the information Harbor needs to start, stop, manage, and configure the
+#    actual native 'ollama' process running on the host machine. Docker
+#    Compose safely ignores fields starting with 'x-'.
+#
+services:
+  # The top-level service key MUST match the Harbor service handle ('ollama').
+  ollama:
+    # --------------------------------------------------------------------
+    # -- Section 1: Proxy Container Definition
+    #    This section defines the lightweight container that will represent
+    #    the native 'ollama' service within the Docker network.
+    # --------------------------------------------------------------------
+
+    # The Docker image to use for the proxy container. A minimal image with
+    # networking tools is ideal. 'alpine/socat' is a common, robust choice.
+    image: alpine/socat:latest
+    container_name: ${HARBOR_CONTAINER_PREFIX:-harbor}.ollama
+
+    # The command for the proxy container. This uses 'socat' to create a TCP
+    # listener on the specified port inside the container and forward all
+    # traffic to the native service running on the host. 'host.docker.internal'
+    # is the special DNS name that Docker provides for containers to connect
+    # back to the host machine.
+    command: tcp-listen:${HARBOR_OLLAMA_HOST_PORT:-11434},fork,reuseaddr tcp-connect:host.docker.internal:${HARBOR_OLLAMA_HOST_PORT:-11434}
+
+    # Expose the port for external access. Template variables allow dynamic port configuration.
+    ports:
+      - "${HARBOR_OLLAMA_HOST_PORT:-11434}:11434"
+
+    # The healthcheck for the proxy container. This is the KEY to making hybrid
+    # dependencies work. This test does NOT check the proxy itself; it checks
+    # the readiness of the ACTUAL NATIVE SERVICE on the host. This ensures that
+    # any container with `depends_on: ollama` will correctly wait until the
+    # native Ollama daemon is fully initialized and ready to accept connections.
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z host.docker.internal ${HARBOR_OLLAMA_HOST_PORT:-11434} || exit 1"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+      start_period: 5s
+
+    # Ensures the proxy can be discovered by other services in the stack.
+    networks:
+      - harbor-network
+
+    # --------------------------------------------------------------------
+    # -- Section 2: Native Process Metadata (The Harbor Contract)
+    #    This custom block is ignored by Docker Compose but is parsed by
+    #    Harbor's scripts to manage the native process lifecycle.
+    # --------------------------------------------------------------------
+    x-harbor-native:
+      # ================================================================
+      # == Native Execution Configuration (Docker-Style Pattern)
+      # ================================================================
+      #
+      # Harbor uses a Docker-style ENTRYPOINT + CMD pattern for native services:
+      # - 'executable': Like Docker's ENTRYPOINT - the binary to execute
+      # - 'daemon_args': Like Docker's CMD - the arguments for daemon startup
+      #
+      # DESIGN PHILOSOPHY:
+      # This pattern separates the "what to run" (executable) from the "how to run it"
+      # (arguments), enabling maximum flexibility for different service architectures.
+      #
+      # EXECUTABLE vs SERVICE NAME VARIATIONS:
+      # The 'executable' field can differ from the Harbor service handle:
+      #
+      # Case 1 - Same name (like ollama):
+      #   - Service handle: "ollama"
+      #   - Executable: "ollama"
+      #   - Daemon startup: ollama serve
+      #   - User commands: ollama list, ollama pull model
+      #
+      # Case 2 - Different executable name:
+      #   - Service handle: "textgen"
+      #   - Executable: "text-generation-server"
+      #   - Daemon startup: text-generation-server --port 8080
+      #   - User commands: text-generation-server --help
+      #
+      # Case 3 - Custom installation path:
+      #   - Service handle: "ollama"
+      #   - Executable: "/opt/custom/ollama-enterprise"
+      #   - Daemon startup: /opt/custom/ollama-enterprise serve
+      #   - User commands: /opt/custom/ollama-enterprise list
+      #
+      # Case 4 - Separate daemon and client executables:
+      #   - Service handle: "myservice"
+      #   - Executable: "myservice-daemon" (for daemon startup)
+      #   - Client tool: "myservice-cli" (separate binary for user commands)
+      #   - Note: Harbor currently uses 'executable' for both. For separate
+      #     binaries, you'd typically set executable to the daemon binary.
+      #
+      # EXECUTION FLOW:
+      # 1. Daemon startup: Harbor calls: native_script.sh "ollama" "serve"
+      # 2. Native script executes: exec "$@" (i.e., exec ollama serve)
+      # 3. User commands: Harbor calls: executable + user_args directly
+      #    Example: `harbor run ollama list` -> ollama list
+      #
+      # SCRIPT DESIGN:
+      # The native script (ollama_native.sh) uses a simple pattern:
+      #   exec "$@"
+      # This works well for Ollama but other services may need custom scripts.
+      #
+      # CONFIGURATION EXAMPLES:
+      #
+      # 1. SIMPLE DAEMON (like Ollama):
+      # executable: "ollama"
+      # daemon_args: ["serve"]
+      # Results in: ollama serve
+      #
+      # 2. DAEMON WITH OPTIONS:
+      # executable: "ollama"
+      # daemon_args: ["serve", "--host", "0.0.0.0", "--port", "${HARBOR_OLLAMA_HOST_PORT:-11434}"]
+      # Results in: ollama serve --host 0.0.0.0 --port ${HARBOR_OLLAMA_HOST_PORT:-11434}
+      #
+      # 3. CUSTOM INSTALLATION PATH:
+      # executable: "/usr/local/bin/ollama"
+      # daemon_args: ["serve"]
+      # Results in: /usr/local/bin/ollama serve
+      #
+      # 4. DIFFERENT EXECUTABLE NAME:
+      # executable: "text-generation-server"
+      # daemon_args: ["--port", "8080", "--model-id", "model"]
+      # Results in: text-generation-server --port 8080 --model-id model
+      #
+      # SERVICES THAT NEED CUSTOM SCRIPTS:
+      # - Services requiring environment setup (PATH, LD_LIBRARY_PATH, etc.)
+      # - Services needing configuration file generation
+      # - Services with complex initialization or health checks
+      # - Services with multiple binaries or wrapper requirements
+      # - Services needing specific user/permission handling
+      #
+      # ERROR HANDLING APPROACH:
+      # This simple script relies on shell and executable error messages.
+      # For production deployments, you may want custom error handling,
+      # binary validation, or setup verification in the script.
+
+      # The executable binary name or path for this service.
+      # Used for both daemon startup and user commands (e.g., `harbor run ollama list`).
+      # Can be just the binary name (if in PATH) or a full path.
+      # Examples: "ollama", "/usr/local/bin/ollama", "/opt/custom/ollama-v2"
+      executable: "ollama"
+
+      # The arguments to pass to the executable when starting the daemon.
+      # This replaces the old 'daemon_command' field and supports complex arguments.
+      # Examples: ["serve"], ["serve", "--debug"], ["start", "--port", "${HARBOR_OLLAMA_HOST_PORT:-11434}"]
+      daemon_args: ["serve"]
+
+      # The TCP port that the native daemon process will listen on. This is used
+      # by the proxy's command and healthcheck.
+      port: 11434
+
+      # A boolean (true/false) flag that informs Harbor's "auto" execution preference.
+      # If true, `auto` mode will prefer to run this service natively on platforms
+      # where Docker has poor GPU support (i.e., Apple Silicon) to ensure max performance.
+      requires_gpu_passthrough: true
+
+      # A list of environment variables from Harbor's main .env file that should be
+      # exported into the environment of the native process before it is started.
+      # This allows for consistent configuration of both native and container services.
+      env_vars:
+        - "OLLAMA_DEBUG"
+        - "OLLAMA_KEEP_ALIVE"
+
+      # A map of environment variables that Harbor will inject into OTHER, DEPENDENT
+      # containers during `harbor up`. This allows containerized apps (like a web UI)
+      # to correctly configure themselves to find and connect to the native service.
+      # This replaces hardcoded URLs in cross-service integration files.
+      # Template variables like ${HARBOR_OLLAMA_HOST_PORT:-11434} are replaced with actual values.
+      env_overrides:
+        HARBOR_OLLAMA_INTERNAL_URL: "http://host.docker.internal:${HARBOR_OLLAMA_HOST_PORT:-11434}"

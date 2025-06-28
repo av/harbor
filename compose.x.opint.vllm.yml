@@ -2,6 +2,6 @@ services:
   opint:
     entrypoint: >
       interpreter
-        --api_base http://vllm:8000/v1
+        --api_base ${HARBOR_DEP_VLLM_INTERNAL_URL:-http://vllm:8000}/v1
         --api_key sk-vllm
         ${HARBOR_OPINT_CMD}

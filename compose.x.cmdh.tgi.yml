@@ -3,4 +3,4 @@ services:
     environment:
       - LLM_HOST=OpenAI
       - OPENAI_API_KEY=sk-tgi
-      - OPENAI_BASE_URL=http://tgi:80/v1
+      - OPENAI_BASE_URL=${HARBOR_DEP_TGI_INTERNAL_URL:-http://tgi:80}/v1

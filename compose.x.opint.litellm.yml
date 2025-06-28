@@ -2,6 +2,6 @@ services:
   opint:
     entrypoint: >
       interpreter
-        --api_base http://litellm:4000/v1
+        --api_base ${HARBOR_DEP_LITELLM_INTERNAL_URL:-http://litellm:4000}/v1
         --api_key ${HARBOR_LITELLM_MASTER_KEY}
         ${HARBOR_OPINT_CMD}
