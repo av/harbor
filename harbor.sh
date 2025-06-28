@@ -608,8 +608,6 @@ _harbor_get_docker_services_list() {
             mapfile -t services < <(eval "$compose_cmd config --services" 2>/dev/null || true)
         fi
     fi
-    # Print each collected service on a new line. This forms the function's output stream.
-    printf '%s\n' "${services[@]}"
 }
 
 # _harbor_get_native_services_list()
@@ -780,57 +778,177 @@ run_routine() {
     fi
 }
 
-routine_compose_with_options() {
+# =============================================================================
+# Harbor Compose Operations Engine
+# =============================================================================
+#
+# MOTIVATION:
+# Harbor needs to perform two fundamentally different operations with compose files:
+# 1. SERVICE DISCOVERY: Get a list of available services (for `harbor list`, etc.)
+# 2. COMPOSE EXECUTION: Generate docker compose commands (for `harbor up`, etc.)
+#
+# Previously, both operations used the same function with confusing semantics,
+# leading to file location issues, unclear return types, and maintenance problems.
+#
+# DESIGN SOLUTION:
+# This implements a clean separation with:
+# - Shared core logic for argument parsing and capability detection
+# - Two semantic public functions with clear contracts
+# - Single JS engine handling both output modes
+# - Backward compatibility for existing code
+#
+# ARCHITECTURE:
+# _harbor_compose_operation() -> Core shared implementation
+#   ├── get_available_services() -> Returns: newline-separated service names
+#   ├── build_compose_command() -> Returns: docker compose command string
+#   └── routine_compose_with_options() -> DEPRECATED: Use build_compose_command()
+#
+# USAGE:
+#   get_available_services "*"           # List all services
+#   get_available_services "webui"       # List webui and dependencies
+#   build_compose_command "webui"        # Get compose command for webui
+#   build_compose_command -x "ollama" "*" # All services except ollama
+#
+# =============================================================================
+
+# CORE IMPLEMENTATION: Shared argument parsing and capability detection
+# This function handles all the complex logic for parsing service options,
+# detecting system capabilities (NVIDIA, ROCm, etc.), and building the final
+# options list that gets passed to the Deno compose engine.
+#
+# @param output_type - "services" or "command" - determines return format
+# @param ...args - Service names, exclusions (-x), and other options
+# @return - Depends on output_type: service list OR compose command
+_harbor_compose_operation() {
+    local output_type="$1"; shift
     local -a exclude_handles=()
     local -a service_options=()
 
-    # Parse exclusion flags from user arguments
+    # Parse exclusion flags and service options from user arguments
+    # -x/--exclude flags specify services to exclude (typically native services)
     while [[ $# -gt 0 ]]; do
         case "$1" in
             -x|--exclude)
                 shift
-                # Collect services until next flag or end
+                # Collect services until next flag or end of arguments
                 while [[ $# -gt 0 && ! "$1" =~ ^- ]]; do
                     exclude_handles+=("$1")
                     shift
                 done
                 ;;
             *)
+                # All other arguments are treated as service names or options
                 service_options+=("$1")
                 shift
                 ;;
         esac
     done
 
-    # Build final options list: user services + defaults + auto-detected capabilities
+    # Build comprehensive options list combining:
+    # - User-specified services/options
+    # - Harbor default services (from .env configuration)
+    # - Default capabilities (from .env configuration)
     local options=("${service_options[@]}" "${default_options[@]}" "${default_capabilities[@]}")
 
+    # Auto-detect system capabilities and add appropriate compose file selectors
+    # This ensures the right GPU support, modern compose features, etc. are included
     if [ "$default_auto_capabilities" = "true" ]; then
         if has_nvidia && has_nvidia_ctk; then
-            options+=("nvidia")
+            options+=("nvidia")        # NVIDIA GPU support with Container Toolkit
         elif has_nvidia_cdi; then
-            options+=("cdi")
+            options+=("cdi")           # NVIDIA GPU support with CDI
         fi
 
         if has_rocm; then
-            options+=("rocm")
+            options+=("rocm")          # AMD GPU support
         fi
 
         if has_modern_compose; then
-            options+=("mdc")
+            options+=("mdc")           # Modern Docker Compose features
         fi
 
         if has_apple_silicon_gpu; then
-            options+=("apple-silicon-gpu")
+            options+=("apple-silicon-gpu")  # Apple Silicon GPU support
         fi
     fi
 
-    # Pass structured arguments to Deno with proper exclusion format
+    # Call the unified Deno compose engine with the specified output mode
+    # The JS engine handles merging compose files and returning the requested format
     if [[ ${#exclude_handles[@]} -gt 0 ]]; then
-        run_routine mergeComposeFiles -x "${exclude_handles[@]}" -- "${options[@]}"
+        run_routine mergeComposeFiles --output-type="$output_type" -x "${exclude_handles[@]}" -- "${options[@]}"
     else
-        run_routine mergeComposeFiles "${options[@]}"
+        run_routine mergeComposeFiles --output-type="$output_type" "${options[@]}"
     fi
+}
+
+# =============================================================================
+# PUBLIC API FUNCTIONS
+# =============================================================================
+
+# SERVICE DISCOVERY: Get list of available Harbor services
+#
+# PURPOSE: Used by `harbor list`, service validation, and other operations
+# that need to know what services are available in the current Harbor setup.
+#
+# WHEN TO USE:
+# - Implementing `harbor list` functionality
+# - Validating user-provided service names
+# - Building service menus or autocomplete
+# - Any operation that needs service enumeration
+#
+# USAGE EXAMPLES:
+#   get_available_services                    # All services
+#   get_available_services "*"               # All services (explicit)
+#   get_available_services "webui" "ollama"  # Specific services + dependencies
+#   get_available_services -x "ollama"       # All except ollama
+#
+# @param ...args - Service names, wildcards, exclusions (-x)
+# @return - Newline-separated list of service names (one per line)
+# @stdout - Service names that can be piped or captured
+get_available_services() {
+    _harbor_compose_operation "services" "$@"
+}
+
+# COMPOSE COMMAND GENERATION: Build docker compose execution command
+#
+# PURPOSE: Used by `harbor up`, `harbor down`, and other operations that
+# need to execute docker compose commands with the correct merged configuration.
+#
+# WHEN TO USE:
+# - Implementing `harbor up/down/restart` functionality
+# - Any operation that needs to execute compose commands
+# - Building compose commands for external execution
+# - Operations requiring the full merged compose context
+#
+# USAGE EXAMPLES:
+#   build_compose_command "webui"                    # Command for webui service
+#   build_compose_command -x "ollama" "*"          # All services except ollama
+#   build_compose_command "webui" "ollama" "nginx" # Multiple specific services
+#
+# @param ...args - Service names, wildcards, exclusions (-x)
+# @return - Complete docker compose command string
+# @stdout - Command like "docker compose -f /path/to/merged.yml"
+build_compose_command() {
+    _harbor_compose_operation "command" "$@"
+}
+
+# =============================================================================
+# BACKWARD COMPATIBILITY
+# =============================================================================
+
+# DEPRECATED: Use build_compose_command() instead
+#
+# This function is maintained for backward compatibility with existing Harbor code.
+# New code should use build_compose_command() for clarity and consistency.
+#
+# MIGRATION PATH:
+#   OLD: compose_cmd=$(routine_compose_with_options "webui")
+#   NEW: compose_cmd=$(build_compose_command "webui")
+#
+# This function will be removed in a future Harbor version after all
+# internal usage has been migrated to the new semantic functions.
+routine_compose_with_options() {
+    build_compose_command "$@"
 }
 
 # -----------------------------------------------------------------------------
@@ -1008,7 +1126,8 @@ __compose_get_static_file_list_legacy() {
 #   6. Returns the final, complete `docker compose -f ...` command string.
 compose_with_options() {
     if [[ $default_legacy_cli == 'false' ]]; then
-        routine_compose_with_options "$@"; return
+        # Use the new semantic API for non-legacy mode
+        build_compose_command "$@"; return
     fi
 
     local base_dir="$PWD"
