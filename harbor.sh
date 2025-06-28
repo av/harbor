@@ -2600,19 +2600,19 @@ _harbor_start_native_service() {
     #     return 0
     # fi
 
-    # 4. Prepare environment variables to be exported for the native process.
-    local env_exports=""
+    # 4. Prepare environment variables for the native process using a safe array.
+    local -a env_vars_for_exec=()
     if [[ ${#NATIVE_ENV_VARS_LIST[@]} -gt 0 ]]; then
         for var_name in "${NATIVE_ENV_VARS_LIST[@]}"; do
+            # Use a subshell to avoid polluting the current environment with 'value'
             local value; value=$(env_manager --silent get "$var_name")
             if [[ -n "$value" ]]; then
-                # The export statement will be part of the command executed by nohup's subshell.
-                env_exports+="export ${var_name}='${value}'; "
+                env_vars_for_exec+=("${var_name}=${value}")
             fi
         done
     fi
 
-    # 5. Execute the launch command using Docker-style ENTRYPOINT + CMD pattern.
+    # 5. Execute the launch command using nohup and env for robust daemonization.
     # ================================================================
     # == Native Service Execution (Docker-Style Pattern)
     # ================================================================
@@ -2633,21 +2633,23 @@ _harbor_start_native_service() {
     # - Harbor calls: native_script.sh "ollama" "serve"
     # - Native script executes: exec "$@"  (i.e., exec ollama serve)
     #
-    log_info "Starting native service '${service_handle}' via ${env_exports} exec "'""$native_script"" "$NATIVE_EXECUTABLE" "${NATIVE_DAEMON_ARGS[@]}"'" in the background..."
+    log_info "Starting native service '${service_handle}' via nohup in the background..."
     local log_file="${LOG_DIR}/harbor-${service_handle}-native.log"
 
-    # Use nohup and a subshell to correctly daemonize the process with its environment.
-    # Pass executable + daemon args separately (Docker-style) to the native script.
-    # The native script will execute: exec "$NATIVE_EXECUTABLE" "${NATIVE_DAEMON_ARGS[@]}"
-    # TODO(ahundt) why is nohup missing here?
-    # TODO(ahundt) enable the harbor log capabilities for native services and/or prevent logs from growing indefinitely
-    ( ${env_exports} exec "$native_script" "$NATIVE_EXECUTABLE" "${NATIVE_DAEMON_ARGS[@]}" ) > "$log_file" 2>&1 &
+    # Use nohup to ensure the process is not terminated when the shell exits.
+    # Use env to safely pass environment variables without risk of injection.
+    # The entire command is run in a subshell `( ... )` to correctly handle `&`.
+    ( nohup env "${env_vars_for_exec[@]}" "$native_script" "$NATIVE_EXECUTABLE" "${NATIVE_DAEMON_ARGS[@]}" ) > "$log_file" 2>&1 &
     local pid=$!
     echo "$pid" > "$pid_file"
 
     # 6. Replace sleep with intelligent, stable wait
     if ! _wait_for_native_process_stability "$service_handle" "$pid"; then
-        log_error "Failed to launch native daemon for '${service_handle}'. Check logs for details: ${log_file}"
+        log_error "Failed to launch native daemon for '${service_handle}'. Check logs for details:"
+        # As requested, output the log file content for immediate debugging.
+        log_error "--- Start of log file: ${log_file} ---"
+        cat "$log_file"
+        log_error "--- End of log file: ${log_file} ---"
         # Attempt to clean up the failed process
         kill "$pid" 2>/dev/null
         rm -f "$pid_file"
