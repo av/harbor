@@ -3,6 +3,4 @@ services:
     volumes:
       - ./open-webui/configs/config.searxng.json:/app/configs/config.searxng.json
     environment:
-      - ENABLE_RAG_WEB_SEARCH=true
-      - RAG_WEB_SEARCH_ENGINE=searxng
       - SEARXNG_QUERY_URL=${HARBOR_SEARXNG_INTERNAL_URL}/search?q=<query>

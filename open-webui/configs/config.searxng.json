@@ -11,6 +11,60 @@
 		"enable_hybrid_search": true,
 		"reranking_model": "",
 		"chunk_size": 1500,
-		"chunk_overlap": 100
+		"chunk_overlap": 100,
+		"web": {
+			"search": {
+				"enable": true,
+				"engine": "searxng",
+				"trust_env": false,
+				"result_count": 3,
+				"concurrent_requests": 10,
+				"domain": {
+					"filter_list": []
+				},
+				"bypass_embedding_and_retrieval": false,
+				"bypass_web_loader": false,
+				"yacy_query_url": "",
+				"yacy_username": "",
+				"yacy_password": "",
+				"google_pse_api_key": "",
+				"google_pse_engine_id": "",
+				"brave_search_api_key": "",
+				"kagi_search_api_key": "",
+				"mojeek_search_api_key": "",
+				"bocha_search_api_key": "",
+				"serpstack_api_key": "",
+				"serpstack_https": true,
+				"serper_api_key": "",
+				"serply_api_key": "",
+				"tavily_api_key": "",
+				"searchapi_api_key": "",
+				"searchapi_engine": "",
+				"serpapi_api_key": "",
+				"serpapi_engine": "",
+				"jina_api_key": "",
+				"bing_search_v7_endpoint": "https://api.bing.microsoft.com/v7.0/search",
+				"bing_search_v7_subscription_key": "",
+				"exa_api_key": "",
+				"perplexity_api_key": "",
+				"perplexity_model": "sonar",
+				"perplexity_search_context_usage": "medium",
+				"sougou_api_sid": "",
+				"sougou_api_sk": "",
+				"external_web_search_url": "",
+				"external_web_search_api_key": "",
+				"tavily_extract_depth": "basic"
+			},
+			"loader": {
+				"engine": "",
+				"ssl_verification": true,
+				"playwright_ws_url": "",
+				"playwright_timeout": 10000,
+				"firecrawl_api_key": "",
+				"firecrawl_api_url": "https://api.firecrawl.dev",
+				"external_web_loader_url": "",
+				"external_web_loader_api_key": ""
+			}
+		}
 	}
 }
