@@ -8,7 +8,8 @@ services:
       context: ./parllama
       dockerfile: Dockerfile
     volumes:
-      - ${HARBOR_PARLLAMA_CACHE}:/root/.parllama
+      - ${HARBOR_PARLLAMA_CACHE}:/root/.local/share/parllama
     tty: true
+    user: root
     networks:
       - harbor-network

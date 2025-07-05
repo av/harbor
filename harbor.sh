@@ -2753,7 +2753,7 @@ run_tabbyapi_command() {
 }
 
 run_parllama_command() {
-    $(compose_with_options "parllama") run --rm -it --entrypoint bash parllama -c parllama
+    $(compose_with_options "parllama") run --rm -it --entrypoint bash parllama -c "uvx parllama"
 }
 
 run_oterm_command() {
