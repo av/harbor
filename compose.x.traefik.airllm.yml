@@ -5,8 +5,9 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.airllm.rule=Host(`airllm.${HARBOR_TRAEFIK_DOMAIN}`)"
-      - "traefik.http.services.airllm.loadbalancer.server.port=${HARBOR_AIRLLM_HOST_PORT}"
-      - "traefik.http.routers.airllm.entrypoints=web"
+      - "traefik.http.services.airllm.loadbalancer.server.port=5000"
+      - "traefik.http.routers.airllm.entrypoints=websecure"
+      - "traefik.http.routers.airllm.tls=true"
       - "traefik.http.routers.airllm.service=airllm"
 
     networks:

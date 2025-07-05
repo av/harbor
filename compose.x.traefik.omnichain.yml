@@ -6,7 +6,8 @@ services:
       - "traefik.enable=true"
       - "traefik.http.routers.omnichain.rule=Host(`omnichain.${HARBOR_TRAEFIK_DOMAIN}`)"
       - "traefik.http.services.omnichain.loadbalancer.server.port=${HARBOR_OMNICHAIN_HOST_PORT}"
-      - "traefik.http.routers.omnichain.entrypoints=web"
+      - "traefik.http.routers.omnichain.entrypoints=websecure"
+      - "traefik.http.routers.omnichain.tls=true"
       - "traefik.http.routers.omnichain.service=omnichain"
 
     networks:

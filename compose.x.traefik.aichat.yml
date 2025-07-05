@@ -6,7 +6,8 @@ services:
       - "traefik.enable=true"
       - "traefik.http.routers.aichat.rule=Host(`aichat.${HARBOR_TRAEFIK_DOMAIN}`)"
       - "traefik.http.services.aichat.loadbalancer.server.port=${HARBOR_AICHAT_HOST_PORT}"
-      - "traefik.http.routers.aichat.entrypoints=web"
+      - "traefik.http.routers.aichat.entrypoints=websecure"
+      - "traefik.http.routers.aichat.tls=true"
       - "traefik.http.routers.aichat.service=aichat"
 
     networks:

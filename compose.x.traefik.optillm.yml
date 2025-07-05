@@ -5,8 +5,9 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.optillm.rule=Host(`optillm.${HARBOR_TRAEFIK_DOMAIN}`)"
-      - "traefik.http.services.optillm.loadbalancer.server.port=${HARBOR_OPTILLM_HOST_PORT}"
-      - "traefik.http.routers.optillm.entrypoints=web"
+      - "traefik.http.services.optillm.loadbalancer.server.port=8000"
+      - "traefik.http.routers.optillm.entrypoints=websecure"
+      - "traefik.http.routers.optillm.tls=true"
       - "traefik.http.routers.optillm.service=optillm"
 
     networks:

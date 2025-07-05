@@ -5,8 +5,9 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.openhands.rule=Host(`openhands.${HARBOR_TRAEFIK_DOMAIN}`)"
-      - "traefik.http.services.openhands.loadbalancer.server.port=${HARBOR_OPENHANDS_HOST_PORT}"
-      - "traefik.http.routers.openhands.entrypoints=web"
+      - "traefik.http.services.openhands.loadbalancer.server.port=3000"
+      - "traefik.http.routers.openhands.entrypoints=websecure"
+      - "traefik.http.routers.openhands.tls=true"
       - "traefik.http.routers.openhands.service=openhands"
 
     networks:

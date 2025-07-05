@@ -5,8 +5,9 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.jupyter.rule=Host(`jupyter.${HARBOR_TRAEFIK_DOMAIN}`)"
-      - "traefik.http.services.jupyter.loadbalancer.server.port=${HARBOR_JUPYTER_HOST_PORT}"
-      - "traefik.http.routers.jupyter.entrypoints=web"
+      - "traefik.http.services.jupyter.loadbalancer.server.port=8888"
+      - "traefik.http.routers.jupyter.entrypoints=websecure"
+      - "traefik.http.routers.jupyter.tls=true"
       - "traefik.http.routers.jupyter.service=jupyter"
 
     networks:

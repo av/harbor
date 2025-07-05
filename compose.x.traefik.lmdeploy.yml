@@ -5,8 +5,9 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.lmdeploy.rule=Host(`lmdeploy.${HARBOR_TRAEFIK_DOMAIN}`)"
-      - "traefik.http.services.lmdeploy.loadbalancer.server.port=${HARBOR_LMDEPLOY_HOST_PORT}"
-      - "traefik.http.routers.lmdeploy.entrypoints=web"
+      - "traefik.http.services.lmdeploy.loadbalancer.server.port=23333"
+      - "traefik.http.routers.lmdeploy.entrypoints=websecure"
+      - "traefik.http.routers.lmdeploy.tls=true"
       - "traefik.http.routers.lmdeploy.service=lmdeploy"
 
     networks:

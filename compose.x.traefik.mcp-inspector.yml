@@ -6,7 +6,8 @@ services:
       - "traefik.enable=true"
       - "traefik.http.routers.mcp-inspector.rule=Host(`mcp-inspector.${HARBOR_TRAEFIK_DOMAIN}`)"
       - "traefik.http.services.mcp-inspector.loadbalancer.server.port=6274"
-      - "traefik.http.routers.mcp-inspector.entrypoints=web"
+      - "traefik.http.routers.mcp-inspector.entrypoints=websecure"
+      - "traefik.http.routers.mcp-inspector.tls=true"
       - "traefik.http.routers.mcp-inspector.service=mcp-inspector"
 
     networks:

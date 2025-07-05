@@ -5,8 +5,9 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.raglite.rule=Host(`raglite.${HARBOR_TRAEFIK_DOMAIN}`)"
-      - "traefik.http.services.raglite.loadbalancer.server.port=${HARBOR_RAGLIT_HOST_PORT}"
-      - "traefik.http.routers.raglite.entrypoints=web"
+      - "traefik.http.services.raglite.loadbalancer.server.port=8000"
+      - "traefik.http.routers.raglite.entrypoints=websecure"
+      - "traefik.http.routers.raglite.tls=true"
       - "traefik.http.routers.raglite.service=raglite"
 
     networks:

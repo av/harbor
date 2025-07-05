@@ -5,8 +5,9 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.ktransformers.rule=Host(`ktransformers.${HARBOR_TRAEFIK_DOMAIN}`)"
-      - "traefik.http.services.ktransformers.loadbalancer.server.port=${HARBOR_KTRANSFORMERS_HOST_PORT}"
-      - "traefik.http.routers.ktransformers.entrypoints=web"
+      - "traefik.http.services.ktransformers.loadbalancer.server.port=12456"
+      - "traefik.http.routers.ktransformers.entrypoints=websecure"
+      - "traefik.http.routers.ktransformers.tls=true"
       - "traefik.http.routers.ktransformers.service=ktransformers"
 
     networks:

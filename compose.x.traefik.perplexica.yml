@@ -5,8 +5,9 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.perplexica.rule=Host(`perplexica.${HARBOR_TRAEFIK_DOMAIN}`)"
-      - "traefik.http.services.perplexica.loadbalancer.server.port=${HARBOR_PERPLEXICA_HOST_PORT}"
-      - "traefik.http.routers.perplexica.entrypoints=web"
+      - "traefik.http.services.perplexica.loadbalancer.server.port=3000"
+      - "traefik.http.routers.perplexica.entrypoints=websecure"
+      - "traefik.http.routers.perplexica.tls=true"
       - "traefik.http.routers.perplexica.service=perplexica"
 
     networks:

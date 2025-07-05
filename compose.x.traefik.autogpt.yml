@@ -5,8 +5,9 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.autogpt.rule=Host(`autogpt.${HARBOR_TRAEFIK_DOMAIN}`)"
-      - "traefik.http.services.autogpt.loadbalancer.server.port=${HARBOR_AUTOGPT_HOST_PORT}"
-      - "traefik.http.routers.autogpt.entrypoints=web"
+      - "traefik.http.services.autogpt.loadbalancer.server.port=8000"
+      - "traefik.http.routers.autogpt.entrypoints=websecure"
+      - "traefik.http.routers.autogpt.tls=true"
       - "traefik.http.routers.autogpt.service=autogpt"
 
     networks:

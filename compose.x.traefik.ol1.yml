@@ -5,8 +5,9 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.ol1.rule=Host(`ol1.${HARBOR_TRAEFIK_DOMAIN}`)"
-      - "traefik.http.services.ol1.loadbalancer.server.port=${HARBOR_OL1_HOST_PORT}"
-      - "traefik.http.routers.ol1.entrypoints=web"
+      - "traefik.http.services.ol1.loadbalancer.server.port=8501"
+      - "traefik.http.routers.ol1.entrypoints=websecure"
+      - "traefik.http.routers.ol1.tls=true"
       - "traefik.http.routers.ol1.service=ol1"
 
     networks:

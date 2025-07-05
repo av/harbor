@@ -5,8 +5,9 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.litlytics.rule=Host(`litlytics.${HARBOR_TRAEFIK_DOMAIN}`)"
-      - "traefik.http.services.litlytics.loadbalancer.server.port=${HARBOR_LITLYTICS_HOST_PORT}"
-      - "traefik.http.routers.litlytics.entrypoints=web"
+      - "traefik.http.services.litlytics.loadbalancer.server.port=3000"
+      - "traefik.http.routers.litlytics.entrypoints=websecure"
+      - "traefik.http.routers.litlytics.tls=true"
       - "traefik.http.routers.litlytics.service=litlytics"
 
     networks:

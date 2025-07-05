@@ -5,8 +5,9 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.latentscope.rule=Host(`latentscope.${HARBOR_TRAEFIK_DOMAIN}`)"
-      - "traefik.http.services.latentscope.loadbalancer.server.port=${HARBOR_LATENTSCOPE_HOST_PORT}"
-      - "traefik.http.routers.latentscope.entrypoints=web"
+      - "traefik.http.services.latentscope.loadbalancer.server.port=5001"
+      - "traefik.http.routers.latentscope.entrypoints=websecure"
+      - "traefik.http.routers.latentscope.tls=true"
       - "traefik.http.routers.latentscope.service=latentscope"
 
     networks:

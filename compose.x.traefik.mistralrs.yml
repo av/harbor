@@ -5,8 +5,9 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.mistralrs.rule=Host(`mistralrs.${HARBOR_TRAEFIK_DOMAIN}`)"
-      - "traefik.http.services.mistralrs.loadbalancer.server.port=${HARBOR_MISTRALRS_HOST_PORT}"
-      - "traefik.http.routers.mistralrs.entrypoints=web"
+      - "traefik.http.services.mistralrs.loadbalancer.server.port=8021"
+      - "traefik.http.routers.mistralrs.entrypoints=websecure"
+      - "traefik.http.routers.mistralrs.tls=true"
       - "traefik.http.routers.mistralrs.service=mistralrs"
 
     networks:

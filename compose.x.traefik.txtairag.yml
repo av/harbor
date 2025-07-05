@@ -5,8 +5,9 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.txtairag.rule=Host(`txtairag.${HARBOR_TRAEFIK_DOMAIN}`)"
-      - "traefik.http.services.txtairag.loadbalancer.server.port=${HARBOR_TXTAI_RAG_HOST_PORT}"
-      - "traefik.http.routers.txtairag.entrypoints=web"
+      - "traefik.http.services.txtairag.loadbalancer.server.port=8501"
+      - "traefik.http.routers.txtairag.entrypoints=websecure"
+      - "traefik.http.routers.txtairag.tls=true"
       - "traefik.http.routers.txtairag.service=txtairag"
 
     networks:

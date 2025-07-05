@@ -5,8 +5,9 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.tabbyapi.rule=Host(`tabbyapi.${HARBOR_TRAEFIK_DOMAIN}`)"
-      - "traefik.http.services.tabbyapi.loadbalancer.server.port=${HARBOR_TABBYAPI_HOST_PORT}"
-      - "traefik.http.routers.tabbyapi.entrypoints=web"
+      - "traefik.http.services.tabbyapi.loadbalancer.server.port=5000"
+      - "traefik.http.routers.tabbyapi.entrypoints=websecure"
+      - "traefik.http.routers.tabbyapi.tls=true"
       - "traefik.http.routers.tabbyapi.service=tabbyapi"
 
     networks:

@@ -5,8 +5,9 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.speaches.rule=Host(`speaches.${HARBOR_TRAEFIK_DOMAIN}`)"
-      - "traefik.http.services.speaches.loadbalancer.server.port=${HARBOR_SPEACHES_HOST_PORT}"
-      - "traefik.http.routers.speaches.entrypoints=web"
+      - "traefik.http.services.speaches.loadbalancer.server.port=8000"
+      - "traefik.http.routers.speaches.entrypoints=websecure"
+      - "traefik.http.routers.speaches.tls=true"
       - "traefik.http.routers.speaches.service=speaches"
 
     networks:

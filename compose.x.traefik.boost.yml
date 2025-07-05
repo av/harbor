@@ -5,8 +5,9 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.boost.rule=Host(`boost.${HARBOR_TRAEFIK_DOMAIN}`)"
-      - "traefik.http.services.boost.loadbalancer.server.port=${HARBOR_BOOST_HOST_PORT}"
-      - "traefik.http.routers.boost.entrypoints=web"
+      - "traefik.http.services.boost.loadbalancer.server.port=8000"
+      - "traefik.http.routers.boost.entrypoints=websecure"
+      - "traefik.http.routers.boost.tls=true"
       - "traefik.http.routers.boost.service=boost"
 
     networks:

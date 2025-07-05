@@ -5,8 +5,9 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.langfuse.rule=Host(`langfuse.${HARBOR_TRAEFIK_DOMAIN}`)"
-      - "traefik.http.services.langfuse.loadbalancer.server.port=${HARBOR_LANGFUSE_HOST_PORT}"
-      - "traefik.http.routers.langfuse.entrypoints=web"
+      - "traefik.http.services.langfuse.loadbalancer.server.port=3000"
+      - "traefik.http.routers.langfuse.entrypoints=websecure"
+      - "traefik.http.routers.langfuse.tls=true"
       - "traefik.http.routers.langfuse.service=langfuse"
 
     networks:

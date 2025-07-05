@@ -5,8 +5,9 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.tgi.rule=Host(`tgi.${HARBOR_TRAEFIK_DOMAIN}`)"
-      - "traefik.http.services.tgi.loadbalancer.server.port=${HARBOR_TGI_HOST_PORT}"
-      - "traefik.http.routers.tgi.entrypoints=web"
+      - "traefik.http.services.tgi.loadbalancer.server.port=80"
+      - "traefik.http.routers.tgi.entrypoints=websecure"
+      - "traefik.http.routers.tgi.tls=true"
       - "traefik.http.routers.tgi.service=tgi"
 
     networks:

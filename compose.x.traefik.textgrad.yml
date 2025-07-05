@@ -5,8 +5,9 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.textgrad.rule=Host(`textgrad.${HARBOR_TRAEFIK_DOMAIN}`)"
-      - "traefik.http.services.textgrad.loadbalancer.server.port=${HARBOR_TEXTGRAD_HOST_PORT}"
-      - "traefik.http.routers.textgrad.entrypoints=web"
+      - "traefik.http.services.textgrad.loadbalancer.server.port=8888"
+      - "traefik.http.routers.textgrad.entrypoints=websecure"
+      - "traefik.http.routers.textgrad.tls=true"
       - "traefik.http.routers.textgrad.service=textgrad"
 
     networks:

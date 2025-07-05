@@ -5,8 +5,9 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.llamaswap.rule=Host(`llamaswap.${HARBOR_TRAEFIK_DOMAIN}`)"
-      - "traefik.http.services.llamaswap.loadbalancer.server.port=${HARBOR_LLAMASWAP_HOST_PORT}"
-      - "traefik.http.routers.llamaswap.entrypoints=web"
+      - "traefik.http.services.llamaswap.loadbalancer.server.port=8080"
+      - "traefik.http.routers.llamaswap.entrypoints=websecure"
+      - "traefik.http.routers.llamaswap.tls=true"
       - "traefik.http.routers.llamaswap.service=llamaswap"
 
     networks:

@@ -5,8 +5,9 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.perplexideez.rule=Host(`perplexideez.${HARBOR_TRAEFIK_DOMAIN}`)"
-      - "traefik.http.services.perplexideez.loadbalancer.server.port=${HARBOR_PERPLEXIDEEZ_HOST_PORT}"
-      - "traefik.http.routers.perplexideez.entrypoints=web"
+      - "traefik.http.services.perplexideez.loadbalancer.server.port=80"
+      - "traefik.http.routers.perplexideez.entrypoints=websecure"
+      - "traefik.http.routers.perplexideez.tls=true"
       - "traefik.http.routers.perplexideez.service=perplexideez"
 
     networks:

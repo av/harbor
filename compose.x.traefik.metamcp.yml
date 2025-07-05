@@ -5,8 +5,9 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.metamcp.rule=Host(`metamcp.${HARBOR_TRAEFIK_DOMAIN}`)"
-      - "traefik.http.services.metamcp.loadbalancer.server.port=${HARBOR_METAMCP_HOST_PORT}"
-      - "traefik.http.routers.metamcp.entrypoints=web"
+      - "traefik.http.services.metamcp.loadbalancer.server.port=3000"
+      - "traefik.http.routers.metamcp.entrypoints=websecure"
+      - "traefik.http.routers.metamcp.tls=true"
       - "traefik.http.routers.metamcp.service=metamcp"
 
     networks:

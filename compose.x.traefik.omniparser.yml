@@ -5,8 +5,9 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.omniparser.rule=Host(`omniparser.${HARBOR_TRAEFIK_DOMAIN}`)"
-      - "traefik.http.services.omniparser.loadbalancer.server.port=${HARBOR_OMNIPARSER_HOST_PORT}"
-      - "traefik.http.routers.omniparser.entrypoints=web"
+      - "traefik.http.services.omniparser.loadbalancer.server.port=7861"
+      - "traefik.http.routers.omniparser.entrypoints=websecure"
+      - "traefik.http.routers.omniparser.tls=true"
       - "traefik.http.routers.omniparser.service=omniparser"
 
     networks:

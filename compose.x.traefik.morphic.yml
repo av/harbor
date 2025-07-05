@@ -5,8 +5,9 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.morphic.rule=Host(`morphic.${HARBOR_TRAEFIK_DOMAIN}`)"
-      - "traefik.http.services.morphic.loadbalancer.server.port=${HARBOR_MORPHIC_HOST_PORT}"
-      - "traefik.http.routers.morphic.entrypoints=web"
+      - "traefik.http.services.morphic.loadbalancer.server.port=3000"
+      - "traefik.http.routers.morphic.entrypoints=websecure"
+      - "traefik.http.routers.morphic.tls=true"
       - "traefik.http.routers.morphic.service=morphic"
 
     networks:

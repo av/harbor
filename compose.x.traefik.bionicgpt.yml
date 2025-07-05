@@ -5,8 +5,9 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.bionicgpt.rule=Host(`bionicgpt.${HARBOR_TRAEFIK_DOMAIN}`)"
-      - "traefik.http.services.bionicgpt.loadbalancer.server.port=${HARBOR_BIONICGPT_HOST_PORT}"
-      - "traefik.http.routers.bionicgpt.entrypoints=web"
+      - "traefik.http.services.bionicgpt.loadbalancer.server.port=7700"
+      - "traefik.http.routers.bionicgpt.entrypoints=websecure"
+      - "traefik.http.routers.bionicgpt.tls=true"
       - "traefik.http.routers.bionicgpt.service=bionicgpt"
 
     networks:

@@ -5,8 +5,9 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.kobold.rule=Host(`kobold.${HARBOR_TRAEFIK_DOMAIN}`)"
-      - "traefik.http.services.kobold.loadbalancer.server.port=${HARBOR_KOBOLD_HOST_PORT}"
-      - "traefik.http.routers.kobold.entrypoints=web"
+      - "traefik.http.services.kobold.loadbalancer.server.port=5001"
+      - "traefik.http.routers.kobold.entrypoints=websecure"
+      - "traefik.http.routers.kobold.tls=true"
       - "traefik.http.routers.kobold.service=kobold"
 
     networks:

@@ -5,8 +5,9 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.sqlchat.rule=Host(`sqlchat.${HARBOR_TRAEFIK_DOMAIN}`)"
-      - "traefik.http.services.sqlchat.loadbalancer.server.port=${HARBOR_SQLCHAT_HOST_PORT}"
-      - "traefik.http.routers.sqlchat.entrypoints=web"
+      - "traefik.http.services.sqlchat.loadbalancer.server.port=3000"
+      - "traefik.http.routers.sqlchat.entrypoints=websecure"
+      - "traefik.http.routers.sqlchat.tls=true"
       - "traefik.http.routers.sqlchat.service=sqlchat"
 
     networks:

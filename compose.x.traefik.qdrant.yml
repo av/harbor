@@ -5,8 +5,9 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.qdrant.rule=Host(`qdrant.${HARBOR_TRAEFIK_DOMAIN}`)"
-      - "traefik.http.services.qdrant.loadbalancer.server.port=${HARBOR_QDRANT_HOST_PORT}"
-      - "traefik.http.routers.qdrant.entrypoints=web"
+      - "traefik.http.services.qdrant.loadbalancer.server.port=6333"
+      - "traefik.http.routers.qdrant.entrypoints=websecure"
+      - "traefik.http.routers.qdrant.tls=true"
       - "traefik.http.routers.qdrant.service=qdrant"
 
     networks:

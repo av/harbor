@@ -6,7 +6,8 @@ services:
       - "traefik.enable=true"
       - "traefik.http.routers.librechat.rule=Host(`librechat.${HARBOR_TRAEFIK_DOMAIN}`)"
       - "traefik.http.services.librechat.loadbalancer.server.port=${HARBOR_LIBRECHAT_HOST_PORT}"
-      - "traefik.http.routers.librechat.entrypoints=web"
+      - "traefik.http.routers.librechat.entrypoints=websecure"
+      - "traefik.http.routers.librechat.tls=true"
       - "traefik.http.routers.librechat.service=librechat"
 
     networks:

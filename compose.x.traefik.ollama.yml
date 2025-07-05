@@ -5,8 +5,9 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.ollama.rule=Host(`ollama.${HARBOR_TRAEFIK_DOMAIN}`)"
-      - "traefik.http.services.ollama.loadbalancer.server.port=${HARBOR_OLLAMA_HOST_PORT}"
-      - "traefik.http.routers.ollama.entrypoints=web"
+      - "traefik.http.services.ollama.loadbalancer.server.port=11434"
+      - "traefik.http.routers.ollama.entrypoints=websecure"
+      - "traefik.http.routers.ollama.tls=true"
       - "traefik.http.routers.ollama.service=ollama"
 
     networks:

@@ -5,8 +5,9 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.vllm.rule=Host(`vllm.${HARBOR_TRAEFIK_DOMAIN}`)"
-      - "traefik.http.services.vllm.loadbalancer.server.port=${HARBOR_VLLM_HOST_PORT}"
-      - "traefik.http.routers.vllm.entrypoints=web"
+      - "traefik.http.services.vllm.loadbalancer.server.port=8000"
+      - "traefik.http.routers.vllm.entrypoints=websecure"
+      - "traefik.http.routers.vllm.tls=true"
       - "traefik.http.routers.vllm.service=vllm"
 
     networks:

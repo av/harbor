@@ -5,8 +5,9 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.libretranslate.rule=Host(`libretranslate.${HARBOR_TRAEFIK_DOMAIN}`)"
-      - "traefik.http.services.libretranslate.loadbalancer.server.port=${HARBOR_LIBRETRANSLATE_HOST_PORT}"
-      - "traefik.http.routers.libretranslate.entrypoints=web"
+      - "traefik.http.services.libretranslate.loadbalancer.server.port=5000"
+      - "traefik.http.routers.libretranslate.entrypoints=websecure"
+      - "traefik.http.routers.libretranslate.tls=true"
       - "traefik.http.routers.libretranslate.service=libretranslate"
 
     networks:

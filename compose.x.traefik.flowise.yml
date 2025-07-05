@@ -5,8 +5,9 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.flowise.rule=Host(`flowise.${HARBOR_TRAEFIK_DOMAIN}`)"
-      - "traefik.http.services.flowise.loadbalancer.server.port=${HARBOR_FLOWISE_HOST_PORT}"
-      - "traefik.http.routers.flowise.entrypoints=web"
+      - "traefik.http.services.flowise.loadbalancer.server.port=3000"
+      - "traefik.http.routers.flowise.entrypoints=websecure"
+      - "traefik.http.routers.flowise.tls=true"
       - "traefik.http.routers.flowise.service=flowise"
 
     networks:

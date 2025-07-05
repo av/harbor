@@ -5,8 +5,9 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.hollama.rule=Host(`hollama.${HARBOR_TRAEFIK_DOMAIN}`)"
-      - "traefik.http.services.hollama.loadbalancer.server.port=${HARBOR_HOLLAMA_HOST_PORT}"
-      - "traefik.http.routers.hollama.entrypoints=web"
+      - "traefik.http.services.hollama.loadbalancer.server.port=4173"
+      - "traefik.http.routers.hollama.entrypoints=websecure"
+      - "traefik.http.routers.hollama.tls=true"
       - "traefik.http.routers.hollama.service=hollama"
 
     networks:

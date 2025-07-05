@@ -5,8 +5,9 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.n8n.rule=Host(`n8n.${HARBOR_TRAEFIK_DOMAIN}`)"
-      - "traefik.http.services.n8n.loadbalancer.server.port=${HARBOR_N8N_HOST_PORT}"
-      - "traefik.http.routers.n8n.entrypoints=web"
+      - "traefik.http.services.n8n.loadbalancer.server.port=5678"
+      - "traefik.http.routers.n8n.entrypoints=websecure"
+      - "traefik.http.routers.n8n.tls=true"
       - "traefik.http.routers.n8n.service=n8n"
 
     networks:

@@ -5,8 +5,9 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.aphrodite.rule=Host(`aphrodite.${HARBOR_TRAEFIK_DOMAIN}`)"
-      - "traefik.http.services.aphrodite.loadbalancer.server.port=${HARBOR_APHRODITE_HOST_PORT}"
-      - "traefik.http.routers.aphrodite.entrypoints=web"
+      - "traefik.http.services.aphrodite.loadbalancer.server.port=2242"
+      - "traefik.http.routers.aphrodite.entrypoints=websecure"
+      - "traefik.http.routers.aphrodite.tls=true"
       - "traefik.http.routers.aphrodite.service=aphrodite"
 
     networks:

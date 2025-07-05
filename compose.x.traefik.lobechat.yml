@@ -5,8 +5,9 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.lobechat.rule=Host(`lobechat.${HARBOR_TRAEFIK_DOMAIN}`)"
-      - "traefik.http.services.lobechat.loadbalancer.server.port=${HARBOR_LOBECHAT_HOST_PORT}"
-      - "traefik.http.routers.lobechat.entrypoints=web"
+      - "traefik.http.services.lobechat.loadbalancer.server.port=3210"
+      - "traefik.http.routers.lobechat.entrypoints=websecure"
+      - "traefik.http.routers.lobechat.tls=true"
       - "traefik.http.routers.lobechat.service=lobechat"
 
     networks:

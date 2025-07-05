@@ -5,8 +5,9 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.localai.rule=Host(`localai.${HARBOR_TRAEFIK_DOMAIN}`)"
-      - "traefik.http.services.localai.loadbalancer.server.port=${HARBOR_LOCALAI_HOST_PORT}"
-      - "traefik.http.routers.localai.entrypoints=web"
+      - "traefik.http.services.localai.loadbalancer.server.port=8080"
+      - "traefik.http.routers.localai.entrypoints=websecure"
+      - "traefik.http.routers.localai.tls=true"
       - "traefik.http.routers.localai.service=localai"
 
     networks:
