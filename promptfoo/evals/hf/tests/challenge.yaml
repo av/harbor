@@ -1,0 +1,729 @@
+# Generated Promptfoo test cases for MMLU-Pro dataset
+# This file contains test cases for evaluating LLMs on the MMLU-Pro dataset.
+# Each test case includes a question with options and the expected answer.
+- vars:
+    question_id: '1668'
+    question: >-
+      A man filed a federal diversity action against a bus company, seeking
+      damages for injuries he had sustained in an accident while riding a bus
+      owned by the company. The man demanded a jury trial. After the parties'
+      attorneys examined the prospective jurors and exercised their challenges,
+      six jurors and two alternate jurors were chosen. During the trial, two
+      jurors became ill and were replaced by the alternate jurors. At the
+      conclusion of replaced by the alternate jurors. At the conclusion of the
+      trial, a third juror also became ill, and the court excused that juror.
+      The parties' attorneys stipulated to the return of a verdict from a
+      five-person jury. The jury then deliberated and returned a verdict for the
+      company. The man timely filed a motion for a new trial, arguing that the
+      five-person jury was not large enough to return a verdict. Should the
+      court grant the motion?
+
+
+      Options:
+
+      A) No, because the verdict was reached before the third juror was excused.
+
+      B) No, because the court properly excused the three jurors due to illness.
+
+      C) Yes, because there must be at least six jurors on a federal civil jury.
+
+      D) Yes, because there must be at least 12 jurors on a federal civil jury.
+
+      E) Yes, because the replacement of jurors during the trial invalidated the
+      verdict.
+
+      F) Yes, because the stipulation of the attorneys cannot override federal
+      jury size requirements.
+
+      G) No, because the parties stipulated to a verdict from a jury of fewer
+      than six jurors.
+
+      H) No, because the illness of jurors is a valid reason for reducing the
+      jury size.
+
+      I) No, because the remaining jurors were sufficient to reach a unanimous
+      decision.
+
+      J) Yes, because the man was not given a fair trial due to the reduced jury
+      size.
+  assert:
+    - type: llm-rubric
+      value: The final answer is "G)"
+- vars:
+    question_id: '2768'
+    question: >-
+      MRI is preferred over CT (computed tomography) in all of the following
+      scenarios, EXCEPT:
+
+
+      Options:
+
+      A) The detection of spinal cord injuries
+
+      B) The detection of white matter abnormalities
+
+      C) The detection of soft tissue injuries
+
+      D) The detection of a small tumor
+
+      E) The detection of lung cancer
+
+      F) The detection of acute cerebral infarct
+
+      G) The detection of brain aneurysms
+
+      H) The detection of a skull fracture
+
+      I) The detection of heart disease
+
+      J) The detection of liver abnormalities
+  assert:
+    - type: llm-rubric
+      value: The final answer is "H)"
+- vars:
+    question_id: '3039'
+    question: >-
+      Using conditioning, how can one determine the sensitivity of a dog's
+      hearing to sounds of different frequencies?
+
+
+      Options:
+
+      A) Through ultrasound examination
+
+      B) Through blood sample analysis
+
+      C) Through direct observation
+
+      D) Through measuring brain wave activity in response to sounds
+
+      E) Through operant conditioning
+
+      F) Through x-ray examination
+
+      G) Through auditory brainstem response (ABR) testing
+
+      H) Through genetic testing
+
+      I) Through a controlled environment listening test
+
+      J) Through behavioral observation in natural settings
+  assert:
+    - type: llm-rubric
+      value: The final answer is "E)"
+- vars:
+    question_id: '3243'
+    question: >-
+      From 146 students tested for PTC tasting ability, 105 were tasters and 41
+      were non-tasters. Calculate the frequencies of tasters and non-tasters.
+
+
+      Options:
+
+      A) Frequency of T is 0.59 and frequency of t is 0.41
+
+      B) Frequency of T is 0.47 and frequency of t is 0.53
+
+      C) Frequency of T is 0.72 and frequency of t is 0.28
+
+      D) Frequency of T is 0.50 and frequency of t is 0.50
+
+      E) Frequency of T is 0.41 and frequency of t is 0.59
+
+      F) Frequency of T is 0.53 and frequency of t is 0.47
+
+      G) Frequency of T is 0.28 and frequency of t is 0.72
+
+      H) Frequency of T is 0.39 and frequency of t is 0.61
+
+      I) Frequency of T is 0.35 and frequency of t is 0.65
+
+      J) Frequency of T is 0.61 and frequency of t is 0.39
+  assert:
+    - type: llm-rubric
+      value: The final answer is "B)"
+- vars:
+    question_id: '4359'
+    question: >-
+      A constant-volume perfect gas thermometer indicates a pressure of $6.69
+      \mathrm{kPa}$ at the triple point temperature of water (273.16 K). What
+      pressure indicates a temperature of $100.00^{\circ} \mathrm{C}$?
+
+
+      Options:
+
+      A) 8.56 $\mathrm{kPa}$
+
+      B) 7.02 kPa
+
+      C) 11.22 kPa
+
+      D) 8.00 kPa
+
+      E) 10.00 kPa
+
+      F) 10.25 $\mathrm{kPa}$
+
+      G) 9.50 kPa
+
+      H) 7.89 $\mathrm{kPa}$
+
+      I) 9.14$\mathrm{kPa}$
+
+      J) 12.33 kPa
+  assert:
+    - type: llm-rubric
+      value: The final answer is "I)"
+- vars:
+    question_id: '4929'
+    question: >-
+      A(n) _________ contains primary refuse; a _________ contains secondary
+      refuse.
+
+
+      Options:
+
+      A) office; landfill
+
+      B) dining area; garbage disposal
+
+      C) bathroom; incinerator
+
+      D) kitchen; garden
+
+      E) playground; waste treatment plant
+
+      F) picnic site; trash dump
+
+      G) activity area; recycling area
+
+      H) bedroom; compost bin
+
+      I) living room; sewer system
+  assert:
+    - type: llm-rubric
+      value: The final answer is "F)"
+- vars:
+    question_id: '4970'
+    question: >-
+      A more accurate calibration curve and conversion for radiocarbon dating
+      can be derived from:
+
+
+      Options:
+
+      A) coins recovered from ancient shipwrecks.
+
+      B) dendrochronology.
+
+      C) all of the above.
+
+      D) ice core sampling.
+
+      E) written records.
+
+      F) bone dating of ancient human remains.
+
+      G) examination of sediment layers.
+
+      H) satellite imagery.
+
+      I) fossil records.
+
+      J) carbon dating of historical buildings.
+  assert:
+    - type: llm-rubric
+      value: The final answer is "B)"
+- vars:
+    question_id: '5077'
+    question: >-
+      Which of the following is an important reason to advocate the process of
+      desecuritization?
+
+
+      Options:
+
+      A) To prevent the erosion of established civil liberties through the
+      removal of special rights and the cessation of extraordinary measures.
+
+      B) To prevent stagnation of the security realm and facilitate the
+      recognition and securitization of new or more urgent existential threats.
+
+      C) To ensure that securitizing actors conceptualise security threats in
+      terms of those that can be addressed using extraordinary measures.
+  assert:
+    - type: llm-rubric
+      value: The final answer is "A)"
+- vars:
+    question_id: '5610'
+    question: |-
+      Which of the boys on the TV show 'My Three Sons' is adopted?
+
+      Options:
+      A) Danny
+      B) Sam
+      C) Charlie
+      D) Ernie
+      E) Fred
+      F) Robbie
+      G) Chip
+      H) Billy
+      I) Steve
+      J) Mike
+  assert:
+    - type: llm-rubric
+      value: The final answer is "D)"
+- vars:
+    question_id: '6058'
+    question: >-
+      Vitamin D deficiency can often be found as a single nutrient deficiency,
+      that is, in an otherwise well-nourished person. The main reason this can
+      happen is because:
+
+
+
+      Options:
+
+      A) Vitamin D is not essential for the body, therefore, its deficiency
+      doesn't affect the overall nourishment.
+
+      B) Vitamin D is a rare nutrient and can only be found in a few expensive
+      food items.
+
+      C) Vitamin D absorption is not affected by the presence of other nutrients
+      in the body.
+
+      D) The content of vitamin D in foods depends on the soil in which the food
+      was grown so is not related to wealth or age.
+
+      E) Overconsumption of Vitamin D can lead to its deficiency.
+
+      F) Diets containing sufficient other nutrients to promote growth can
+      increase the requirement of vitamin D so that it becomes limiting.
+
+      G) Most vitamin D in the body does not come from food so access to food is
+      not an important determinant of vitamin D status.
+
+      H) Foods containing large amounts of vitamin D are eaten by both poor and
+      wealthy people according to various cultural reasons.
+
+      I) Vitamin D is present in all types of food, therefore, its deficiency is
+      usually accompanied by other nutrient deficiencies.
+
+      J) Vitamin D is only produced in the body during certain times of the
+      year.
+  assert:
+    - type: llm-rubric
+      value: The final answer is "G)"
+- vars:
+    question_id: '6205'
+    question: >-
+      A source emits a sound from one medium with a certain velocity, intensity,
+      frequency and wavelength. When the sound exits the first medium and enters
+      a denser medium, all of the following changes EXCEPT:
+
+
+      Options:
+
+      A) tone
+
+      B) amplitude
+
+      C) wavelength
+
+      D) direction
+
+      E) pitch
+
+      F) frequency
+
+      G) resonance
+
+      H) volume
+
+      I) intensity
+
+      J) velocity
+  assert:
+    - type: llm-rubric
+      value: The final answer is "F)"
+- vars:
+    question_id: '7401'
+    question: >-
+      If output of goods and services in real terms was $1600 billion last year,
+      the money supply was $500 billion and the velocity of money was 4, then
+      what was the price level? Was last year an inflationary period or a
+      deflationary period?
+
+
+      Options:
+
+      A) 1.25, Not enough information
+
+      B) 0.8, Inflationary period
+
+      C) 2.5, Inflationary period
+
+      D) 2, It was a period of stable prices
+
+      E) 1.6, Deflationary period
+
+      F) 3, Deflationary period
+
+      G) 1.5, Not enough information
+
+      H) 1.25, Inflationary period
+
+      I) 2, Not enough information
+
+      J) 1, Not enough information
+  assert:
+    - type: llm-rubric
+      value: The final answer is "A)"
+- vars:
+    question_id: '7481'
+    question: >-
+      If a bank has total reserves of $ 1000 and demand deposits of $ 2000, what
+      is the amount by which demand deposits can ex-pand in the banking system,
+      assuming a 20% required reserve ratio.
+
+
+      Options:
+
+      A) $ 2000
+
+      B) $ 400
+
+      C) $ 1200
+
+      D) $ 800
+
+      E) $ 10000
+
+      F) $ 5000
+
+      G) $ 3000
+
+      H) $ 600
+
+      I) $ 1600
+
+      J) $ 7000
+  assert:
+    - type: llm-rubric
+      value: The final answer is "G)"
+- vars:
+    question_id: '7801'
+    question: >-
+      A dentist has noticed that about two children in every seven whom he sees
+      professionally develop cavities before they turn 10 years old. Last week
+      he examined the teeth of five unrelated children younger than 10. Let X be
+      the number of children who develop cavities before turning 10. Which of
+      the following gives the probability that at least one will develop a
+      cavity before turning 10?
+
+
+      Options:
+
+      A) P(X = 3 out of 5)
+
+      B) P(X = 0)
+
+      C) P(X = 7 out of 10)
+
+      D) P(X = 1)
+
+      E) 1 – P(X = 1)
+
+      F) P(X = 1, 2, 3, 4, 5)
+
+      G) P(X = 2 out of 7)
+
+      H) P(X = 2, 3, 4, 5, 6, 7)
+
+      I) 1 – P(X = 0)
+
+      J) P(X = 2 out of 5)
+  assert:
+    - type: llm-rubric
+      value: The final answer is "I)"
+- vars:
+    question_id: '8305'
+    question: >-
+      Assuming $x$ and $y$ are both 2-d random variable. The covariance matrix
+      of $x=((1,2),(2,3),(3,3),(4,4))$, $y=((3,4),(1,5),(5,3),(3,3))$ is $Cov$.
+      What is summation of the eigenvalue of $Cov$?
+
+
+      Options:
+
+      A) 3.654
+
+      B) 7.890
+
+      C) 1.234
+
+      D) 0.987
+
+      E) 5.321
+
+      F) 3.141
+
+      G) 1.618
+
+      H) 4.890
+
+      I) 6.213
+
+      J) 2.767
+  assert:
+    - type: llm-rubric
+      value: The final answer is "J)"
+- vars:
+    question_id: '8867'
+    question: >-
+      7.4-7. For a public opinion poll for a close presidential election, let
+      $p$ denote the proportion of voters who favor candidate $A$. How large a
+      sample should be taken if we want the maximum error of the estimate of $p$
+      to be equal to
+
+      (a) 0.03 with $95 \%$ confidence?
+
+
+      Options:
+
+      A) 500
+
+      B) 2000
+
+      C) 1800
+
+      D) $1068$
+
+      E) 950
+
+      F) 800
+
+      G) 1500
+
+      H) 1300
+
+      I) 1200
+
+      J) 1100
+  assert:
+    - type: llm-rubric
+      value: The final answer is "D)"
+- vars:
+    question_id: '9191'
+    question: >-
+      A projector with a lens of 40 cm focal length illuminates an object slide
+      4.0 cm long and throws an image upon a screen 20 m from the lens. What is
+      the size of the pro-jected image?
+
+
+      Options:
+
+      A) 220cm
+
+      B) 200cm
+
+      C) 210 cm
+
+      D) 190 cm
+
+      E) 240cm
+
+      F) 260 cm
+
+      G) 180cm
+
+      H) 160 cm
+
+      I) 150 cm
+
+      J) 300 cm
+  assert:
+    - type: llm-rubric
+      value: The final answer is "B)"
+- vars:
+    question_id: '9615'
+    question: >-
+      Two rods of the same diameter, one made of brass and of length 25 cm, the
+      other of steel and of length50 cm, are 50 cm, are placed end to end and
+      pinned to two rigid supports. The temperature of the rods rises to 40°C.
+      What is the stress in each rod? Young'smodulifor steel and brass are 20 ×
+      10^11 steel and brass are 20 × 10^11 dynes \textbullet cm^\rule{1em}{1pt}2
+      and 10 × 10^11 dynes \textbullet cm ^-2, respectively, and 10^11 dynes
+      \textbullet cm ^-2, respectively, and their respective coefficients of
+      expansion are 1.2 × 10 ^-5 C coefficients of expansion are 1.2 × 10 ^-5 C
+      deg^-1 and 1.8 × 10 ^-5 C deg ^-1. 1.8 × 10 ^-5 C deg ^-1.
+
+
+      Options:
+
+      A) 0.50 × 10^9 dyne . cm^-2
+
+      B) 1.2 × 10^9 dyne . cm^-2
+
+      C) 1.0 × 10^9 dyne . cm^-2
+
+      D) 2.5 × 10^9 dyne . cm^-2
+
+      E) 1.84 × 10^9 dyne . cm^-2
+
+      F) 1.5 × 10^9 dyne . cm^-2
+
+      G) 2.0 × 10^9 dyne . cm^-2
+
+      H) 0.60 × 10^9 dyne . cm^-2
+
+      I) 0.30 × 10^9 dyne . cm^-2
+
+      J) 0.84 × 10^9 dyne . cm^-2
+  assert:
+    - type: llm-rubric
+      value: The final answer is "J)"
+- vars:
+    question_id: '10505'
+    question: >-
+      Write a FORTRAN program to compute the arithmetic mean of N real numbers.
+      You may assume that the numbers have been read into an array X having
+      members X(1), X(2),..., X(N).
+
+
+      Options:
+
+      A) DIMENSION X(N) SUM = 0.0 READ (5,20) N, (X(I), I=1,N) DO 50 I = 1,N
+      5\OSUM = SUM + X(N-I+1) AVG = SUM/FLOAT (N) STOP END
+
+      B) DIMENSION X(1:N) SUM = 0.0 READ (5,20) N FOR I = 1 TO N SUM = SUM +
+      X(I) NEXT I AVG = SUM/FLOAT (N) PRINT *, AVG END
+
+      C) DIMENSION X(N) SUM = 0.0 READ (5,20) N 2\OFORMAT (2X,I5) DO 50 I = 1,N
+      SUM = SUM + I AVG = SUM/FLOAT (N) STOP END
+
+      D) DIMENSION X(N) SUM = 0.0 READ (5,20) (X(I), I=1,N) DO 50 I = 1,N 5\OSUM
+      = SUM + X(I) AVG = SUM/N STOP END
+
+      E) DIMENSION X(N) SUM = 0.0 READ (5,20) N 2\OFORMAT (2X,I5) DO 50 I = 1,N
+      5\OSUM = SUM - X(I) AVG = SUM/FLOAT (N) STOP END
+
+      F) DIMENSION X(N) SUM = 0.0 READ (5,20) N 2\OFORMAT (2X,I5) DO 50 I = 1,N
+      5\OSUM = SUM + X(I) AVG = SUM/FLOAT (N) STOP END
+
+      G) DIMENSION X(N) SUM = 1.0 READ (5,20) N 2\OFORMAT (2X,I5) DO 50 I = 1,N
+      5\OSUM = SUM + X(I) AVG = SUM/FLOAT (N) STOP END
+
+      H) DIMENSION X(N) SUM = 0.0 READ (5,20) N 2\OFORMAT (2X,I5) DO 50 I = 1,N
+      SUM = SUM + X(I)^2 AVG = SQRT(SUM/FLOAT (N)) STOP END
+
+      I) DIMENSION X(N) SUM = 0.0 READ (5,20) N 2\OFORMAT (2X,I5) DO 50 I = 1,N
+      5\OSUM = SUM + X(I) AVG = SUM/INT (N) STOP END
+
+      J) DIMENSION X(N) SUM = 0.0 WRITE (5,20) N 2\OFORMAT (2X,I5) DO 50 I = 1,N
+      5\OSUM = SUM + X(I) AVG = SUM/FLOAT (N) STOP END
+  assert:
+    - type: llm-rubric
+      value: The final answer is "F)"
+- vars:
+    question_id: '10529'
+    question: |-
+      What are support vectors?
+
+      Options:
+      A) The data outliers in an SVM.
+      B) The data points that are used to calculate the distance in an SVM.
+      C) The only examples necessary to compute f(x) in an SVM.
+      D) The data centroid.
+      E) All examples that have a zero weight αk in an SVM.
+      F) The examples farthest from the decision boundary.
+      G) All examples that fall within the decision boundary in an SVM.
+  assert:
+    - type: llm-rubric
+      value: The final answer is "C)"
+- vars:
+    question_id: '10720'
+    question: |-
+      What is the value of this python expression: 4 + 3 % 2?
+
+      Options:
+      A) 9
+      B) 7
+      C) 0
+      D) 4
+      E) 8
+      F) 1
+      G) 6
+      H) 3
+      I) 2
+      J) 5
+  assert:
+    - type: llm-rubric
+      value: The final answer is "J)"
+- vars:
+    question_id: '11981'
+    question: >-
+      Calculate the change in entropy for liquid water @ - 5°C and 1atmto ice at
+      - 5°C and 1 atm. Use the following data: C_p for H_2O(s) = 9 cal deg^-1
+      mole^-1 C_p forH_2O(1) = 18 cal deg^-1 mole^-1 \DeltaH_fusion@ 0°C and
+      1atmis1,440 cal/mole
+
+
+      Options:
+
+      A) -2.22eu
+
+      B) - 5.1eu
+
+      C) 1.440eu
+
+      D) -1.440eu
+
+      E) 2.22eu
+
+      F) -0.166eu
+
+      G) -5.27eu
+
+      H) -0.144eu
+
+      I) 0.333eu
+
+      J) 0.144eu
+  assert:
+    - type: llm-rubric
+      value: The final answer is "B)"
+- vars:
+    question_id: '12240'
+    question: >-
+      Estimate the overall heat transfer coefficient, based on the outside
+      surface area, for hot water flowing with a velocity of 30 cm/sec through a
+      standard 1.5 in. schedule 80 steel pipe. The temperature is 22°C. Take the
+      thermal conductivity of steel as 60 W/m-°C.
+
+
+      Options:
+
+      A) 8.52 W/m^2-°C
+
+      B) 6.52 W/m^2-°C
+
+      C) 7.52 W/m^2-°C
+
+      D) 13.52 W/m^2-°C
+
+      E) 5.52 W/m^2-°C
+
+      F) 12.52 W/m^2-°C
+
+      G) 9.52 W/m^2-°C
+
+      H) 14.52 W/m^2-°C
+
+      I) 11.52 W/m^2-°C
+
+      J) 10.52 W/m^2-°C
+  assert:
+    - type: llm-rubric
+      value: The final answer is "A)"

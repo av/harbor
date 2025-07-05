@@ -176,6 +176,11 @@ logger = log.setup_logger(__name__)
 
 
 async def apply(chat: 'ch.Chat', llm: 'llm.LLM'):
+  """
+  Pads the chat context with fake reasoning inputs.
+  Doesn't work at all in practice.
+  """
+
   llm.boost_params['pad_size'] = '128'
 
   pad = make_pad(**llm.boost_params)

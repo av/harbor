@@ -5,6 +5,20 @@ import config
 import selection
 
 ID_PREFIX = "eli5"
+DOCS = """
+Based on a simple idea of explaining complex things in a simple way. The module will ask the LLM to explain a question to itself first and then will use that explanation for the final answer.
+
+**Parameters**
+
+`eli5` module supports selection strategy parameters identical to `mcts`, `g1`, and `rcn` modules, just under the `boost.eli5` prefix.
+
+```bash
+# Strategy to find the message to start from
+harbor config set boost.eli5.strat match
+# Match last user message, for example
+harbor config set boost.eli5.strat_params role=user,index=-1
+```
+"""
 logger = log.setup_logger(ID_PREFIX)
 
 eli5_prompt = """

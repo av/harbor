@@ -1,0 +1,233 @@
+2025-06-29T09:11:07.408Z [ERROR]: API call error: Error: Request failed after 4 retries: TypeError: fetch failed (Cause: Error: getaddrinfo ENOTFOUND harbor.boost)
+2025-06-29T09:11:10.172Z [ERROR]: API call error: Error: Request failed after 4 retries: TypeError: fetch failed (Cause: Error: getaddrinfo ENOTFOUND harbor.boost)
+2025-06-29T09:11:10.752Z [ERROR]: API call error: Error: Request failed after 4 retries: TypeError: fetch failed (Cause: Error: getaddrinfo ENOTFOUND harbor.boost)
+2025-06-29T09:11:15.343Z [ERROR]: API call error: Error: Request failed after 4 retries: TypeError: fetch failed (Cause: Error: getaddrinfo ENOTFOUND harbor.boost)
+2025-06-29T09:13:13.186Z [ERROR]: API call error: Error: Request failed after 4 retries: TypeError: fetch failed (Cause: Error: getaddrinfo ENOTFOUND harbor.boost)
+2025-06-29T09:13:17.322Z [ERROR]: API call error: Error: Request failed after 4 retries: TypeError: fetch failed (Cause: Error: getaddrinfo ENOTFOUND harbor.boost)
+2025-06-29T09:13:19.757Z [ERROR]: API call error: Error: Request failed after 4 retries: TypeError: fetch failed (Cause: Error: getaddrinfo ENOTFOUND harbor.boost)
+2025-06-29T12:03:25.925Z [ERROR]: API call error: Error: Error parsing response from http://172.17.0.1:8004/v1/chat/completions: Unexpected token 'I', "Internal S"... is not valid JSON. Received text: Internal Server Error
+2025-06-29T12:03:25.943Z [ERROR]: API call error: Error: Error parsing response from http://172.17.0.1:8004/v1/chat/completions: Unexpected token 'I', "Internal S"... is not valid JSON. Received text: Internal Server Error
+2025-06-29T12:03:25.956Z [ERROR]: API call error: Error: Error parsing response from http://172.17.0.1:8004/v1/chat/completions: Unexpected token 'I', "Internal S"... is not valid JSON. Received text: Internal Server Error
+2025-06-29T12:03:25.962Z [ERROR]: API call error: Error: Error parsing response from http://172.17.0.1:8004/v1/chat/completions: Unexpected token 'I', "Internal S"... is not valid JSON. Received text: Internal Server Error
+2025-06-29T12:03:25.968Z [ERROR]: API call error: Error: Error parsing response from http://172.17.0.1:8004/v1/chat/completions: Unexpected token 'I', "Internal S"... is not valid JSON. Received text: Internal Server Error
+2025-06-29T12:03:25.974Z [ERROR]: API call error: Error: Error parsing response from http://172.17.0.1:8004/v1/chat/completions: Unexpected token 'I', "Internal S"... is not valid JSON. Received text: Internal Server Error
+2025-06-29T12:03:25.979Z [ERROR]: API call error: Error: Error parsing response from http://172.17.0.1:8004/v1/chat/completions: Unexpected token 'I', "Internal S"... is not valid JSON. Received text: Internal Server Error
+2025-06-29T12:03:25.988Z [ERROR]: API call error: Error: Error parsing response from http://172.17.0.1:8004/v1/chat/completions: Unexpected token 'I', "Internal S"... is not valid JSON. Received text: Internal Server Error
+2025-06-29T12:03:25.993Z [ERROR]: API call error: Error: Error parsing response from http://172.17.0.1:8004/v1/chat/completions: Unexpected token 'I', "Internal S"... is not valid JSON. Received text: Internal Server Error
+2025-06-29T12:03:25.998Z [ERROR]: API call error: Error: Error parsing response from http://172.17.0.1:8004/v1/chat/completions: Unexpected token 'I', "Internal S"... is not valid JSON. Received text: Internal Server Error
+2025-06-29T12:03:26.001Z [ERROR]: API call error: Error: Error parsing response from http://172.17.0.1:8004/v1/chat/completions: Unexpected token 'I', "Internal S"... is not valid JSON. Received text: Internal Server Error
+2025-06-29T12:03:26.005Z [ERROR]: API call error: Error: Error parsing response from http://172.17.0.1:8004/v1/chat/completions: Unexpected token 'I', "Internal S"... is not valid JSON. Received text: Internal Server Error
+2025-06-29T12:03:26.009Z [ERROR]: API call error: Error: Error parsing response from http://172.17.0.1:8004/v1/chat/completions: Unexpected token 'I', "Internal S"... is not valid JSON. Received text: Internal Server Error
+2025-06-29T12:03:26.013Z [ERROR]: API call error: Error: Error parsing response from http://172.17.0.1:8004/v1/chat/completions: Unexpected token 'I', "Internal S"... is not valid JSON. Received text: Internal Server Error
+2025-06-29T12:03:26.017Z [ERROR]: API call error: Error: Error parsing response from http://172.17.0.1:8004/v1/chat/completions: Unexpected token 'I', "Internal S"... is not valid JSON. Received text: Internal Server Error
+2025-06-29T12:03:26.020Z [ERROR]: API call error: Error: Error parsing response from http://172.17.0.1:8004/v1/chat/completions: Unexpected token 'I', "Internal S"... is not valid JSON. Received text: Internal Server Error
+2025-06-29T12:03:26.027Z [ERROR]: API call error: Error: Error parsing response from http://172.17.0.1:8004/v1/chat/completions: Unexpected token 'I', "Internal S"... is not valid JSON. Received text: Internal Server Error
+2025-06-29T12:03:26.041Z [ERROR]: API call error: Error: Error parsing response from http://172.17.0.1:8004/v1/chat/completions: Unexpected token 'I', "Internal S"... is not valid JSON. Received text: Internal Server Error
+2025-06-29T12:03:26.047Z [ERROR]: API call error: Error: Error parsing response from http://172.17.0.1:8004/v1/chat/completions: Unexpected token 'I', "Internal S"... is not valid JSON. Received text: Internal Server Error
+2025-06-29T12:03:26.051Z [ERROR]: API call error: Error: Error parsing response from http://172.17.0.1:8004/v1/chat/completions: Unexpected token 'I', "Internal S"... is not valid JSON. Received text: Internal Server Error
+2025-06-29T12:03:26.055Z [ERROR]: API call error: Error: Error parsing response from http://172.17.0.1:8004/v1/chat/completions: Unexpected token 'I', "Internal S"... is not valid JSON. Received text: Internal Server Error
+2025-06-29T12:03:26.060Z [ERROR]: API call error: Error: Error parsing response from http://172.17.0.1:8004/v1/chat/completions: Unexpected token 'I', "Internal S"... is not valid JSON. Received text: Internal Server Error
+2025-06-29T12:03:26.064Z [ERROR]: API call error: Error: Error parsing response from http://172.17.0.1:8004/v1/chat/completions: Unexpected token 'I', "Internal S"... is not valid JSON. Received text: Internal Server Error
+2025-06-29T12:06:13.852Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:13.877Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:13.888Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:13.900Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:13.907Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:13.913Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:13.919Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:13.925Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:13.929Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:13.934Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:13.938Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:13.942Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:13.947Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:13.953Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:13.958Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:13.963Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:13.973Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:13.984Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:13.988Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:13.994Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:13.998Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:14.002Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:14.006Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:21.614Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:21.624Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:21.629Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:21.635Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:21.641Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:21.647Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:21.654Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:21.663Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:21.669Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:21.675Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:21.681Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:21.685Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:21.689Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:21.693Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:21.697Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:21.700Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:21.707Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:21.715Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:21.718Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:21.722Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:21.726Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:21.730Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:21.735Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:33.499Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:33.510Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:33.516Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:33.520Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:33.526Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:33.532Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:33.539Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:33.546Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:33.550Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:33.555Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:33.560Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:33.564Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:33.568Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:33.573Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:33.578Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:33.583Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:33.590Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:33.597Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:33.602Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:33.607Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:33.612Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:33.617Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:06:33.623Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:07:01.148Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:07:07.037Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:07:19.771Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:09:18.461Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:09:40.685Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:09:48.012Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:12:41.423Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:12:49.958Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:16:13.099Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:16:22.295Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:17:09.920Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:17:21.114Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:18:32.110Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:18:42.514Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:18:56.021Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:18:56.048Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:18:56.064Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:18:56.076Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:18:56.084Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:18:56.090Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:18:56.096Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:18:56.103Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:18:56.108Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:18:56.114Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:18:56.123Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:18:56.129Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:18:56.136Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:18:56.141Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:18:56.145Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:18:56.151Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:18:56.155Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:18:56.159Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:18:56.163Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:18:56.168Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:18:56.178Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:18:56.183Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:18:56.207Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:21:58.681Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:21:58.706Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:21:58.719Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:21:58.731Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:21:58.743Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:21:58.750Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:21:58.758Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:21:58.764Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:21:58.769Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:21:58.779Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:21:58.785Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:21:58.790Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:21:58.795Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:21:58.800Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:21:58.808Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:21:58.848Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:21:58.861Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:21:58.866Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:21:58.894Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:21:58.925Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:21:58.944Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:21:58.977Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:21:59.031Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T12:29:06.395Z [ERROR]: API call error: Error: Request failed after 4 retries: TypeError: fetch failed (Cause: SocketError: other side closed)
+2025-06-29T12:29:06.416Z [ERROR]: API call error: Error: Request failed after 4 retries: TypeError: fetch failed (Cause: SocketError: other side closed)
+2025-06-29T12:29:06.427Z [ERROR]: API call error: Error: Request failed after 4 retries: TypeError: fetch failed (Cause: SocketError: other side closed)
+2025-06-29T15:19:53.517Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T15:19:53.540Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T15:19:53.552Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T15:19:53.564Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T15:19:53.573Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T15:19:53.580Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T15:19:53.586Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T15:19:53.591Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T15:19:53.595Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T15:19:53.601Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T15:19:53.610Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T15:19:53.617Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T15:19:53.623Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T15:19:53.628Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T15:19:53.633Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T15:19:53.638Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T15:19:53.648Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T15:19:53.659Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T15:19:53.668Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T15:19:53.673Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T15:19:53.679Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T15:19:53.683Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T15:19:53.689Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T15:19:57.294Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T15:19:57.307Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T15:19:57.314Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T15:19:57.322Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T15:19:57.327Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T15:19:57.334Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T15:19:57.341Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T15:19:57.350Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T15:19:57.357Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T15:19:57.361Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T15:19:57.365Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T15:19:57.369Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T15:19:57.373Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T15:19:57.377Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T15:19:57.380Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T15:19:57.385Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T15:19:57.395Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T15:19:57.404Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T15:19:57.409Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T15:19:57.414Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T15:19:57.419Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T15:19:57.424Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T15:19:57.428Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-06-29T15:23:45.610Z [ERROR]: API call error: Error: Request failed after 4 retries: TypeError: fetch failed (Cause: Error: connect ECONNREFUSED 172.17.0.1:8004)
+2025-07-03T16:25:20.473Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-07-03T16:25:20.492Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-07-03T16:25:20.505Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-07-03T16:25:20.514Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-07-03T16:25:20.523Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-07-03T16:25:20.531Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-07-03T16:25:20.539Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-07-03T16:25:20.546Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-07-03T16:25:20.554Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-07-03T16:25:20.561Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-07-03T16:25:20.570Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-07-03T16:25:20.577Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-07-03T16:25:20.585Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-07-03T16:25:20.593Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-07-03T16:25:20.599Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-07-03T16:25:20.605Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-07-03T16:25:20.614Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-07-03T16:25:20.621Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-07-03T16:25:20.628Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-07-03T16:25:20.634Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-07-03T16:25:20.640Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-07-03T16:25:20.646Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-07-03T16:25:20.652Z [ERROR]: API call error: Error: Error parsing response as JSON: Internal Server Error
+2025-07-03T16:34:00.694Z [ERROR]: API call error: Error: Request failed after 4 retries: TypeError: fetch failed (Cause: Error: connect ECONNREFUSED 172.17.0.1:8004)

@@ -13,6 +13,62 @@ import selection
 logger = log.setup_logger(__name__)
 
 ID_PREFIX = "klmbr"
+DOCS = """
+![klmbr screenshot](https://github.com/av/klmbr/raw/main/assets/c4ndl3.png)
+![klmbr screenshot](./boost-klmbr.png)
+
+Boosts model creativity by applying character-level random rewrites to the input. Read a full overview of the technique in the [source repo](https://github.com/av/klmbr).
+
+Every LLM will respond to rewrites in a different way. Some models will generate more diverse completions, while others might start generating completely random sequences. Default parameters are tuned for Llama 3.1 8B, you might want to adjust them when running with a different model.
+
+**Parameters**
+
+- `percentage` - amount of characters to rewrite in the input. Default is `35`
+- `mods` - types of rewrites to apply. Default is `all`, available options:
+  - `capitalize` - swaps character capitalization
+  - `diacritic` - adds a random diacritic to the character
+  - `leetspeak` - replaces characters with leetspeak equivalents
+  - `remove_vowel` - removes vowels from the input
+- `strat` - strategy for selection of the messages to rewrite. Default is `match`
+  - `all` - match all messages
+  - `first` - match first message regardless of the role
+  - `last` - match last message regardless of the role
+  - `any` - match one random message
+  - `percentage` - match a percentage of random messages from the conversation
+  - `user` - match all user messages
+  - `match` - use a filter to match messages
+- `strat_params` - parameters (filter) for the selection strategy. Default matches all user messages
+  - `percentage` - for `percentage` strat - the percentage of messages to match, default is `50`
+  - `index` - for `match` strat - the index of the message to match
+  - `role` - for `match` strat - the role of the message to match
+  - `substring` - for `match` strat - will match messages containing the substring
+
+**Examples**
+
+```bash
+# Reduce the rewrite percentage
+harbor boost klmbr percentage 20
+
+# Enable/disable rewrite modules
+harbor boost klmbr mods rm all
+harbor boost klmbr mods add capitalize
+harbor boost klmbr mods add diacritic
+harbor boost klmbr mods add leetspeak
+harbor boost klmbr mods add remove_vowel
+
+# Change the selection strategy
+# 1. Match all user messages
+harbor boost klmbr strat match
+harbor boost klmbr strat_params role user
+# 2. Match the last message (regardless of the role)
+harbor boost klmbr strat match
+harbor boost klmbr strat_params index -1
+# 3. Match messages containing a substring
+harbor boost klmbr strat match
+harbor boost klmbr strat_params substring "random"
+```
+
+"""
 
 leetspeak_map = {
   "a": "4",

@@ -1,0 +1,42 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+# Learn more about building a configuration: https://promptfoo.dev/docs/configuration/guide
+
+description: "Mini MMLU Pro"
+
+evaluateOptions:
+  maxConcurrency: 16
+
+prompts:
+  - "{{question}}"
+
+definitions:
+  harborBoost: &harborBoost
+    apiBaseUrl: http://harbor.boost:8000/v1
+    apiKey: sk-boost
+  standaloneBoost: &standaloneBoost
+    apiBaseUrl: http://172.17.0.1:8004/v1
+    apiKey: sk-boost
+
+defaultTest:
+  options:
+    provider:
+      id: openai:chat:openai/gpt-4.1-mini
+      config:
+        apiBaseUrl: https://openrouter.ai/api/v1
+        apiKeyEnvar: HARBOR_OPENROUTER_KEY
+
+providers:
+  # - id: openai:chat:llama3.2:3b-instruct-q8_0
+  # - id: openai:chat:evolve-llama3.2:3b-instruct-q8_0
+  - id: openai:chat:evolve-meta-llama/llama-3.2-3b-instruct
+    label: Llama 3.2 3B
+    config:
+      temperature: 0.1
+      <<: *standaloneBoost
+
+tests:
+  # - file://tests/category_sample.yaml
+  # - file://tests/validate.yaml
+  - file://tests/challenge.yaml
+  # - file://tests/gpqa_diamond.yaml

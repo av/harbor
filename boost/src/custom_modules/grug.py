@@ -2,6 +2,10 @@ import chat as ch
 import llm
 
 ID_PREFIX = "grug"
+DOCS = """
+Translates input task into ["grug"](https://grugbrain.dev/) language, with a set of very basic, simplistic solutions.
+Then synthesises these solutions into one practical solution and uses it to answer the original query.
+"""
 
 
 async def apply(chat: 'ch.Chat', llm: 'llm.LLM'):

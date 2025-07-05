@@ -69,6 +69,13 @@ Provide a clear and definitive answer to the question.
 
 
 async def apply(chat: 'ch.Chat', llm: 'llm.LLM'):
+  """
+  Analyzes the question in the chat and provides a detailed answer.
+  The analysis includes identifying ambiguities, details, definitions, and discrepancies.
+  The final answer is provided based on the analysis.
+  This module is designed to help clarify complex questions and provide a comprehensive response.
+  """
+
   await llm.emit_status('Ambiguiity')
   ambiguities = await llm.stream_chat_completion(
     prompt=ambi_prompt, question=chat.tail.content

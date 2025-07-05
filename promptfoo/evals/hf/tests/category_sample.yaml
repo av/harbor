@@ -1,0 +1,462 @@
+# Generated Promptfoo test cases for MMLU-Pro dataset
+# This file contains test cases for evaluating LLMs on the MMLU-Pro dataset.
+# Each test case includes a question with options and the expected answer.
+- vars:
+    question_id: '2548'
+    question: >-
+      What makes a piece of material to be learnedmeaningful, andhow does its
+      meaningfulness affect the rate of learning?
+
+
+      Options:
+
+      A) Meaningfulness is determined solely by the difficulty of the material,
+      not by associations
+
+      B) The rate of learning is unaffected by the meaningfulness of the
+      material
+
+      C) Learning is easier when the material is unfamiliar
+
+      D) Learning is facilitated when the material is abstract and theoretical
+      with no practical applications
+
+      E) The more sensory modalities involved in presenting the material, the
+      less meaningful it becomes
+
+      F) Learning is more effective when the material has no relevance to the
+      learner's prior knowledge or experiences
+
+      G) The more meaningful something is, the easier it is to learn and retain
+      it. Meaningfulness is measured by the number of associations they evoked.
+
+      H) Learning is faster when there are fewer associations
+
+      I) The more complex the material, the easier it is to learn
+
+      J) Material is considered meaningful if it is presented in a larger
+      volume, regardless of associations
+  assert:
+    - type: llm-rubric
+      value: The final answer is "G)"
+- vars:
+    question_id: '12240'
+    question: >-
+      Estimate the overall heat transfer coefficient, based on the outside
+      surface area, for hot water flowing with a velocity of 30 cm/sec through a
+      standard 1.5 in. schedule 80 steel pipe. The temperature is 22°C. Take the
+      thermal conductivity of steel as 60 W/m-°C.
+
+
+      Options:
+
+      A) 8.52 W/m^2-°C
+
+      B) 6.52 W/m^2-°C
+
+      C) 7.52 W/m^2-°C
+
+      D) 13.52 W/m^2-°C
+
+      E) 5.52 W/m^2-°C
+
+      F) 12.52 W/m^2-°C
+
+      G) 9.52 W/m^2-°C
+
+      H) 14.52 W/m^2-°C
+
+      I) 11.52 W/m^2-°C
+
+      J) 10.52 W/m^2-°C
+  assert:
+    - type: llm-rubric
+      value: The final answer is "A)"
+- vars:
+    question_id: '6205'
+    question: >-
+      A source emits a sound from one medium with a certain velocity, intensity,
+      frequency and wavelength. When the sound exits the first medium and enters
+      a denser medium, all of the following changes EXCEPT:
+
+
+      Options:
+
+      A) tone
+
+      B) amplitude
+
+      C) wavelength
+
+      D) direction
+
+      E) pitch
+
+      F) frequency
+
+      G) resonance
+
+      H) volume
+
+      I) intensity
+
+      J) velocity
+  assert:
+    - type: llm-rubric
+      value: The final answer is "F)"
+- vars:
+    question_id: '9191'
+    question: >-
+      A projector with a lens of 40 cm focal length illuminates an object slide
+      4.0 cm long and throws an image upon a screen 20 m from the lens. What is
+      the size of the pro-jected image?
+
+
+      Options:
+
+      A) 220cm
+
+      B) 200cm
+
+      C) 210 cm
+
+      D) 190 cm
+
+      E) 240cm
+
+      F) 260 cm
+
+      G) 180cm
+
+      H) 160 cm
+
+      I) 150 cm
+
+      J) 300 cm
+  assert:
+    - type: llm-rubric
+      value: The final answer is "B)"
+- vars:
+    question_id: '4290'
+    question: >-
+      In a given chemical compound, there is a bond between "A" and "B".
+      Theelectronegativitiesofthe involved elements are , respectively, 1.2 and
+      2.1 What is the probable nature of the bond between "A" and "B"?
+
+
+      Options:
+
+      A) Polar bond
+
+      B) Dipole-dipole bond
+
+      C) Ionic bond
+
+      D) Covalent bond
+
+      E) Hydrogen bond
+
+      F) Metallic bond
+
+      G) Pi bond
+
+      H) Van der Waals bond
+
+      I) Sigma bond
+
+      J) Covalent network bond
+  assert:
+    - type: llm-rubric
+      value: The final answer is "D)"
+- vars:
+    question_id: '11240'
+    question: |2-
+       Where did people believe in the goddess known as Holy Mother of Mount Fairy Peach?
+
+      Options:
+      A) China
+      B) Silla
+      C) Goguryeo
+      D) Joseon
+  assert:
+    - type: llm-rubric
+      value: The final answer is "B)"
+- vars:
+    question_id: '10720'
+    question: |-
+      What is the value of this python expression: 4 + 3 % 2?
+
+      Options:
+      A) 9
+      B) 7
+      C) 0
+      D) 4
+      E) 8
+      F) 1
+      G) 6
+      H) 3
+      I) 2
+      J) 5
+  assert:
+    - type: llm-rubric
+      value: The final answer is "J)"
+- vars:
+    question_id: '5402'
+    question: |-
+      The intention of making traditional, saleable art objects was abandoned by
+
+      Options:
+      A) Surrealists
+      B) Futurists
+      C) Cubists
+      D) Pop artists
+      E) Realists
+      F) Abstract Expressionists
+      G) Conceptual artists
+      H) Impressionists
+      I) Dadaists
+      J) Fauvists
+  assert:
+    - type: llm-rubric
+      value: The final answer is "G)"
+- vars:
+    question_id: '7401'
+    question: >-
+      If output of goods and services in real terms was $1600 billion last year,
+      the money supply was $500 billion and the velocity of money was 4, then
+      what was the price level? Was last year an inflationary period or a
+      deflationary period?
+
+
+      Options:
+
+      A) 1.25, Not enough information
+
+      B) 0.8, Inflationary period
+
+      C) 2.5, Inflationary period
+
+      D) 2, It was a period of stable prices
+
+      E) 1.6, Deflationary period
+
+      F) 3, Deflationary period
+
+      G) 1.5, Not enough information
+
+      H) 1.25, Inflationary period
+
+      I) 2, Not enough information
+
+      J) 1, Not enough information
+  assert:
+    - type: llm-rubric
+      value: The final answer is "A)"
+- vars:
+    question_id: '376'
+    question: >-
+      A department store distributes its overhead based on the direct labor
+      cost. If the overhead for one month was $4,200, and the direct labor cost
+      of the department store was $35,000, find (a) what per-cent overhead is of
+      direct labor and (b) the cost of overhead for thehousewaresdepartment,
+      which has a labor cost of $5,340.
+
+
+      Options:
+
+      A) 14%, $747.60
+
+      B) 7%, $374.80
+
+      C) 20%, $1,068.00
+
+      D) 10%, $534.00
+
+      E) 8%, $427.20
+
+      F) 11%, $587.40
+
+      G) 12%, $640.80
+
+      H) 9%, $480.60
+
+      I) 15%, $801.00
+
+      J) 6%, $320.40
+  assert:
+    - type: llm-rubric
+      value: The final answer is "G)"
+- vars:
+    question_id: '4798'
+    question: >-
+      This question refers to the following information.
+
+      Read the the following poem to answer questions.
+
+      Take up the White Man's burden—
+
+      Send forth the best ye breed—
+
+      Go bind your sons to exile
+
+      To serve your captives' need;
+
+      To wait in heavy harness,
+
+      On fluttered folk and wild—
+
+      Your new-caught, sullen peoples,
+
+      Half-devil and half-child.
+
+      ...
+
+      Take up the White Man's burden—
+
+      The savage wars of peace—
+
+      Fill full the mouth of Famine
+
+      And bid the sickness cease;
+
+      And when your goal is nearest
+
+      The end for others sought…
+
+      Watch sloth and heathen Folly
+
+      Bring all your hopes to naught.
+
+      Rudyard Kipling, The White Man's Burden, 1899
+
+      It is generally acknowledged that Kipling fashioned White Man's Burden to
+      address the subject of the American colonization of the Philippines, which
+      the United States had recently won from Spain in the Spanish-American War.
+      With that information in mind, what message can Kipling be said to be
+      offering the Americans in this excerpt?
+
+
+      Options:
+
+      A) A call for all Western nations to unite in the effort of colonization
+
+      B) A critique of the American government for engaging in the act of
+      colonization
+
+      C) An appeal to respect the cultural differences and practices of
+      colonized peoples
+
+      D) An exhortation to Christianize the heathen peoples of the world
+
+      E) A warning to avoid the war and hardships of imperialism
+
+      F) An endorsement of the use of force and military might in colonization
+
+      G) A plea to the Americans to return the colonized peoples to their
+      homelands
+
+      H) An encouragement to Americans to seize the economic opportunities
+      offered by the colonies
+
+      I) A reminder of the responsibility of advanced civilizations to bring the
+      benefits of modern civilization to less-developed peoples
+
+      J) An ironic presentation of the sheer folly of imperialism
+  assert:
+    - type: llm-rubric
+      value: The final answer is "I)"
+- vars:
+    question_id: '8867'
+    question: >-
+      7.4-7. For a public opinion poll for a close presidential election, let
+      $p$ denote the proportion of voters who favor candidate $A$. How large a
+      sample should be taken if we want the maximum error of the estimate of $p$
+      to be equal to
+
+      (a) 0.03 with $95 \%$ confidence?
+
+
+      Options:
+
+      A) 500
+
+      B) 2000
+
+      C) 1800
+
+      D) $1068$
+
+      E) 950
+
+      F) 800
+
+      G) 1500
+
+      H) 1300
+
+      I) 1200
+
+      J) 1100
+  assert:
+    - type: llm-rubric
+      value: The final answer is "D)"
+- vars:
+    question_id: '3039'
+    question: >-
+      Using conditioning, how can one determine the sensitivity of a dog's
+      hearing to sounds of different frequencies?
+
+
+      Options:
+
+      A) Through ultrasound examination
+
+      B) Through blood sample analysis
+
+      C) Through direct observation
+
+      D) Through measuring brain wave activity in response to sounds
+
+      E) Through operant conditioning
+
+      F) Through x-ray examination
+
+      G) Through auditory brainstem response (ABR) testing
+
+      H) Through genetic testing
+
+      I) Through a controlled environment listening test
+
+      J) Through behavioral observation in natural settings
+  assert:
+    - type: llm-rubric
+      value: The final answer is "E)"
+- vars:
+    question_id: '1315'
+    question: >-
+      A buyer filed a lawsuit against a seller based on a written contract
+      allegedly executed at the time of the sale of the seller's hot dog stand
+      to the buyer. Under the terms of the contract, the seller agreed not to
+      open a hot dog stand for a period of two years within a distance of two
+      miles of the old hot dog stand, now owned by the buyer. The buyer alleged
+      in his complaint that the seller violated the contract by opening a hot
+      dog stand one-half mile from the old location. The original contract was
+      lost prior to trial. At trial, the buyer wants to introduce a duplicate
+      carbon copy of the written contract. The seller objects as to the
+      authenticity of the original written contract. The copy is
+
+
+      Options:
+
+      A) inadmissible, because the seller contests the authenticity of the
+      written contract.
+
+      B) inadmissible, because the best evidence rule requires that the original
+      contract always be used as evidence.
+
+      C) admissible, because the duplicate is a carbon copy.
+
+      D) admissible, because the original contract was lost.
+  assert:
+    - type: llm-rubric
+      value: The final answer is "A)"

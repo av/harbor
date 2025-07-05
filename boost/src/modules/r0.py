@@ -5,6 +5,23 @@ import chat as ch
 import llm
 
 ID_PREFIX = 'r0'
+DOCS = """
+![Boost R0](./boost-r0.png)
+
+This workflow allows you to add R1-like reasoning to any LLM (including [older ones, like Llama 2, or Gemma 1](https://www.reddit.com/r/LocalLLaMA/comments/1ixckba/making_older_llms_llama_2_and_gemma_1_reason/)). Of course, it won't show the same performance as an actually GRPO-boosted model, but it can still provide some interesting results as well as being a very flexible base to experiment with.
+
+```bash
+# Enable the module
+harbor boost modules add r0
+```
+
+**Parameters**
+
+```bash
+# Get/set the amount of thoughts to generate
+harbor boost r0 thoughts 5
+```
+"""
 
 THOUGHT_ENTRIES = [
   'What ',

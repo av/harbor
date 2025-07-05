@@ -9,6 +9,26 @@ import chat as ch
 import llm
 
 ID_PREFIX = 'concept'
+DOCS = """
+![concept](./boost-concept.png)
+
+`concept` is a module allowing LLM to first generate a small concept graph to aid it in replying to the original message.
+The entire workflow is completely orchestrated so less interesting from interpretability perspective, but more from the representation perspective.
+
+```bash
+# With Harbor
+harbor boost modules add concept
+
+# Standalone usage
+docker run \\
+  -e "HARBOR_BOOST_OPENAI_URLS=http://172.17.0.1:11434/v1" \\
+  -e "HARBOR_BOOST_OPENAI_KEYS=sk-ollama" \\
+  -e "HARBOR_BOOST_PUBLIC_URL=http://localhost:8004" \\
+  -e "HARBOR_BOOST_MODULES=concept" \\
+  -p 8004:8000 \
+  ghcr.io/av/harbor-boost:latest
+```
+"""
 
 logger = log.setup_logger(ID_PREFIX)
 current_dir = os.path.dirname(os.path.abspath(__file__))

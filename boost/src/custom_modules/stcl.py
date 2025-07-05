@@ -6,6 +6,12 @@ from modules.klmbr import modify_text
 
 # STCL - Single Token Completion Loop
 ID_PREFIX = 'stcl'
+DOCS = """
+`stcl` - Single Token Completion Loop
+
+Aims to improve the quality of responses by metaprompting every few tokens to avoid possible mistakes and biases.
+Includes a few different strategies in the code to vary the content and the placement of the metaprompt.
+"""
 logger = log.setup_logger(ID_PREFIX)
 
 pause_params = {

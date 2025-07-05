@@ -6,6 +6,21 @@ import os
 
 ID_PREFIX = 'dnd'
 
+DOCS = """
+⚠️ This module is only compatible with Open WebUI as a client due to its support of custom artifacts.
+
+When serving the completion, LLM will first invent a skill check it must pass to address your message. Then, the workflow will roll a dice determining if the model passes the check or not and will guide the model to respond accordingly.
+
+Gemma failing to explain transformers architecture due to failing a "Sequential Data Translation Mastery" check.
+
+![Screenshot of DnD module](./boost-dnd.png)
+
+```bash
+# Enable the module
+harbor boost modules add dnd
+```
+"""
+
 current_dir = os.path.dirname(os.path.abspath(__file__))
 artifact_path = os.path.join(
   current_dir, '..', 'custom_modules', 'artifacts', 'dnd_mini.html'
@@ -49,12 +64,11 @@ Reply with the skill name and nothing else.
   with open(artifact_path, 'r') as file:
     artifact = file.read()
   await llm.emit_artifact(
-    artifact
-      .replace('<<listener_id>>', llm.id)
-      .replace('<<skill_name>>', skill.strip())
-      .replace('<<difficulty_class>>', str(difficulty_class))
-      .replace('<<result>>', 'passed' if passed else 'failed')
-      .replace('<<dice>>', dice_notation)
+    artifact.replace('<<listener_id>>',
+                     llm.id).replace('<<skill_name>>', skill.strip()).replace(
+                       '<<difficulty_class>>', str(difficulty_class)
+                     ).replace('<<result>>', 'passed' if passed else
+                               'failed').replace('<<dice>>', dice_notation)
   )
   await llm.emit_status('Rolling...')
   # Wait for the artifact to be loaded and
@@ -62,13 +76,17 @@ Reply with the skill name and nothing else.
   await asyncio.sleep(3.0)
 
   if passed:
-    chat.user("""
+    chat.user(
+      """
 Please answer to my message as if you passed a "{skill}" check.
-    """.format(skill=skill, dice=dice_notation, dc=difficulty_class))
+    """.format(skill=skill, dice=dice_notation, dc=difficulty_class)
+    )
   else:
-    chat.user("""
+    chat.user(
+      """
 Please answer to my message as if you failed a "{skill}" check.
 Since you failed, your reply should actually fail to address the message as well.
-    """.format(skill=skill, dice=dice_notation, dc=difficulty_class))
+    """.format(skill=skill, dice=dice_notation, dc=difficulty_class)
+    )
 
   await llm.stream_final_completion()

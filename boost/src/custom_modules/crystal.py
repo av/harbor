@@ -24,6 +24,13 @@ For problem X, have each expert present their perspective, then synthesize conse
 """
 
 async def apply(chat: 'ch.Chat', llm: 'llm.LLM'):
+  """
+  Instructs the LLM to act as three experts debating a problem.
+  - Analyst specializing in edge cases
+  - Engineer focused on implementation details
+  - Philosopher examining fundamental assumptions
+  """
+
   crystal_chat = ch.Chat(tail=ch.ChatNode(role="user", content=""))
   question = await llm.chat_completion(
     prompt=query_prompt,

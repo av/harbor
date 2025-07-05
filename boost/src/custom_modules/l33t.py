@@ -2,6 +2,9 @@ import llm
 import chat as ch
 
 ID_PREFIX = 'l33t'
+DOCS = """
+Solves oritginal request in light leetspeak, then answers it in plain English.
+"""
 
 async def apply(chat: 'ch.Chat', llm: 'llm.LLM'):
   side_chat = ch.Chat.from_conversation([chat.tail.message()])

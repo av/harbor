@@ -20,6 +20,11 @@ ID_PREFIX = "discussurl"
 
 
 async def apply(chat, llm):
+  """
+  Matches all URLs in the input, reads them with Jina and adds their content for
+  the LLM to use during the completion.
+  """
+
   text = chat.text()
   urls = re.findall(url_regex, text)
 
@@ -31,7 +36,7 @@ async def apply(chat, llm):
   content = ""
   for url in urls:
     await llm.emit_status(f"Reading {url[0]}...")
-    content += requests.get(url[0]).text
+    content += requests.get('https://r.jina.ai/' + url[0]).text
 
   await llm.stream_final_completion(
     prompt=prompt,

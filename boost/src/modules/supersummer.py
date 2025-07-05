@@ -6,6 +6,71 @@ import selection
 import chat as ch
 
 ID_PREFIX = "supersummer"
+DOCS = """
+Based on a technique of generation of a summary of the given given content from key questions. The module will ask the LLM to provide a given amount of key questions and then will use them to guide the generation of the summary.
+
+**Parameters**
+
+`supersummer` module supports selection strategy parameters identical to `mcts`, `g1`, and `rcn` modules, just under the `boost.supersummer` prefix.
+
+```bash
+# Strategy to find the message to start from
+harbor config set boost.supersummer.strat match
+# Match last user message, for example
+harbor config set boost.supersummer.strat_params role=user,index=-1
+```
+
+In addition to that, it's possible to adjust number of questions the model will generate, as well as the desired length of the summary.
+
+```bash
+# Number of questions to generate
+harbor config set boost.supersummer.questions 3
+# Length of the summary, you can use any
+# textual specification, like "one paragraph"
+harbor config set boost.supersummer.length "few paragraphs"
+```
+
+Here're sample questions and summary that `supersummer` generated from Harbor's readme:
+
+<details>
+
+<summary>Sample questions and summary</summary>
+
+### Questions
+
+**What is Harbor, and what are its primary functions?**
+(This question addresses the central theme or argument of the text, which is to introduce Harbor as a containerized LLM toolkit.)
+
+**What services can be managed with Harbor, and how does it facilitate their use?**
+(This question highlights important facts or evidence, such as the various services listed in the "Services" section, and how Harbor enables easy management and usage of these services.)
+
+**How does Harbor simplify local LLM development and experimentation?**
+(This question reveals the author's purpose or perspective, which is to make local LLM development more convenient and streamlined by providing a unified CLI interface for managing services and configurations.)
+
+**What benefits does Harbor provide over using individual Docker Compose files or Linux administration commands?**
+(This question explores any significant implications or conclusions of using Harbor, such as the convenience factor and workflow centralisation it offers.)
+
+**Can Harbor be used in conjunction with existing Docker setups, or is it intended to replace them entirely?**
+(This question highlights important facts or evidence about Harbor's purpose and scope, such as its ability to co-exist with existing Docker setups and provide added value through its convenience features.)
+
+### Summary
+
+Harbor is a containerized Long-Short-Memory (LLM) toolkit that enables effortless management of LLM backends, APIs, frontends, and services. Developed as an open-source project, Harbor consists of a Command-Line Interface (CLI) and a companion application to help manage and run AI services in a unified manner.
+
+Harbor offers several key features:
+
+- **Managed Services**: The platform allows users to easily manage various LLM-related services, such as UIs (User Interfaces), Backends, Frontends, and Satellites.
+- **Unified CLI Interface**: Harbor provides a single command-line interface for managing multiple services, eliminating the need for manual configuration and streamlining development workflows.
+- **Convenience Utilities**: A range of convenience tools helps users manage LLM-related tasks efficiently, such as setting up services, debugging, creating URLs, and establishing network tunnels.
+- **Cache Sharing and Reuse**: Harbor shares and reuses host caches, significantly enhancing model performance and reducing memory consumption across supported services (e.g., Hugging Face models, Ollama).
+- **Config Profiles**: The application allows users to manage multiple configuration profiles for different development tasks or projects.
+
+Harbor's purpose is not only to provide a convenient platform but also to simplify local LLM development by making it easier to setup and experiment with various LLM-related services. As such, Harbor can perfectly align with existing Docker setups and offers several benefits over manual Linux administration commands, like ease of use and streamlined configurations management.
+
+As the author implies, the main benefit of using Harbor lies in its ability to simplify local LLM development and reduce time required for experiments and prototyping steps in a unified and convenient setup.
+
+</details>
+"""
 
 logger = log.setup_logger(__name__)
 
@@ -84,5 +149,6 @@ async def apply(chat: 'ch.Chat', llm: 'llm.LLM'):
 
   await llm.emit_status('Generating summary...')
   await llm.stream_final_completion(
-    prompt=summer_prompt.format(input=node.content, questions=questions, length=length)
+    prompt=summer_prompt.
+    format(input=node.content, questions=questions, length=length)
   )

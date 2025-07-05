@@ -1,8 +1,12 @@
-ID_PREFIX = "unstable"
-
 import chat as ch
 import llm
 import random
+
+ID_PREFIX = "unstable"
+DOCS = """
+Will generate a random personality description for the LLM to follow for every message.
+The personality will include three extreme traits, a temperament, and a reply style.
+"""
 
 extreme_traits = [
   "Eccentric", "Obsessive", "Impulsive", "Paranoid", "Narcissistic",

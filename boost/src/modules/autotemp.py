@@ -8,6 +8,24 @@ import tools
 import tools.registry
 
 ID_PREFIX = 'autotemp'
+DOCS = """
+![autotemp screenshot](./boost-autotemp.png)
+
+The model will be given a tool to automatically adjust its own temperature based on the specific task.
+
+```bash
+# with Harbor
+harbor boost modules add autotemp
+
+# Standalong usage
+docker run \\
+  -e "HARBOR_BOOST_OPENAI_URLS=http://172.17.0.1:11434/v1" \\
+  -e "HARBOR_BOOST_OPENAI_KEYS=sk-ollama" \\
+  -e "HARBOR_BOOST_MODULES=autotemp" \\
+  -p 8004:8000 \\
+  ghcr.io/av/harbor-boost:latest
+```
+"""
 
 logger = log.setup_logger(ID_PREFIX)
 

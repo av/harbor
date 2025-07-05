@@ -4,7 +4,13 @@ import chat as ch
 import llm
 import log
 
-ID_PREFIX = 'fml' # "formulaic", not what you think
+ID_PREFIX = 'fml'
+DOCS = """
+`fml` - "Formulaic" (not the other thing)
+
+Rewrites original request in a formulaic logic language (whatever LLM will mean by that),
+solves it, and rewrites the solution in natural language.
+"""
 
 async def apply(chat: 'ch.Chat', llm: 'llm.LLM'):
   chat.user(

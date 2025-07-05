@@ -1,3 +1,5 @@
+from pydantic import BaseModel, Field
+
 import chat
 import llm
 import log
@@ -6,40 +8,60 @@ import log
 ID_PREFIX = "cex"
 logger = log.setup_logger(ID_PREFIX)
 
-async def apply(chat: 'chat.Chat', llm: 'llm.LLM'):
-  repeats = 3
-  content = chat.tail.content
-
-  repeated_content = await llm.chat_completion(
-    prompt="""
-Take a below content and rewrite it word-by-word {repeats} times.
-However, for every repetition, you will choose analogous words or synonyms.
+variants_prompt = """
+Take below content and rewrite it word-by-word {repeats} times.
+Choose analogous words or synonyms for every repetition.
 Do not answer to the content itself, only rewrite it word-by-word.
-Do not write any comments or annotations, only reply with the rewritten content and nothing else.
+You must reply with a JSON array with {repeats} strings, each item being a paraphrased sentence.
 
 Example:
 "The quick brown fox jumps over the lazy dog."
-- The swift russet fox leaps across the idle hound.
-- The nimble tawny fox bounds over the lethargic canine.
-- The agile copper fox vaults above the sluggish mutt.
+[
+  "The swift russet fox leaps across the idle hound.",
+  "The nimble tawny fox bounds over the lethargic canine.",
+  "The agile copper fox vaults above the sluggish mutt."
+]
 
 Content:
 {content}
-""".strip(),
-    content=content,
-    repeats=repeats,
-    resolve=True
+"""
+
+
+class VariantsResponse(BaseModel):
+  variants: list[str] = Field(
+    default_factory=list,
+    description="List of paraphrased sentences based on the original content."
   )
 
-  await llm.emit_message(f"{repeated_content}\n")
 
+async def apply(chat: 'chat.Chat', llm: 'llm.LLM'):
+  """
+  `cex` - Context Expansion.
+
+  Rephrases initial input content multiple times, generating variants of the original text.
+  The idea is that reprojections of the original content can help avoiding otherwise overfit answers.
+  """
+
+  repeats = 3
+  content = chat.tail.content
+
+  variants_response = await llm.chat_completion(
+    prompt=variants_prompt.strip(),
+    content=content,
+    repeats=repeats,
+    schema=VariantsResponse,
+    resolve=True
+  )
+  variants = VariantsResponse(**variants_response)
+  responses = []
+
+  for variant in variants.variants:
+    response = await llm.chat_completion(prompt=variant, resolve=True)
+    responses.append(response)
+
+  variants_text = [f"- {response}" for response in responses]
   chat.user(f"""
-Since you have a hard time understanding things, here's the same message as above, but rephrased word-by-word {repeats} times.
-{repeated_content}
-  """)
-  words = chat.tail.content.split()
-  repeated = ' '.join([' '.join([word] * repeats) for word in words])
-  chat.tail.content = repeated
-
-  await llm.emit_message("\n---\n")
-  await llm.stream_final_completion(chat=chat)
+Synthesize your answer based on the following options:
+{variants_text}
+""")
+  await llm.stream_final_completion()

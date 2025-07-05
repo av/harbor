@@ -6,8 +6,13 @@ import log
 import llm
 import selection
 
-# CSSV - Choice Selection for Systematic Validation
 ID_PREFIX = 'cssv'
+DOCS = """
+CSSV - Choice Selection for Systematic Validation
+
+Essentially, performs a beam search based on the critique from multiple system prompts. Similar to `pdsv`.
+"""
+
 logger = log.setup_logger(ID_PREFIX)
 
 continue_params = {

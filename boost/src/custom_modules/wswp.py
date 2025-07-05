@@ -4,6 +4,11 @@ import chat as ch
 import llm
 
 ID_PREFIX = 'wswp'
+DOCS = """
+Attempts to swap adjacent word positions in the input text with a certain probability.
+Sometimes can help to avoid overfit, especially in cases where the LLM is too focused on specific word order or structure.
+The usability is limited, though.
+"""
 
 def swap_words(**args) -> str:
   text = args['text']

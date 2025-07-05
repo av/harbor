@@ -601,7 +601,7 @@ run_down() {
     log_debug "Matched: ${matched_services[*]}"
 
     matched_services_str=$(printf " %s" "${matched_services[@]}")
-    $(compose_with_options "*") down --remove-orphans "$@" $matched_services_str
+    $(compose_with_options "*") down --remove-orphans --timeout 1 "$@" $matched_services_str
 }
 
 run_restart() {
@@ -4026,6 +4026,23 @@ run_k6_command() {
         k6 run "$@"
 }
 
+run_promptfoo_eval() {
+    local eval_name="$1"
+    local other_args="${@:2}"
+    local eval_path="$(harbor home)/promptfoo/evals/$eval_name"
+
+    log_debug "Running promptfoo eval: $eval_name"
+    pushd "$eval_path" || {
+        log_error "Failed to change directory to $eval_path"
+        return 1
+    }
+
+    trap 'popd >/dev/null; exit 130' INT
+    harbor pf eval $other_args
+    trap - INT
+    popd >/dev/null
+}
+
 run_promptfoo_command() {
     local services=$(get_active_services)
     log_debug "Active services: $services"
@@ -4045,6 +4062,10 @@ run_promptfoo_command() {
         ;;
     esac
 
+    # Run promptfoo CLI, handle Ctrl+C/Ctrl+D gracefully
+    trap 'echo; log_info "Promptfoo CLI interrupted."; exit 130' INT
+    trap 'echo; log_info "Promptfoo CLI terminated."; exit 130' TERM
+
     $(compose_with_options $services "promptfoo") run \
         --rm \
         -it \
@@ -4054,6 +4075,8 @@ run_promptfoo_command() {
         --workdir "$original_dir" \
         --entrypoint promptfoo \
         promptfoo "$@"
+
+    trap - INT TERM
 }
 
 run_webtop_command() {
@@ -4618,6 +4641,10 @@ main_entrypoint() {
     tools)
         shift
         run_harbor_tools "$@"
+        ;;
+    eval)
+        shift
+        run_promptfoo_eval "$@"
         ;;
     *)
         return $scramble_exit_code

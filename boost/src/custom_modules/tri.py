@@ -2,7 +2,14 @@ import chat as ch
 import llm
 
 ID_PREFIX = "tri"
+DOCS = """
+In relation to the incoming request, LLM is tasked to generate:
+- three aspects to consider,
+- three pitfalls to avoid,
+- three paragraphs of possible solutions.
 
+Then, it synthesizes these solutions into one practical solution and uses it to answer the original query.
+"""
 
 async def apply(chat: 'ch.Chat', llm: 'llm.LLM'):
   await llm.emit_message('\n<think>\n')

@@ -2,9 +2,17 @@ import chat as ch
 import llm
 from dataclasses import dataclass
 
-# recpl - Recursive Plan Expansion
+# recpl - Recursive Plannning
 ID_PREFIX = 'recpl'
 ITERATIONS = 8
+DOCS = """
+`recpl` - Recursive Planning
+
+Attempts to solve input request by recursively expanding a plan that achieves the given objective.
+LLM decides whether or not actions in the plan are "atomic" (can be executed in a single step) or not.
+If an action is not atomic, it is expanded into smaller actions until all actions are atomic.
+The final plan is then used to answer the original query.
+"""
 
 @dataclass
 class RecplGUI:

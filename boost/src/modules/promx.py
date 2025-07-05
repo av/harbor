@@ -10,6 +10,25 @@ import chat as ch
 import llm
 
 ID_PREFIX = 'promx'
+DOCS = """
+![promx](./boost-promx.png)
+
+`promx` (Prompt Mixer) implements dynamic metaprompting with real-time control.
+
+```bash
+# With Harbor
+harbor boost modules add promx
+
+# Standalone usage
+docker run \\
+  -e "HARBOR_BOOST_OPENAI_URLS=http://172.17.0.1:11434/v1" \\
+  -e "HARBOR_BOOST_OPENAI_KEYS=sk-ollama" \\
+  -e "HARBOR_BOOST_PUBLIC_URL=http://localhost:8004" \\
+  -e "HARBOR_BOOST_MODULES=promx" \\
+  -p 8004:8000 \\
+  ghcr.io/av/harbor-boost:latest
+```
+"""
 
 logger = log.setup_logger(ID_PREFIX)
 current_dir = os.path.dirname(os.path.abspath(__file__))

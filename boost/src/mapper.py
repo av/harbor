@@ -1,5 +1,6 @@
 from asyncache import cached
 from cachetools import TTLCache
+from fastapi import HTTPException
 
 import httpx
 
@@ -88,10 +89,16 @@ def resolve_request_config(body: Dict) -> Dict:
     f"Resolved proxy model: {proxy_model}, proxy module: {proxy_module}, proxy backend: {proxy_backend}"
   )
 
+  if not proxy_backend:
+    raise HTTPException(
+      status_code=404,
+      detail=f"Unknown model: '{model}'",
+    )
+
   proxy_key = config.BOOST_KEYS[
     config.BOOST_APIS.index(proxy_backend)]
 
-  return {
+  proxy_config = {
     "url": proxy_backend,
     "headers":
       {
@@ -103,6 +110,8 @@ def resolve_request_config(body: Dict) -> Dict:
     "messages": messages,
     "module": proxy_module,
   }
+
+  return proxy_config
 
 def is_title_generation_task(llm: 'LLM'):
   # TODO: Better way to identify?

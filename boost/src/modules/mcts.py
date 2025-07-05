@@ -16,6 +16,44 @@ import selection
 
 logger = log.setup_logger(__name__)
 ID_PREFIX = "mcts"
+DOCS = """
+This is a less-cool version of the [Visual Tree Of Thoughts](https://openwebui.com/f/everlier/mcts) Open WebUI Function. Less cool because there's no way to rewrite the message content from a proxy side (yet), so all of the intermediate outputs are additive.
+
+Nonetheless, the core of the technique is the same and is based on the Tree Of Thoughts and MCTS algorithms. An initial "idea" or answer is generated and then is improved upon for a given amount of steps.
+
+```bash
+# Enable the module
+harbor boost modules add mcts
+```
+
+**Parameters**
+
+All parameters below are prefixed with `boost.mcts.` in `harbor config`
+
+- `strat` - strategy for selection of the messages to rewrite. Default is `match`, other values:
+  - `all` - match all messages
+  - `first` - match first message regardless of the role
+  - `last` - match last message regardless of the role
+  - `any` - match one random message
+  - `percentage` - match a percentage of random messages from the conversation
+  - `user` - match all user messages
+  - `match` - use a filter to match messages
+- `strat_params` - parameters (filter) for the selection strategy. Default matches all user messages, fields:
+  - `percentage` - for `percentage` strat - the percentage of messages to match, default is `50`
+  - `index` - for `match` strat - the index of the message to match
+  - `role` - for `match` strat - the role of the message to match
+  - `substring` - for `match` strat - will match messages containing the substring
+- `max_iterations` - Maximum amount of Monte Carlo iterations to run (same tree), default is `2`
+- `max_simulations` - Improvement steps per iteration, default is `2`
+- `max_thoughts` - This number + 1 will be amount of improved variants to generate per node
+
+```bash
+# Strategy to find the message to start from
+harbor config set boost.mcts.strat match
+# Match last user message, for example
+harbor config set boost.mcts.strat_params role=user,index=-1
+```
+"""
 
 # ==============================================================================
 

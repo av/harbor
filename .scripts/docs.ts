@@ -19,6 +19,11 @@ const targets = {
   "./docs/2.3.28-Satellite&colon-Promptfoo.md": "./promptfoo/README.md",
 };
 
+const docgenTargets = {
+  'harbor run boost uv run config.py': './docs/5.2.2-Harbor-Boost-Configuration.md',
+  'harbor run boost uv run mods.py': './docs/5.2.3-Harbor-Boost-Modules.md',
+}
+
 main().catch(console.error);
 
 async function main() {
@@ -28,6 +33,7 @@ async function main() {
     copyDocsToWiki(),
     copyDocsToApp(),
     copyTargets(),
+    docgen(),
   ])
 }
 
@@ -234,5 +240,39 @@ ${satellites.map(renderService).join("\n")}
   await Deno.writeTextFile(
     "./docs/2.-Services.md",
     indexTemplate
+  );
+}
+
+async function docgen() {
+  await Promise.all(
+    Object.entries(docgenTargets).map(async ([cmd, dest]) => {
+      console.debug(`Rendering target: ${cmd} -> ${dest}`);
+      const process = Deno.run({
+        cmd: cmd.split(" "),
+        stdout: "piped",
+        stderr: "piped",
+      });
+
+      const [status, stdout, stderr] = await Promise.all([
+        process.status(),
+        process.output(),
+        process.stderrOutput(),
+      ]);
+
+      if (!status.success) {
+        const error = new TextDecoder().decode(stderr);
+        console.error(`Error running command "${cmd}": ${error}`);
+        throw new Error(`Command failed: ${error}`);
+      }
+
+      const output = new TextDecoder().decode(stdout).trim();
+      if (!output) {
+        console.warn(`No output from command "${cmd}"`);
+        return;
+      }
+
+      await Deno.writeTextFile(dest, output);
+      console.debug(`Rendered target: ${cmd} -> ${dest}`);
+    })
   );
 }

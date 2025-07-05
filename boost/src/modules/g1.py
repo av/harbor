@@ -11,6 +11,33 @@ import chat as ch
 logger = log.setup_logger(__name__)
 
 ID_PREFIX = "g1"
+DOCS = """
+Dynamic Chain-of-Thought pattern.
+
+See [original implementation for Grok](https://github.com/bklieger-groq/g1). Harbor also has a [dedicated `ol1` service](./2.3.19-Satellite:-ol1) (UI only) that implements the same technique.
+
+```bash
+# Enable the module
+harbor boost modules add g1
+```
+
+**Parameters**
+
+- `max_steps` - Maximum amount of iterations for self-reflection, default is 15
+- `strat` - strategy for selection of the messages to rewrite. Default is `match`
+  - `all` - match all messages
+  - `first` - match first message regardless of the role
+  - `last` - match last message regardless of the role
+  - `any` - match one random message
+  - `percentage` - match a percentage of random messages from the conversation
+  - `user` - match all user messages
+  - `match` - use a filter to match messages
+- `strat_params` - parameters (filter) for the selection strategy. Default matches all user messages
+  - `percentage` - for `percentage` strat - the percentage of messages to match, default is `50`
+  - `index` - for `match` strat - the index of the message to match
+  - `role` - for `match` strat - the role of the message to match
+  - `substring` - for `match` strat - will match messages containing the substring
+"""
 
 
 async def apply(chat: 'ch.Chat', llm: 'llm.LLM'):

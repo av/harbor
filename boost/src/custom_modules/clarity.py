@@ -16,6 +16,11 @@ Reply only with "clarify" or "ready" and nothing else. Everything else will be i
 
 
 async def apply(chat: 'ch.Chat', llm: 'llm.LLM'):
+  """
+  Applies recursive "clarfication" of the input question.
+  LLM tries to classify if the question has any amibiguities and instrucred to clarify them if so.
+  """
+
   iterations = 0
   max_iterations = 15
 

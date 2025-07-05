@@ -9,6 +9,18 @@ import chat as ch
 import llm
 
 ID_PREFIX = "dot"
+DOCS = """
+![screenshot of dot module in action](./boost-dot.png)
+
+⚠️ The visual part of this module is only compatible with Open WebUI, but the reasoning skeleton will work with any OpenAI-compatible client.
+
+Inspired by [Chain of Draft](https://arxiv.org/abs/2502.18600) paper.
+
+```bash
+# Enable the module
+harbor boost modules add dot
+```
+"""
 
 logger = log.setup_logger(ID_PREFIX)
 

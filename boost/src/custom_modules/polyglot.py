@@ -7,6 +7,11 @@ import log
 logger = log.setup_logger(__name__)
 
 ID_PREFIX = "polyglot"
+DOCS = """
+Solves the original request in multiple languages, then synthesizes the solutions into a single coherent response.
+Based on the assumption that different languages can trigger different reprojections within the LLM,
+which may lead to more diverse and creative solutions or help avoiding overfit.
+"""
 
 translate_query_prompt = """
 Translate the following message into {language} language.

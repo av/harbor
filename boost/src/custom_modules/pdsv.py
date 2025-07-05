@@ -8,6 +8,12 @@ import selection
 
 # PDSV - Personality-Driven Selection and Validation
 ID_PREFIX = 'pdsv'
+DOCS = """
+`pdsv` - Personality-Driven Selection and Validation
+
+Essentially a beam search from multiple system prompts, similar to `cssv`.
+"""
+
 logger = log.setup_logger(ID_PREFIX)
 
 continue_params = {

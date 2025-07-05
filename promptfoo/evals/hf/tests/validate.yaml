@@ -1,0 +1,7 @@
+- vars:
+    question_id: '0'
+    question: >-
+      I'm tall when I'm young, and taller when I'm old. What am I?
+  assert:
+    - type: llm-rubric
+      value: The final answer is NOT "a candle"

@@ -3,8 +3,14 @@ import llm
 
 ID_PREFIX = '3t'
 
-
 async def apply(chat: 'ch.Chat', llm: 'llm.LLM'):
+  """
+  3T (Three-Turn) is a module that facilitates a three-turn conversation with the user.
+  It prompts the user to answer a question three times, each time providing a different answer.
+  The user is encouraged to correct any mistakes made in the previous answers.
+  The final answer is derived from the three answers provided by the user.
+  """
+
   side_chat = ch.Chat(
     tail=ch.ChatNode(
       content="""

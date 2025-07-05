@@ -8,6 +8,9 @@ import selection
 
 # USV - Unique Selection and Validation
 ID_PREFIX = 'usv'
+DOCS = """
+A variation on the beam search.
+"""
 logger = log.setup_logger(ID_PREFIX)
 
 continue_params = {

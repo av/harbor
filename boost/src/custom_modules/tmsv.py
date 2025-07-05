@@ -8,6 +8,10 @@ import selection
 
 # TMSV - Temperature-Driven Selection and Validation
 ID_PREFIX = 'tmsv'
+DOCS = """
+Essentially a beam search based on the temperature variations.
+"""
+
 logger = log.setup_logger(ID_PREFIX)
 
 continue_params = {

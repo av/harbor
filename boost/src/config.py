@@ -142,43 +142,85 @@ HARBOR_OPENAI_URLS = Config[StrList](
   name='HARBOR_OPENAI_URLS',
   type=StrList,
   default='',
-  description='A list of URLs to the OpenAI APIs'
+  description="""
+An alias for `HARBOR_BOOST_OPENAI_URLS`.
+""".strip()
 )
 
 HARBOR_OPENAI_KEYS = Config[StrList](
   name='HARBOR_OPENAI_KEYS',
   type=StrList,
   default='',
-  description='A list of API keys to use for the OpenAI APIs'
+  description="""
+An alias for `HARBOR_BOOST_OPENAI_KEYS`.
+""".strip()
 )
 
 HARBOR_BOOST_OPENAI_URLS = Config[StrList](
   name='HARBOR_BOOST_OPENAI_URLS',
   type=StrList,
   default='',
-  description='A list of URLs to the OpenAI APIs to boost'
+  description="""
+A semicolon-separated list of URLs to the OpenAI APIs to boost.
+Prefer using named APIs via `HARBOR_BOOST_OPENAI_URL_*` and `HARBOR_BOOST_OPENAI_KEY_*` instead.
+Must index-match contents of `HARBOR_BOOST_OPENAI_KEYS`.
+
+Example:
+```bash
+HARBOR_OPENAI_URLS=https://localhost:11434/v1;https://localhost:8080/v1
+```
+""".strip()
 )
 
 HARBOR_BOOST_OPENAI_KEYS = Config[StrList](
   name='HARBOR_BOOST_OPENAI_KEYS',
   type=StrList,
   default='',
-  description='A list of API keys to use for the OpenAI APIs to boost'
+  description="""
+A semicolon-separated list of API keys to use for the OpenAI APIs to boost.
+Prefer using named APIs via `HARBOR_BOOST_OPENAI_URL_*` and `HARBOR_BOOST_OPENAI_KEY_*` instead.
+Must index-match contents of `HARBOR_BOOST_OPENAI_URLS`.
+
+Example:
+```bash
+HARBOR_OPENAI_KEYS=sk-abc123;sk-def456
+```
+""".strip()
 )
 
 HARBOR_BOOST_EXTRA_OPENAI_URLS = Config[str](
   name='HARBOR_BOOST_OPENAI_URL_*',
   type=str,
   default='',
-  description='Named OpenAI-compatible API URLs to boost'
+  description="""
+Named OpenAI-compatible API URLs to boost.
+`*` means multiple variables can be defined with arbitrary postfix.
+
+Example:
+```bash
+HARBOR_BOOST_OPENAI_URL_OLLAMA=https://localhost:11434/v1
+HARBOR_BOOST_OPENAI_KEY_OLLAMA=sk-ollama123
+
+HARBOR_BOOST_OPENAI_URL_HF=https://api-inference.huggingface.co/v1
+HARBOR_BOOST_OPENAI_KEY_HF=sk-hf456
+```
+"""
 )
 
 HARBOR_BOOST_EXTRA_OPENAI_KEYS = Config[str](
   name='HARBOR_BOOST_OPENAI_KEY_*',
   type=str,
   default='',
-  description=
-  'Named OpenAI-compatible API keys to use for the OpenAI APIs to boost'
+  description="""
+Example:
+```bash
+HARBOR_BOOST_OPENAI_URL_OLLAMA=https://localhost:11434/v1
+HARBOR_BOOST_OPENAI_KEY_OLLAMA=sk-ollama123
+
+HARBOR_BOOST_OPENAI_URL_HF=https://api-inference.huggingface.co/v1
+HARBOR_BOOST_OPENAI_KEY_HF=sk-hf456
+```
+""".strip()
 )
 
 # Combining all the sources from
@@ -197,7 +239,18 @@ EXTRA_LLM_PARAMS = Config[ConfigDict](
   name='HARBOR_BOOST_EXTRA_LLM_PARAMS',
   type=ConfigDict,
   default='temperature=0.35',
-  description='Extra parameters to always add to the LLM API requests for the downstream APIs (subset of chat completion payload)'
+  description="""
+Allows to specify extra payload for /chat/completions endpoints for all downstream services at once.
+Format is `key=value,key2=value2,...`.
+
+Example:
+```bash
+HARBOR_BOOST_EXTRA_LLM_PARAMS=temperature=0.35,top_p=0.9
+
+# Be careful using provider-specific parameters
+HARBOR_BOOST_EXTRA_LLM_PARAMS=temperature=0.12,max_ctx=8192
+```
+""".strip()
 )
 
 # ----------------- MODULES -----------------
@@ -205,15 +258,57 @@ EXTRA_LLM_PARAMS = Config[ConfigDict](
 BOOST_MODS = Config[StrList](
   name='HARBOR_BOOST_MODULES',
   type=StrList,
-  default='klmbr;rcn;g1',
-  description='A list of boost modules to load'
+  default='all',
+  description="""
+A list of boost modules that will be advertised by `/v1/models` endpoint.
+All loaded modules can still be used directly, this configuration only affects
+which modules are advertised in the API.
+
+Supports `all` value to enable all modules.
+
+Example:
+```bash
+# Serve all modules
+HARBOR_BOOST_MODULES=all
+
+# Only serve klmbr and rcn modules
+HARBOR_BOOST_MODULES=klmbr;rcn
+```
+
+When using with Harbor, you can configure this via Harbor CLI:
+
+```bash
+# Enable the module
+harbor boost modules add <module>
+# Disable the module
+harbor boost modules rm <module>
+# List enabled modules
+harbor boost modules ls
+```
+
+
+Note that new Harbor releases might introduce new modules, so the default value of this setting could change in the future. Check out [Harbor Profiles](./3.-Harbor-CLI-Reference#harbor-profile) for a way to save and restore your configuration.
+
+""".strip()
 )
 
 BOOST_FOLDERS = Config[StrList](
   name='HARBOR_BOOST_MODULE_FOLDERS',
   type=StrList,
   default='modules;custom_modules',
-  description='A list of folders to load boost modules from'
+  description="""
+A list of folders to load boost modules from.
+You can mount custom modules to the `/boost/custom_modules` or a custom location and use this configuration to load them.
+
+Example:
+```bash
+# Load from default locations
+HARBOR_BOOST_MODULE_FOLDERS=modules;custom_modules
+
+# Disable all built-in modules and load only custom ones
+HARBOR_BOOST_MODULE_FOLDERS=/some/custom/path
+```
+""".strip()
 )
 
 # ---------------- COMPLETION ---------------
@@ -222,14 +317,39 @@ INTERMEDIATE_OUTPUT = Config[bool](
   name='HARBOR_BOOST_INTERMEDIATE_OUTPUT',
   type=bool,
   default='true',
-  description='Whether to output intermediate completions'
+  description="""
+When set to `true`, the boost output the intermediate steps of the module, not only the final result, providing more dynamic feedback to the user.
+
+Intermediate output includes status messages, internal monologue, and other non-final completions. Note that it doesn't mean "all output" from the module, as the module source can still decide to not emit specific things at all, or inverse - emit them even if this setting is off.
+
+Example of the intermediate output from the `g1` module - underlying reasoning steps:
+
+![example of intermediate output from g1 boost module](./g1-reasoning.png)
+""".strip()
 )
 
 STATUS_STYLE = Config[str](
   name='HARBOR_BOOST_STATUS_STYLE',
   type=str,
   default='md:codeblock',
-  description='The style of status messages'
+  description="""
+A module can call `llm.emit_status` during its processing, which will be streamed as a "status" or "progress" message to the user. This setting controls the format of this message, which will be dependent on what's supported by the frontend where boost response is displayed.
+
+Options:
+
+````bash
+md:codeblock "\n```boost\n{status}\n```\n",
+md:h1        "\n\n# {status}\n\n",
+md:h2        "\n\n## {status}\n\n",
+md:h3        "\n\n### {status}\n\n",
+plain        "\n\n{status}\n\n",
+none         ""
+````
+
+The default is `md:codeblock` and looks like this in the WebUI:
+
+![screenshot of status in the webui](./webui-boost-status.png)
+""".strip()
 )
 
 # ---------------- BEHAVIOR -----------------
@@ -238,37 +358,90 @@ SERVE_BASE_MODELS = Config[bool](
   name='HARBOR_BOOST_BASE_MODELS',
   type=bool,
   default='false',
-  description=
-  'When enabled, boost will also serve original models from downstream APIs'
+  description="""
+Depending on the configuration of your setup, your LLM backend might or might not be connected to the UI directly. If not (or using boost as a standalone service), you can toggle this option on for the `boost` to serve them as is.
+
+```bash
+# Now "unboosted" models will also be available
+# via the boost API
+harbor config boost.base_models true
+```
+""".strip()
 )
 
 MODEL_FILTER = Config[ConfigDict](
   name='HARBOR_BOOST_MODEL_FILTER',
   type=ConfigDict,
   default='',
-  description=
-  'When specified, boost will only serve models which IDs match the filter'
+  description="""
+When specified, `boost` will only serve models matching the filter. The filter is a key/value expression that'll be matched against the model metadata. See examples below:
+
+```bash
+# Only boost models with the "llama" in the name
+harbor config set boost.model_filter id.contains=llama
+# Only boost models matching the regex
+harbor config set boost.model_filter id.regex=.+q8_0$
+# Boost by regex matching multiple IDs
+harbor config set boost.model_filter "id.regex=.*(llama3.1:8b|llama3.2:3b|qwen2.5:7b)"
+# Only boost a model with the exact ID
+harbor config set boost.model_filter id=llama3.1:8b
+```
+
+This filter runs _after_ the boosted models (per module) are added, so you can filter them out as well.
+""".strip()
 )
 
 API_KEY = Config[str](
   name='HARBOR_BOOST_API_KEY',
   type=str,
   default='',
-  description='The API key to use for the boost API'
+  description="""
+By default, boost will accept and serve any request, but you can configure one or more API keys to restrict access to the service.
+
+Example:
+
+```bash
+# Configure the API key
+HARBOR_BOOST_API_KEY=sk-boost
+# Send the API key in the header
+# Authorization: sk-boost
+```
+""".strip()
 )
 
 API_KEYS = Config[StrList](
   name='HARBOR_BOOST_API_KEYS',
   type=StrList,
   default='',
-  description='A colon-separated list of API keys to use for the boost API'
+  description="""
+A colon-separated list of API keys to use for the boost API. Counterpart to `HARBOR_BOOST_API_KEY`.
+
+Example:
+```bash
+# Configure the API keys
+HARBOR_BOOST_API_KEYS=sk-user1;sk-user2;sk-user3
+```
+
+""".strip()
 )
 
 EXTRA_KEYS = Config[str](
   name='HARBOR_BOOST_API_KEY_*',
   type=str,
   default='',
-  description='Named API keys to use for the boost API'
+  description="""
+Allows specifying additional, "named" API keys that will be accepted by the boost API.
+
+Example:
+```bash
+# Configure the API keys
+HARBOR_BOOST_API_KEY_MAIN=sk-main
+
+# Temporary API key for testing
+HARBOR_BOOST_API_KEY_TEST=sk-test
+```
+
+""".strip()
 )
 
 BOOST_AUTH = [
@@ -457,3 +630,23 @@ R0_THOUGHTS = Config[int](
   default='5',
   description='The amount of thoughts to generate for the r0 module'
 )
+
+if __name__ == '__main__':
+  # Render documentation
+  configs = [item for item in globals().values() if isinstance(item, Config)]
+
+  docs = '''
+# Harbor Boost Configuration
+
+Harbor Boost is configured using environment variables. Following options are available:
+  '''
+
+  for config in configs:
+    docs += f'\n\n## {config.name}\n'
+    docs += f'> **Type**: `{config.type.__name__}`<br/>\n'
+    docs += f'> **Default**: `{config.default}`<br/>\n'
+
+    if config.description:
+      docs += f'\n{config.description}\n'
+
+  print(docs)

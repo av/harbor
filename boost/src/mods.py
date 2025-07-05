@@ -7,8 +7,10 @@ the registry.
 import os
 import importlib
 
-from config import INTERMEDIATE_OUTPUT, BOOST_FOLDERS
+from config import BOOST_FOLDERS
 
+# To avoid circular imports
+import selection
 import log
 
 logger = log.setup_logger(__name__)
@@ -37,3 +39,20 @@ if len(registry) == 0:
   logger.warning("No modules loaded. Is boost configured correctly?")
 else:
   logger.info(f"Loaded {len(registry)} modules: {', '.join(registry.keys())}")
+
+if __name__ == "__main__":
+  # Render module docs to the stdout
+  docs = """
+# Harbor Boost Modules
+
+Documentation for built-in modules in Harbor Boost.
+"""
+
+  for module_name, module in sorted(registry.items()):
+    docs += f"\n## {module_name}\n\n"
+    mod_doc = module.DOCS if hasattr(
+      module, "DOCS"
+    ) else module.apply.__doc__ if module.apply.__doc__ else "No documentation available."
+    docs += f"{mod_doc.strip()}\n\n"
+
+  print(docs)

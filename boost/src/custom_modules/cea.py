@@ -70,6 +70,14 @@ join = '\n'
 
 
 async def apply(chat: 'ch.Chat', llm: 'llm.LLM'):
+  """
+  `cea` - Cellular Automata
+
+  Adds a cellular automata outputs to the chat.
+  The idea is to introduce pseudo-random context that has innate structure and observe how that affects the LLM's response.
+  In practice, most LLMs are efficient enough to not focus on such part of the input at all, so this module is useless.
+  """
+
   rule = int(llm.boost_params.get('cea_rule', '73'))
   gens = int(llm.boost_params.get('cea_generations', '32'))
 

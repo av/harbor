@@ -6,6 +6,10 @@ import log
 import chat as ch
 
 ID_PREFIX = 'ow'
+DOCS = """
+Attempts to allow the LLM to edit its previous response by manipulating it at a word level.
+In practice, few LLMs can understand the nature of such task and it's usually not effective.
+"""
 
 logger = log.setup_logger(ID_PREFIX)
 

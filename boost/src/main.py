@@ -117,7 +117,9 @@ async def websocket_event(stream_id: str, websocket: WebSocket):
 @app.get("/v1/models")
 async def get_boost_models(api_key: str = Depends(get_api_key)):
   downstream = await mapper.list_downstream()
-  enabled_modules = config.BOOST_MODS.value
+  enabled_modules = mods.registry.keys() if config.BOOST_MODS.value == [
+    'all'
+  ] else config.BOOST_MODS.value
   should_filter = len(MODEL_FILTER.value) > 0
   serve_base_models = SERVE_BASE_MODELS.value
   candidates = []
