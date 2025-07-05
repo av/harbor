@@ -1,5 +1,7 @@
 ARG HARBOR_VLLM_VERSION=latest
-FROM vllm/vllm-openai:${HARBOR_VLLM_VERSION}
+ARG HARBOR_VLLM_IMAGE=vllm/vllm-openai
+
+FROM ${HARBOR_VLLM_IMAGE}:${HARBOR_VLLM_VERSION}
 
 # Install:
 # - bitsandbytes for additional quantization support

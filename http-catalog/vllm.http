@@ -1,4 +1,5 @@
 @host = http://localhost:{{HARBOR_VLLM_HOST_PORT}}
+@model = Qwen/Qwen3-4B
 
 ###
 
@@ -6,8 +7,11 @@ GET {{host}}/v1/models
 
 ###
 
-curl {{host}}/v1/chat/completions -H 'Content-Type: application/json' -d '{
-  "model": "google/gemma-2-2b-it",
+POST {{host}}/v1/chat/completions
+Content-Type: application/json
+
+{
+  "model": "{{model}}",
   "messages": [
     {
       "role": "user",
@@ -15,12 +19,15 @@ curl {{host}}/v1/chat/completions -H 'Content-Type: application/json' -d '{
     }
   ],
   "max_tokens": 200
-}'
+}
 
 ###
 
-curl {{host}}/v1/chat/completions -H 'Content-Type: application/json' -d '{
-  "model": "meta-llama/Meta-Llama-3.1-8B-Instruct",
+POST {{host}}/v1/chat/completions
+Content-Type: application/json
+
+{
+  "model": "{{model}}",
   "messages": [
     {
       "role": "user",
@@ -32,7 +39,9 @@ curl {{host}}/v1/chat/completions -H 'Content-Type: application/json' -d '{
 
 ###
 
-curl {{host}}/v1/chat/completions -H 'Content-Type: application/json' -H "Authorization: Bearer ---" -d '{
+POST {{host}}/v1/chat/completions
+Content-Type: application/json
+{
   "model": "google/gemma-2-2b-it",
   "messages": [
     {
@@ -45,7 +54,9 @@ curl {{host}}/v1/chat/completions -H 'Content-Type: application/json' -H "Author
 
 ###
 
-curl {{host}}/v1/chat/completions -H 'Content-Type: application/json' -H "Authorization: Bearer ---" -d '{
+POST {{host}}/v1/chat/completions
+Content-Type: application/json
+{
   "model": "ChenMnZ/Mistral-Large-Instruct-2407-EfficientQAT-w2g64-GPTQ",
   "messages": [
     {
@@ -78,8 +89,11 @@ curl {{host}}/v1/completions -H 'Content-Type: application/json' -H "Authorizati
 
 ###
 
-curl {{host}}/v1/chat/completions -H 'Content-Type: application/json' -H "Authorization: Bearer ---" -d '{
-  "model": "ChenMnZ/Mistral-Large-Instruct-2407-EfficientQAT-w2g64-GPTQ",
+POST {{host}}/v1/chat/completions
+Content-Type: application/json
+
+{
+  "model": "{{model}}",
   "messages": [
     {
       "role": "user",
@@ -87,29 +101,30 @@ curl {{host}}/v1/chat/completions -H 'Content-Type: application/json' -H "Author
     }
   ],
   "max_tokens": 8
-}'
-
-###
-
-curl {{host}}/v1/chat/completions -H 'Content-Type: application/json' -H "Authorization: Bearer ---" -d '{
-  "model": "microsoft/Phi-3.5-MoE-instruct",
-  "messages": [
-    {
-      "role": "user",
-      "content": "Answer in one word. Where is Paris?"
-    }
-  ],
-  "max_tokens": 8
-}'
+}
 
 ###
 
 POST {{host}}/v1/chat/completions
 Content-Type: application/json
-Authorization: Bearer sk-vllm
+{
+  "model": "{{model}}",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Answer in one word. Where is Paris?"
+    }
+  ],
+  "max_tokens": 8
+}
+
+###
+
+POST {{host}}/v1/chat/completions
+Content-Type: application/json
 
 {
-  "model": "microsoft/Phi-3.5-mini-instruct",
+  "model": "{{model}}",
   "messages": [
     {
       "role": "user",

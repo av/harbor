@@ -1,6 +1,6 @@
 model_list:
   - model_name: vllm
     litellm_params:
-      model: openai/microsoft/Phi-3.5-mini-instruct
+      model: openai/Qwen/Qwen3-4B
       api_base: http://vllm:8000/v1
       api_key: sk-vllm

@@ -8,6 +8,7 @@ services:
       context: ./vllm
       dockerfile: Dockerfile
       args:
+        HARBOR_VLLM_IMAGE: ${HARBOR_VLLM_IMAGE}
         HARBOR_VLLM_VERSION: ${HARBOR_VLLM_VERSION}
     ports:
       - ${HARBOR_VLLM_HOST_PORT}:8000
