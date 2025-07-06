@@ -16,6 +16,24 @@ DOCS = """
 
 Variation of beam search with exploration of the next few tokens based
 on system prompts eliciting different reasoning/continuation styles.
+
+```bash
+# With harbor
+harbor boost modules add nbs
+harbor up boost --tail
+# Connected to Open WebUI by default
+harbor open
+
+# Standalone usage
+docker run \\
+  -e "HARBOR_BOOST_OPENAI_URLS=http://172.17.0.1:11434/v1" \\
+  -e "HARBOR_BOOST_OPENAI_KEYS=sk-ollama" \\
+  -e "HARBOR_BOOST_PUBLIC_URL=http://localhost:8004" \\
+  -e "HARBOR_BOOST_MODULES=nbs" \\
+  -p 8004:8000 \\
+  ghcr.io/av/harbor-boost:latest
+```
+
 """
 
 logger = log.setup_logger(ID_PREFIX)
