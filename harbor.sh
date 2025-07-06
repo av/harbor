@@ -4250,7 +4250,7 @@ run_modularmax_command() {
 # ========================================================================
 
 # Globals
-version="0.3.16"
+version="0.3.17"
 harbor_repo_url="https://github.com/av/harbor.git"
 harbor_release_url="https://api.github.com/repos/av/harbor/releases/latest"
 delimiter="|"

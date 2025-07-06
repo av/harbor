@@ -55,6 +55,10 @@ Boost comes with [a lot of built-in modules](../docs/5.2.3-Harbor-Boost-Modules)
 |-|-|
 | ![](../docs/boost-markov.png) | ![](../docs/boost-concept.png) |
 
+| [`nbs`](../docs/5.2.3-Harbor-Boost-Modules#nbs) |
+|-|
+| ![](../docs/boost-nbs.png) |
+
 | [`dnd`](../docs/5.2.3-Harbor-Boost-Modules#dnd) | [`promx`](../docs/5.2.3-Harbor-Boost-Modules#promx) |
 |-|-|
 | ![](../docs/boost-dnd.png) | ![](../docs/boost-promx.png) |
