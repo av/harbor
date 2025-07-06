@@ -64,11 +64,10 @@ Reply with the skill name and nothing else.
   with open(artifact_path, 'r') as file:
     artifact = file.read()
   await llm.emit_artifact(
-    artifact.replace('<<listener_id>>',
-                     llm.id).replace('<<skill_name>>', skill.strip()).replace(
-                       '<<difficulty_class>>', str(difficulty_class)
-                     ).replace('<<result>>', 'passed' if passed else
-                               'failed').replace('<<dice>>', dice_notation)
+    artifact.replace('<<skill_name>>', skill.strip()).replace(
+      '<<difficulty_class>>', str(difficulty_class)
+    ).replace('<<result>>', 'passed'
+              if passed else 'failed').replace('<<dice>>', dice_notation)
   )
   await llm.emit_status('Rolling...')
   # Wait for the artifact to be loaded and

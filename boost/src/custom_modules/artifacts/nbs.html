@@ -1,0 +1,455 @@
+<style>
+  body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    overflow: hidden;
+    background: #222;
+  }
+
+  svg {
+    width: 100vw;
+    height: 100vh;
+    display: block;
+  }
+
+  .node {
+    cursor: pointer;R
+  }
+
+  .link {
+    stroke-opacity: 0.7;
+  }
+
+  .node text {
+    pointer-events: none;
+    font-size: 10px;
+    font-weight: bold;
+    opacity: 1;
+  }
+
+  #tracker {
+    font-size: 1.5rem;
+    max-height: 12rem;
+    max-width: 60rem;
+    overflow-y: auto;
+    scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+    scrollbar-width: thin;
+  }
+
+  #tracker > span {
+    display: inline-block;
+    padding: 0.125rem;
+    margin: 0.125rem;
+    border-radius: 0.25rem;
+    background-color: transparent;
+    transition: background-color 0.3s ease;
+  }
+
+  #legend {
+    position: absolute;
+    bottom: 1rem;
+    left: 1rem;
+    right: 1rem;
+
+    display: flex;
+    flex-direction: column;
+
+    background: rgba(0, 0, 0, 0.25);
+    padding: 1rem;
+    gap: 1rem;
+    border-radius: 1rem;
+    font-size: 14px;
+    backdrop-filter: blur(12px);
+  }
+
+  #legend>.items {
+    flex: 1;
+    display: flex;
+    flex-direction: row;
+    gap: 0.5rem;
+  }
+
+  #legend>.items>* {
+    width: 1rem;
+    height: 1rem;
+    border-radius: 1rem;
+  }
+</style>
+
+<svg id="visualisation"></svg>
+<section id="legend">
+  <section class="items"></section>
+  <section id="tracker"></section>
+</section>
+
+<script type="module">
+  import * as d3 from "https://cdn.jsdelivr.net/npm/d3@7/+esm";
+
+  let svg, simulation, link, node, width, height;
+  let container;
+  let linksGroup, nodesGroup;
+
+  let xScaleUpper = 100;
+  let xScale = d3.scaleTime().range([0, xScaleUpper]);
+  let colors = d3.scaleOrdinal(d3.schemeObservable10);
+
+  const nodes = [];
+  const links = [];
+
+  function initializeVisualization() {
+    svg = d3.select("#visualisation")
+      .attr("width", "100%")
+      .attr("height", "100%");
+
+    const zoom = d3.zoom()
+      .scaleExtent([0.1, 4])
+      .on("zoom", (event) => {
+        container.attr("transform", event.transform);
+      });
+
+    svg.call(zoom);
+
+    container = svg.append("g")
+      .attr("class", "container");
+
+    linksGroup = container.append("g").attr("class", "links");
+    nodesGroup = container.append("g").attr("class", "nodes");
+
+    const defs = svg.append("defs");
+
+    const glow = defs.append("filter")
+      .attr("id", "glow")
+      .attr("x", "-50%")
+      .attr("y", "-50%")
+      .attr("width", "200%")
+      .attr("height", "200%");
+
+    const glowStronger = defs.append("filter")
+      .attr("id", "glowStronger")
+      .attr("x", "-50%")
+      .attr("y", "-50%")
+      .attr("width", "200%")
+      .attr("height", "200%");
+
+    glow.append("feGaussianBlur")
+      .attr("stdDeviation", "2")
+      .attr("result", "coloredBlur");
+
+    const feMerge = glow.append("feMerge");
+    feMerge.append("feMergeNode").attr("in", "coloredBlur");
+    feMerge.append("feMergeNode").attr("in", "SourceGraphic");
+
+    glowStronger.append("feGaussianBlur")
+      .attr("stdDeviation", "6")
+      .attr("result", "coloredBlur");
+
+    const feMergeStronger = glowStronger.append("feMerge");
+    feMergeStronger.append("feMergeNode").attr("in", "coloredBlur");
+    feMergeStronger.append("feMergeNode").attr("in", "SourceGraphic");
+
+    updateDimensions();
+
+    simulation = d3.forceSimulation()
+      .force("link", d3.forceLink().id(d => d.id).distance(120))
+      .force("charge", d3.forceManyBody().strength(-250))
+      .force("y", d3.forceY(height / 2).strength(0.03))
+      .force("collide", d3.forceCollide().radius(32));
+
+    simulation.on("tick", ticked);
+
+    window.addEventListener("resize", () => {
+      updateDimensions();
+      simulation.force("center", d3.forceCenter(width / 2, height / 2));
+      updateXScale();
+      simulation.alpha(0.5).restart();
+    });
+  }
+
+  function updateDimensions() {
+    width = window.innerWidth;
+    height = window.innerHeight;
+    svg.attr("width", width).attr("height", height);
+  }
+
+  const formatTime = d3.timeFormat("%H:%M:%S");
+
+  function addNode(node) {
+    const now = new Date();
+
+    if (typeof node === 'string') {
+      node = {
+        id: node,
+        label: node,
+        timestamp: now,
+        timeStr: formatTime(now),
+        x: width / 2,
+        y: height / 2,
+      }
+    }
+
+    if (nodes.find(n => n.id === node.id)) return;
+
+    const newNode = {
+      id: Math.random().toString(16).replace('.', ''),
+      label: node.label || node.id || "Node",
+      category: node.category || "relevant_concepts",
+      timestamp: now,
+      timeStr: formatTime(now),
+      x: width / 2,
+      y: height / 2,
+      ...node,
+    };
+
+    nodes.push(newNode);
+    updateVisualization();
+    return newNode;
+  }
+
+  const highlightedNodes = new Set();
+
+  function linkNodes(fromLabel, toLabel) {
+    const fromNode = nodes.find(n => n.id === fromLabel);
+    const toNode = nodes.find(n => n.id === toLabel);
+    if (!fromNode || !toNode) return;
+
+    if (links.some(l => (l.source === fromLabel && l.target === toLabel) ||
+      (l.source === toLabel && l.target === fromLabel))) return;
+
+    const newLink = { source: fromLabel, target: toLabel };
+    links.push(newLink);
+
+    highlightedNodes.add(fromLabel);
+    highlightedNodes.add(toLabel);
+
+    updateVisualization();
+    return newLink;
+  }
+
+  function updateXScale() {
+    if (!nodes.length) return;
+    const minT = d3.min(nodes, d => d.timestamp);
+    const maxT = d3.max(nodes, d => d.timestamp);
+    xScale.domain(minT === maxT ? [d3.timeMinute.offset(minT, -1), d3.timeMinute.offset(maxT, 1)] : [minT, maxT]);
+    simulation.force("xTime", d3.forceX(d => xScale(d.timestamp)).strength(0.4));
+  }
+
+  function nodeWidth(node) {
+    return Math.max(node.label.length, node.timeStr.length) * 8 + 20;
+  }
+
+  function updateVisualization() {
+    updateXScale();
+
+    link = linksGroup.selectAll("line").data(links, d => `${d.source.id || d.source}-${d.target.id || d.target}`);
+    link.exit().remove();
+    link = link.enter().append("line")
+      .attr("class", "link")
+      .attr("stroke", "#999")
+      .attr("stroke-width", 2)
+      .merge(link);
+
+    node = nodesGroup.selectAll(".node").data(nodes, d => d.id);
+    node.exit().remove();
+    const nodeEnter = node.enter().append("g")
+      .attr("class", "node")
+      .call(drag(simulation))
+      .append('g');
+
+    nodeEnter.append("rect")
+      .attr("x", d => -nodeWidth(d) / 2)
+      .attr("y", -18)
+      .attr("width", d => nodeWidth(d))
+      .attr("height", 24)
+      .attr("rx", 12)
+      .attr("ry", 12)
+      .style("fill", d => '#eee')
+      .style("stroke", "#e5e7eb")
+      .style("stroke-width", 2)
+      .style("filter", "url(#glow)")
+      .attr("transform", "scale(0)")
+      .transition()
+      .duration(600)
+      .ease(d3.easeElastic.period(0.75))
+      .attr("transform", "scale(1)");
+
+    nodeEnter.append("circle")
+      .attr("r", 8)
+      .attr("cx", (d) => -nodeWidth(d) * 0.5 + 12)
+      .attr("cy", -6)
+      .style("fill", d => colors(d.category))
+      .attr("transform", "scale(0)")
+      .transition()
+      .duration(600)
+      .ease(d3.easeElastic.period(0.75))
+      .attr("transform", "scale(1)");
+
+    nodeEnter.append("text")
+      .attr("dy", -2)
+      .attr("text-anchor", "middle")
+      .text(d => d.label)
+      .style("fill", "#2d2d2d")
+      .style("font-weight", "600")
+      .style("font-size", "12px")
+      .attr("transform", "scale(0)")
+      .transition()
+      .duration(600)
+      .ease(d3.easeElastic.period(0.75))
+      .attr("transform", "scale(1)");
+
+    node = nodeEnter.merge(node);
+
+    node.each(function (d) {
+      const isHighlighted = highlightedNodes.has(d.id);
+      d3.select(this).selectAll('rect')
+        .transition().duration(300)
+        .attr('transform', 'scale(1)')
+        // .attr('transform', isHighlighted ? 'scale(1.25)' : 'scale(1)')
+        .style('filter', isHighlighted ? 'url(#glowStronger)' : 'url(#glow)');
+      d3.select(this).selectAll('text')
+        .transition().duration(300)
+        .attr('transform', 'scale(1)');
+      // .attr('transform', isHighlighted ? 'scale(1.15)' : 'scale(1)');
+    });
+
+    simulation.nodes(nodes);
+    simulation.force("link").links(links);
+    simulation.alpha(0.2).restart();
+    nodesGroup.raise();
+  }
+
+  function drag(simulation) {
+    function dragstarted(event) {
+      if (!event.active) simulation.alphaTarget(0.3).restart();
+      event.subject.fx = event.subject.x;
+      event.subject.fy = event.subject.y;
+    }
+
+    function dragged(event) {
+      event.subject.fx = event.x;
+      event.subject.fy = event.y;
+    }
+
+    function dragended(event) {
+      if (!event.active) simulation.alphaTarget(0);
+      event.subject.fx = null;
+      event.subject.fy = null;
+    }
+
+    return d3.drag()
+      .on("start", dragstarted)
+      .on("drag", dragged)
+      .on("end", dragended);
+  }
+
+  function ticked() {
+    container.selectAll('.link')
+      .attr('x1', d => d.source.x)
+      .attr('y1', d => d.source.y)
+      .attr('x2', d => d.target.x)
+      .attr('y2', d => d.target.y);
+
+    container.selectAll('.node')
+      .attr('transform', d => `translate(${d.x}, ${d.y})`);
+  }
+
+  const handlers = {
+    "boost.listener.event": handleBoostEvent,
+    "chat.completion.chunk": handleCompletionChunk,
+    'boost.node': ({ data }) => addNode(data),
+    'boost.nodes': ({ data }) => {
+      const { nodes } = data;
+      xScaleUpper += 200;
+      xScale.range([100, xScaleUpper]);
+      nodes.forEach(node => addNode(node));
+    },
+    'boost.node.choice': ({ data }) => {
+      const { node } = data;
+      const tracker = document.getElementById("tracker");
+
+      const newContent = document.createElement('span');
+      newContent.textContent = node.label;
+      newContent.style.backgroundColor = colors(node.category);
+
+      tracker.appendChild(newContent);
+    },
+    'boost.linked_concepts': ({ data }) => {
+      const { concepts } = data;
+      concepts.reduce((prev, curr) => {
+        if (prev) linkNodes(prev, curr);
+        return curr;
+      }, null);
+    },
+    'boost.nbs.prompts': ({ data }) => {
+      const { prompts } = data;
+      const items = Object.entries(prompts).map(
+        ([key, value]) => ({
+          label: key,
+          prompt: value,
+          color: colors(key),
+        })
+      );
+
+      d3.select("#legend > .items").selectAll("div")
+        .data(items)
+        .join("div")
+        .attr('title', d => `${d.label.toLocaleUpperCase()}\n${d.prompt}`)
+        .style("background-color", d => d.color)
+        .style("margin", "5px 0")
+        .style("font-size", "14px");
+    }
+  };
+
+  function processChunk(chunk) {
+    try {
+      const data = JSON.parse(chunk.replace(/data: /, ""));
+      const text = data.object;
+      const handler = handlers[text];
+      if (handler) handler(data);
+    } catch (e) {
+      console.error("Error processing chunk:", e);
+    }
+  }
+
+  function handleCompletionChunk() { }
+
+  function handleBoostEvent(chunk) {
+    const { event } = chunk;
+    const handler = handlers[event];
+    if (handler) handler(chunk);
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    initializeVisualization();
+    startListening();
+    window.addNode = addNode;
+    window.linkNodes = linkNodes;
+  });
+
+  async function startListening() {
+    try {
+      const listenerId = "<<listener_id>>";
+      const boostUrl = '<<boost_public_url>>';
+
+      const response = await fetch(
+        `${boostUrl}/events/${listenerId}`,
+        {
+          headers: { Authorization: "Bearer sk-boost" },
+        }
+      );
+
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+      const reader = response.body.getReader();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const blob = new TextDecoder().decode(value);
+        const chunks = blob.split("\n\n");
+        for (const chunk of chunks) if (chunk.trim()) processChunk(chunk);
+      }
+    } catch (error) {
+      console.error("Error connecting to event stream:", error);
+    }
+  }
+</script>

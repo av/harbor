@@ -268,9 +268,12 @@ class LLM(AsyncEventEmitter):
   async def emit_status(self, status):
     await self.emit_message(format.format_status(status))
 
-  async def emit_artifact(self, artifact):
-    artifact = artifact.replace('<<boost_public_url>>', BOOST_PUBLIC_URL.value)
+  async def emit_artifact(self, artifact, wait=True):
+    artifact = artifact.replace('<<boost_public_url>>', BOOST_PUBLIC_URL.value).replace('<<listener_id>>', self.id)
     await self.emit_message(format.format_artifact(artifact))
+    if wait:
+      await asyncio.sleep(1.0)
+
 
   async def emit_message(self, message):
     await self.emit_chunk(self.chunk_from_message(message))

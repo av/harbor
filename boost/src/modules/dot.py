@@ -29,18 +29,17 @@ artifact_path = os.path.join(
   current_dir, '..', 'custom_modules', 'artifacts', 'dot_mini.html'
 )
 
+
 class Step(BaseModel):
-  id: str = Field(
-    description="The unique identifier for the step.",
-  )
+  id: str = Field(description="The unique identifier for the step.",)
   step: str = Field(
     description="The step of the reasoning process. Maximum 5 words.",
   )
 
+
 class DraftPlan(BaseModel):
-  steps: list[Step] = Field(
-    description="The steps of the draft plan process.",
-  )
+  steps: list[Step] = Field(description="The steps of the draft plan process.",)
+
 
 draft_plan_prompt = """
 <instruction>
@@ -97,14 +96,12 @@ Your response will be passed to the user instead of assistant's plan.
 </input>
 """
 
+
 async def serve_artifact(llm: 'llm.LLM'):
   with open(artifact_path, 'r') as file:
     artifact = file.read()
 
-    await llm.emit_artifact(
-      artifact
-        .replace('<<listener_id>>', llm.id)
-    )
+    await llm.emit_artifact(artifact)
     await asyncio.sleep(0.5)
 
 
@@ -137,10 +134,12 @@ async def apply(chat: 'ch.Chat', llm: 'llm.LLM'):
   })
 
   for step in plan.steps:
-    await llm.emit_listener_event('dot.step.status', {
-      'id': step.id,
-      'status': 'executing',
-    })
+    await llm.emit_listener_event(
+      'dot.step.status', {
+        'id': step.id,
+        'status': 'executing',
+      }
+    )
 
     step_response = await llm.stream_chat_completion(
       prompt=execute_step_prompt,
@@ -166,5 +165,3 @@ async def apply(chat: 'ch.Chat', llm: 'llm.LLM'):
   await llm.emit_listener_event('dot.status', {
     'status': 'Done',
   })
-
-

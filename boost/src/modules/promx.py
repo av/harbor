@@ -524,8 +524,7 @@ async def apply(chat: 'ch.Chat', llm: 'llm.LLM'):
   logger.info('Listener')
   await llm.on('websocket.message', route_client_message)
   logger.info('Artifact')
-  await llm.emit_artifact(artifact.replace('<<listener_id>>', llm.id))
-  await asyncio.sleep(1.0)
+  await llm.emit_artifact(artifact)
 
   logger.info('Mixing')
   await state.mix()

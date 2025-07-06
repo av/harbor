@@ -159,8 +159,7 @@ async def apply(chat: 'ch.Chat', llm: 'llm.LLM'):
   if 'qwen3' in llm.model:
     chat.system('/no_think')
 
-  await llm.emit_artifact(artifact.replace('<<listener_id>>', llm.id))
-  await asyncio.sleep(1.0)
+  await llm.emit_artifact(artifact=artifact)
   await llm.emit_listener_event('boost.status', {'status': 'Initializing'})
   await llm.emit_listener_event('boost.intensity', {'intensity': 1.0})
 

@@ -35,8 +35,7 @@ artifact_path = os.path.join(
   '..',
   'custom_modules',
   'artifacts',
-  # 'ponder.html',
-  'ponder_mini.html',
+  'nbs_mini.html',
 )
 
 concepts_prompt = """
@@ -161,9 +160,7 @@ async def apply(chat: 'ch.Chat', llm: 'llm.LLM'):
   with open(artifact_path, 'r') as f:
     artifact = f.read()
 
-  await llm.emit_artifact(artifact.replace('<<listener_id>>', llm.id))
-  await asyncio.sleep(1.0)
-
+  await llm.emit_artifact(artifact)
   await llm.start_thinking()
   await llm.emit_message('\n### Concepts\n')
   concepts = []

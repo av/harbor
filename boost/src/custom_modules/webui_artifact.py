@@ -16,7 +16,5 @@ async def apply(chat: 'ch.Chat', llm: 'llm.LLM'):
   with open(artifact_path, 'r') as file:
     artifact = file.read()
 
-  await llm.emit_artifact(artifact.replace('<<listener_id>>', llm.id))
-  await asyncio.sleep(1.0)
-
+  await llm.emit_artifact(artifact)
   await llm.stream_final_completion()
