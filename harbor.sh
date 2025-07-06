@@ -332,7 +332,11 @@ run_routine() {
         return 1
     fi
 
-    local routine_path="$harbor_home/routines/$routine_name.js"
+    if [[ "$routine_name" == *.* ]]; then
+        local routine_path="$harbor_home/routines/$routine_name"
+    else
+        local routine_path="$harbor_home/routines/$routine_name.ts"
+    fi
 
     if [ ! -f $routine_path ]; then
         log_error "Routine '$routine_name' not identified"
@@ -347,13 +351,12 @@ run_routine() {
         -v harbor-deno-cache:/deno-dir:rw \
         -w "$harbor_home" \
         -e "HARBOR_LOG_LEVEL=$default_log_level" \
-        denoland/deno:distroless \
-        run -A --unstable-sloppy-imports \
+        $default_routine_runtime \
         $routine_path "$@"
 }
 
 routine_compose_with_options() {
-    local options=("${default_options[@]}" "${default_capabilities[@]}")
+    local options=()
 
     if [ "$default_auto_capabilities" = "true" ]; then
         if has_nvidia && has_nvidia_ctk; then
@@ -380,7 +383,7 @@ compose_with_options() {
         return
     fi
 
-    local base_dir="$PWD"
+    local base_dir="$harbor_home"
     local compose_files=("$base_dir/compose.yml") # Always include the base compose file
     local options=("${default_options[@]}" "${default_capabilities[@]}")
 
@@ -531,7 +534,7 @@ resolve_compose_command() {
         ;;
     esac
 
-    local cmd=$(compose_with_options "$@")
+    local cmd=$(compose_with_options --no-merge "$@")
 
     if $is_human; then
         echo "$cmd" | sed "s|-f $harbor_home/|\n - |g"
@@ -659,6 +662,17 @@ run_logs() {
 }
 
 run_pull() {
+    available_services=$(get_services --silent)
+
+    for service in "$@"; do
+        if echo "$available_services" | grep -q "^$service-"; then
+            log_info "Pulling service $service"
+        else
+            run_ollama_command pull "$service"
+            return 0
+        fi
+    done
+
     $(compose_with_options "$@") pull
 }
 
@@ -3346,10 +3360,11 @@ run_ollama_command() {
     local services=$(get_active_services)
     local ollama_host=$(env_manager get ollama.internal.url)
 
-    # If ollama is not in $services - inform user
     if ! is_service_running "ollama"; then
-        log_error "Please start ollama service to use 'harbor ollama'"
-        exit 1
+        log_debug "Ollama is not running, launching..."
+        run_up --no-defaults ollama
+    else
+        log_debug "Ollama already running"
     fi
 
     $(compose_with_options $services "ollama") run \
@@ -4276,6 +4291,7 @@ default_log_level=$(env_manager get log.level)
 default_history_file=$(env_manager get history.file)
 default_history_size=$(env_manager get history.size)
 default_legacy_cli=${HARBOR_LEGACY_CLI:-$(env_manager get legacy.cli)}
+default_routine_runtime=$(env_manager get routine.runtime)
 
 main_entrypoint() {
     case "$1" in
@@ -4645,6 +4661,10 @@ main_entrypoint() {
     eval)
         shift
         run_promptfoo_eval "$@"
+        ;;
+    routine)
+        shift
+        run_routine "$@"
         ;;
     *)
         return $scramble_exit_code

@@ -1,0 +1,18 @@
+{
+  "unstable": [
+    "sloppy-imports"
+  ],
+  "lint": {
+    "rules": {
+      "exclude": [
+        "no-sloppy-imports"
+      ]
+    }
+  },
+  "compilerOptions": {
+    "lib": [
+      "ESNext"
+    ],
+    "checkJs": true
+  }
+}

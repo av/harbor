@@ -14,8 +14,9 @@ export const paths = {
   currentProfile: '.env',
 }
 
-export async function listComposeFiles() {
-  const files = await fs.promises.readdir(paths.home);
+export async function listComposeFiles(dir = paths.home) {
+  const files = await fs.promises.readdir(dir);
+
   return files
     .filter((file) => file.match(/compose\..+\.yml/))
     .sort((a, b) => {

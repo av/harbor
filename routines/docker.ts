@@ -1,5 +1,6 @@
 import { listComposeFiles } from './paths';
-import { BUILTIN_CAPS, log } from "./utils";
+import { BUILTIN_CAPS, consumeArg, log } from "./utils";
+import { cachedConfig, defaultCapabilities, defaultServices } from './envManager';
 
 export function isCapability(capability, defaultCapabilities = BUILTIN_CAPS) {
   return defaultCapabilities.includes(capability);
@@ -10,11 +11,20 @@ export function isCapabilityFile(filename, defaultCapabilities = BUILTIN_CAPS) {
 }
 
 export async function resolveComposeFiles(args) {
-  const options = [...args].filter((s) => !!s);
-  const composeFiles = ['compose.yml'];
+  const options = [
+    ...(
+      await Promise.all([
+        defaultCapabilities.unwrap(),
+        defaultServices.unwrap(),
+      ])
+        .then((r => r.flat()))
+    ),
+    ...args
+  ].filter((s) => !!s);
+  const dir = consumeArg(args, ['--dir']);
 
-  // Find and sort compose files
-  const allFiles = await listComposeFiles();
+  const allFiles = await listComposeFiles(dir);
+  const outFiles = ['compose.yml'];
 
   for (const file of allFiles) {
     const filename = file.split("/").pop();
@@ -43,7 +53,7 @@ export async function resolveComposeFiles(args) {
       }
 
       if (allMatched) {
-        composeFiles.push(file);
+        outFiles.push(file);
       }
       continue;
     }
@@ -64,15 +74,19 @@ export async function resolveComposeFiles(args) {
     }
 
     if (match) {
-      composeFiles.push(file);
+      outFiles.push(file);
     }
   }
 
-  log.debug("Matched compose files:", composeFiles.length);
+  log.debug("Matched compose files:", outFiles.length);
 
-  return composeFiles
+  return outFiles
 }
 
-export function composeCommand(args) {
-  return `docker compose ${args}`;
+export const whichCompose = cachedConfig({
+  key: 'compose.command'
+})
+
+export async function composeCommand(args) {
+  return `${await whichCompose()} ${args}`;
 }
