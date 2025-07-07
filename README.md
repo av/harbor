@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/av-harbor-badge.png)](https://mseep.ai/app/av-harbor)
+
 ![Harbor project logo](https://github.com/av/harbor/raw/main/docs/harbor-2.png)
 
 [![GitHub Tag](https://img.shields.io/github/v/tag/av/harbor)](https://github.com/av/harbor/releases)
