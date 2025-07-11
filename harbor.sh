@@ -231,7 +231,7 @@ run_harbor_doctor() {
     if has_rocm; then
         log_info "${ok} ROCm is installed"
     else
-	log_warn "${nok} ROCm in not installed. AMD GPU support may not work."
+        log_warn "${nok} ROCm in not installed. AMD GPU support may not work."
     fi
 
     if $has_errors; then
@@ -496,7 +496,6 @@ compose_with_options() {
     # Return the command string
     echo "$cmd"
 }
-
 
 is_capability() {
     local capability="$1"
@@ -1318,9 +1317,9 @@ env_manager() {
     local env_file=".env"
     local prefix="HARBOR_"
     local silent=false
+    local filtered_args=()
 
-    # Parse options
-    while [[ "$1" == --* ]]; do
+    while [[ $# -gt 0 ]]; do
         case "$1" in
         --silent)
             silent=true
@@ -1335,11 +1334,13 @@ env_manager() {
             shift 2
             ;;
         *)
-            $silent || echo "Unknown option: $1"
-            return 1
+            filtered_args+=("$1")
+            shift
             ;;
         esac
     done
+
+    set -- "${filtered_args[@]}"
 
     case "$1" in
     get)
@@ -1373,10 +1374,11 @@ env_manager() {
         $silent || log_info "Set $prefix$upper_key to: \"$value\""
         ;;
     list | ls)
+        log_error "RUNNING LS > $env_file"
         grep "^$prefix" "$env_file" | sed "s/^$prefix//" | while read -r line; do
             key=${line%%=*}
             value=${line#*=}
-            value=$(echo "$value" | sed -E 's/^"(.*)"$/\1/') # Remove surrounding quotes for display
+            value=$(echo "$value" | sed -E 's/^"(.*)"$/\1/')
             printf "%-30s %s\n" "$key" "$value"
         done
         ;;
@@ -4140,25 +4142,25 @@ run_webtop_command() {
 
 run_kobold_command() {
     case "$1" in
-        model)
-            shift
-            env_manager_alias kobold.model "$@"
-            ;;
-        args)
-            shift
-            env_manager_alias kobold.args "$@"
-            ;;
-        -h | --help | help)
-            echo "Please note that this is not Kobold CLI, but a Harbor CLI to manage Kobold service."
-            echo
-            echo "Usage: harbor kobold <command>"
-            echo
-            echo "Commands:"
-            echo "  harbor kobold model [user/repo] - Get or set the Kobold model repository to run"
-            ;;
-        *)
-            return $scramble_exit_code
-            ;;
+    model)
+        shift
+        env_manager_alias kobold.model "$@"
+        ;;
+    args)
+        shift
+        env_manager_alias kobold.args "$@"
+        ;;
+    -h | --help | help)
+        echo "Please note that this is not Kobold CLI, but a Harbor CLI to manage Kobold service."
+        echo
+        echo "Usage: harbor kobold <command>"
+        echo
+        echo "Commands:"
+        echo "  harbor kobold model [user/repo] - Get or set the Kobold model repository to run"
+        ;;
+    *)
+        return $scramble_exit_code
+        ;;
     esac
 }
 
@@ -4241,7 +4243,7 @@ run_modularmax_command() {
         env_manager_alias modularmax.extra_args "$@"
         return 0
         ;;
-    help|-h|--help)
+    help | -h | --help)
         echo "Please note that this is not ModularMax CLI, but a Harbor CLI to manage ModularMax service."
         echo
         echo "Usage: harbor modularmax <command>"
