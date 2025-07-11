@@ -1374,7 +1374,6 @@ env_manager() {
         $silent || log_info "Set $prefix$upper_key to: \"$value\""
         ;;
     list | ls)
-        log_error "RUNNING LS > $env_file"
         grep "^$prefix" "$env_file" | sed "s/^$prefix//" | while read -r line; do
             key=${line%%=*}
             value=${line#*=}
