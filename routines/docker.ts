@@ -1,5 +1,5 @@
 import { listComposeFiles } from './paths';
-import { BUILTIN_CAPS, consumeArg, log } from "./utils";
+import { BUILTIN_CAPS, consumeArg, consumeFlagArg, log } from "./utils";
 import { cachedConfig, defaultCapabilities, defaultServices } from './envManager';
 
 export function isCapability(capability, defaultCapabilities = BUILTIN_CAPS) {
@@ -11,18 +11,18 @@ export function isCapabilityFile(filename, defaultCapabilities = BUILTIN_CAPS) {
 }
 
 export async function resolveComposeFiles(args) {
+  const includeDefaults = !consumeFlagArg(args, ['--no-defaults']);
+  const dir = consumeArg(args, ['--dir']);
   const options = [
     ...(
       await Promise.all([
         defaultCapabilities.unwrap(),
-        defaultServices.unwrap(),
+        includeDefaults ? defaultServices.unwrap() : [],
       ])
         .then((r => r.flat()))
     ),
     ...args
   ].filter((s) => !!s);
-  const dir = consumeArg(args, ['--dir']);
-
   const allFiles = await listComposeFiles(dir);
   const outFiles = ['compose.yml'];
 

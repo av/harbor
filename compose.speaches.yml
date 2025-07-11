@@ -12,9 +12,22 @@ services:
       - ${HARBOR_HF_CACHE}:/home/ubuntu/.cache/huggingface
       - ${HARBOR_LLAMACPP_CACHE}:/home/ubuntu/.cache/llama.cpp
       - ${HARBOR_VLLM_CACHE}:/home/ubuntu/.cache/vllm
-      # Temporary override, remove
-      # when support for Kokoro v1.0 is added
-      - ./speaches/hf_utils.py:/home/ubuntu/speaches/speaches/hf_utils.py
-      - ./speaches/kokoro_utils.py:/home/ubuntu/speaches/speaches/kokoro_utils.py
+    networks:
+      - harbor-network
+
+  speaches-init:
+    # Same image as used for the routines
+    # for minimal overhead
+    image: denoland/deno:distroless
+    container_name: ${HARBOR_CONTAINER_PREFIX}.speaches-init
+    depends_on:
+      speaches:
+        condition: service_started
+    env_file:
+      - ./.env
+      - ./speaches/override.env
+    volumes:
+      - ./speaches/init_entrypoint.ts:/init_entrypoint.ts
+    entrypoint: deno run -A init_entrypoint.ts
     networks:
       - harbor-network

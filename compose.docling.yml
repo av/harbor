@@ -1,0 +1,11 @@
+services:
+  docling:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.docling
+    image: ${HARBOR_DOCLING_IMAGE}:${HARBOR_DOCLING_VERSION}
+    ports:
+      - ${HARBOR_DOCLING_HOST_PORT}:5001
+    env_file:
+      - ./.env
+      - ./docling/override.env
+    networks:
+      - harbor-network

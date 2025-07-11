@@ -540,5 +540,11 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         tags: [HST.satellite],
         wikiUrl: `${wikiUrl}/2.3.48-Satellite-Airweave`,
         tooltip: 'Airweave lets agents search any app by transforming its contents into agent-ready knowledge.'
+    },
+    docling: {
+        name: 'Docling',
+        tags: [HST.satellite],
+        wikiUrl: `${wikiUrl}/2.3.49-Satellite-Docling`,
+        tooltip: 'Transform documents into format ready for LLMs.'
     }
 };

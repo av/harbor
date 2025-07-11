@@ -665,7 +665,7 @@ run_pull() {
     available_services=$(get_services --silent)
 
     for service in "$@"; do
-        if echo "$available_services" | grep -q "^$service-"; then
+        if echo "$available_services" | grep -q "^$service$"; then
             log_info "Pulling service $service"
         else
             run_ollama_command pull "$service"
@@ -955,12 +955,19 @@ sys_open() {
 
     # Open the URL in the default browser
     if command -v xdg-open &>/dev/null; then
-        xdg-open "$url" # Linux
+        xdg-open "$url"
+        rc=$?
     elif command -v open &>/dev/null; then
-        open "$url" # macOS
+        open "$url"
+        rc=$?
     elif command -v start &>/dev/null; then
-        start "$url" # Windows
+        start "$url"
+        rc=$?
     else
+        rc=1
+    fi
+
+    if [ $rc -ne 0 ]; then
         log_error "Unable to open browser. Please visit $url manually."
         return 1
     fi
@@ -982,9 +989,10 @@ run_open() {
 
     # Use docker port for the final fallback
     if service_url=$(get_url "$1"); then
-        sys_open "$service_url"
-        log_info "Opened $service_url in your default browser."
-        return 0
+        if sys_open "$service_url"; then
+            log_info "Opened $service_url in your default browser."
+            return 0
+        fi
     else
         log_error "Failed to get service URL for '$1'"
         return 1

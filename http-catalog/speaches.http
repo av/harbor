@@ -3,6 +3,13 @@
 ###
 
 GET {{host}}/v1/models
+GET {{host}}/v1/models?task=automatic-speech-recognition
+GET {{host}}/v1/models?task=text-to-speech
+
+
+###
+
+GET {{host}}/v1/registry
 
 ###
 
@@ -11,9 +18,18 @@ Content-Type: application/json
 
 {
   "voice": "af_heart",
+  "model": "speaches-ai/Kokoro-82M-v1.0-ONNX-int8",
   "input": "The quick brown fox jumped over the lazy dog."
 }
 
 ###
 
 GET {{host}}/v1/audio/speech/voices
+
+###
+
+POST {{host}}/v1/models/Systran/faster-distil-whisper-large-v3
+
+###
+
+POST {{host}}/v1/models/Systran/faster-distil-whisper-small.en
