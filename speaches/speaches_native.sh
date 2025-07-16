@@ -236,19 +236,19 @@ if [[ "$HARBOR_SPEACHES_FORCE_SETUP" == "true" ]] || ! command_exists speaches; 
         if [[ -n "$HARBOR_PYTHON_VERSION" ]]; then
             log_info "Creating venv with Python version $HARBOR_PYTHON_VERSION via uv venv..."
             uv venv "$VENV_DIR" --python "python${HARBOR_PYTHON_VERSION}"
+            source "$VENV_DIR/bin/activate"    # Set python_executable variable for use in subsequent commands
+
         else
             log_info "Creating venv with default Python via uv venv..."
             uv venv "$VENV_DIR"
+            source "$VENV_DIR/bin/activate"    # Set python_executable variable for use in subsequent commands
+            # robustly set the python version variable to the default python version in one line
+            HARBOR_PYTHON_VERSION="$(python --version | awk '{print $2}')"
+
         fi
     else
         log_info "Virtual environment already exists."
     fi
-
-    # Source the venv to ensure correct environment for subsequent commands
-    # shellcheck disable=SC1090
-    source "$VENV_DIR/bin/activate"    # Set python_executable variable for use in subsequent commands
-    python_executable="$VENV_DIR/bin/python"
-    log_info "Using Python: $($python_executable --version)"
 
     # local pyproject_file="$REPO_DIR/pyproject.toml"
     # if grep -q 'requires-python = ">=3.12' "$pyproject_file"; then
@@ -258,10 +258,10 @@ if [[ "$HARBOR_SPEACHES_FORCE_SETUP" == "true" ]] || ! command_exists speaches; 
 
     log_info "Syncing and upgrading dependencies via 'uv sync'..."
     # NOTE: You can do uv sync --upgrade to ensure latest packages but can occasionally introduce breaking changes. Removed because stability is preferred.
-    uv sync --all-extras --python "$python_executable" -f "$REPO_DIR/pyproject.toml"
+    uv sync --all-extras
 
     log_info "Installing the 'speaches' command-line tool via 'uv tool install'..."
-    uv tool install . --from "$REPO_DIR" --python "$python_executable"
+    uv tool install .
 
     # Step 5: Pre-download Default Models
     log_info "[Step 5/6] Pre-downloading default models for faster first launch..."
@@ -314,7 +314,7 @@ fi
 #
 # This launches the uvicorn server via the `speaches` tool, and ensures
 # Harbor directly manages the final service process for clean shutdowns.
-log_info "Speaches setup complete. Handing off to command: speaches $@"
+log_info "Speaches setup complete. Handing off to command: $@"
 
 # include the url of the pull request, and up:
 # https://github.com/speaches-ai/speaches/pull/449
