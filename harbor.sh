@@ -18,7 +18,8 @@ show_help() {
     echo "  up|u [handle(s)]        - Start the service(s)"
     echo "    up --tail             - Start and tail the logs"
     echo "    up --open             - Start and open in the browser"
-    echo "    up webui -n ollama    - Start webui, run ollama natively"
+    echo "    up -n                 - Force all eligible services to run natively"
+    echo "    up -c                 - Force all services to run as containers"
     echo "  down|d                  - Stop and remove the containers"
     echo "  restart|r [handle]      - Down then up"
     echo "  ps                      - List the running containers"
@@ -801,7 +802,6 @@ run_routine() {
 # _harbor_compose_operation() -> Core shared implementation
 #   ├── get_available_services() -> Returns: newline-separated service names
 #   ├── build_compose_command() -> Returns: docker compose command string
-#   └── routine_compose_with_options() -> DEPRECATED: Use build_compose_command()
 #
 # USAGE:
 #   get_available_services "*"           # List all services
@@ -936,20 +936,6 @@ build_compose_command() {
 # BACKWARD COMPATIBILITY
 # =============================================================================
 
-# DEPRECATED: Use build_compose_command() instead
-#
-# This function is maintained for backward compatibility with existing Harbor code.
-# New code should use build_compose_command() for clarity and consistency.
-#
-# MIGRATION PATH:
-#   OLD: compose_cmd=$(routine_compose_with_options "webui")
-#   NEW: compose_cmd=$(build_compose_command "webui")
-#
-# This function will be removed in a future Harbor version after all
-# internal usage has been migrated to the new semantic functions.
-routine_compose_with_options() {
-    build_compose_command "$@"
-}
 
 # -----------------------------------------------------------------------------
 # v12.0 CORE: Context-Aware Composition Engine (Planner/Executor Model)
@@ -1400,47 +1386,63 @@ resolve_compose_command() {
 # fast path for container-only stacks and a robust hybrid orchestrator that correctly
 # handles all flags and dependencies. All known regressions have been fixed.
 run_up() {
-    # --- Phase 0: Setup and Argument Parsing ---
-    _ensure_pid_dir
-    local temp_native_env_file=""
-    trap 'rm -f "$temp_native_env_file" 2>/dev/null' EXIT
-
-    local -a up_options=()
-    local -a services_to_run_args=()
-    local -a explicit_exclude_handles=()
+    # Clean, optimized Harbor 'up' command with container-only fast path and hybrid wave support
+    local should_tail=false
+    local should_open=false
+    local filtered_args=()
+    local up_args=()
     local force_native=false
+    local force_container=false
 
-    # This parser correctly separates user-provided flags, services, and exclusions.
-    while [[ $# -gt 0 ]]; do
-        case "$1" in
-            --no-defaults|--open|-o|--tail|-t) up_options+=("$1"); shift ;;
-            -n|--native) force_native=true; shift ;;
-            -x|--exclude)
-                shift
-                while [[ $# -gt 0 && ! "$1" =~ ^- && "$1" != "--" ]]; do
-                    explicit_exclude_handles+=("$1"); shift
-                done
-                if [[ "$1" == "--" ]]; then shift; fi
-                ;;
-            *) services_to_run_args+=("$1"); shift ;;
+    # Parse arguments - keep it simple like main branch
+    for arg in "$@"; do
+        case "$arg" in
+        --no-defaults)
+            up_args+=("$arg")
+            ;;
+        --open | -o)
+            should_open=true
+            ;;
+        --tail | -t)
+            should_tail=true
+            ;;
+        -n|--native)
+            force_native=true
+            ;;
+        -c|--container)
+            force_container=true
+            ;;
+        *)
+            filtered_args+=("$arg") # Add to filtered arguments
+            ;;
         esac
     done
 
-    # --- Step 1: Determine services to start in THIS operation ---
-    if [[ ${#services_to_run_args[@]} -eq 0 ]] && ! [[ " ${up_options[*]} " =~ " --no-defaults " ]]; then
-        services_to_run_args=("${default_options[@]}")
+    # Validate conflicting flags
+    if [[ "$force_native" == "true" && "$force_container" == "true" ]]; then
+        log_error "Cannot use both -n/--native and -c/--container flags together"
+        return 1
     fi
-    if [[ ${#services_to_run_args[@]} -eq 0 ]]; then log_warn "No services specified to start."; return 0; fi
 
-    # --- Step 2: Determine which of the requested services will run natively vs. container ---
+    # Apply defaults if no services specified
+    if [[ ${#filtered_args[@]} -eq 0 ]] && ! [[ " ${up_args[*]} " =~ " --no-defaults " ]]; then
+        filtered_args=("${default_options[@]}")
+    fi
+    if [[ ${#filtered_args[@]} -eq 0 ]]; then 
+        log_warn "No services specified to start."
+        return 0
+    fi
+
+    # Determine which services need native vs container execution
     local -a native_targets_this_run=()
     local -a container_targets_this_run=()
-    for service in "${services_to_run_args[@]}"; do
-        # We must respect an explicit -x flag above all else.
-        if [[ " ${explicit_exclude_handles[*]} " =~ " ${service} " ]]; then
+    for service in "${filtered_args[@]}"; do
+        # Force flags override all preferences
+        if [[ "$force_native" == "true" && $(_harbor_is_native_eligible "$service") == "true" ]]; then
             native_targets_this_run+=("$service")
-        elif [[ "$force_native" == "true" && $(_harbor_is_native_eligible "$service") == "true" ]]; then
-             native_targets_this_run+=("$service")
+        elif [[ "$force_container" == "true" ]]; then
+            container_targets_this_run+=("$service")
+        # Default to configured preference
         elif [[ "$(_harbor_get_configured_execution_preference "$service")" == "NATIVE" ]]; then
             native_targets_this_run+=("$service")
         else
@@ -1448,84 +1450,47 @@ run_up() {
         fi
     done
 
-    # --- Step 3: Start services using dependency-aware waves ---
-    # Replaces broken phase-based startup (natives first, containers second) with
-    # unified dependency resolution that handles interleaved native/container chains
-    local wave_system_used=false
-    if [[ ${#native_targets_this_run[@]} -gt 0 || ${#container_targets_this_run[@]} -gt 0 ]]; then
-        _harbor_start_services_with_dependency_waves "${container_targets_this_run[@]}" || {
-            log_error "Dependency wave startup encountered errors, but continuing with post-run actions"
-        }
-        wave_system_used=true
+    # CONTAINER-ONLY FAST PATH: If no native services, use simple main branch approach
+    if [[ ${#native_targets_this_run[@]} -eq 0 ]]; then
+        log_debug "Running container-only fast path for services: ${up_args[@]} ${container_targets_this_run[@]}"
+        $(compose_with_options "${up_args[@]}" "${container_targets_this_run[@]}") up -d --wait
     else
-        log_info "No services to start."
+        # HYBRID WAVE PATH: Use dependency wave system for mixed scenarios
+        _ensure_pid_dir
+        log_debug "Running hybrid wave path for ${#container_targets_this_run[@]} containers, ${#native_targets_this_run[@]} natives"
+        _harbor_start_services_with_dependency_waves "${container_targets_this_run[@]}" || {
+            log_error "Dependency wave startup failed, but continuing with post-run actions"
+        }
     fi
 
-    # --- Step 4-6: Legacy container startup (only when wave system not used) ---
-    if [[ "$wave_system_used" == "false" ]]; then
-        # --- Step 4: Prepare the dynamic environment for Docker Compose ---
-        # The environment needs to know about ALL native services (already running + just started)
-        # to correctly configure dependencies.
-        local -a all_native_services=()
-        local all_active_services; all_active_services=$(get_active_services)
-        for service in $all_active_services; do
-            if [[ "$(_harbor_get_running_service_runtime "$service")" == "NATIVE" ]]; then
-                all_native_services+=("$service")
-            fi
-        done
-        temp_native_env_file=$(__up_generate_transient_env_file "${all_native_services[@]}")
-
-        # --- Step 5: Build the compose command ONLY for the relevant services ---
-        # THE CORE FIX: The context for composition is the services requested NOW plus any
-        # already-running container services they might depend on. This prevents loading the entire project.
-        local -a composition_context=("${services_to_run_args[@]}")
-        local already_running_containers
-        already_running_containers=$(get_active_services | xargs -n1 | while read s; do if [[ "$(_harbor_get_running_service_runtime "$s")" == "CONTAINER" ]]; then echo "$s"; fi; done)
-        composition_context+=(${already_running_containers})
-        # Ensure uniqueness
-        composition_context=($(printf "%s\n" "${composition_context[@]}" | sort -u))
-
-        local compose_cmd
-        # We pass ALL native services to -x to ensure their containers are never started.
-        compose_cmd=$(compose_with_options -x "${all_native_services[@]}" -- "${composition_context[@]}")
-
-        # CRITICAL FIX: When using --env-file, Docker Compose disables automatic loading of the default .env file.
-        # We must explicitly specify both the main .env file and any transient override file to ensure
-        # a complete environment is available. The order matters for precedence: later files override earlier ones.
-        compose_cmd+=" --env-file .env"
-        if [[ -n "$temp_native_env_file" ]]; then
-            compose_cmd+=" --env-file $temp_native_env_file"
-        fi
-
-        # --- Step 6: Execute the command on the container targets for this run ---
-        if [[ ${#container_targets_this_run[@]} -gt 0 ]]; then
-            log_info "Starting container services: ${container_targets_this_run[*]}"
-            eval "$compose_cmd up -d --wait ${container_targets_this_run[*]}" || {
-                log_error "Failed to start container services. Check docker logs."
-            }
-        else
-            log_info "No new container services to start."
-        fi
+    # Post-run actions (always executed)
+    if [ "$default_autoopen" = "true" ]; then
+        run_open "$default_open"
     fi
 
-    # --- Step 7: Post-run Actions ---
-    log_info "Harbor 'up' command finished successfully."
-
-    local should_open=false; local should_tail=false
-    for arg in "${up_args[@]}"; do
-        case "$arg" in --open|-o) should_open=true;; --tail|-t) should_tail=true;; esac
+    for service in "${default_tunnels[@]}"; do
+        establish_tunnel "$service"
     done
 
     if $should_tail; then
-        if [[ ${#services_to_run_args[@]} -gt 0 ]]; then
-            run_logs "${services_to_run_args[@]}"
-        elif [[ ${#requested_services[@]} -gt 0 ]]; then
-            run_logs "${requested_services[0]}"
+        # Note: run_logs can handle multiple services for docker compose logs
+        # For container services, pass all. Native services won't appear in docker logs.
+        if [[ ${#container_targets_this_run[@]} -gt 0 ]]; then
+            run_logs "${container_targets_this_run[@]}"
+        elif [[ ${#filtered_args[@]} -gt 0 ]]; then
+            # Fallback: if no containers were started, try to tail whatever was requested
+            # This maintains compatibility with main branch behavior
+            run_logs "${filtered_args[@]}"
         fi
     fi
+
     if $should_open; then
-        if [[ ${#services_to_run_args[@]} -gt 0 ]]; then
-            run_open "${services_to_run_args[0]}"
+        # Note: run_open only accepts one service (uses $1 internally)
+        # Prioritize opening the first container service since natives may not have URLs
+        if [[ ${#container_targets_this_run[@]} -gt 0 ]]; then
+            run_open "${container_targets_this_run[0]}"
+        elif [[ ${#filtered_args[@]} -gt 0 ]]; then
+            run_open "${filtered_args[0]}"
         else
             run_open "$default_open"
         fi
@@ -1533,122 +1498,6 @@ run_up() {
 }
 
 
-# [v25.1] Builds the definitive execution plan for a `harbor up` command.
-# This version is enhanced to correctly process the `-n|--native` flag, by comparing
-# the full context against the user's specific request.
-#
-# @param {string} plan_ref - Nameref to the associative array to populate.
-# @param {string} force_native - "true" or "false".
-# @param {array} full_context_services - All services that should exist (running + requested).
-# @param {array} requested_services - Only the services the user asked to start now.
-__up_build_plan() {
-    local -n plan_ref=$1
-    local force_native=$2
-    # The arrays are passed as strings, so we re-create them locally.
-    local -a full_context_services=($3)
-    local -a requested_services=($4)
-
-    local -a native_targets=(); local -a container_targets=()
-    for service in "${full_context_services[@]}"; do
-        # The -n flag is a high-priority override. It applies ONLY to services
-        # in the current request that are native-eligible.
-        if [[ "$force_native" == "true" ]] && [[ " ${requested_services[*]} " =~ " ${service} " ]] && has_native_config "$service"; then
-            native_targets+=("$service")
-        # Otherwise, fall back to the standard, multi-layered preference check.
-        elif [[ "$(_harbor_get_configured_execution_preference "$service")" == "NATIVE" ]]; then
-            native_targets+=("$service")
-        else
-            container_targets+=("$service")
-        fi
-    done
-    plan_ref[native_targets]=$(echo "${native_targets[@]}")
-    plan_ref[container_targets]=$(echo "${container_targets[@]}")
-}
-
-# [v12.0 Helper] Phase 1: Executes the foundational container startup.
-__up_execute_phase1_foundations() {
-    local -n plan_ref=$1
-    local foundations="${plan_ref[foundational_containers]}"
-    if [[ -n "$foundations" ]]; then
-        log_info "Execute Phase 1: Starting foundational container dependencies: $foundations"
-        local compose_cmd; compose_cmd=$(compose_with_options $foundations)
-        eval "$compose_cmd up -d --wait" || { log_error "Failed to start foundational containers."; }
-        log_info "Execute Phase 1: Foundational containers are healthy."
-    else
-        log_debug "Execute Phase 1: No foundational containers to start."
-    fi
-}
-
-# [v12.0 Helper] Phase 2: Executes the native service startup.
-__up_execute_phase2_native() {
-    local -n plan_ref=$1
-    local natives="${plan_ref[native_targets]}"
-    local env_file=""
-    if [[ -n "$natives" ]]; then
-        log_info "Execute Phase 2: Starting native services and preparing environment: $natives"
-        env_file=$(__compose_generate_transient_env_file $natives)
-        for service in $natives; do
-            # Add explicit error handling for consistency with other phases.
-            _harbor_start_native_service "$service" || { log_error "Failed to start native service '${service}'."; }
-        done
-    else
-        log_debug "Execute Phase 2: No native services to start."
-    fi
-    echo "$env_file" # Return path to env file for Phase 3
-}
-
-# [v12.1 Helper] Phase 3: Executes the main service startup.
-# This function is responsible for the final `docker compose up` command.
-# It correctly separates the full service CONTEXT (for file resolution) from
-# the specific EXECUTION targets (for the 'up' command), which is the
-# core of the fix.
-__up_execute_phase3_main() {
-    local -n plan_ref=$1
-    local temp_native_env_file="$2"
-
-    # Step 1: Capture the services and arguments that should be passed to `docker compose up`.
-    # These are traced directly from the user's original `harbor up` command arguments
-    # and passed faithfully from the `run_up` function. This array contains ONLY
-    # the services the user wants to start in *this specific invocation*.
-    local -a services_and_args=("${@:3}")
-
-    # Step 2: Define the full context for building the compose command.
-    # This includes all services currently running and all services requested in this operation
-    # to ensure Docker Compose has a complete dependency graph to work with. This is
-    # essential for `depends_on` to work correctly but MUST NOT be passed to `up`.
-    local all_context_targets="${plan_ref[container_targets]} ${plan_ref[native_targets]}"
-
-    # Step 3: Check if there are any services to actually start now.
-    # This avoids running an empty `docker compose up` command, which would default
-    # to starting all services defined in the merged compose file.
-    local phase3_up_targets_str="${services_and_args[*]}"
-
-    if [[ -n "${phase3_up_targets_str// /}" ]]; then
-        log_debug "Execute Phase 3: Bringing up main services: $phase3_up_targets_str"
-
-        # Step 4: Build the compose command using the FULL context. This ensures that
-        # `compose_with_options` can see all relevant services (e.g., `webui` and `ollama`)
-        # and include the necessary cross-service integration files (e.g., `compose.x.webui.ollama.yml`).
-        local compose_cmd; compose_cmd=$(compose_with_options $all_context_targets)
-
-        # CRITICAL FIX: When using --env-file, Docker Compose disables automatic loading of the default .env file.
-        # We must explicitly specify both the main .env file and any transient override file to ensure
-        # a complete environment is available. The order matters for precedence: later files override earlier ones.
-        compose_cmd+=" --env-file .env"
-        if [[ -n "$temp_native_env_file" ]]; then
-            compose_cmd+=" --env-file $temp_native_env_file"
-        fi
-
-        # Step 5: Execute the `up` command, passing ONLY the specifically requested services.
-        # This is the definitive fix. By passing `${services_and_args[*]}`, we instruct
-        # Docker Compose to only start the services the user asked for (e.g., just `ollama`),
-        # while still having the full context of other services for networking and dependencies.
-        eval "$compose_cmd up -d --wait ${services_and_args[*]}" || { log_error "Failed to start main services. Check docker logs."; }
-        log_info "Execute Phase 3: Main services are running."
-    else
-        log_debug "Execute Phase 3: No new services to start in this operation."
-    fi
-}
 
 # [v14.0 HELPER] Expands a list of service handles to include their sub-services.
 # A sub-service is defined by the convention `<handle>-<suffix>`.
@@ -2750,12 +2599,26 @@ _harbor_start_services_with_dependency_waves() {
     # Compute optimal startup waves using Harbor's startupOrder.js routine
     # Output format: STATUS=SUCCESS, WAVE_COUNT=3, WAVE_1_CONTAINERS="api", WAVE_1_NATIVES="ollama", etc.
     local waves_output
-    waves_output=$(run_routine startupOrder --container "${container_services[@]}" --native "${native_targets_this_run[@]}" 2>/dev/null)
+    local wave_stderr_file=$(mktemp)
+    waves_output=$(run_routine startupOrder --container "${container_services[@]}" --native "${native_targets_this_run[@]}" 2>"$wave_stderr_file")
+    local wave_exit_code=$?
+    local wave_error=$(cat "$wave_stderr_file")
+    rm -f "$wave_stderr_file"
     
-    if [[ $? -ne 0 || -z "$waves_output" ]]; then
-        log_warn "Dependency wave computation failed, falling back to phase-based startup"
-        _harbor_fallback_phase_based_startup "${container_services[@]}"
-        return $?
+    if [[ $wave_exit_code -ne 0 || -z "$waves_output" ]]; then
+        log_error "Dependency wave computation failed"
+        if [[ "$wave_error" =~ "Circular dependency detected" ]]; then
+            log_error "CIRCULAR DEPENDENCY DETECTED:"
+            echo "$wave_error" | grep -A 10 "Circular dependency" >&2
+            log_error ""
+            log_error "To fix: Remove circular dependencies between services"
+        elif ! command -v deno &>/dev/null; then
+            log_error "Deno is not installed or not in PATH"
+            log_error "To fix: Install Deno from https://deno.land"
+        else
+            log_error "Error details: $wave_error"
+        fi
+        return 1
     fi
     
     # Parse wave computation results (Harbor's standard bash variable pattern)
@@ -2771,10 +2634,11 @@ _harbor_start_services_with_dependency_waves() {
     
     # Validate wave computation results
     if [[ "$STATUS" != "SUCCESS" || -z "$WAVE_COUNT" || "$WAVE_COUNT" == "0" ]]; then
-        log_warn "Invalid dependency wave output (STATUS=$STATUS, WAVE_COUNT=$WAVE_COUNT)"
-        log_warn "Falling back to phase-based startup for compatibility"
-        _harbor_fallback_phase_based_startup "${container_services[@]}"
-        return $?
+        log_error "Invalid dependency wave output (STATUS=$STATUS, WAVE_COUNT=$WAVE_COUNT)"
+        if [[ "$ERROR_MESSAGE" ]]; then
+            log_error "Details: $ERROR_MESSAGE"
+        fi
+        return 1
     fi
     
     log_info "Executing $WAVE_COUNT dependency waves with type-aware parallel execution..."
@@ -2802,7 +2666,7 @@ _harbor_start_services_with_dependency_waves() {
         }
     done
     
-    log_success "All $WAVE_COUNT dependency waves completed successfully"
+    log_info "All $WAVE_COUNT dependency waves completed successfully"
     return 0
 }
 
@@ -2880,7 +2744,7 @@ _harbor_execute_wave_with_types() {
     
     # Report wave completion status
     if [[ $failed_services -eq 0 ]]; then
-        log_success "Wave $wave_num: all $total_wave_services services started successfully"
+        log_info "Wave $wave_num: all $total_wave_services services started successfully"
         return 0
     else
         log_error "Wave $wave_num: $failed_services/$total_wave_services services failed to start"
@@ -3086,130 +2950,7 @@ _harbor_wait_for_native_service_ready() {
     return 0  # Don't fail startup - allow graceful degradation
 }
 
-# FALLBACK SYSTEM: Phase-based startup for compatibility when dependency waves fail
-#
-# PURPOSE: Graceful degradation when dependency wave computation fails
-#          Provides compatibility with existing Harbor installations
-#          Maintains service startup capability even with dependency resolution issues
-#
-# LIMITATIONS:
-#   - Only handles simple dependency patterns (natives first, containers second)
-#   - Breaks for interleaved native→container→native dependency chains
-#   - No parallel execution optimization within service types
-#   - Limited to native-to-native and container-to-container dependencies
-#
-# WHEN USED:
-#   - startupOrder.js routine fails or times out
-#   - Circular dependencies detected but user wants to continue anyway
-#   - Invalid dependency wave output format
-#   - Emergency fallback for production stability
-#
-# PARAMETERS:
-#   $@ - Array of container services to start
-#   Uses global: native_targets_this_run[] - Array of native services to start
-_harbor_fallback_phase_based_startup() {
-    local container_services=("$@")
-    
-    log_warn "FALLBACK: Using legacy phase-based startup"
-    log_warn "  This approach may fail for complex interleaved dependencies"
-    log_warn "  Consider fixing dependency issues for optimal startup reliability"
-    
-    # Phase 1: Start all native services (with basic dependency ordering)
-    if [[ ${#native_targets_this_run[@]} -gt 0 ]]; then
-        log_info "Phase 1: Starting ${#native_targets_this_run[@]} native services"
-        _harbor_start_native_services_with_dependencies "${native_targets_this_run[@]}" || {
-            log_error "Native services failed to start in fallback mode"
-            return 1
-        }
-    fi
-    
-    # Phase 2: Start all container services (assumes natives are ready)
-    if [[ ${#container_services[@]} -gt 0 ]]; then
-        log_info "Phase 2: Starting ${#container_services[@]} container services"
-        _harbor_start_wave_containers "${container_services[@]}" || {
-            log_error "Container services failed to start in fallback mode"  
-            return 1
-        }
-    fi
-    
-    log_success "Fallback startup completed (functionality may be limited)"
-    return 0
-}
 
-# LEGACY COMPATIBILITY: Deprecated native service dependency resolver
-#
-# STATUS: DEPRECATED - Use _harbor_start_services_with_dependency_waves() instead
-# REASON: Only handles native-to-native dependencies, breaks for interleaved chains
-# KEPT: For fallback compatibility until full migration verified
-#
-# LIMITATIONS:
-#   - Cannot handle native→container→native dependency chains
-#   - Limited dependency resolution (only native-to-native)
-#   - No parallel execution optimization
-#   - Prone to deadlocks with complex dependency graphs
-#
-# MIGRATION PATH:
-#   - Update callers to use _harbor_start_services_with_dependency_waves()
-#   - Test dependency wave system with production workloads
-#   - Remove this function after migration verification complete
-_harbor_start_native_services_with_dependencies() {
-    local services=("$@")
-    
-    log_warn "DEPRECATED: Using legacy native dependency resolver"
-    log_warn "  This function cannot handle interleaved native/container dependencies"
-    log_warn "  Migrate to _harbor_start_services_with_dependency_waves() for full functionality"
-    
-    # Simple native-only dependency resolution (limited capability)
-    local ready_services=()
-    local pending_services=("${services[@]}")
-    
-    while [[ ${#pending_services[@]} -gt 0 ]]; do
-        local started_this_wave=false
-        local remaining_services=()
-        
-        for service in "${pending_services[@]}"; do
-            local can_start=true
-            
-            # Check native-to-native dependencies only (limited scope)
-            local native_config_file="${service}/${service}_native.yml"
-            if [[ -f "$native_config_file" ]]; then
-                local deps_output; deps_output=$(run_routine loadNativeConfig "$native_config_file" "$service" 2>/dev/null)
-                if [[ $? -eq 0 && -n "$deps_output" ]]; then
-                    local native_depends_on_containers
-                    eval "$deps_output"
-                    
-                    for dep in "${NATIVE_DEPENDS_ON_CONTAINERS[@]}"; do
-                        if [[ ! " ${ready_services[*]} " =~ " ${dep} " ]]; then
-                            can_start=false
-                            break
-                        fi
-                    done
-                fi
-            fi
-            
-            if [[ "$can_start" == "true" ]]; then
-                _harbor_start_native_service "$service"
-                _harbor_wait_for_native_service_ready "$service"
-                ready_services+=("$service")
-                started_this_wave=true
-            else
-                remaining_services+=("$service")
-            fi
-        done
-        
-        pending_services=("${remaining_services[@]}")
-        
-        # Deadlock prevention: start remaining services if no progress
-        if [[ "$started_this_wave" == "false" && ${#pending_services[@]} -gt 0 ]]; then
-            log_warn "Breaking potential dependency deadlock - starting remaining services"
-            for service in "${pending_services[@]}"; do
-                _harbor_start_native_service "$service"
-                _harbor_wait_for_native_service_ready "$service"
-            done
-            break
-        fi
-    done
-}
 
 # prepares the environment, and starts the background process. It does not wait
 # for the service to become healthy; that is the responsibility of the caller.
