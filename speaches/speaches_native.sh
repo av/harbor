@@ -192,8 +192,8 @@ mkdir -p "$HARBOR_SPEACHES_WORKSPACE"
 # NOTE: the local speaches the user already installed will be run if the speaches command exists,
 # it will skip the full setup to just run the command at the bottom
 
-# if harbor speaches force setup is set or the command speaches does not exist, we will always run the full setup.
-if [[ "$HARBOR_SPEACHES_FORCE_SETUP" == "true" ]] || ! command_exists speaches; then
+# if harbor speaches force setup is set, command speaches does not exist, or we need a project environment, we will always run the full setup.
+if [[ "$HARBOR_SPEACHES_FORCE_SETUP" == "true" ]] || ! command_exists speaches || [[ ! -d "$REPO_DIR" ]] || [[ ! -f "$REPO_DIR/pyproject.toml" ]]; then
 
 # # If the state file exists, we can skip the lengthy setup process.
 # if [[ -f "$STATE_FILE" ]]; then
@@ -260,24 +260,23 @@ if [[ "$HARBOR_SPEACHES_FORCE_SETUP" == "true" ]] || ! command_exists speaches; 
     # NOTE: You can do uv sync --upgrade to ensure latest packages but can occasionally introduce breaking changes. Removed because stability is preferred.
     uv sync --all-extras
 
-    log_info "Installing the 'speaches' command-line tool via 'uv tool install'..."
-    uv tool install .
+    log_info "Speaches dependencies installed. Will use 'uv run speaches' for execution."
 
     # Step 5: Pre-download Default Models
     log_info "[Step 5/6] Pre-downloading default models for faster first launch..."
     # This check is now more robust. It uses the tool itself to list available
     # models and greps the output, rather than relying on cache directory structure.
-    if "$VENV_DIR/bin/speaches" model list | grep -q "$SPEACHES_STT_MODEL"; then
+    if uv run speaches model ls | grep -q "$SPEACHES_STT_MODEL"; then
         log_info "STT model '$SPEACHES_STT_MODEL' already available."
     else
         log_info "Downloading STT model: '$SPEACHES_STT_MODEL'..."
-        "$VENV_DIR/bin/speaches" model download "$SPEACHES_STT_MODEL"
+        uv run speaches model download "$SPEACHES_STT_MODEL"
     fi
-    if "$VENV_DIR/bin/speaches" model list | grep -q "$SPEACHES_TTS_MODEL"; then
+    if uv run speaches model ls | grep -q "$SPEACHES_TTS_MODEL"; then
         log_info "TTS model '$SPEACHES_TTS_MODEL' already available."
     else
         log_info "Downloading TTS model: '$SPEACHES_TTS_MODEL'..."
-        "$VENV_DIR/bin/speaches" model download "$SPEACHES_TTS_MODEL"
+        uv run speaches model download "$SPEACHES_TTS_MODEL"
     fi
 
     # Step 6: Create the state file to enable the fast path for next time.
@@ -338,14 +337,15 @@ log_info "Speaches setup complete. Handing off to command: $@"
 # # run the speaches server then open http://localhost:8000 in your web browser to try speaches
 # speaches serve --host 0.0.0.0 --port 8000
 
-if [[ -f "$VENV_DIR/bin/activate" ]]; then
-    log_info "Activating virtual environment: $VENV_DIR"
-    cd "$HARBOR_SPEACHES_WORKSPACE"
-    # shellcheck disable=SC1091
-    source "$VENV_DIR/bin/activate"
+# Execute speaches using project environment if available, otherwise system environment
+if [[ -d "$REPO_DIR" ]] && [[ -f "$REPO_DIR/pyproject.toml" ]]; then
+    log_info "Using project environment from $REPO_DIR"
+    cd "$REPO_DIR"
+    exec uv run "$@"
+else
+    log_info "No project found, using system environment with uv run --no-project"
+    exec uv run --no-project "$@"
 fi
-
- exec "$@"
 
 
 # https://aistudio.google.com/app/prompts?state=%7B%22ids%22:%5B%221SrK-h2XlgJj0jOyMKSlWKOH8_k6Ikucp%22%5D,%22action%22:%22open%22,%22userId%22:%22113401184214553951890%22,%22resourceKeys%22:%7B%7D%7D&usp=sharing
