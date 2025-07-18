@@ -127,6 +127,18 @@ cleanup_services() {
 # Trap cleanup on exit
 trap cleanup_services EXIT
 
+# Get actual service port from Harbor
+get_service_port() {
+    local service="$1"
+    local url
+    url=$("$HARBOR_ROOT/harbor.sh" url "$service" 2>/dev/null || echo "")
+    if [[ -n "$url" ]]; then
+        echo "$url" | sed 's|.*://[^:]*:\([0-9]*\).*|\1|'
+    else
+        echo ""
+    fi
+}
+
 # Wait for service to be ready
 wait_for_service() {
     local service="$1"
@@ -253,9 +265,11 @@ test_mixed_orchestration() {
         local webui_ready=false
         local speaches_ready=false
         
-        if wait_for_service "webui" "8080" 30; then
+        local webui_port
+        webui_port=$(get_service_port "webui")
+        if [[ -n "$webui_port" ]] && wait_for_service "webui" "$webui_port" 30; then
             webui_ready=true
-            test_result "WebUI readiness" true "webui responding on port 8080"
+            test_result "WebUI readiness" true "webui responding on port $webui_port"
         else
             test_result "WebUI readiness" false "webui not ready" "Check webui startup"
         fi
@@ -303,9 +317,11 @@ test_dependency_resolution() {
         fi
         
         # WebUI (depends on ollama)
-        if wait_for_service "webui" "8080" 30; then
+        local webui_port
+        webui_port=$(get_service_port "webui")
+        if [[ -n "$webui_port" ]] && wait_for_service "webui" "$webui_port" 30; then
             webui_ready=true
-            test_result "WebUI readiness" true "webui responding on port 8080"
+            test_result "WebUI readiness" true "webui responding on port $webui_port"
         else
             test_result "WebUI readiness" false "webui not ready" "Check webui startup"
         fi
@@ -341,13 +357,16 @@ test_cross_service_communication() {
         test_result "Communication test setup" true "webui + speaches started for communication test"
         
         # Wait for both services
-        if wait_for_service "webui" "8080" 30 && wait_for_service "speaches" "34331" 30; then
+        local webui_port speaches_port
+        webui_port=$(get_service_port "webui")
+        speaches_port=$(get_service_port "speaches")
+        if [[ -n "$webui_port" ]] && [[ -n "$speaches_port" ]] && wait_for_service "webui" "$webui_port" 30 && wait_for_service "speaches" "$speaches_port" 30; then
             test_result "Communication services ready" true "Both services responding"
             
             # Test if webui can reach speaches
             # This is a simplified test - in practice, we'd check if webui can discover speaches
-            if check_api_endpoint "webui" "http://localhost:8080/health" && \
-               check_api_endpoint "speaches" "http://localhost:34331/v1/models"; then
+            if check_api_endpoint "webui" "http://localhost:$webui_port/health" && \
+               check_api_endpoint "speaches" "http://localhost:$speaches_port/v1/models"; then
                 test_result "Service APIs accessible" true "Both service APIs responding"
                 
                 # Test if services can communicate (proxy container functionality)
@@ -464,7 +483,9 @@ test_default_services_integration() {
         
         # Wait for default services (typically webui and ollama)
         local default_ready=true
-        if ! wait_for_service "webui" "8080" 30; then
+        local webui_port
+        webui_port=$(get_service_port "webui")
+        if [[ -z "$webui_port" ]] || ! wait_for_service "webui" "$webui_port" 30; then
             default_ready=false
         fi
         if ! wait_for_service "ollama" "11434" 30; then
@@ -553,6 +574,11 @@ run_all_integration_tests() {
     echo
     log_info "Running comprehensive integration tests..."
     log_warning "Note: These tests start actual Harbor services"
+    
+    # Clean up any existing services first to ensure clean test environment
+    log_info "Stopping any existing Harbor services for clean test environment..."
+    harbor_down >/dev/null 2>&1 || true
+    
     echo
     
     # Run all test functions
