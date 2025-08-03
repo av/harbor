@@ -14,7 +14,7 @@ services:
     entrypoint: ["/app/start_webui.sh"]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
-      interval: 1s
+      interval: 2s
       timeout: 10s
       retries: 10
       start_period: 2s
