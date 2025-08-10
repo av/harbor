@@ -26,6 +26,13 @@ const targets: ValueSeed[] = [{
     },
   },
 }, {
+  target: 'boost/pyproject.toml',
+  value: {
+    project: {
+      version: VERSION,
+    }
+  }
+}, {
   target: 'package.json',
   value: {
     version: VERSION,
