@@ -2143,7 +2143,11 @@ get_ip() {
 }
 
 extract_tunnel_url() {
-    grep -oP '(?<=\|  )https://[^[:space:]]+\.trycloudflare\.com(?=\s+\|)' | head -n1
+    if [[ "$(uname)" == "Darwin" ]]; then
+        grep -oE 'https://[^[:space:]]+\.trycloudflare\.com' | head -n1
+    else
+        grep -oP '(?<=\|  )https://[^[:space:]]+\.trycloudflare\.com(?=\s+\|)' | head -n1
+    fi
 }
 
 establish_tunnel() {
