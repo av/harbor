@@ -414,3 +414,4 @@ In the demo, Harbor App is used to launch a default stack with [Ollama](./2.2.1-
 ![@av's wife](https://ui-avatars.com/api/?size=32&name=KN&rounded=true&background=ffaaaa&color=ff4444)
 ![@burnth3heretic](https://ui-avatars.com/api/?size=32&name=BTH&rounded=true)
 ![@vood](https://ui-avatars.com/api/?size=32&name=VD&rounded=true)
+![@anonymous](https://ui-avatars.com/api/?size=32&name=🥷&rounded=true&background=bada55)
