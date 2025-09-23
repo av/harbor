@@ -1100,8 +1100,16 @@ reset_env_file() {
 }
 
 merge_env_files() {
-    local default_file=$default_profile
-    local target_file=".env"
+    local default_file=$1
+    local target_file=$2
+
+    if [ -z "$source_file" ]; then
+        default_file=$default_profile
+    fi
+
+    if [ -z "$target_file" ]; then
+        target_file=".env"
+    fi
 
     # Check if both files exist
     if [[ ! -f "$target_file" ]]; then
@@ -1854,6 +1862,10 @@ run_profile_command() {
         shift
         harbor_profile_list
         ;;
+    merge | m)
+        shift
+        harbor_profile_merge "$@"
+        ;;
     --help | -h)
         echo "Harbor profile management"
         echo "Usage: $0 profile"
@@ -1863,6 +1875,7 @@ run_profile_command() {
         echo "  set|use|load <profile_name>  - Set current profile"
         echo "  remove|rm <profile_name> - Remove a profile"
         echo "  list|ls                  - List all profiles"
+        echo "  merge|m <profile_name>   - Merge a profile into the current configuration"
         return 0
         ;;
     *)
@@ -1914,6 +1927,29 @@ harbor_profile_set() {
     fi
 
     cp "$profile_file" .env
+    log_info "Profile '$profile_name' loaded."
+}
+
+harbor_profile_merge() {
+    local profile_name=$1
+    local profile_file="$profiles_dir/$profile_name.env"
+
+    if [ -z "$profile_name" ]; then
+        log_error "Please provide a profile name."
+        return 1
+    fi
+
+    if [ ! -f "$profile_file" ]; then
+        log_error "Profile '$profile_name' not found."
+        return 1
+    fi
+
+    local tmp_env_merge=$(mktemp)
+    cp "$profile_file" "$tmp_env_merge"
+    merge_env_files "$default_current_env" "$tmp_env_merge"
+    merge_env_files "$default_env" "$tmp_env_merge"
+
+    cp "$tmp_env_merge" "$default_current_env"
     log_info "Profile '$profile_name' loaded."
 }
 

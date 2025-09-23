@@ -4,9 +4,7 @@ services:
     env_file:
       - ./.env
       - ./fabric/override.env
-    build:
-      context: ./fabric
-      dockerfile: Dockerfile
+    image: ${HARBOR_FABRIC_IMAGE}:${HARBOR_FABRIC_VERSION}
     volumes:
       - ${HARBOR_FABRIC_CONFIG_PATH}:/root/.config/fabric
     networks:
