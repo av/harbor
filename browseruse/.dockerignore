@@ -1,0 +1,8 @@
+# Ignore everything by default
+*
+
+# But include the Dockerfile and specific files needed
+!Dockerfile
+!*.py
+!pyproject.toml
+!uv.lock

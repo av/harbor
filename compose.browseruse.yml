@@ -1,0 +1,72 @@
+services:
+  browseruse:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.browseruse
+    build:
+      context: ${HARBOR_BROWSERUSE_GIT_REF}
+      dockerfile: Dockerfile
+    env_file:
+      - ./.env
+      - ./browseruse/override.env
+    networks:
+      - harbor-network
+    ports:
+      - "${HARBOR_BROWSERUSE_HOST_PORT}:7788"
+      - "${HARBOR_BROWSERUSE_VNC_PORT}:6080"
+      - "${HARBOR_BROWSERUSE_VNC_DISPLAY_PORT}:5901"
+      - "${HARBOR_BROWSERUSE_DEBUG_PORT}:9222"
+    environment:
+      # LLM API Keys & Endpoints from Harbor's .env
+      - OPENAI_ENDPOINT=${OPENAI_ENDPOINT:-https://api.openai.com/v1}
+      - OPENAI_API_KEY=${HARBOR_OPENAI_KEY:-}
+      - ANTHROPIC_ENDPOINT=${ANTHROPIC_ENDPOINT:-https://api.anthropic.com}
+      - ANTHROPIC_API_KEY=${HARBOR_ANTHROPIC_KEY:-}
+      - GOOGLE_API_KEY=${HARBOR_GOOGLE_KEY:-}
+      - AZURE_OPENAI_API_KEY=${HARBOR_AZURE_OPENAI_API_KEY:-}
+      - DEEPSEEK_ENDPOINT=${DEEPSEEK_ENDPOINT:-https://api.deepseek.com}
+      - DEEPSEEK_API_KEY=${HARBOR_DEEPSEEK_API_KEY:-}
+      - MISTRAL_ENDPOINT=${MISTRAL_ENDPOINT:-https://api.mistral.ai/v1}
+      - MISTRAL_API_KEY=${HARBOR_MISTRAL_KEY:-}
+      - ALIBABA_ENDPOINT=${ALIBABA_ENDPOINT:-https://dashscope.aliyuncs.com/compatible-mode/v1}
+      - ALIBABA_API_KEY=${HARBOR_ALIBABA_API_KEY:-}
+      - MOONSHOT_ENDPOINT=${MOONSHOT_ENDPOINT:-https://api.moonshot.cn/v1}
+      - MOONSHOT_API_KEY=${HARBOR_MOONSHOT_API_KEY:-}
+      - UNBOUND_ENDPOINT=${UNBOUND_ENDPOINT:-https://api.getunbound.ai}
+      - UNBOUND_API_KEY=${HARBOR_UNBOUND_API_KEY:-}
+      - SiliconFLOW_ENDPOINT=${SiliconFLOW_ENDPOINT:-https://api.siliconflow.cn/v1/}
+      - SiliconFLOW_API_KEY=${HARBOR_SILICONFLOW_API_KEY:-}
+      - IBM_ENDPOINT=${IBM_ENDPOINT:-https://us-south.ml.cloud.ibm.com}
+      - IBM_API_KEY=${HARBOR_IBM_API_KEY:-}
+      - IBM_PROJECT_ID=${HARBOR_IBM_PROJECT_ID:-}
+      # Application Settings
+      - ANONYMIZED_TELEMETRY=${HARBOR_BROWSERUSE_ANONYMIZED_TELEMETRY:-false}
+      - BROWSER_USE_LOGGING_LEVEL=${HARBOR_BROWSERUSE_LOGGING_LEVEL:-info}
+      # Browser Settings
+      - BROWSER_PATH=${HARBOR_BROWSERUSE_BROWSER_PATH:-}
+      - BROWSER_USER_DATA=${HARBOR_BROWSERUSE_BROWSER_USER_DATA:-}
+      - BROWSER_DEBUGGING_PORT=${HARBOR_BROWSERUSE_BROWSER_DEBUG_PORT:-9222}
+      - BROWSER_DEBUGGING_HOST=localhost
+      - USE_OWN_BROWSER=${HARBOR_BROWSERUSE_USE_OWN_BROWSER:-false}
+      - KEEP_BROWSER_OPEN=${HARBOR_BROWSERUSE_KEEP_BROWSER_OPEN:-true}
+      - BROWSER_CDP=${HARBOR_BROWSERUSE_BROWSER_CDP:-}
+      # Display Settings
+      - DISPLAY=:99
+      - PLAYWRIGHT_BROWSERS_PATH=/ms-browsers
+      - RESOLUTION=${HARBOR_BROWSERUSE_RESOLUTION:-1920x1080x24}
+      - RESOLUTION_WIDTH=${HARBOR_BROWSERUSE_RESOLUTION_WIDTH:-1920}
+      - RESOLUTION_HEIGHT=${HARBOR_BROWSERUSE_RESOLUTION_HEIGHT:-1080}
+      # VNC Settings
+      - VNC_PASSWORD=${HARBOR_BROWSERUSE_VNC_PASSWORD:-youvncpassword}
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix
+      - ./browseruse/data:/app/data/chrome_data
+    restart: unless-stopped
+    shm_size: "2gb"
+    cap_add:
+      - SYS_ADMIN
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "5901"]
+      interval: 10s
+      timeout: 5s
+      retries: 3

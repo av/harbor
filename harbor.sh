@@ -18,6 +18,8 @@ show_help() {
     echo "  up|u [handle(s)]        - Start the service(s)"
     echo "    up --tail             - Start and tail the logs"
     echo "    up --open             - Start and open in the browser"
+    echo "    up --no-defaults      - Do not include default services"
+
     echo "  down|d                  - Stop and remove the containers"
     echo "  restart|r [handle]      - Down then up"
     echo "  ps                      - List the running containers"
@@ -545,6 +547,7 @@ resolve_compose_command() {
 run_up() {
     local should_tail=false
     local should_open=false
+    local should_attach=false
     local filtered_args=()
     local up_args=()
 
@@ -558,6 +561,9 @@ run_up() {
             ;;
         --tail | -t)
             should_tail=true
+            ;;
+        --attach | -a)
+            should_attach=true
             ;;
         *)
             filtered_args+=("$arg") # Add to filtered arguments
@@ -575,6 +581,11 @@ run_up() {
     for service in "${default_tunnels[@]}"; do
         establish_tunnel "$service"
     done
+
+    if $should_attach; then
+        run_attach "$filtered_args"
+        return
+    fi
 
     if $should_tail; then
         run_logs "$filtered_args"
@@ -695,6 +706,25 @@ run_run() {
 
 run_stats() {
     $(compose_with_options "*") stats
+}
+
+run_attach() {
+  local service_name=$1
+
+  if [ -z "$service_name" ]; then
+      log_error "Usage: harbor attach <service>"
+      return 1
+  fi
+
+  local container_name=$(get_container_name "$service_name")
+
+  if docker ps --filter "name=$container_name" | grep -q "$container_name"; then
+        log_info "Attaching to container $container_name..."
+        docker attach "$container_name"
+    else
+        log_error "Container $container_name is not running."
+        return 1
+  fi
 }
 
 run_hf_open() {
@@ -1912,6 +1942,114 @@ harbor_profile_list() {
     done
 }
 
+# Helper function to check if a string is a URL
+is_url() {
+    local input="$1"
+    if [[ "$input" =~ ^https?:// ]]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+# Helper function to convert URLs to raw content URLs for common services
+resolve_raw_url() {
+    local url="$1"
+
+    # GitHub blob URLs -> raw.githubusercontent.com
+    if [[ "$url" =~ github\.com/([^/]+)/([^/]+)/blob/([^/]+)/(.+) ]]; then
+        local user="${BASH_REMATCH[1]}"
+        local repo="${BASH_REMATCH[2]}"
+        local branch="${BASH_REMATCH[3]}"
+        local path="${BASH_REMATCH[4]}"
+        echo "https://raw.githubusercontent.com/${user}/${repo}/${branch}/${path}"
+        return 0
+    fi
+
+    # GitHub gist URLs
+    if [[ "$url" =~ gist\.github\.com/([^/]+)/([^/#]+) ]]; then
+        local user="${BASH_REMATCH[1]}"
+        local gist_id="${BASH_REMATCH[2]}"
+        echo "https://gist.githubusercontent.com/${user}/${gist_id}/raw"
+        return 0
+    fi
+
+    # GitLab blob URLs -> raw
+    if [[ "$url" =~ gitlab\.com/([^/]+)/([^/]+)/(-/)?blob/([^/]+)/(.+) ]]; then
+        local user="${BASH_REMATCH[1]}"
+        local repo="${BASH_REMATCH[2]}"
+        local branch="${BASH_REMATCH[4]}"
+        local path="${BASH_REMATCH[5]}"
+        echo "https://gitlab.com/${user}/${repo}/-/raw/${branch}/${path}"
+        return 0
+    fi
+
+    # Pastebin URLs -> raw
+    if [[ "$url" =~ pastebin\.com/([^/]+)$ ]] && [[ ! "$url" =~ pastebin\.com/raw/ ]]; then
+        local paste_id="${BASH_REMATCH[1]}"
+        echo "https://pastebin.com/raw/${paste_id}"
+        return 0
+    fi
+
+    # Bitbucket URLs -> raw
+    if [[ "$url" =~ bitbucket\.org/([^/]+)/([^/]+)/src/([^/]+)/(.+) ]]; then
+        local user="${BASH_REMATCH[1]}"
+        local repo="${BASH_REMATCH[2]}"
+        local branch="${BASH_REMATCH[3]}"
+        local path="${BASH_REMATCH[4]}"
+        echo "https://bitbucket.org/${user}/${repo}/raw/${branch}/${path}"
+        return 0
+    fi
+
+    # If no transformation needed, return original URL
+    echo "$url"
+    return 0
+}
+
+# Helper function to download a profile from URL
+download_profile() {
+    local url="$1"
+    local profile_name="$2"
+    local profile_file="$profiles_dir/${profile_name}.env"
+
+    log_info "Downloading profile from: $url"
+
+    # Resolve to raw content URL if needed
+    local raw_url
+    raw_url=$(resolve_raw_url "$url")
+
+    if [ "$raw_url" != "$url" ]; then
+        log_info "Resolved to raw URL: $raw_url"
+    fi
+
+    # Create profiles directory if it doesn't exist
+    mkdir -p "$profiles_dir"
+
+    # Download the file
+    if curl -sL "$raw_url" -o "$profile_file"; then
+        # Check if downloaded file is empty or contains error content
+        if [ ! -s "$profile_file" ]; then
+            log_error "Downloaded profile is empty"
+            rm -f "$profile_file"
+            return 1
+        fi
+
+        # Basic validation - check if it looks like an env file
+        if ! grep -q "=" "$profile_file" && ! grep -q "^#" "$profile_file"; then
+            log_error "Downloaded content does not appear to be a valid profile file"
+            rm -f "$profile_file"
+            return 1
+        fi
+
+        log_info "Successfully downloaded profile as: $profile_name"
+        return 0
+    else
+        log_error "Failed to download profile from: $raw_url"
+        rm -f "$profile_file"
+        return 1
+    fi
+}
+
 harbor_profile_set() {
     local profile_name=$1
     local profile_file="$profiles_dir/$profile_name.env"
@@ -1921,9 +2059,42 @@ harbor_profile_set() {
         return 1
     fi
 
+    # Check if profile_name is a URL
+    if is_url "$profile_name"; then
+        # Generate a profile name from the URL
+        local url_profile_name
+        url_profile_name=$(basename "$profile_name" .env)
+        # If basename doesn't give a meaningful name, create one from timestamp
+        if [[ "$url_profile_name" == "$profile_name" ]] || [[ "$url_profile_name" == "" ]]; then
+            url_profile_name="url_profile_$(date +%s)"
+        fi
+
+        # Download the profile
+        if ! download_profile "$profile_name" "$url_profile_name"; then
+            return 1
+        fi
+
+        # Update variables to use the downloaded profile
+        profile_name="$url_profile_name"
+        profile_file="$profiles_dir/$profile_name.env"
+    fi
+
     if [ ! -f "$profile_file" ]; then
         log_error "Profile '$profile_name' not found."
         return 1
+    fi
+
+    # Check if profile file is shorter than .env file
+    if [ -f ".env" ]; then
+        local profile_size
+        local env_size
+        profile_size=$(wc -c < "$profile_file" 2>/dev/null || echo 0)
+        env_size=$(wc -c < ".env" 2>/dev/null || echo 0)
+
+        if [ "$profile_size" -lt "$env_size" ]; then
+            harbor_profile_merge "$profile_name"
+            return $?
+        fi
     fi
 
     cp "$profile_file" .env
@@ -4383,6 +4554,10 @@ main_entrypoint() {
     stats)
         shift
         run_stats "$@"
+        ;;
+    attach)
+        shift
+        run_attach "$@"
         ;;
     cmd)
         shift

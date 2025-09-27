@@ -112,15 +112,21 @@ HARBOR_${HANDLE}_VERSION="latest"
 ```
 
 **Port allocation:**
+- Read the `default.env` file from the end to see the place to add new service variables and last used port
 - Check existing ports in `profiles/default.env`
 - Use next available port in 33000-34000 range
 - Increment by 10s for services needing multiple ports
+
+**Consistency**
+- All environment variables referenced in the `compose.${handle}.yml` must be defined in the `profiles/default.env`
+- All variables must use the `HARBOR_${HANDLE}_*` pattern in the profile, but not necessarily in the compose file
 
 ### Step 5: Add Service Metadata
 
 **File:** `app/src/serviceMetadata.ts`
 
 **Add entry:**
+Add new entry at the end of the `serviceMetadata` object.
 ```typescript
 ${handle}: {
     name: '${Service Display Name}',
@@ -132,8 +138,11 @@ ${handle}: {
 
 **Category mapping:**
 - Backend services: HST.backend, category_num = 2
+  - Backends are used for inference services for LLMs and other models (TTS/STT, etc.)
 - Frontend services: HST.frontend, category_num = 1
+  - Frontends are Web UIs for interacting with LLMs
 - Satellite services: HST.satellite, category_num = 3
+  - Satellites are CLI tools, utilities, Web UIs for doing specific tasks utilising LLMs or other services in Harbor
 
 **Find next document number:**
 ```bash
@@ -150,60 +159,55 @@ ls docs/2.3.*.md | wc -l
 **File pattern:** `docs/2.${category_num}.${next_num}-${Category}-${Service-Name}.md`
 
 **Required sections:**
-```markdown
-# ${Service Name}
+
+```harbor-service-doc(markdown)
+### [${Service Name}](LINK TO ORIGINAL REPO)
+
+> Handle: `<service handle>`<br/>
+> URL: [http://localhost:<DEFAULT HOST PORT>](http://localhost:<DEFAULT HOST PORT>)
 
 Brief description of the service and its purpose.
+
+## Starting
+
+\`\`\`bash
+# Pull if pre-built image
+harbor pull <service handle>
+# Build docs if needed
+harbor build <service handle>
+
+# Start the service
+# --open for web UIs
+# --tail for BEs
+harbor up <service handle> --open
+# For CLIs, implement an alias:
+harbor <service handle> --help
+\`\`\`
 
 ## Configuration
 
 ### Environment Variables
+
+Following options can be set via [`harbor config`](./3.-Harbor-CLI-Reference.md#harbor-config):
+
+\`\`\`bash
 List all HARBOR_${HANDLE}_* variables with descriptions.
+\`\`\`
 
 ### Volumes
 Describe any persistent data or configuration mounts.
-
-## Usage
-
-### Starting the Service
-\`\`\`bash
-harbor up ${handle}
-\`\`\`
-
-### Accessing the Service
-\`\`\`bash
-harbor open ${handle}
-harbor url ${handle}
-\`\`\`
-
-## Integration
-
-Describe how this service integrates with other Harbor services.
-
-## Troubleshooting
-
-Common issues and solutions.
 ```
-
-### Step 7: Create Service Directory and Files
-
-**Create directory:**
-```bash
-mkdir -p ${handle}
-```
-
-**Required files:**
-- `${handle}/override.env` - Already created by scaffold
-- Add configuration files, scripts, or Dockerfiles as needed for the service
 
 ### Step 8: Add to .gitignore (if needed)
 
 **Add persistent data directories:**
+- Create `.gitignore` in a service folder
+
 ```bash
 # Add to .gitignore if service creates persistent data
-echo "${handle}/data" >> .gitignore
-echo "${handle}/cache" >> .gitignore
-echo "${handle}/logs" >> .gitignore
+echo "data/" >> .gitignore
+echo "cache/" >> .gitignore
+echo "logs/" >> .gitignore
 ```
 
 ### Step 10: Cross-Service Integration (Optional)
