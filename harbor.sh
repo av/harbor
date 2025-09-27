@@ -1133,7 +1133,7 @@ merge_env_files() {
     local default_file=$1
     local target_file=$2
 
-    if [ -z "$source_file" ]; then
+    if [ -z "$default_file" ]; then
         default_file=$default_profile
     fi
 
