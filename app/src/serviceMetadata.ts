@@ -80,6 +80,12 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         wikiUrl: `${wikiUrl}/5.2.-Harbor-Boost`,
         tooltip: 'Connects to downstream LLM API and serves a wrapper with custom workflow. For example, it can be used to add a CoT (Chain of Thought) to an existing LLM API, and much more. Scriptable with Python.',
     },
+    browseruse: {
+        name: 'Browser Use',
+        tags: [HST.satellite, HST.partial],
+        wikiUrl: `${wikiUrl}/2.3.50-Satellite-Browser-Use`,
+        tooltip: 'AI-powered browser automation with web UI',
+    },
     cfd: {
         name: 'cloudflared',
         tags: [HST.satellite, HST.api, HST.cli],

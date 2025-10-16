@@ -1,0 +1,6 @@
+services:
+  browseruse:
+    environment:
+      - DEFAULT_LLM=ollama
+      - OLLAMA_ENDPOINT=${HARBOR_OLLAMA_INTERNAL_URL}
+      - OLLAMA_HOST=${HARBOR_OLLAMA_INTERNAL_URL}

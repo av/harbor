@@ -31,6 +31,11 @@ services:
       - ./metamcp/data:/var/lib/postgresql/data
     networks:
       - harbor-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
 
   metamcp-migrate:
     container_name: ${HARBOR_CONTAINER_PREFIX}.metamcp-migrate
@@ -43,7 +48,8 @@ services:
       - ./metamcp/override.env
     command: pnpm drizzle-kit migrate
     depends_on:
-      - metamcp-postgres
+      metamcp-postgres:
+        condition: service_healthy
     networks:
       - harbor-network
 
