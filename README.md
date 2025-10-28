@@ -171,6 +171,9 @@ Save and manage configuration profiles for different scenarios. For example - sa
 # Save and use config profiles
 harbor profile save llama4
 harbor profile use default
+
+# Import profiles from a URL
+harbor profile use https://example.com/path/to/harbor-profile.env
 ```
 
 #### Command History
@@ -372,6 +375,8 @@ harbor config set webui.host.port 8080
 # Create and manage config profiles
 harbor profile save l370b
 harbor profile use default
+# Import profile from a URL
+harbor profile use https://example.com/path/to/harbor-profile.env
 
 # Lookup recently used harbor commands
 harbor history
