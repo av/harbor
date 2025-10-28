@@ -208,7 +208,9 @@ harbor eject searxng llamacpp > docker-compose.harbor.yml
 [AnythingLLM](https://github.com/av/harbor/wiki/2.1.9-Frontend:-AnythingLLM) ⦁︎
 [Chat Nio](https://github.com/av/harbor/wiki/2.1.10-Frontend:-Chat-Nio) ⦁︎
 [mikupad](https://github.com/av/harbor/wiki/2.1.11-Frontend:-Mikupad) ⦁︎
-[oterm](https://github.com/av/harbor/wiki/2.1.12-Frontend-oterm)
+[oterm](https://github.com/av/harbor/wiki/2.1.12-Frontend-oterm) ⦁︎
+[omnichain](https://github.com/av/harbor/wiki/2.3.16-Satellite:-omnichain) ⦁︎
+[ol1](https://github.com/av/harbor/wiki/2.3.19-Satellite:-ol1)
 
 ##### Backends
 [Ollama](https://github.com/av/harbor/wiki/2.2.1-Backend:-Ollama) ⦁︎
@@ -226,7 +228,8 @@ harbor eject searxng llamacpp > docker-compose.harbor.yml
 [SGLang](https://github.com/av/harbor/wiki/2.2.12-Backend:-SGLang) ⦁︎
 [KTransformers](https://github.com/av/harbor/wiki/2.2.13-Backend:-KTransformers) ⦁︎
 [Nexa SDK](https://github.com/av/harbor/wiki/2.2.15-Backend:-Nexa-SDK) ⦁︎
-[KoboldCpp](https://github.com/av/harbor/wiki/2.2.16-Backend:-KoboldCpp)
+[KoboldCpp](https://github.com/av/harbor/wiki/2.2.16-Backend:-KoboldCpp) ⦁︎
+[Modular MAX](https://github.com/av/harbor/wiki/2.2.17-Backend-Modular-MAX)
 
 ##### Satellites
 [Harbor Bench](https://github.com/av/harbor/wiki/5.1.-Harbor-Bench) ⦁︎
@@ -245,7 +248,7 @@ harbor eject searxng llamacpp > docker-compose.harbor.yml
 [TextGrad](https://github.com/av/harbor/wiki/2.3.12-Satellite:-TextGrad) ⦁︎
 [Aider](https://github.com/av/harbor/wiki/2.3.13-Satellite:-aider) ⦁︎
 [aichat](https://github.com/av/harbor/wiki/2.3.14-Satellite:-aichat) ⦁︎
-[omnichain](https://github.com/av/harbor/wiki/2.3.16-Satellite:-omnichain) ⦁︎
+[autogpt](https://github.com/av/harbor/wiki/2.3.15-Satellite:-AutoGPT) ⦁︎
 [lm-evaluation-harness](https://github.com/av/harbor/wiki/2.3.17-Satellite:-lm-evaluation-harness) ⦁︎
 [JupyterLab](https://github.com/av/harbor/wiki/2.3.18-Satellite:-JupyterLab) ⦁︎
 [ol1](https://github.com/av/harbor/wiki/2.3.19-Satellite:-ol1) ⦁︎
@@ -276,7 +279,11 @@ harbor eject searxng llamacpp > docker-compose.harbor.yml
 [SuperGateway](https://github.com/av/harbor/wiki/2.3.44-Satellite-supergateway) ⦁︎
 [Local Deep Research](https://github.com/av/harbor/wiki/2.3.45-Satellite-Local-Deep-Research) ⦁︎
 [LocalAI](https://github.com/av/harbor/wiki/2.3.46-Satellite-LocalAI) ⦁︎
-[AgentZero](https://github.com/av/harbor/wiki/2.3.47-Satellite-Agent-Zero)
+[AgentZero](https://github.com/av/harbor/wiki/2.3.47-Satellite-Agent-Zero) ⦁︎
+[Airweave](https://github.com/av/harbor/wiki/2.3.48-Satellite-Airweave) ⦁︎
+[Docling](https://github.com/av/harbor/wiki/2.3.49-Satellite-Docling) ⦁︎
+[Browser Use](https://github.com/av/harbor/wiki/2.3.50-Satellite-Browser-Use) ⦁︎
+[Unsloth](https://github.com/av/harbor/wiki/2.3.51-Satellite-Unsloth)
 
 
 See [services documentation](https://github.com/av/harbor/wiki/2.-Services) for a brief overview of each.
