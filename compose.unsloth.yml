@@ -1,0 +1,19 @@
+services:
+  unsloth:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.unsloth
+    image: ${HARBOR_UNSLOTH_IMAGE}:${HARBOR_UNSLOTH_VERSION}
+    env_file:
+      - ./.env
+      - ./unsloth/override.env
+    ports:
+      - ${HARBOR_UNSLOTH_HOST_PORT}:8888
+      - ${HARBOR_UNSLOTH_SSH_PORT}:22
+    environment:
+      - JUPYTER_PASSWORD=${HARBOR_UNSLOTH_JUPYTER_PASSWORD}
+      - HF_TOKEN=${HARBOR_HF_TOKEN}
+    volumes:
+      - ${HARBOR_UNSLOTH_WORKSPACE}:/workspace/work
+      - ${HARBOR_HF_CACHE}:/root/.cache/huggingface
+    networks:
+      - harbor-network
+

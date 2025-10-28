@@ -552,5 +552,11 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         tags: [HST.satellite],
         wikiUrl: `${wikiUrl}/2.3.49-Satellite-Docling`,
         tooltip: 'Transform documents into format ready for LLMs.'
+    },
+    unsloth: {
+        name: 'Unsloth',
+        tags: [HST.satellite],
+        wikiUrl: `${wikiUrl}/2.3.51-Satellite-Unsloth`,
+        tooltip: 'Jupyter Lab environment with Unsloth for fast LLM fine-tuning - 2x faster training with 70% less memory.'
     }
 };
