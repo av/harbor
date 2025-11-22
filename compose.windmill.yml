@@ -1,0 +1,110 @@
+services:
+  windmill:
+    image: ${HARBOR_WINDMILL_CADDY_IMAGE}:${HARBOR_WINDMILL_CADDY_VERSION}
+    container_name: ${HARBOR_CONTAINER_PREFIX}.windmill
+    restart: unless-stopped
+    ports:
+      - ${HARBOR_WINDMILL_HOST_PORT}:80
+    volumes:
+      - ./windmill/Caddyfile:/etc/caddy/Caddyfile
+      - ${HARBOR_WINDMILL_WORKSPACE}/caddy_data:/data
+    environment:
+      - HARBOR_WINDMILL_BASE_URL=${HARBOR_WINDMILL_BASE_URL}
+      - HARBOR_WINDMILL_ADDRESS=${HARBOR_WINDMILL_ADDRESS}
+    env_file:
+      - ./.env
+      - ./windmill/override.env
+    networks:
+      - harbor-network
+    depends_on:
+      windmill-server:
+        condition: service_started
+
+  windmill-db:
+    image: ${HARBOR_WINDMILL_DB_IMAGE}:${HARBOR_WINDMILL_DB_VERSION}
+    container_name: ${HARBOR_CONTAINER_PREFIX}.windmill-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${HARBOR_WINDMILL_DB_PASSWORD}
+      POSTGRES_USER: ${HARBOR_WINDMILL_DB_USER}
+      POSTGRES_DB: ${HARBOR_WINDMILL_DB_NAME}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${HARBOR_WINDMILL_DB_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - ${HARBOR_WINDMILL_WORKSPACE}/db:/var/lib/postgresql/data
+    networks:
+      - harbor-network
+    ports:
+      - ${HARBOR_WINDMILL_DB_HOST_PORT}:5432
+
+  windmill-server:
+    image: ${HARBOR_WINDMILL_IMAGE}:${HARBOR_WINDMILL_VERSION}
+    container_name: ${HARBOR_CONTAINER_PREFIX}.windmill-server
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgresql://${HARBOR_WINDMILL_DB_USER}:${HARBOR_WINDMILL_DB_PASSWORD}@windmill-db:5432/${HARBOR_WINDMILL_DB_NAME}?sslmode=disable
+      - MODE=server
+    env_file:
+      - ./.env
+      - ./windmill/override.env
+    depends_on:
+      windmill-db:
+        condition: service_healthy
+    volumes:
+      - ${HARBOR_WINDMILL_WORKSPACE}/logs:/tmp/windmill/logs
+    networks:
+      - harbor-network
+
+  windmill-worker:
+    image: ${HARBOR_WINDMILL_IMAGE}:${HARBOR_WINDMILL_VERSION}
+    container_name: ${HARBOR_CONTAINER_PREFIX}.windmill-worker
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgresql://${HARBOR_WINDMILL_DB_USER}:${HARBOR_WINDMILL_DB_PASSWORD}@windmill-db:5432/${HARBOR_WINDMILL_DB_NAME}?sslmode=disable
+      - MODE=worker
+      - WORKER_GROUP=default
+    env_file:
+      - ./.env
+      - ./windmill/override.env
+    depends_on:
+      windmill-db:
+        condition: service_healthy
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${HARBOR_WINDMILL_WORKSPACE}/cache:/tmp/windmill/cache
+      - ${HARBOR_WINDMILL_WORKSPACE}/logs:/tmp/windmill/logs
+    networks:
+      - harbor-network
+
+  windmill-worker-native:
+    image: ${HARBOR_WINDMILL_IMAGE}:${HARBOR_WINDMILL_VERSION}
+    container_name: ${HARBOR_CONTAINER_PREFIX}.windmill-worker-native
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgresql://${HARBOR_WINDMILL_DB_USER}:${HARBOR_WINDMILL_DB_PASSWORD}@windmill-db:5432/${HARBOR_WINDMILL_DB_NAME}?sslmode=disable
+      - MODE=worker
+      - WORKER_GROUP=native
+      - NUM_WORKERS=8
+      - SLEEP_QUEUE=200
+    env_file:
+      - ./.env
+      - ./windmill/override.env
+    depends_on:
+      windmill-db:
+        condition: service_healthy
+    volumes:
+      - ${HARBOR_WINDMILL_WORKSPACE}/logs:/tmp/windmill/logs
+    networks:
+      - harbor-network
+
+  windmill-lsp:
+    image: ${HARBOR_WINDMILL_LSP_IMAGE}:${HARBOR_WINDMILL_LSP_VERSION}
+    container_name: ${HARBOR_CONTAINER_PREFIX}.windmill-lsp
+    restart: unless-stopped
+    volumes:
+      - ${HARBOR_WINDMILL_WORKSPACE}/lsp_cache:/pyls/.cache
+    networks:
+      - harbor-network

@@ -558,5 +558,11 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         tags: [HST.satellite],
         wikiUrl: `${wikiUrl}/2.3.51-Satellite-Unsloth`,
         tooltip: 'Jupyter Lab environment with Unsloth for fast LLM fine-tuning - 2x faster training with 70% less memory.'
-    }
+    },
+    windmill: {
+        name: 'Windmill',
+        tags: [HST.satellite, HST.workflows],
+        wikiUrl: `${wikiUrl}/2.3.52-Satellite-Windmill`,
+        tooltip: 'Open-source developer platform for internal tools, workflows, and UIs with multi-language script support.'
+    },
 };

@@ -7,5 +7,6 @@
     {
       "file": ".copilot-instructions.md"
     }
-  ]
+  ],
+  "chat.useAgentsMdFile": true,
 }

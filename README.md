@@ -286,7 +286,8 @@ harbor eject searxng llamacpp > docker-compose.harbor.yml
 [Airweave](https://github.com/av/harbor/wiki/2.3.48-Satellite-Airweave) ⦁︎
 [Docling](https://github.com/av/harbor/wiki/2.3.49-Satellite-Docling) ⦁︎
 [Browser Use](https://github.com/av/harbor/wiki/2.3.50-Satellite-Browser-Use) ⦁︎
-[Unsloth](https://github.com/av/harbor/wiki/2.3.51-Satellite-Unsloth)
+[Unsloth](https://github.com/av/harbor/wiki/2.3.51-Satellite-Unsloth) ⦁︎
+[Windmill](https://github.com/av/harbor/wiki/2.3.52-Satellite-Windmill)
 
 
 See [services documentation](https://github.com/av/harbor/wiki/2.-Services) for a brief overview of each.

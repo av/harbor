@@ -99,6 +99,7 @@ services:
 - Must use harbor-network
 - Environment variables must follow `HARBOR_${HANDLE}_*` pattern
 - If service exposes ports, use `${HARBOR_${HANDLE}_HOST_PORT}:${internal_port}` format
+- Main container in the compose file MUST match the service handle
 
 ### Step 4: Add Environment Variables to profiles/default.env
 

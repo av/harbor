@@ -1,0 +1,15 @@
+{
+	layer4 {
+		:25 {
+			proxy {
+				to windmill-server:2525
+			}
+		}
+	}
+}
+
+{$HARBOR_WINDMILL_BASE_URL} {
+	bind {$HARBOR_WINDMILL_ADDRESS}
+	reverse_proxy /ws/* http://windmill-lsp:3001
+	reverse_proxy /* http://windmill-server:8000
+}
