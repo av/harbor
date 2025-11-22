@@ -31,9 +31,8 @@ services:
       - COMFYUI_ARGS=${HARBOR_COMFYUI_ARGS}
       - PROVISIONING_SCRIPT=${HARBOR_COMFYUI_PROVISIONING}
 
-      # Python user packages persistence
-      - PYTHONUSERBASE=/opt/comfyui-packages
-      - PIP_USER=true
+      # Python custom packages persistence
+      - PYTHONPATH=/opt/comfyui-packages:${PYTHONPATH}
     ports:
       - ${HARBOR_COMFYUI_HOST_PORT}:${HARBOR_COMFYUI_HOST_PORT}
       - ${HARBOR_COMFYUI_PORTAL_HOST_PORT}:${HARBOR_COMFYUI_PORTAL_HOST_PORT}
