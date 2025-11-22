@@ -30,12 +30,17 @@ services:
       - CIVITAI_TOKEN=${HARBOR_CIVITAI_TOKEN}
       - COMFYUI_ARGS=${HARBOR_COMFYUI_ARGS}
       - PROVISIONING_SCRIPT=${HARBOR_COMFYUI_PROVISIONING}
+
+      # Python user packages persistence
+      - PYTHONUSERBASE=/opt/comfyui-packages
+      - PIP_USER=true
     ports:
       - ${HARBOR_COMFYUI_HOST_PORT}:${HARBOR_COMFYUI_HOST_PORT}
       - ${HARBOR_COMFYUI_PORTAL_HOST_PORT}:${HARBOR_COMFYUI_PORTAL_HOST_PORT}
       - ${HARBOR_COMFYUI_SYNCTHING_HOST_PORT}:${HARBOR_COMFYUI_SYNCTHING_HOST_PORT}
     volumes:
       - ${HARBOR_COMFYUI_WORKSPACE}:/workspace
+      - ./comfyui/packages:/opt/comfyui-packages
     networks:
       - harbor-network
 
