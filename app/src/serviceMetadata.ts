@@ -565,4 +565,10 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         wikiUrl: `${wikiUrl}/2.3.52-Satellite-Windmill`,
         tooltip: 'Open-source developer platform for internal tools, workflows, and UIs with multi-language script support.'
     },
+    presenton: {
+        name: 'Presenton',
+        tags: [HST.frontend],
+        wikiUrl: `${wikiUrl}/2.1.13-Frontend-Presenton`,
+        tooltip: 'Open-source AI presentation generator with custom layouts, multi-model support, and PDF/PPTX export.'
+    },
 };
