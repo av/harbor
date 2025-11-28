@@ -29,6 +29,11 @@ Every LLM will respond to rewrites in a different way. Some models will generate
   - `diacritic` - adds a random diacritic to the character
   - `leetspeak` - replaces characters with leetspeak equivalents
   - `remove_vowel` - removes vowels from the input
+  - `invert_180` - inverts characters 180 degrees
+  - `unicode_lookalike` - replaces characters with Unicode lookalikes from other scripts
+  - `homoglyph` - replaces characters with visually identical homoglyphs
+  - `zero_width` - inserts zero-width characters after the character
+  - `zalgo` - adds multiple combining marks to create zalgo text effect
 - `strat` - strategy for selection of the messages to rewrite. Default is `match`
   - `all` - match all messages
   - `first` - match first message regardless of the role
@@ -55,6 +60,11 @@ harbor boost klmbr mods add capitalize
 harbor boost klmbr mods add diacritic
 harbor boost klmbr mods add leetspeak
 harbor boost klmbr mods add remove_vowel
+harbor boost klmbr mods add invert_180
+harbor boost klmbr mods add unicode_lookalike
+harbor boost klmbr mods add homoglyph
+harbor boost klmbr mods add zero_width
+harbor boost klmbr mods add zalgo
 
 # Change the selection strategy
 # 1. Match all user messages
@@ -137,6 +147,84 @@ invert_map = {
 
 diacritics = ["̀", "́", "̂", "̃", "̈", "̄", "̆", "̇", "̊", "̋"]
 
+unicode_lookalike_map = {
+  'a': 'а',  # Cyrillic
+  'c': 'с',  # Cyrillic
+  'e': 'е',  # Cyrillic
+  'o': 'ο',  # Greek omicron
+  'p': 'р',  # Cyrillic
+  'x': 'х',  # Cyrillic
+  'y': 'у',  # Cyrillic
+  'A': 'А',  # Cyrillic
+  'B': 'В',  # Cyrillic
+  'C': 'С',  # Cyrillic
+  'E': 'Ε',  # Greek
+  'H': 'Η',  # Greek
+  'I': 'Ι',  # Greek
+  'K': 'Κ',  # Greek
+  'M': 'Μ',  # Greek
+  'N': 'Ν',  # Greek
+  'O': 'Ο',  # Greek
+  'P': 'Ρ',  # Greek
+  'T': 'Τ',  # Greek
+  'X': 'Χ',  # Greek
+  'Y': 'Υ',  # Greek
+  'Z': 'Ζ',  # Greek
+}
+
+homoglyph_map = {
+  'a': 'а',  # Cyrillic a
+  'e': 'е',  # Cyrillic e
+  'o': 'о',  # Cyrillic o
+  'p': 'р',  # Cyrillic r
+  'c': 'с',  # Cyrillic s
+  'y': 'у',  # Cyrillic u
+  'x': 'х',  # Cyrillic h
+  'i': 'і',  # Cyrillic i
+  'j': 'ј',  # Cyrillic j
+  's': 'ѕ',  # Cyrillic dze
+  'A': 'А',  # Cyrillic A
+  'B': 'В',  # Cyrillic V
+  'C': 'С',  # Cyrillic S
+  'E': 'Е',  # Cyrillic E
+  'H': 'Н',  # Cyrillic N
+  'I': 'І',  # Cyrillic I
+  'J': 'Ј',  # Cyrillic J
+  'K': 'К',  # Cyrillic K
+  'M': 'М',  # Cyrillic M
+  'O': 'О',  # Cyrillic O
+  'P': 'Р',  # Cyrillic P
+  'S': 'Ѕ',  # Cyrillic S
+  'T': 'Т',  # Cyrillic T
+  'X': 'Х',  # Cyrillic Kh
+  'Y': 'Υ',  # Greek Upsilon
+}
+
+zero_width_chars = [
+  '\u200B',  # Zero Width Space
+  '\u200C',  # Zero Width Non-Joiner
+  '\u200D',  # Zero Width Joiner
+  '\uFEFF',  # Zero Width No-Break Space
+]
+
+zalgo_marks = [
+  # Combining marks above
+  '\u0300', '\u0301', '\u0302', '\u0303', '\u0304', '\u0305', '\u0306',
+  '\u0307', '\u0308', '\u0309', '\u030A', '\u030B', '\u030C', '\u030D',
+  '\u030E', '\u030F', '\u0310', '\u0311', '\u0312', '\u0313', '\u0314',
+  '\u0315', '\u031A', '\u031B', '\u033D', '\u033E', '\u033F', '\u0340',
+  '\u0341', '\u0342', '\u0343', '\u0344', '\u0346',
+  # Combining marks below
+  '\u0316', '\u0317', '\u0318', '\u0319', '\u031C', '\u031D', '\u031E',
+  '\u031F', '\u0320', '\u0321', '\u0322', '\u0323', '\u0324', '\u0325',
+  '\u0326', '\u0327', '\u0328', '\u0329', '\u032A', '\u032B', '\u032C',
+  '\u032D', '\u032E', '\u032F', '\u0330', '\u0331', '\u0332', '\u0333',
+  '\u0339', '\u033A', '\u033B', '\u033C', '\u0345', '\u0347', '\u0348',
+  '\u0349', '\u034D', '\u034E',
+  # Combining marks through
+  '\u0335', '\u0336', '\u0337', '\u0338',
+]
+
 punctuation = ".,!?;:"
 
 
@@ -184,12 +272,42 @@ def invert_180(chars, idx):
   return invert_map.get(chars[idx], chars[idx])
 
 
+def unicode_lookalike(chars, idx):
+  if is_standalone_vowel(chars, idx):
+    return chars[idx]
+
+  return unicode_lookalike_map.get(chars[idx], chars[idx])
+
+
+def homoglyph(chars, idx):
+  if is_standalone_vowel(chars, idx):
+    return chars[idx]
+
+  return homoglyph_map.get(chars[idx], chars[idx])
+
+
+def zero_width(chars, idx):
+  return chars[idx] + random.choice(zero_width_chars)
+
+
+def zalgo(chars, idx):
+  if chars[idx].isalpha():
+    num_marks = random.randint(1, 3)
+    marks = ''.join(random.choice(zalgo_marks) for _ in range(num_marks))
+    return chars[idx] + marks
+  return chars[idx]
+
+
 mods = {
   "capitalize": capitalize,
   "diacritic": diacritic,
   "leetspeak": leetspeak,
   "remove_vowel": remove_vowel,
   "invert_180": invert_180,
+  "unicode_lookalike": unicode_lookalike,
+  "homoglyph": homoglyph,
+  "zero_width": zero_width,
+  "zalgo": zalgo,
 }
 
 
@@ -265,3 +383,27 @@ async def apply(chat: 'ch.Chat', llm: 'llm.LLM'):
 
   await llm.emit_status(llm.chat.tail.content)
   await llm.stream_final_completion(chat=chat)
+
+if __name__ == "__main__":
+  sample = "Which company created Hacker News?"
+
+  print("Original:", sample)
+  print()
+
+  # Test with all mods
+  modified, mapping = modify_text(text=sample, percentage=30, mods=[
+    "all",
+    # "diacritic",
+    # "remove_vowel",
+    # "invert_180",
+    # "unicode_lookalike",
+    # "homoglyph",
+    # "zero_width",
+    # "zalgo",
+  ])
+  double_modified, _ = modify_text(
+    text=modified, percentage=30, mods=["all"]
+  )
+  print()
+  print("All mods (100%):", modified)
+  print("Double modified:", double_modified)

@@ -1,9 +1,11 @@
+from typing import TYPE_CHECKING
 import random
 import re
 
-from chat import Chat
+if TYPE_CHECKING:
+  from chat import Chat
 
-def percentage(chat: Chat, **kwargs):
+def percentage(chat: 'Chat', **kwargs):
   percentage = kwargs.get("percentage", 50)
   nodes = chat.plain()
   num_nodes = max(1, int(len(nodes) * (percentage / 100)))
@@ -11,7 +13,7 @@ def percentage(chat: Chat, **kwargs):
   return nodes[:num_nodes]
 
 
-def match(chat: Chat, **kwargs):
+def match(chat: 'Chat', **kwargs):
   substring = kwargs.get("substring", "")
   role = kwargs.get("role", "")
   index = kwargs.get("index", None)
@@ -30,23 +32,23 @@ def match(chat: Chat, **kwargs):
   return nodes
 
 
-def user(chat: Chat):
+def user(chat: 'Chat'):
   return match(chat, role="user")
 
 
-def all(chat: Chat):
+def all(chat: 'Chat'):
   return chat.plain()
 
 
-def first(chat: Chat):
+def first(chat: 'Chat'):
   return match(chat, index=0)
 
 
-def last(chat: Chat):
+def last(chat: 'Chat'):
   return match(chat, index=-1)
 
 
-def any(chat: Chat):
+def any(chat: 'Chat'):
   return [random.choice(chat.plain())]
 
 
@@ -61,7 +63,7 @@ selection_strategies = {
 }
 
 
-def apply_strategy(chat: Chat, strategy: str, params: dict):
+def apply_strategy(chat: 'Chat', strategy: str, params: dict):
   return selection_strategies[strategy](chat, **params)
 
 def match_regex(value, regex):
