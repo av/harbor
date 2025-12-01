@@ -571,4 +571,10 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         wikiUrl: `${wikiUrl}/2.1.13-Frontend-Presenton`,
         tooltip: 'Open-source AI presentation generator with custom layouts, multi-model support, and PDF/PPTX export.'
     },
+    karakeep: {
+        name: 'Karakeep',
+        tags: [HST.satellite],
+        wikiUrl: `${wikiUrl}/2.3.53-Satellite-Karakeep`,
+        tooltip: 'Self-hosted bookmark manager with AI-powered automatic tagging via OpenAI or Ollama.'
+    },
 };

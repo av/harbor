@@ -1,0 +1,60 @@
+services:
+  karakeep:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.karakeep
+    image: ${HARBOR_KARAKEEP_IMAGE}:${HARBOR_KARAKEEP_VERSION}
+    restart: unless-stopped
+    env_file:
+      - ./.env
+      - ./karakeep/override.env
+    depends_on:
+      - karakeep-chrome
+      - karakeep-meilisearch
+    ports:
+      - ${HARBOR_KARAKEEP_HOST_PORT}:3000
+    volumes:
+      - ${HARBOR_KARAKEEP_WORKSPACE}:/data
+    environment:
+      - NEXTAUTH_SECRET=${HARBOR_KARAKEEP_NEXTAUTH_SECRET}
+      - NEXTAUTH_URL=http://localhost:${HARBOR_KARAKEEP_HOST_PORT}
+      - MEILI_ADDR=http://karakeep-meilisearch:7700
+      - MEILI_MASTER_KEY=${HARBOR_KARAKEEP_MEILI_MASTER_KEY}
+      - BROWSER_WEB_URL=http://karakeep-chrome:9222
+      - DATA_DIR=/data
+      - OPENAI_API_KEY=${HARBOR_OPENAI_KEY:-}
+      - INFERENCE_TEXT_MODEL=${HARBOR_KARAKEEP_INFERENCE_TEXT_MODEL:-}
+      - INFERENCE_IMAGE_MODEL=${HARBOR_KARAKEEP_INFERENCE_IMAGE_MODEL:-}
+      - INFERENCE_CONTEXT_LENGTH=${HARBOR_KARAKEEP_INFERENCE_CONTEXT_LENGTH:-8192}
+    networks:
+      - harbor-network
+
+  karakeep-chrome:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.karakeep-chrome
+    image: ${HARBOR_KARAKEEP_CHROME_IMAGE}:${HARBOR_KARAKEEP_CHROME_VERSION}
+    restart: unless-stopped
+    env_file:
+      - ./.env
+      - ./karakeep/override.env
+    command:
+      - --no-sandbox
+      - --disable-gpu
+      - --disable-dev-shm-usage
+      - --remote-debugging-address=0.0.0.0
+      - --remote-debugging-port=9222
+      - --hide-scrollbars
+    networks:
+      - harbor-network
+
+  karakeep-meilisearch:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.karakeep-meilisearch
+    image: ${HARBOR_KARAKEEP_MEILI_IMAGE}:${HARBOR_KARAKEEP_MEILI_VERSION}
+    restart: unless-stopped
+    env_file:
+      - ./.env
+      - ./karakeep/override.env
+    environment:
+      - MEILI_MASTER_KEY=${HARBOR_KARAKEEP_MEILI_MASTER_KEY}
+      - MEILI_NO_ANALYTICS=true
+    volumes:
+      - ${HARBOR_KARAKEEP_WORKSPACE}/meilisearch:/meili_data
+    networks:
+      - harbor-network
