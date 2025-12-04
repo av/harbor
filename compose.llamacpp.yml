@@ -1,6 +1,6 @@
 services:
   llamacpp:
-    image: ghcr.io/ggerganov/llama.cpp:full
+    image: ${HARBOR_LLAMACPP_IMAGE}:server
     container_name: ${HARBOR_CONTAINER_PREFIX}.llamacpp
     env_file:
       - ./.env
@@ -12,7 +12,6 @@ services:
     ports:
       - ${HARBOR_LLAMACPP_HOST_PORT}:8080
     command: >
-      --server
       ${HARBOR_LLAMACPP_MODEL_SPECIFIER}
       ${HARBOR_LLAMACPP_EXTRA_ARGS}
       --port 8080
