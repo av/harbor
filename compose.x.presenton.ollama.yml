@@ -1,0 +1,6 @@
+services:
+  presenton:
+    environment:
+      - LLM=ollama
+      - OLLAMA_URL=http://localhost:33821
+      - OLLAMA_MODEL=${HARBOR_PRESENTON_OLLAMA_MODEL:-llama3.1:8b}

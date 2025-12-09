@@ -2152,12 +2152,25 @@ harbor_profile_remove() {
 __anchor_utils=true
 
 run_harbor_find() {
-    find $(eval echo "$(env_manager get hf.cache)") \
-        $(eval echo "$(env_manager get llamacpp.cache)") \
-        $(eval echo "$(env_manager get ollama.cache)") \
-        $(eval echo "$(env_manager get vllm.cache)") \
-        $(eval echo "$(env_manager get comfyui.workspace)") \
-        -xtype f -wholename "*$**"
+    local dirs=""
+    local dir
+
+    for dir in \
+        "$(eval echo "$(env_manager get hf.cache)")" \
+        "$(eval echo "$(env_manager get llamacpp.cache)")" \
+        "$(eval echo "$(env_manager get ollama.cache)")" \
+        "$(eval echo "$(env_manager get vllm.cache)")" \
+        "$(eval echo "$(env_manager get comfyui.workspace)")"; do
+        if [ -d "$dir" ]; then
+            dirs="$dirs $dir"
+        fi
+    done
+
+    if [ -z "$dirs" ]; then
+        return 0
+    fi
+
+    find $dirs -type f -follow -path "*$**" 2>/dev/null || true
 }
 
 run_hf_docker_cli() {
@@ -4469,7 +4482,7 @@ run_modularmax_command() {
 # ========================================================================
 
 # Globals
-version="0.3.20"
+version="0.3.24"
 harbor_repo_url="https://github.com/av/harbor.git"
 harbor_release_url="https://api.github.com/repos/av/harbor/releases/latest"
 delimiter="|"

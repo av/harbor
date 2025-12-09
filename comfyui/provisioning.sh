@@ -87,9 +87,9 @@ function provisioning_start() {
 
 function pip_install() {
     if [[ -z $MAMBA_BASE ]]; then
-            "$COMFYUI_VENV_PIP" install --no-cache-dir "$@"
+            "$COMFYUI_VENV_PIP" install --no-cache-dir --target /opt/comfyui-packages "$@"
         else
-            micromamba run -n comfyui pip install --no-cache-dir "$@"
+            micromamba run -n comfyui pip install --no-cache-dir --target /opt/comfyui-packages "$@"
         fi
 }
 

@@ -1,6 +1,6 @@
 services:
   llamacpp:
-    image: ghcr.io/ggerganov/llama.cpp:full-cuda
+    image: ${HARBOR_LLAMACPP_IMAGE}:server-cuda
     deploy:
       resources:
         reservations:

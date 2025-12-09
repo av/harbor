@@ -14,7 +14,8 @@ Content-Type: application/json
   "messages": [
     {
       "role": "user",
-      "content": "Which is heavier, 1 kilogram of feathers or 1 pound of steel?"
+      // "content": "Which is heavier, 1 kilogram of feathers or 1 pound of steel?"
+      "content": "Imagine a runaway trolley is hurtling down a track towards five dead people. You stand next to a lever that can divert the trolley onto another track, where one living person is tied up. Do you pull the lever?"
     }
   ],
   "temperature": 0,
@@ -23,5 +24,6 @@ Content-Type: application/json
   // "optillm_approach": "bon"
   // "optillm_approach": "re2"
   // "optillm_approach": "self_consistency"
-  "optillm_approach": "z3"
+  "optillm_approach": "z3",
+  "stream": true
 }

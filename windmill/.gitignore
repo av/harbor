@@ -1,0 +1,5 @@
+db/
+cache/
+logs/
+lsp_cache/
+caddy_data/
