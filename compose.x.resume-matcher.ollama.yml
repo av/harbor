@@ -1,0 +1,8 @@
+services:
+  resume-matcher-backend:
+    environment:
+      - OLLAMA_HOST=${HARBOR_OLLAMA_INTERNAL_URL}
+      - LLM_PROVIDER=ollama
+      - LLM_BASE_URL=${HARBOR_OLLAMA_INTERNAL_URL}
+      - EMBEDDING_PROVIDER=ollama
+      - EMBEDDING_BASE_URL=${HARBOR_OLLAMA_INTERNAL_URL}

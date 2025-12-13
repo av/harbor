@@ -1,0 +1,99 @@
+services:
+  resume-matcher-backend:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.resume-matcher-backend
+    build:
+      context: ${HARBOR_RESUME_MATCHER_GIT_REF}
+      dockerfile_inline: |
+        FROM python:3.12-slim AS base
+        ENV PYTHONDONTWRITEBYTECODE=1
+        ENV PYTHONUNBUFFERED=1
+        ENV UV_CACHE_DIR=/tmp/uv-cache
+        RUN apt-get update && apt-get install -y --no-install-recommends curl build-essential && rm -rf /var/lib/apt/lists/*
+        RUN pip install --no-cache-dir uv
+        WORKDIR /app
+        COPY apps/backend/ .
+        RUN sed -i 's/==[0-9.]*//g' pyproject.toml && rm -f uv.lock
+        RUN uv lock && uv sync
+        RUN if [ ! -f .env ] && [ -f .env.sample ]; then cp .env.sample .env; fi
+        EXPOSE 8000
+        HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=30s CMD curl -f http://localhost:8000/ping || exit 1
+        CMD ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--timeout-keep-alive", "300"]
+    ports:
+      - ${HARBOR_RESUME_MATCHER_BACKEND_HOST_PORT}:8000
+    env_file:
+      - ./.env
+      - ./resume-matcher/override.env
+    environment:
+      - SESSION_SECRET_KEY=${HARBOR_RESUME_MATCHER_SESSION_SECRET}
+      - SYNC_DATABASE_URL=sqlite:///./app.db
+      - ASYNC_DATABASE_URL=sqlite+aiosqlite:///./app.db
+      - LLM_PROVIDER=${HARBOR_RESUME_MATCHER_LLM_PROVIDER}
+      - LL_MODEL=${HARBOR_RESUME_MATCHER_LLM_MODEL}
+      - EMBEDDING_PROVIDER=${HARBOR_RESUME_MATCHER_EMBEDDING_PROVIDER}
+      - EMBEDDING_MODEL=${HARBOR_RESUME_MATCHER_EMBEDDING_MODEL}
+      - ALLOWED_ORIGINS=["http://localhost:${HARBOR_RESUME_MATCHER_HOST_PORT}", "http://localhost:3000", "http://resume-matcher:3000"]
+    volumes:
+      - ${HARBOR_RESUME_MATCHER_WORKSPACE}/data:/app/data
+    networks:
+      - harbor-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  resume-matcher:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.resume-matcher
+    build:
+      context: ${HARBOR_RESUME_MATCHER_GIT_REF}
+      dockerfile_inline: |
+        FROM node:18-alpine AS deps
+        RUN apk add --no-cache libc6-compat
+        WORKDIR /app
+        COPY apps/frontend/package*.json ./
+        RUN npm ci
+        FROM node:18-alpine AS builder
+        WORKDIR /app
+        COPY --from=deps /app/node_modules ./node_modules
+        COPY apps/frontend/ .
+        ARG NEXT_PUBLIC_API_URL
+        ENV NEXT_PUBLIC_API_URL=$$NEXT_PUBLIC_API_URL
+        ENV NEXT_TELEMETRY_DISABLED=1
+        RUN printf "import type { NextConfig } from 'next';\nconst nextConfig: NextConfig = {\n  output: 'standalone',\n  eslint: { ignoreDuringBuilds: true },\n  typescript: { ignoreBuildErrors: true },\n};\nexport default nextConfig;\n" > next.config.ts
+        RUN find . -name 'layout.tsx' -path '*/app/*' -exec sh -c 'grep -L "export const dynamic" "$$1" && echo "export const dynamic = \"force-dynamic\";" >> "$$1"' _ {} \; 2>/dev/null || true
+        RUN npm run build
+        FROM node:18-alpine AS runner
+        WORKDIR /app
+        ENV NODE_ENV=production
+        RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 nextjs
+        COPY --from=builder /app/public ./public
+        RUN mkdir .next && chown nextjs:nodejs .next
+        COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+        COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+        USER nextjs
+        EXPOSE 3000
+        ENV PORT=3000
+        ENV HOSTNAME="0.0.0.0"
+        CMD ["node", "server.js"]
+      args:
+        - NEXT_PUBLIC_API_URL=http://localhost:${HARBOR_RESUME_MATCHER_BACKEND_HOST_PORT}
+    ports:
+      - ${HARBOR_RESUME_MATCHER_HOST_PORT}:3000
+    env_file:
+      - ./.env
+      - ./resume-matcher/override.env
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=http://localhost:${HARBOR_RESUME_MATCHER_BACKEND_HOST_PORT}
+    depends_on:
+      resume-matcher-backend:
+        condition: service_healthy
+    networks:
+      - harbor-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
