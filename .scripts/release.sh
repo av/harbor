@@ -10,6 +10,13 @@ harbor dev seed-traefik
 echo "Moving docs..."
 harbor dev docs
 
+# cd to wiki and push the docs
+cd ../harbor.wiki
+git add .
+git commit -m "chore: docs"
+git push origin master
+cd ../harbor
+
 # echo "NPM Publish..."
 # npm publish --access public
 
