@@ -18,6 +18,7 @@ The CLI is already installed globally for your tests, you may run `harbor <comma
 
 ```bash
 harbor help
+harbor ps # list running services
 harbor build <service>
 harbor logs <service> # tails by default
 # Raw compose command for the service
@@ -35,6 +36,8 @@ harbor dev scaffold <service_name>
 harbor dev docs
 harbor dev seeed
 ```
+
+This means that you're not allowed to run those scripts with `deno run` directly.
 
 ### Updating default profile
 

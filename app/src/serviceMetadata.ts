@@ -589,4 +589,10 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         wikiUrl: `${wikiUrl}/2.3.55-Satellite-Resume-Matcher`,
         tooltip: 'AI-powered tool for comparing resumes against job descriptions using local LLMs via Ollama.'
     },
+    drawio: {
+        name: 'Drawio',
+        tags: [HST.satellite],
+        wikiUrl: `${wikiUrl}/2.3.56-Satellite-Drawio`,
+        tooltip: 'AI-powered diagram creation tool - generate draw.io diagrams from natural language.'
+    },
 };

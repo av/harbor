@@ -20,7 +20,7 @@ harbor up
 harbor up searxng speaches
 ```
 
-Harbor is a containerized LLM toolkit that allows you to run LLM backends, frontends and related useful services. It consists of a CLI and a companion App.
+Harbor is a CLI and companion app that lets you spin up a complete local LLM stack—backends like Ollama, llama.cpp, or vLLM, frontends like Open WebUI, plus supporting services like SearXNG for web search, Speaches for voice chat, and ComfyUI for image generation—all pre-wired to work together with a single `harbor up` command. No manual setup: just pick the services you want and Harbor handles the Docker Compose orchestration, configuration, and cross-service connectivity so you can focus on actually using your models.
 
 ![Screenshot of Harbor CLI and App together](https://github.com/av/harbor/wiki/harbor-app-3.png)
 

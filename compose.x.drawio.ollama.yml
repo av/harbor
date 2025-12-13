@@ -1,0 +1,5 @@
+services:
+  drawio:
+    environment:
+      - AI_PROVIDER=ollama
+      - OLLAMA_BASE_URL=${HARBOR_OLLAMA_INTERNAL_URL}/v1

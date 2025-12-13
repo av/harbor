@@ -1,0 +1,20 @@
+services:
+  drawio:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.drawio
+    image: ${HARBOR_DRAWIO_IMAGE}:${HARBOR_DRAWIO_VERSION}
+    env_file:
+      - ./.env
+      - ./drawio/override.env
+    ports:
+      - ${HARBOR_DRAWIO_HOST_PORT}:3000
+    environment:
+      - AI_PROVIDER=${HARBOR_DRAWIO_AI_PROVIDER}
+      - AI_MODEL=${HARBOR_DRAWIO_AI_MODEL}
+      - TEMPERATURE=${HARBOR_DRAWIO_TEMPERATURE}
+      - ACCESS_CODE_LIST=${HARBOR_DRAWIO_ACCESS_CODE}
+      - OPENAI_API_KEY=${HARBOR_OPENAI_KEY}
+      - ANTHROPIC_API_KEY=${HARBOR_ANTHROPIC_KEY}
+      - GOOGLE_GENERATIVE_AI_API_KEY=${HARBOR_GOOGLE_KEY}
+      - DEEPSEEK_API_KEY=${HARBOR_DEEPSEEK_API_KEY}
+    networks:
+      - harbor-network
