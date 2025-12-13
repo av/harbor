@@ -1,0 +1,31 @@
+services:
+  netdata:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.netdata
+    image: ${HARBOR_NETDATA_IMAGE}:${HARBOR_NETDATA_VERSION}
+    env_file:
+      - ./.env
+      - ./netdata/override.env
+    ports:
+      - ${HARBOR_NETDATA_HOST_PORT}:19999
+    pid: host
+    restart: unless-stopped
+    cap_add:
+      - SYS_PTRACE
+      - SYS_ADMIN
+    security_opt:
+      - apparmor:unconfined
+    volumes:
+      - ${HARBOR_NETDATA_WORKSPACE}/config:/etc/netdata
+      - ${HARBOR_NETDATA_WORKSPACE}/lib:/var/lib/netdata
+      - ${HARBOR_NETDATA_WORKSPACE}/cache:/var/cache/netdata
+      - /:/host/root:ro,rslave
+      - /etc/passwd:/host/etc/passwd:ro
+      - /etc/group:/host/etc/group:ro
+      - /etc/localtime:/etc/localtime:ro
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /etc/os-release:/host/etc/os-release:ro
+      - /var/log:/host/var/log:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - harbor-network

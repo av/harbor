@@ -12,6 +12,7 @@ Important locations:
 - `/docs` - documentation for the project and services
 - `/routines` - part of the CLI that was rewritten in Deno
 - `/.scripts` - scripts for development tasks, written in Deno and Bash
+- `/profiles/default.env` - default harbor config that will be distributed to the users
 
 The CLI is already installed globally for your tests, you may run `harbor <command>` directly.
 
@@ -24,3 +25,20 @@ $(harbor cmd <service>)
 ```
 
 Refer to [CLI Reference](./docs/3.-Harbor-CLI-Reference.md) for more details.
+
+### Running dev scripts
+
+You will always use `harbor` CLI to run project dev scripts, for example:
+
+```bash
+harbor dev scaffold <service_name>
+harbor dev docs
+harbor dev seeed
+```
+
+### Updating default profile
+
+When you make changes to the `default.env`, you then need to update the current profile with:
+```bash
+harbor config update
+```

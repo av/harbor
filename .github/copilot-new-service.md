@@ -192,12 +192,22 @@ harbor <service handle> --help
 Following options can be set via [`harbor config`](./3.-Harbor-CLI-Reference.md#harbor-config):
 
 \`\`\`bash
-List all HARBOR_${HANDLE}_* variables with descriptions.
+List all HARBOR_${HANDLE}_* variables with descriptions. Example:
+
+# Main UI port
+HARBOR_SERVICE_HOST_PORT          00000
+
+# Workspace directory for persistent data
+HARBOR_SERVICE_WORKSPACE          ./service
 \`\`\`
 
 ### Volumes
 Describe any persistent data or configuration mounts.
 ```
+
+**Validation:**
+- Documentation explains how to start the service, refers to troubleshooting guide
+- Documentation refers to Harbor CLI commands, not Docker commands
 
 ### Step 8: Add to .gitignore (if needed)
 

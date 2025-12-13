@@ -577,4 +577,10 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         wikiUrl: `${wikiUrl}/2.3.53-Satellite-Karakeep`,
         tooltip: 'Self-hosted bookmark manager with AI-powered automatic tagging via OpenAI or Ollama.'
     },
+    netdata: {
+        name: 'Netdata',
+        tags: [HST.satellite],
+        wikiUrl: `${wikiUrl}/2.3.54-Satellite-Netdata`,
+        tooltip: 'Real-time infrastructure monitoring with per-second metrics for systems, containers, and applications.'
+    },
 };
