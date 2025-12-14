@@ -594,9 +594,17 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         tags: [HST.satellite],
         wikiUrl: `${wikiUrl}/2.3.56-Satellite-Drawio`,
         tooltip: 'AI-powered diagram creation tool - generate draw.io diagrams from natural language.'
-    },    mindsdb: {
+    },
+    mindsdb: {
         name: 'MindsDB',
         tags: [HST.satellite, HST.api],
         wikiUrl: `${wikiUrl}/2.3.57-Satellite-MindsDB`,
         tooltip: 'AI platform for integrating ML models with data sources via HTTP and MySQL APIs.',
-    },};
+    },
+    sim: {
+        name: 'Sim Studio',
+        tags: [HST.satellite, HST.workflows],
+        wikiUrl: `${wikiUrl}/2.3.58-Satellite-Sim-Studio`,
+        tooltip: 'Open-source platform to build and deploy AI agent workflows with visual canvas editor.',
+    },
+};

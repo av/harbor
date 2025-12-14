@@ -1,0 +1,109 @@
+services:
+  sim:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.sim
+    image: ${HARBOR_SIM_IMAGE}:${HARBOR_SIM_VERSION}
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - ${HARBOR_SIM_HOST_PORT}:3000
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://${HARBOR_SIM_DB_USER}:${HARBOR_SIM_DB_PASSWORD}@sim-postgres:5432/${HARBOR_SIM_DB_NAME}
+      - BETTER_AUTH_URL=http://host.docker.internal:${HARBOR_SIM_HOST_PORT}
+      - NEXT_PUBLIC_APP_URL=http://host.docker.internal:${HARBOR_SIM_HOST_PORT}
+      - BETTER_AUTH_SECRET=${HARBOR_SIM_AUTH_SECRET}
+      - ENCRYPTION_KEY=${HARBOR_SIM_ENCRYPTION_KEY}
+      - INTERNAL_API_SECRET=${HARBOR_SIM_INTERNAL_API_SECRET}
+      - OLLAMA_URL=${HARBOR_SIM_OLLAMA_URL:-http://host.docker.internal:11434}
+      - SOCKET_SERVER_URL=http://sim-realtime:3002
+      - NEXT_PUBLIC_SOCKET_URL=http://host.docker.internal:${HARBOR_SIM_REALTIME_HOST_PORT}
+    env_file:
+      - ./.env
+      - ./sim/override.env
+    depends_on:
+      sim-postgres:
+        condition: service_healthy
+      sim-migrations:
+        condition: service_completed_successfully
+      sim-realtime:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'wget', '--spider', '--quiet', 'http://127.0.0.1:3000']
+      interval: 90s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - harbor-network
+
+  sim-realtime:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.sim-realtime
+    image: ${HARBOR_SIM_REALTIME_IMAGE}:${HARBOR_SIM_VERSION}
+    restart: unless-stopped
+    ports:
+      - ${HARBOR_SIM_REALTIME_HOST_PORT}:3002
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+    environment:
+      - DATABASE_URL=postgresql://${HARBOR_SIM_DB_USER}:${HARBOR_SIM_DB_PASSWORD}@sim-postgres:5432/${HARBOR_SIM_DB_NAME}
+      - NEXT_PUBLIC_APP_URL=http://localhost:${HARBOR_SIM_HOST_PORT}
+      - BETTER_AUTH_URL=http://localhost:${HARBOR_SIM_HOST_PORT}
+      - BETTER_AUTH_SECRET=${HARBOR_SIM_AUTH_SECRET}
+    env_file:
+      - ./.env
+      - ./sim/override.env
+    depends_on:
+      sim-postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'wget', '--spider', '--quiet', 'http://127.0.0.1:3002/health']
+      interval: 90s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - harbor-network
+
+  sim-migrations:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.sim-migrations
+    image: ${HARBOR_SIM_MIGRATIONS_IMAGE}:${HARBOR_SIM_VERSION}
+    working_dir: /app/packages/db
+    environment:
+      - DATABASE_URL=postgresql://${HARBOR_SIM_DB_USER}:${HARBOR_SIM_DB_PASSWORD}@sim-postgres:5432/${HARBOR_SIM_DB_NAME}
+    env_file:
+      - ./.env
+      - ./sim/override.env
+    depends_on:
+      sim-postgres:
+        condition: service_healthy
+    command: ['bun', 'run', 'db:migrate']
+    restart: 'no'
+    networks:
+      - harbor-network
+
+  sim-postgres:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.sim-postgres
+    image: ${HARBOR_SIM_DB_IMAGE}:${HARBOR_SIM_DB_VERSION}
+    restart: unless-stopped
+    ports:
+      - ${HARBOR_SIM_DB_HOST_PORT}:5432
+    environment:
+      - POSTGRES_USER=${HARBOR_SIM_DB_USER}
+      - POSTGRES_PASSWORD=${HARBOR_SIM_DB_PASSWORD}
+      - POSTGRES_DB=${HARBOR_SIM_DB_NAME}
+    volumes:
+      - ${HARBOR_SIM_WORKSPACE}/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${HARBOR_SIM_DB_USER}']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - harbor-network
