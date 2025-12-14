@@ -607,4 +607,10 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         wikiUrl: `${wikiUrl}/2.3.58-Satellite-Sim-Studio`,
         tooltip: 'Open-source platform to build and deploy AI agent workflows with visual canvas editor.',
     },
+    onyx: {
+        name: 'Onyx',
+        tags: [HST.frontend, HST.workflows, HST.tools],
+        wikiUrl: `${wikiUrl}/2.1.14-Frontend-Onyx`,
+        tooltip: 'Open Source AI Platform with Chat UI, RAG, MCP support, and 40+ document connectors.',
+    },
 };
