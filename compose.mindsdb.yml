@@ -1,0 +1,25 @@
+services:
+  mindsdb:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.mindsdb
+    image: ${HARBOR_MINDSDB_IMAGE}:${HARBOR_MINDSDB_VERSION}
+    env_file:
+      - ./.env
+      - ./mindsdb/override.env
+    volumes:
+      - ${HARBOR_MINDSDB_WORKSPACE}:/root/mdb_storage
+    ports:
+      - ${HARBOR_MINDSDB_HOST_PORT}:47334
+      - ${HARBOR_MINDSDB_MYSQL_HOST_PORT}:47335
+    environment:
+      - MINDSDB_APIS=${HARBOR_MINDSDB_APIS}
+      - MINDSDB_USERNAME=${HARBOR_MINDSDB_USERNAME}
+      - MINDSDB_PASSWORD=${HARBOR_MINDSDB_PASSWORD}
+      - MKL_SERVICE_FORCE_INTEL=1
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:47334/api/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - harbor-network

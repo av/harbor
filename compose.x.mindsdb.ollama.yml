@@ -1,0 +1,6 @@
+services:
+  mindsdb:
+    environment:
+      - LLM_FUNCTION_BASE_URL=${HARBOR_OLLAMA_INTERNAL_URL}/v1
+      - LLM_FUNCTION_MODEL=${HARBOR_MINDSDB_OLLAMA_MODEL}
+      - OPENAI_API_KEY=sk-ollama

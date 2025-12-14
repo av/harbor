@@ -594,5 +594,9 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         tags: [HST.satellite],
         wikiUrl: `${wikiUrl}/2.3.56-Satellite-Drawio`,
         tooltip: 'AI-powered diagram creation tool - generate draw.io diagrams from natural language.'
-    },
-};
+    },    mindsdb: {
+        name: 'MindsDB',
+        tags: [HST.satellite, HST.api],
+        wikiUrl: `${wikiUrl}/2.3.57-Satellite-MindsDB`,
+        tooltip: 'AI platform for integrating ML models with data sources via HTTP and MySQL APIs.',
+    },};

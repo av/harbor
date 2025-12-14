@@ -1,0 +1,5 @@
+services:
+  mindsdb:
+    environment:
+      - LLM_FUNCTION_BASE_URL=http://vllm:8000/v1
+      - OPENAI_API_KEY=sk-vllm
