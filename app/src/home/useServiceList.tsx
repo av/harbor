@@ -5,7 +5,7 @@ import { HarborService, serviceMetadata } from "../serviceMetadata";
 import { resolveResultLines } from "../utils";
 
 export const isCoreService = (handle: string) => {
-    return !handle.includes('-');
+    return !handle.includes('-') || handle in serviceMetadata;
 }
 
 export const useServiceList = () => {
