@@ -1,0 +1,15 @@
+# Harbor Dify2 - Uses stock Dify compose with upstream transformation
+# The actual service definitions come from dify2/upstream/docker/docker-compose.yaml
+# This file only contains Harbor-specific additions/overrides
+
+services:
+  # Cross-service integration example: connect to Harbor's ollama
+  # This merges with the transformed dify2-api service
+  dify2-api:
+    environment:
+      - OPENAI_API_BASE=http://${HARBOR_CONTAINER_PREFIX}.ollama:11434/v1
+
+  # Expose the web interface on Harbor's port
+  dify2-web:
+    ports:
+      - ${HARBOR_DIFY2_HOST_PORT:-3001}:3000
