@@ -371,7 +371,7 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
     webui: {
         name: 'Open WebUI',
         tags: [HST.frontend],
-        projectUrl: 'https://docs.openwebui.com/',
+        projectUrl: 'https://github.com/open-webui/open-webui',
         wikiUrl: `${wikiUrl}/2.1.1-Frontend:-Open-WebUI`,
         tooltip: 'widely adopted and feature rich web interface for interacting with LLMs. Supports OpenAI-compatible and Ollama backends, multi-users, multi-model chats, custom prompts, TTS, Web RAG, RAG, and much much more.',
     },
