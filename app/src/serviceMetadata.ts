@@ -99,7 +99,7 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
     cfd: {
         name: 'cloudflared',
         tags: [HST.satellite, HST.api, HST.cli],
-        projectUrl: 'https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/',
+        projectUrl: 'https://github.com/cloudflare/cloudflared',
         wikiUrl: `${wikiUrl}/2.3.8-Satellite:-cloudflared`,
         tooltip: 'A helper service allowing to expose Harbor services over the internet.',
     },
@@ -127,7 +127,7 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
     dify: {
         name: 'Dify',
         tags: [HST.satellite, HST.workflows],
-        projectUrl: 'https://docs.dify.ai/',
+        projectUrl: 'https://github.com/langgenius/dify',
         wikiUrl: `${wikiUrl}/2.3.3-Satellite:-Dify`,
         tooltip: 'An open-source LLM app development platform.',
     },
@@ -188,7 +188,7 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
     litellm: {
         name: 'LiteLLM',
         tags: [HST.satellite, HST.api],
-        projectUrl: 'https://docs.litellm.ai/docs/',
+        projectUrl: 'https://github.com/BerriAI/litellm',
         wikiUrl: `${wikiUrl}/2.3.5-Satellite:-LiteLLM`,
         tooltip: 'LLM proxy that can aggregate multiple inference APIs together into a single endpoint.',
     },
@@ -406,7 +406,7 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
     n8n: {
         name: 'n8n',
         tags: [HST.satellite, HST.workflows],
-        projectUrl: 'https://n8n.io/',
+        projectUrl: 'https://github.com/n8n-io/n8n',
         wikiUrl: `${wikiUrl}/2.3.23-Satellite:-n8n`,
         tooltip: 'Fair-code workflow automation platform with native AI capabilities.',
     },
@@ -420,7 +420,7 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
     pipelines: {
         name: 'Open WebUI Pipelines',
         tags: [HST.satellite, HST.api, HST.workflows],
-        projectUrl: 'https://docs.openwebui.com/pipelines/',
+        projectUrl: 'https://github.com/open-webui/pipelines',
         wikiUrl: `${wikiUrl}/2.3.25-Satellite:-Open-WebUI-Pipelines`,
         tooltip: 'UI-Agnostic OpenAI API Plugin Framework.',
     },
