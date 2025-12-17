@@ -1,0 +1,36 @@
+# Harbor Service Configuration for Dify2
+# This file configures how Harbor manages this service
+
+# Upstream compose transformation
+# Allows using stock Docker Compose files with automatic Harbor integration
+upstream:
+  # Path to stock compose file (relative to this directory)
+  source: ./upstream/docker/docker-compose.yaml
+
+  # Prefix for all service names (api -> dify2-api)
+  prefix: dify2
+
+  # Services to exclude from stock compose
+  # We exclude nginx since Harbor handles reverse proxy differently
+  exclude:
+    - nginx
+    - certbot
+
+  # Optional: init container for any pre-startup tasks
+  # Dify doesn't need config merging, but we include this as an example
+  # init:
+  #   image: busybox:latest
+  #   script: ./scripts/init.sh
+  #   volumes:
+  #     - ./configs:/input
+  #     - dify2-shared:/output
+
+# Future sections (not yet implemented):
+# metadata:
+#   tags: [backend, api]
+#   wikiUrl: https://github.com/av/harbor/wiki/dify2
+#
+# configs:
+#   base: ./configs/config.yml
+#   cross:
+#     ollama: ./configs/config.ollama.yml

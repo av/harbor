@@ -14,6 +14,18 @@ export interface UpstreamConfig {
   };
 }
 
+export interface HarborConfig {
+  upstream?: UpstreamConfig;
+  metadata?: {
+    tags?: string[];
+    wikiUrl?: string;
+  };
+  configs?: {
+    base?: string;
+    cross?: Record<string, string>;
+  };
+}
+
 export interface ComposeFile {
   services?: Record<string, ServiceDefinition>;
   volumes?: Record<string, unknown>;
@@ -31,16 +43,33 @@ export interface ServiceDefinition {
 }
 
 /**
- * Load and parse a harbor.upstream.yaml configuration file
+ * Load and parse a harbor.yaml configuration file
  */
-export async function loadUpstreamConfig(servicePath: string): Promise<UpstreamConfig | null> {
-  const configPath = `${servicePath}/harbor.upstream.yaml`;
+export async function loadHarborConfig(servicePath: string): Promise<HarborConfig | null> {
+  const configPath = `${servicePath}/harbor.yaml`;
   try {
     const content = await Deno.readTextFile(configPath);
-    return yaml.parse(content) as UpstreamConfig;
+    return yaml.parse(content) as HarborConfig;
   } catch {
     return null;
   }
+}
+
+/**
+ * Load upstream config from harbor.yaml (for backward compatibility)
+ */
+export async function loadUpstreamConfig(servicePath: string): Promise<UpstreamConfig | null> {
+  const config = await loadHarborConfig(servicePath);
+  return config?.upstream || null;
+}
+
+/**
+ * Check if a service directory has a harbor.yaml configuration
+ */
+export async function hasHarborConfig(serviceName: string): Promise<boolean> {
+  const servicePath = `${paths.home}/${serviceName}`;
+  const config = await loadHarborConfig(servicePath);
+  return config !== null;
 }
 
 /**
@@ -324,6 +353,23 @@ export async function loadTransformedUpstream(
     log.error(`Failed to load upstream compose for ${serviceName}: ${err}`);
     return null;
   }
+}
+
+/**
+ * Find all services with harbor.yaml configurations
+ */
+export async function findHarborConfigServices(): Promise<string[]> {
+  const services: string[] = [];
+
+  for await (const entry of Deno.readDir(paths.home)) {
+    if (entry.isDirectory && !entry.name.startsWith(".")) {
+      if (await hasHarborConfig(entry.name)) {
+        services.push(entry.name);
+      }
+    }
+  }
+
+  return services;
 }
 
 /**

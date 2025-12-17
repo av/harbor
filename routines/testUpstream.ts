@@ -1,13 +1,22 @@
 // Test script for upstream compose transformation
 import * as yaml from "jsr:@std/yaml";
-import { loadUpstreamConfig, transformUpstreamCompose, loadTransformedUpstream } from "./upstream.ts";
+import { loadHarborConfig, loadUpstreamConfig, transformUpstreamCompose, loadTransformedUpstream } from "./upstream.ts";
 import { paths } from "./paths.ts";
 
 async function testTransformation() {
   console.log("=== Testing Upstream Compose Transformation ===\n");
 
-  // Test 1: Load upstream config
-  console.log("1. Loading upstream config for dify2...");
+  // Test 1: Load harbor.yaml config
+  console.log("1. Loading harbor.yaml for dify2...");
+  const harborConfig = await loadHarborConfig(`${paths.home}/dify2`);
+  if (!harborConfig) {
+    console.error("Failed to load harbor.yaml!");
+    Deno.exit(1);
+  }
+  console.log("   Harbor config loaded:", JSON.stringify(harborConfig, null, 2));
+
+  // Test 2: Load upstream config from harbor.yaml
+  console.log("\n2. Loading upstream config...");
   const config = await loadUpstreamConfig(`${paths.home}/dify2`);
   if (!config) {
     console.error("Failed to load upstream config!");

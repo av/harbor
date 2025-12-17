@@ -1,12 +1,43 @@
-# Harbor Upstream Compose Integration - Progress
+# Harbor Service Configuration (harbor.yaml) - Progress
 
 ## 2024-12-16
+
+### Session 3: Rename to harbor.yaml
+
+**Completed**:
+1. ✅ Renamed `harbor.upstream.yaml` → `harbor.yaml`
+2. ✅ Restructured schema with `upstream:` section for future extensibility
+3. ✅ Updated `routines/upstream.ts`:
+   - Added `HarborConfig` interface with `upstream`, `metadata`, `configs` sections
+   - Added `loadHarborConfig()` function
+   - `loadUpstreamConfig()` now reads from `harbor.yaml` → `upstream:` section
+   - Added `hasHarborConfig()` and `findHarborConfigServices()` functions
+4. ✅ Updated documentation (AGENTS.md)
+5. ✅ Created feature branch: `feature/upstream-compose-integration`
+
+**New Schema**:
+```yaml
+# harbor.yaml
+upstream:
+  source: ./upstream/docker-compose.yaml
+  prefix: myservice
+  exclude: [nginx]
+
+metadata:  # Future
+  tags: [backend, api]
+
+configs:   # Future
+  base: ./configs/config.yml
+```
+
+---
 
 ### Session 2: Implementation
 
 **Completed**:
 1. ✅ Created `routines/upstream.ts` - Core transformation module
-   - `loadUpstreamConfig()` - Loads `harbor.upstream.yaml`
+   - `loadHarborConfig()` - Loads `harbor.yaml`
+   - `loadUpstreamConfig()` - Extracts `upstream:` section
    - `transformUpstreamCompose()` - Transforms stock compose with prefix
    - `loadTransformedUpstream()` - Full pipeline for a service
    - Handles: service names, container_name, depends_on, network_mode, volumes, networks
@@ -17,7 +48,7 @@
    - Merged using existing deepMerge logic
 
 3. ✅ Created `dify2/` test service structure:
-   - `dify2/harbor.upstream.yaml` - Config pointing to stock dify
+   - `dify2/harbor.yaml` - Config with `upstream:` section
    - `dify2/override.env` - Harbor-specific env vars
    - `dify2/upstream/docker/docker-compose.yaml` - Downloaded stock file
    - `compose.dify2.yml` - Harbor overlay for cross-service integration
@@ -25,10 +56,10 @@
 4. ✅ Created `routines/testUpstream.ts` - Test script for transformation
 
 **Files Created/Modified**:
-- `routines/upstream.ts` (NEW) - 340 lines
+- `routines/upstream.ts` (NEW) - ~390 lines
 - `routines/mergeComposeFiles.ts` (MODIFIED) - Added upstream loading
 - `routines/testUpstream.ts` (NEW) - Test script
-- `dify2/harbor.upstream.yaml` (NEW)
+- `dify2/harbor.yaml` (NEW)
 - `dify2/override.env` (NEW)
 - `dify2/upstream/docker/docker-compose.yaml` (NEW - downloaded)
 - `compose.dify2.yml` (NEW)

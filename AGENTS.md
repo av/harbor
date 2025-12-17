@@ -26,70 +26,74 @@ Refer to [CLI Reference](./docs/3.-Harbor-CLI-Reference.md) for more details.
 
 ---
 
-# Upstream Compose Integration (WIP)
+# harbor.yaml - Service Configuration (WIP)
 
 ## Overview
 
-Harbor is evolving to support **stock Docker Compose files** from upstream projects with minimal or zero modifications. This enables easier integration of third-party services while maintaining Harbor's dynamic compose layering system.
+Harbor is evolving to support a unified **`harbor.yaml`** configuration file per service. This enables:
+- Using **stock Docker Compose files** from upstream projects with zero modifications
+- Declarative service metadata for the Harbor App
+- Simplified config merging via init containers
 
-## Core Design
+This approach maintains **full backward compatibility** - existing services without `harbor.yaml` work exactly as before.
 
-### Problem Statement
-
-Current Harbor services require:
-1. Rewriting compose files with Harbor conventions (prefixed service names, harbor-network, etc.)
-2. Custom entrypoints for config merging (webui, litellm)
-3. Manual sync when upstream projects update
-
-### Solution: Upstream Compose Transformation
-
-A preprocessing step that:
-1. **Reads** stock compose files from upstream projects
-2. **Transforms** service names, volumes, networks, and references
-3. **Merges** with Harbor's overlay files
-4. **Optionally runs init containers** for config preparation
-
-### File Structure Convention
+## File Structure
 
 ```
 harbor/
   {service}/
+    harbor.yaml                   # Service configuration (NEW)
     upstream/                     # Git submodule or copy of upstream repo
       docker-compose.yaml         # UNTOUCHED stock file
-    harbor.upstream.yaml          # Transformation metadata
     override.env                  # Harbor env overrides
   compose.{service}.yml           # Harbor overlay (cross-service integration)
 ```
 
-### `harbor.upstream.yaml` Schema
+## `harbor.yaml` Schema
 
 ```yaml
-# Required: path to stock compose file
-source: ./upstream/docker/docker-compose.yaml
+# Upstream compose transformation (optional)
+# Use this when integrating stock Docker Compose files
+upstream:
+  # Path to stock compose file (relative to service directory)
+  source: ./upstream/docker/docker-compose.yaml
 
-# Required: prefix for service/volume names
-prefix: dify2
+  # Prefix for all service names (api -> dify2-api)
+  prefix: dify2
 
-# Optional: which services to include (default: all)
-include:
-  - api
-  - worker
-  - web
+  # Services to include (default: all)
+  include:
+    - api
+    - worker
+    - web
 
-# Optional: which services to exclude
-exclude:
-  - nginx
+  # Services to exclude
+  exclude:
+    - nginx
 
-# Optional: init container for config preparation
-init:
-  image: python:3.11-alpine
-  script: ./scripts/prepare-config.sh
-  volumes:
-    - ./configs:/input
-    - {prefix}-shared:/output
+  # Init container for config preparation (optional)
+  init:
+    image: python:3.11-alpine
+    script: ./scripts/prepare-config.sh
+    volumes:
+      - ./configs:/input
+      - {prefix}-shared:/output
+
+# Service metadata for Harbor App (future)
+metadata:
+  tags: [backend, api]
+  wikiUrl: https://github.com/av/harbor/wiki/myservice
+
+# Config merging (future)
+configs:
+  base: ./configs/config.yml
+  cross:
+    ollama: ./configs/config.ollama.yml
 ```
 
-### Transformation Rules
+## Upstream Transformation Rules
+
+When `upstream:` is specified, the CLI automatically transforms the stock compose:
 
 | Original | Transformed |
 |----------|-------------|
@@ -99,31 +103,15 @@ init:
 | `network_mode: service:X` | `network_mode: service:{prefix}-X` |
 | Volume `mydata` | `{prefix}-mydata` |
 | Networks | Add `harbor-network` to all services |
+| `env_file` | Inject `.env` and `override.env` |
 
-### Init Container Pattern (Option A)
+## Migration Path
 
-For services needing runtime config assembly:
+Existing services can be gradually migrated:
 
-```yaml
-init:
-  image: python:3.11-alpine
-  script: ./scripts/merge-configs.sh
-  volumes:
-    - ./configs:/input
-    - {prefix}-config:/output
-  # Runs before main services, exits on completion
-```
-
-Main services then mount the shared volume:
-```yaml
-services:
-  {prefix}-api:
-    volumes:
-      - {prefix}-config:/app/config
-    depends_on:
-      {prefix}-init:
-        condition: service_completed_successfully
-```
+1. **No change needed** - Services without `harbor.yaml` work as before
+2. **Add harbor.yaml** - For new services using stock compose files
+3. **Migrate existing** - Replace manually-rewritten compose with `upstream:` config
 
 ## Implementation Status
 
