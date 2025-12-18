@@ -33,12 +33,23 @@ export interface ComposeFile {
   [key: string]: unknown;
 }
 
+/**
+ * Volume can be either a string (short syntax) or an object (long syntax)
+ */
+type VolumeEntry = string | {
+  type?: string;
+  source?: string;
+  target?: string;
+  read_only?: boolean;
+  [key: string]: unknown;
+};
+
 export interface ServiceDefinition {
   container_name?: string;
   depends_on?: string[] | Record<string, { condition?: string }>;
   networks?: string[] | Record<string, unknown>;
   network_mode?: string;
-  volumes?: string[];
+  volumes?: VolumeEntry[];
   [key: string]: unknown;
 }
 
@@ -139,6 +150,14 @@ export function transformUpstreamCompose(
     transformed.volumes![newName] = volumeConfig;
   }
 
+  // Transform networks (prefix them and preserve config)
+  // Also add a prefixed 'default' network since services may reference it implicitly
+  transformed.networks![`${prefix}-default`] = {};
+  for (const [name, networkConfig] of Object.entries(compose.networks || {})) {
+    const newName = `${prefix}-${name}`;
+    transformed.networks![newName] = networkConfig;
+  }
+
   // Copy over any x- extension fields (YAML anchors are already resolved)
   for (const [key, value] of Object.entries(compose)) {
     if (key.startsWith("x-")) {
@@ -176,16 +195,21 @@ function transformService(
   // Set container name with harbor prefix
   transformed.container_name = `\${HARBOR_CONTAINER_PREFIX}.${prefix}-${originalName}`;
 
-  // Add harbor-network to networks
+  // Transform network references and add harbor-network
   if (Array.isArray(transformed.networks)) {
-    if (!transformed.networks.includes("harbor-network")) {
-      transformed.networks = [...transformed.networks, "harbor-network"];
-    }
+    // Prefix all network names and add harbor-network
+    transformed.networks = [
+      ...transformed.networks.map((net) => `${prefix}-${net}`),
+      "harbor-network",
+    ];
   } else if (typeof transformed.networks === "object" && transformed.networks !== null) {
-    transformed.networks = {
-      ...transformed.networks,
-      "harbor-network": {},
-    };
+    // Prefix all network keys and add harbor-network
+    const prefixedNetworks: Record<string, unknown> = {};
+    for (const [netName, netConfig] of Object.entries(transformed.networks)) {
+      prefixedNetworks[`${prefix}-${netName}`] = netConfig;
+    }
+    prefixedNetworks["harbor-network"] = {};
+    transformed.networks = prefixedNetworks;
   } else if (!transformed.network_mode) {
     // Only add network if not using network_mode
     transformed.networks = ["harbor-network"];
@@ -250,13 +274,25 @@ function transformDependsOn(
 
 /**
  * Transform volume mounts to use prefixed named volumes
+ * Handles both short syntax (string) and long syntax (object)
  */
 function transformVolumes(
-  volumes: string[],
+  volumes: VolumeEntry[],
   prefix: string,
   servicePath: string
-): string[] {
+): VolumeEntry[] {
   return volumes.map((vol) => {
+    // Handle long syntax (object format)
+    if (typeof vol === "object" && vol !== null) {
+      const transformed = { ...vol };
+      // Only transform named volumes (type: volume), not bind mounts
+      if (transformed.type === "volume" && transformed.source) {
+        transformed.source = `${prefix}-${transformed.source}`;
+      }
+      return transformed;
+    }
+
+    // Handle short syntax (string format)
     // Named volume format: "volumename:/path" or "volumename:/path:ro"
     // Bind mount format: "./path:/path" or "/absolute/path:/path"
     const parts = vol.split(":");

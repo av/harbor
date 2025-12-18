@@ -1,5 +1,60 @@
 # Harbor Service Configuration (harbor.yaml) - Progress
 
+## 2024-12-18
+
+### Session 4: Documentation & Discussion Draft
+
+**Completed**:
+1. ✅ Pushed feature branch to origin: `origin/feature/upstream-compose-integration`
+2. ✅ Created `DISCUSSION_DRAFT.md` for upstream GitHub discussion
+3. ✅ Researched modern Docker Compose features (profiles, providers, include, watch)
+4. ✅ Designed `overlays:` syntax for declarative cross-service integrations
+5. ✅ Documented longer-term vision (hooks, secrets, backup, multi-env)
+6. ✅ Updated AGENTS.md with implementation details
+
+**Key Findings - Docker Compose Features**:
+- **Profiles**: Static, can't replace Harbor's dynamic file-matching
+- **Include**: No conditional logic (`include: if:` doesn't exist)
+- **Providers**: New extension mechanism for non-container resources (interesting for future)
+- **Lifecycle hooks**: `post_start`/`pre_stop` added in Compose v2.30
+
+**Proposed Future `harbor.yaml` Sections**:
+```yaml
+overlays:        # Cross-service integrations (replaces compose.x.*.yml naming)
+hooks:           # pre_up, post_up, pre_down lifecycle scripts
+secrets:         # SOPS/age/Vault integration
+backup:          # Scheduled volume backups
+environments:    # dev/prod configurations
+```
+
+**Next**: Test transformation with `harbor up dify2`
+
+### Session 4b: Bug Fixes & Testing
+
+**Bugs Fixed**:
+1. ✅ **Volume long syntax**: Volumes can be objects (not just strings) - added `VolumeEntry` type
+2. ✅ **Network prefixing**: Service network references now prefixed (`ssrf_proxy_network` → `dify2-ssrf_proxy_network`)
+3. ✅ **Default network**: Added implicit `{prefix}-default` network for services referencing `default`
+
+**Test Results**:
+```bash
+# Transformation test - 33 services transformed correctly
+~/.deno/bin/deno run --allow-read testUpstream.ts
+# Services: dify2-init_permissions, dify2-api, dify2-worker, dify2-web, ...
+
+# Merged compose validation
+docker compose -f __harbor.yml config --services
+# Shows: dify2-api, dify2-worker, dify2-web, dify2-redis, etc.
+
+# Harbor up dry-run - pulls images successfully
+harbor up dify2 --dry-run
+```
+
+**Files Modified**:
+- `routines/upstream.ts` - Fixed volume and network transformation
+
+---
+
 ## 2024-12-16
 
 ### Session 3: Rename to harbor.yaml

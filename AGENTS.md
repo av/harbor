@@ -93,7 +93,17 @@ configs:
 
 ## Upstream Transformation Rules
 
-When `upstream:` is specified, the CLI automatically transforms the stock compose:
+When `upstream:` is specified, the CLI automatically transforms the stock compose.
+
+**Implementation**: Transformation is done via proper YAML parsing (`@std/yaml`), not regex. The stock compose is parsed into an object, transformed structurally, then merged. YAML anchors (`x-shared-env`, etc.) are resolved at parse time by the YAML library.
+
+**Core module**: `routines/upstream.ts` (~390 lines)
+- `loadHarborConfig()` / `loadUpstreamConfig()` - Load and parse `harbor.yaml`
+- `transformUpstreamCompose()` - Main transformation orchestrator
+- `transformService()` - Per-service transformation (container_name, networks, depends_on, etc.)
+- `loadTransformedUpstream()` - Full pipeline for a service
+
+**Transformation rules**:
 
 | Original | Transformed |
 |----------|-------------|
@@ -126,3 +136,11 @@ See [Progress.md](./Progress.md) for current development status.
 | Open-WebUI | 2 | Low | ⏳ Planned |
 | Flowise | 1 | Low | ⏳ Planned |
 | Lobe-Chat | 7+ | High (network_mode) | ⏳ Planned |
+
+## Future Directions
+
+See [DISCUSSION_DRAFT.md](./DISCUSSION_DRAFT.md) for proposed extensions:
+- **Declarative overlays**: `overlays:` section for cross-service integrations (replacing file-naming conventions)
+- **Lifecycle hooks**: `hooks:` for pre_up, post_up, pre_down scripts
+- **Secrets management**: `secrets:` for SOPS/age/Vault integration
+- **Multi-environment**: `environments:` for dev/prod configurations
