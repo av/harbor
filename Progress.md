@@ -53,6 +53,26 @@ harbor up dify2 --dry-run
 **Files Modified**:
 - `routines/upstream.ts` - Fixed volume and network transformation
 
+**Deep Testing Results**:
+```
+✅ dify2-web          - Up, serving Next.js on port 3001
+✅ dify2-redis        - Up, healthy
+✅ dify2-init_perms   - Completed successfully
+✅ ollama             - Up, healthy
+⚠️  dify2-api         - Starts but needs storage config (OPENDAL_SCHEME)
+⚠️  dify2-sandbox     - Needs conf/config.yaml (volume mount issue)
+⚠️  dify2-ssrf_proxy  - Entrypoint script issue
+⏸️  dify2-worker      - Waiting on API
+⏸️  dify2-db_postgres - Not started (uses Docker Compose profiles)
+```
+
+**Known Issues for Dify Integration**:
+1. **Profiles**: Stock Dify uses `profiles:` for optional services (databases). Need to handle profile passthrough or default selection.
+2. **Config files**: Some services (sandbox, ssrf_proxy) expect config files that aren't in the stock compose volumes.
+3. **Environment**: API needs storage configuration (`OPENDAL_SCHEME`, etc.) - should be in `override.env`.
+
+**Conclusion**: The upstream transformation is working correctly. The issues are Dify-specific configuration requirements, not transformation bugs.
+
 ---
 
 ## 2024-12-16
