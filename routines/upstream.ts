@@ -238,7 +238,13 @@ function transformService(
   }
 
   // Add env_file for harbor integration
-  const envFiles = ["./.env", `./${servicePath.split("/").pop()}/override.env`];
+  // Order: Harbor global -> upstream defaults -> service overrides (later files override earlier)
+  const serviceDir = servicePath.split("/").pop();
+  const envFiles = [
+    "./.env",
+    `./${serviceDir}/upstream/.env.example`,
+    `./${serviceDir}/override.env`,
+  ];
   if (Array.isArray(transformed.env_file)) {
     transformed.env_file = [...envFiles, ...transformed.env_file];
   } else if (transformed.env_file) {

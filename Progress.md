@@ -73,6 +73,43 @@ harbor up dify2 --dry-run
 
 **Conclusion**: The upstream transformation is working correctly. The issues are Dify-specific configuration requirements, not transformation bugs.
 
+### Session 4c: Full Dify2 Integration
+
+**Completed**:
+1. ✅ Downloaded Dify's `.env.example` to `dify2/upstream/.env.example`
+2. ✅ Updated transformation to inject upstream env file: `.env` → `upstream/.env.example` → `override.env`
+3. ✅ Downloaded ssrf_proxy config files (`docker-entrypoint.sh`, `squid.conf.template`)
+4. ✅ Created sandbox config directory with `config.yaml`
+5. ✅ Added service hostname overrides to global `.env` (DB_HOST, REDIS_HOST, etc.)
+6. ✅ Fixed port conflict (PLUGIN_DEBUGGING_PORT 5003→5013)
+
+**All Dify2 Services Running**:
+```
+harbor.dify2-web                Up (port 3001)
+harbor.dify2-api                Up (port 5001 internal)
+harbor.dify2-worker             Up
+harbor.dify2-worker_beat        Up
+harbor.dify2-plugin_daemon      Up (port 5013)
+harbor.dify2-redis              Up (healthy)
+harbor.dify2-db_postgres        Up (requires --profile postgresql)
+harbor.dify2-sandbox            Up (healthy)
+harbor.dify2-ssrf_proxy         Up
+harbor.dify2-init_permissions   Exited (0) - expected
+```
+
+**Key Learnings**:
+1. **Env file precedence**: Compose `environment:` with defaults like `${VAR:-default}` requires overrides in global `.env`, not just `env_file`
+2. **Profiles**: Database services use `profiles: [postgresql]` - must pass `--profile postgresql` to start them
+3. **Config files**: Some services (sandbox, ssrf_proxy) need config files downloaded from upstream
+
+**Files Modified**:
+- `routines/upstream.ts` - Added upstream `.env.example` to env_file injection
+- `dify2/override.env` - Service hostname overrides
+- `.env` - Global Dify2 config (DB_HOST, REDIS_HOST, ports)
+- `dify2/upstream/.env.example` - Downloaded from Dify
+- `dify2/upstream/ssrf_proxy/*` - Downloaded config files
+- `dify2/upstream/volumes/sandbox/conf/config.yaml` - Sandbox config
+
 ---
 
 ## 2024-12-16

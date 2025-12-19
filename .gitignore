@@ -116,3 +116,5 @@ __harbor.yml
 .parcel-cache
 
 context_portal
+dify2/upstream/volumes/db/
+dify2/upstream/volumes/redis/
