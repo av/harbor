@@ -706,4 +706,11 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         wikiUrl: `${wikiUrl}/2.1.14-Frontend-Onyx`,
         tooltip: 'Open Source AI Platform with Chat UI, RAG, MCP support, and 40+ document connectors.',
     },
+    opennotebook: {
+        name: 'Open Notebook',
+        tags: [HST.satellite, HST.tools],
+        projectUrl: 'https://github.com/lfnovo/open-notebook',
+        wikiUrl: `${wikiUrl}/2.3.59-Satellite-Open-Notebook`,
+        tooltip: 'AI-powered research and note-taking platform with multi-provider LLM support, podcast generation, and content analysis.',
+    },
 };

@@ -1,0 +1,5 @@
+services:
+  opennotebook:
+    environment:
+      - OPENAI_COMPATIBLE_BASE_URL_LLM=http://llamacpp:8080/v1
+      - OPENAI_COMPATIBLE_API_KEY_LLM=sk-llamacpp

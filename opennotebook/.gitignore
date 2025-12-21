@@ -1,0 +1,11 @@
+# Open Notebook data directories
+data/
+db/
+
+# Database files
+*.db
+*.db-shm
+*.db-wal
+
+# Logs
+*.log

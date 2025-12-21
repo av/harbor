@@ -41,7 +41,15 @@ This means that you're not allowed to run those scripts with `deno run` directly
 
 ### Updating default profile
 
-When you make changes to the `default.env`, you then need to update the current profile with:
+When you make changes to `/profiles/default.env`, you then need to update the current profile with:
 ```bash
 harbor config update
 ```
+
+**Important for development:** Changes to `/profiles/default.env` are NOT automatically propagated to your current profile (`.env`). During development, you need to update both files:
+1. Update `/profiles/default.env` for distribution to users
+2. Update `.env` (or run `harbor config update`) to apply changes to your current profile
+
+### Code Quality
+
+**STRICTLY PROHIBITED:** Adding useless or obvious comments to code. Comments should only explain complex logic, non-obvious decisions, or provide necessary context. Never add comments that merely restate what the code clearly does.

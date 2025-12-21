@@ -100,6 +100,7 @@ services:
 - Environment variables must follow `HARBOR_${HANDLE}_*` pattern
 - If service exposes ports, use `${HARBOR_${HANDLE}_HOST_PORT}:${internal_port}` format
 - Main container in the compose file MUST match the service handle
+- You must not set `restart` policy in the compose file, automatic restart is not expected and considered an error
 
 ### Step 4: Add Environment Variables to profiles/default.env
 
@@ -229,6 +230,35 @@ Create cross-service files following pattern:
 - `compose.x.${handle}.${other_service}.yml` - Integration with specific service
 - `compose.x.${handle}.nvidia.yml` - GPU support
 - `compose.x.traefik.${handle}.yml` - Reverse proxy integration
+
+#### Ollama Integration Pattern
+
+When integrating a service that supports Ollama, create a `compose.x.${handle}.ollama.yml` file to auto-configure Ollama connectivity:
+
+```yaml
+services:
+  ${handle}:
+    environment:
+      - <SERVICE_OLLAMA_VAR>=${HARBOR_OLLAMA_INTERNAL_URL}
+```
+
+**Example for Open Notebook** (`compose.x.opennotebook.ollama.yml`):
+```yaml
+services:
+  opennotebook:
+    environment:
+      - OLLAMA_API_BASE=${HARBOR_OLLAMA_INTERNAL_URL}
+```
+
+This pattern allows the service to automatically connect to Ollama when both are running in the Harbor network. The `HARBOR_OLLAMA_INTERNAL_URL` defaults to `http://ollama:11434`.
+
+**Common Ollama environment variable names:**
+- `OLLAMA_API_BASE` - Most common (Open WebUI, Open Notebook, etc.)
+- `OLLAMA_URL` - Alternative naming (Parllama, etc.)
+- `OLLAMA_BASE_URL` - Another variant
+- `OLLAMA_HOST` - Less common
+
+Check the service's documentation or environment variable configuration to identify the correct variable name.
 
 ### Validation Checklist
 

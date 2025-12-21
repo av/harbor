@@ -15,7 +15,7 @@ show_help() {
     echo "Usage: $0 <command> [options]"
     echo
     echo "Compose Setup Commands:"
-    echo "  up|u [handle(s)]        - Start the service(s)"
+    echo "  up|u|start|s [handle(s)] - Start the service(s)"
     echo "    up --tail             - Start and tail the logs"
     echo "    up --open             - Start and open in the browser"
     echo "    up --no-defaults      - Do not include default services"
@@ -32,6 +32,7 @@ show_help() {
     echo "  shell <handle>          - Load shell in the given service main container"
     echo "  build <handle>          - Build the given service"
     echo "  stats                   - Show resource usage statistics"
+    echo "  attach <handle>         - Attach to a running service container"
     echo "  cmd <handle>            - Print the docker compose command"
     echo
     echo "Setup Management Commands:"
@@ -60,6 +61,11 @@ show_help() {
     echo "  morphic   - Configure Morphic service"
     echo "  modularmax - Configure Modular MAX service"
     echo "  boost     - Configure Harbor Boost service"
+    echo "  stt       - Configure Speech-to-Text service"
+    echo "  speaches  - Configure Speaches service"
+    echo "  webtop    - Configure Webtop service"
+    echo "  mcp       - Configure MCP service"
+    echo "  oterm     - Configure oterm service"
     echo
     echo "Service CLIs:"
     echo "  ollama     - Run Ollama CLI (docker). Service should be running."
@@ -71,10 +77,12 @@ show_help() {
     echo "  cmdh              - Run cmdh CLI"
     echo "  parllama          - Launch Parllama - TUI for chatting with Ollama models"
     echo "  bench             - Run and manage Harbor Bench"
+    echo "  lmeval|lm_eval    - Run LM Evaluation Harness"
     echo "  openhands|oh      - Run OpenHands service"
     echo "  repopack          - Run the Repopack CLI"
     echo "  nexa              - Run the Nexa CLI, configure the service"
     echo "  gptme             - Run gptme CLI, configure the service"
+    echo "  promptfoo|pf      - Run promptfoo CLI for LLM testing and evaluation"
     echo "  hf                - Run the Harbor's Hugging Face CLI. Expanded with a few additional commands."
     echo "    hf dl           - HuggingFaceModelDownloader CLI"
     echo "    hf parse-url    - Parse file URL from Hugging Face"
@@ -150,6 +158,10 @@ show_help() {
     echo "  smi                   - Show NVIDIA GPU information"
     echo "  top                   - Run nvtop to monitor GPU usage"
     echo "  size                  - Print the size of caches Harbor is aware of"
+    echo "  eval                  - Run promptfoo evaluation"
+    echo "  routine               - Run internal Harbor routines"
+    echo "  dev <script>          - Run Harbor development scripts"
+    echo "  tools                 - Run Harbor development tools"
     echo
     echo "Harbor Workspace Commands:"
     echo "  home    - Show path to the Harbor workspace"
@@ -4524,7 +4536,7 @@ default_routine_runtime=$(env_manager get routine.runtime)
 
 main_entrypoint() {
     case "$1" in
-    up | u)
+    up | u | start | s)
         shift
         run_up "$@"
         ;;
