@@ -122,6 +122,7 @@ HARBOR_${HANDLE}_VERSION="latest"
 **Consistency**
 - All environment variables referenced in the `compose.${handle}.yml` must be defined in the `profiles/default.env`
 - All variables must use the `HARBOR_${HANDLE}_*` pattern in the profile, but not necessarily in the compose file
+- **CRITICAL:** Never edit `.env` manually. After updating `profiles/default.env`, always run `harbor config update` to sync changes to your local environment.
 
 ### Step 5: Add Service Metadata
 

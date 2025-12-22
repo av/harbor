@@ -4452,6 +4452,79 @@ run_gptme_command() {
         gptme -m $model_spec "$@"
 }
 
+run_tensortruth_command() {
+    case "$1" in
+    docs)
+        shift
+        local services=$(get_active_services)
+
+        if ! is_service_running "tensortruth"; then
+            log_error "TensorTruth is not running. Start it with 'harbor up tensortruth'"
+            return 1
+        fi
+
+        $(compose_with_options $services "tensortruth") run \
+            --rm \
+            --name harbor.tensortruth-docs-$RANDOM \
+            -e "TERM=xterm-256color" \
+            -v "$original_dir:$original_dir" \
+            --workdir "$original_dir" \
+            tensortruth tensor-truth-docs "$@"
+        ;;
+    build)
+        shift
+        local services=$(get_active_services)
+
+        if ! is_service_running "tensortruth"; then
+            log_error "TensorTruth is not running. Start it with 'harbor up tensortruth'"
+            return 1
+        fi
+
+        $(compose_with_options $services "tensortruth") run \
+            --rm \
+            --name harbor.tensortruth-build-$RANDOM \
+            -e "TERM=xterm-256color" \
+            -v "$original_dir:$original_dir" \
+            --workdir "$original_dir" \
+            tensortruth tensor-truth-build "$@"
+        ;;
+    papers)
+        shift
+        local services=$(get_active_services)
+
+        if ! is_service_running "tensortruth"; then
+            log_error "TensorTruth is not running. Start it with 'harbor up tensortruth'"
+            return 1
+        fi
+
+        $(compose_with_options $services "tensortruth") run \
+            --rm \
+            --name harbor.tensortruth-papers-$RANDOM \
+            -e "TERM=xterm-256color" \
+            -v "$original_dir:$original_dir" \
+            --workdir "$original_dir" \
+            tensortruth tensor-truth-papers "$@"
+        ;;
+    -h | --help | help)
+        echo "Usage: harbor tensortruth <command>"
+        echo
+        echo "Commands:"
+        echo "  harbor tensortruth docs [args]   - Scrape documentation (tensor-truth-docs)"
+        echo "  harbor tensortruth build [args]  - Build vector indexes (tensor-truth-build)"
+        echo "  harbor tensortruth papers [args] - Manage papers (tensor-truth-papers)"
+        echo
+        echo "Examples:"
+        echo "  harbor tensortruth docs --list"
+        echo "  harbor tensortruth docs pytorch numpy"
+        echo "  harbor tensortruth papers --category dl_foundations"
+        echo "  harbor tensortruth build --modules module_name"
+        ;;
+    *)
+        return $scramble_exit_code
+        ;;
+    esac
+}
+
 run_mcp_command() {
     case "$1" in
     inspector)
@@ -4818,6 +4891,10 @@ main_entrypoint() {
     gptme)
         shift
         run_gptme_command "$@"
+        ;;
+    tensortruth)
+        shift
+        run_tensortruth_command "$@"
         ;;
     mcp)
         shift

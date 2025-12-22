@@ -333,6 +333,13 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         wikiUrl: `${wikiUrl}/2.2.4-Backend:-TabbyAPI`,
         tooltip: 'An OAI compatible exllamav2 API that\'s both lightweight and fast',
     },
+    tensortruth: {
+        name: 'TensorTruth',
+        tags: [HST.satellite, HST.cli],
+        projectUrl: 'https://github.com/ljubobratovicrelja/tensor-truth',
+        wikiUrl: `${wikiUrl}/2.3.60-Satellite-tensortruth`,
+        tooltip: 'RAG implementation with convenience features for indexing Python packages and scientific papers.',
+    },
     textgrad: {
         name: 'TextGrad',
         tags: [HST.satellite],

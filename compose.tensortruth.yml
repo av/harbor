@@ -1,0 +1,18 @@
+services:
+  tensortruth:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.tensortruth
+    build:
+      context: ./tensortruth
+      dockerfile: Dockerfile
+      args:
+        HARBOR_TENSORTRUTH_IMAGE: ${HARBOR_TENSORTRUTH_IMAGE}
+        HARBOR_TENSORTRUTH_VERSION: ${HARBOR_TENSORTRUTH_VERSION}
+    ports:
+      - ${HARBOR_TENSORTRUTH_HOST_PORT}:8501
+    volumes:
+      - ${HARBOR_TENSORTRUTH_CACHE}:/root/.tensortruth
+    env_file:
+      - ./.env
+      - ./tensortruth/override.env
+    networks:
+      - harbor-network

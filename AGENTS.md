@@ -46,9 +46,9 @@ When you make changes to `/profiles/default.env`, you then need to update the cu
 harbor config update
 ```
 
-**Important for development:** Changes to `/profiles/default.env` are NOT automatically propagated to your current profile (`.env`). During development, you need to update both files:
+**Important for development:** Changes to `/profiles/default.env` are NOT automatically propagated to your current profile (`.env`). You MUST NOT edit `.env` manually. Instead:
 1. Update `/profiles/default.env` for distribution to users
-2. Update `.env` (or run `harbor config update`) to apply changes to your current profile
+2. Run `harbor config update` to apply changes to your current profile
 
 ### Code Quality
 
