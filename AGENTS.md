@@ -58,26 +58,23 @@ upstream:
   # Path to stock compose file (relative to service directory)
   source: ./upstream/docker/docker-compose.yaml
 
-  # Prefix for all service names (api -> dify2-api)
-  prefix: dify2
+  # Namespace for isolation (creates internal network + prefixed aliases)
+  namespace: dify2
 
   # Services to include (default: all)
-  include:
+  services:
+    include:
+      - api
+      - worker
+      - web
+    exclude:
+      - nginx
+
+  # Services exposed on harbor-network (with {namespace}-{service} alias)
+  # Other services stay internal-only
+  expose:
     - api
-    - worker
     - web
-
-  # Services to exclude
-  exclude:
-    - nginx
-
-  # Init container for config preparation (optional)
-  init:
-    image: python:3.11-alpine
-    script: ./scripts/prepare-config.sh
-    volumes:
-      - ./configs:/input
-      - {prefix}-shared:/output
 
 # Service metadata for Harbor App (future)
 metadata:
@@ -91,28 +88,52 @@ configs:
     ollama: ./configs/config.ollama.yml
 ```
 
+## Namespace Isolation via Internal Networks
+
+The key insight is using **Docker Compose networks** for conflict prevention:
+
+1. **Internal network**: `{namespace}-internal` - Services use original names (no compose changes needed)
+2. **Shared network**: `harbor-network` - Exposed services get `{namespace}-{service}` alias
+
+This means:
+- **No env rewrites needed** - Internal services reference each other by original names
+- **No compose modifications** - Upstream compose works as-is
+- **No conflicts** - External services see prefixed aliases
+- **Backward compatible** - Existing Harbor services unchanged
+
+```yaml
+# Example: dify2 services
+services:
+  api:                      # Original service name preserved
+    networks:
+      dify2-internal:       # Internal: reachable as "api", "db", "redis"
+      harbor-network:
+        aliases:
+          - dify2-api       # External: reachable as "dify2-api"
+```
+
 ## Upstream Transformation Rules
 
 When `upstream:` is specified, the CLI automatically transforms the stock compose.
 
 **Implementation**: Transformation is done via proper YAML parsing (`@std/yaml`), not regex. The stock compose is parsed into an object, transformed structurally, then merged. YAML anchors (`x-shared-env`, etc.) are resolved at parse time by the YAML library.
 
-**Core module**: `routines/upstream.ts` (~390 lines)
+**Core module**: `routines/upstream.ts`
 - `loadHarborConfig()` / `loadUpstreamConfig()` - Load and parse `harbor.yaml`
 - `transformUpstreamCompose()` - Main transformation orchestrator
-- `transformService()` - Per-service transformation (container_name, networks, depends_on, etc.)
+- `transformService()` - Per-service transformation (container_name, networks, etc.)
 - `loadTransformedUpstream()` - Full pipeline for a service
 
 **Transformation rules**:
 
 | Original | Transformed |
 |----------|-------------|
-| Service `api` | `{prefix}-api` |
-| `container_name: X` | `${HARBOR_CONTAINER_PREFIX}.{prefix}-{original}` |
-| `depends_on: [redis]` | `depends_on: [{prefix}-redis]` |
-| `network_mode: service:X` | `network_mode: service:{prefix}-X` |
-| Volume `mydata` | `{prefix}-mydata` |
-| Networks | Add `harbor-network` to all services |
+| Service `api` | `api` (unchanged) |
+| `container_name: X` | `${HARBOR_CONTAINER_PREFIX}.{namespace}-{original}` |
+| `depends_on: [redis]` | `depends_on: [redis]` (unchanged - internal network) |
+| `network_mode: service:X` | `network_mode: service:X` (unchanged - internal network) |
+| Volume `mydata` | `{namespace}-mydata` |
+| Networks | Add `{namespace}-internal` + `harbor-network` (with alias for exposed services) |
 | `env_file` | Inject `.env` and `override.env` |
 
 ## Migration Path

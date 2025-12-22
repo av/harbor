@@ -97,7 +97,7 @@ harbor.dify2-ssrf_proxy         Up
 harbor.dify2-init_permissions   Exited (0) - expected
 ```
 
-**Key Learnings**:
+**Key Learnings (Session 4c - now superseded by Session 5)**:
 1. **Env file precedence**: Compose `environment:` with defaults like `${VAR:-default}` requires overrides in global `.env`, not just `env_file`
 2. **Profiles**: Database services use `profiles: [postgresql]` - must pass `--profile postgresql` to start them
 3. **Config files**: Some services (sandbox, ssrf_proxy) need config files downloaded from upstream
@@ -109,6 +109,66 @@ harbor.dify2-init_permissions   Exited (0) - expected
 - `dify2/upstream/.env.example` - Downloaded from Dify
 - `dify2/upstream/ssrf_proxy/*` - Downloaded config files
 - `dify2/upstream/volumes/sandbox/conf/config.yaml` - Sandbox config
+
+### Session 5: Namespace Isolation via Internal Networks
+
+**Date**: 2024-12-22
+
+**Problem with Previous Approach (Session 4c)**:
+The env rewrite approach required:
+1. Injecting upstream `.env.example` into env_file chain
+2. Rewriting service hostnames in `override.env` (DB_HOST, REDIS_HOST, etc.)
+3. Adding Dify-specific overrides to Harbor's global `.env`
+4. Complex handling of hardcoded values in compose `environment:` section
+
+This was fragile and polluted the global `.env` with service-specific config.
+
+**New Approach: Internal Network Isolation**
+
+Use Docker Compose networks to prevent conflicts without rewriting env vars:
+
+```yaml
+# harbor.yaml schema
+upstream:
+  source: ./upstream/docker/docker-compose.yaml
+  namespace: dify2
+  services:
+    include: [api, worker, web, redis, db]
+    exclude: [nginx]
+  expose: [api, web]  # Services visible on harbor-network
+```
+
+**How it works**:
+
+| Network | Service reachable as | Used by |
+|---------|---------------------|---------|
+| `dify2-internal` | `api`, `db`, `redis` (original) | Dify services internally |
+| `harbor-network` | `dify2-api`, `dify2-web` (aliased) | Other Harbor services |
+
+**Benefits**:
+1. **No env rewrites** - Internal services use original names
+2. **No compose changes** - Upstream compose works as-is
+3. **No conflicts** - External services see prefixed aliases
+4. **Backward compatible** - Existing Harbor services unchanged
+5. **Clean separation** - No Dify-specific vars in global `.env`
+
+**Transformation rules (updated)**:
+
+| Original | Transformed |
+|----------|-------------|
+| Service `api` | `api` (unchanged) |
+| `container_name: X` | `${HARBOR_CONTAINER_PREFIX}.{namespace}-{original}` |
+| `depends_on: [redis]` | `depends_on: [redis]` (unchanged) |
+| `network_mode: service:X` | `network_mode: service:X` (unchanged) |
+| Volume `mydata` | `{namespace}-mydata` |
+| Networks | Add `{namespace}-internal` + `harbor-network` (with alias for exposed) |
+
+**Cross-service integration**:
+- Other Harbor services reference exposed aliases: `http://dify2-api:5001`
+- User creates cross-service files: `compose.x.boost.dify2.yml`
+- Internal Dify services (db, redis) not exposed - no conflicts possible
+
+**Status**: Design finalized, implementation pending
 
 ---
 

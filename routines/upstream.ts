@@ -4,14 +4,21 @@ import { log } from "./utils";
 
 export interface UpstreamConfig {
   source: string;
-  prefix: string;
-  include?: string[];
-  exclude?: string[];
+  namespace: string;
+  services?: {
+    include?: string[];
+    exclude?: string[];
+  };
+  expose?: string[];  // Services exposed on harbor-network with alias
   init?: {
     image: string;
     script: string;
     volumes?: string[];
   };
+  // Deprecated - kept for backward compatibility
+  prefix?: string;
+  include?: string[];
+  exclude?: string[];
 }
 
 export interface HarborConfig {
@@ -100,11 +107,18 @@ export function transformUpstreamCompose(
   config: UpstreamConfig,
   servicePath: string
 ): ComposeFile {
-  const { prefix, include, exclude } = config;
+  // Support both new schema (namespace, services.include/exclude) and old (prefix, include/exclude)
+  const namespace = config.namespace || config.prefix || "upstream";
+  const include = config.services?.include || config.include;
+  const exclude = config.services?.exclude || config.exclude;
+  const expose = config.expose || [];
+  const internalNetwork = `${namespace}-internal`;
+
   const transformed: ComposeFile = {
     services: {},
     volumes: {},
     networks: {
+      [internalNetwork]: {},  // Internal network for service isolation
       "harbor-network": { external: true },
     },
   };
@@ -127,35 +141,31 @@ export function transformUpstreamCompose(
     }
   }
 
-  // Transform services
+  // Build set of exposed services
+  const exposedServices = new Set<string>(expose);
+
+  // Transform services - keep original names, add to internal network
   for (const [name, service] of Object.entries(compose.services || {})) {
     if (!includedServices.has(name)) {
       continue;
     }
 
-    const newName = `${prefix}-${name}`;
+    // Keep original service name (no prefixing)
     const transformedService = transformService(
       service,
       name,
-      prefix,
-      includedServices,
+      namespace,
+      internalNetwork,
+      exposedServices.has(name),
       servicePath
     );
-    transformed.services![newName] = transformedService;
+    transformed.services![name] = transformedService;
   }
 
   // Transform volumes (prefix them to avoid conflicts)
   for (const [name, volumeConfig] of Object.entries(compose.volumes || {})) {
-    const newName = `${prefix}-${name}`;
+    const newName = `${namespace}-${name}`;
     transformed.volumes![newName] = volumeConfig;
-  }
-
-  // Transform networks (prefix them and preserve config)
-  // Also add a prefixed 'default' network since services may reference it implicitly
-  transformed.networks![`${prefix}-default`] = {};
-  for (const [name, networkConfig] of Object.entries(compose.networks || {})) {
-    const newName = `${prefix}-${name}`;
-    transformed.networks![newName] = networkConfig;
   }
 
   // Copy over any x- extension fields (YAML anchors are already resolved)
@@ -167,12 +177,12 @@ export function transformUpstreamCompose(
 
   // Add init container if configured
   if (config.init) {
-    transformed.services![`${prefix}-init`] = createInitContainer(config, prefix, servicePath);
+    transformed.services![`${namespace}-init`] = createInitContainer(config, namespace, internalNetwork, servicePath);
     
     // Make all other services depend on init
     for (const [name, service] of Object.entries(transformed.services!)) {
-      if (name !== `${prefix}-init`) {
-        addInitDependency(service as ServiceDefinition, `${prefix}-init`);
+      if (name !== `${namespace}-init`) {
+        addInitDependency(service as ServiceDefinition, `${namespace}-init`);
       }
     }
   }
@@ -182,67 +192,54 @@ export function transformUpstreamCompose(
 
 /**
  * Transform a single service definition
+ * Uses internal network for isolation, with optional alias on harbor-network for exposed services
  */
 function transformService(
   service: ServiceDefinition,
   originalName: string,
-  prefix: string,
-  includedServices: Set<string>,
+  namespace: string,
+  internalNetwork: string,
+  isExposed: boolean,
   servicePath: string
 ): ServiceDefinition {
   const transformed: ServiceDefinition = { ...service };
 
-  // Set container name with harbor prefix
-  transformed.container_name = `\${HARBOR_CONTAINER_PREFIX}.${prefix}-${originalName}`;
+  // Set container name with harbor prefix and namespace
+  transformed.container_name = `\${HARBOR_CONTAINER_PREFIX}.${namespace}-${originalName}`;
 
-  // Transform network references and add harbor-network
-  if (Array.isArray(transformed.networks)) {
-    // Prefix all network names and add harbor-network
-    transformed.networks = [
-      ...transformed.networks.map((net) => `${prefix}-${net}`),
-      "harbor-network",
-    ];
-  } else if (typeof transformed.networks === "object" && transformed.networks !== null) {
-    // Prefix all network keys and add harbor-network
-    const prefixedNetworks: Record<string, unknown> = {};
-    for (const [netName, netConfig] of Object.entries(transformed.networks)) {
-      prefixedNetworks[`${prefix}-${netName}`] = netConfig;
-    }
-    prefixedNetworks["harbor-network"] = {};
-    transformed.networks = prefixedNetworks;
-  } else if (!transformed.network_mode) {
-    // Only add network if not using network_mode
-    transformed.networks = ["harbor-network"];
+  // Build network configuration
+  // All services join internal network (original names work there)
+  // Exposed services also join harbor-network with prefixed alias
+  const networks: Record<string, unknown> = {
+    [internalNetwork]: {},  // Internal network - service reachable by original name
+  };
+
+  if (isExposed) {
+    // Exposed services get alias on harbor-network
+    networks["harbor-network"] = {
+      aliases: [`${namespace}-${originalName}`],
+    };
   }
 
-  // Transform depends_on references
-  if (transformed.depends_on) {
-    transformed.depends_on = transformDependsOn(
-      transformed.depends_on,
-      prefix,
-      includedServices
-    );
+  // Handle network_mode: service:X - these services share network with another
+  // Don't add networks if using network_mode
+  if (!transformed.network_mode) {
+    transformed.networks = networks;
   }
+  // Note: network_mode references stay unchanged - they reference original service names
+  // which work because all services are on the internal network
 
-  // Transform network_mode: service:X references
-  if (transformed.network_mode?.startsWith("service:")) {
-    const referencedService = transformed.network_mode.replace("service:", "");
-    if (includedServices.has(referencedService)) {
-      transformed.network_mode = `service:${prefix}-${referencedService}`;
-    }
-  }
+  // depends_on stays unchanged - references original service names (internal network)
 
   // Transform volume references to use prefixed named volumes
   if (transformed.volumes) {
-    transformed.volumes = transformVolumes(transformed.volumes, prefix, servicePath);
+    transformed.volumes = transformVolumes(transformed.volumes, namespace, servicePath);
   }
 
   // Add env_file for harbor integration
-  // Order: Harbor global -> upstream defaults -> service overrides (later files override earlier)
   const serviceDir = servicePath.split("/").pop();
   const envFiles = [
     "./.env",
-    `./${serviceDir}/upstream/.env.example`,
     `./${serviceDir}/override.env`,
   ];
   if (Array.isArray(transformed.env_file)) {
@@ -253,28 +250,6 @@ function transformService(
     transformed.env_file = envFiles;
   }
 
-  return transformed;
-}
-
-/**
- * Transform depends_on to use prefixed service names
- */
-function transformDependsOn(
-  dependsOn: string[] | Record<string, { condition?: string }>,
-  prefix: string,
-  includedServices: Set<string>
-): string[] | Record<string, { condition?: string }> {
-  if (Array.isArray(dependsOn)) {
-    return dependsOn.map((dep) =>
-      includedServices.has(dep) ? `${prefix}-${dep}` : dep
-    );
-  }
-
-  const transformed: Record<string, { condition?: string }> = {};
-  for (const [dep, config] of Object.entries(dependsOn)) {
-    const newDep = includedServices.has(dep) ? `${prefix}-${dep}` : dep;
-    transformed[newDep] = config;
-  }
   return transformed;
 }
 
@@ -328,21 +303,22 @@ function transformVolumes(
  */
 function createInitContainer(
   config: UpstreamConfig,
-  prefix: string,
+  namespace: string,
+  internalNetwork: string,
   servicePath: string
 ): ServiceDefinition {
   const serviceDir = servicePath.split("/").pop();
   const init: ServiceDefinition = {
     image: config.init!.image,
-    container_name: `\${HARBOR_CONTAINER_PREFIX}.${prefix}-init`,
+    container_name: `\${HARBOR_CONTAINER_PREFIX}.${namespace}-init`,
     command: ["sh", `-c`, `sh /scripts/init.sh`],
     volumes: [
       `./${serviceDir}/${config.init!.script}:/scripts/init.sh:ro`,
       ...(config.init!.volumes || []).map((v) =>
-        v.replace("{prefix}", prefix)
+        v.replace("{namespace}", namespace)
       ),
     ],
-    networks: ["harbor-network"],
+    networks: [internalNetwork],
     restart: "no",
   };
   return init;

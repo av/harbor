@@ -7,23 +7,22 @@ upstream:
   # Path to stock compose file (relative to this directory)
   source: ./upstream/docker/docker-compose.yaml
 
-  # Prefix for all service names (api -> dify2-api)
-  prefix: dify2
+  # Namespace for isolation
+  # Creates internal network where services use original names (api, db, redis)
+  # Exposed services get prefixed alias on harbor-network (dify2-api, dify2-web)
+  namespace: dify2
 
-  # Services to exclude from stock compose
-  # We exclude nginx since Harbor handles reverse proxy differently
-  exclude:
-    - nginx
-    - certbot
+  # Services to include/exclude from stock compose
+  services:
+    exclude:
+      - nginx
+      - certbot
 
-  # Optional: init container for any pre-startup tasks
-  # Dify doesn't need config merging, but we include this as an example
-  # init:
-  #   image: busybox:latest
-  #   script: ./scripts/init.sh
-  #   volumes:
-  #     - ./configs:/input
-  #     - dify2-shared:/output
+  # Services exposed on harbor-network with {namespace}-{service} alias
+  # Other services stay internal-only (no conflicts with other Harbor services)
+  expose:
+    - api
+    - web
 
 # Future sections (not yet implemented):
 # metadata:
