@@ -727,7 +727,7 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         name: 'Kotaemon',
         tags: [HST.satellite, HST.rag],
         projectUrl: 'https://github.com/Cinnamon/kotaemon',
-        wikiUrl: `${wikiUrl}/2.1.15-Frontend-Kotaemon`,
+        wikiUrl: `${wikiUrl}/2.3.61-Satellite-Kotaemon`,
         tooltip: 'Clean & customizable RAG UI for chatting with your documents (Gradio-based).',
     },
 };
