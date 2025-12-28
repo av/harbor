@@ -15,8 +15,11 @@ export enum HST {
     builtIn = "Built-in",
     eval = "Eval",
     audio = "Audio",
+    rag = "RAG",
+    image = "Image",
     workflows = "Workflows",
     tools = "Tools",
+    infra = "Infra",
 }
 
 export type HarborService = {
@@ -35,7 +38,7 @@ export const wikiUrl = 'https://github.com/av/harbor/wiki';
 export const serviceMetadata: Record<string, Partial<HarborService>> = {
     aichat: {
         name: 'aichat',
-        tags: [HST.satellite, HST.cli],
+        tags: [HST.satellite, HST.cli, HST.rag],
         projectUrl: 'https://github.com/sigoden/aichat',
         wikiUrl: `${wikiUrl}/2.3.14-Satellite:-aichat`,
         tooltip: 'All-in-one LLM CLI tool featuring Shell Assistant, Chat-REPL, RAG, AI tools & agents.',
@@ -98,7 +101,7 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
     },
     cfd: {
         name: 'cloudflared',
-        tags: [HST.satellite, HST.api, HST.cli],
+        tags: [HST.satellite, HST.api, HST.cli, HST.infra],
         projectUrl: 'https://github.com/cloudflare/cloudflared',
         wikiUrl: `${wikiUrl}/2.3.8-Satellite:-cloudflared`,
         tooltip: 'A helper service allowing to expose Harbor services over the internet.',
@@ -119,7 +122,7 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
     },
     comfyui: {
         name: 'ComfyUI',
-        tags: [HST.frontend, HST.workflows],
+        tags: [HST.frontend, HST.workflows, HST.image],
         projectUrl: 'https://github.com/comfyanonymous/ComfyUI',
         wikiUrl: `${wikiUrl}/2.1.2-Frontend:-ComfyUI`,
         tooltip: 'The most powerful and modular diffusion model GUI, api and backend with a graph/nodes interface.',
@@ -173,7 +176,7 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
     },
     langfuse: {
         name: 'LangFuse',
-        tags: [HST.satellite, HST.api],
+        tags: [HST.satellite, HST.api, HST.infra],
         projectUrl: 'https://github.com/langfuse/langfuse',
         wikiUrl: `${wikiUrl}/2.3.6-Satellite:-langfuse`,
         tooltip: 'Open source LLM engineering platform: LLM Observability, metrics, evals, prompt management, playground, datasets.',
@@ -187,7 +190,7 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
     },
     litellm: {
         name: 'LiteLLM',
-        tags: [HST.satellite, HST.api],
+        tags: [HST.satellite, HST.api, HST.infra],
         projectUrl: 'https://github.com/BerriAI/litellm',
         wikiUrl: `${wikiUrl}/2.3.5-Satellite:-LiteLLM`,
         tooltip: 'LLM proxy that can aggregate multiple inference APIs together into a single endpoint.',
@@ -215,7 +218,7 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
     },
     lobechat: {
         name: 'Lobe Chat',
-        tags: [HST.frontend],
+        tags: [HST.frontend, HST.rag],
         projectUrl: 'https://github.com/lobehub/lobe-chat',
         wikiUrl: `${wikiUrl}/2.1.5-Frontend:-Lobe-Chat`,
         tooltip: 'An open-source, modern-design AI chat framework. Supports Multi AI Providers( OpenAI / Claude 3 / Gemini / Ollama / Azure / DeepSeek), Knowledge Base (file upload / knowledge management / RAG ), Multi-Modals (Vision/TTS) and plugin system.',
@@ -278,7 +281,7 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
     },
     perplexica: {
         name: 'Perplexica',
-        tags: [HST.satellite],
+        tags: [HST.satellite, HST.rag],
         projectUrl: 'https://github.com/ItzCrazyKns/Perplexica',
         wikiUrl: `${wikiUrl}/2.3.2-Satellite:-Perplexica`,
         tooltip: 'An AI-powered search engine. It is an Open source alternative to Perplexity AI.',
@@ -307,7 +310,7 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
     },
     sglang: {
         name: 'SGLang',
-        tags: [HST.backend],
+        tags: [HST.backend, HST.image],
         projectUrl: 'https://github.com/sgl-project/sglang',
         wikiUrl: `${wikiUrl}/2.2.12-Backend:-SGLang`,
         tooltip: 'SGLang is a fast serving framework for large language models and vision language models.',
@@ -356,7 +359,7 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
     },
     txtairag: {
         name: 'txtai RAG',
-        tags: [HST.satellite],
+        tags: [HST.satellite, HST.rag],
         projectUrl: 'https://github.com/neuml/rag',
         wikiUrl: `${wikiUrl}/2.3.11-Satellite:-txtai-RAG`,
         tooltip: 'RAG WebUI built with txtai.',
@@ -370,7 +373,7 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
     },
     webui: {
         name: 'Open WebUI',
-        tags: [HST.frontend],
+        tags: [HST.frontend, HST.rag],
         projectUrl: 'https://github.com/open-webui/open-webui',
         wikiUrl: `${wikiUrl}/2.1.1-Frontend:-Open-WebUI`,
         tooltip: 'widely adopted and feature rich web interface for interacting with LLMs. Supports OpenAI-compatible and Ollama backends, multi-users, multi-model chats, custom prompts, TTS, Web RAG, RAG, and much much more.',
@@ -384,7 +387,7 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
     },
     anythingllm: {
         name: 'AnythingLLM',
-        tags: [HST.frontend, HST.partial],
+        tags: [HST.frontend, HST.partial, HST.rag],
         projectUrl: 'https://github.com/Mintplex-Labs/anything-llm',
         wikiUrl: `${wikiUrl}/2.1.9-Frontend:-AnythingLLM`,
         tooltip: 'The all-in-one Desktop & Docker AI application with built-in RAG, AI agents, and more.',
@@ -433,7 +436,7 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
     },
     qdrant: {
         name: 'Qdrant',
-        tags: [HST.satellite],
+        tags: [HST.satellite, HST.rag, HST.infra],
         projectUrl: 'https://github.com/qdrant/qdrant',
         wikiUrl: `${wikiUrl}/2.3.26-Satellite:-Qdrant`,
         tooltip: 'Qdrant - High-performance, massive-scale Vector Database and Vector Search Engine.',
@@ -461,7 +464,7 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
     },
     omniparser: {
         name: 'OmniParser',
-        tags: [HST.satellite],
+        tags: [HST.satellite, HST.image],
         projectUrl: 'https://github.com/microsoft/OmniParser',
         wikiUrl: `${wikiUrl}/2.3.30-Satellite:-OmniParser`,
         tooltip: 'A simple screen parsing tool towards pure vision based GUI agent.',
@@ -475,14 +478,14 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
     },
     langflow: {
         name: 'LangFlow',
-        tags: [HST.satellite, HST.workflows],
+        tags: [HST.satellite, HST.workflows, HST.rag],
         projectUrl: 'https://github.com/langflow-ai/langflow',
         wikiUrl: `${wikiUrl}/2.3.32-Satellite:-LangFlow`,
         tooltip: 'A low-code app builder for RAG and multi-agent AI applications.',
     },
     optillm: {
         name: 'OptiLLM',
-        tags: [HST.satellite, HST.api],
+        tags: [HST.satellite, HST.api, HST.infra],
         projectUrl: 'https://github.com/codelion/optillm',
         wikiUrl: `${wikiUrl}/2.3.33-Satellite:-OptiLLM`,
         tooltip: 'Optimising LLM proxy that implements many advanced workflows to boost the performance of the LLMs.',
@@ -501,7 +504,7 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
     },
     morphic: {
         name: 'Morphic',
-        tags: [HST.satellite],
+        tags: [HST.satellite, HST.rag],
         projectUrl: 'https://github.com/miurla/morphic',
         wikiUrl: `${wikiUrl}/2.3.34-Satellite-Morphic`,
         tooltip: 'An AI-powered search engine with a generative UI, similar to Perplexity and Perplexica.',
@@ -529,7 +532,7 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
     },
     traefik: {
         name: 'Traefik',
-        tags: [HST.satellite, HST.api],
+        tags: [HST.satellite, HST.api, HST.infra],
         projectUrl: 'https://github.com/traefik/traefik',
         wikiUrl: `${wikiUrl}/2.3.37-Satellite-traefik`,
         tooltip: 'A modern HTTP reverse proxy and load balancer that makes deploying microservices easy.',
@@ -550,7 +553,7 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
     },
     raglite: {
         name: 'RAGLite',
-        tags: [HST.satellite],
+        tags: [HST.satellite, HST.rag],
         projectUrl: 'https://github.com/superlinear-ai/raglite',
         wikiUrl: `${wikiUrl}/2.3.39-Satellite-RAGLite`,
         tooltip: 'Python toolkit for Retrieval-Augmented Generation (RAG)',
@@ -589,7 +592,7 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
     },
     supergateway: {
         name: 'SuperGateway',
-        tags: [HST.satellite, HST.cli, HST.tools],
+        tags: [HST.satellite, HST.cli, HST.tools, HST.infra],
         projectUrl: 'https://github.com/supercorp-ai/supergateway',
         wikiUrl: `${wikiUrl}/2.3.44-Satellite-supergateway`,
         tooltip: 'A simple and powerful API gateway for LLMs.',
@@ -603,14 +606,14 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
     },
     localai: {
         name: 'LocalAI',
-        tags: [HST.satellite],
+        tags: [HST.satellite, HST.image],
         projectUrl: 'https://github.com/go-skynet/LocalAI',
         wikiUrl: `${wikiUrl}/2.3.46-Satellite-LocalAI`,
         tooltip: 'Complete AI stack for running AI models locally. Allows downloading variety of LLMs, TTS/STT/Image models and running thme locally via Web UI.',
     },
     agentzero: {
         name: 'Agent Zero',
-        tags: [HST.satellite],
+        tags: [HST.satellite, HST.rag],
         projectUrl: 'https://github.com/frdel/agent-zero',
         wikiUrl: `${wikiUrl}/2.3.47-Satellite-Agent-Zero`,
         tooltip: `General-purpose personal assistant with Web RAG, persistent memory, tools, browser use and more.`
@@ -624,14 +627,14 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
     },
     airweave: {
         name: 'Airweave',
-        tags: [HST.satellite],
+        tags: [HST.satellite, HST.rag],
         projectUrl: 'https://github.com/airweave-ai/airweave',
         wikiUrl: `${wikiUrl}/2.3.48-Satellite-Airweave`,
         tooltip: 'Airweave lets agents search any app by transforming its contents into agent-ready knowledge.'
     },
     docling: {
         name: 'Docling',
-        tags: [HST.satellite],
+        tags: [HST.satellite, HST.rag],
         projectUrl: 'https://github.com/docling-project/docling',
         wikiUrl: `${wikiUrl}/2.3.49-Satellite-Docling`,
         tooltip: 'Transform documents into format ready for LLMs.'
@@ -652,7 +655,7 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
     },
     presenton: {
         name: 'Presenton',
-        tags: [HST.frontend],
+        tags: [HST.satellite],
         projectUrl: 'https://github.com/presenton/presenton',
         wikiUrl: `${wikiUrl}/2.1.13-Frontend-Presenton`,
         tooltip: 'Open-source AI presentation generator with custom layouts, multi-model support, and PDF/PPTX export.'
@@ -666,7 +669,7 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
     },
     netdata: {
         name: 'Netdata',
-        tags: [HST.satellite],
+        tags: [HST.satellite, HST.infra],
         projectUrl: 'https://github.com/netdata/netdata',
         wikiUrl: `${wikiUrl}/2.3.54-Satellite-Netdata`,
         tooltip: 'Real-time infrastructure monitoring with per-second metrics for systems, containers, and applications.'
@@ -701,14 +704,14 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
     },
     onyx: {
         name: 'Onyx',
-        tags: [HST.frontend, HST.workflows, HST.tools],
+        tags: [HST.frontend, HST.workflows, HST.rag],
         projectUrl: 'https://github.com/onyx-dot-app/onyx',
         wikiUrl: `${wikiUrl}/2.1.14-Frontend-Onyx`,
         tooltip: 'Open Source AI Platform with Chat UI, RAG, MCP support, and 40+ document connectors.',
     },
     opennotebook: {
         name: 'Open Notebook',
-        tags: [HST.satellite, HST.tools],
+        tags: [HST.satellite],
         projectUrl: 'https://github.com/lfnovo/open-notebook',
         wikiUrl: `${wikiUrl}/2.3.59-Satellite-Open-Notebook`,
         tooltip: 'AI-powered research and note-taking platform with multi-provider LLM support, podcast generation, and content analysis.',
@@ -722,7 +725,7 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
     },
     kotaemon: {
         name: 'Kotaemon',
-        tags: [HST.frontend, HST.tools],
+        tags: [HST.satellite, HST.rag],
         projectUrl: 'https://github.com/Cinnamon/kotaemon',
         wikiUrl: `${wikiUrl}/2.1.15-Frontend-Kotaemon`,
         tooltip: 'Clean & customizable RAG UI for chatting with your documents (Gradio-based).',
