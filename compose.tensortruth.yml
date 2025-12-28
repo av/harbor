@@ -11,6 +11,7 @@ services:
       - ${HARBOR_TENSORTRUTH_HOST_PORT}:8501
     volumes:
       - ${HARBOR_TENSORTRUTH_CACHE}:/root/.tensortruth
+      - ${HARBOR_HF_CACHE}:/root/.cache/huggingface
     env_file:
       - ./.env
       - ./tensortruth/override.env
