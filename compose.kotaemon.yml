@@ -1,0 +1,18 @@
+services:
+  kotaemon:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.kotaemon
+    image: ${HARBOR_KOTAEMON_IMAGE}:${HARBOR_KOTAEMON_VERSION}
+    env_file:
+      - ./.env
+      - ./kotaemon/override.env
+    entrypoint: ["python", "app.py"]
+    environment:
+      - GRADIO_SERVER_NAME=0.0.0.0
+      - GRADIO_SERVER_PORT=7860
+    ports:
+      - ${HARBOR_KOTAEMON_HOST_PORT}:7860
+    volumes:
+      - ${HARBOR_KOTAEMON_WORKSPACE}:/app/ktem_app_data
+    networks:
+      - harbor-network
+

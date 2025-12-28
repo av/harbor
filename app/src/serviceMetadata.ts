@@ -720,4 +720,11 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         wikiUrl: `${wikiUrl}/2.3.60-Satellite-Home-Assistant`,
         tooltip: 'Open source home automation platform for managing and controlling smart home devices.',
     },
+    kotaemon: {
+        name: 'Kotaemon',
+        tags: [HST.frontend, HST.tools],
+        projectUrl: 'https://github.com/Cinnamon/kotaemon',
+        wikiUrl: `${wikiUrl}/2.1.15-Frontend-Kotaemon`,
+        tooltip: 'Clean & customizable RAG UI for chatting with your documents (Gradio-based).',
+    },
 };
