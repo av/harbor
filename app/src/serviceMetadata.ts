@@ -713,4 +713,11 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         wikiUrl: `${wikiUrl}/2.3.59-Satellite-Open-Notebook`,
         tooltip: 'AI-powered research and note-taking platform with multi-provider LLM support, podcast generation, and content analysis.',
     },
+    homeassistant: {
+        name: 'Home Assistant',
+        tags: [HST.satellite],
+        projectUrl: 'https://github.com/home-assistant/core',
+        wikiUrl: `${wikiUrl}/2.3.60-Satellite-Home-Assistant`,
+        tooltip: 'Open source home automation platform for managing and controlling smart home devices.',
+    },
 };

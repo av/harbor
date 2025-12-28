@@ -1,0 +1,13 @@
+services:
+  homeassistant:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.homeassistant
+    image: ${HARBOR_HOMEASSISTANT_IMAGE}:${HARBOR_HOMEASSISTANT_VERSION}
+    network_mode: host
+    environment:
+      - TZ=${HARBOR_HOMEASSISTANT_TIMEZONE}
+    volumes:
+      - ${HARBOR_HOMEASSISTANT_WORKSPACE}/config:/config
+      - /etc/localtime:/etc/localtime:ro
+    env_file:
+      - ./.env
+      - ./homeassistant/override.env
