@@ -1,0 +1,21 @@
+services:
+  sist2-es:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.sist2-es
+    image: elasticsearch:7.17.9
+    environment:
+      - discovery.type=single-node
+      - ES_JAVA_OPTS=${HARBOR_SIST2_ES_JAVA_OPTS}
+    volumes:
+      - ${HARBOR_SIST2_WORKSPACE}/es-data:/usr/share/elasticsearch/data
+    networks:
+      - harbor-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9200/_cluster/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  sist2:
+    depends_on:
+      sist2-es:
+        condition: service_healthy

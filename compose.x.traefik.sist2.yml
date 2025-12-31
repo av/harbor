@@ -1,0 +1,7 @@
+services:
+  sist2:
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.sist2.rule=Host(`sist2.${HARBOR_TRAEFIK_DOMAIN}`)"
+      - "traefik.http.routers.sist2.entrypoints=web"
+      - "traefik.http.services.sist2.loadbalancer.server.port=8080"

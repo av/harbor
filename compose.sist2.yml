@@ -1,0 +1,20 @@
+services:
+  sist2:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.sist2
+    image: ${HARBOR_SIST2_IMAGE}:${HARBOR_SIST2_VERSION}
+    env_file:
+      - ./.env
+      - ./sist2/override.env
+    environment:
+      - DATA_FOLDER=/sist2-admin/
+    working_dir: /root/sist2-admin/
+    entrypoint: python3
+    command:
+      - /root/sist2-admin/sist2_admin/app.py
+    ports:
+      - ${HARBOR_SIST2_HOST_PORT}:8080
+      - ${HARBOR_SIST2_SEARCH_PORT}:4090
+    volumes:
+      - ${HARBOR_SIST2_WORKSPACE}:/sist2-admin/
+    networks:
+      - harbor-network

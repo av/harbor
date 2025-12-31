@@ -3882,6 +3882,31 @@ run_ol1_command() {
     esac
 }
 
+run_sist2_command() {
+    case "$1" in
+    paths)
+        shift
+        env_manager_arr sist2.scan.paths "$@"
+        return 0
+        ;;
+    -h | --help | help)
+        echo "Harbor CLI to manage sist2 service."
+        echo
+        echo "Usage: harbor sist2 <command>"
+        echo
+        echo "Commands:"
+        echo "  harbor sist2 paths         - List configured scan paths"
+        echo "  harbor sist2 paths add <p> - Add a path to scan"
+        echo "  harbor sist2 paths rm <p>  - Remove a path from scan list"
+        echo "  harbor sist2 paths clear   - Remove all scan paths"
+        return 0
+        ;;
+    *)
+        return $scramble_exit_code
+        ;;
+    esac
+}
+
 run_ktransformers_command() {
     case "$1" in
     model)
@@ -4762,6 +4787,10 @@ main_entrypoint() {
     ol1)
         shift
         run_ol1_command "$@"
+        ;;
+    sist2)
+        shift
+        run_sist2_command "$@"
         ;;
     ktransformers)
         shift

@@ -730,4 +730,11 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         wikiUrl: `${wikiUrl}/2.3.61-Satellite-Kotaemon`,
         tooltip: 'Clean & customizable RAG UI for chatting with your documents (Gradio-based).',
     },
+    sist2: {
+        name: 'sist2',
+        tags: [HST.satellite, HST.rag],
+        projectUrl: 'https://github.com/simon987/sist2',
+        wikiUrl: `${wikiUrl}/2.3.62-Satellite-sist2`,
+        tooltip: 'Lightning-fast file system indexer and search tool with OCR, embeddings, and web UI.',
+    },
 };
