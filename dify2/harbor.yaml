@@ -1,5 +1,6 @@
 # Harbor Service Configuration for Dify2
 # This file configures how Harbor manages this service
+# This is the SINGLE SOURCE OF TRUTH - no separate compose.dify2.yml needed
 
 # Upstream compose transformation
 # Allows using stock Docker Compose files with automatic Harbor integration
@@ -9,7 +10,8 @@ upstream:
 
   # Namespace for isolation
   # Creates internal network where services use original names (api, db, redis)
-  # Exposed services get prefixed alias on harbor-network (dify2-api, dify2-web)
+  # Service names in merged compose are prefixed (dify2-api, dify2-web)
+  # Original names available as aliases on internal network
   namespace: dify2
 
   # Services to include/exclude from stock compose
@@ -24,12 +26,24 @@ upstream:
     - api
     - web
 
+  # Harbor-specific overrides (replaces compose.dify2.yml)
+  # Keys are ORIGINAL service names, applied to prefixed services
+  overrides:
+    api:
+      environment:
+        - OPENAI_API_BASE=http://${HARBOR_CONTAINER_PREFIX}.ollama:11434/v1
+    web:
+      ports:
+        - ${HARBOR_DIFY2_HOST_PORT:-3001}:3000
+
 # Future sections (not yet implemented):
 # metadata:
 #   tags: [backend, api]
 #   wikiUrl: https://github.com/av/harbor/wiki/dify2
 #
 # configs:
-#   base: ./configs/config.yml
 #   cross:
-#     ollama: ./configs/config.ollama.yml
+#     ollama:
+#       api:
+#         environment:
+#           - OLLAMA_ENABLED=true

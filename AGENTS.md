@@ -42,26 +42,27 @@ This approach maintains **full backward compatibility** - existing services with
 ```
 harbor/
   {service}/
-    harbor.yaml                   # Service configuration (NEW)
+    harbor.yaml                   # Service configuration - SINGLE SOURCE OF TRUTH
     upstream/                     # Git submodule or copy of upstream repo
       docker-compose.yaml         # UNTOUCHED stock file
-    override.env                  # Harbor env overrides
-  compose.{service}.yml           # Harbor overlay (cross-service integration)
+    override.env                  # Harbor env overrides (optional)
+  # NOTE: compose.{service}.yml is NO LONGER NEEDED for upstream services
+  # All config is in harbor.yaml including overrides
 ```
 
 ## `harbor.yaml` Schema
 
 ```yaml
-# Upstream compose transformation (optional)
+# Upstream compose transformation
 # Use this when integrating stock Docker Compose files
 upstream:
   # Path to stock compose file (relative to service directory)
   source: ./upstream/docker/docker-compose.yaml
 
-  # Namespace for isolation (creates internal network + prefixed aliases)
+  # Namespace for isolation (creates internal network + prefixed service names)
   namespace: dify2
 
-  # Services to include (default: all)
+  # Services to include/exclude (default: all)
   services:
     include:
       - api
@@ -76,16 +77,28 @@ upstream:
     - api
     - web
 
+  # Harbor-specific overrides (REPLACES compose.{service}.yml)
+  # Keys are ORIGINAL service names, applied to prefixed services
+  overrides:
+    api:
+      environment:
+        - OPENAI_API_BASE=http://${HARBOR_CONTAINER_PREFIX}.ollama:11434/v1
+    web:
+      ports:
+        - ${HARBOR_DIFY2_HOST_PORT:-3001}:3000
+
 # Service metadata for Harbor App (future)
 metadata:
   tags: [backend, api]
   wikiUrl: https://github.com/av/harbor/wiki/myservice
 
-# Config merging (future)
+# Cross-service config merging (future)
 configs:
-  base: ./configs/config.yml
   cross:
-    ollama: ./configs/config.ollama.yml
+    ollama:
+      api:
+        environment:
+          - OLLAMA_ENABLED=true
 ```
 
 ## Namespace Isolation via Internal Networks
@@ -102,11 +115,13 @@ This means:
 - **Backward compatible** - Existing Harbor services unchanged
 
 ```yaml
-# Example: dify2 services
+# Example: dify2 services in merged compose
 services:
-  api:                      # Original service name preserved
+  dify2-api:                # Prefixed service name (avoids collision)
     networks:
-      dify2-internal:       # Internal: reachable as "api", "db", "redis"
+      dify2-internal:
+        aliases:
+          - api             # Internal: reachable as "api" (original name)
       harbor-network:
         aliases:
           - dify2-api       # External: reachable as "dify2-api"
@@ -128,13 +143,14 @@ When `upstream:` is specified, the CLI automatically transforms the stock compos
 
 | Original | Transformed |
 |----------|-------------|
-| Service `api` | `api` (unchanged) |
+| Service `api` | `{namespace}-api` (prefixed to avoid collision) |
 | `container_name: X` | `${HARBOR_CONTAINER_PREFIX}.{namespace}-{original}` |
-| `depends_on: [redis]` | `depends_on: [redis]` (unchanged - internal network) |
-| `network_mode: service:X` | `network_mode: service:X` (unchanged - internal network) |
+| `depends_on: [redis]` | `depends_on: [{namespace}-redis]` (prefixed) |
+| `network_mode: service:X` | `network_mode: service:{namespace}-X` (prefixed) |
 | Volume `mydata` | `{namespace}-mydata` |
-| Networks | Add `{namespace}-internal` + `harbor-network` (with alias for exposed services) |
+| Networks | Add `{namespace}-internal` (with original name alias) + `harbor-network` (for exposed) |
 | `env_file` | Inject `.env` and `override.env` |
+| `overrides` | Merged into transformed services (environment, ports, volumes append) |
 
 ## Migration Path
 

@@ -15,6 +15,9 @@ export interface UpstreamConfig {
     script: string;
     volumes?: string[];
   };
+  // Harbor-specific overrides applied to transformed services
+  // Keys are original service names, values are compose service properties
+  overrides?: Record<string, Partial<ServiceDefinition>>;
   // Deprecated - kept for backward compatibility
   prefix?: string;
   include?: string[];
@@ -31,6 +34,8 @@ export interface HarborConfig {
     base?: string;
     cross?: Record<string, string>;
   };
+  // Top-level overrides (alternative to upstream.overrides)
+  overrides?: Record<string, Partial<ServiceDefinition>>;
 }
 
 export interface ComposeFile {
@@ -144,22 +149,24 @@ export function transformUpstreamCompose(
   // Build set of exposed services
   const exposedServices = new Set<string>(expose);
 
-  // Transform services - keep original names, add to internal network
+  // Transform services - prefix names to avoid collision, use aliases for internal resolution
   for (const [name, service] of Object.entries(compose.services || {})) {
     if (!includedServices.has(name)) {
       continue;
     }
 
-    // Keep original service name (no prefixing)
+    // Prefix service name to avoid collision with other upstream stacks
+    const prefixedName = `${namespace}-${name}`;
     const transformedService = transformService(
       service,
       name,
       namespace,
       internalNetwork,
       exposedServices.has(name),
-      servicePath
+      servicePath,
+      includedServices
     );
-    transformed.services![name] = transformedService;
+    transformed.services![prefixedName] = transformedService;
   }
 
   // Transform volumes (prefix them to avoid conflicts)
@@ -187,7 +194,64 @@ export function transformUpstreamCompose(
     }
   }
 
+  // Transform depends_on references to use prefixed names
+  for (const [name, service] of Object.entries(transformed.services!)) {
+    if ((service as ServiceDefinition).depends_on) {
+      (service as ServiceDefinition).depends_on = transformDependsOn(
+        (service as ServiceDefinition).depends_on!,
+        namespace,
+        includedServices
+      );
+    }
+  }
+
+  // Apply overrides from harbor.yaml (keys are original names, apply to prefixed services)
+  if (config.overrides) {
+    for (const [originalName, overrideConfig] of Object.entries(config.overrides)) {
+      const prefixedName = `${namespace}-${originalName}`;
+      if (transformed.services![prefixedName]) {
+        // Deep merge override into transformed service
+        const existing = transformed.services![prefixedName] as ServiceDefinition;
+        transformed.services![prefixedName] = mergeServiceOverride(existing, overrideConfig);
+      }
+    }
+  }
+
   return transformed;
+}
+
+/**
+ * Merge override config into existing service definition
+ */
+function mergeServiceOverride(
+  existing: ServiceDefinition,
+  override: Partial<ServiceDefinition>
+): ServiceDefinition {
+  const merged = { ...existing };
+  
+  for (const [key, value] of Object.entries(override)) {
+    if (key === "environment" && Array.isArray(value)) {
+      // Merge environment arrays
+      const existingEnv = Array.isArray(merged.environment) ? merged.environment : [];
+      merged.environment = [...existingEnv, ...value];
+    } else if (key === "ports" && Array.isArray(value)) {
+      // Merge ports arrays
+      const existingPorts = Array.isArray(merged.ports) ? merged.ports : [];
+      merged.ports = [...existingPorts, ...value];
+    } else if (key === "volumes" && Array.isArray(value)) {
+      // Merge volumes arrays
+      const existingVolumes = Array.isArray(merged.volumes) ? merged.volumes : [];
+      merged.volumes = [...existingVolumes, ...value];
+    } else if (key === "labels" && typeof value === "object") {
+      // Merge labels objects
+      merged.labels = { ...(merged.labels as Record<string, string> || {}), ...value };
+    } else {
+      // Override other values directly
+      (merged as Record<string, unknown>)[key] = value;
+    }
+  }
+  
+  return merged;
 }
 
 /**
@@ -200,7 +264,8 @@ function transformService(
   namespace: string,
   internalNetwork: string,
   isExposed: boolean,
-  servicePath: string
+  servicePath: string,
+  _includedServices: Set<string>
 ): ServiceDefinition {
   const transformed: ServiceDefinition = { ...service };
 
@@ -208,10 +273,12 @@ function transformService(
   transformed.container_name = `\${HARBOR_CONTAINER_PREFIX}.${namespace}-${originalName}`;
 
   // Build network configuration
-  // All services join internal network (original names work there)
+  // All services join internal network with ORIGINAL name as alias (for internal resolution)
   // Exposed services also join harbor-network with prefixed alias
   const networks: Record<string, unknown> = {
-    [internalNetwork]: {},  // Internal network - service reachable by original name
+    [internalNetwork]: {
+      aliases: [originalName],  // Original name as alias for internal service discovery
+    },
   };
 
   if (isExposed) {
@@ -226,10 +293,11 @@ function transformService(
   if (!transformed.network_mode) {
     transformed.networks = networks;
   }
-  // Note: network_mode references stay unchanged - they reference original service names
-  // which work because all services are on the internal network
-
-  // depends_on stays unchanged - references original service names (internal network)
+  // network_mode: service:X references need to be prefixed
+  if (transformed.network_mode && transformed.network_mode.startsWith("service:")) {
+    const refService = transformed.network_mode.replace("service:", "");
+    transformed.network_mode = `service:${namespace}-${refService}`;
+  }
 
   // Transform volume references to use prefixed named volumes
   if (transformed.volumes) {
@@ -250,6 +318,28 @@ function transformService(
     transformed.env_file = envFiles;
   }
 
+  return transformed;
+}
+
+/**
+ * Transform depends_on to use prefixed service names
+ */
+function transformDependsOn(
+  dependsOn: string[] | Record<string, { condition?: string }>,
+  namespace: string,
+  includedServices: Set<string>
+): string[] | Record<string, { condition?: string }> {
+  if (Array.isArray(dependsOn)) {
+    return dependsOn.map((dep) =>
+      includedServices.has(dep) ? `${namespace}-${dep}` : dep
+    );
+  }
+
+  const transformed: Record<string, { condition?: string }> = {};
+  for (const [dep, config] of Object.entries(dependsOn)) {
+    const newDep = includedServices.has(dep) ? `${namespace}-${dep}` : dep;
+    transformed[newDep] = config;
+  }
   return transformed;
 }
 
