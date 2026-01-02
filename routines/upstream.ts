@@ -150,11 +150,12 @@ export function transformUpstreamCompose(
 
   // Build map of exposed services to their aliases
   // expose can be: ["api", "web"] or ["api", {web: "custom-alias"}]
+  // Default: use original name (matches upstream), custom alias when needed
   const exposeMap = new Map<string, string>();  // service -> alias
   for (const item of expose) {
     if (typeof item === "string") {
-      // Default alias: {namespace}-{service}
-      exposeMap.set(item, `${namespace}-${item}`);
+      // Default alias: original service name (no prefix)
+      exposeMap.set(item, item);
     } else {
       // Custom alias: {service: alias}
       for (const [service, alias] of Object.entries(item)) {

@@ -72,11 +72,11 @@ upstream:
       - nginx
 
   # Services exposed on harbor-network
-  # - Simple string: uses default alias {namespace}-{service}
-  # - Object {service: alias}: uses custom alias
+  # - Simple string: uses original name (matches upstream)
+  # - Object {service: alias}: uses custom alias (e.g., for conflict avoidance)
   expose:
-    - api                    # exposed as dify2-api
-    - web: dify-web          # exposed as dify-web (custom alias)
+    - api                    # exposed as "api" (original name)
+    - web: dify2-web         # exposed as "dify2-web" (prefixed when conflict expected)
 
   # Harbor-specific overrides (REPLACES compose.{service}.yml)
   # Keys are ORIGINAL service names, applied to prefixed services
