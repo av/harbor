@@ -9,7 +9,9 @@ export interface UpstreamConfig {
     include?: string[];
     exclude?: string[];
   };
-  expose?: string[];  // Services exposed on harbor-network with alias
+  // Services exposed on harbor-network
+  // Can be string (uses default {namespace}-{service} alias) or object {service: alias}
+  expose?: (string | Record<string, string>)[];
   init?: {
     image: string;
     script: string;
@@ -146,8 +148,20 @@ export function transformUpstreamCompose(
     }
   }
 
-  // Build set of exposed services
-  const exposedServices = new Set<string>(expose);
+  // Build map of exposed services to their aliases
+  // expose can be: ["api", "web"] or ["api", {web: "custom-alias"}]
+  const exposeMap = new Map<string, string>();  // service -> alias
+  for (const item of expose) {
+    if (typeof item === "string") {
+      // Default alias: {namespace}-{service}
+      exposeMap.set(item, `${namespace}-${item}`);
+    } else {
+      // Custom alias: {service: alias}
+      for (const [service, alias] of Object.entries(item)) {
+        exposeMap.set(service, alias);
+      }
+    }
+  }
 
   // Transform services - prefix names to avoid collision, use aliases for internal resolution
   for (const [name, service] of Object.entries(compose.services || {})) {
@@ -157,12 +171,13 @@ export function transformUpstreamCompose(
 
     // Prefix service name to avoid collision with other upstream stacks
     const prefixedName = `${namespace}-${name}`;
+    const exposeAlias = exposeMap.get(name);  // undefined if not exposed
     const transformedService = transformService(
       service,
       name,
       namespace,
       internalNetwork,
-      exposedServices.has(name),
+      exposeAlias,  // pass alias or undefined
       servicePath,
       includedServices
     );
@@ -263,7 +278,7 @@ function transformService(
   originalName: string,
   namespace: string,
   internalNetwork: string,
-  isExposed: boolean,
+  exposeAlias: string | undefined,  // alias for harbor-network, or undefined if not exposed
   servicePath: string,
   _includedServices: Set<string>
 ): ServiceDefinition {
@@ -274,17 +289,17 @@ function transformService(
 
   // Build network configuration
   // All services join internal network with ORIGINAL name as alias (for internal resolution)
-  // Exposed services also join harbor-network with prefixed alias
+  // Exposed services also join harbor-network with custom or default alias
   const networks: Record<string, unknown> = {
     [internalNetwork]: {
       aliases: [originalName],  // Original name as alias for internal service discovery
     },
   };
 
-  if (isExposed) {
-    // Exposed services get alias on harbor-network
+  if (exposeAlias) {
+    // Exposed services get custom alias on harbor-network
     networks["harbor-network"] = {
-      aliases: [`${namespace}-${originalName}`],
+      aliases: [exposeAlias],
     };
   }
 

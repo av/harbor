@@ -71,11 +71,12 @@ upstream:
     exclude:
       - nginx
 
-  # Services exposed on harbor-network (with {namespace}-{service} alias)
-  # Other services stay internal-only
+  # Services exposed on harbor-network
+  # - Simple string: uses default alias {namespace}-{service}
+  # - Object {service: alias}: uses custom alias
   expose:
-    - api
-    - web
+    - api                    # exposed as dify2-api
+    - web: dify-web          # exposed as dify-web (custom alias)
 
   # Harbor-specific overrides (REPLACES compose.{service}.yml)
   # Keys are ORIGINAL service names, applied to prefixed services

@@ -20,11 +20,14 @@ upstream:
       - nginx
       - certbot
 
-  # Services exposed on harbor-network with {namespace}-{service} alias
+  # Services exposed on harbor-network
+  # - Simple string: uses default alias {namespace}-{service}
+  # - Object {service: alias}: uses custom alias
   # Other services stay internal-only (no conflicts with other Harbor services)
   expose:
-    - api
-    - web
+    - api                    # exposed as dify2-api
+    - web                    # exposed as dify2-web
+    # - web: dify-web        # example: custom alias
 
   # Harbor-specific overrides (replaces compose.dify2.yml)
   # Keys are ORIGINAL service names, applied to prefixed services
