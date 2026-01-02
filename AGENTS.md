@@ -78,28 +78,35 @@ upstream:
     - api                    # exposed as "api" (original name)
     - web: dify2-web         # exposed as "dify2-web" (prefixed when conflict expected)
 
-  # Harbor-specific overrides (REPLACES compose.{service}.yml)
+  # Static overrides (always applied)
   # Keys are ORIGINAL service names, applied to prefixed services
   overrides:
-    api:
-      environment:
-        - OPENAI_API_BASE=http://${HARBOR_CONTAINER_PREFIX}.ollama:11434/v1
     web:
       ports:
         - ${HARBOR_DIFY2_HOST_PORT:-3001}:3000
+
+  # Cross-service overlays (applied when other Harbor services are active)
+  # Structure: <other_service>: <target_service>: <compose_properties>
+  # Coexists with file-based overlays (compose.x.{service1}.{service2}.yml)
+  overlays:
+    ollama:
+      api:
+        environment:
+          - OPENAI_API_BASE=http://${HARBOR_CONTAINER_PREFIX}.ollama:11434/v1
+    litellm:
+      api:
+        environment:
+          - OPENAI_API_BASE=http://${HARBOR_CONTAINER_PREFIX}.litellm:4000/v1
+    # AND logic: when BOTH services are running
+    # [ollama, langfuse]:
+    #   api:
+    #     environment:
+    #       - LANGFUSE_ENABLED=true
 
 # Service metadata for Harbor App (future)
 metadata:
   tags: [backend, api]
   wikiUrl: https://github.com/av/harbor/wiki/myservice
-
-# Cross-service config merging (future)
-configs:
-  cross:
-    ollama:
-      api:
-        environment:
-          - OLLAMA_ENABLED=true
 ```
 
 ## Namespace Isolation via Internal Networks

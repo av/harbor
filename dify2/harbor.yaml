@@ -29,24 +29,33 @@ upstream:
     - web                    # exposed as "web" (original name)
     # - web: dify2-web       # example: prefixed alias when conflict expected
 
-  # Harbor-specific overrides (replaces compose.dify2.yml)
+  # Static overrides (always applied)
   # Keys are ORIGINAL service names, applied to prefixed services
   overrides:
-    api:
-      environment:
-        - OPENAI_API_BASE=http://${HARBOR_CONTAINER_PREFIX}.ollama:11434/v1
     web:
       ports:
         - ${HARBOR_DIFY2_HOST_PORT:-3001}:3000
+
+  # Cross-service overlays (applied when other Harbor services are active)
+  # Structure: <other_service>: <target_service>: <compose_properties>
+  overlays:
+    # When ollama is running, configure api to use it
+    ollama:
+      api:
+        environment:
+          - OPENAI_API_BASE=http://${HARBOR_CONTAINER_PREFIX}.ollama:11434/v1
+    # When litellm is running, configure api to use it instead
+    litellm:
+      api:
+        environment:
+          - OPENAI_API_BASE=http://${HARBOR_CONTAINER_PREFIX}.litellm:4000/v1
+    # AND logic: when BOTH ollama AND langfuse are running
+    # [ollama, langfuse]:
+    #   api:
+    #     environment:
+    #       - LANGFUSE_ENABLED=true
 
 # Future sections (not yet implemented):
 # metadata:
 #   tags: [backend, api]
 #   wikiUrl: https://github.com/av/harbor/wiki/dify2
-#
-# configs:
-#   cross:
-#     ollama:
-#       api:
-#         environment:
-#           - OLLAMA_ENABLED=true

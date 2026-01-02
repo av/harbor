@@ -33,26 +33,34 @@ upstream:
     - api                    # exposed as "api" (original name)
     - web: dify2-web         # exposed as "dify2-web" (prefixed when conflict expected)
   
-  # Harbor-specific overrides (REPLACES compose.{service}.yml)
+  # Static overrides (always applied)
   # Keys are ORIGINAL service names, applied to prefixed services
   overrides:
-    api:
-      environment:
-        - OPENAI_API_BASE=http://${HARBOR_CONTAINER_PREFIX}.ollama:11434/v1
     web:
       ports:
         - ${HARBOR_DIFY2_HOST_PORT:-3001}:3000
 
-# Future sections (not yet implemented):
-metadata:
-  tags: [backend, api]
-
-configs:
-  cross:
+  # Cross-service overlays (applied when other Harbor services are active)
+  # Structure: <other_service>: <target_service>: <compose_properties>
+  # Coexists with file-based overlays (compose.x.{service1}.{service2}.yml)
+  overlays:
     ollama:
       api:
         environment:
-          - OLLAMA_ENABLED=true
+          - OPENAI_API_BASE=http://${HARBOR_CONTAINER_PREFIX}.ollama:11434/v1
+    litellm:
+      api:
+        environment:
+          - OPENAI_API_BASE=http://${HARBOR_CONTAINER_PREFIX}.litellm:4000/v1
+    # AND logic: when BOTH services are running
+    # [ollama, langfuse]:
+    #   api:
+    #     environment:
+    #       - LANGFUSE_ENABLED=true
+
+# Future sections (not yet implemented):
+metadata:
+  tags: [backend, api]
 ```
 
 ## What's implemented
@@ -61,13 +69,14 @@ configs:
 - ✅ `upstream.namespace` - Internal network isolation
 - ✅ `upstream.services.include/exclude` - Service filtering
 - ✅ `upstream.expose` - Harbor-network aliases (default: original name, custom alias when needed)
-- ✅ `upstream.overrides` - Harbor-specific config (replaces `compose.{service}.yml`)
+- ✅ `upstream.overrides` - Static config (replaces `compose.{service}.yml`)
+- ✅ `upstream.overlays` - Cross-service config (applied when other services are active)
 
 ## Not yet implemented
 
 - ⏳ `metadata:` - Service tags, wiki URL
-- ⏳ `configs.cross:` - Conditional cross-service config merging
 - ⏳ System variable syntax (e.g., `{{service:ollama}}`) - currently using Harbor env conventions
+- ⏳ AND logic for overlays (e.g., `[ollama, langfuse]:` when both are running)
 
 ## Key insight: Namespace isolation via internal networks
 
@@ -130,17 +139,17 @@ I've created [PR #204](https://github.com/av/harbor/pull/204) with the full impl
 
 These are ideas for future extensions, kept here for reference:
 
-### Declarative Cross-Service Overlays
+### AND Logic for Overlays
 
-The `configs.cross` section could evolve to support conditional cross-service config:
+Currently overlays trigger when a single service is active. Future: trigger when multiple services are active:
 
 ```yaml
-configs:
-  cross:
-    ollama:
-      api:
-        environment:
-          - OLLAMA_ENABLED=true
+overlays:
+  # Applied only when BOTH ollama AND langfuse are running
+  [ollama, langfuse]:
+    api:
+      environment:
+        - LANGFUSE_ENABLED=true
 ```
 
 ### System Variable Syntax
