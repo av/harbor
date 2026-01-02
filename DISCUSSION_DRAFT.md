@@ -1,256 +1,182 @@
-# GitHub Discussion Draft for av/harbor
+# GitHub Discussion Reply - Stock Docker Compose Integration
 
-**Category:** Ideas / Feature Request
-
----
-
-## Title: RFC: Stock Docker Compose Integration via `harbor.yaml`
+**In reply to:** [Discussion #202](https://github.com/av/harbor/discussions/202)
 
 ---
 
-### Summary
+Thanks for the thoughtful response and sorry for my delayed reply!
 
-I'd like to propose a feature that enables Harbor to use **stock Docker Compose files** from upstream projects with zero modifications. This would significantly reduce maintenance burden when integrating complex services like Dify, Langflow, or Lobe-Chat that have their own multi-service compose files.
+## On the TypeScript SDK approach
 
-### Problem
+I think this makes a lot of sense. The SDK could serve as the programmatic layer that YAML configs are built on - similar to how Elestio uses `elestio.yaml` as a meta-manifest. Users who want simple configs use YAML, power users who need conditionals/loops/type-safety use the SDK directly.
 
-Currently, when adding a new service to Harbor, we need to manually rewrite the upstream's Docker Compose file to:
-- Rename services to avoid conflicts (e.g., `api` → `dify-api`)
-- Update `container_name` with Harbor's prefix convention
-- Fix all `depends_on` and `network_mode: service:X` references
-- Rename volumes to avoid conflicts
-- Add `harbor-network` to all services
-- Inject Harbor's env files
+## Summary of what I've built
 
-This is error-prone, time-consuming, and creates a maintenance burden whenever upstream updates their compose file.
-
-### Proposed Solution
-
-Introduce a `harbor.yaml` configuration file per service that declares transformation rules:
+I've been iterating on this with AI-assisted coding (Claude). Here's the full `harbor.yaml` schema:
 
 ```yaml
-# {service}/harbor.yaml
 upstream:
   # Path to stock compose file (can be a git submodule)
   source: ./upstream/docker/docker-compose.yaml
   
-  # Prefix for all service names (api -> dify2-api)
-  prefix: dify2
+  # Namespace for isolation (creates internal network)
+  namespace: dify2
   
-  # Services to exclude (e.g., nginx when Harbor handles reverse proxy)
-  exclude:
-    - nginx
-    - certbot
+  # Services to include/exclude from stock compose
+  services:
+    exclude: [nginx, certbot]
+  
+  # Services exposed on harbor-network
+  # - Simple string: uses original name (matches upstream)
+  # - Object {service: alias}: uses custom alias (e.g., for conflict avoidance)
+  expose:
+    - api                    # exposed as "api" (original name)
+    - web: dify2-web         # exposed as "dify2-web" (prefixed when conflict expected)
+  
+  # Harbor-specific overrides (REPLACES compose.{service}.yml)
+  # Keys are ORIGINAL service names, applied to prefixed services
+  overrides:
+    api:
+      environment:
+        - OPENAI_API_BASE=http://${HARBOR_CONTAINER_PREFIX}.ollama:11434/v1
+    web:
+      ports:
+        - ${HARBOR_DIFY2_HOST_PORT:-3001}:3000
 
-# Future sections for extensibility
+# Future sections (not yet implemented):
 metadata:
   tags: [backend, api]
-  wikiUrl: https://github.com/av/harbor/wiki/dify
 
 configs:
-  base: ./configs/config.yml
   cross:
-    ollama: ./configs/config.ollama.yml
+    ollama:
+      api:
+        environment:
+          - OLLAMA_ENABLED=true
 ```
 
-The CLI would automatically transform the stock compose at runtime using **namespace isolation via internal networks**:
+## What's implemented
 
-```yaml
-# harbor.yaml
-upstream:
-  source: ./upstream/docker/docker-compose.yaml
-  namespace: dify2
-  services:
-    include: [api, worker, web, redis, db]
-    exclude: [nginx]
-  expose: [api, web]  # Services visible on harbor-network
-```
+- ✅ `upstream.source` - Stock compose path
+- ✅ `upstream.namespace` - Internal network isolation
+- ✅ `upstream.services.include/exclude` - Service filtering
+- ✅ `upstream.expose` - Harbor-network aliases (default: original name, custom alias when needed)
+- ✅ `upstream.overrides` - Harbor-specific config (replaces `compose.{service}.yml`)
 
-**Key insight**: Use Docker Compose networks for conflict prevention instead of rewriting service names:
+## Not yet implemented
+
+- ⏳ `metadata:` - Service tags, wiki URL
+- ⏳ `configs.cross:` - Conditional cross-service config merging
+- ⏳ System variable syntax (e.g., `{{service:ollama}}`) - currently using Harbor env conventions
+
+## Key insight: Namespace isolation via internal networks
+
+The initial approach required rewriting environment variables (`DB_HOST=dify2-db`, etc.) which was fragile. The breakthrough was using Docker Compose networks:
 
 | Network | Service reachable as | Used by |
 |---------|---------------------|---------|
-| `{namespace}-internal` | `api`, `db`, `redis` (original names) | Internal services |
-| `harbor-network` | `{namespace}-api`, `{namespace}-web` (aliased) | Other Harbor services |
+| `dify2-internal` | `api`, `db`, `redis` (original names) | Internal services |
+| `harbor-network` | `api`, `web` (or custom alias) | Other Harbor services |
 
-**Transformation rules**:
+Service names in the merged compose are prefixed (`dify2-api`) to avoid collision between upstream stacks, but original names are available as aliases on both networks by default.
+
+**Transformation rules:**
 
 | Original | Transformed |
 |----------|-------------|
-| Service `api` | `api` (unchanged) |
+| Service `api` | `{namespace}-api` (prefixed to avoid collision) |
 | `container_name: X` | `${HARBOR_CONTAINER_PREFIX}.{namespace}-{original}` |
-| `depends_on: [redis]` | `depends_on: [redis]` (unchanged - internal network) |
-| `network_mode: service:X` | `network_mode: service:X` (unchanged - internal network) |
+| `depends_on: [redis]` | `depends_on: [{namespace}-redis]` (prefixed) |
+| `network_mode: service:X` | `network_mode: service:{namespace}-X` (prefixed) |
 | Volume `mydata` | `{namespace}-mydata` |
-| Networks | Add `{namespace}-internal` + `harbor-network` (with alias for exposed) |
+| Networks | Add `{namespace}-internal` (with original name alias) + `harbor-network` (for exposed) |
 | `env_file` | Inject `.env` and `override.env` |
+| `overrides` | Merged into transformed services (environment, ports, volumes append) |
 
-This approach means:
-- **No env rewrites needed** - Internal services reference each other by original names
-- **No compose modifications** - Upstream compose works as-is  
-- **No conflicts** - External services see prefixed aliases
-- **Backward compatible** - Existing Harbor services unchanged
+## Benefits
 
-### Benefits
+- **No env rewrites needed** - upstream compose works as-is
+- **No service name conflicts** between upstream stacks
+- **`harbor.yaml` is single source of truth** - no separate `compose.{service}.yml` needed
 
-1. **Zero maintenance** - Stock compose files can be git submodules, updated with `git pull`
-2. **Backward compatible** - Services without `harbor.yaml` work exactly as before
-3. **Extensible** - The `harbor.yaml` schema can grow to include service metadata for the Harbor App, config merging declarations, etc.
-4. **Reduced errors** - Automated transformation eliminates manual rewrite mistakes
+This has been running Dify (10 services) and verified working today.
 
-### Implementation Status
+## Compatibility & Gradual Migration
 
-I have a working proof-of-concept implementation:
-- **Branch:** `feature/upstream-compose-integration` ([kundeng/harbor](https://github.com/kundeng/harbor/tree/feature/upstream-compose-integration))
-- **Core module:** `routines/upstream.ts` (~390 lines)
-- **Test service:** `dify2/` with stock Dify compose file
+This was a key design goal. The implementation is **fully backward compatible**:
 
-The implementation integrates into the existing `mergeComposeFiles.ts` flow - upstream transforms are loaded before regular compose files and merged using the existing deepMerge logic.
+1. **Existing services unchanged** - Services without `harbor.yaml` work exactly as before
+2. **No breaking changes** - The transformation only activates when `harbor.yaml` exists
+3. **Gradual adoption** - New services can use `harbor.yaml`, existing ones can migrate incrementally
 
-### Questions for Discussion
+## Tested scenarios
 
-1. Does this align with Harbor's design philosophy?
-2. Should the `harbor.yaml` file live in the service directory (proposed) or somewhere else?
-3. Any concerns about the transformation rules? Are there edge cases I'm missing?
-4. Interest in the future `metadata:` and `configs:` sections for Harbor App integration?
+- ✅ `harbor up dify2` - Services start correctly
+- ✅ Internal DNS resolution verified (`redis`, `db_postgres`, `sandbox` resolve correctly)
+- ✅ Overrides applied (environment, ports)
+- ✅ Profiles passthrough (`--profile postgresql`)
 
-### Future Direction: Declarative Cross-Service Overlays
+## Not yet tested
 
-Currently, Harbor uses file-naming conventions for cross-service integration:
-- `compose.x.aider.ollama.yml` - applied when both `aider` AND `ollama` are running
-- `compose.litellm.langfuse.postgres.yml` - applied when ANY of those services run
+I haven't gone through the entire `harbor.sh` CLI - commands like `harbor build`, `harbor exec`, `harbor shell`, etc. **Is this approach compatible with the full CLI?** Are there specific commands I should verify?
 
-This works well but has limitations:
-- Discovery requires scanning filenames
-- Logic is implicit in naming conventions
-- Hard to see all integrations for a service at a glance
+## PR ready for review
 
-The `harbor.yaml` approach could evolve to make this **declarative**:
+I've created [PR #204](https://github.com/av/harbor/pull/204) with the full implementation. Happy to adjust based on your feedback, especially regarding the SDK direction - this could become the first "backend" that the SDK targets, or remain as a simpler YAML alternative for basic cases.
+
+---
+
+## Future Directions (not yet implemented)
+
+These are ideas for future extensions, kept here for reference:
+
+### Declarative Cross-Service Overlays
+
+The `configs.cross` section could evolve to support conditional cross-service config:
 
 ```yaml
-# aider/harbor.yaml
-upstream:
-  source: ./upstream/docker-compose.yaml
-  prefix: aider
-
-# Cross-service overlays - applied conditionally based on active services
-overlays:
-  # When ollama is also running
-  ollama:
-    volumes:
-      - ./configs/aider.ollama.yml:/root/.aider/ollama.yml
-  
-  # When litellm is also running  
-  litellm:
-    volumes:
-      - ./configs/aider.litellm.yml:/root/.aider/litellm.yml
-    environment:
-      - OPENAI_API_BASE=http://litellm:4000
-  
-  # Platform capabilities (nvidia toolkit detected)
-  nvidia:
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-
-# Multi-service conditions (AND logic)
-overlays:
-  # Applied only when BOTH litellm AND langfuse are running
-  [litellm, langfuse]:
-    environment:
-      - LANGFUSE_HOST=http://langfuse:3000
+configs:
+  cross:
+    ollama:
+      api:
+        environment:
+          - OLLAMA_ENABLED=true
 ```
 
-This would:
-1. **Consolidate** all cross-service logic for a service in one place
-2. **Make dependencies explicit** and discoverable
-3. **Support complex conditions** (AND/OR logic) declaratively
-4. **Maintain backward compatibility** - file-based overlays continue to work
+### System Variable Syntax
 
-The file-naming convention could eventually become syntactic sugar that generates `harbor.yaml` entries, or both systems could coexist.
-
-### Why Not Native Docker Compose Features?
-
-Docker Compose has `profiles` and `include`, but neither can replace Harbor's dynamic composition:
-
-- **Profiles** are static - you assign services to named profiles at authoring time. Harbor's file-matching is dynamic based on runtime service selection.
-- **Include** lacks conditional logic - there's no `include: if: condition` syntax.
-
-Harbor's file-matcher implements a **rule engine** that neither feature can replicate. The `harbor.yaml` approach formalizes this as a declarative configuration layer.
-
-### Longer-Term Vision: Service Manifest for Full Lifecycle
-
-This is admittedly ambitious, but if the `harbor.yaml` pattern proves useful, it could evolve into a **service manifest** that handles the full operational lifecycle - not just *what* to run, but *how* to operate it:
+Currently using Harbor env conventions (`${HARBOR_CONTAINER_PREFIX}`). Future syntax could be cleaner:
 
 ```yaml
-# Future harbor.yaml - full service manifest
-upstream:
-  source: ./upstream/docker-compose.yaml
-  prefix: myservice
+overrides:
+  api:
+    environment:
+      - OPENAI_API_BASE=http://{{service:ollama}}:11434/v1
+  web:
+    ports:
+      - {{port:3001}}:3000
+```
 
-overlays:
-  ollama: { ... }
-  nvidia: { ... }
+### Lifecycle Hooks
 
-# Lifecycle hooks (beyond Docker's native post_start/pre_stop)
+```yaml
 hooks:
   pre_up:
     - script: ./scripts/check-dependencies.sh
   post_up:
     - script: ./scripts/seed-database.sh
-  pre_down:
-    - script: ./scripts/backup-data.sh
+```
 
-# Secrets management (SOPS/age, Vault, etc.)
+### Secrets Management
+
+```yaml
 secrets:
   provider: sops
   files:
-    - .env.secrets.enc  # decrypted at runtime
-
-# Backup & persistence
-backup:
-  schedule: "0 2 * * *"
-  volumes: [postgres-data, ollama-models]
-  destination: s3://harbor-backups/{{date}}
-
-# Multi-environment support
-environments:
-  dev:
-    overlays: [nvidia]
-    env_file: .env.dev
-  prod:
-    overlays: [nvidia, monitoring]
-    secrets:
-      provider: vault
+    - .env.secrets.enc
 ```
-
-This would position Harbor as a **compose-based orchestration platform** - something I've been searching for across many alternatives:
-
-- **Dokploy** - Clean UI, good Compose support, but limited cross-service orchestration
-- **Coolify** - Feature-rich PaaS, but focused on app deployment not service composition
-- **CapRover** - Solid and customizable, but Compose support is secondary
-- **Portainer** - Great container GUI, but not an orchestration layer
-- **Dockge** - Simple compose management, lacks advanced composition logic
-
-Harbor is the closest I've found to treating Docker Compose as a **first-class orchestration primitive** rather than just a deployment artifact. The dynamic file-matching, cross-service config merging, and service-aware CLI are exactly the patterns needed for complex multi-service stacks (especially AI services that need to wire together backends, frontends, and satellites).
-
-The `harbor.yaml` proposal formalizes these patterns. If proven with AI services, it could become a foundation for an **API-first, compose-based orchestration system** that surpasses the alternatives for complex scenarios.
-
-*(This vision may be too ambitious for Harbor's current scope as an LLM toolkit - happy to keep it focused on the immediate `upstream:` feature if preferred.)*
-
-### Next Steps (if accepted)
-
-- [ ] Test with more upstream services (Langflow, Flowise, Lobe-Chat)
-- [ ] Handle Docker Compose `profiles:` passthrough
-- [ ] Optional init container generation for config preparation
-- [ ] Prototype `overlays:` syntax for cross-service declarations
-- [ ] Documentation and migration guide
 
 ---
 
-Happy to discuss and iterate on this design. Would love to hear thoughts from the community!
+Happy to discuss and iterate on this design!
 
