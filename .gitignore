@@ -118,3 +118,4 @@ __harbor.yml
 context_portal
 dify2/upstream/volumes/db/
 dify2/upstream/volumes/redis/
+DISCUSSION_DRAFT.md
