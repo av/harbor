@@ -730,4 +730,11 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         wikiUrl: `${wikiUrl}/2.3.61-Satellite-Kotaemon`,
         tooltip: 'Clean & customizable RAG UI for chatting with your documents (Gradio-based).',
     },
+    mcpforge: {
+        name: 'MCP Forge',
+        tags: [HST.satellite, HST.tools],
+        projectUrl: 'https://github.com/IBM/mcp-context-forge',
+        wikiUrl: `${wikiUrl}/2.3.62-Satellite-MCP-Forge`,
+        tooltip: 'Gateway and admin UI for managing Model Context Protocol (MCP) servers, tools, and resources.',
+    },
 };

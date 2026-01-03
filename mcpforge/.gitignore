@@ -1,0 +1,7 @@
+# MCP Forge Data
+data/
+
+# SQLite Database
+*.db
+*.db-shm
+*.db-wal
