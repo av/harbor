@@ -2624,6 +2624,10 @@ run_llamacpp_command() {
     }
 
     case "$1" in
+    models)
+        shift
+        curl -s $(harbor url llamacpp)/models | jq -r '.models[]'
+        ;;
     model)
         shift
         env_manager_alias llamacpp.model --on-set update_model_spec "$@"
