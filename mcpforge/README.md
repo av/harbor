@@ -46,7 +46,7 @@ REDIS_URL=redis://redis:6379/0
 
 ## Authentication
 
-By default, authentication is disabled for localhost development (`AUTH_REQUIRED=false`). 
+By default, authentication is disabled for localhost development (`AUTH_REQUIRED=false`).
 
 **Warning**: If exposing this service externally, always enable authentication by setting:
 ```bash
