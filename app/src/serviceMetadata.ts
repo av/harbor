@@ -737,4 +737,11 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         wikiUrl: `${wikiUrl}/2.3.62-Satellite-MCP-Forge`,
         tooltip: 'Gateway and admin UI for managing Model Context Protocol (MCP) servers, tools, and resources.',
     },
+    astrbot: {
+        name: 'AstrBot',
+        tags: [HST.satellite, HST.frontend, HST.tools],
+        projectUrl: 'https://github.com/AstrBotDevs/AstrBot',
+        wikiUrl: `${wikiUrl}/2.3.63-Satellite-AstrBot`,
+        tooltip: 'All-in-one agentic chatbot platform for multi-LLM conversations across messaging platforms with plugin system.',
+    },
 };

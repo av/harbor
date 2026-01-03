@@ -1,0 +1,5 @@
+services:
+  astrbot:
+    environment:
+      # Configure in WebUI: http://llamacpp:8080/v1
+      - HARBOR_ASTRBOT_LLAMACPP_ENDPOINT=http://llamacpp:8080/v1

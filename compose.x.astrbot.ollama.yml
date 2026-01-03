@@ -1,0 +1,5 @@
+services:
+  astrbot:
+    environment:
+      # Configure in WebUI: http://ollama:11434/v1
+      - HARBOR_ASTRBOT_OLLAMA_ENDPOINT=http://ollama:11434/v1

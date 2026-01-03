@@ -1,0 +1,5 @@
+services:
+  astrbot:
+    environment:
+      # Configure in WebUI: http://vllm:8000/v1
+      - HARBOR_ASTRBOT_VLLM_ENDPOINT=http://vllm:8000/v1
