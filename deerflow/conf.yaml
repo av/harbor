@@ -1,0 +1,14 @@
+# DeerFlow Configuration - README
+#
+# This file is NO LONGER USED directly.
+#
+# Harbor now uses a config merging system where:
+# 1. Base config is in: deerflow/configs/deerflow.config.yaml
+# 2. Service-specific configs (e.g., ollama) are in: deerflow/configs/deerflow.*.yaml
+# 3. At startup, all configs are merged into /app/conf.yaml inside the container
+#
+# To customize DeerFlow configuration:
+# - Edit deerflow/configs/deerflow.config.yaml for base settings
+# - Use compose.x.deerflow.*.yml files to add service-specific integrations
+#
+# See: https://github.com/bytedance/deer-flow/blob/main/docs/configuration_guide.md

@@ -1,0 +1,49 @@
+services:
+  deerflow-backend:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.deerflow-backend
+    build:
+      context: https://github.com/bytedance/deer-flow.git#main
+      dockerfile: Dockerfile
+    ports:
+      - ${HARBOR_DEERFLOW_BACKEND_HOST_PORT}:8000
+    env_file:
+      - ./.env
+      - ./deerflow/override.env
+    environment:
+      - ALLOWED_ORIGINS=http://localhost:${HARBOR_DEERFLOW_HOST_PORT}
+    volumes:
+      # Base config (a. prefix ensures it's loaded first, before overrides)
+      - ./deerflow/configs/deerflow.config.yaml:/app/configs/a.config.yaml
+      # Config merger entrypoint
+      - ./deerflow/start_deerflow.sh:/app/start_deerflow.sh
+      # Data directory
+      - ${HARBOR_DEERFLOW_WORKSPACE}/data:/app/data
+    entrypoint: ["/app/start_deerflow.sh"]
+    networks:
+      - harbor-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/docs"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  deerflow:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.deerflow
+    build:
+      context: https://github.com/bytedance/deer-flow.git#main:web
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=http://localhost:${HARBOR_DEERFLOW_BACKEND_HOST_PORT}/api
+    ports:
+      - ${HARBOR_DEERFLOW_HOST_PORT}:3000
+    env_file:
+      - ./.env
+      - ./deerflow/override.env
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:${HARBOR_DEERFLOW_BACKEND_HOST_PORT}/api
+    depends_on:
+      deerflow-backend:
+        condition: service_healthy
+    networks:
+      - harbor-network

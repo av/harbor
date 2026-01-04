@@ -1,0 +1,8 @@
+# DeerFlow Ollama Integration
+# Mounts Ollama-specific config that overrides base_url to use Harbor's Ollama
+services:
+  deerflow-backend:
+    volumes:
+      - ./deerflow/configs/deerflow.ollama.yaml:/app/configs/z.ollama.yaml
+    depends_on:
+      - ollama

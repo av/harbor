@@ -1,0 +1,17 @@
+# DeerFlow Ollama Configuration
+# This overrides base_url to use Harbor's Ollama service
+
+BASIC_MODEL:
+  model: "${HARBOR_DEERFLOW_MODEL}"
+  base_url: "${HARBOR_OLLAMA_INTERNAL_URL}/v1"
+  api_key: "ollama"
+
+REASONING_MODEL:
+  model: "${HARBOR_DEERFLOW_MODEL}"
+  base_url: "${HARBOR_OLLAMA_INTERNAL_URL}/v1"
+  api_key: "ollama"
+
+CODE_MODEL:
+  model: "${HARBOR_DEERFLOW_MODEL}"
+  base_url: "${HARBOR_OLLAMA_INTERNAL_URL}/v1"
+  api_key: "ollama"

@@ -728,7 +728,14 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         tags: [HST.satellite, HST.rag],
         projectUrl: 'https://github.com/Cinnamon/kotaemon',
         wikiUrl: `${wikiUrl}/2.3.61-Satellite-Kotaemon`,
-        tooltip: 'Clean & customizable RAG UI for chatting with your documents (Gradio-based).',
+        tooltip: 'An open-source RAG-based tool for chatting with your documents.',
+    },
+    deerflow: {
+        name: 'DeerFlow',
+        tags: [HST.satellite, HST.rag, HST.workflows],
+        projectUrl: 'https://github.com/bytedance/deer-flow',
+        wikiUrl: `${wikiUrl}/2.3.65-Satellite-DeerFlow`,
+        tooltip: 'Community-driven deep research framework combining LLMs with web search, crawling, and multi-agent workflows for comprehensive research reports.',
     },
     mcpforge: {
         name: 'MCP Forge',

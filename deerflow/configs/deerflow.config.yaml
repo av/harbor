@@ -1,0 +1,25 @@
+# DeerFlow Base Configuration
+# This file is merged with other config files to create the final conf.yaml
+# See: https://github.com/bytedance/deer-flow/blob/main/docs/configuration_guide.md
+
+BASIC_MODEL:
+  model: "${HARBOR_DEERFLOW_MODEL}"
+  base_url: "http://localhost:11434/v1"
+  api_key: "ollama"
+
+REASONING_MODEL:
+  model: "${HARBOR_DEERFLOW_MODEL}"
+  base_url: "http://localhost:11434/v1"
+  api_key: "ollama"
+
+CODE_MODEL:
+  model: "${HARBOR_DEERFLOW_MODEL}"
+  base_url: "http://localhost:11434/v1"
+  api_key: "ollama"
+
+SEARCH_ENGINE:
+  engine: duckduckgo
+
+CRAWLER_ENGINE: jina
+
+DEBUG: false
