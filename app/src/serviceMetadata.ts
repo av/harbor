@@ -233,7 +233,7 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
     ol1: {
         name: 'ol1',
         tags: [HST.frontend],
-        projectUrl: 'https://github.com/jupyterlab/jupyterlab',
+        projectUrl: 'https://github.com/av/harbor/tree/main/ol1',
         wikiUrl: `${wikiUrl}/2.3.19-Satellite:-ol1`,
         tooltip: 'A simple Gradio app implementing an o1-like chain of reasoning with Ollama.',
     },
