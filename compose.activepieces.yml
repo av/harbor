@@ -1,0 +1,51 @@
+services:
+  activepieces:
+    image: ${HARBOR_ACTIVEPIECES_IMAGE}:${HARBOR_ACTIVEPIECES_VERSION}
+    container_name: ${HARBOR_CONTAINER_PREFIX}.activepieces
+    ports:
+      - ${HARBOR_ACTIVEPIECES_HOST_PORT}:80
+    volumes:
+      - ${HARBOR_ACTIVEPIECES_WORKSPACE}:/root/.activepieces
+    depends_on:
+      activepieces-db:
+        condition: service_healthy
+    env_file:
+      - ./.env
+      - ./activepieces/override.env
+    environment:
+      - AP_DB_TYPE=POSTGRES
+      - AP_POSTGRES_HOST=activepieces-db
+      - AP_POSTGRES_PORT=5432
+      - AP_POSTGRES_DATABASE=${HARBOR_ACTIVEPIECES_PG_DB}
+      - AP_POSTGRES_USERNAME=${HARBOR_ACTIVEPIECES_PG_USER}
+      - AP_POSTGRES_PASSWORD=${HARBOR_ACTIVEPIECES_PG_PASSWORD}
+      - AP_REDIS_TYPE=MEMORY
+      - AP_ENCRYPTION_KEY=${HARBOR_ACTIVEPIECES_ENCRYPTION_KEY}
+      - AP_JWT_SECRET=${HARBOR_ACTIVEPIECES_JWT_SECRET}
+      - AP_FRONTEND_URL=http://localhost:${HARBOR_ACTIVEPIECES_HOST_PORT}
+      - AP_EXECUTION_MODE=${HARBOR_ACTIVEPIECES_EXECUTION_MODE}
+      - AP_TRIGGER_DEFAULT_POLL_INTERVAL=${HARBOR_ACTIVEPIECES_TRIGGER_POLL_INTERVAL}
+    networks:
+      - harbor-network
+
+  activepieces-db:
+    image: ${HARBOR_ACTIVEPIECES_PG_IMAGE}:${HARBOR_ACTIVEPIECES_PG_VERSION}
+    container_name: ${HARBOR_CONTAINER_PREFIX}.activepieces-db
+    networks:
+      - harbor-network
+    ports:
+      - ${HARBOR_ACTIVEPIECES_PG_HOST_PORT}:5432
+    env_file:
+      - ./.env
+      - ./activepieces/override.env
+    environment:
+      - POSTGRES_USER=${HARBOR_ACTIVEPIECES_PG_USER}
+      - POSTGRES_PASSWORD=${HARBOR_ACTIVEPIECES_PG_PASSWORD}
+      - POSTGRES_DB=${HARBOR_ACTIVEPIECES_PG_DB}
+    volumes:
+      - ${HARBOR_ACTIVEPIECES_WORKSPACE}/db:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -h localhost -U ${HARBOR_ACTIVEPIECES_PG_USER} -d ${HARBOR_ACTIVEPIECES_PG_DB}']
+      interval: 5s
+      timeout: 5s
+      retries: 10

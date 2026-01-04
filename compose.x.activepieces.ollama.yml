@@ -1,0 +1,5 @@
+services:
+  activepieces:
+    environment:
+      # Ollama URL for use in custom HTTP requests or AI nodes
+      - OLLAMA_BASE_URL=${HARBOR_OLLAMA_INTERNAL_URL}

@@ -744,4 +744,11 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         wikiUrl: `${wikiUrl}/2.3.63-Satellite-AstrBot`,
         tooltip: 'All-in-one agentic chatbot platform for multi-LLM conversations across messaging platforms with plugin system.',
     },
+    activepieces: {
+        name: 'Activepieces',
+        tags: [HST.satellite, HST.workflows],
+        projectUrl: 'https://github.com/activepieces/activepieces',
+        wikiUrl: `${wikiUrl}/2.3.64-Satellite-Activepieces`,
+        tooltip: 'Open-source workflow automation platform with AI capabilities and 200+ app connectors.',
+    },
 };
