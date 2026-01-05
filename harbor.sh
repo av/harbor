@@ -771,23 +771,32 @@ link_cli() {
     local shell_profile=""
     if [[ -f "$HOME/.zshrc" ]]; then
         shell_profile="$HOME/.zshrc"
-    elif [[ -f "$HOME/.bash_profile" ]]; then
-        shell_profile="$HOME/.bash_profile"
-    elif [[ -f "$HOME/.bashrc" ]]; then
-        shell_profile="$HOME/.bashrc"
-    elif [[ -f "$HOME/.profile" ]]; then
-        shell_profile="$HOME/.profile"
-    else
-        if [[ "$OSTYPE" == "darwin"* ]]; then
-            shell_profile="$HOME/.zshrc"
-        elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+    elif [[ "$OSTYPE" == "darwin"* ]]; then
+        if [[ -f "$HOME/.bash_profile" ]]; then
+            shell_profile="$HOME/.bash_profile"
+        elif [[ -f "$HOME/.bashrc" ]]; then
             shell_profile="$HOME/.bashrc"
+        elif [[ -f "$HOME/.profile" ]]; then
+            shell_profile="$HOME/.profile"
         else
-            # We can't determine the shell profile
-            log_warn "Sorry, but Harbor can't determine which shell configuration file to update."
-            log_warn "Please link the CLI manually."
-            log_warn "Harbor supports: ~/.zshrc, ~/.bash_profile, ~/.bashrc, ~/.profile"
-            return 1
+            shell_profile="$HOME/.zshrc"
+        fi
+    else
+        if [[ -f "$HOME/.bashrc" ]]; then
+            shell_profile="$HOME/.bashrc"
+        elif [[ -f "$HOME/.profile" ]]; then
+            shell_profile="$HOME/.profile"
+        elif [[ -f "$HOME/.bash_profile" ]]; then
+            shell_profile="$HOME/.bash_profile"
+        else
+            if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+                shell_profile="$HOME/.bashrc"
+            else
+                log_warn "Sorry, but Harbor can't determine which shell configuration file to update."
+                log_warn "Please link the CLI manually."
+                log_warn "Harbor supports: ~/.zshrc, ~/.bash_profile, ~/.bashrc, ~/.profile"
+                return 1
+            fi
         fi
     fi
 
