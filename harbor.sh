@@ -280,39 +280,45 @@ has_rocm() {
 }
 
 has_modern_compose() {
-    local compose_version=$(docker compose version --short | sed -e 's/-desktop//')
+    local compose_version_raw
+    compose_version_raw=$(docker compose version --short 2>/dev/null | sed -e 's/-desktop//')
 
-    # Handle potential empty or invalid version string
-    if [ -z "$compose_version" ]; then
+    if [ -z "$compose_version_raw" ]; then
         log_debug "Could not detect Docker Compose version"
         return 1
     fi
 
-    # Split version into components, defaulting to 0 if not present
-    local major_version=$(echo "$compose_version" | cut -d. -f1 || echo "0")
-    local minor_version=$(echo "$compose_version" | cut -d. -f2 || echo "0")
-    local patch_version=$(echo "$compose_version" | cut -d. -f3 || echo "0")
-
-    # log_debug "Docker Compose version: $major_version.$minor_version.$patch_version"
-
-    # Compare major version first
-    if [ "$major_version" -gt "$desired_compose_major" ]; then
+    local compose_version=${compose_version_raw#v}
+    if [ "$compose_version" = "dev" ]; then
+        log_debug "Docker Compose reports version 'dev'; assuming it is modern"
         return 0
-    elif [ "$major_version" -lt "$desired_compose_major" ]; then
+    fi
+
+    local major_version minor_version patch_version
+    if [[ "$compose_version" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
+        major_version=${BASH_REMATCH[1]}
+        minor_version=${BASH_REMATCH[2]}
+        patch_version=${BASH_REMATCH[3]}
+    else
+        log_debug "Unrecognized Docker Compose version '$compose_version_raw'; skipping numeric comparison"
+        return 0
+    fi
+
+    if ((major_version > desired_compose_major)); then
+        return 0
+    elif ((major_version < desired_compose_major)); then
         log_debug "Major version is less than $desired_compose_major"
         return 1
     fi
 
-    # If major versions are equal, compare minor versions
-    if [ "$minor_version" -gt "$desired_compose_minor" ]; then
+    if ((minor_version > desired_compose_minor)); then
         return 0
-    elif [ "$minor_version" -lt "$desired_compose_minor" ]; then
+    elif ((minor_version < desired_compose_minor)); then
         log_debug "Minor version is less than $desired_compose_minor"
         return 1
     fi
 
-    # If minor versions are equal, compare patch versions
-    if [ "$patch_version" -lt "$desired_compose_patch" ]; then
+    if ((patch_version < desired_compose_patch)); then
         log_debug "Patch version is less than $desired_compose_patch"
         return 1
     fi
