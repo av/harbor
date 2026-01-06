@@ -1,0 +1,6 @@
+services:
+  khoj:
+    depends_on:
+      - searxng
+    environment:
+      - KHOJ_SEARXNG_URL=http://searxng:8080

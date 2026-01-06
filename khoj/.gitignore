@@ -1,0 +1,4 @@
+db/
+config/
+models/
+huggingface/

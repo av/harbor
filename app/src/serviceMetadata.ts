@@ -765,4 +765,11 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         wikiUrl: `${wikiUrl}/2.3.66-Satellite-PhotoPrism`,
         tooltip: 'AI-powered photo management app with face recognition, image classification, and automatic organization.',
     },
+    khoj: {
+        name: 'Khoj',
+        tags: [HST.satellite, HST.rag],
+        projectUrl: 'https://github.com/khoj-ai/khoj',
+        wikiUrl: `${wikiUrl}/2.3.67-Satellite-Khoj`,
+        tooltip: 'AI second brain for chat, search, and agents with your docs. Supports local and cloud LLMs.',
+    },
 };

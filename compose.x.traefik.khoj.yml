@@ -1,0 +1,7 @@
+services:
+  khoj:
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.services.khoj.loadbalancer.server.port=42110"
+      - "traefik.http.routers.khoj.rule=Host(`khoj.${HARBOR_TRAEFIK_HOST}`)"
+      - "traefik.http.routers.khoj.entrypoints=web"

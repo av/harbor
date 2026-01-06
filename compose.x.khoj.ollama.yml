@@ -1,0 +1,7 @@
+services:
+  khoj:
+    depends_on:
+      - ollama
+    environment:
+      - OPENAI_BASE_URL=${HARBOR_OLLAMA_INTERNAL_URL}/v1/
+      - KHOJ_DEFAULT_CHAT_MODEL=${HARBOR_KHOJ_DEFAULT_MODEL}
