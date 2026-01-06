@@ -4163,6 +4163,43 @@ run_langflow_command() {
     esac
 }
 
+run_photoprism_command() {
+    case "$1" in
+    model)
+        shift
+        env_manager_alias photoprism.vision.model "$@"
+        return 0
+        ;;
+    -h | --help | help)
+        echo "Usage: harbor photoprism <command>"
+        echo
+        echo "Harbor Commands:"
+        echo "  harbor photoprism model [model]  - Get or set the vision model for Ollama integration"
+        echo
+        echo "PhotoPrism CLI Commands (run inside container):"
+        echo "  harbor photoprism vision ls                      - List configured vision models"
+        echo "  harbor photoprism vision run -m caption          - Run caption generation"
+        echo "  harbor photoprism vision run -m labels           - Run label generation"
+        echo "  harbor photoprism passwd <user>                  - Reset user password"
+        echo "  harbor photoprism users ls                       - List users"
+        echo
+        echo "See: https://docs.photoprism.app/user-guide/ai/cli/"
+        return 0
+        ;;
+    esac
+
+    local services=$(get_active_services)
+
+    if ! is_service_running "photoprism"; then
+        log_error "PhotoPrism is not running. Start it with 'harbor up photoprism'"
+        return 1
+    fi
+
+    $(compose_with_options $services "photoprism") exec \
+        photoprism \
+        photoprism "$@"
+}
+
 run_openhands_command() {
     local services=$(get_active_services)
 
@@ -4737,6 +4774,10 @@ main_entrypoint() {
     parler)
         shift
         run_parler_command "$@"
+        ;;
+    photoprism)
+        shift
+        run_photoprism_command "$@"
         ;;
     airllm)
         shift

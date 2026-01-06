@@ -7,4 +7,4 @@ sed "s|\${HARBOR_PHOTOPRISM_VISION_MODEL}|${HARBOR_PHOTOPRISM_VISION_MODEL}|g; \
      s|\${HARBOR_OLLAMA_INTERNAL_URL}|${HARBOR_OLLAMA_INTERNAL_URL}|g" \
     /photoprism/vision.yml.template > "$CONFIG_DIR/vision.yml"
 
-exec /scripts/entrypoint.sh "$@"
+exec /init "$@"
