@@ -1,0 +1,61 @@
+services:
+  photoprism:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.photoprism
+    image: ${HARBOR_PHOTOPRISM_IMAGE}:${HARBOR_PHOTOPRISM_VERSION}
+    stop_grace_period: 15s
+    depends_on:
+      photoprism-db:
+        condition: service_healthy
+    security_opt:
+      - seccomp:unconfined
+      - apparmor:unconfined
+    ports:
+      - ${HARBOR_PHOTOPRISM_HOST_PORT}:2342
+    env_file:
+      - ./.env
+      - ./photoprism/override.env
+    environment:
+      - PHOTOPRISM_ADMIN_USER=${HARBOR_PHOTOPRISM_ADMIN_USER}
+      - PHOTOPRISM_ADMIN_PASSWORD=${HARBOR_PHOTOPRISM_ADMIN_PASSWORD}
+      - PHOTOPRISM_SITE_URL=http://localhost:${HARBOR_PHOTOPRISM_HOST_PORT}/
+      - PHOTOPRISM_SITE_TITLE=${HARBOR_PHOTOPRISM_SITE_TITLE}
+      - PHOTOPRISM_DATABASE_SERVER=photoprism-db:3306
+      - PHOTOPRISM_DATABASE_NAME=${HARBOR_PHOTOPRISM_DB_NAME}
+      - PHOTOPRISM_DATABASE_USER=${HARBOR_PHOTOPRISM_DB_USER}
+      - PHOTOPRISM_DATABASE_PASSWORD=${HARBOR_PHOTOPRISM_DB_PASSWORD}
+      - PHOTOPRISM_INIT=https tensorflow
+    working_dir: /photoprism
+    volumes:
+      - ${HARBOR_PHOTOPRISM_ORIGINALS}:/photoprism/originals
+      - ${HARBOR_PHOTOPRISM_STORAGE}:/photoprism/storage
+      - ${HARBOR_PHOTOPRISM_STORAGE}/tensorflow:/tmp/amd64
+    networks:
+      - harbor-network
+
+  photoprism-db:
+    image: ${HARBOR_PHOTOPRISM_MARIADB_IMAGE}:${HARBOR_PHOTOPRISM_MARIADB_VERSION}
+    container_name: ${HARBOR_CONTAINER_PREFIX}.photoprism-db
+    stop_grace_period: 15s
+    security_opt:
+      - seccomp:unconfined
+      - apparmor:unconfined
+    command: --innodb-buffer-pool-size=512M --transaction-isolation=READ-COMMITTED --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --max-connections=512 --innodb-rollback-on-timeout=OFF --innodb-lock-wait-timeout=120
+    ports:
+      - ${HARBOR_PHOTOPRISM_MARIADB_HOST_PORT}:3306
+    env_file:
+      - ./.env
+      - ./photoprism/override.env
+    environment:
+      - MARIADB_DATABASE=${HARBOR_PHOTOPRISM_DB_NAME}
+      - MARIADB_USER=${HARBOR_PHOTOPRISM_DB_USER}
+      - MARIADB_PASSWORD=${HARBOR_PHOTOPRISM_DB_PASSWORD}
+      - MARIADB_ROOT_PASSWORD=${HARBOR_PHOTOPRISM_DB_ROOT_PASSWORD}
+    volumes:
+      - ${HARBOR_PHOTOPRISM_STORAGE}/database:/var/lib/mysql
+    healthcheck:
+      test: ['CMD-SHELL', 'healthcheck.sh --connect --innodb_initialized']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - harbor-network

@@ -1,0 +1,13 @@
+Models:
+- Type: labels
+  Model: ${HARBOR_PHOTOPRISM_VISION_MODEL}
+  Engine: ollama
+  Run: auto
+  Service:
+    Uri: ${HARBOR_OLLAMA_INTERNAL_URL}/api/generate
+- Type: caption
+  Model: ${HARBOR_PHOTOPRISM_VISION_MODEL}
+  Engine: ollama
+  Run: auto
+  Service:
+    Uri: ${HARBOR_OLLAMA_INTERNAL_URL}/api/generate

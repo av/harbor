@@ -1,0 +1,12 @@
+services:
+  photoprism:
+    environment:
+      - PHOTOPRISM_INIT=https tensorflow-gpu gpu
+      - PHOTOPRISM_FFMPEG_ENCODER=nvidia
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

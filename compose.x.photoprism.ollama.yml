@@ -1,0 +1,11 @@
+services:
+  photoprism:
+    depends_on:
+      - ollama
+    environment:
+      - HARBOR_PHOTOPRISM_VISION_MODEL=${HARBOR_PHOTOPRISM_VISION_MODEL}
+      - HARBOR_OLLAMA_INTERNAL_URL=${HARBOR_OLLAMA_INTERNAL_URL}
+    volumes:
+      - ./photoprism/vision.yml.template:/photoprism/vision.yml.template:ro
+      - ./photoprism/start_photoprism.sh:/photoprism/start_photoprism.sh:ro
+    entrypoint: ["/photoprism/start_photoprism.sh"]

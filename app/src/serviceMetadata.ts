@@ -758,4 +758,11 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         wikiUrl: `${wikiUrl}/2.3.64-Satellite-Activepieces`,
         tooltip: 'Open-source workflow automation platform with AI capabilities and 200+ app connectors.',
     },
+    photoprism: {
+        name: 'PhotoPrism',
+        tags: [HST.satellite, HST.image],
+        projectUrl: 'https://github.com/photoprism/photoprism',
+        wikiUrl: `${wikiUrl}/2.3.66-Satellite-PhotoPrism`,
+        tooltip: 'AI-powered photo management app with face recognition, image classification, and automatic organization.',
+    },
 };
