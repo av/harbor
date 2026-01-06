@@ -8,7 +8,7 @@ You will aid me in releasing a new version of Harbor. Follow these steps:
 - When codegen is done, commit current changes with the message: `chore: vX.Y.Z`
 - Push the commit to the main branch
 - Research changes made since the last release by examining git commit history and PRs merged.
-- Open https://github.com/av/harbor/releases/new in my browser, with query parameters to prefill the new release form (see below).
+- Open https://github.com/av/harbor/releases/new, with query parameters to prefill the new release form (see below). Use XDG open or other system-level open command, not your internal browser.
 
 ### GitHub new release parameter reference
 
