@@ -7,7 +7,8 @@ services:
       - ./landing/override.env
     volumes:
       - ./landing/www:/usr/share/nginx/html:ro
-      - ./docs:/usr/share/nginx/html/docs:ro
+      - ./docs:/docs:ro
+      - ./landing/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     ports:
       - ${HARBOR_LANDING_HOST_PORT}:80
     healthcheck:
