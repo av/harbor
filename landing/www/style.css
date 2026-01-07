@@ -64,7 +64,16 @@ body {
 }
 
 .logo {
-    font-size: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.logo svg {
+    width: 28px;
+    height: 28px;
+    color: var(--primary-color);
+    stroke-width: 2;
 }
 
 .nav-links {
