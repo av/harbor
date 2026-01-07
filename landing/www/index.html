@@ -3,343 +3,777 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Harbor - Your Local LLM Toolkit</title>
+    <title>Harbor - The OS for Local Intelligence</title>
+    <meta name="description" content="Orchestrate LLMs, AI agents, and RAG pipelines on your own hardware. The open-source local AI infrastructure.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
     <link rel="stylesheet" href="style.css">
 </head>
-<body>
+<body class="dark-theme">
+    <!-- Dynamic Background -->
+    <div class="fixed-background">
+        <div class="grid-pattern"></div>
+        <div class="noise-overlay"></div>
+        <div class="glow-orb orb-1"></div>
+        <div class="glow-orb orb-2"></div>
+    </div>
+
+    <!-- Navigation -->
     <nav class="navbar">
-        <div class="container">
-            <div class="nav-brand">
-                <span class="logo">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="5" r="3"/>
-                        <line x1="12" x2="12" y1="22" y2="8"/>
-                        <path d="M5 12H2a10 10 0 0 0 20 0h-3"/>
-                    </svg>
-                </span>
-                <span class="brand-name">Harbor</span>
-            </div>
+        <div class="container nav-container">
+            <a href="#" class="brand">
+                <span>Harbor</span>
+            </a>
             <div class="nav-links">
-                <a href="#features">Features</a>
-                <a href="#quickstart">Quick Start</a>
-                <a href="docs/">Documentation</a>
-                <a href="https://github.com/av/harbor" target="_blank" class="github-link">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
-                    </svg>
-                    GitHub
+                <a href="#features" class="nav-link">Features</a>
+                <a href="https://github.com/av/harbor/wiki" class="nav-link">Docs</a>
+                <a href="https://github.com/av/harbor" class="nav-link">GitHub</a>
+            </div>
+            <div class="nav-actions">
+                <a href="https://github.com/av/harbor">
+                    <img src="https://img.shields.io/github/stars/av/harbor?style=social" alt="GitHub stars">
                 </a>
             </div>
         </div>
     </nav>
 
-    <header class="hero">
-        <div class="container">
-            <div class="hero-content">
-                <h1 class="hero-title">Run Local LLMs with One Command</h1>
-                <p class="hero-subtitle">Harbor manages your local LLM environment. Pre-configured backends, frontends, and services work together out of the box.</p>
-                <div class="hero-code">
-                    <code># Start Open WebUI and Ollama
-harbor up
-
-# Add web search and voice chat
-harbor up searxng speaches</code>
-                </div>
-                <div class="hero-actions">
-                    <a href="#quickstart" class="btn btn-primary">Install Harbor</a>
-                    <a href="docs/" class="btn btn-secondary">Documentation</a>
-                </div>
-            </div>
-        </div>
-    </header>
-
-    <section id="features" class="features">
-        <div class="container">
-            <h2 class="section-title">Features</h2>
-            <div class="features-grid">
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>
+    <main>
+        <!-- Hero Section -->
+        <section class="hero">
+            <div class="container hero-container">
+                <div class="hero-content">
+                    <div class="badge-wrapper">
+                        <div class="badge fade-in-up" style="animation-delay: 0.1s;">
+                            <span class="pulse-dot"></span>
+                            <span class="badge-text">v0.1.0 Public Beta</span>
+                        </div>
                     </div>
-                    <h3>Local LLMs</h3>
-                    <p>Run LLMs on your machine with minimal configuration. Backends connect to Open WebUI automatically.</p>
-                    <div class="feature-code">harbor up ollama llamacpp vllm</div>
-                </div>
 
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m13 2-2 2.5L13 7"/><path d="m17 6-2.5 2 2.5 2"/><path d="M19 10h-2.5l2.5 2.5"/><path d="m20 14-2 2.5L20 19"/><path d="m17 18-2.5-2 2.5-2"/><path d="M15 22h-2.5l-2.5-2.5"/><path d="M11 20v-2.5l-2.5-2.5"/><path d="m7 18-2-2.5L7 13"/><path d="M5 14h2.5L5 11.5"/><path d="m4 10 2-2.5L4 5"/><path d="m7 6 2.5 2L7 10"/><path d="M9 2h2.5L14 4.5"/></svg>
-                    </div>
-                    <h3>Multiple Inference Engines</h3>
-                    <p>Supports vLLM, llama.cpp, TGI, TabbyAPI, Aphrodite, SGLang, KTransformers, and more.</p>
-                </div>
+                    <h1 class="hero-title fade-in-up" style="animation-delay: 0.2s;">
+                        The Operating System <br>
+                        for <span class="gradient-text">Local Intelligence</span>
+                    </h1>
 
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
-                    </div>
-                    <h3>Tool Use (MCP)</h3>
-                    <p>Add tools to your LLMs using the MCP ecosystem. Includes web UI for management.</p>
-                    <div class="feature-code">harbor up metamcp mcpo</div>
-                </div>
+                    <p class="hero-subtitle fade-in-up" style="animation-delay: 0.3s;">
+                        Spin up complex AI stacks with a single command. Orchestrate LLMs, Agents, and RAG pipelines on your own hardware. No Docker headaches.
+                    </p>
 
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
-                    </div>
-                    <h3>Image Generation</h3>
-                    <p>ComfyUI with FLUX integrates with Open WebUI.</p>
-                    <div class="feature-code">harbor up comfyui</div>
-                </div>
-
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-                    </div>
-                    <h3>Web Search</h3>
-                    <p>SearXNG connects to Perplexica, ChatUI, Morphic, and other services for web-enhanced responses.</p>
-                    <div class="feature-code">harbor up searxng perplexica</div>
-                </div>
-
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
-                    </div>
-                    <h3>Voice Chat</h3>
-                    <p>Add speech-to-text and text-to-speech with Speaches (OpenAI-compatible API).</p>
-                    <div class="feature-code">harbor up speaches</div>
-                </div>
-
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="8" x="3" y="3" rx="2"/><path d="M7 11v4a2 2 0 0 0 2 2h4"/><rect width="8" height="8" x="13" y="13" rx="2"/></svg>
-                    </div>
-                    <h3>LLM Workflows</h3>
-                    <p>Build workflows using Dify, n8n, LangFlow, FloWise, or Open WebUI Pipelines.</p>
-                    <div class="feature-code">harbor up dify</div>
-                </div>
-
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="20" x="5" y="2" rx="2" ry="2"/><path d="M12 18h.01"/></svg>
-                    </div>
-                    <h3>Remote Access</h3>
-                    <p>Access services from your phone via QR codes, local network, or internet tunneling.</p>
-                    <div class="feature-code">harbor qr<br>harbor tunnel</div>
-                </div>
-
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
-                    </div>
-                    <h3>Configuration Profiles</h3>
-                    <p>Save and switch between configurations for different models and setups.</p>
-                    <div class="feature-code">harbor profile save llama4<br>harbor profile use default</div>
-                </div>
-
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 17V7l5 5-5 5"/><circle cx="12" cy="12" r="10"/></svg>
-                    </div>
-                    <h3>Command History</h3>
-                    <p>Track Harbor commands separately from shell history.</p>
-                    <div class="feature-code">harbor history</div>
-                </div>
-
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></svg>
-                    </div>
-                    <h3>LLM Scripting</h3>
-                    <p>Script workflows and automate LLM interactions with Harbor Boost.</p>
-                    <div class="feature-code">harbor up boost</div>
-                </div>
-
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
-                    </div>
-                    <h3>Export Configuration</h3>
-                    <p>Generate a standalone docker-compose file from your Harbor setup.</p>
-                    <div class="feature-code">harbor eject > compose.yml</div>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <section id="quickstart" class="quickstart">
-        <div class="container">
-            <h2 class="section-title">Quick Start</h2>
-            <div class="quickstart-content">
-                <div class="quickstart-step">
-                    <div class="step-number">1</div>
-                    <div class="step-content">
-                        <h3>Install Harbor</h3>
-                        <div class="code-block">
-                            <code># Using npm
-npm install -g @avcodes/harbor
-
-# Or using pip
-pip install llm-harbor
-
-# Or using bash
-curl -fsSL https://raw.githubusercontent.com/av/harbor/main/install.sh | bash</code>
+                    <div class="hero-actions fade-in-up" style="animation-delay: 0.4s;">
+                        <div class="terminal-install">
+                            <span class="prompt">$</span>
+                            <div class="typewriter-text" id="typewriter">curl https://av.codes/get-harbor.sh | bash</div>
+                            <button class="copy-btn" aria-label="Copy command">
+                                <i data-lucide="copy"></i>
+                            </button>
                         </div>
                     </div>
                 </div>
 
-                <div class="quickstart-step">
-                    <div class="step-number">2</div>
-                    <div class="step-content">
-                        <h3>Start Harbor</h3>
-                        <div class="code-block">
-                            <code># Start default services (Open WebUI + Ollama)
-harbor up
+                <!-- 3D Isometric Visual -->
+                <div class="hero-visual fade-in-up" style="animation-delay: 0.5s;">
+                    <div class="iso-stack">
+                        <!-- Layer 3: Agents -->
+                        <div class="iso-layer layer-agents float-slow">
+                            <div class="layer-glass">
+                                <div class="layer-header">
+                                    <i data-lucide="bot" class="layer-icon"></i>
+                                    <span>Agents</span>
+                                </div>
+                                <div class="layer-items">
+                                    <span class="pill">OpenHands</span>
+                                    <span class="pill">Bolt</span>
+                                </div>
+                            </div>
+                        </div>
 
-# Or start with additional services
-harbor up searxng speaches comfyui</code>
+                        <!-- Connectors -->
+                        <div class="stack-connector c1"></div>
+
+                        <!-- Layer 2: Satellites -->
+                        <div class="iso-layer layer-satellites float-medium">
+                            <div class="layer-glass">
+                                <div class="layer-header">
+                                    <i data-lucide="layout-grid" class="layer-icon"></i>
+                                    <span>Services</span>
+                                </div>
+                                <div class="layer-items">
+                                    <span class="pill">SearXNG</span>
+                                    <span class="pill">OpenWebUI</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Connectors -->
+                        <div class="stack-connector c2"></div>
+
+                        <!-- Layer 1: Inference -->
+                        <div class="iso-layer layer-inference float-fast">
+                            <div class="layer-glass">
+                                <div class="layer-header">
+                                    <i data-lucide="cpu" class="layer-icon"></i>
+                                    <span>Inference</span>
+                                </div>
+                                <div class="layer-items">
+                                    <span class="pill">Ollama</span>
+                                    <span class="pill">vLLM</span>
+                                </div>
+                            </div>
+                        </div>
+
+                         <!-- Base Shadow -->
+                        <div class="iso-shadow"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Infinite Marquee -->
+        <div class="marquee-section">
+            <div class="marquee-track">
+                <div class="marquee-content">
+                    <span class="mq-item">Llama 3</span>
+                    <span class="mq-sep">/</span>
+                    <span class="mq-item">Mistral</span>
+                    <span class="mq-sep">/</span>
+                    <span class="mq-item">Qwen</span>
+                    <span class="mq-sep">/</span>
+                    <span class="mq-item">Stable Diffusion</span>
+                    <span class="mq-sep">/</span>
+                    <span class="mq-item">Ollama</span>
+                    <span class="mq-sep">/</span>
+                    <span class="mq-item">vLLM</span>
+                    <span class="mq-sep">/</span>
+                    <span class="mq-item">LangChain</span>
+                    <span class="mq-sep">/</span>
+                    <span class="mq-item">LlamaIndex</span>
+                    <span class="mq-sep">/</span>
+                    <span class="mq-item">OpenWebUI</span>
+                    <span class="mq-sep">/</span>
+                     <span class="mq-item">Llama 3</span>
+                    <span class="mq-sep">/</span>
+                    <span class="mq-item">Mistral</span>
+                    <span class="mq-sep">/</span>
+                    <span class="mq-item">Qwen</span>
+                    <span class="mq-sep">/</span>
+                    <span class="mq-item">Stable Diffusion</span>
+                    <span class="mq-sep">/</span>
+                    <span class="mq-item">Ollama</span>
+                    <span class="mq-sep">/</span>
+                    <span class="mq-item">vLLM</span>
+                    <span class="mq-sep">/</span>
+                    <span class="mq-item">LangChain</span>
+                    <span class="mq-sep">/</span>
+                    <span class="mq-item">LlamaIndex</span>
+                    <span class="mq-sep">/</span>
+                    <span class="mq-item">OpenWebUI</span>
+                    <span class="mq-sep">/</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Features Section -->
+        <section id="features" class="features-section">
+            <div class="container">
+                <div class="section-header">
+                    <h2>Everything Included</h2>
+                    <p>Stop fighting with Python environments. Start shipping.</p>
+                </div>
+
+                <div class="bento-grid" id="bento-grid">
+                    <!-- Feature 1: One Command Stack -->
+                    <div class="bento-card spotlight-card card-tall">
+                        <div class="spotlight-bg"></div>
+                        <div class="card-content">
+                            <div class="card-icon-lg">
+                                <i data-lucide="play-circle"></i>
+                            </div>
+                            <h3>One Command Stack</h3>
+                            <p>Start Ollama and Open WebUI together with a single command. Defaults handle everything for you.</p>
+
+                            <div class="micro-terminal">
+                                <div class="mt-header">
+                                    <span class="mt-dot red"></span>
+                                    <span class="mt-dot yellow"></span>
+                                    <span class="mt-dot green"></span>
+                                </div>
+                                <div class="mt-body">
+                                    <div class="mt-line"><span class="mt-prompt">$</span> harbor up</div>
+                                    <div class="mt-line success">✔ harbor.ollama Healthy</div>
+                                    <div class="mt-line success">✔ harbor.webui Healthy</div>
+                                    <div class="mt-line"><span class="mt-prompt">$</span> harbor open</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Feature 2: Model Management -->
+                    <div class="bento-card spotlight-card">
+                         <div class="spotlight-bg"></div>
+                        <div class="card-content">
+                            <div class="card-header">
+                                <div class="card-icon-box"><i data-lucide="brain"></i></div>
+                                <h3>Model Management</h3>
+                            </div>
+                            <p>Pull, list, and configure models across all backends. Works with Ollama, vLLM, llama.cpp, and more.</p>
+                            <div class="micro-terminal">
+                                <div class="mt-body">
+                                    <div class="mt-line"><span class="mt-prompt">$</span> harbor vllm model google/gemma-2-2b-it</div>
+                                    <div class="mt-line"><span class="mt-prompt">$</span> harbor ollama list</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Feature 3: Harbor App -->
+                    <div class="bento-card spotlight-card card-tall">
+                         <div class="spotlight-bg"></div>
+                        <div class="card-content">
+                            <div>
+                                <div class="card-icon-lg">
+                                    <i data-lucide="layout-dashboard"></i>
+                                </div>
+                                <h3>Harbor App</h3>
+                                <p>Visual interface for managing services, monitoring resources, and configuring your stack. No terminal required.</p>
+                            </div>
+                            <div class="card-screenshot">
+                                <img src="harbor-app-3.png" alt="Harbor App Interface" loading="lazy">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Feature 4: Unified CLI -->
+                    <div class="bento-card spotlight-card card-wide">
+                         <div class="spotlight-bg"></div>
+                        <div class="card-content row-content">
+                            <div class="text-side">
+                                 <div class="card-header">
+                                    <div class="card-icon-box"><i data-lucide="terminal-square"></i></div>
+                                    <h3>Powerful CLI</h3>
+                                </div>
+                                <p>Configure services, manage models, view logs, and access service shells. Everything through one interface.</p>
+                                <div class="feature-pills">
+                                    <span class="f-pill"><i data-lucide="check"></i> harbor pull</span>
+                                    <span class="f-pill"><i data-lucide="check"></i> harbor logs</span>
+                                    <span class="f-pill"><i data-lucide="check"></i> harbor config</span>
+                                </div>
+                            </div>
+                            <div class="cli-demo">
+                                <div class="cli-row">
+                                    <span class="cli-p">➜</span> <span class="cli-c">harbor ollama pull llama3.2</span>
+                                </div>
+                                <div class="cli-row success">✔ Model pulled</div>
+                                <div class="cli-row">
+                                    <span class="cli-p">➜</span> <span class="cli-c">harbor up searxng</span>
+                                </div>
+                                <div class="cli-row success">✔ Web search enabled</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Feature 5: Web RAG -->
+                    <div class="bento-card spotlight-card card-tall">
+                         <div class="spotlight-bg"></div>
+                        <div class="card-content">
+                            <div>
+                                <div class="card-icon-lg">
+                                    <i data-lucide="globe"></i>
+                                </div>
+                                <h3>Local Web RAG</h3>
+                                <p>Add SearXNG for web search and deep research. Auto-connected to Open WebUI, Perplexica, Morphic, and more.</p>
+                            </div>
+                            <div class="micro-terminal">
+                                <div class="mt-header">
+                                    <span class="mt-dot red"></span>
+                                    <span class="mt-dot yellow"></span>
+                                    <span class="mt-dot green"></span>
+                                </div>
+                                <div class="mt-body">
+                                    <div class="mt-line"><span class="mt-prompt">$</span> harbor up searxng</div>
+                                    <div class="mt-line success">✔ Web search enabled in Open WebUI</div>
+                                    <div class="mt-line"><span class="mt-prompt">$</span> harbor up perplexica morphic</div>
+                                    <div class="mt-line success">✔ Deep research tools ready</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Feature 6: Image Generation -->
+                    <div class="bento-card spotlight-card">
+                         <div class="spotlight-bg"></div>
+                        <div class="card-content">
+                            <div class="card-header">
+                                <div class="card-icon-box"><i data-lucide="image"></i></div>
+                                <h3>Image Generation</h3>
+                            </div>
+                            <p>ComfyUI + Flux pre-wired to Open WebUI. Generate images in your chat interface with a single command.</p>
+                            <div class="micro-terminal">
+                                <div class="mt-body">
+                                    <div class="mt-line"><span class="mt-prompt">$</span> harbor up comfyui</div>
+                                    <div class="mt-line success">✔ FLUX ready in Open WebUI</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Feature 7: Voice Chat -->
+                    <div class="bento-card spotlight-card">
+                         <div class="spotlight-bg"></div>
+                        <div class="card-content">
+                            <div class="card-header">
+                                <div class="card-icon-box"><i data-lucide="mic"></i></div>
+                                <h3>Voice Chat</h3>
+                            </div>
+                            <p>Talk to your LLM with built-in TTS and STT. Speaches provides OpenAI-compatible voice endpoints.</p>
+                            <div class="micro-terminal">
+                                <div class="mt-body">
+                                    <div class="mt-line"><span class="mt-prompt">$</span> harbor up speaches</div>
+                                    <div class="mt-line success">✔ Voice enabled in Open WebUI</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Feature 8: Service Management -->
+                    <div class="bento-card spotlight-card card-tall">
+                         <div class="spotlight-bg"></div>
+                        <div class="card-content">
+                            <div>
+                                <div class="card-icon-lg">
+                                    <i data-lucide="boxes"></i>
+                                </div>
+                                <h3>100+ Services</h3>
+                                <p>Choose from frontends, backends, and satellites. Start, stop, and configure services with visual controls or CLI commands.</p>
+                            </div>
+                            <div class="card-screenshot physics-container">
+                                <canvas id="servicesCanvas"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Feature 9: LLM Workflows -->
+                    <div class="bento-card spotlight-card card-wide">
+                         <div class="spotlight-bg"></div>
+                        <div class="card-content row-content">
+                            <div class="text-side">
+                                 <div class="card-header">
+                                    <div class="card-icon-box"><i data-lucide="workflow"></i></div>
+                                    <h3>LLM Workflows</h3>
+                                </div>
+                                <p>Build complex AI workflows with Dify, n8n, Flowise, LangFlow, and more. All pre-configured and ready to use.</p>
+                                <div class="feature-pills">
+                                    <span class="f-pill"><i data-lucide="check"></i> Dify</span>
+                                    <span class="f-pill"><i data-lucide="check"></i> n8n</span>
+                                    <span class="f-pill"><i data-lucide="check"></i> Flowise</span>
+                                    <span class="f-pill"><i data-lucide="check"></i> LangFlow</span>
+                                </div>
+                            </div>
+                            <div class="cli-demo">
+                                <div class="cli-row">
+                                    <span class="cli-p">➜</span> <span class="cli-c">harbor up dify</span>
+                                </div>
+                                <div class="cli-row success">✔ Dify ready at localhost:3000</div>
+                                <div class="cli-row">
+                                    <span class="cli-p">➜</span> <span class="cli-c">harbor up n8n flowise</span>
+                                </div>
+                                <div class="cli-row success">✔ Workflow tools ready</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Feature 10: Backend Flexibility -->
+                    <div class="bento-card spotlight-card card-tall">
+                         <div class="spotlight-bg"></div>
+                        <div class="card-content">
+                            <div>
+                                <div class="card-icon-lg">
+                                    <i data-lucide="cpu"></i>
+                                </div>
+                                <h3>Multiple Backends</h3>
+                                <p>Choose Ollama for simplicity, vLLM for speed, llama.cpp for efficiency. Switch backends with harbor defaults.</p>
+                            </div>
+                            <div class="micro-terminal">
+                                <div class="mt-header">
+                                    <span class="mt-dot red"></span>
+                                    <span class="mt-dot yellow"></span>
+                                    <span class="mt-dot green"></span>
+                                </div>
+                                <div class="mt-body">
+                                    <div class="mt-line"><span class="mt-prompt">$</span> harbor defaults rm ollama</div>
+                                    <div class="mt-line"><span class="mt-prompt">$</span> harbor defaults add vllm</div>
+                                    <div class="mt-line"><span class="mt-prompt">$</span> harbor up</div>
+                                    <div class="mt-line success">✔ vLLM backend started</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Feature 11: Profile Switching -->
+                    <div class="bento-card spotlight-card">
+                         <div class="spotlight-bg"></div>
+                        <div class="card-content">
+                            <div>
+                                <div class="card-header">
+                                    <div class="card-icon-box"><i data-lucide="folder-sync"></i></div>
+                                    <h3>Config Profiles</h3>
+                                </div>
+                                <p>Save and switch between configurations instantly. Load profiles from URLs or share with your team.</p>
+                            </div>
+                            <div class="micro-terminal">
+                                <div class="mt-body">
+                                    <div class="mt-line"><span class="mt-prompt">$</span> harbor profile save dev</div>
+                                    <div class="mt-line"><span class="mt-prompt">$</span> harbor profile use prod</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Feature 12: 100% Private -->
+                    <div class="bento-card spotlight-card">
+                         <div class="spotlight-bg"></div>
+                        <div class="card-content">
+                            <div class="card-header">
+                                <div class="card-icon-box"><i data-lucide="shield-check"></i></div>
+                                <h3>100% Private</h3>
+                            </div>
+                            <p>Your data never leaves your machine. Fully air-gapped capable. No API keys required for local inference.</p>
+                        </div>
+                    </div>
+
+                    <!-- Feature 13: MCP Integration -->
+                    <div class="bento-card spotlight-card">
+                         <div class="spotlight-bg"></div>
+                        <div class="card-content">
+                            <div>
+                                <div class="card-header">
+                                    <div class="card-icon-box"><i data-lucide="plug-zap"></i></div>
+                                    <h3>MCP Tool Use</h3>
+                                </div>
+                                <p>Manage Model Context Protocol servers with MetaMCP. Connect tools to Open WebUI with mcpo.</p>
+                            </div>
+                            <div class="micro-terminal">
+                                <div class="mt-body">
+                                    <div class="mt-line"><span class="mt-prompt">$</span> harbor up metamcp mcpo</div>
+                                    <div class="mt-line success">✔ MCP tools connected</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bento-card spotlight-card card-wide">
+                         <div class="spotlight-bg"></div>
+                        <div class="card-content row-content">
+                            <div class="text-side">
+                                 <div class="card-header">
+                                    <div class="card-icon-box"><i data-lucide="container"></i></div>
+                                    <h3>Docker Native</h3>
+                                </div>
+                                <p>Built on Docker Compose. Inspect with docker ps, modify compose files, or run harbor cmd for raw access.</p>
+                                <div class="feature-pills">
+                                    <span class="f-pill"><i data-lucide="check"></i> docker ps</span>
+                                    <span class="f-pill"><i data-lucide="check"></i> harbor cmd</span>
+                                    <span class="f-pill"><i data-lucide="check"></i> compose</span>
+                                </div>
+                            </div>
+                            <div class="cli-demo">
+                                <div class="cli-row">
+                                    <span class="cli-p">➜</span> <span class="cli-c">harbor ps</span>
+                                </div>
+                                <div class="cli-row success">ollama, webui running</div>
+                                <div class="cli-row">
+                                    <span class="cli-p">➜</span> <span class="cli-c">$(harbor cmd ollama) logs</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Feature 14: Mobile Access -->
+                    <div class="bento-card spotlight-card">
+                         <div class="spotlight-bg"></div>
+                        <div class="card-content">
+                            <div>
+                                <div class="card-header">
+                                    <div class="card-icon-box"><i data-lucide="smartphone"></i></div>
+                                    <h3>Chat from Phone</h3>
+                                </div>
+                                <p>Print QR codes to instantly access Harbor services from your phone on your local network.</p>
+                            </div>
+                            <div class="micro-terminal">
+                                <div class="mt-body">
+                                    <div class="mt-line"><span class="mt-prompt">$</span> harbor qr</div>
+                                    <div class="mt-line"><span class="mt-prompt">$</span> harbor url webui</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Feature 15: Internet Tunneling -->
+                    <div class="bento-card spotlight-card">
+                         <div class="spotlight-bg"></div>
+                        <div class="card-content">
+                            <div>
+                                <div class="card-header">
+                                    <div class="card-icon-box"><i data-lucide="network"></i></div>
+                                    <h3>Chat from Anywhere</h3>
+                                </div>
+                                <p>Expose services to the internet with built-in tunneling. Use cloudflared or traefik for public access.</p>
+                            </div>
+                            <div class="micro-terminal">
+                                <div class="mt-body">
+                                    <div class="mt-line"><span class="mt-prompt">$</span> harbor tunnel</div>
+                                    <div class="mt-line success">✔ Tunnel established</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Feature 16: LLM Scripting -->
+                    <div class="bento-card spotlight-card card-tall">
+                         <div class="spotlight-bg"></div>
+                        <div class="card-content">
+                            <div>
+                                <div class="card-icon-lg">
+                                    <i data-lucide="code-2"></i>
+                                </div>
+                                <h3>LLM Scripting</h3>
+                                <p>Harbor Boost enables custom workflow modules. Script LLM interactions with built-in quality enhancements.</p>
+                            </div>
+                            <div class="micro-terminal">
+                                <div class="mt-header">
+                                    <span class="mt-dot red"></span>
+                                    <span class="mt-dot yellow"></span>
+                                    <span class="mt-dot green"></span>
+                                </div>
+                                <div class="mt-body">
+                                    <div class="mt-line"><span class="mt-prompt">$</span> harbor up boost</div>
+                                    <div class="mt-line success">✔ LLM proxy with modules active</div>
+                                    <div class="mt-line"><span class="mt-prompt">$</span> harbor config set boost.modules klmbr</div>
+                                    <div class="mt-line success">✔ Creative mode enabled</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Feature 17: Command History -->
+                    <div class="bento-card spotlight-card">
+                         <div class="spotlight-bg"></div>
+                        <div class="card-content">
+                            <div>
+                                <div class="card-header">
+                                    <div class="card-icon-box"><i data-lucide="history"></i></div>
+                                    <h3>Command History</h3>
+                                </div>
+                                <p>Local command history separate from shell. Lookup and re-run Harbor commands easily.</p>
+                            </div>
+                            <div class="micro-terminal">
+                                <div class="mt-body">
+                                    <div class="mt-line"><span class="mt-prompt">$</span> harbor history</div>
+                                    <div class="mt-line">harbor up searxng llamacpp</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Feature 18: Eject to Compose -->
+                    <div class="bento-card spotlight-card">
+                         <div class="spotlight-bg"></div>
+                        <div class="card-content">
+                            <div class="card-header">
+                                <div class="card-icon-box"><i data-lucide="package-open"></i></div>
+                                <h3>Eject & Export</h3>
+                            </div>
+                            <p>Ready to move on? Export your Harbor setup to a standalone Docker Compose file with all configs.</p>
+                            <div class="micro-terminal">
+                                <div class="mt-body">
+                                    <div class="mt-line"><span class="mt-prompt">$</span> harbor eject > compose.yml</div>
+                                    <div class="mt-line success">✔ Standalone stack exported</div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
+            </div>
+        </section>
 
-                <div class="quickstart-step">
-                    <div class="step-number">3</div>
-                    <div class="step-content">
-                        <h3>Access Your LLM</h3>
-                        <div class="code-block">
-                            <code># Open in browser
-harbor open
-
-# Get URL with QR code
-harbor qr</code>
+        <!-- CTA Section -->
+        <section class="cta-section">
+            <div class="container">
+                <div class="cta-card">
+                    <div class="cta-bg-pattern"></div>
+                    <div class="cta-content">
+                        <h2>Ready to modernize your stack?</h2>
+                        <p>Join thousands of engineers building the future of local AI.</p>
+                        <div class="cta-buttons">
+                            <a href="https://github.com/av/harbor/wiki/1.0.-Installing-Harbor" class="btn btn-lg btn-primary hover-glow">
+                                Get Started <i data-lucide="arrow-right"></i>
+                            </a>
+                            <a href="https://discord.gg/8nDRphrhSF" class="btn btn-lg btn-glass">
+                                <i data-lucide="message-square"></i> Join Discord
+                            </a>
                         </div>
                     </div>
                 </div>
             </div>
+        </section>
+    </main>
 
-            <div class="quickstart-note">
-                <p>Use <code>harbor help</code> to see all available commands and services.</p>
+    <footer>
+        <div class="container footer-content">
+            <div class="footer-left">
+                <div class="footer-brand">Harbor</div>
+                <p class="footer-copy">© 2026 Harbor Project. <br>Open Source (MIT).</p>
             </div>
-        </div>
-    </section>
-
-    <section class="services">
-        <div class="container">
-            <h2 class="section-title">Integrated Services</h2>
-            <p class="section-subtitle">Over 100 pre-configured services for LLM development</p>
-            
-            <div class="services-categories">
-                <div class="services-category">
-                    <h3>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></svg>
-                        Frontends
-                    </h3>
-                    <div class="services-list">
-                        <span class="service-tag">Open WebUI</span>
-                        <span class="service-tag">ComfyUI</span>
-                        <span class="service-tag">LibreChat</span>
-                        <span class="service-tag">ChatUI</span>
-                        <span class="service-tag">Lobe Chat</span>
-                        <span class="service-tag">Hollama</span>
-                        <span class="service-tag">parllama</span>
-                        <span class="service-tag">BionicGPT</span>
-                        <span class="service-tag">AnythingLLM</span>
-                        <span class="service-tag">Chat Nio</span>
-                        <span class="service-tag">mikupad</span>
-                        <span class="service-tag">oterm</span>
-                    </div>
+            <div class="footer-links-grid">
+                <div class="footer-col">
+                     <h4>Product</h4>
+                     <a href="https://github.com/av/harbor/wiki/1.0.-Installing-Harbor">Download</a>
+                     <a href="https://github.com/av/harbor/wiki">Documentation</a>
+                     <a href="https://github.com/av/harbor/releases">Changelog</a>
                 </div>
-
-                <div class="services-category">
-                    <h3>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="10" x="3" y="11" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><line x1="8" x2="8" y1="16" y2="16"/><line x1="16" x2="16" y1="16" y2="16"/></svg>
-                        Backends
-                    </h3>
-                    <div class="services-list">
-                        <span class="service-tag">Ollama</span>
-                        <span class="service-tag">llama.cpp</span>
-                        <span class="service-tag">vLLM</span>
-                        <span class="service-tag">TabbyAPI</span>
-                        <span class="service-tag">Aphrodite</span>
-                        <span class="service-tag">mistral.rs</span>
-                        <span class="service-tag">SGLang</span>
-                        <span class="service-tag">KTransformers</span>
-                        <span class="service-tag">TGI</span>
-                        <span class="service-tag">LMDeploy</span>
-                        <span class="service-tag">AirLLM</span>
-                        <span class="service-tag">KoboldCpp</span>
-                    </div>
+                <div class="footer-col">
+                     <h4>Community</h4>
+                     <a href="https://github.com/av/harbor">GitHub</a>
+                     <a href="https://discord.gg/8nDRphrhSF">Discord</a>
                 </div>
-
-                <div class="services-category">
-                    <h3>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 7 9 3 5 7l4 4"/><path d="m17 11 4 4-4 4-4-4"/><path d="m8 12 4 4 6-6-4-4Z"/><path d="m16 8 3-3"/><path d="M9 21a6 6 0 0 0-6-6"/></svg>
-                        Satellites
-                    </h3>
-                    <div class="services-list">
-                        <span class="service-tag">SearXNG</span>
-                        <span class="service-tag">Perplexica</span>
-                        <span class="service-tag">Dify</span>
-                        <span class="service-tag">LiteLLM</span>
-                        <span class="service-tag">LangFuse</span>
-                        <span class="service-tag">Aider</span>
-                        <span class="service-tag">OpenHands</span>
-                        <span class="service-tag">n8n</span>
-                        <span class="service-tag">LangFlow</span>
-                        <span class="service-tag">FloWise</span>
-                        <span class="service-tag">Morphic</span>
-                        <span class="service-tag">MetaMCP</span>
-                        <span class="service-tag more">+50 more</span>
-                    </div>
-                </div>
-            </div>
-
-            <div class="services-cta">
-                <a href="docs/" class="btn btn-secondary">Browse All Services →</a>
-            </div>
-        </div>
-    </section>
-
-    <section class="cta">
-        <div class="container">
-            <h2>Install Harbor</h2>
-            <p>Open source toolkit for running local LLMs</p>
-            <div class="cta-buttons">
-                <a href="https://github.com/av/harbor" target="_blank" class="btn btn-primary">View on GitHub</a>
-                <a href="https://discord.gg/8nDRphrhSF" target="_blank" class="btn btn-secondary">Join Discord</a>
-            </div>
-        </div>
-    </section>
-
-    <footer class="footer">
-        <div class="container">
-            <div class="footer-content">
-                <div class="footer-section">
-                    <h4>Harbor</h4>
-                    <p>Local LLM Toolkit</p>
-                </div>
-                <div class="footer-section">
-                    <h4>Resources</h4>
-                    <a href="docs/">Documentation</a>
-                    <a href="https://github.com/av/harbor" target="_blank">GitHub</a>
-                    <a href="https://github.com/av/harbor/wiki" target="_blank">Wiki</a>
-                </div>
-                <div class="footer-section">
-                    <h4>Community</h4>
-                    <a href="https://discord.gg/8nDRphrhSF" target="_blank">Discord</a>
-                    <a href="https://github.com/av/harbor/issues" target="_blank">Issues</a>
-                    <a href="https://ko-fi.com/avcodes" target="_blank">Support</a>
-                </div>
-                <div class="footer-section">
-                    <h4>Install</h4>
-                    <a href="https://www.npmjs.com/package/@avcodes/harbor" target="_blank">npm</a>
-                    <a href="https://pypi.org/project/llm-harbor/" target="_blank">PyPI</a>
-                </div>
-            </div>
-            <div class="footer-bottom">
-                <p>© 2024 Harbor. Licensed under Apache 2.0</p>
             </div>
         </div>
     </footer>
+
+    <script>
+        // Initialize Icons
+        lucide.createIcons();
+
+        // Spotlight Effect Logic
+        const container = document.getElementById('bento-grid');
+        const cards = document.querySelectorAll('.spotlight-card');
+
+        if (container) {
+            container.addEventListener('mousemove', (e) => {
+                cards.forEach(card => {
+                    const rect = card.getBoundingClientRect();
+                    const x = e.clientX - rect.left;
+                    const y = e.clientY - rect.top;
+                    card.style.setProperty('--mouse-x', `${x}px`);
+                    card.style.setProperty('--mouse-y', `${y}px`);
+                });
+            });
+        }
+
+        // Copy Button Logic
+        const copyBtn = document.querySelector('.copy-btn');
+        if (copyBtn) {
+            copyBtn.addEventListener('click', () => {
+                navigator.clipboard.writeText('curl -sSf https://harbor.run | sh');
+                const originalIcon = copyBtn.innerHTML;
+                copyBtn.innerHTML = '<i data-lucide="check"></i>';
+                lucide.createIcons();
+                setTimeout(() => {
+                    copyBtn.innerHTML = originalIcon;
+                    lucide.createIcons();
+                }, 2000);
+            });
+        }
+
+        // Physics-based Service Icons
+        const canvas = document.getElementById('servicesCanvas');
+        if (canvas && typeof Matter !== 'undefined') {
+            const { Engine, Render, World, Bodies, Mouse, MouseConstraint, Events } = Matter;
+
+            const services = [
+                'ollama', 'n8n', 'flowise', 'jupyter', 'librechat',
+                'photoprism', 'qdrant', 'searxng', 'windmill', 'activepieces',
+                'postgres', 'redis', 'grafana', 'nginx', 'traefik'
+            ];
+
+            const container = canvas.parentElement;
+            const width = container.offsetWidth;
+            const height = container.offsetHeight;
+
+            canvas.width = width;
+            canvas.height = height;
+
+            const engine = Engine.create();
+            engine.gravity.y = 0.8;
+
+            const render = Render.create({
+                canvas: canvas,
+                engine: engine,
+                options: {
+                    width: width,
+                    height: height,
+                    wireframes: false,
+                    background: 'transparent'
+                }
+            });
+
+            // Walls
+            const wallOptions = { isStatic: true, render: { visible: false } };
+            const walls = [
+                Bodies.rectangle(width/2, -25, width, 50, wallOptions),
+                Bodies.rectangle(width/2, height + 25, width, 50, wallOptions),
+                Bodies.rectangle(-25, height/2, 50, height, wallOptions),
+                Bodies.rectangle(width + 25, height/2, 50, height, wallOptions)
+            ];
+
+            // Create icon bodies
+            const iconSize = 36;
+            const icons = services.map((service, i) => {
+                const x = 80 + (i % 5) * 70;
+                const y = 50 + Math.floor(i / 5) * 50;
+                const body = Bodies.circle(x, y, iconSize/2, {
+                    restitution: 0.6,
+                    friction: 0.05,
+                    density: 0.001,
+                    render: {
+                        sprite: {
+                            texture: `https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/${service}.png`,
+                            xScale: iconSize / 256,
+                            yScale: iconSize / 256
+                        }
+                    }
+                });
+                return body;
+            });
+
+            World.add(engine.world, [...walls, ...icons]);
+
+            // Mouse interaction
+            const mouse = Mouse.create(canvas);
+            const mouseConstraint = MouseConstraint.create(engine, {
+                mouse: mouse,
+                constraint: {
+                    stiffness: 0.2,
+                    render: { visible: false }
+                }
+            });
+            World.add(engine.world, mouseConstraint);
+
+            // Hover repulsion
+            let mousePos = { x: 0, y: 0 };
+            Events.on(mouseConstraint, 'mousemove', (e) => {
+                mousePos = e.mouse.position;
+            });
+
+            Events.on(engine, 'beforeUpdate', () => {
+                icons.forEach(icon => {
+                    const dx = icon.position.x - mousePos.x;
+                    const dy = icon.position.y - mousePos.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+
+                    if (dist < 80 && !mouseConstraint.body) {
+                        const force = 0.0008 * (80 - dist) / dist;
+                        Matter.Body.applyForce(icon, icon.position, {
+                            x: dx * force,
+                            y: dy * force
+                        });
+                    }
+                });
+            });
+
+            Engine.run(engine);
+            Render.run(render);
+        }
+    </script>
 </body>
 </html>
