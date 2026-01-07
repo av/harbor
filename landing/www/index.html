@@ -30,17 +30,17 @@
     <header class="hero">
         <div class="container">
             <div class="hero-content">
-                <h1 class="hero-title">Your Local LLM Stack,<br><span class="gradient-text">Effortlessly</span></h1>
-                <p class="hero-subtitle">Setup your complete local LLM environment with a single command. No manual configuration, no hassle.</p>
+                <h1 class="hero-title">Run Local LLMs with One Command</h1>
+                <p class="hero-subtitle">Harbor manages your local LLM environment. Pre-configured backends, frontends, and services work together out of the box.</p>
                 <div class="hero-code">
-                    <code># Start fully configured Open WebUI and Ollama
+                    <code># Start Open WebUI and Ollama
 harbor up
 
-# Add Web RAG and TTS/STT capabilities
+# Add web search and voice chat
 harbor up searxng speaches</code>
                 </div>
                 <div class="hero-actions">
-                    <a href="#quickstart" class="btn btn-primary">Get Started</a>
+                    <a href="#quickstart" class="btn btn-primary">Install Harbor</a>
                     <a href="docs/" class="btn btn-secondary">Documentation</a>
                 </div>
             </div>
@@ -49,88 +49,88 @@ harbor up searxng speaches</code>
 
     <section id="features" class="features">
         <div class="container">
-            <h2 class="section-title">What can Harbor do?</h2>
+            <h2 class="section-title">Features</h2>
             <div class="features-grid">
                 <div class="feature-card">
                     <div class="feature-icon">🤖</div>
                     <h3>Local LLMs</h3>
-                    <p>Run LLMs locally with zero or minimal configuration. All backends are pre-connected to Open WebUI.</p>
+                    <p>Run LLMs on your machine with minimal configuration. Backends connect to Open WebUI automatically.</p>
                     <div class="feature-code">harbor up ollama llamacpp vllm</div>
                 </div>
 
                 <div class="feature-card">
                     <div class="feature-icon">⚡</div>
-                    <h3>Cutting Edge Inference</h3>
-                    <p>Support for major inference engines: vLLM, llama.cpp, TGI, TabbyAPI, Aphrodite, SGLang, KTransformers, and more.</p>
+                    <h3>Multiple Inference Engines</h3>
+                    <p>Supports vLLM, llama.cpp, TGI, TabbyAPI, Aphrodite, SGLang, KTransformers, and more.</p>
                 </div>
 
                 <div class="feature-card">
                     <div class="feature-icon">🔧</div>
                     <h3>Tool Use (MCP)</h3>
-                    <p>Extend your LLMs with the MCP ecosystem. Manage MCPs with a convenient Web UI.</p>
+                    <p>Add tools to your LLMs using the MCP ecosystem. Includes web UI for management.</p>
                     <div class="feature-code">harbor up metamcp mcpo</div>
                 </div>
 
                 <div class="feature-card">
                     <div class="feature-icon">🎨</div>
                     <h3>Image Generation</h3>
-                    <p>Integrated ComfyUI with FLUX and Open WebUI. Generate images in one command.</p>
+                    <p>ComfyUI with FLUX integrates with Open WebUI.</p>
                     <div class="feature-code">harbor up comfyui</div>
                 </div>
 
                 <div class="feature-card">
                     <div class="feature-icon">🔍</div>
-                    <h3>Web RAG</h3>
-                    <p>SearXNG pre-connected to multiple services: Perplexica, ChatUI, Morphic, and more for deep web research.</p>
+                    <h3>Web Search</h3>
+                    <p>SearXNG connects to Perplexica, ChatUI, Morphic, and other services for web-enhanced responses.</p>
                     <div class="feature-code">harbor up searxng perplexica</div>
                 </div>
 
                 <div class="feature-card">
                     <div class="feature-icon">🎙️</div>
                     <h3>Voice Chat</h3>
-                    <p>Setup voice conversations with your LLM. Speaches includes OpenAI-compatible STT and TTS.</p>
+                    <p>Add speech-to-text and text-to-speech with Speaches (OpenAI-compatible API).</p>
                     <div class="feature-code">harbor up speaches</div>
                 </div>
 
                 <div class="feature-card">
                     <div class="feature-icon">🔄</div>
                     <h3>LLM Workflows</h3>
-                    <p>Build LLM-based workflows with Dify, n8n, LangFlow, FloWise, and Open WebUI Pipelines.</p>
+                    <p>Build workflows using Dify, n8n, LangFlow, FloWise, or Open WebUI Pipelines.</p>
                     <div class="feature-code">harbor up dify</div>
                 </div>
 
                 <div class="feature-card">
                     <div class="feature-icon">📱</div>
-                    <h3>Access Anywhere</h3>
-                    <p>Access from your phone with QR codes, from LAN, or expose to internet with built-in tunneling.</p>
+                    <h3>Remote Access</h3>
+                    <p>Access services from your phone via QR codes, local network, or internet tunneling.</p>
                     <div class="feature-code">harbor qr<br>harbor tunnel</div>
                 </div>
 
                 <div class="feature-card">
                     <div class="feature-icon">💾</div>
-                    <h3>Config Profiles</h3>
-                    <p>Save and switch between different configurations. Perfect for managing multiple model setups.</p>
+                    <h3>Configuration Profiles</h3>
+                    <p>Save and switch between configurations for different models and setups.</p>
                     <div class="feature-code">harbor profile save llama4<br>harbor profile use default</div>
                 </div>
 
                 <div class="feature-card">
                     <div class="feature-icon">📜</div>
                     <h3>Command History</h3>
-                    <p>Keep track of your Harbor commands with local-only history, separate from shell history.</p>
+                    <p>Track Harbor commands separately from shell history.</p>
                     <div class="feature-code">harbor history</div>
                 </div>
 
                 <div class="feature-card">
                     <div class="feature-icon">🚀</div>
                     <h3>LLM Scripting</h3>
-                    <p>Harbor Boost lets you easily script workflows and interactions with downstream LLMs.</p>
+                    <p>Script workflows and automate LLM interactions with Harbor Boost.</p>
                     <div class="feature-code">harbor up boost</div>
                 </div>
 
                 <div class="feature-card">
                     <div class="feature-icon">📦</div>
-                    <h3>Eject Anytime</h3>
-                    <p>Ready to move on? Harbor gives you a docker-compose file replicating your entire setup.</p>
+                    <h3>Export Configuration</h3>
+                    <p>Generate a standalone docker-compose file from your Harbor setup.</p>
                     <div class="feature-code">harbor eject > compose.yml</div>
                 </div>
             </div>
@@ -188,15 +188,15 @@ harbor qr</code>
             </div>
 
             <div class="quickstart-note">
-                <p><strong>🎯 Pro tip:</strong> Use <code>harbor help</code> to explore all available commands and services.</p>
+                <p>Use <code>harbor help</code> to see all available commands and services.</p>
             </div>
         </div>
     </section>
 
     <section class="services">
         <div class="container">
-            <h2 class="section-title">100+ Integrated Services</h2>
-            <p class="section-subtitle">Harbor includes a vast ecosystem of pre-configured services</p>
+            <h2 class="section-title">Integrated Services</h2>
+            <p class="section-subtitle">Over 100 pre-configured services for LLM development</p>
             
             <div class="services-categories">
                 <div class="services-category">
@@ -263,8 +263,8 @@ harbor qr</code>
 
     <section class="cta">
         <div class="container">
-            <h2>Ready to get started?</h2>
-            <p>Join the community and start building with local LLMs today</p>
+            <h2>Install Harbor</h2>
+            <p>Open source toolkit for running local LLMs</p>
             <div class="cta-buttons">
                 <a href="https://github.com/av/harbor" target="_blank" class="btn btn-primary">View on GitHub</a>
                 <a href="https://discord.gg/8nDRphrhSF" target="_blank" class="btn btn-secondary">Join Discord</a>
@@ -277,7 +277,7 @@ harbor qr</code>
             <div class="footer-content">
                 <div class="footer-section">
                     <h4>Harbor</h4>
-                    <p>Your Local LLM Toolkit</p>
+                    <p>Local LLM Toolkit</p>
                 </div>
                 <div class="footer-section">
                     <h4>Resources</h4>

@@ -129,13 +129,6 @@ body {
     color: var(--text-primary);
 }
 
-.gradient-text {
-    background: var(--gradient-2);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-}
-
 .hero-subtitle {
     font-size: 24px;
     color: var(--text-secondary);
