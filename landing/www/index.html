@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Harbor - Your Local LLM Toolkit</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <div class="nav-brand">
+                <span class="logo">⚓</span>
+                <span class="brand-name">Harbor</span>
+            </div>
+            <div class="nav-links">
+                <a href="#features">Features</a>
+                <a href="#quickstart">Quick Start</a>
+                <a href="docs/">Documentation</a>
+                <a href="https://github.com/av/harbor" target="_blank" class="github-link">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+                    </svg>
+                    GitHub
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <header class="hero">
+        <div class="container">
+            <div class="hero-content">
+                <h1 class="hero-title">Your Local LLM Stack,<br><span class="gradient-text">Effortlessly</span></h1>
+                <p class="hero-subtitle">Setup your complete local LLM environment with a single command. No manual configuration, no hassle.</p>
+                <div class="hero-code">
+                    <code># Start fully configured Open WebUI and Ollama
+harbor up
+
+# Add Web RAG and TTS/STT capabilities
+harbor up searxng speaches</code>
+                </div>
+                <div class="hero-actions">
+                    <a href="#quickstart" class="btn btn-primary">Get Started</a>
+                    <a href="docs/" class="btn btn-secondary">Documentation</a>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <section id="features" class="features">
+        <div class="container">
+            <h2 class="section-title">What can Harbor do?</h2>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">🤖</div>
+                    <h3>Local LLMs</h3>
+                    <p>Run LLMs locally with zero or minimal configuration. All backends are pre-connected to Open WebUI.</p>
+                    <div class="feature-code">harbor up ollama llamacpp vllm</div>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">⚡</div>
+                    <h3>Cutting Edge Inference</h3>
+                    <p>Support for major inference engines: vLLM, llama.cpp, TGI, TabbyAPI, Aphrodite, SGLang, KTransformers, and more.</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">🔧</div>
+                    <h3>Tool Use (MCP)</h3>
+                    <p>Extend your LLMs with the MCP ecosystem. Manage MCPs with a convenient Web UI.</p>
+                    <div class="feature-code">harbor up metamcp mcpo</div>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">🎨</div>
+                    <h3>Image Generation</h3>
+                    <p>Integrated ComfyUI with FLUX and Open WebUI. Generate images in one command.</p>
+                    <div class="feature-code">harbor up comfyui</div>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">🔍</div>
+                    <h3>Web RAG</h3>
+                    <p>SearXNG pre-connected to multiple services: Perplexica, ChatUI, Morphic, and more for deep web research.</p>
+                    <div class="feature-code">harbor up searxng perplexica</div>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">🎙️</div>
+                    <h3>Voice Chat</h3>
+                    <p>Setup voice conversations with your LLM. Speaches includes OpenAI-compatible STT and TTS.</p>
+                    <div class="feature-code">harbor up speaches</div>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">🔄</div>
+                    <h3>LLM Workflows</h3>
+                    <p>Build LLM-based workflows with Dify, n8n, LangFlow, FloWise, and Open WebUI Pipelines.</p>
+                    <div class="feature-code">harbor up dify</div>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">📱</div>
+                    <h3>Access Anywhere</h3>
+                    <p>Access from your phone with QR codes, from LAN, or expose to internet with built-in tunneling.</p>
+                    <div class="feature-code">harbor qr<br>harbor tunnel</div>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">💾</div>
+                    <h3>Config Profiles</h3>
+                    <p>Save and switch between different configurations. Perfect for managing multiple model setups.</p>
+                    <div class="feature-code">harbor profile save llama4<br>harbor profile use default</div>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">📜</div>
+                    <h3>Command History</h3>
+                    <p>Keep track of your Harbor commands with local-only history, separate from shell history.</p>
+                    <div class="feature-code">harbor history</div>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">🚀</div>
+                    <h3>LLM Scripting</h3>
+                    <p>Harbor Boost lets you easily script workflows and interactions with downstream LLMs.</p>
+                    <div class="feature-code">harbor up boost</div>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">📦</div>
+                    <h3>Eject Anytime</h3>
+                    <p>Ready to move on? Harbor gives you a docker-compose file replicating your entire setup.</p>
+                    <div class="feature-code">harbor eject > compose.yml</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="quickstart" class="quickstart">
+        <div class="container">
+            <h2 class="section-title">Quick Start</h2>
+            <div class="quickstart-content">
+                <div class="quickstart-step">
+                    <div class="step-number">1</div>
+                    <div class="step-content">
+                        <h3>Install Harbor</h3>
+                        <div class="code-block">
+                            <code># Using npm
+npm install -g @avcodes/harbor
+
+# Or using pip
+pip install llm-harbor
+
+# Or using bash
+curl -fsSL https://raw.githubusercontent.com/av/harbor/main/install.sh | bash</code>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="quickstart-step">
+                    <div class="step-number">2</div>
+                    <div class="step-content">
+                        <h3>Start Harbor</h3>
+                        <div class="code-block">
+                            <code># Start default services (Open WebUI + Ollama)
+harbor up
+
+# Or start with additional services
+harbor up searxng speaches comfyui</code>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="quickstart-step">
+                    <div class="step-number">3</div>
+                    <div class="step-content">
+                        <h3>Access Your LLM</h3>
+                        <div class="code-block">
+                            <code># Open in browser
+harbor open
+
+# Get URL with QR code
+harbor qr</code>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="quickstart-note">
+                <p><strong>🎯 Pro tip:</strong> Use <code>harbor help</code> to explore all available commands and services.</p>
+            </div>
+        </div>
+    </section>
+
+    <section class="services">
+        <div class="container">
+            <h2 class="section-title">100+ Integrated Services</h2>
+            <p class="section-subtitle">Harbor includes a vast ecosystem of pre-configured services</p>
+            
+            <div class="services-categories">
+                <div class="services-category">
+                    <h3>🖥️ Frontends</h3>
+                    <div class="services-list">
+                        <span class="service-tag">Open WebUI</span>
+                        <span class="service-tag">ComfyUI</span>
+                        <span class="service-tag">LibreChat</span>
+                        <span class="service-tag">ChatUI</span>
+                        <span class="service-tag">Lobe Chat</span>
+                        <span class="service-tag">Hollama</span>
+                        <span class="service-tag">parllama</span>
+                        <span class="service-tag">BionicGPT</span>
+                        <span class="service-tag">AnythingLLM</span>
+                        <span class="service-tag">Chat Nio</span>
+                        <span class="service-tag">mikupad</span>
+                        <span class="service-tag">oterm</span>
+                    </div>
+                </div>
+
+                <div class="services-category">
+                    <h3>⚙️ Backends</h3>
+                    <div class="services-list">
+                        <span class="service-tag">Ollama</span>
+                        <span class="service-tag">llama.cpp</span>
+                        <span class="service-tag">vLLM</span>
+                        <span class="service-tag">TabbyAPI</span>
+                        <span class="service-tag">Aphrodite</span>
+                        <span class="service-tag">mistral.rs</span>
+                        <span class="service-tag">SGLang</span>
+                        <span class="service-tag">KTransformers</span>
+                        <span class="service-tag">TGI</span>
+                        <span class="service-tag">LMDeploy</span>
+                        <span class="service-tag">AirLLM</span>
+                        <span class="service-tag">KoboldCpp</span>
+                    </div>
+                </div>
+
+                <div class="services-category">
+                    <h3>🛰️ Satellites</h3>
+                    <div class="services-list">
+                        <span class="service-tag">SearXNG</span>
+                        <span class="service-tag">Perplexica</span>
+                        <span class="service-tag">Dify</span>
+                        <span class="service-tag">LiteLLM</span>
+                        <span class="service-tag">LangFuse</span>
+                        <span class="service-tag">Aider</span>
+                        <span class="service-tag">OpenHands</span>
+                        <span class="service-tag">n8n</span>
+                        <span class="service-tag">LangFlow</span>
+                        <span class="service-tag">FloWise</span>
+                        <span class="service-tag">Morphic</span>
+                        <span class="service-tag">MetaMCP</span>
+                        <span class="service-tag more">+50 more</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="services-cta">
+                <a href="docs/" class="btn btn-secondary">Browse All Services →</a>
+            </div>
+        </div>
+    </section>
+
+    <section class="cta">
+        <div class="container">
+            <h2>Ready to get started?</h2>
+            <p>Join the community and start building with local LLMs today</p>
+            <div class="cta-buttons">
+                <a href="https://github.com/av/harbor" target="_blank" class="btn btn-primary">View on GitHub</a>
+                <a href="https://discord.gg/8nDRphrhSF" target="_blank" class="btn btn-secondary">Join Discord</a>
+            </div>
+        </div>
+    </section>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <h4>Harbor</h4>
+                    <p>Your Local LLM Toolkit</p>
+                </div>
+                <div class="footer-section">
+                    <h4>Resources</h4>
+                    <a href="docs/">Documentation</a>
+                    <a href="https://github.com/av/harbor" target="_blank">GitHub</a>
+                    <a href="https://github.com/av/harbor/wiki" target="_blank">Wiki</a>
+                </div>
+                <div class="footer-section">
+                    <h4>Community</h4>
+                    <a href="https://discord.gg/8nDRphrhSF" target="_blank">Discord</a>
+                    <a href="https://github.com/av/harbor/issues" target="_blank">Issues</a>
+                    <a href="https://ko-fi.com/avcodes" target="_blank">Support</a>
+                </div>
+                <div class="footer-section">
+                    <h4>Install</h4>
+                    <a href="https://www.npmjs.com/package/@avcodes/harbor" target="_blank">npm</a>
+                    <a href="https://pypi.org/project/llm-harbor/" target="_blank">PyPI</a>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>© 2024 Harbor. Licensed under Apache 2.0</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>
