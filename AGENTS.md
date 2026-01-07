@@ -71,6 +71,8 @@ harbor config update
 
 **STRICTLY PROHIBITED:** Adding useless or obvious comments to code. Comments should only explain complex logic, non-obvious decisions, or provide necessary context. Never add comments that merely restate what the code clearly does.
 
+**STRICTLY PROHIBITED:** Using emojis in copy, UI text, or user-facing content. Always use Lucide icons (https://lucide.dev) or similar icon libraries instead. Emojis are inconsistent across platforms and lack the professional appearance required for Harbor's interface.
+
 ### Cross-file Patterns (Service Integration)
 
 Cross-files (`compose.x.<service>.<integration>.yml`) are applied when multiple services are running together. This is the standard way to integrate services like Ollama into supporting satellites.
