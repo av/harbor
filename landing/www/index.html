@@ -34,7 +34,7 @@
             </div>
             <div class="nav-actions">
                 <a href="https://github.com/av/harbor">
-                    <img src="https://img.shields.io/github/stars/av/harbor?style=social" alt="GitHub stars">
+                    <img src="https://img.shields.io/github/stars/av/harbor?style=flat-square" alt="GitHub stars">
                 </a>
             </div>
         </div>
@@ -187,11 +187,13 @@
                     <div class="bento-card spotlight-card card-tall">
                         <div class="spotlight-bg"></div>
                         <div class="card-content">
-                            <div class="card-icon-lg">
-                                <i data-lucide="play-circle"></i>
+                            <div>
+                                <div class="card-icon-lg">
+                                    <i data-lucide="play-circle"></i>
+                                </div>
+                                <h3>One Command Stack</h3>
+                                <p>Start Ollama and Open WebUI together with a single command. Defaults handle everything for you.</p>
                             </div>
-                            <h3>One Command Stack</h3>
-                            <p>Start Ollama and Open WebUI together with a single command. Defaults handle everything for you.</p>
 
                             <div class="micro-terminal">
                                 <div class="mt-header">
@@ -200,29 +202,28 @@
                                     <span class="mt-dot green"></span>
                                 </div>
                                 <div class="mt-body">
-                                    <div class="mt-line"><span class="mt-prompt">$</span> harbor up</div>
+                                    <div class="mt-line"><span class="mt-prompt">$</span> <a href="https://github.com/av/harbor/wiki/3.-Harbor-CLI-Reference#harbor-up-services" target="_blank">harbor up</a></div>
                                     <div class="mt-line success">✔ harbor.ollama Healthy</div>
                                     <div class="mt-line success">✔ harbor.webui Healthy</div>
-                                    <div class="mt-line"><span class="mt-prompt">$</span> harbor open</div>
+                                    <div class="mt-line"><span class="mt-prompt">$</span> <a href="https://github.com/av/harbor/wiki/3.-Harbor-CLI-Reference#harbor-open-service" target="_blank">harbor open</a></div>
                                 </div>
                             </div>
                         </div>
                     </div>
 
                     <!-- Feature 2: Model Management -->
-                    <div class="bento-card spotlight-card">
+                    <div class="bento-card spotlight-card card-tall">
                          <div class="spotlight-bg"></div>
                         <div class="card-content">
-                            <div class="card-header">
-                                <div class="card-icon-box"><i data-lucide="brain"></i></div>
-                                <h3>Model Management</h3>
-                            </div>
-                            <p>Pull, list, and configure models across all backends. Works with Ollama, vLLM, llama.cpp, and more.</p>
-                            <div class="micro-terminal">
-                                <div class="mt-body">
-                                    <div class="mt-line"><span class="mt-prompt">$</span> harbor vllm model google/gemma-2-2b-it</div>
-                                    <div class="mt-line"><span class="mt-prompt">$</span> harbor ollama list</div>
+                            <div>
+                                <div class="card-icon-lg">
+                                    <i data-lucide="brain"></i>
                                 </div>
+                                <h3>Model Management</h3>
+                                <p>Pull, list, and configure models across all backends. Works with Ollama, vLLM, llama.cpp, and more.</p>
+                            </div>
+                            <div class="model-grid" id="modelGrid">
+                                <!-- Models injected via JS -->
                             </div>
                         </div>
                     </div>
@@ -255,18 +256,18 @@
                                 </div>
                                 <p>Configure services, manage models, view logs, and access service shells. Everything through one interface.</p>
                                 <div class="feature-pills">
-                                    <span class="f-pill"><i data-lucide="check"></i> harbor pull</span>
-                                    <span class="f-pill"><i data-lucide="check"></i> harbor logs</span>
-                                    <span class="f-pill"><i data-lucide="check"></i> harbor config</span>
+                                    <span class="f-pill"><i data-lucide="check"></i> <a href="https://github.com/av/harbor/wiki/3.-Harbor-CLI-Reference#harbor-pull-servicemodel" target="_blank">harbor pull</a></span>
+                                    <span class="f-pill"><i data-lucide="check"></i> <a href="https://github.com/av/harbor/wiki/3.-Harbor-CLI-Reference#harbor-logs" target="_blank">harbor logs</a></span>
+                                    <span class="f-pill"><i data-lucide="check"></i> <a href="https://github.com/av/harbor/wiki/3.-Harbor-CLI-Reference#harbor-config" target="_blank">harbor config</a></span>
                                 </div>
                             </div>
                             <div class="cli-demo">
                                 <div class="cli-row">
-                                    <span class="cli-p">➜</span> <span class="cli-c">harbor ollama pull llama3.2</span>
+                                    <span class="cli-p">➜</span> <span class="cli-c"><a href="https://github.com/av/harbor/wiki/3.-Harbor-CLI-Reference#harbor-ollama-command" target="_blank">harbor ollama</a> pull llama3.2</span>
                                 </div>
                                 <div class="cli-row success">✔ Model pulled</div>
                                 <div class="cli-row">
-                                    <span class="cli-p">➜</span> <span class="cli-c">harbor up searxng</span>
+                                    <span class="cli-p">➜</span> <span class="cli-c"><a href="https://github.com/av/harbor/wiki/3.-Harbor-CLI-Reference#harbor-up-services" target="_blank">harbor up</a> searxng</span>
                                 </div>
                                 <div class="cli-row success">✔ Web search enabled</div>
                             </div>
@@ -291,9 +292,9 @@
                                     <span class="mt-dot green"></span>
                                 </div>
                                 <div class="mt-body">
-                                    <div class="mt-line"><span class="mt-prompt">$</span> harbor up searxng</div>
+                                    <div class="mt-line"><span class="mt-prompt">$</span> <a href="https://github.com/av/harbor/wiki/3.-Harbor-CLI-Reference#harbor-up-services" target="_blank">harbor up</a> searxng</div>
                                     <div class="mt-line success">✔ Web search enabled in Open WebUI</div>
-                                    <div class="mt-line"><span class="mt-prompt">$</span> harbor up perplexica morphic</div>
+                                    <div class="mt-line"><span class="mt-prompt">$</span> <a href="https://github.com/av/harbor/wiki/3.-Harbor-CLI-Reference#harbor-up-services" target="_blank">harbor up</a> perplexica morphic</div>
                                     <div class="mt-line success">✔ Deep research tools ready</div>
                                 </div>
                             </div>
@@ -311,7 +312,7 @@
                             <p>ComfyUI + Flux pre-wired to Open WebUI. Generate images in your chat interface with a single command.</p>
                             <div class="micro-terminal">
                                 <div class="mt-body">
-                                    <div class="mt-line"><span class="mt-prompt">$</span> harbor up comfyui</div>
+                                    <div class="mt-line"><span class="mt-prompt">$</span> <a href="https://github.com/av/harbor/wiki/3.-Harbor-CLI-Reference#harbor-up-services" target="_blank">harbor up</a> comfyui</div>
                                     <div class="mt-line success">✔ FLUX ready in Open WebUI</div>
                                 </div>
                             </div>
@@ -329,7 +330,7 @@
                             <p>Talk to your LLM with built-in TTS and STT. Speaches provides OpenAI-compatible voice endpoints.</p>
                             <div class="micro-terminal">
                                 <div class="mt-body">
-                                    <div class="mt-line"><span class="mt-prompt">$</span> harbor up speaches</div>
+                                    <div class="mt-line"><span class="mt-prompt">$</span> <a href="https://github.com/av/harbor/wiki/3.-Harbor-CLI-Reference#harbor-up-services" target="_blank">harbor up</a> speaches</div>
                                     <div class="mt-line success">✔ Voice enabled in Open WebUI</div>
                                 </div>
                             </div>
@@ -372,11 +373,11 @@
                             </div>
                             <div class="cli-demo">
                                 <div class="cli-row">
-                                    <span class="cli-p">➜</span> <span class="cli-c">harbor up dify</span>
+                                    <span class="cli-p">➜</span> <span class="cli-c"><a href="https://github.com/av/harbor/wiki/3.-Harbor-CLI-Reference#harbor-up-services" target="_blank">harbor up</a> dify</span>
                                 </div>
                                 <div class="cli-row success">✔ Dify ready at localhost:3000</div>
                                 <div class="cli-row">
-                                    <span class="cli-p">➜</span> <span class="cli-c">harbor up n8n flowise</span>
+                                    <span class="cli-p">➜</span> <span class="cli-c"><a href="https://github.com/av/harbor/wiki/3.-Harbor-CLI-Reference#harbor-up-services" target="_blank">harbor up</a> n8n flowise</span>
                                 </div>
                                 <div class="cli-row success">✔ Workflow tools ready</div>
                             </div>
@@ -392,7 +393,7 @@
                                     <i data-lucide="cpu"></i>
                                 </div>
                                 <h3>Multiple Backends</h3>
-                                <p>Choose Ollama for simplicity, vLLM for speed, llama.cpp for efficiency. Switch backends with harbor defaults.</p>
+                                <p>Choose Ollama for simplicity, vLLM for speed, llama.cpp for efficiency. Switch backends with <a href="https://github.com/av/harbor/wiki/3.-Harbor-CLI-Reference#harbor-defaults" target="_blank">harbor defaults</a>.</p>
                             </div>
                             <div class="micro-terminal">
                                 <div class="mt-header">
@@ -401,9 +402,9 @@
                                     <span class="mt-dot green"></span>
                                 </div>
                                 <div class="mt-body">
-                                    <div class="mt-line"><span class="mt-prompt">$</span> harbor defaults rm ollama</div>
-                                    <div class="mt-line"><span class="mt-prompt">$</span> harbor defaults add vllm</div>
-                                    <div class="mt-line"><span class="mt-prompt">$</span> harbor up</div>
+                                    <div class="mt-line"><span class="mt-prompt">$</span> <a href="https://github.com/av/harbor/wiki/3.-Harbor-CLI-Reference#harbor-defaults" target="_blank">harbor defaults</a> rm ollama</div>
+                                    <div class="mt-line"><span class="mt-prompt">$</span> <a href="https://github.com/av/harbor/wiki/3.-Harbor-CLI-Reference#harbor-defaults" target="_blank">harbor defaults</a> add vllm</div>
+                                    <div class="mt-line"><span class="mt-prompt">$</span> <a href="https://github.com/av/harbor/wiki/3.-Harbor-CLI-Reference#harbor-up-services" target="_blank">harbor up</a></div>
                                     <div class="mt-line success">✔ vLLM backend started</div>
                                 </div>
                             </div>
@@ -423,8 +424,8 @@
                             </div>
                             <div class="micro-terminal">
                                 <div class="mt-body">
-                                    <div class="mt-line"><span class="mt-prompt">$</span> harbor profile save dev</div>
-                                    <div class="mt-line"><span class="mt-prompt">$</span> harbor profile use prod</div>
+                                    <div class="mt-line"><span class="mt-prompt">$</span> <a href="https://github.com/av/harbor/wiki/3.-Harbor-CLI-Reference#harbor-profile" target="_blank">harbor profile</a> save dev</div>
+                                    <div class="mt-line"><span class="mt-prompt">$</span> <a href="https://github.com/av/harbor/wiki/3.-Harbor-CLI-Reference#harbor-profile" target="_blank">harbor profile</a> use prod</div>
                                 </div>
                             </div>
                         </div>
@@ -455,7 +456,7 @@
                             </div>
                             <div class="micro-terminal">
                                 <div class="mt-body">
-                                    <div class="mt-line"><span class="mt-prompt">$</span> harbor up metamcp mcpo</div>
+                                    <div class="mt-line"><span class="mt-prompt">$</span> <a href="https://github.com/av/harbor/wiki/3.-Harbor-CLI-Reference#harbor-up-services" target="_blank">harbor up</a> metamcp mcpo</div>
                                     <div class="mt-line success">✔ MCP tools connected</div>
                                 </div>
                             </div>
@@ -469,20 +470,20 @@
                                     <div class="card-icon-box"><i data-lucide="container"></i></div>
                                     <h3>Docker Native</h3>
                                 </div>
-                                <p>Built on Docker Compose. Inspect with docker ps, modify compose files, or run harbor cmd for raw access.</p>
+                                <p>Built on Docker Compose. Inspect with docker ps, modify compose files, or run <a href="https://github.com/av/harbor/wiki/3.-Harbor-CLI-Reference#harbor-cmd-services" target="_blank">harbor cmd</a> for raw access.</p>
                                 <div class="feature-pills">
                                     <span class="f-pill"><i data-lucide="check"></i> docker ps</span>
-                                    <span class="f-pill"><i data-lucide="check"></i> harbor cmd</span>
+                                    <span class="f-pill"><i data-lucide="check"></i> <a href="https://github.com/av/harbor/wiki/3.-Harbor-CLI-Reference#harbor-cmd-services" target="_blank">harbor cmd</a></span>
                                     <span class="f-pill"><i data-lucide="check"></i> compose</span>
                                 </div>
                             </div>
                             <div class="cli-demo">
                                 <div class="cli-row">
-                                    <span class="cli-p">➜</span> <span class="cli-c">harbor ps</span>
+                                    <span class="cli-p">➜</span> <span class="cli-c"><a href="https://github.com/av/harbor/wiki/3.-Harbor-CLI-Reference#harbor-ps" target="_blank">harbor ps</a></span>
                                 </div>
                                 <div class="cli-row success">ollama, webui running</div>
                                 <div class="cli-row">
-                                    <span class="cli-p">➜</span> <span class="cli-c">$(harbor cmd ollama) logs</span>
+                                    <span class="cli-p">➜</span> <span class="cli-c">$(<a href="https://github.com/av/harbor/wiki/3.-Harbor-CLI-Reference#harbor-cmd-services" target="_blank">harbor cmd</a> ollama) logs</span>
                                 </div>
                             </div>
                         </div>
@@ -501,8 +502,8 @@
                             </div>
                             <div class="micro-terminal">
                                 <div class="mt-body">
-                                    <div class="mt-line"><span class="mt-prompt">$</span> harbor qr</div>
-                                    <div class="mt-line"><span class="mt-prompt">$</span> harbor url webui</div>
+                                    <div class="mt-line"><span class="mt-prompt">$</span> <a href="https://github.com/av/harbor/wiki/3.-Harbor-CLI-Reference#harbor-qr-service" target="_blank">harbor qr</a></div>
+                                    <div class="mt-line"><span class="mt-prompt">$</span> <a href="https://github.com/av/harbor/wiki/3.-Harbor-CLI-Reference#harbor-url-service" target="_blank">harbor url</a> webui</div>
                                 </div>
                             </div>
                         </div>
@@ -521,7 +522,7 @@
                             </div>
                             <div class="micro-terminal">
                                 <div class="mt-body">
-                                    <div class="mt-line"><span class="mt-prompt">$</span> harbor tunnel</div>
+                                    <div class="mt-line"><span class="mt-prompt">$</span> <a href="https://github.com/av/harbor/wiki/3.-Harbor-CLI-Reference#harbor-tunnel-service" target="_blank">harbor tunnel</a></div>
                                     <div class="mt-line success">✔ Tunnel established</div>
                                 </div>
                             </div>
@@ -546,9 +547,9 @@
                                     <span class="mt-dot green"></span>
                                 </div>
                                 <div class="mt-body">
-                                    <div class="mt-line"><span class="mt-prompt">$</span> harbor up boost</div>
+                                    <div class="mt-line"><span class="mt-prompt">$</span> <a href="https://github.com/av/harbor/wiki/3.-Harbor-CLI-Reference#harbor-up-services" target="_blank">harbor up</a> boost</div>
                                     <div class="mt-line success">✔ LLM proxy with modules active</div>
-                                    <div class="mt-line"><span class="mt-prompt">$</span> harbor config set boost.modules klmbr</div>
+                                    <div class="mt-line"><span class="mt-prompt">$</span> <a href="https://github.com/av/harbor/wiki/3.-Harbor-CLI-Reference#harbor-config" target="_blank">harbor config</a> set boost.modules klmbr</div>
                                     <div class="mt-line success">✔ Creative mode enabled</div>
                                 </div>
                             </div>
@@ -568,8 +569,8 @@
                             </div>
                             <div class="micro-terminal">
                                 <div class="mt-body">
-                                    <div class="mt-line"><span class="mt-prompt">$</span> harbor history</div>
-                                    <div class="mt-line">harbor up searxng llamacpp</div>
+                                    <div class="mt-line"><span class="mt-prompt">$</span> <a href="https://github.com/av/harbor/wiki/3.-Harbor-CLI-Reference#harbor-history" target="_blank">harbor history</a></div>
+                                    <div class="mt-line"><a href="https://github.com/av/harbor/wiki/3.-Harbor-CLI-Reference#harbor-up-services" target="_blank">harbor up</a> searxng llamacpp</div>
                                 </div>
                             </div>
                         </div>
@@ -586,7 +587,7 @@
                             <p>Ready to move on? Export your Harbor setup to a standalone Docker Compose file with all configs.</p>
                             <div class="micro-terminal">
                                 <div class="mt-body">
-                                    <div class="mt-line"><span class="mt-prompt">$</span> harbor eject > compose.yml</div>
+                                    <div class="mt-line"><span class="mt-prompt">$</span> <a href="https://github.com/av/harbor/wiki/3.-Harbor-CLI-Reference#harbor-eject" target="_blank">harbor eject</a> > compose.yml</div>
                                     <div class="mt-line success">✔ Standalone stack exported</div>
                                 </div>
                             </div>
@@ -773,6 +774,43 @@
 
             Engine.run(engine);
             Render.run(render);
+        }
+    </script>
+    <script>
+        // Model Management Visualization
+        const models = [
+            { name: 'Meta-Llama-3.1', type: 'LLM', size: '8B', backend: 'ollama', status: 'downloading', progress: 65, color: 'blue' },
+            { name: 'Mistral-Nemo', type: 'LLM', size: '12B', backend: 'vllm', status: 'ready', color: 'purple' },
+            { name: 'Flux.1-schnell', type: 'Image', size: '14B', backend: 'comfyui', status: 'ready', color: 'green' }
+        ];
+
+        const modelGrid = document.getElementById('modelGrid');
+
+        if (modelGrid) {
+            models.forEach((model, index) => {
+                const card = document.createElement('div');
+                card.className = 'model-card';
+                card.style.animationDelay = `${index * 0.15}s`;
+
+                const icon = model.type === 'LLM' ? 'brain' : 'image';
+                const statusHtml = model.status === 'downloading'
+                    ? `<div class="model-progress"><div class="progress-bar" style="width: ${model.progress}%"></div></div>`
+                    : `<div class="model-ready"><i data-lucide="check-circle-2"></i> Ready</div>`;
+
+                card.innerHTML = `
+                    <div class="model-header">
+                        <div class="model-icon ${model.color}"><i data-lucide="${icon}"></i></div>
+                        <div class="model-info">
+                            <span class="model-name">${model.name}</span>
+                            <span class="model-meta">${model.size} • ${model.backend}</span>
+                        </div>
+                    </div>
+                    ${statusHtml}
+                `;
+                modelGrid.appendChild(card);
+            });
+            // Re-run lucide for new icons
+            if (window.lucide) lucide.createIcons();
         }
     </script>
 </body>
