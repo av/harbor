@@ -6,7 +6,7 @@ curl {{host}}/api/ps
 
 ###
 
-curl {{host}}/v1/models
+GET {{host}}/v1/models
 
 ###
 
@@ -376,4 +376,23 @@ POST {{host}}/v1/chat/completions
   ],
   "max_tokens": 20,
   "temperature": 0.15
+}
+
+### Logprobs
+
+POST {{host}}/v1/chat/completions
+Content-Type: application/json
+
+{
+  "model": "llama3.1:8b",
+  "messages": [
+    {
+      "role": "user",
+      "content": "What is the answer to life, the universe and everything? Only give me the number."
+    }
+  ],
+  "max_tokens": 100,
+  "logprobs": true,
+  "top_logprobs": 5,
+  "stream": false
 }
