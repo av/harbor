@@ -1,4 +1,8 @@
-![Harbor project logo](https://github.com/av/harbor/raw/main/docs/harbor-2.png)
+
+
+https://github.com/user-attachments/assets/8a7705e1-6f0e-4374-8784-62b95816aebc
+
+
 
 [![GitHub Tag](https://img.shields.io/github/v/tag/av/harbor)](https://github.com/av/harbor/releases)
 [![NPM Version](https://img.shields.io/npm/v/%40avcodes%2Fharbor?labelColor=red&color=white)](https://www.npmjs.com/package/@avcodes/harbor)
