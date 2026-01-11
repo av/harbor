@@ -1,0 +1,204 @@
+<style>
+*{box-sizing:border-box;scrollbar-width:none}
+body,html{font-family:Avenir,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;overflow:hidden;width:100%;height:100%;margin:0;padding:0;background:#222;color:#bbb}
+.container{display:flex;flex-direction:column;width:100%;height:100%;padding:1rem;gap:1rem}
+.status{padding:.5rem;text-align:center;min-height:2rem;font-size:.85rem;color:#888}
+.words{display:flex;flex-wrap:wrap;gap:.5rem;padding:1rem;overflow-y:auto;align-content:flex-start}
+.word{display:inline-flex;align-items:center;gap:.5rem;padding:.5rem .75rem;background:rgba(255,255,255,.08);border-radius:.25rem;transition:all .3s ease;animation:fadeIn .3s ease}
+.word .id{font-size:.65rem;color:#666;font-family:monospace}
+.word .text{color:#ddd}
+.word.adding{background:rgba(74,170,74,.2);box-shadow:0 0 .5rem rgba(74,170,74,.3)}
+.word.updating{background:rgba(170,170,74,.2);box-shadow:0 0 .5rem rgba(170,170,74,.3)}
+.word.deleting{background:rgba(170,74,74,.2);box-shadow:0 0 .5rem rgba(170,74,74,.3);animation:fadeOut .3s ease forwards}
+.word.inserting{background:rgba(74,74,170,.2);box-shadow:0 0 .5rem rgba(74,74,170,.3)}
+.preview{padding:1rem;background:rgba(255,255,255,.03);border-radius:.25rem;font-style:italic;color:#888;min-height:3rem;border-top:1px solid #333}
+.preview-label{font-size:.7rem;text-transform:uppercase;letter-spacing:.1em;margin-bottom:.5rem;color:#555}
+@keyframes fadeIn{from{opacity:0;transform:scale(.9)}to{opacity:1;transform:scale(1)}}
+@keyframes fadeOut{from{opacity:1;transform:scale(1)}to{opacity:0;transform:scale(.8)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
+.empty{color:#555;font-style:italic;text-align:center;width:100%}
+</style>
+<div class="container">
+  <div class="status"></div>
+  <div class="words"><span class="empty">Buffer empty</span></div>
+  <div class="preview">
+    <div class="preview-label">Preview</div>
+    <div class="preview-text"></div>
+  </div>
+</div>
+<script type="module">
+import autoAnimate from "https://unpkg.com/@formkit/auto-animate@0.8.2/index.mjs";
+
+const elements = {
+  status: document.querySelector(".status"),
+  words: document.querySelector(".words"),
+  preview: document.querySelector(".preview-text"),
+  empty: document.querySelector(".empty")
+};
+
+const words = new Map();
+
+const handlers = {
+  "boost.listener.event": handleBoostEvent,
+  "wordedit.status": handleStatus,
+  "wordedit.word.add": handleWordAdd,
+  "wordedit.word.insert_before": handleWordInsertBefore,
+  "wordedit.word.insert_after": handleWordInsertAfter,
+  "wordedit.word.update": handleWordUpdate,
+  "wordedit.word.delete": handleWordDelete,
+  "wordedit.clear": handleClear
+};
+
+function setStatus(text) {
+  elements.status.textContent = text;
+}
+
+function updatePreview() {
+  const wordElements = elements.words.querySelectorAll(".word");
+  const texts = [];
+  wordElements.forEach(el => {
+    const textEl = el.querySelector(".text");
+    if (textEl) texts.push(textEl.textContent);
+  });
+  elements.preview.textContent = texts.join(" ") || "(empty)";
+}
+
+function removeEmpty() {
+  const empty = elements.words.querySelector(".empty");
+  if (empty) empty.remove();
+}
+
+function showEmpty() {
+  if (elements.words.children.length === 0) {
+    const empty = document.createElement("span");
+    empty.classList.add("empty");
+    empty.textContent = "Buffer empty";
+    elements.words.appendChild(empty);
+  }
+}
+
+function createWordElement(id, text, className) {
+  removeEmpty();
+  const el = document.createElement("div");
+  el.classList.add("word", className);
+  el.setAttribute("data-word-id", id);
+  el.innerHTML = `<span class="id">[${id}]</span><span class="text">${escapeHtml(text)}</span>`;
+  setTimeout(() => el.classList.remove(className), 500);
+  return el;
+}
+
+function escapeHtml(text) {
+  const div = document.createElement("div");
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+function handleStatus(data) {
+  setStatus(data.status);
+}
+
+function handleWordAdd(data) {
+  const el = createWordElement(data.id, data.text, "adding");
+  elements.words.appendChild(el);
+  words.set(data.id, data.text);
+  updatePreview();
+}
+
+function handleWordInsertBefore(data) {
+  const targetEl = elements.words.querySelector(`[data-word-id="${data.before_id}"]`);
+  if (!targetEl) return;
+  const el = createWordElement(data.id, data.text, "inserting");
+  targetEl.parentNode.insertBefore(el, targetEl);
+  words.set(data.id, data.text);
+  updatePreview();
+}
+
+function handleWordInsertAfter(data) {
+  const targetEl = elements.words.querySelector(`[data-word-id="${data.after_id}"]`);
+  if (!targetEl) return;
+  const el = createWordElement(data.id, data.text, "inserting");
+  targetEl.parentNode.insertBefore(el, targetEl.nextSibling);
+  words.set(data.id, data.text);
+  updatePreview();
+}
+
+function handleWordUpdate(data) {
+  const el = elements.words.querySelector(`[data-word-id="${data.id}"]`);
+  if (!el) return;
+  el.classList.add("updating");
+  const textEl = el.querySelector(".text");
+  if (textEl) textEl.textContent = data.text;
+  words.set(data.id, data.text);
+  setTimeout(() => el.classList.remove("updating"), 500);
+  updatePreview();
+}
+
+function handleWordDelete(data) {
+  const el = elements.words.querySelector(`[data-word-id="${data.id}"]`);
+  if (!el) return;
+  el.classList.add("deleting");
+  words.delete(data.id);
+  setTimeout(() => {
+    el.remove();
+    showEmpty();
+    updatePreview();
+  }, 300);
+}
+
+function handleClear() {
+  elements.words.innerHTML = "";
+  words.clear();
+  showEmpty();
+  updatePreview();
+}
+
+function handleBoostEvent(data) {
+  const handler = handlers[data.event];
+  if (handler) {
+    handler(data.data);
+  }
+}
+
+function processChunk(chunk) {
+  try {
+    const data = JSON.parse(chunk.replace(/data: /, ""));
+    const handler = handlers[data.object];
+    if (handler) {
+      handler(data);
+    }
+  } catch (e) {
+    console.error("Error processing chunk:", e);
+  }
+}
+
+async function startListening() {
+  try {
+    const listenerId = "<<listener_id>>";
+    const boostUrl = "<<boost_public_url>>";
+    const response = await fetch(`${boostUrl}/events/${listenerId}`, {
+      headers: { Authorization: "Bearer sk-boost" }
+    });
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    const reader = response.body.getReader();
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      try {
+        const chunks = new TextDecoder().decode(value).split("\n\n");
+        for (const chunk of chunks) {
+          if (chunk.trim()) processChunk(chunk);
+        }
+      } catch (e) {
+        console.error("Error processing data:", e);
+      }
+    }
+  } catch (e) {
+    console.error("Error connecting to event stream:", e);
+  }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  autoAnimate(elements.words, { duration: 150, easing: "ease-in-out" });
+  startListening();
+});
+</script>

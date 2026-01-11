@@ -336,7 +336,7 @@ class LLM(AsyncEventEmitter):
     logger.debug(f"Chat: {str(chat):.256}")
 
     result = ""
-    pending_tool_calls = {}    # Track tool calls being built
+    pending_tool_calls = {}    # Track tool calls being built, keyed by id
     first_tool_call_id = None
 
     async with httpx.AsyncClient(timeout=None) as client:
@@ -364,6 +364,8 @@ class LLM(AsyncEventEmitter):
         # Flag to determine if we need to execute tool calls
         end_of_stream = False
         current_stream_content = ""
+        # Track tool call IDs in order of appearance
+        tool_call_order = []
 
         async with client.stream(
           "POST",
@@ -428,30 +430,44 @@ class LLM(AsyncEventEmitter):
                     continue
 
                   tool_call = tool_calls_data[0]
+                  tool_id = tool_call.get("id")
                   index = tool_call.get("index", 0)
 
                   # Store the first tool call ID we see
-                  if tool_call.get("id") and not first_tool_call_id:
-                    first_tool_call_id = tool_call.get("id")
+                  if tool_id and not first_tool_call_id:
+                    first_tool_call_id = tool_id
+
+                  # Use tool_id as primary key if available, fall back to index
+                  # This handles Ollama bug where multiple calls have same index but different ids
+                  if tool_id:
+                    key = tool_id
+                  else:
+                    # For streaming chunks without id, find existing call by index
+                    # or use index as key for truly streamed arguments
+                    key = f"idx_{index}"
+                    for existing_key, existing_call in pending_tool_calls.items():
+                      if existing_call.get("_index") == index:
+                        key = existing_key
+                        break
 
                   # Initialize tool call if new
-                  if index not in pending_tool_calls:
-                    pending_tool_calls[index] = {
-                      "id": tool_call.get("id") or
-                            first_tool_call_id,    # Use stored ID as fallback
+                  if key not in pending_tool_calls:
+                    pending_tool_calls[key] = {
+                      "id": tool_id or first_tool_call_id,
                       "function":
                         {
                           "name": tool_call.get("function", {}).get("name"),
                           "arguments": ""
                         },
-                      "type": tool_call.get("type") or "function"
+                      "type": tool_call.get("type") or "function",
+                      "_index": index
                     }
+                    tool_call_order.append(key)
 
                   # Update arguments
                   function_args = tool_call.get("function", {}).get("arguments")
-                  if index in pending_tool_calls and function_args is not None:
-                    pending_tool_calls[index]["function"]["arguments"
-                                                         ] += function_args
+                  if key in pending_tool_calls and function_args is not None:
+                    pending_tool_calls[key]["function"]["arguments"] += function_args
 
                   logger.debug(f"Tool call chunk: {parsed}")
                 else:
@@ -467,7 +483,15 @@ class LLM(AsyncEventEmitter):
 
         # After stream ends, check if we need to execute tool calls
         if pending_tool_calls and (end_of_stream or not current_stream_content):
-          for index, tool_call in pending_tool_calls.items():
+          # Execute in order of appearance
+          for key in tool_call_order:
+            tool_call = pending_tool_calls.get(key)
+            if not tool_call:
+              continue
+
+            # Remove internal tracking field before use
+            tool_call.pop("_index", None)
+
             try:
               logger.warning(f"Executing tool call: {tool_call}")
               name = tool_call["function"]["name"]

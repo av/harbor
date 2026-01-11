@@ -43,6 +43,7 @@ $(harbor cmd <service>)
 ```
 
 Refer to [CLI Reference](./docs/3.-Harbor-CLI-Reference.md) for more details.
+Remember that `harbor logs` TAILS LOGS BY DEFAULT. Use native `docker logs` if that is not what you expect. Use `-n 1000` to expand logs that'll be included in the initial selection.
 
 ### Running dev scripts
 
