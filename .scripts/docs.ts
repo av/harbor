@@ -216,9 +216,17 @@ async function renderServiceIndex() {
   const backends = byTag(tags.backend);
   const satellites = byTag(tags.satellite);
 
-  const renderService = (s) => `
-- [${s.name}](${s.wikiUrl}) <span style="opacity: 0.5;">${s.tags.map((t) => `\`${t}\``).join(', ')}</span><br/>
-${s.tooltip}`
+  const renderService = (s) => {
+    const logoImg = s.logo
+      ? `<img src="${s.logo}" alt="${s.name} logo" width="12" height="12" /> `
+      : '';
+    const tags = `<span style="opacity: 0.5;">${s.tags.map((t) => `\`${t}\``).join(', ')}</span>`;
+    const serviceLink = `<a href="${s.wikiUrl}">${logoImg}${s.name}</a>`;
+
+    return `
+- ${serviceLink} ${tags}<br/>
+${s.tooltip}`;
+  };
 
   const indexTemplate = `
 Various services that are integrated with Harbor. The link in the service name will lead you to a dedicated page in Harbor's wiki with details on getting started with the service.

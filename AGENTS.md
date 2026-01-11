@@ -105,3 +105,27 @@ Documentation must include:
 - How to change default values
 
 No behavior should be a surprise for the end user. If you add it, document it.
+
+### Service Logos
+
+Service logos are managed via the `logo` field in [serviceMetadata.ts](./app/src/serviceMetadata.ts).
+
+**Logo Strategy:**
+- Logos are **static URL strings** in serviceMetadata.ts (no runtime resolution)
+- Resolved once via `harbor dev add-logos` and written to the file
+- Resolution chain: homepage favicon → dashboardicons.com → GitHub owner avatar
+
+**Adding logos:**
+
+```bash
+# Resolve and write logos for services without one
+harbor dev add-logos
+
+# Preview changes without writing
+harbor dev add-logos --dry-run
+```
+
+**Resolution order:**
+1. GitHub homepage favicon (via Google's favicon service)
+2. dashboardicons.com (common service icons)
+3. GitHub owner avatar (fallback)
