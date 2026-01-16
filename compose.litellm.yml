@@ -46,6 +46,6 @@ services:
     ports:
       - ${HARBOR_LITELLM_DB_HOST_PORT}:5432
     volumes:
-      - ./litellm/db:/var/lib/postgresql/data
+      - ./litellm/db:/var/lib/postgresql
     networks:
       - harbor-network
