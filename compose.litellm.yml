@@ -31,7 +31,7 @@ services:
       - UI_PASSWORD=${HARBOR_LITELLM_UI_PASSWORD}
 
   litellm-db:
-    image: postgres
+    image: postgres:18
     restart: always
     container_name: ${HARBOR_CONTAINER_PREFIX}.litellm-db
     healthcheck:
