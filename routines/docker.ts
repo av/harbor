@@ -1,4 +1,4 @@
-import { listComposeFiles } from './paths';
+import { listComposeFiles, listComposeModules } from './paths';
 import { BUILTIN_CAPS, consumeArg, consumeFlagArg, log } from "./utils";
 import { cachedConfig, defaultCapabilities, defaultServices } from './envManager';
 
@@ -81,6 +81,83 @@ export async function resolveComposeFiles(args) {
   log.debug("Matched compose files:", outFiles.length);
 
   return outFiles
+}
+
+/**
+ * Resolve TypeScript compose modules matching the given arguments.
+ * Uses identical matching logic as resolveComposeFiles.
+ */
+export async function resolveComposeModules(args) {
+  const includeDefaults = !consumeFlagArg(args, ['--no-defaults']);
+  const dir = consumeArg(args, ['--dir']);
+  const options = [
+    ...(
+      await Promise.all([
+        defaultCapabilities.unwrap(),
+        includeDefaults ? defaultServices.unwrap() : [],
+      ])
+        .then((r => r.flat()))
+    ),
+    ...args
+  ].filter((s) => !!s);
+  const allModules = await listComposeModules(dir);
+  const outModules = [];
+
+  for (const file of allModules) {
+    const filename = file.split("/").pop();
+    let match = false;
+
+    // Handle cross-service files
+    if (filename.includes(".x.")) {
+      const cross = filename.replace("compose.x.", "").replace(".ts", "");
+      const filenameParts = cross.split(".");
+      let allMatched = true;
+
+      for (const part of filenameParts) {
+        if (isCapability(part)) {
+          // Capabilities must match exactly
+          if (!options.includes(part)) {
+            allMatched = false;
+            break;
+          }
+        } else {
+          // Services can match wildcards
+          if (!options.includes(part) && !options.includes("*")) {
+            allMatched = false;
+            break;
+          }
+        }
+      }
+
+      if (allMatched) {
+        outModules.push(file);
+      }
+      continue;
+    }
+
+    // Check if file matches any options
+    for (const option of options) {
+      if (option === "*") {
+        if (!isCapabilityFile(filename)) {
+          match = true;
+          break;
+        }
+      }
+
+      if (filename.includes(`.${option}.`)) {
+        match = true;
+        break;
+      }
+    }
+
+    if (match) {
+      outModules.push(file);
+    }
+  }
+
+  log.debug("Matched compose modules:", outModules.length);
+
+  return outModules;
 }
 
 export const whichCompose = cachedConfig({

@@ -26,3 +26,20 @@ export async function listComposeFiles(dir = paths.home) {
       return a.localeCompare(b);
     });
 }
+
+/**
+ * List TypeScript compose modules in the given directory.
+ * Mirrors listComposeFiles() but for .ts files.
+ */
+export async function listComposeModules(dir = paths.home) {
+  const files = await fs.promises.readdir(dir);
+
+  return files
+    .filter((file: string) => file.match(/compose\..+\.ts$/))
+    .sort((a: string, b: string) => {
+      const dotsInA = (a.match(/\./g) || []).length;
+      const dotsInB = (b.match(/\./g) || []).length;
+      if (dotsInA !== dotsInB) return dotsInA - dotsInB;
+      return a.localeCompare(b);
+    });
+}

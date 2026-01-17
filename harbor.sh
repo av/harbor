@@ -2908,6 +2908,25 @@ run_aphrodite_command() {
     esac
 }
 
+run_opencode_command() {
+    case "$1" in
+    workspaces)
+        shift
+        env_manager_arr opencode.workspaces "$@"
+        ;;
+    -h | --help | help)
+        echo "Usage: harbor opencode <command>"
+        echo
+        echo "Commands:"
+        echo "  harbor opencode workspaces [ls|rm|add] - Manage workspace directories for OpenCode"
+        echo "                                             Workspaces are mounted as /root/<name> in the container"
+        ;;
+    *)
+        return $scramble_exit_code
+        ;;
+    esac
+}
+
 run_open_ai_command() {
     update_main_key() {
         local key=$(env_manager get openai.keys | cut -d";" -f1)
@@ -4730,6 +4749,10 @@ main_entrypoint() {
     openai)
         shift
         run_open_ai_command "$@"
+        ;;
+    opencode)
+        shift
+        run_opencode_command "$@"
         ;;
     webui)
         shift

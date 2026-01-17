@@ -1,4 +1,5 @@
 import { red, yellow, gray } from "jsr:@std/fmt/colors";
+import process from 'node:process';
 
 export const BUILTIN_CAPS = ["nvidia", "mdc", "cdi"];
 export const CONFIG_PREFIX = "HARBOR_";

@@ -872,4 +872,13 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         wikiUrl: `${wikiUrl}/2.3.67-Satellite-Khoj`,
         tooltip: 'AI second brain for chat, search, and agents with your docs. Supports local and cloud LLMs.',
     },
+    opencode: {
+        name: 'OpenCode',
+        tags: [HST.satellite, HST.cli],
+        projectUrl: 'https://github.com/anomalyco/opencode',
+        logo: 'https://github.com/anomalyco.png?size=200',
+        wikiUrl: `${wikiUrl}/2.3.68-Satellite-OpenCode`,
+        tooltip: 'AI coding assistant with server API, TUI, and IDE extensions. Supports multiple LLM providers.',
+    },
 };
+
