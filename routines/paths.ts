@@ -18,10 +18,11 @@ export async function listComposeFiles(dir = paths.home) {
   const files = await fs.promises.readdir(dir);
 
   return files
-    .filter((file) => file.match(/compose\..+\.yml/))
-    .sort((a, b) => {
+    .filter((file: string) => file.match(/compose\..+\.yml/))
+    .sort((a: string, b: string) => {
       const dotsInA = (a.match(/\./g) || []).length;
       const dotsInB = (b.match(/\./g) || []).length;
-      return dotsInA - dotsInB;
+      if (dotsInA !== dotsInB) return dotsInA - dotsInB;
+      return a.localeCompare(b);
     });
 }

@@ -2,7 +2,7 @@
   "files.exclude": {
     "**/.git": false
   },
-  "deno.enable": false,
+  "deno.enable": true,
   "github.copilot.chat.codeGeneration.instructions": [
     {
       "file": ".copilot-instructions.md"

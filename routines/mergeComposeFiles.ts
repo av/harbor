@@ -18,7 +18,7 @@ export async function mergeComposeFiles(args) {
       sourceFiles.map(async (file) => yaml.parse(await Deno.readTextFile(file)))
     )
     const merged = contents.reduce((acc, next) => deepMerge(acc, next), {});
-    await Deno.writeTextFile(paths.mergedYaml, yaml.stringify(merged))
+    await Deno.writeTextFile(`${paths.home}/${paths.mergedYaml}`, yaml.stringify(merged))
     targetFiles.push(`${paths.home}/${paths.mergedYaml}`);
   } else {
     // Keep files as they are
