@@ -25,7 +25,9 @@ show_help() {
     echo "  ps                      - List the running containers"
     echo "  logs|l <handle>         - View the logs of the containers"
     echo "  exec <handle> [command] - Execute a command in a running service"
-    echo "  pull <handle>           - Pull the latest images"
+    echo "  pull <handle>           - Pull the latest images or models"
+    echo "    pull <service>        - Pull Docker images for a service"
+    echo "    pull <model>          - Pull Ollama model or llama.cpp HF model"
     echo "  dive <handle>           - Run the Dive CLI to inspect Docker images"
     echo "  run <alias>             - Run a command defined as an alias"
     echo "  run <handle> [command]  - Run a one-off command in a service container"
@@ -696,12 +698,96 @@ run_pull() {
         if echo "$available_services" | grep -q "^$service$"; then
             log_info "Pulling service $service"
         else
+            # Probe HF repo existence (200 OK) to determine if it's a Llama.cpp target
+            # Strip tag if present for the check
+            local repo="${service%:*}"
+
+            # Must look like org/repo (at least one slash) to be a candidate
+            if [[ "$service" == *"/"* ]] && curl --output /dev/null --silent --head --fail --connect-timeout 5 "https://huggingface.co/$repo"; then
+                run_llamacpp_pull "$service"
+                return 0
+            fi
+
             run_ollama_command pull "$service"
             return 0
         fi
     done
 
     $(compose_with_options "$@") pull
+}
+
+run_llamacpp_pull() {
+    local model="$1"
+    log_info "Detected Llama.cpp target: $model"
+    log_info "Starting ephemeral llama-server to pull model to cache..."
+
+    local safe_model_name=$(echo "$model" | sed 's/[^a-zA-Z0-9._-]/-/g')
+    local c_log="/tmp/pull-${safe_model_name}.log"
+
+    # Embed simple logger to match Harbor's CLI style inside the container
+    # Using printf for better portability and avoiding echo -e issues
+    local script_logger="
+    log_info() {
+        printf \"\\033[90m%s\\033[0m [INFO] %s\\n\" \"\$(date +'%H:%M:%S')\" \"\$*\"
+    }
+    log_success() {
+        printf \"\\033[90m%s\\033[0m [INFO] \\033[32m✔\\033[0m %s\\n\" \"\$(date +'%H:%M:%S')\" \"\$*\"
+    }
+    log_error() {
+        printf \"\\033[90m%s\\033[0m [ERROR] \\033[31m✘\\033[0m %s\\n\" \"\$(date +'%H:%M:%S')\" \"\$*\"
+    }
+    "
+
+    local cmd="
+    $script_logger
+
+    touch \"$c_log\"
+    tail -f \"$c_log\" &
+    TAIL_PID=\$!
+
+    log_info 'Starting download process for $model...' >> \"$c_log\"
+
+    /app/llama-server -hf '$model' --port 8080 --host 0.0.0.0 --n-gpu-layers 0 -c 128 >> \"$c_log\" 2>&1 &
+    SRV_PID=\$!
+
+    while true; do
+        if grep -q 'using cached file' \"$c_log\"; then
+            log_success 'Model is already cached.'
+            kill \$SRV_PID 2>/dev/null
+            kill \$TAIL_PID 2>/dev/null
+            exit 0
+        fi
+
+        # 'loading model' indicates download finished
+        if grep -q 'main: loading model' \"$c_log\" || grep -q 'load_model: loading model' \"$c_log\"; then
+            log_success 'Download completed successfully.'
+            kill \$SRV_PID 2>/dev/null
+            kill \$TAIL_PID 2>/dev/null
+            exit 0
+        fi
+
+        # Fallback success
+        if grep -q 'HTTP server listening' \"$c_log\"; then
+            log_success 'Server ready (Download success).'
+            kill \$SRV_PID 2>/dev/null
+            kill \$TAIL_PID 2>/dev/null
+            exit 0
+        fi
+
+        if ! kill -0 \$SRV_PID 2>/dev/null; then
+            log_error 'Download process exited prematurely. Check logs above.'
+            kill \$TAIL_PID 2>/dev/null
+            exit 1
+        fi
+        sleep 0.5
+    done
+    "
+
+    $(compose_with_options "llamacpp") run \
+        --rm \
+        --entrypoint /bin/sh \
+        llamacpp \
+        -c "$cmd"
 }
 
 run_run() {
