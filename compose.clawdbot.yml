@@ -1,0 +1,36 @@
+services:
+  clawdbot:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.clawdbot
+    image: ${HARBOR_CLAWDBOT_IMAGE}:${HARBOR_CLAWDBOT_VERSION}
+    build:
+      context: ${HARBOR_CLAWDBOT_GIT_REF}
+      dockerfile: Dockerfile
+      args:
+        CLAWDBOT_DOCKER_APT_PACKAGES: ${HARBOR_CLAWDBOT_DOCKER_APT_PACKAGES}
+    env_file:
+      - ./.env
+      - ./clawdbot/override.env
+    environment:
+      - HOME=/home/node
+      - TERM=xterm-256color
+      - CLAWDBOT_GATEWAY_TOKEN=${HARBOR_CLAWDBOT_GATEWAY_TOKEN}
+      - CLAWDBOT_GATEWAY_BIND=${HARBOR_CLAWDBOT_GATEWAY_BIND}
+      - CLAWDBOT_GATEWAY_PORT=${HARBOR_CLAWDBOT_HOST_PORT}
+      - CLAWDBOT_BRIDGE_PORT=${HARBOR_CLAWDBOT_BRIDGE_HOST_PORT}
+      - HARBOR_CLAWDBOT_AUTO_APPROVE_UI=${HARBOR_CLAWDBOT_AUTO_APPROVE_UI}
+      - CLAUDE_AI_SESSION_KEY=${HARBOR_CLAWDBOT_CLAUDE_AI_SESSION_KEY}
+      - CLAUDE_WEB_SESSION_KEY=${HARBOR_CLAWDBOT_CLAUDE_WEB_SESSION_KEY}
+      - CLAUDE_WEB_COOKIE=${HARBOR_CLAWDBOT_CLAUDE_WEB_COOKIE}
+    volumes:
+      - ${HARBOR_CLAWDBOT_CONFIG_DIR}:/home/node/.clawdbot
+      - ${HARBOR_CLAWDBOT_WORKSPACE_DIR}:/home/node/clawd
+      - ./clawdbot/entrypoint.sh:/entrypoint.sh
+    ports:
+      - ${HARBOR_CLAWDBOT_HOST_PORT}:${HARBOR_CLAWDBOT_HOST_PORT}
+      - ${HARBOR_CLAWDBOT_BRIDGE_HOST_PORT}:${HARBOR_CLAWDBOT_BRIDGE_HOST_PORT}
+    init: true
+    stdin_open: true
+    tty: true
+    entrypoint: ["/bin/sh", "/entrypoint.sh"]
+    networks:
+      - harbor-network

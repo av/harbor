@@ -37,9 +37,14 @@ export interface ComposeContext {
   service: string | null;
 
   /**
-   * Active services list from selectors
+   * Active services list from selectors (includes defaults)
    */
   services: string[];
+
+  /**
+   * Explicitly requested services (excludes defaults)
+   */
+  explicitServices: string[];
 
   /**
    * Active capabilities from selectors

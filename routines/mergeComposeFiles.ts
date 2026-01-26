@@ -41,7 +41,8 @@ function buildComposeContext(
   mergeEnabled: boolean,
   modulePath: string,
   services: string[],
-  capabilities: string[]
+  capabilities: string[],
+  explicitServices: string[]
 ): ComposeContext {
   const service = extractServiceFromModule(modulePath.split('/').pop() || '');
 
@@ -49,6 +50,7 @@ function buildComposeContext(
     compose,
     service,
     services,
+    explicitServices,
     capabilities,
     args: [...args],
     dir: path.resolve(dir || paths.home),
@@ -85,7 +87,8 @@ async function applyComposeModules(
   dir: string,
   mergeEnabled: boolean,
   services: string[],
-  capabilities: string[]
+  capabilities: string[],
+  explicitServices: string[]
 ): Promise<ComposeObject> {
   let result = compose;
 
@@ -112,7 +115,8 @@ async function applyComposeModules(
         mergeEnabled,
         modulePath,
         services,
-        capabilities
+        capabilities,
+        explicitServices
       );
 
       log.debug(`Applying TS compose: ${modulePath}`);
@@ -145,6 +149,7 @@ async function applyComposeModules(
 
 export async function mergeComposeFiles(args) {
   let shouldMerge = !consumeFlagArg(args, ["--no-merge"]);
+  const includeDefaults = !consumeFlagArg(args, ['--no-defaults']);
   const dir = args.find(arg => arg.startsWith('--dir='))?.split('=')[1];
   const sourceFiles = await resolveComposeFiles(args);
   let targetFiles = []
@@ -152,8 +157,11 @@ export async function mergeComposeFiles(args) {
   // Extract services and capabilities from args (after flags are consumed)
   // Args at this point are the remaining service/capability names
   const allOptions = args.filter(arg => !arg.startsWith('-'));
-  const defServices = await defaultServices.unwrap() || [];
+  const defServices = includeDefaults ? (await defaultServices.unwrap() || []) : [];
   const defCaps = await defaultCapabilities.unwrap() || [];
+
+  // Track explicitly requested services (before merging with defaults)
+  const explicitServices = allOptions.filter(s => !isCapability(s));
 
   // Combine explicit args with defaults
   const allServicesAndCaps = [...new Set([...defServices, ...defCaps, ...allOptions])];
@@ -175,7 +183,7 @@ export async function mergeComposeFiles(args) {
     const tsModules = await resolveComposeModules([...args]);
     if (tsModules.length > 0) {
       log.debug(`Applying ${tsModules.length} TypeScript compose module(s)`);
-      merged = await applyComposeModules(merged, tsModules, args, sourceFiles, dir, shouldMerge, services, capabilities);
+      merged = await applyComposeModules(merged, tsModules, args, sourceFiles, dir, shouldMerge, services, capabilities, explicitServices);
     }
 
     await Deno.writeTextFile(`${paths.home}/${paths.mergedYaml}`, yaml.stringify(merged))

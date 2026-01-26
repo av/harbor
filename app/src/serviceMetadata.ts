@@ -880,5 +880,13 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         wikiUrl: `${wikiUrl}/2.3.68-Satellite-OpenCode`,
         tooltip: 'AI coding assistant with server API, TUI, and IDE extensions. Supports multiple LLM providers.',
     },
+    clawdbot: {
+        name: 'Clawdbot',
+        tags: [HST.satellite, HST.tools],
+        projectUrl: 'https://github.com/clawdbot/clawdbot',
+        logo: 'https://github.com/clawdbot.png?size=200',
+        wikiUrl: `${wikiUrl}/2.3.69-Satellite-Clawdbot`,
+        tooltip: 'Personal AI assistant with a self-hosted gateway, Control UI, and multi-channel messaging support.',
+    },
 };
 

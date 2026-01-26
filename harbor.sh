@@ -2365,6 +2365,8 @@ run_fixfs() {
     docker_fsacl $(eval echo "$(env_manager get txtai.cache)")
     docker_fsacl $(eval echo "$(env_manager get nexa.cache)")
     docker_fsacl $(eval echo "$(env_manager get aichat.config_path)")
+    docker_fsacl $(eval echo "$(env_manager get comfyui.workspace)")
+    docker_fsacl $(eval echo "$(env_manager get clawdbot.config_dir)")
 }
 
 open_home_code() {
