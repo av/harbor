@@ -1,16 +1,16 @@
 #!/bin/sh
 set -e
 
-GATEWAY_PORT="${CLAWDBOT_GATEWAY_PORT:-${HARBOR_CLAWDBOT_HOST_PORT:-34721}}"
-GATEWAY_BIND="${CLAWDBOT_GATEWAY_BIND:-${HARBOR_CLAWDBOT_GATEWAY_BIND:-lan}}"
-GATEWAY_MODE="${HARBOR_CLAWDBOT_GATEWAY_MODE:-local}"
-GATEWAY_TOKEN="${CLAWDBOT_GATEWAY_TOKEN:-${HARBOR_CLAWDBOT_GATEWAY_TOKEN:-}}"
-AUTO_APPROVE_UI="${HARBOR_CLAWDBOT_AUTO_APPROVE_UI:-true}"
-DEFAULT_MODEL="${HARBOR_CLAWDBOT_MODEL:-}"
+GATEWAY_PORT="${MOLTBOT_GATEWAY_PORT:-${HARBOR_MOLTBOT_HOST_PORT:-34721}}"
+GATEWAY_BIND="${MOLTBOT_GATEWAY_BIND:-${HARBOR_MOLTBOT_GATEWAY_BIND:-lan}}"
+GATEWAY_MODE="${HARBOR_MOLTBOT_GATEWAY_MODE:-local}"
+GATEWAY_TOKEN="${MOLTBOT_GATEWAY_TOKEN:-${HARBOR_MOLTBOT_GATEWAY_TOKEN:-}}"
+AUTO_APPROVE_UI="${HARBOR_MOLTBOT_AUTO_APPROVE_UI:-true}"
+DEFAULT_MODEL="${HARBOR_MOLTBOT_MODEL:-}"
 BACKEND_NAME="${HARBOR_BACKEND_NAME:-ollama}"
 BACKEND_URL="${HARBOR_BACKEND_URL:-http://ollama:11434}"
-CONTEXT_LENGTH="${HARBOR_CLAWDBOT_CONTEXT_WINDOW:-16384}"
-CONFIG_PATH="/home/node/.clawdbot/clawdbot.json"
+CONTEXT_LENGTH="${HARBOR_MOLTBOT_CONTEXT_WINDOW:-16384}"
+CONFIG_PATH="/home/node/.moltbot/moltbot.json"
 
 if [ "$#" -gt 0 ]; then
   exec node dist/index.js "$@"
@@ -19,19 +19,19 @@ fi
 # Always regenerate config from env vars on container start
 # This ensures backend/model changes are picked up on restart
 if [ -z "$DEFAULT_MODEL" ]; then
-  echo "HARBOR_CLAWDBOT_MODEL is empty. Set it to a model ID (example: llama3.1:8b) and restart." >&2
+  echo "HARBOR_MOLTBOT_MODEL is empty. Set it to a model ID (example: llama3.1:8b) and restart." >&2
   exit 1
 fi
 
 if [ -z "$GATEWAY_TOKEN" ]; then
-  echo "HARBOR_CLAWDBOT_GATEWAY_TOKEN is empty. Set it (harbor config set clawdbot.gateway_token \"...\") and restart." >&2
+  echo "HARBOR_MOLTBOT_GATEWAY_TOKEN is empty. Set it (harbor config set moltbot.gateway_token \"...\") and restart." >&2
   exit 1
 fi
 
-mkdir -p /home/node/.clawdbot
+mkdir -p /home/node/.moltbot
 
-# Ensure model ID includes provider prefix for Clawdbot's model resolution
-# Clawdbot expects format in agents.defaults.model.primary: "provider/model-id"
+# Ensure model ID includes provider prefix for Moltbot's model resolution
+# Moltbot expects format in agents.defaults.model.primary: "provider/model-id"
 # But models array should have model ID WITHOUT provider prefix
 # Examples:
 #   Primary: "llamacpp/unsloth/GLM-4.7-Flash-GGUF:Q8_0"
@@ -50,7 +50,7 @@ fi
 
 # Check if config exists - if not, create initial template
 if [ ! -f "$CONFIG_PATH" ]; then
-  echo "Creating initial clawdbot configuration..."
+  echo "Creating initial moltbot configuration..."
   cat > "$CONFIG_PATH" <<EOF
 {
   "gateway": {
@@ -102,7 +102,7 @@ if [ ! -f "$CONFIG_PATH" ]; then
 EOF
 else
   # Config exists - update only dynamic fields to preserve user customizations
-  echo "Updating clawdbot configuration with current backend settings..."
+  echo "Updating moltbot configuration with current backend settings..."
   node -e "
     const fs = require('fs');
     const config = JSON.parse(fs.readFileSync('$CONFIG_PATH', 'utf8'));
@@ -151,7 +151,7 @@ else
   "
 fi
 
-rm -f /home/node/.clawdbot/gateway*.loc /home/node/.clawdbot/gateway*.lock /home/node/.clawdbot/gateway*.pid
+rm -f /home/node/.moltbot/gateway*.loc /home/node/.moltbot/gateway*.lock /home/node/.moltbot/gateway*.pid
 
 node dist/index.js gateway --bind "$GATEWAY_BIND" --port "$GATEWAY_PORT" &
 GATEWAY_PID=$!

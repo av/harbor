@@ -1,7 +1,7 @@
 import type { ComposeContext, ComposeObject } from './routines/composeTypes';
 
 /**
- * OpenAI-compatible inference backends supported by clawdbot.
+ * OpenAI-compatible inference backends supported by moltbot.
  * Priority order: first match wins when multiple backends are active.
  */
 const BACKENDS: Record<string, { url: string; name: string }> = {
@@ -17,7 +17,7 @@ const BACKENDS: Record<string, { url: string; name: string }> = {
 export default async function apply(ctx: ComposeContext): Promise<ComposeObject> {
   const { compose, services, explicitServices } = ctx;
 
-  if (!compose.services?.clawdbot) {
+  if (!compose.services?.moltbot) {
     return compose;
   }
 
@@ -40,28 +40,28 @@ export default async function apply(ctx: ComposeContext): Promise<ComposeObject>
   const { url, name } = BACKENDS[backendService];
 
   // Ensure environment object exists
-  if (!compose.services.clawdbot.environment) {
-    compose.services.clawdbot.environment = {};
+  if (!compose.services.moltbot.environment) {
+    compose.services.moltbot.environment = {};
   }
 
   // Inject backend connection details as environment variables
-  if (Array.isArray(compose.services.clawdbot.environment)) {
-    compose.services.clawdbot.environment.push(
+  if (Array.isArray(compose.services.moltbot.environment)) {
+    compose.services.moltbot.environment.push(
       `HARBOR_BACKEND_NAME=${name}`,
       `HARBOR_BACKEND_URL=${url}`
     );
   } else {
-    compose.services.clawdbot.environment.HARBOR_BACKEND_NAME = name;
-    compose.services.clawdbot.environment.HARBOR_BACKEND_URL = url;
+    compose.services.moltbot.environment.HARBOR_BACKEND_NAME = name;
+    compose.services.moltbot.environment.HARBOR_BACKEND_URL = url;
   }
 
   // Add depends_on for the detected backend
-  const existingDeps = compose.services.clawdbot.depends_on || [];
+  const existingDeps = compose.services.moltbot.depends_on || [];
   const depsArray = Array.isArray(existingDeps)
     ? existingDeps
     : Object.keys(existingDeps);
 
-  compose.services.clawdbot.depends_on = [
+  compose.services.moltbot.depends_on = [
     ...new Set([...depsArray, backendService])
   ];
 
