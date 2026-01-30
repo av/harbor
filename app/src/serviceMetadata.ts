@@ -880,12 +880,12 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         wikiUrl: `${wikiUrl}/2.3.68-Satellite-OpenCode`,
         tooltip: 'AI coding assistant with server API, TUI, and IDE extensions. Supports multiple LLM providers.',
     },
-    moltbot: {
-        name: 'Moltbot',
+    openclaw: {
+        name: 'OpenClaw',
         tags: [HST.satellite, HST.tools],
-        projectUrl: 'https://github.com/moltbot/moltbot',
-        logo: 'https://github.com/moltbot.png?size=200',
-        wikiUrl: `${wikiUrl}/2.3.70-Satellite-Moltbot`,
+        projectUrl: 'https://github.com/openclaw/openclaw',
+        logo: 'https://github.com/openclaw.png?size=200',
+        wikiUrl: `${wikiUrl}/2.3.70-Satellite-OpenClaw`,
         tooltip: 'Personal AI assistant with a self-hosted gateway, Control UI, and multi-channel messaging support.',
     },
 };

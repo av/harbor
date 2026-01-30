@@ -2366,7 +2366,7 @@ run_fixfs() {
     docker_fsacl $(eval echo "$(env_manager get nexa.cache)")
     docker_fsacl $(eval echo "$(env_manager get aichat.config_path)")
     docker_fsacl $(eval echo "$(env_manager get comfyui.workspace)")
-    docker_fsacl $(eval echo "$(env_manager get moltbot.config_dir)")
+    docker_fsacl $(eval echo "$(env_manager get openclaw.config_dir)")
 }
 
 open_home_code() {
@@ -4654,7 +4654,7 @@ run_modularmax_command() {
 # ========================================================================
 
 # Globals
-version="0.3.40"
+version="0.3.41"
 harbor_repo_url="https://github.com/av/harbor.git"
 harbor_release_url="https://api.github.com/repos/av/harbor/releases/latest"
 delimiter="|"

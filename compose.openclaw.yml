@@ -1,0 +1,36 @@
+services:
+  openclaw:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.openclaw
+    image: ${HARBOR_OPENCLAW_IMAGE}:${HARBOR_OPENCLAW_VERSION}
+    build:
+      context: ${HARBOR_OPENCLAW_GIT_REF}
+      dockerfile: Dockerfile
+      args:
+        OPENCLAW_DOCKER_APT_PACKAGES: ${HARBOR_OPENCLAW_DOCKER_APT_PACKAGES}
+    env_file:
+      - ./.env
+      - ./openclaw/override.env
+    environment:
+      - HOME=/home/node
+      - TERM=xterm-256color
+      - OPENCLAW_GATEWAY_TOKEN=${HARBOR_OPENCLAW_GATEWAY_TOKEN}
+      - OPENCLAW_GATEWAY_BIND=${HARBOR_OPENCLAW_GATEWAY_BIND}
+      - OPENCLAW_GATEWAY_PORT=${HARBOR_OPENCLAW_HOST_PORT}
+      - OPENCLAW_BRIDGE_PORT=${HARBOR_OPENCLAW_BRIDGE_HOST_PORT}
+      - HARBOR_OPENCLAW_AUTO_APPROVE_UI=${HARBOR_OPENCLAW_AUTO_APPROVE_UI}
+      - CLAUDE_AI_SESSION_KEY=${HARBOR_OPENCLAW_CLAUDE_AI_SESSION_KEY}
+      - CLAUDE_WEB_SESSION_KEY=${HARBOR_OPENCLAW_CLAUDE_WEB_SESSION_KEY}
+      - CLAUDE_WEB_COOKIE=${HARBOR_OPENCLAW_CLAUDE_WEB_COOKIE}
+    volumes:
+      - ${HARBOR_OPENCLAW_CONFIG_DIR}:/home/node/.openclaw
+      - ${HARBOR_OPENCLAW_WORKSPACE_DIR}:/home/node/openclaw
+      - ./openclaw/entrypoint.sh:/entrypoint.sh
+    ports:
+      - ${HARBOR_OPENCLAW_HOST_PORT}:${HARBOR_OPENCLAW_HOST_PORT}
+      - ${HARBOR_OPENCLAW_BRIDGE_HOST_PORT}:${HARBOR_OPENCLAW_BRIDGE_HOST_PORT}
+    init: true
+    stdin_open: true
+    tty: true
+    entrypoint: ["/bin/sh", "/entrypoint.sh"]
+    networks:
+      - harbor-network
