@@ -1,0 +1,22 @@
+services:
+  ldr:
+    image: ${HARBOR_LDR_IMAGE}:${HARBOR_LDR_VERSION}
+    # build:
+    #   context: https://github.com/LearningCircuit/local-deep-research.git
+    #   dockerfile: Dockerfile
+    container_name: ${HARBOR_CONTAINER_PREFIX}.ldr
+    ports:
+      - ${HARBOR_LDR_HOST_PORT}:5000
+    env_file:
+      - ./.env
+      - ./services/ldr/override.env
+    environment:
+      - OPENAI_API_KEY=${HARBOR_OPENAI_KEY}
+      - LDR_OPENAI_API_KEY=${HARBOR_OPENAI_KEY}
+      - ANTHROPIC_API_KEY=${HARBOR_ANTHROPIC_KEY}
+      - LDR_ANTHROPIC_API_KEY=${HARBOR_ANTHROPIC_KEY}
+    volumes:
+      - ${HARBOR_LDR_WORKSPACE}/config:/root/.config/local_deep_research
+      - ${HARBOR_LDR_WORKSPACE}/data:/usr/local/lib/python3.13/site-packages/data
+    networks:
+      - harbor-network

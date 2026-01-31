@@ -1,0 +1,23 @@
+services:
+  aphrodite:
+    image: alpindale/aphrodite-openai:${HARBOR_APHRODITE_VERSION}
+    container_name: ${HARBOR_CONTAINER_PREFIX}.aphrodite
+    env_file:
+      - ./.env
+      - ./services/aphrodite/override.env
+    ipc: host
+    ports:
+      - "${HARBOR_APHRODITE_HOST_PORT}:2242"
+    volumes:
+      - ${HARBOR_HF_CACHE}:/root/.cache/huggingface
+    user: root
+    networks:
+      - harbor-network
+    command: >
+      --model ${HARBOR_APHRODITE_MODEL}
+      ${HARBOR_APHRODITE_EXTRA_ARGS}
+    environment:
+      - HF_HOME=/root/.cache/huggingface
+      - HF_TOKEN=${HARBOR_HF_TOKEN}
+      - MODEL_NAME=${HARBOR_APHRODITE_MODEL}
+      - CMD_ADDITIONAL_ARGUMENTS=${HARBOR_APHRODITE_EXTRA_ARGS}

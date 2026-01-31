@@ -1,0 +1,28 @@
+services:
+  webui:
+    image: ghcr.io/open-webui/open-webui:${HARBOR_WEBUI_VERSION}
+    env_file:
+      - ./.env
+      - ./services/open-webui/override.env
+    container_name: ${HARBOR_CONTAINER_PREFIX}.webui
+    volumes:
+      - ./open-webui:/app/backend/data
+      - ./services/open-webui/start_webui.sh:/app/start_webui.sh
+      - ./shared/json_config_merger.py:/app/json_config_merger.py
+      - ./services/open-webui/configs/config.override.json:/app/configs/config.z.override.json
+      - /etc/localtime:/etc/localtime:ro
+    entrypoint: ["/app/start_webui.sh"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 2s
+      timeout: 10s
+      retries: 10
+      start_period: 2s
+    ports:
+      - ${HARBOR_WEBUI_HOST_PORT}:8080
+    networks:
+      - harbor-network
+    environment:
+      - WEBUI_NAME=${HARBOR_WEBUI_NAME}
+      - WEBUI_SECRET_KEY=${HARBOR_WEBUI_SECRET}
+      - GLOBAL_LOG_LEVEL=${HARBOR_WEBUI_LOG_LEVEL}

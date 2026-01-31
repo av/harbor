@@ -1,0 +1,4 @@
+services:
+  chatui:
+    volumes:
+      - ./services/chatui/configs/chatui.aphrodite.yml:/app/configs/chatui.aphrodite.yml

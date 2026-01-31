@@ -15,7 +15,7 @@ services:
     image: \${${envPrefix}IMAGE}:\${${envPrefix}VERSION}
     env_file:
       - ./.env
-      - ./${handle}/override.env
+      - ./services/${handle}/override.env
     networks:
       - harbor-network
 `.trimStart();
@@ -35,12 +35,13 @@ async function scaffold(handle: string) {
       );
     }
 
-    // Create directory
-    const dirPath = join(Deno.cwd(), handle);
+    // Create directory in services folder
+    const servicesDir = join(Deno.cwd(), 'services');
+    const dirPath = join(servicesDir, handle);
     await ensureDir(dirPath);
 
-    // Create compose file
-    const composePath = join(Deno.cwd(), `compose.${handle}.yml`);
+    // Create compose file in services folder
+    const composePath = join(servicesDir, `compose.${handle}.yml`);
     await Deno.writeTextFile(composePath, composeTemplate(handle));
 
     // Create env file

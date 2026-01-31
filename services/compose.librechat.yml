@@ -1,0 +1,112 @@
+services:
+  librechat:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.librechat
+    ports:
+      - "${HARBOR_LIBRECHAT_HOST_PORT}:${HARBOR_LIBRECHAT_HOST_PORT}"
+    depends_on:
+      - librechat-db
+      - librechat-rag
+      - librechat-search
+      - librechat-vector
+    image: ghcr.io/danny-avila/librechat-dev:latest
+    networks:
+      - harbor-network
+    env_file:
+      - ./.env
+      - ./services/librechat/.env
+      - ./services/librechat/override.env
+    environment:
+      - HOST=0.0.0.0
+      - PORT=${HARBOR_LIBRECHAT_HOST_PORT}
+      - MONGO_URI=mongodb://librechat-db:27017/LibreChat
+      - MEILI_HOST=http://librechat-search:7700
+      - RAG_PORT=${HARBOR_LIBRECHAT_RAG_HOST_PORT}
+      - RAG_API_URL=http://librechat-rag:${HARBOR_LIBRECHAT_RAG_HOST_PORT}
+      - ANYSCALE_API_KEY=${HARBOR_ANYSCALE_KEY:-user_provided}
+      - APIPIE_API_KEY=${HARBOR_APIPIE_KEY:-user_provided}
+      - COHERE_API_KEY=${HARBOR_COHERE_KEY:-user_provided}
+      - FIREWORKS_API_KEY=${HARBOR_FIREWORKS_API_KEY:-user_provided}
+      - GROQ_API_KEY=${HARBOR_GROQ_KEY:-user_provided}
+      - HUGGINGFACE_TOKEN=${HARBOR_HF_TOKEN:-user_provided}
+      - MISTRAL_API_KEY=${HARBOR_MISTRAL_KEY:-user_provided}
+      - OPENROUTER_KEY=${HARBOR_OPENROUTER_KEY:-user_provided}
+      - PERPLEXITY_API_KEY=${HARBOR_PERPLEXITY_KEY:-user_provided}
+      - SHUTTLEAI_API_KEY=${HARBOR_SHUTTLEAI_KEY:-user_provided}
+      - TOGETHERAI_API_KEY=${HARBOR_TOGETHERAI_KEY:-user_provided}
+      - ANTHROPIC_API_KEY=${HARBOR_ANTHROPIC_KEY:-user_provided}
+      - BINGAI_TOKEN=${HARBOR_BINGAI_TOKEN:-user_provided}
+      - GOOGLE_KEY=${HARBOR_GOOGLE_KEY:-user_provided}
+      - OPENAI_API_KEY=${HARBOR_OPENAI_KEY:-user_provided}
+      - ASSISTANTS_API_KEY=${HARBOR_ASSISTANTS_KEY:-user_provided}
+    volumes:
+      - ./shared/yaml_config_merger.js:/app/yaml_config_merger.mjs
+      - type: bind
+        source: ./services/librechat/.env
+        target: /app/.env
+      - ./services/librechat/start_librechat.sh:/app/start_librechat.sh
+      - ./services/librechat/librechat.yml:/app/configs/librechat.yml
+      - ./services/librechat/images:/app/client/public/images
+    entrypoint: /app/start_librechat.sh
+
+
+  librechat-db:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.librechat-db
+    image: mongo
+    env_file:
+      - ./.env
+      - ./services/librechat/.env
+      - ./services/librechat/override.env
+    volumes:
+      - ./services/librechat/data:/data/db
+    command: mongod --noauth
+    networks:
+      - harbor-network
+
+  librechat-search:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.librechat-search
+    image: getmeili/meilisearch:v1.12.3
+    env_file:
+      - ./.env
+      - ./services/librechat/.env
+      - ./services/librechat/override.env
+    environment:
+      - MEILI_HOST=http://librechat-search:7700
+      - MEILI_NO_ANALYTICS=true
+    volumes:
+      - ./services/librechat/meili_data_v1.12:/meili_data
+    networks:
+      - harbor-network
+
+  librechat-vector:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.librechat-vector
+    image: ankane/pgvector:latest
+    env_file:
+      - ./.env
+      - ./services/librechat/.env
+      - ./services/librechat/override.env
+    environment:
+      POSTGRES_DB: mydatabase
+      POSTGRES_USER: myuser
+      POSTGRES_PASSWORD: mypassword
+    volumes:
+      - ./services/librechat/vectordb:/var/lib/postgresql/data
+    networks:
+      - harbor-network
+
+  librechat-rag:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.librechat-rag
+    image: ghcr.io/danny-avila/librechat-rag-api-dev-lite:latest
+    environment:
+      - DB_HOST=librechat-vector
+      - RAG_PORT=${HARBOR_LIBRECHAT_RAG_HOST_PORT}
+      - EMBEDDINGS_PROVIDER=ollama
+      - OLLAMA_BASE_URL=${HARBOR_OLLAMA_INTERNAL_URL}
+      - EMBEDDINGS_MODEL=mxbai-embed-large
+    depends_on:
+      - librechat-vector
+    env_file:
+      - .env
+      - ./services/librechat/.env
+      - ./services/librechat/override.env
+    networks:
+      - harbor-network

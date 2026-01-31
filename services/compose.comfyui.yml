@@ -1,0 +1,42 @@
+services:
+  comfyui:
+    env_file:
+      - ./.env
+      - ./services/comfyui/override.env
+    container_name: ${HARBOR_CONTAINER_PREFIX}.comfyui
+    image: ghcr.io/ai-dock/comfyui:${HARBOR_COMFYUI_VERSION}
+    environment:
+      # Auto-update - should be done with "harbor comfyui version" and
+      # docker image pinning
+      # - AUTO_UPDATE=false
+      # Should not establish tunnels by default, "harbor tunnel"
+      # should be used instead
+      - CF_QUICK_TUNNELS=false
+      # Ensure that workspace is synced automatically
+      # - WORKSPACE_SYNC=true
+      - WORKSPACE=/workspace
+
+      # Ports
+      - COMFYUI_PORT_HOST=${HARBOR_COMFYUI_HOST_PORT}
+      - SERVICEPORTAL_PORT_HOST=${HARBOR_COMFYUI_PORTAL_HOST_PORT}
+      - SYNCTHING_UI_PORT_HOST=${HARBOR_COMFYUI_SYNCTHING_HOST_PORT}
+
+      # Env settings
+      - WEB_ENABLE_AUTH=${HARBOR_COMFYUI_AUTH}
+      - WEB_USER=${HARBOR_COMFYUI_USER}
+      - WEB_PASSWORD=${HARBOR_COMFYUI_PASSWORD}
+      - WEB_TOKEN=${HARBOR_COMFYUI_PASSWORD}
+      - HF_TOKEN=${HARBOR_HF_TOKEN}
+      - CIVITAI_TOKEN=${HARBOR_CIVITAI_TOKEN}
+      - COMFYUI_ARGS=${HARBOR_COMFYUI_ARGS}
+      - PROVISIONING_SCRIPT=${HARBOR_COMFYUI_PROVISIONING}
+    ports:
+      - ${HARBOR_COMFYUI_HOST_PORT}:${HARBOR_COMFYUI_HOST_PORT}
+      - ${HARBOR_COMFYUI_PORTAL_HOST_PORT}:${HARBOR_COMFYUI_PORTAL_HOST_PORT}
+      - ${HARBOR_COMFYUI_SYNCTHING_HOST_PORT}:${HARBOR_COMFYUI_SYNCTHING_HOST_PORT}
+    volumes:
+      - ${HARBOR_COMFYUI_WORKSPACE}:/workspace
+      - ./services/comfyui/packages:/opt/comfyui-packages
+    networks:
+      - harbor-network
+

@@ -1,0 +1,33 @@
+services:
+  jupyter:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.jupyter
+    env_file:
+      - ./.env
+      - ./services/jupyter/override.env
+    build:
+      context: ./jupyter
+      dockerfile: Dockerfile
+      args:
+        HARBOR_JUPYTER_IMAGE: ${HARBOR_JUPYTER_IMAGE}
+        HARBOR_JUPYTER_EXTRA_DEPS: ${HARBOR_JUPYTER_EXTRA_DEPS}
+    ports:
+      - ${HARBOR_JUPYTER_HOST_PORT}:8888
+    command: [
+      "jupyter", "lab",
+      "--port=8888", "--ip=0.0.0.0",
+      "--allow-root", "--browser=false", "--no-browser",
+      "--IdentityProvider.token=''",
+      "--ServerApp.password=''",
+      "--allow_remote_access=true",
+      "--NotebookApp.disable_check_xsrf=True",
+    ]
+    volumes:
+      - ${HARBOR_JUPYTER_WORKSPACE}:/app/workspace
+      - ${HARBOR_HF_CACHE}:/root/.cache/huggingface
+      - ${HARBOR_VLLM_CACHE}:/root/.cache/vllm
+      - ${HARBOR_LLAMACPP_CACHE}:/root/.cache/llama.cpp
+      - ${HARBOR_OLLAMA_CACHE}:/root/.ollama
+    networks:
+      - harbor-network
+    environment:
+      - HF_TOKEN=${HARBOR_HF_TOKEN}

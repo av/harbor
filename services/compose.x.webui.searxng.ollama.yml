@@ -1,0 +1,4 @@
+services:
+  webui:
+    volumes:
+      - ./services/open-webui/configs/config.x.searxng.ollama.json:/app/configs/config.x.searxng.ollama.json

@@ -1,4 +1,0 @@
-services:
-  cmdh:
-    volumes:
-      - ./cmdh/harbor.prompt:/app/system.prompt

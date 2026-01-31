@@ -332,9 +332,9 @@ has_modern_compose() {
 __anchor_fns=true
 
 resolve_compose_files() {
-    # Find all .yml files in the specified base directory,
+    # Find all .yml files in the services directory,
     # but do not go into subdirectories
-    find "$base_dir" -maxdepth 1 -name "*.yml" |
+    find "$harbor_home/services" -maxdepth 1 -name "*.yml" |
         # For each file, count the number of dots in the filename
         # and prepend this count to the filename
         awk -F. '{print NF-1, $0}' |
@@ -3607,7 +3607,7 @@ run_comfyui_workspace_command() {
     case "$1" in
     open)
         shift
-        sys_open "$harbor_home/comfyui/workspace"
+        sys_open "$harbor_home/services/comfyui/workspace"
         ;;
     sync)
         shift
@@ -3652,7 +3652,7 @@ run_comfyui_command() {
         ;;
     output)
         shift
-        sys_open "$harbor_home/comfyui/workspace/ComfyUI/output"
+        sys_open "$harbor_home/services/comfyui/workspace/ComfyUI/output"
         ;;
     -h | --help | help)
         echo "Please note that this is not ComfyUI CLI, but a Harbor CLI to manage ComfyUI service."

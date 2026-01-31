@@ -1,0 +1,4 @@
+services:
+  webui:
+    volumes:
+      - ./services/open-webui/configs/config.x.mcpo.metamcp.json:/app/configs/config.x.mcpo.metamcp.json

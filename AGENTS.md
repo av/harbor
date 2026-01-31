@@ -26,11 +26,13 @@ When user shows you a new or not obvious command for you - document it in this A
 Important locations:
 - '.' - root, also referred to as `$(harbor home)`
 - `harbor.sh` - the main CLI script, it is very large and complex, but it contains the main entry point for the CLI
+- `/services` - **all service directories and compose files** (e.g., `services/ollama/`, `services/compose.ollama.yml`)
 - `/app` - the Tauri app that provides a GUI for managing services
 - `/docs` - documentation for the project and services
 - `/routines` - part of the CLI that was rewritten in Deno
 - `/.scripts` - scripts for development tasks, written in Deno and Bash
 - `/profiles/default.env` - default harbor config that will be distributed to the users
+- `compose.yml` - base compose file at root (always included)
 
 The CLI is already installed globally for your tests, you may run `harbor <command>` directly.
 
@@ -77,7 +79,7 @@ harbor config update
 
 ### Cross-file Patterns (Service Integration)
 
-Cross-files (`compose.x.<service>.<integration>.yml`) are applied when multiple services are running together. This is the standard way to integrate services like Ollama into supporting satellites.
+Cross-files (`services/compose.x.<service>.<integration>.yml`) are applied when multiple services are running together. This is the standard way to integrate services like Ollama into supporting satellites.
 
 **Pattern:** When a satellite service can use Ollama (or another backend), create a cross-file that:
 1. Adds `depends_on` for the backend service
@@ -85,7 +87,7 @@ Cross-files (`compose.x.<service>.<integration>.yml`) are applied when multiple 
 3. Sets environment variables for the integration
 4. Overrides entrypoint if config rendering is needed at startup
 
-**Example:** `compose.x.photoprism.ollama.yml` adds vision model config only when PhotoPrism runs with Ollama.
+**Example:** `services/compose.x.photoprism.ollama.yml` adds vision model config only when PhotoPrism runs with Ollama.
 
 ### Configurable Models and Backends
 

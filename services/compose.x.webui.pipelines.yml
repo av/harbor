@@ -1,0 +1,4 @@
+services:
+  webui:
+    volumes:
+      - ./services/open-webui/configs/config.pipelines.json:/app/configs/config.pipelines.json

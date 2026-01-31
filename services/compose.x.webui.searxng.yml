@@ -1,0 +1,6 @@
+services:
+  webui:
+    volumes:
+      - ./services/open-webui/configs/config.searxng.json:/app/configs/config.searxng.json
+    environment:
+      - SEARXNG_QUERY_URL=${HARBOR_SEARXNG_INTERNAL_URL}/search?q=<query>

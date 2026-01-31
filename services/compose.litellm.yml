@@ -1,0 +1,51 @@
+services:
+  litellm:
+    image: ghcr.io/berriai/litellm:main-stable
+    env_file:
+      - ./.env
+      - ./services/litellm/override.env
+    container_name: ${HARBOR_CONTAINER_PREFIX}.litellm
+    volumes:
+    # Additional config file volumes will be appended when
+    # LiteLLM is combined with other services
+      - ./services/litellm/litellm.config.yaml:/app/litellm/config.yaml
+      - ./services/litellm/start_litellm.sh:/app/litellm/start_litellm.sh
+      - ./shared/yaml_config_merger.py:/app/yaml_config_merger.py
+    # Note that this config is "assembled" from
+    # the parts that implement relevant service
+    # compatibility, such as vllm or tgi or langfuse.
+    # See individual parts in the ./litellm folder
+    command: ['--config', '/app/proxy.yaml']
+    entrypoint: ["/app/litellm/start_litellm.sh"]
+    depends_on:
+      litellm-db:
+        condition: service_healthy
+    ports:
+      - ${HARBOR_LITELLM_HOST_PORT}:4000
+    networks:
+      - harbor-network
+    environment:
+      - LITELLM_MASTER_KEY=${HARBOR_LITELLM_MASTER_KEY}
+      - DATABASE_URL=postgresql://postgres:postgres@litellm-db:5432/postgres
+      - UI_USERNAME=${HARBOR_LITELLM_UI_USERNAME}
+      - UI_PASSWORD=${HARBOR_LITELLM_UI_PASSWORD}
+
+  litellm-db:
+    image: postgres:18
+    restart: always
+    container_name: ${HARBOR_CONTAINER_PREFIX}.litellm-db
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=postgres
+    ports:
+      - ${HARBOR_LITELLM_DB_HOST_PORT}:5432
+    volumes:
+      - ./services/litellm/db:/var/lib/postgresql
+    networks:
+      - harbor-network
