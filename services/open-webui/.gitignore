@@ -1,0 +1,4 @@
+config.json
+cache/
+uploads/
+vector_db/
