@@ -1,4 +1,4 @@
 services:
   webui:
     volumes:
-      - ./services/open-webui/configs/config.boost.json:/app/configs/config.boost.json
+      - ./services/webui/configs/config.boost.json:/app/configs/config.boost.json

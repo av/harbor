@@ -107,6 +107,9 @@ qdrant/storage
 # Merged compose
 __harbor.yml
 
+# Migration backups
+.migration-backup-*
+
 .cache
 .local
 .npm

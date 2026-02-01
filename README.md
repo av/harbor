@@ -34,10 +34,20 @@ Harbor is a CLI and companion app that lets you spin up a complete local LLM sta
 
 ![Screenshot of Harbor CLI and App together](https://github.com/av/harbor/wiki/harbor-app-3.png)
 
+> **🔄 Migrating to Harbor 0.4.0?**
+>
+> Harbor 0.4.0 introduces a new directory structure where all service files are organized in a `services/` directory for better maintainability and a cleaner root directory.
+>
+> **Existing users:** Run `harbor migrate --dry-run` to preview changes, then `harbor migrate` to upgrade. See the [Migration Guide](docs/0.4.0-Migration-Guide.md) for details.
+>
+> **New users:** No action needed—everything is already organized!
+
 ## Documentation
 
 - [Installing Harbor](https://github.com/av/harbor/wiki/1.0.-Installing-Harbor)<br/>
   Guides to install Harbor CLI and App
+- [**Migration Guide (v0.4.0)**](docs/0.4.0-Migration-Guide.md)<br/>
+  **Important:** Guide for upgrading to Harbor 0.4.0 with the new directory structure
 - [Harbor User Guide](https://github.com/av/harbor/wiki/1.-Harbor-User-Guide)<br/>
   High-level overview of working with Harbor
 - [Harbor App](https://github.com/av/harbor/wiki/1.1-Harbor-App)<br/>

@@ -1,4 +1,4 @@
 services:
   webui:
     volumes:
-      - ./services/open-webui/configs/config.ollama.json:/app/configs/config.ollama.json
+      - ./services/webui/configs/config.ollama.json:/app/configs/config.ollama.json

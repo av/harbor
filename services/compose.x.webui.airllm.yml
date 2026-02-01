@@ -1,4 +1,4 @@
 services:
   webui:
     volumes:
-      - ./services/open-webui/configs/config.airllm.json:/app/configs/config.airllm.json
+      - ./services/webui/configs/config.airllm.json:/app/configs/config.airllm.json

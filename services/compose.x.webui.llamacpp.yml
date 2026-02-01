@@ -1,4 +1,4 @@
 services:
   webui:
     volumes:
-      - ./services/open-webui/configs/config.llamacpp.json:/app/configs/config.llamacpp.json
+      - ./services/webui/configs/config.llamacpp.json:/app/configs/config.llamacpp.json

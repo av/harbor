@@ -1,4 +1,4 @@
 services:
   webui:
     volumes:
-      - ./services/open-webui/configs/config.kobold.json:/app/configs/config.kobold.json
+      - ./services/webui/configs/config.kobold.json:/app/configs/config.kobold.json

@@ -1,4 +1,4 @@
 services:
   webui:
     volumes:
-      - ./services/open-webui/configs/config.nexa.json:/app/configs/config.nexa.json
+      - ./services/webui/configs/config.nexa.json:/app/configs/config.nexa.json

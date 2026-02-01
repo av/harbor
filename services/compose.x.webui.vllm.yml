@@ -1,4 +1,4 @@
 services:
   webui:
     volumes:
-      - ./services/open-webui/configs/config.vllm.json:/app/configs/config.vllm.json
+      - ./services/webui/configs/config.vllm.json:/app/configs/config.vllm.json

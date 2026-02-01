@@ -1,4 +1,4 @@
 services:
   webui:
     volumes:
-      - ./services/open-webui/configs/config.sglang.json:/app/configs/config.sglang.json
+      - ./services/webui/configs/config.sglang.json:/app/configs/config.sglang.json

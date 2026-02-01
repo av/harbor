@@ -1,4 +1,4 @@
 services:
   webui:
     volumes:
-      - ./services/open-webui/configs/config.optillm.json:/app/configs/config.optillm.json
+      - ./services/webui/configs/config.optillm.json:/app/configs/config.optillm.json

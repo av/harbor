@@ -2414,6 +2414,31 @@ update_harbor() {
     log_info "Harbor updated successfully."
 }
 
+run_migrate_command() {
+    case "$1" in
+    -h | --help | help)
+        echo "Harbor 0.4.0 Migration Tool"
+        echo
+        echo "Usage: harbor migrate [options]"
+        echo
+        echo "Options:"
+        echo "  --dry-run           Preview migration without making changes"
+        echo "  --force             Skip confirmation prompts"
+        echo "  --rollback=<dir>    Rollback migration from backup directory"
+        echo "  -h, --help          Show this help message"
+        echo
+        echo "This command migrates your Harbor installation to the new 0.4.0 structure"
+        echo "where all service files are organized in the services/ directory."
+        echo
+        echo "See docs/0.4.0-Migration-Guide.md for more information."
+        ;;
+    *)
+        log_debug "Running migration script"
+        deno run -A --unstable-sloppy-imports "$harbor_home/.scripts/migrate-0.4.0.ts" "$@"
+        ;;
+    esac
+}
+
 get_active_services() {
     docker compose ps --format "{{.Service}}" | tr '\n' ' '
 }
@@ -2645,7 +2670,7 @@ run_harbor_env() {
         fi
     fi
 
-    local env_file="$service/override.env"
+    local env_file="services/$service/override.env"
 
     log_debug "'env' $env_file - $mgr_cmd $env_var $env_val"
 
@@ -4994,6 +5019,10 @@ main_entrypoint() {
         shift
         run_mcp_command "$@"
         ;;
+    migrate)
+        shift
+        run_migrate_command "$@"
+        ;;
     modularmax)
         shift
         run_modularmax_command "$@"
@@ -5087,6 +5116,76 @@ main_entrypoint() {
         ;;
     esac
 }
+
+check_migration_needed() {
+    # Skip check for certain commands that don't need migration check
+    local skip_commands="migrate|help|--help|-h|version|--version|-v"
+    if [[ "$1" =~ ^($skip_commands)$ ]]; then
+        return 0
+    fi
+
+    # Check if services directory exists and is populated
+    if [ -d "$harbor_home/services" ]; then
+        # Check if services directory has content
+        if [ -n "$(ls -A "$harbor_home/services" 2>/dev/null)" ]; then
+            # Services directory exists and has content, assume migrated
+            return 0
+        fi
+    fi
+
+    # Check for service directories at root (excluding known infrastructure dirs)
+    local has_old_structure=false
+    local exclude_pattern="^(app|docs|routines|scripts|profiles|shared|harbor|tools|skills|services|node_modules|dist|\..*)$"
+    
+    while IFS= read -r dir; do
+        local basename=$(basename "$dir")
+        if [[ ! "$basename" =~ $exclude_pattern ]]; then
+            # Check if this looks like a service directory (has corresponding compose file)
+            if [ -f "$harbor_home/compose.$basename.yml" ] || [ -f "$harbor_home/compose.$basename.ts" ]; then
+                has_old_structure=true
+                break
+            fi
+        fi
+    done < <(find "$harbor_home" -maxdepth 1 -type d 2>/dev/null)
+
+    # Check for compose files at root (excluding base compose.yml)
+    if [ "$has_old_structure" = false ]; then
+        if ls "$harbor_home"/compose.*.yml "$harbor_home"/compose.*.ts 2>/dev/null | grep -v "^$harbor_home/compose.yml$" >/dev/null; then
+            has_old_structure=true
+        fi
+    fi
+
+    if [ "$has_old_structure" = true ]; then
+        echo ""
+        echo "╔════════════════════════════════════════════════════════════╗"
+        echo "║                  🔄 MIGRATION REQUIRED                     ║"
+        echo "╚════════════════════════════════════════════════════════════╝"
+        echo ""
+        echo "Harbor 0.4.0 introduces a new directory structure."
+        echo "Your installation needs to be migrated to continue."
+        echo ""
+        echo "What changed:"
+        echo "  • Service files moved to services/ directory"
+        echo "  • Cleaner root directory structure"
+        echo "  • Better organization and maintainability"
+        echo ""
+        echo "To migrate your installation:"
+        echo "  1. Review changes: ${c_g}harbor migrate --dry-run${c_nc}"
+        echo "  2. Run migration:  ${c_g}harbor migrate${c_nc}"
+        echo "  3. Learn more:     ${c_g}docs/0.4.0-Migration-Guide.md${c_nc}"
+        echo ""
+        echo "The migration is safe and includes automatic backups."
+        echo ""
+        
+        # Don't exit, just warn for now to allow migrate command to run
+        return 0
+    fi
+
+    return 0
+}
+
+# Check if migration is needed (but don't block execution)
+check_migration_needed "$1"
 
 # Call the main logic with argument swapping
 if ! swap_and_retry main_entrypoint "$@"; then

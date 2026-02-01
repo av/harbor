@@ -1,4 +1,4 @@
 services:
   webui:
     volumes:
-      - ./services/open-webui/configs/config.modularmax.json:/app/configs/config.modularmax.json
+      - ./services/webui/configs/config.modularmax.json:/app/configs/config.modularmax.json
