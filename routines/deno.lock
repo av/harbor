@@ -3,7 +3,8 @@
   "specifiers": {
     "jsr:@std/collections@*": "1.0.10",
     "jsr:@std/fmt@*": "1.0.5",
-    "jsr:@std/yaml@*": "1.0.5"
+    "jsr:@std/yaml@*": "1.0.5",
+    "npm:@types/node@*": "22.15.15"
   },
   "jsr": {
     "@std/collections@1.0.10": {
@@ -14,6 +15,17 @@
     },
     "@std/yaml@1.0.5": {
       "integrity": "71ba3d334305ee2149391931508b2c293a8490f94a337eef3a09cade1a2a2742"
+    }
+  },
+  "npm": {
+    "@types/node@22.15.15": {
+      "integrity": "sha512-R5muMcZob3/Jjchn5LcO8jdKwSCbzqmPB6ruBxMcf9kbxtniZHP327s6C37iOfuw8mbKK3cAQa7sEl7afLrQ8A==",
+      "dependencies": [
+        "undici-types"
+      ]
+    },
+    "undici-types@6.21.0": {
+      "integrity": "sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ=="
     }
   }
 }

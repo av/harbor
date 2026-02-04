@@ -162,6 +162,7 @@ services:
     build:
       context: ./dify/openai
       dockerfile: Dockerfile
+      network: host
     container_name: ${HARBOR_CONTAINER_PREFIX}.dify-openai
     ports:
       - ${HARBOR_DIFY_D2O_HOST_PORT}:3000
