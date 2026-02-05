@@ -854,6 +854,20 @@ ${colors.reset}
     }
   }
 
+  // Fix filesystem permissions before migration
+  if (!args["dry-run"]) {
+    log("INFO", "Running harbor fixfs to fix filesystem permissions...");
+    const fixfsCommand = new Deno.Command("harbor", {
+      args: ["fixfs"],
+      stdout: "inherit",
+      stderr: "inherit",
+    });
+    const fixfsResult = await fixfsCommand.output();
+    if (!fixfsResult.success) {
+      log("WARN", "harbor fixfs returned non-zero exit code, but continuing migration");
+    }
+  }
+
   // Step 2: Detection
   log("INFO", "Step 2/5: Detecting files to migrate");
   const plan = await detectMigration();

@@ -2366,20 +2366,74 @@ docker_fsacl() {
 }
 
 run_fixfs() {
-    docker_fsacl .
+    local uid=$(id -u)
+    local gid=$(id -g)
 
-    docker_fsacl $(eval echo "$(env_manager get hf.cache)")
-    docker_fsacl $(eval echo "$(env_manager get vllm.cache)")
-    docker_fsacl $(eval echo "$(env_manager get llamacpp.cache)")
-    docker_fsacl $(eval echo "$(env_manager get ollama.cache)")
-    docker_fsacl $(eval echo "$(env_manager get parllama.cache)")
-    docker_fsacl $(eval echo "$(env_manager get opint.config.path)")
-    docker_fsacl $(eval echo "$(env_manager get fabric.config.path)")
-    docker_fsacl $(eval echo "$(env_manager get txtai.cache)")
-    docker_fsacl $(eval echo "$(env_manager get nexa.cache)")
-    docker_fsacl $(eval echo "$(env_manager get aichat.config_path)")
-    docker_fsacl $(eval echo "$(env_manager get comfyui.workspace)")
-    docker_fsacl $(eval echo "$(env_manager get openclaw.config_dir)")
+    # Collect all paths that need fixing
+    local paths=(
+        "."
+        "$(eval echo "$(env_manager get hf.cache)")"
+        "$(eval echo "$(env_manager get vllm.cache)")"
+        "$(eval echo "$(env_manager get llamacpp.cache)")"
+        "$(eval echo "$(env_manager get ollama.cache)")"
+        "$(eval echo "$(env_manager get parllama.cache)")"
+        "$(eval echo "$(env_manager get opint.config.path)")"
+        "$(eval echo "$(env_manager get fabric.config.path)")"
+        "$(eval echo "$(env_manager get txtai.cache)")"
+        "$(eval echo "$(env_manager get nexa.cache)")"
+        "$(eval echo "$(env_manager get aichat.config_path)")"
+        "$(eval echo "$(env_manager get comfyui.workspace)")"
+        "$(eval echo "$(env_manager get openclaw.config_dir)")"
+    )
+
+    # Create missing directories and build volume mounts
+    local volume_args=()
+    local chown_commands=()
+    local counter=0
+
+    for path in "${paths[@]}"; do
+        # Skip empty paths
+        [[ -z "$path" ]] && continue
+
+        # Create directory if missing
+        if [[ ! -e "$path" ]]; then
+            log_debug "fixfs: creating missing directory: $path"
+            mkdir -p "$path" || {
+                log_warn "fixfs: failed to create directory: $path"
+                continue
+            }
+        fi
+
+        # Convert to absolute path and add to volume mounts
+        local abs_path=$(realpath "$path")
+        volume_args+=("-v" "$abs_path:/target$counter")
+        chown_commands+=("chown -R $uid:$gid /target$counter")
+        ((counter++))
+    done
+
+    # Run single container if we have paths to fix
+    if [[ ${#volume_args[@]} -gt 0 ]]; then
+        log_info "Fixing permissions for $counter volume(s)..."
+
+        # Build chown script by joining commands with &&
+        local chown_script
+        chown_script=$(printf '%s && ' "${chown_commands[@]}")
+        chown_script="${chown_script% && }"  # Remove trailing ' && '
+
+        docker run --rm \
+            --entrypoint sh \
+            "${volume_args[@]}" \
+            -u root \
+            denoland/deno:alpine \
+            -c "$chown_script" || {
+            log_warn "Failed to fix permissions for some volumes"
+            return 1
+        }
+
+        log_info "Successfully fixed permissions"
+    else
+        log_warn "No valid paths found to fix"
+    fi
 }
 
 open_home_code() {
