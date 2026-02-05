@@ -2371,7 +2371,7 @@ run_fixfs() {
 
     # Collect all paths that need fixing
     local paths=(
-        "."
+        "$harbor_home"
         "$(eval echo "$(env_manager get hf.cache)")"
         "$(eval echo "$(env_manager get vllm.cache)")"
         "$(eval echo "$(env_manager get llamacpp.cache)")"
