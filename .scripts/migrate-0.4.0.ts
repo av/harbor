@@ -457,11 +457,43 @@ async function performMigration(plan: MigrationPlan, dryRun: boolean): Promise<M
       try {
         // Check if destination already exists
         if (await exists(destPath)) {
-          log("WARN", `  Destination already exists: services/${targetDir}/, skipping`);
-          continue;
+          // Check if destination is empty or minimal (just config files from git)
+          const srcSize = await getDirSize(srcPath);
+          const destSize = await getDirSize(destPath);
+          
+          // If source has significant data (>1MB) and dest is minimal (<10MB), merge them
+          if (srcSize > 1024 * 1024 && destSize < 10 * 1024 * 1024) {
+            log("INFO", `  Destination exists but is minimal (${formatBytes(destSize)}), will merge with source (${formatBytes(srcSize)})`);
+          } else if (srcSize > 1024 * 1024 && destSize > 10 * 1024 * 1024) {
+            // Both have significant data - manual intervention needed
+            const errMsg = `Both ${srcPath} (${formatBytes(srcSize)}) and ${destPath} (${formatBytes(destSize)}) contain significant data. Manual merge required.`;
+            log("ERROR", `  ${errMsg}`);
+            result.errors.push(errMsg);
+            result.success = false;
+            continue;
+          } else {
+            log("WARN", `  Destination already exists: services/${targetDir}/, skipping`);
+            continue;
+          }
+        } else {
+          // Destination doesn't exist, create it
+          await ensureDir(destPath);
         }
 
-        await Deno.rename(srcPath, destPath);
+        // Use rsync to handle root-owned files and merge safely
+        const rsyncCommand = new Deno.Command("rsync", {
+          args: ["-a", `${srcPath}/`, `${destPath}/`],
+        });
+        const rsyncResult = await rsyncCommand.output();
+        
+        if (!rsyncResult.success) {
+          const stderr = new TextDecoder().decode(rsyncResult.stderr);
+          throw new Error(`rsync failed: ${stderr}`);
+        }
+        
+        // Remove source directory after successful rsync
+        await Deno.remove(srcPath, { recursive: true });
+        
         if (dir !== targetDir) {
           log("SUCCESS", `  Moved and renamed: ${dir}/ → services/${targetDir}/`);
           result.renamedItems.push({ from: dir, to: `services/${targetDir}` });
@@ -500,11 +532,37 @@ async function performMigration(plan: MigrationPlan, dryRun: boolean): Promise<M
       try {
         // Check if destination already exists
         if (await exists(destPath)) {
-          log("WARN", `  Destination already exists: services/${targetFile}, skipping`);
-          continue;
+          // For compose files, compare content to see if they're identical
+          try {
+            const srcContent = await Deno.readTextFile(srcPath);
+            const destContent = await Deno.readTextFile(destPath);
+            
+            if (srcContent === destContent) {
+              log("INFO", `  Destination exists with identical content: services/${targetFile}, removing source`);
+              await Deno.remove(srcPath);
+              result.movedFiles.push(file);
+              continue;
+            } else {
+              log("INFO", `  Destination exists with different content, replacing with source: services/${targetFile}`);
+              await Deno.remove(destPath);
+            }
+          } catch {
+            // If we can't read/compare, assume they're different and replace
+            await Deno.remove(destPath);
+          }
         }
 
-        await Deno.rename(srcPath, destPath);
+        // Use mv command for consistency
+        const mvCommand = new Deno.Command("mv", {
+          args: [srcPath, destPath],
+        });
+        const mvResult = await mvCommand.output();
+        
+        if (!mvResult.success) {
+          const stderr = new TextDecoder().decode(mvResult.stderr);
+          throw new Error(`mv failed: ${stderr}`);
+        }
+        
         if (file !== targetFile) {
           log("SUCCESS", `  Moved and renamed: ${file} → services/${targetFile}`);
           result.renamedItems.push({ from: file, to: `services/${targetFile}` });
@@ -545,7 +603,17 @@ async function performMigration(plan: MigrationPlan, dryRun: boolean): Promise<M
             continue;
           }
 
-          await Deno.rename(srcPath, destPath);
+          // Use mv command to handle all cases consistently
+          const mvCommand = new Deno.Command("mv", {
+            args: [srcPath, destPath],
+          });
+          const mvResult = await mvCommand.output();
+          
+          if (!mvResult.success) {
+            const stderr = new TextDecoder().decode(mvResult.stderr);
+            throw new Error(`mv failed: ${stderr}`);
+          }
+          
           log("SUCCESS", `  Renamed: ${rename.from} → ${rename.to}`);
           result.renamedItems.push({ from: rename.from, to: rename.to });
         } catch (error) {

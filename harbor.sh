@@ -2336,20 +2336,33 @@ hf_spec_2_folder_spec() {
 
 docker_fsacl() {
     local folder=$1
-    log_debug "fsacl: $folder"
-
-    # 1000, 1001, 1002 - most frequent default users on Debian
-    # 100 - most frequent default on Alpine
-    # 911 - "abc" user from LinuxServer.io images
-    # 101 - clickhouse
-    # 1032 - libretranslate
-    sudo setfacl --recursive -m user:1000:rwx $folder &&
-        sudo setfacl --recursive -m user:1002:rwx $folder &&
-        sudo setfacl --recursive -m user:1001:rwx $folder &&
-        sudo setfacl --recursive -m user:100:rwx $folder &&
-        sudo setfacl --recursive -m user:911:rwx $folder &&
-        sudo setfacl --recursive -m user:101:rwx $folder &&
-        sudo setfacl --recursive -m user:1032:rwx $folder
+    
+    # Skip if folder doesn't exist
+    if [[ ! -e "$folder" ]]; then
+        log_debug "fsacl: skipping non-existent path: $folder"
+        return 0
+    fi
+    
+    # Get host user's uid/gid to set ownership correctly
+    local uid=$(id -u)
+    local gid=$(id -g)
+    
+    log_debug "fsacl: $folder (chown to $uid:$gid)"
+    
+    # Convert to absolute path (required for Docker volume mount)
+    local abs_folder=$(realpath "$folder")
+    
+    # Spawn container as root to fix ownership
+    # Using Deno Alpine image which includes standard Unix tools
+    docker run --rm \
+        --entrypoint sh \
+        -v "$abs_folder:/target" \
+        -u root \
+        denoland/deno:alpine \
+        -c "chown -R $uid:$gid /target" || {
+        log_warn "Failed to fix permissions for: $folder"
+        return 1
+    }
 }
 
 run_fixfs() {
