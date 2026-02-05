@@ -47,6 +47,7 @@ interface MigrationPlan {
   serviceDirs: string[];
   composeFiles: string[];
   needsMigration: boolean;
+  renames: { from: string; to: string; type: 'dir' | 'file' }[];
 }
 
 interface MigrationResult {
@@ -54,6 +55,7 @@ interface MigrationResult {
   backupDir?: string;
   movedDirs: string[];
   movedFiles: string[];
+  renamedItems: { from: string; to: string }[];
   errors: string[];
 }
 
@@ -94,6 +96,16 @@ async function isServiceDirectory(dir: string): Promise<boolean> {
 
   // Check if there's a corresponding compose file
   const harborHome = Deno.cwd();
+
+  // Special case: open-webui directory should be treated as a service directory
+  // even though its compose files are named "webui"
+  if (dirName === "open-webui") {
+    const webuiComposeFile = join(harborHome, "compose.webui.yml");
+    if (await exists(webuiComposeFile)) {
+      return true;
+    }
+  }
+
   const possibleComposeFiles = [
     join(harborHome, `compose.${dirName}.yml`),
     join(harborHome, `compose.${dirName}.ts`),
@@ -108,6 +120,46 @@ async function isServiceDirectory(dir: string): Promise<boolean> {
   }
 
   return false;
+}
+
+async function detectOpenWebuiRenames(): Promise<{ from: string; to: string; type: 'dir' | 'file' }[]> {
+  const harborHome = Deno.cwd();
+  const renames: { from: string; to: string; type: 'dir' | 'file' }[] = [];
+
+  // Only check for open-webui directory/files in services/ (already migrated)
+  // Files at root will be handled during the move operation
+  const servicesOpenWebui = join(harborHome, "services", "open-webui");
+  if (await exists(servicesOpenWebui)) {
+    try {
+      const stat = await Deno.stat(servicesOpenWebui);
+      if (stat.isDirectory) {
+        renames.push({ from: "services/open-webui", to: "services/webui", type: 'dir' });
+      }
+    } catch {
+      // Skip if can't stat
+    }
+  }
+
+  // Check for compose files with open-webui in services/ directory
+  const servicesDir = join(harborHome, "services");
+  if (await exists(servicesDir)) {
+    try {
+      for await (const entry of Deno.readDir(servicesDir)) {
+        if (entry.isFile && entry.name.includes("open-webui") && entry.name.match(/^compose\..+\.(yml|ts)$/)) {
+          const newName = entry.name.replace(/open-webui/g, "webui");
+          renames.push({
+            from: `services/${entry.name}`,
+            to: `services/${newName}`,
+            type: 'file'
+          });
+        }
+      }
+    } catch {
+      // Skip if can't read directory
+    }
+  }
+
+  return renames;
 }
 
 async function detectMigration(): Promise<MigrationPlan> {
@@ -141,12 +193,16 @@ async function detectMigration(): Promise<MigrationPlan> {
     }
   }
 
-  const needsMigration = serviceDirs.length > 0 || composeFiles.length > 0;
+  // Detect open-webui → webui renames
+  const renames = await detectOpenWebuiRenames();
+
+  const needsMigration = serviceDirs.length > 0 || composeFiles.length > 0 || renames.length > 0;
 
   return {
     serviceDirs,
     composeFiles,
     needsMigration,
+    renames,
   };
 }
 
@@ -263,6 +319,19 @@ async function createBackup(plan: MigrationPlan): Promise<string> {
     }
   }
 
+  // Check sizes of directories that will be renamed
+  for (const rename of plan.renames) {
+    if (rename.type === 'dir') {
+      const srcPath = join(harborHome, rename.from);
+      const size = await getDirSize(srcPath);
+      totalSize += size;
+
+      if (size > 100 * 1024 * 1024) { // > 100MB
+        log("WARN", `  ${rename.from}/: ${formatBytes(size)}`);
+      }
+    }
+  }
+
   if (totalSize > 1024 * 1024 * 1024) { // > 1GB
     log("WARN", `Total backup size will be approximately ${formatBytes(totalSize)}`);
     log("WARN", "Large directories contain data files that won't be modified during migration.");
@@ -276,6 +345,7 @@ async function createBackup(plan: MigrationPlan): Promise<string> {
   // Create subdirectories in backup
   await ensureDir(join(backupDir, "service-dirs"));
   await ensureDir(join(backupDir, "compose-files"));
+  await ensureDir(join(backupDir, "renames"));
 
   // Backup service directories
   for (const dir of plan.serviceDirs) {
@@ -292,6 +362,28 @@ async function createBackup(plan: MigrationPlan): Promise<string> {
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : String(error);
       log("WARN", `  Failed to backup directory ${dir}: ${errMsg}`);
+    }
+  }
+
+  // Backup items that will be renamed
+  for (const rename of plan.renames) {
+    const srcPath = join(harborHome, rename.from);
+    const destPath = join(backupDir, "renames", basename(rename.from));
+
+    try {
+      if (rename.type === 'dir') {
+        const command = new Deno.Command("cp", {
+          args: ["-r", srcPath, destPath],
+        });
+        await command.output();
+        log("INFO", `  Backed up directory for rename: ${rename.from}`);
+      } else {
+        await Deno.copyFile(srcPath, destPath);
+        log("INFO", `  Backed up file for rename: ${rename.from}`);
+      }
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : String(error);
+      log("WARN", `  Failed to backup ${rename.from}: ${errMsg}`);
     }
   }
 
@@ -333,6 +425,7 @@ async function performMigration(plan: MigrationPlan, dryRun: boolean): Promise<M
     success: true,
     movedDirs: [],
     movedFiles: [],
+    renamedItems: [],
     errors: [],
   };
 
@@ -346,21 +439,35 @@ async function performMigration(plan: MigrationPlan, dryRun: boolean): Promise<M
   log("INFO", `Migrating ${plan.serviceDirs.length} service directories...`);
   for (const dir of plan.serviceDirs) {
     const srcPath = join(harborHome, dir);
-    const destPath = join(servicesDir, dir);
+    // Rename open-webui to webui during migration
+    const targetDir = dir.replace(/open-webui/g, "webui");
+    const destPath = join(servicesDir, targetDir);
 
     if (dryRun) {
-      log("INFO", `  [DRY RUN] Would move: ${dir}/ → services/${dir}/`);
+      if (dir !== targetDir) {
+        log("INFO", `  [DRY RUN] Would move and rename: ${dir}/ → services/${targetDir}/`);
+      } else {
+        log("INFO", `  [DRY RUN] Would move: ${dir}/ → services/${dir}/`);
+      }
       result.movedDirs.push(dir);
+      if (dir !== targetDir) {
+        result.renamedItems.push({ from: dir, to: `services/${targetDir}` });
+      }
     } else {
       try {
         // Check if destination already exists
         if (await exists(destPath)) {
-          log("WARN", `  Destination already exists: services/${dir}/, skipping`);
+          log("WARN", `  Destination already exists: services/${targetDir}/, skipping`);
           continue;
         }
 
         await Deno.rename(srcPath, destPath);
-        log("SUCCESS", `  Moved: ${dir}/ → services/${dir}/`);
+        if (dir !== targetDir) {
+          log("SUCCESS", `  Moved and renamed: ${dir}/ → services/${targetDir}/`);
+          result.renamedItems.push({ from: dir, to: `services/${targetDir}` });
+        } else {
+          log("SUCCESS", `  Moved: ${dir}/ → services/${dir}/`);
+        }
         result.movedDirs.push(dir);
       } catch (error) {
         const errMsg = `Failed to move ${dir}: ${error instanceof Error ? error.message : String(error)}`;
@@ -375,27 +482,78 @@ async function performMigration(plan: MigrationPlan, dryRun: boolean): Promise<M
   log("INFO", `Migrating ${plan.composeFiles.length} compose files...`);
   for (const file of plan.composeFiles) {
     const srcPath = join(harborHome, file);
-    const destPath = join(servicesDir, file);
+    // Rename open-webui to webui during migration
+    const targetFile = file.replace(/open-webui/g, "webui");
+    const destPath = join(servicesDir, targetFile);
 
     if (dryRun) {
-      log("INFO", `  [DRY RUN] Would move: ${file} → services/${file}`);
+      if (file !== targetFile) {
+        log("INFO", `  [DRY RUN] Would move and rename: ${file} → services/${targetFile}`);
+      } else {
+        log("INFO", `  [DRY RUN] Would move: ${file} → services/${file}`);
+      }
       result.movedFiles.push(file);
+      if (file !== targetFile) {
+        result.renamedItems.push({ from: file, to: `services/${targetFile}` });
+      }
     } else {
       try {
         // Check if destination already exists
         if (await exists(destPath)) {
-          log("WARN", `  Destination already exists: services/${file}, skipping`);
+          log("WARN", `  Destination already exists: services/${targetFile}, skipping`);
           continue;
         }
 
         await Deno.rename(srcPath, destPath);
-        log("SUCCESS", `  Moved: ${file} → services/${file}`);
+        if (file !== targetFile) {
+          log("SUCCESS", `  Moved and renamed: ${file} → services/${targetFile}`);
+          result.renamedItems.push({ from: file, to: `services/${targetFile}` });
+        } else {
+          log("SUCCESS", `  Moved: ${file} → services/${file}`);
+        }
         result.movedFiles.push(file);
       } catch (error) {
         const errMsg = `Failed to move ${file}: ${error instanceof Error ? error.message : String(error)}`;
         log("ERROR", `  ${errMsg}`);
         result.errors.push(errMsg);
         result.success = false;
+      }
+    }
+  }
+
+  // Perform open-webui → webui renames
+  if (plan.renames.length > 0) {
+    log("INFO", `Renaming ${plan.renames.length} open-webui items to webui...`);
+    for (const rename of plan.renames) {
+      const srcPath = join(harborHome, rename.from);
+      const destPath = join(harborHome, rename.to);
+
+      if (dryRun) {
+        log("INFO", `  [DRY RUN] Would rename: ${rename.from} → ${rename.to}`);
+        result.renamedItems.push({ from: rename.from, to: rename.to });
+      } else {
+        try {
+          // Check if destination already exists
+          if (await exists(destPath)) {
+            log("WARN", `  Destination already exists: ${rename.to}, skipping rename`);
+            continue;
+          }
+
+          // Check if source exists
+          if (!await exists(srcPath)) {
+            log("WARN", `  Source not found: ${rename.from}, skipping rename`);
+            continue;
+          }
+
+          await Deno.rename(srcPath, destPath);
+          log("SUCCESS", `  Renamed: ${rename.from} → ${rename.to}`);
+          result.renamedItems.push({ from: rename.from, to: rename.to });
+        } catch (error) {
+          const errMsg = `Failed to rename ${rename.from}: ${error instanceof Error ? error.message : String(error)}`;
+          log("ERROR", `  ${errMsg}`);
+          result.errors.push(errMsg);
+          result.success = false;
+        }
       }
     }
   }
@@ -461,7 +619,7 @@ async function rollback(backupDir: string): Promise<boolean> {
   const metadata = JSON.parse(await Deno.readTextFile(metadataPath));
   const plan: MigrationPlan = metadata.plan;
 
-  log("INFO", `Restoring ${plan.serviceDirs.length} directories and ${plan.composeFiles.length} files...`);
+  log("INFO", `Restoring ${plan.serviceDirs.length} directories, ${plan.composeFiles.length} files, and ${plan.renames?.length || 0} renamed items...`);
 
   let success = true;
 
@@ -513,6 +671,44 @@ async function rollback(backupDir: string): Promise<boolean> {
       const errMsg = error instanceof Error ? error.message : String(error);
       log("ERROR", `  Failed to restore ${file}: ${errMsg}`);
       success = false;
+    }
+  }
+
+  // Restore renamed items
+  if (plan.renames && plan.renames.length > 0) {
+    for (const rename of plan.renames) {
+      const backupPath = join(backupDir, "renames", basename(rename.from));
+      const destPath = join(harborHome, rename.from);
+
+      try {
+        if (await exists(backupPath)) {
+          // Remove the renamed version if it exists
+          const renamedPath = join(harborHome, rename.to);
+          if (await exists(renamedPath)) {
+            if (rename.type === 'dir') {
+              await Deno.remove(renamedPath, { recursive: true });
+            } else {
+              await Deno.remove(renamedPath);
+            }
+          }
+
+          // Restore to original name
+          if (rename.type === 'dir') {
+            const command = new Deno.Command("cp", {
+              args: ["-r", backupPath, destPath],
+            });
+            await command.output();
+            log("SUCCESS", `  Restored renamed directory: ${rename.from}`);
+          } else {
+            await Deno.copyFile(backupPath, destPath);
+            log("SUCCESS", `  Restored renamed file: ${rename.from}`);
+          }
+        }
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : String(error);
+        log("ERROR", `  Failed to restore renamed item ${rename.from}: ${errMsg}`);
+        success = false;
+      }
     }
   }
 
@@ -604,6 +800,7 @@ ${colors.reset}
 ${colors.bold}Migration Plan:${colors.reset}
   Service directories to move: ${colors.yellow}${plan.serviceDirs.length}${colors.reset}
   Compose files to move:       ${colors.yellow}${plan.composeFiles.length}${colors.reset}
+  Items to rename:             ${colors.yellow}${plan.renames.length}${colors.reset}
 `);
 
   if (plan.serviceDirs.length > 0) {
@@ -614,6 +811,11 @@ ${colors.bold}Migration Plan:${colors.reset}
   if (plan.composeFiles.length > 0) {
     log("INFO", "Compose files:");
     plan.composeFiles.forEach(f => console.log(`    - ${f}`));
+  }
+
+  if (plan.renames.length > 0) {
+    log("INFO", "Renames (open-webui → webui):");
+    plan.renames.forEach(r => console.log(`    - ${r.from} → ${r.to}`));
   }
 
   // Step 3: Confirmation (unless --force or --dry-run)
@@ -651,6 +853,7 @@ Do you want to proceed? (yes/no): `);
 ${colors.bold}Dry Run Summary:${colors.reset}
   Would move ${result.movedDirs.length} directories
   Would move ${result.movedFiles.length} files
+  Would rename ${result.renamedItems.length} items
 
 Run without --dry-run to perform actual migration.
 `);
@@ -675,6 +878,7 @@ ${colors.green}${colors.bold}✓ Migration completed successfully!${colors.reset
 Summary:
   Moved ${result.movedDirs.length} service directories
   Moved ${result.movedFiles.length} compose files
+  Renamed ${result.renamedItems.length} items (open-webui → webui)
   Backup location: ${backupDir}
 
 ${colors.bold}Next Steps:${colors.reset}
