@@ -2336,22 +2336,22 @@ hf_spec_2_folder_spec() {
 
 docker_fsacl() {
     local folder=$1
-    
+
     # Skip if folder doesn't exist
     if [[ ! -e "$folder" ]]; then
         log_debug "fsacl: skipping non-existent path: $folder"
         return 0
     fi
-    
+
     # Get host user's uid/gid to set ownership correctly
     local uid=$(id -u)
     local gid=$(id -g)
-    
+
     log_debug "fsacl: $folder (chown to $uid:$gid)"
-    
+
     # Convert to absolute path (required for Docker volume mount)
     local abs_folder=$(realpath "$folder")
-    
+
     # Spawn container as root to fix ownership
     # Using Deno Alpine image which includes standard Unix tools
     docker run --rm \
@@ -5149,7 +5149,7 @@ check_migration_needed() {
     # Check for service directories at root (excluding known infrastructure dirs)
     local has_old_structure=false
     local exclude_pattern="^(app|docs|routines|scripts|profiles|shared|harbor|tools|skills|services|node_modules|dist|\..*)$"
-    
+
     while IFS= read -r dir; do
         local basename=$(basename "$dir")
         if [[ ! "$basename" =~ $exclude_pattern ]]; then
@@ -5189,7 +5189,7 @@ check_migration_needed() {
         echo ""
         echo "The migration is safe and includes automatic backups."
         echo ""
-        
+
         # Don't exit, just warn for now to allow migrate command to run
         return 0
     fi

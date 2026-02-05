@@ -460,7 +460,7 @@ async function performMigration(plan: MigrationPlan, dryRun: boolean): Promise<M
           // Check if destination is empty or minimal (just config files from git)
           const srcSize = await getDirSize(srcPath);
           const destSize = await getDirSize(destPath);
-          
+
           // If source has significant data (>1MB) and dest is minimal (<10MB), merge them
           if (srcSize > 1024 * 1024 && destSize < 10 * 1024 * 1024) {
             log("INFO", `  Destination exists but is minimal (${formatBytes(destSize)}), will merge with source (${formatBytes(srcSize)})`);
@@ -485,15 +485,15 @@ async function performMigration(plan: MigrationPlan, dryRun: boolean): Promise<M
           args: ["-a", `${srcPath}/`, `${destPath}/`],
         });
         const rsyncResult = await rsyncCommand.output();
-        
+
         if (!rsyncResult.success) {
           const stderr = new TextDecoder().decode(rsyncResult.stderr);
           throw new Error(`rsync failed: ${stderr}`);
         }
-        
+
         // Remove source directory after successful rsync
         await Deno.remove(srcPath, { recursive: true });
-        
+
         if (dir !== targetDir) {
           log("SUCCESS", `  Moved and renamed: ${dir}/ → services/${targetDir}/`);
           result.renamedItems.push({ from: dir, to: `services/${targetDir}` });
@@ -536,7 +536,7 @@ async function performMigration(plan: MigrationPlan, dryRun: boolean): Promise<M
           try {
             const srcContent = await Deno.readTextFile(srcPath);
             const destContent = await Deno.readTextFile(destPath);
-            
+
             if (srcContent === destContent) {
               log("INFO", `  Destination exists with identical content: services/${targetFile}, removing source`);
               await Deno.remove(srcPath);
@@ -557,12 +557,12 @@ async function performMigration(plan: MigrationPlan, dryRun: boolean): Promise<M
           args: [srcPath, destPath],
         });
         const mvResult = await mvCommand.output();
-        
+
         if (!mvResult.success) {
           const stderr = new TextDecoder().decode(mvResult.stderr);
           throw new Error(`mv failed: ${stderr}`);
         }
-        
+
         if (file !== targetFile) {
           log("SUCCESS", `  Moved and renamed: ${file} → services/${targetFile}`);
           result.renamedItems.push({ from: file, to: `services/${targetFile}` });
@@ -608,12 +608,12 @@ async function performMigration(plan: MigrationPlan, dryRun: boolean): Promise<M
             args: [srcPath, destPath],
           });
           const mvResult = await mvCommand.output();
-          
+
           if (!mvResult.success) {
             const stderr = new TextDecoder().decode(mvResult.stderr);
             throw new Error(`mv failed: ${stderr}`);
           }
-          
+
           log("SUCCESS", `  Renamed: ${rename.from} → ${rename.to}`);
           result.renamedItems.push({ from: rename.from, to: rename.to });
         } catch (error) {
