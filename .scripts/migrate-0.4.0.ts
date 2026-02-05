@@ -101,7 +101,8 @@ async function isServiceDirectory(dir: string): Promise<boolean> {
   // even though its compose files are named "webui"
   if (dirName === "open-webui") {
     const webuiComposeFile = join(harborHome, "compose.webui.yml");
-    if (await exists(webuiComposeFile)) {
+    const servicesWebuiComposeFile = join(harborHome, "services", "compose.webui.yml");
+    if (await exists(webuiComposeFile) || await exists(servicesWebuiComposeFile)) {
       return true;
     }
   }
@@ -455,50 +456,72 @@ async function performMigration(plan: MigrationPlan, dryRun: boolean): Promise<M
       }
     } else {
       try {
+        // Check if this is a retry (migration was already attempted)
+        const preMigrationPath = join(harborHome, `${dir}.pre-migration`);
+        const isRetry = await exists(preMigrationPath);
+
         // Check if destination already exists
         if (await exists(destPath)) {
-          // Check if destination is empty or minimal (just config files from git)
           const srcSize = await getDirSize(srcPath);
           const destSize = await getDirSize(destPath);
 
-          // If source has significant data (>1MB) and dest is minimal (<10MB), merge them
-          if (srcSize > 1024 * 1024 && destSize < 10 * 1024 * 1024) {
-            log("INFO", `  Destination exists but is minimal (${formatBytes(destSize)}), will merge with source (${formatBytes(srcSize)})`);
-          } else if (srcSize > 1024 * 1024 && destSize > 10 * 1024 * 1024) {
-            // Both have significant data - manual intervention needed
-            const errMsg = `Both ${srcPath} (${formatBytes(srcSize)}) and ${destPath} (${formatBytes(destSize)}) contain significant data. Manual merge required.`;
-            log("ERROR", `  ${errMsg}`);
-            result.errors.push(errMsg);
-            result.success = false;
-            continue;
-          } else {
-            log("WARN", `  Destination already exists: services/${targetDir}/, skipping`);
-            continue;
+          if (isRetry) {
+            // This is a retry - both dirs might have significant data from previous failed migration
+            if (srcSize > 1024 * 1024 && destSize > 10 * 1024 * 1024) {
+              const errMsg = `Both ${srcPath} (${formatBytes(srcSize)}) and ${destPath} (${formatBytes(destSize)}) contain significant data. This appears to be a retry after failed migration. Please manually resolve.`;
+              log("ERROR", `  ${errMsg}`);
+              result.errors.push(errMsg);
+              result.success = false;
+              continue;
+            }
           }
+          // First run or small dest: proceed with merge
+          log("INFO", `  Merging ${formatBytes(srcSize)} from ${dir}/ into services/${targetDir}/ (${formatBytes(destSize)})`);
         } else {
-          // Destination doesn't exist, create it
+          // Destination doesn't exist - create it
           await ensureDir(destPath);
         }
 
-        // Use rsync to handle root-owned files and merge safely
-        const rsyncCommand = new Deno.Command("rsync", {
-          args: ["-a", `${srcPath}/`, `${destPath}/`],
-        });
-        const rsyncResult = await rsyncCommand.output();
+        // Copy user data to services directory using bash script
+        // Only copies files that don't exist in destination (preserves structure files from git)
+        // Handles file/directory conflicts properly by skipping any path that exists in dest
+        const copyScript = `
+          cd "${srcPath}" || exit 1
+          find . -type f -o -type l | while IFS= read -r file; do
+            if [ ! -e "${destPath}/$file" ]; then
+              mkdir -p "${destPath}/$(dirname "$file")" 2>/dev/null || true
+              cp -p "$file" "${destPath}/$file" 2>/dev/null || true
+            fi
+          done
+        `;
 
-        if (!rsyncResult.success) {
-          const stderr = new TextDecoder().decode(rsyncResult.stderr);
-          throw new Error(`rsync failed: ${stderr}`);
+        const bashCommand = new Deno.Command("bash", {
+          args: ["-c", copyScript],
+        });
+        const bashResult = await bashCommand.output();
+
+        if (!bashResult.success) {
+          const stderr = new TextDecoder().decode(bashResult.stderr);
+          throw new Error(`copy failed: ${stderr}`);
         }
 
-        // Remove source directory after successful rsync
-        await Deno.remove(srcPath, { recursive: true });
+        // Move source directory aside instead of deleting it
+        const movedPath = join(harborHome, `${dir}.pre-migration`);
+        const mvCommand = new Deno.Command("mv", {
+          args: [srcPath, movedPath],
+        });
+        const mvResult = await mvCommand.output();
+
+        if (!mvResult.success) {
+          const stderr = new TextDecoder().decode(mvResult.stderr);
+          throw new Error(`mv failed: ${stderr}`);
+        }
 
         if (dir !== targetDir) {
-          log("SUCCESS", `  Moved and renamed: ${dir}/ → services/${targetDir}/`);
+          log("SUCCESS", `  Moved and renamed: ${dir}/ → services/${targetDir}/ (original saved to ${dir}.pre-migration/)`);
           result.renamedItems.push({ from: dir, to: `services/${targetDir}` });
         } else {
-          log("SUCCESS", `  Moved: ${dir}/ → services/${dir}/`);
+          log("SUCCESS", `  Moved: ${dir}/ → services/${dir}/ (original saved to ${dir}.pre-migration/)`);
         }
         result.movedDirs.push(dir);
       } catch (error) {
@@ -538,17 +561,28 @@ async function performMigration(plan: MigrationPlan, dryRun: boolean): Promise<M
             const destContent = await Deno.readTextFile(destPath);
 
             if (srcContent === destContent) {
-              log("INFO", `  Destination exists with identical content: services/${targetFile}, removing source`);
-              await Deno.remove(srcPath);
+              log("INFO", `  Destination exists with identical content: services/${targetFile}, keeping dest`);
+              // Move source aside since dest is good
+              const mvCmd = new Deno.Command("mv", {
+                args: [srcPath, `${srcPath}.duplicate`],
+              });
+              await mvCmd.output();
               result.movedFiles.push(file);
               continue;
             } else {
               log("INFO", `  Destination exists with different content, replacing with source: services/${targetFile}`);
-              await Deno.remove(destPath);
+              // Move dest aside, then mv will move src to dest
+              const mvCmd = new Deno.Command("mv", {
+                args: [destPath, `${destPath}.old`],
+              });
+              await mvCmd.output();
             }
           } catch {
             // If we can't read/compare, assume they're different and replace
-            await Deno.remove(destPath);
+            const mvCmd = new Deno.Command("mv", {
+              args: [destPath, `${destPath}.old`],
+            });
+            await mvCmd.output();
           }
         }
 
@@ -698,17 +732,29 @@ async function rollback(backupDir: string): Promise<boolean> {
 
     try {
       if (await exists(backupPath)) {
-        // Remove current version in services/ if it exists
+        // Restore from backup to root using bash copy
         const servicesPath = join(harborHome, "services", dir);
-        if (await exists(servicesPath)) {
-          await Deno.remove(servicesPath, { recursive: true });
-        }
+        const copyScript = `
+          cd "${backupPath}" || exit 1
+          find . -type f -o -type l | while IFS= read -r file; do
+            mkdir -p "${destPath}/$(dirname "$file")" 2>/dev/null || true
+            cp -p "$file" "${destPath}/$file" 2>/dev/null || true
+          done
+        `;
 
-        // Restore from backup
-        const command = new Deno.Command("cp", {
-          args: ["-r", backupPath, destPath],
+        const command = new Deno.Command("bash", {
+          args: ["-c", copyScript],
         });
         await command.output();
+
+        // If the migrated version exists in services/, move it aside instead of deleting
+        if (await exists(servicesPath)) {
+          const movedPath = `${servicesPath}.rollback-moved`;
+          const mvCommand = new Deno.Command("mv", {
+            args: [servicesPath, movedPath],
+          });
+          await mvCommand.output();
+        }
         log("SUCCESS", `  Restored: ${dir}/`);
       }
     } catch (error) {
@@ -725,10 +771,13 @@ async function rollback(backupDir: string): Promise<boolean> {
 
     try {
       if (await exists(backupPath)) {
-        // Remove current version in services/ if it exists
+        // Move current version in services/ aside if it exists
         const servicesPath = join(harborHome, "services", file);
         if (await exists(servicesPath)) {
-          await Deno.remove(servicesPath);
+          const mvCmd = new Deno.Command("mv", {
+            args: [servicesPath, `${servicesPath}.rollback-moved`],
+          });
+          await mvCmd.output();
         }
 
         // Restore from backup
@@ -753,17 +802,26 @@ async function rollback(backupDir: string): Promise<boolean> {
           // Remove the renamed version if it exists
           const renamedPath = join(harborHome, rename.to);
           if (await exists(renamedPath)) {
-            if (rename.type === 'dir') {
-              await Deno.remove(renamedPath, { recursive: true });
-            } else {
-              await Deno.remove(renamedPath);
-            }
+            // Move aside instead of deleting
+            const movedPath = `${renamedPath}.rollback-moved`;
+            const mvCommand = new Deno.Command("mv", {
+              args: [renamedPath, movedPath],
+            });
+            await mvCommand.output();
           }
 
           // Restore to original name
           if (rename.type === 'dir') {
-            const command = new Deno.Command("cp", {
-              args: ["-r", backupPath, destPath],
+            const copyScript = `
+              cd "${backupPath}" || exit 1
+              find . -type f -o -type l | while IFS= read -r file; do
+                mkdir -p "${destPath}/$(dirname "$file")" 2>/dev/null || true
+                cp -p "$file" "${destPath}/$file" 2>/dev/null || true
+              done
+            `;
+
+            const command = new Deno.Command("bash", {
+              args: ["-c", copyScript],
             });
             await command.output();
             log("SUCCESS", `  Restored renamed directory: ${rename.from}`);
@@ -966,7 +1024,9 @@ Summary:
 ${colors.bold}Next Steps:${colors.reset}
   1. Test your services: ${colors.cyan}harbor up <service>${colors.reset}
   2. Verify everything works correctly
-  3. Once confirmed, you can delete the backup: ${colors.cyan}rm -rf ${backupDir}${colors.reset}
+  3. Once confirmed, clean up:
+     - Delete backup: ${colors.cyan}rm -rf ${backupDir}${colors.reset}
+     - Delete old directories: ${colors.cyan}rm -rf *.pre-migration${colors.reset}
 
 ${colors.bold}If you encounter issues:${colors.reset}
   Rollback: ${colors.cyan}harbor migrate --rollback=${backupDir}${colors.reset}
