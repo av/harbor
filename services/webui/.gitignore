@@ -1,4 +1,7 @@
 config.json
 cache/
 uploads/
+*.db
+vector_db/
+old_config.json
 vector_db/

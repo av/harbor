@@ -20,6 +20,9 @@ const EXCLUDE_DIRS = new Set([
   "skills",
   "services", // The target directory itself
 
+  // Data volume directories (created by Docker, not service dirs)
+  "webui", // v0.4.0 mounts ./services/webui as data volume; root-level webui/ is from Docker
+
   // Build and dependencies
   "node_modules",
   "dist",
@@ -482,16 +485,14 @@ async function performMigration(plan: MigrationPlan, dryRun: boolean): Promise<M
           await ensureDir(destPath);
         }
 
-        // Copy user data to services directory using bash script
-        // Only copies files that don't exist in destination (preserves structure files from git)
-        // Handles file/directory conflicts properly by skipping any path that exists in dest
+        // Copy user data from v0.3.41 source into services/ directory
+        // Always overwrites — source files are user data that must be preserved
+        // v0.4.0 structure files (configs, scripts) don't exist in old dirs, so no conflict
         const copyScript = `
           cd "${srcPath}" || exit 1
           find . -type f -o -type l | while IFS= read -r file; do
-            if [ ! -e "${destPath}/$file" ]; then
-              mkdir -p "${destPath}/$(dirname "$file")" 2>/dev/null || true
-              cp -p "$file" "${destPath}/$file" 2>/dev/null || true
-            fi
+            mkdir -p "${destPath}/$(dirname "$file")" 2>/dev/null || true
+            cp -fp "$file" "${destPath}/$file" 2>/dev/null || true
           done
         `;
 

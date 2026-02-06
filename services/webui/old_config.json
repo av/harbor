@@ -1,7 +1,0 @@
-{
-  "ollama": {
-    "base_urls": [
-      "http://ollama:11434"
-    ]
-  }
-}

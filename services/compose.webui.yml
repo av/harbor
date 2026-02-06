@@ -6,7 +6,7 @@ services:
       - ./services/webui/override.env
     container_name: ${HARBOR_CONTAINER_PREFIX}.webui
     volumes:
-      - ./webui:/app/backend/data
+      - ./services/webui:/app/backend/data
       - ./services/webui/start_webui.sh:/app/start_webui.sh
       - ./shared/json_config_merger.py:/app/json_config_merger.py
       - ./services/webui/configs/config.override.json:/app/configs/config.z.override.json
