@@ -1,0 +1,133 @@
+services:
+  postiz:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.postiz
+    image: ${HARBOR_POSTIZ_IMAGE}:${HARBOR_POSTIZ_VERSION}
+    env_file:
+      - ./.env
+      - ./services/postiz/override.env
+    environment:
+      MAIN_URL: http://localhost:${HARBOR_POSTIZ_HOST_PORT}
+      FRONTEND_URL: http://localhost:${HARBOR_POSTIZ_HOST_PORT}
+      NEXT_PUBLIC_BACKEND_URL: http://localhost:${HARBOR_POSTIZ_HOST_PORT}/api
+      BACKEND_INTERNAL_URL: http://localhost:3000
+      JWT_SECRET: ${HARBOR_POSTIZ_JWT_SECRET}
+      DATABASE_URL: postgresql://${HARBOR_POSTIZ_DB_USER}:${HARBOR_POSTIZ_DB_PASSWORD}@postiz-postgres:5432/${HARBOR_POSTIZ_DB_NAME}
+      REDIS_URL: redis://postiz-redis:6379
+      TEMPORAL_ADDRESS: postiz-temporal:7233
+      IS_GENERAL: "true"
+      DISABLE_REGISTRATION: "false"
+      RUN_CRON: "true"
+      STORAGE_PROVIDER: local
+      UPLOAD_DIRECTORY: /uploads
+      NEXT_PUBLIC_UPLOAD_DIRECTORY: /uploads
+      NX_ADD_PLUGINS: "false"
+    ports:
+      - ${HARBOR_POSTIZ_HOST_PORT}:5000
+    volumes:
+      - ./services/postiz/config:/config/
+      - ./services/postiz/uploads:/uploads/
+    depends_on:
+      postiz-postgres:
+        condition: service_healthy
+      postiz-redis:
+        condition: service_healthy
+      postiz-temporal:
+        condition: service_started
+    networks:
+      - harbor-network
+
+  postiz-postgres:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.postiz-postgres
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${HARBOR_POSTIZ_DB_USER}
+      POSTGRES_PASSWORD: ${HARBOR_POSTIZ_DB_PASSWORD}
+      POSTGRES_DB: ${HARBOR_POSTIZ_DB_NAME}
+    volumes:
+      - ./services/postiz/db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${HARBOR_POSTIZ_DB_USER} -d ${HARBOR_POSTIZ_DB_NAME}"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    networks:
+      - harbor-network
+
+  postiz-redis:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.postiz-redis
+    image: redis:7.2
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    volumes:
+      - ./services/postiz/redis-data:/data
+    networks:
+      - harbor-network
+
+  postiz-temporal-postgres:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.postiz-temporal-postgres
+    image: postgres:16
+    environment:
+      POSTGRES_USER: temporal
+      POSTGRES_PASSWORD: temporal
+    volumes:
+      - ./services/postiz/temporal-db:/var/lib/postgresql/data
+    networks:
+      - harbor-network
+
+  postiz-elasticsearch:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.postiz-elasticsearch
+    image: elasticsearch:7.17.18
+    user: "1000:1000"
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    volumes:
+      - postiz-elasticsearch-data:/usr/share/elasticsearch/data
+    networks:
+      - harbor-network
+
+  postiz-temporal:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.postiz-temporal
+    image: temporalio/auto-setup:1.28.1
+    environment:
+      - DB=postgres12
+      - DB_PORT=5432
+      - POSTGRES_USER=temporal
+      - POSTGRES_PWD=temporal
+      - POSTGRES_SEEDS=postiz-temporal-postgres
+      - DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development-sql.yaml
+      - TEMPORAL_NAMESPACE=default
+      - ENABLE_ES=true
+      - ES_SEEDS=postiz-elasticsearch
+      - ES_VERSION=v7
+      - ES_SCHEME=http
+      - ES_PORT=9200
+      - ES_VIS_DOCSTORE_INDEX=temporal_visibility_v1_dev
+    depends_on:
+      - postiz-temporal-postgres
+      - postiz-elasticsearch
+    volumes:
+      - ./services/postiz/dynamicconfig:/etc/temporal/config/dynamicconfig
+    networks:
+      - harbor-network
+
+  postiz-temporal-ui:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.postiz-temporal-ui
+    image: temporalio/ui:2.34.0
+    environment:
+      - TEMPORAL_ADDRESS=postiz-temporal:7233
+      - TEMPORAL_CORS_ORIGINS=http://localhost:${HARBOR_POSTIZ_HOST_PORT}
+    ports:
+      - ${HARBOR_POSTIZ_TEMPORAL_UI_HOST_PORT}:8080
+    depends_on:
+      - postiz-temporal
+    networks:
+      - harbor-network
+
+volumes:
+  postiz-elasticsearch-data:
+    driver: local

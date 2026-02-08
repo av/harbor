@@ -896,5 +896,13 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         wikiUrl: `${wikiUrl}/2.3.71-Satellite-nanobot`,
         tooltip: 'Ultra-lightweight personal AI assistant with multi-channel messaging and scheduled tasks.',
     },
+    postiz: {
+        name: 'Postiz',
+        tags: [HST.satellite, HST.tools],
+        projectUrl: 'https://github.com/gitroomhq/postiz-app',
+        logo: 'https://www.google.com/s2/favicons?domain=postiz.com&sz=128',
+        wikiUrl: `${wikiUrl}/2.3.72-Satellite-Postiz`,
+        tooltip: 'AI-powered social media scheduling tool for managing posts, analytics, and team collaboration.',
+    },
 };
 

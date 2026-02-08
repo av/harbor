@@ -1,0 +1,5 @@
+config/
+uploads/
+db/
+redis-data/
+temporal-db/
