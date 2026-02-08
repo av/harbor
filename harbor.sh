@@ -84,6 +84,7 @@ show_help() {
     echo "  repopack          - Run the Repopack CLI"
     echo "  nexa              - Run the Nexa CLI, configure the service"
     echo "  gptme             - Run gptme CLI, configure the service"
+    echo "  nanobot           - Run nanobot CLI"
     echo "  promptfoo|pf      - Run promptfoo CLI for LLM testing and evaluation"
     echo "  hf                - Run the Harbor's Hugging Face CLI. Expanded with a few additional commands."
     echo "    hf dl           - HuggingFaceModelDownloader CLI"
@@ -2821,7 +2822,7 @@ run_llamacpp_command() {
     case "$1" in
     models)
         shift
-        curl -s $(harbor url llamacpp)/models | jq -r '.models[]'
+        curl -s $(harbor url llamacpp)/models | jq -r '.data[].id'
         ;;
     model)
         shift
@@ -3668,6 +3669,34 @@ run_aider_command() {
         -v "$original_dir:/home/appuser/workspace" \
         --workdir "/home/appuser/workspace" \
         aider "$@"
+}
+
+run_nanobot_command() {
+    case "$1" in
+    model)
+        shift
+        env_manager_alias nanobot.model "$@"
+        return 0
+        ;;
+    -h | --help | help)
+        echo "Please note that this is not nanobot CLI, but a Harbor CLI to manage nanobot service."
+        echo
+        echo "Usage: harbor nanobot <command>"
+        echo
+        echo "Commands:"
+        echo "  harbor nanobot model [model] - Get or set the nanobot model"
+        ;;
+    esac
+
+    local services
+    services=$(get_active_services)
+
+    $(compose_with_options $services "nanobot") run \
+        -it \
+        --rm \
+        --service-ports \
+        -e "TERM=xterm-256color" \
+        nanobot "$@"
 }
 
 run_chatui_command() {
@@ -4993,6 +5022,10 @@ main_entrypoint() {
     aider)
         shift
         run_aider_command "$@"
+        ;;
+    nanobot)
+        shift
+        run_nanobot_command "$@"
         ;;
     chatui)
         shift

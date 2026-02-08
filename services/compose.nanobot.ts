@@ -4,7 +4,7 @@ import { detectBackend, addBackendDependency, injectBackendEnv } from '../routin
 export default function apply(ctx: ComposeContext): ComposeObject {
   const { compose, services, explicitServices } = ctx;
 
-  if (!compose.services?.openclaw) {
+  if (!compose.services?.nanobot) {
     return compose;
   }
 
@@ -17,10 +17,10 @@ export default function apply(ctx: ComposeContext): ComposeObject {
   }
 
   // Inject backend connection details as environment variables
-  injectBackendEnv(compose.services.openclaw, backend);
+  injectBackendEnv(compose.services.nanobot, backend);
 
   // Add depends_on for the detected backend
-  addBackendDependency(compose.services.openclaw, backend.service);
+  addBackendDependency(compose.services.nanobot, backend.service);
 
   return compose;
 }

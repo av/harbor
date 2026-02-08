@@ -1,18 +1,5 @@
-import type { ComposeContext, ComposeObject } from './routines/composeTypes';
-
-/**
- * OpenAI-compatible inference backends supported for auto-discovery.
- * Each backend exposes a /v1/models endpoint.
- */
-const BACKENDS: Record<string, { url: string; name: string }> = {
-  ollama: { url: 'http://ollama:11434', name: 'Ollama' },
-  llamacpp: { url: 'http://llamacpp:8080', name: 'Llama.cpp' },
-  vllm: { url: 'http://vllm:8000', name: 'vLLM' },
-  tabbyapi: { url: 'http://tabbyapi:5000', name: 'TabbyAPI' },
-  mistralrs: { url: 'http://mistralrs:8021', name: 'Mistral.rs' },
-  sglang: { url: 'http://sglang:30000', name: 'SGLang' },
-  lmdeploy: { url: 'http://lmdeploy:23333', name: 'LMDeploy' },
-};
+import type { ComposeContext, ComposeObject } from '../routines/composeTypes';
+import { getAllActiveBackends, addBackendDependency, type DetectedBackend } from '../routines/backendIntegration';
 
 /**
  * Generates an inline bash script that:
@@ -23,8 +10,8 @@ const BACKENDS: Record<string, { url: string; name: string }> = {
  *
  * Note: All $ must be escaped as $$ for Docker Compose interpolation.
  */
-function generateDiscoveryScript(backends: Array<{ svc: string; url: string; name: string }>): string {
-  const backendList = backends.map(b => `${b.svc}=${b.url}`).join(' ');
+function generateDiscoveryScript(backends: DetectedBackend[]): string {
+  const backendList = backends.map(b => `${b.service}=${b.info.url}`).join(' ');
 
   // Note: Using string concatenation for bash syntax that conflicts with JS template literals
   const configDirDefault = '$$' + '{OPENCODE_CONFIG_DIR:-/root/.config/opencode}';
@@ -133,23 +120,17 @@ export default async function apply(ctx: ComposeContext): Promise<ComposeObject>
     }
   }
 
-  // Detect active backends from ctx.services
-  const activeBackends = Object.entries(BACKENDS)
-    .filter(([svc]) => services.includes(svc))
-    .map(([svc, cfg]) => ({ svc, ...cfg }));
+  // Detect active backends using shared utility
+  const activeBackends = getAllActiveBackends(services);
 
   if (activeBackends.length === 0) {
     return compose;
   }
 
-  // Add depends_on for active backends
-  const existingDeps = compose.services.opencode.depends_on || [];
-  const depsArray = Array.isArray(existingDeps)
-    ? existingDeps
-    : Object.keys(existingDeps);
-  compose.services.opencode.depends_on = [
-    ...new Set([...depsArray, ...activeBackends.map(b => b.svc)])
-  ];
+  // Add depends_on for all active backends
+  for (const backend of activeBackends) {
+    addBackendDependency(compose.services.opencode, backend.service);
+  }
 
   // Inject discovery script with only the active backends
   const discoveryScript = generateDiscoveryScript(activeBackends);

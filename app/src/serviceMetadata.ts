@@ -888,5 +888,13 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         wikiUrl: `${wikiUrl}/2.3.70-Satellite-OpenClaw`,
         tooltip: 'Personal AI assistant with a self-hosted gateway, Control UI, and multi-channel messaging support.',
     },
+    nanobot: {
+        name: 'nanobot',
+        tags: [HST.satellite, HST.cli, HST.tools],
+        projectUrl: 'https://github.com/HKUDS/nanobot',
+        logo: 'https://github.com/HKUDS.png?size=200',
+        wikiUrl: `${wikiUrl}/2.3.71-Satellite-nanobot`,
+        tooltip: 'Ultra-lightweight personal AI assistant with multi-channel messaging and scheduled tasks.',
+    },
 };
 
