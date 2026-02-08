@@ -1,0 +1,22 @@
+services:
+  searxng:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.searxng
+    env_file:
+      - ./.env
+      - ./services/searxng/override.env
+    image: ${HARBOR_SEARXNG_IMAGE}:${HARBOR_SEARXNG_VERSION}
+    environment:
+      INSTANCE_NAME: searxng
+      BASE_URL: http://0.0.0.0:8080
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080"]
+      interval: 1s
+      timeout: 10s
+      retries: 10
+      start_period: 2s
+    volumes:
+      - ${HARBOR_SEARXNG_WORKSPACE}:/etc/searxng
+    ports:
+      - ${HARBOR_SEARXNG_HOST_PORT}:8080
+    networks:
+      - harbor-network

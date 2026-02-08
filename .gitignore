@@ -7,7 +7,7 @@
 # Node
 node_modules/
 
-# Open WebUI
+# Open WebUI (old)
 open-webui/*
 open-webui/config.json
 
@@ -15,6 +15,24 @@ open-webui/config.json
 !open-webui/extras/
 !open-webui/start_webui.sh
 !open-webui/override.env
+
+# Open WebUI (new, in services)
+services/webui/*
+services/webui/config.json
+
+!services/webui/configs/
+!services/webui/extras/
+!services/webui/start_webui.sh
+!services/webui/override.env
+
+# Open WebUI (new, in root)
+webui/*
+webui/config.json
+
+!webui/configs/
+!webui/extras/
+!webui/start_webui.sh
+!webui/override.env
 
 # Ollama
 /ollama/ollama/
@@ -106,6 +124,9 @@ qdrant/storage
 
 # Merged compose
 __harbor.yml
+
+# Migration backups
+.migration-backup-*
 
 .cache
 .local

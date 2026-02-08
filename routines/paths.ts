@@ -7,6 +7,7 @@ const __dirname = import.meta.dirname;
 export const paths = {
   home: path.resolve(__dirname, '..'),
   routines: path.resolve(__dirname),
+  services: path.resolve(__dirname, '..', 'services'),
   mergedYaml: '__harbor.yml',
   tools: path.resolve(__dirname, '..', 'tools'),
   toolsConfig: '__tools.yml',
@@ -14,7 +15,7 @@ export const paths = {
   currentProfile: '.env',
 }
 
-export async function listComposeFiles(dir = paths.home) {
+export async function listComposeFiles(dir = paths.services) {
   const files = await fs.promises.readdir(dir);
 
   return files
@@ -31,7 +32,7 @@ export async function listComposeFiles(dir = paths.home) {
  * List TypeScript compose modules in the given directory.
  * Mirrors listComposeFiles() but for .ts files.
  */
-export async function listComposeModules(dir = paths.home) {
+export async function listComposeModules(dir = paths.services) {
   const files = await fs.promises.readdir(dir);
 
   return files

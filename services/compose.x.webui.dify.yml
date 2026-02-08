@@ -1,0 +1,4 @@
+services:
+  webui:
+    volumes:
+      - ./services/webui/configs/config.dify.json:/app/configs/config.dify.json

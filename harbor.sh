@@ -84,6 +84,7 @@ show_help() {
     echo "  repopack          - Run the Repopack CLI"
     echo "  nexa              - Run the Nexa CLI, configure the service"
     echo "  gptme             - Run gptme CLI, configure the service"
+    echo "  nanobot           - Run nanobot CLI"
     echo "  promptfoo|pf      - Run promptfoo CLI for LLM testing and evaluation"
     echo "  hf                - Run the Harbor's Hugging Face CLI. Expanded with a few additional commands."
     echo "    hf dl           - HuggingFaceModelDownloader CLI"
@@ -332,9 +333,9 @@ has_modern_compose() {
 __anchor_fns=true
 
 resolve_compose_files() {
-    # Find all .yml files in the specified base directory,
+    # Find all .yml files in the services directory,
     # but do not go into subdirectories
-    find "$base_dir" -maxdepth 1 -name "*.yml" |
+    find "$harbor_home/services" -maxdepth 1 -name "*.yml" |
         # For each file, count the number of dots in the filename
         # and prepend this count to the filename
         awk -F. '{print NF-1, $0}' |
@@ -2336,37 +2337,104 @@ hf_spec_2_folder_spec() {
 
 docker_fsacl() {
     local folder=$1
-    log_debug "fsacl: $folder"
 
-    # 1000, 1001, 1002 - most frequent default users on Debian
-    # 100 - most frequent default on Alpine
-    # 911 - "abc" user from LinuxServer.io images
-    # 101 - clickhouse
-    # 1032 - libretranslate
-    sudo setfacl --recursive -m user:1000:rwx $folder &&
-        sudo setfacl --recursive -m user:1002:rwx $folder &&
-        sudo setfacl --recursive -m user:1001:rwx $folder &&
-        sudo setfacl --recursive -m user:100:rwx $folder &&
-        sudo setfacl --recursive -m user:911:rwx $folder &&
-        sudo setfacl --recursive -m user:101:rwx $folder &&
-        sudo setfacl --recursive -m user:1032:rwx $folder
+    # Skip if folder doesn't exist
+    if [[ ! -e "$folder" ]]; then
+        log_debug "fsacl: skipping non-existent path: $folder"
+        return 0
+    fi
+
+    # Get host user's uid/gid to set ownership correctly
+    local uid=$(id -u)
+    local gid=$(id -g)
+
+    log_debug "fsacl: $folder (chown to $uid:$gid)"
+
+    # Convert to absolute path (required for Docker volume mount)
+    local abs_folder=$(realpath "$folder")
+
+    # Spawn container as root to fix ownership
+    # Using Deno Alpine image which includes standard Unix tools
+    docker run --rm \
+        --entrypoint sh \
+        -v "$abs_folder:/target" \
+        -u root \
+        denoland/deno:alpine \
+        -c "chown -R $uid:$gid /target" || {
+        log_warn "Failed to fix permissions for: $folder"
+        return 1
+    }
 }
 
 run_fixfs() {
-    docker_fsacl .
+    local uid=$(id -u)
+    local gid=$(id -g)
 
-    docker_fsacl $(eval echo "$(env_manager get hf.cache)")
-    docker_fsacl $(eval echo "$(env_manager get vllm.cache)")
-    docker_fsacl $(eval echo "$(env_manager get llamacpp.cache)")
-    docker_fsacl $(eval echo "$(env_manager get ollama.cache)")
-    docker_fsacl $(eval echo "$(env_manager get parllama.cache)")
-    docker_fsacl $(eval echo "$(env_manager get opint.config.path)")
-    docker_fsacl $(eval echo "$(env_manager get fabric.config.path)")
-    docker_fsacl $(eval echo "$(env_manager get txtai.cache)")
-    docker_fsacl $(eval echo "$(env_manager get nexa.cache)")
-    docker_fsacl $(eval echo "$(env_manager get aichat.config_path)")
-    docker_fsacl $(eval echo "$(env_manager get comfyui.workspace)")
-    docker_fsacl $(eval echo "$(env_manager get openclaw.config_dir)")
+    # Collect all paths that need fixing
+    local paths=(
+        "$harbor_home"
+        "$(eval echo "$(env_manager get hf.cache)")"
+        "$(eval echo "$(env_manager get vllm.cache)")"
+        "$(eval echo "$(env_manager get llamacpp.cache)")"
+        "$(eval echo "$(env_manager get ollama.cache)")"
+        "$(eval echo "$(env_manager get parllama.cache)")"
+        "$(eval echo "$(env_manager get opint.config.path)")"
+        "$(eval echo "$(env_manager get fabric.config.path)")"
+        "$(eval echo "$(env_manager get txtai.cache)")"
+        "$(eval echo "$(env_manager get nexa.cache)")"
+        "$(eval echo "$(env_manager get aichat.config_path)")"
+        "$(eval echo "$(env_manager get comfyui.workspace)")"
+        "$(eval echo "$(env_manager get openclaw.config_dir)")"
+    )
+
+    # Create missing directories and build volume mounts
+    local volume_args=()
+    local chown_commands=()
+    local counter=0
+
+    for path in "${paths[@]}"; do
+        # Skip empty paths
+        [[ -z "$path" ]] && continue
+
+        # Create directory if missing
+        if [[ ! -e "$path" ]]; then
+            log_debug "fixfs: creating missing directory: $path"
+            mkdir -p "$path" || {
+                log_warn "fixfs: failed to create directory: $path"
+                continue
+            }
+        fi
+
+        # Convert to absolute path and add to volume mounts
+        local abs_path=$(realpath "$path")
+        volume_args+=("-v" "$abs_path:/target$counter")
+        chown_commands+=("chown -R $uid:$gid /target$counter")
+        ((counter++))
+    done
+
+    # Run single container if we have paths to fix
+    if [[ ${#volume_args[@]} -gt 0 ]]; then
+        log_info "Fixing permissions for $counter volume(s)..."
+
+        # Build chown script by joining commands with &&
+        local chown_script
+        chown_script=$(printf '%s && ' "${chown_commands[@]}")
+        chown_script="${chown_script% && }"  # Remove trailing ' && '
+
+        docker run --rm \
+            --entrypoint sh \
+            "${volume_args[@]}" \
+            -u root \
+            denoland/deno:alpine \
+            -c "$chown_script" || {
+            log_warn "Failed to fix permissions for some volumes"
+            return 1
+        }
+
+        log_info "Successfully fixed permissions"
+    else
+        log_warn "No valid paths found to fix"
+    fi
 }
 
 open_home_code() {
@@ -2412,6 +2480,31 @@ update_harbor() {
     merge_env_files
 
     log_info "Harbor updated successfully."
+}
+
+run_migrate_command() {
+    case "$1" in
+    -h | --help | help)
+        echo "Harbor 0.4.0 Migration Tool"
+        echo
+        echo "Usage: harbor migrate [options]"
+        echo
+        echo "Options:"
+        echo "  --dry-run           Preview migration without making changes"
+        echo "  --force             Skip confirmation prompts"
+        echo "  --rollback=<dir>    Rollback migration from backup directory"
+        echo "  -h, --help          Show this help message"
+        echo
+        echo "This command migrates your Harbor installation to the new 0.4.0 structure"
+        echo "where all service files are organized in the services/ directory."
+        echo
+        echo "See docs/0.4.0-Migration-Guide.md for more information."
+        ;;
+    *)
+        log_debug "Running migration script"
+        deno run -A --unstable-sloppy-imports "$harbor_home/.scripts/migrate-0.4.0.ts" "$@"
+        ;;
+    esac
 }
 
 get_active_services() {
@@ -2645,7 +2738,7 @@ run_harbor_env() {
         fi
     fi
 
-    local env_file="$service/override.env"
+    local env_file="services/$service/override.env"
 
     log_debug "'env' $env_file - $mgr_cmd $env_var $env_val"
 
@@ -2729,7 +2822,7 @@ run_llamacpp_command() {
     case "$1" in
     models)
         shift
-        curl -s $(harbor url llamacpp)/models | jq -r '.models[]'
+        curl -s $(harbor url llamacpp)/models | jq -r '.data[].id'
         ;;
     model)
         shift
@@ -3578,6 +3671,34 @@ run_aider_command() {
         aider "$@"
 }
 
+run_nanobot_command() {
+    case "$1" in
+    model)
+        shift
+        env_manager_alias nanobot.model "$@"
+        return 0
+        ;;
+    -h | --help | help)
+        echo "Please note that this is not nanobot CLI, but a Harbor CLI to manage nanobot service."
+        echo
+        echo "Usage: harbor nanobot <command>"
+        echo
+        echo "Commands:"
+        echo "  harbor nanobot model [model] - Get or set the nanobot model"
+        ;;
+    esac
+
+    local services
+    services=$(get_active_services)
+
+    $(compose_with_options $services "nanobot") run \
+        -it \
+        --rm \
+        --service-ports \
+        -e "TERM=xterm-256color" \
+        nanobot "$@"
+}
+
 run_chatui_command() {
     case "$1" in
     version)
@@ -3607,7 +3728,7 @@ run_comfyui_workspace_command() {
     case "$1" in
     open)
         shift
-        sys_open "$harbor_home/comfyui/workspace"
+        sys_open "$harbor_home/services/comfyui/workspace"
         ;;
     sync)
         shift
@@ -3652,7 +3773,7 @@ run_comfyui_command() {
         ;;
     output)
         shift
-        sys_open "$harbor_home/comfyui/workspace/ComfyUI/output"
+        sys_open "$harbor_home/services/comfyui/workspace/ComfyUI/output"
         ;;
     -h | --help | help)
         echo "Please note that this is not ComfyUI CLI, but a Harbor CLI to manage ComfyUI service."
@@ -4902,6 +5023,10 @@ main_entrypoint() {
         shift
         run_aider_command "$@"
         ;;
+    nanobot)
+        shift
+        run_nanobot_command "$@"
+        ;;
     chatui)
         shift
         run_chatui_command "$@"
@@ -4993,6 +5118,10 @@ main_entrypoint() {
     mcp)
         shift
         run_mcp_command "$@"
+        ;;
+    migrate)
+        shift
+        run_migrate_command "$@"
         ;;
     modularmax)
         shift
@@ -5087,6 +5216,76 @@ main_entrypoint() {
         ;;
     esac
 }
+
+check_migration_needed() {
+    # Skip check for certain commands that don't need migration check
+    local skip_commands="migrate|help|--help|-h|version|--version|-v"
+    if [[ "$1" =~ ^($skip_commands)$ ]]; then
+        return 0
+    fi
+
+    # Check if services directory exists and is populated
+    if [ -d "$harbor_home/services" ]; then
+        # Check if services directory has content
+        if [ -n "$(ls -A "$harbor_home/services" 2>/dev/null)" ]; then
+            # Services directory exists and has content, assume migrated
+            return 0
+        fi
+    fi
+
+    # Check for service directories at root (excluding known infrastructure dirs)
+    local has_old_structure=false
+    local exclude_pattern="^(app|docs|routines|scripts|profiles|shared|harbor|tools|skills|services|node_modules|dist|\..*)$"
+
+    while IFS= read -r dir; do
+        local basename=$(basename "$dir")
+        if [[ ! "$basename" =~ $exclude_pattern ]]; then
+            # Check if this looks like a service directory (has corresponding compose file)
+            if [ -f "$harbor_home/compose.$basename.yml" ] || [ -f "$harbor_home/compose.$basename.ts" ]; then
+                has_old_structure=true
+                break
+            fi
+        fi
+    done < <(find "$harbor_home" -maxdepth 1 -type d 2>/dev/null)
+
+    # Check for compose files at root (excluding base compose.yml)
+    if [ "$has_old_structure" = false ]; then
+        if ls "$harbor_home"/compose.*.yml "$harbor_home"/compose.*.ts 2>/dev/null | grep -v "^$harbor_home/compose.yml$" >/dev/null; then
+            has_old_structure=true
+        fi
+    fi
+
+    if [ "$has_old_structure" = true ]; then
+        echo ""
+        echo "╔════════════════════════════════════════════════════════════╗"
+        echo "║                  🔄 MIGRATION REQUIRED                     ║"
+        echo "╚════════════════════════════════════════════════════════════╝"
+        echo ""
+        echo "Harbor 0.4.0 introduces a new directory structure."
+        echo "Your installation needs to be migrated to continue."
+        echo ""
+        echo "What changed:"
+        echo "  • Service files moved to services/ directory"
+        echo "  • Cleaner root directory structure"
+        echo "  • Better organization and maintainability"
+        echo ""
+        echo "To migrate your installation:"
+        echo "  1. Review changes: ${c_g}harbor migrate --dry-run${c_nc}"
+        echo "  2. Run migration:  ${c_g}harbor migrate${c_nc}"
+        echo "  3. Learn more:     ${c_g}docs/0.4.0-Migration-Guide.md${c_nc}"
+        echo ""
+        echo "The migration is safe and includes automatic backups."
+        echo ""
+
+        # Don't exit, just warn for now to allow migrate command to run
+        return 0
+    fi
+
+    return 0
+}
+
+# Check if migration is needed (but don't block execution)
+check_migration_needed "$1"
 
 # Call the main logic with argument swapping
 if ! swap_and_retry main_entrypoint "$@"; then

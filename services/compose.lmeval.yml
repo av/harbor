@@ -1,0 +1,25 @@
+services:
+  lmeval:
+    build:
+      context: ./lmeval
+      dockerfile: Dockerfile
+    container_name: ${HARBOR_CONTAINER_PREFIX}.lmeval
+    env_file:
+      - ./.env
+      - ./services/lmeval/override.env
+    volumes:
+      - ${HARBOR_HF_CACHE}:/root/.cache/huggingface
+      - ${HARBOR_LMEVAL_CACHE}:/app/cache
+      - ${HARBOR_LMEVAL_RESULTS}:/app/results
+    networks:
+      - harbor-network
+    environment:
+      - HF_TOKEN=${HARBOR_HF_TOKEN}
+      - LM_HARNESS_CACHE_PATH=/app/cache
+    entrypoint: >
+      lm_eval
+      --output_path /app/results/${HARBOR_LMEVAL_MODEL_SPECIFIER}/
+      --use_cache /app/cache/${HARBOR_LMEVAL_MODEL_SPECIFIER}/sqlite_cache_rank
+      --model ${HARBOR_LMEVAL_TYPE}
+      --model_args ${HARBOR_LMEVAL_MODEL_ARGS}
+      ${HARBOR_LMEVAL_EXTRA_ARGS}

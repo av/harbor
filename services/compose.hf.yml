@@ -1,0 +1,14 @@
+services:
+  hf:
+    build:
+      context: ./hf
+      dockerfile: Dockerfile
+    container_name: ${HARBOR_CONTAINER_PREFIX}.hf
+    env_file:
+      - ./.env
+      - ./services/hf/override.env
+    volumes:
+      - ${HARBOR_HF_CACHE}:/root/.cache/huggingface
+    environment:
+      - HF_TOKEN=${HARBOR_HF_TOKEN}
+    network_mode: host

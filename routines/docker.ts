@@ -24,6 +24,7 @@ export async function resolveComposeFiles(args) {
     ...args
   ].filter((s) => !!s);
   const allFiles = await listComposeFiles(dir);
+  // compose.yml stays at root, service compose files are in services/
   const outFiles = ['compose.yml'];
 
   for (const file of allFiles) {
@@ -53,7 +54,8 @@ export async function resolveComposeFiles(args) {
       }
 
       if (allMatched) {
-        outFiles.push(file);
+        // Prefix with services/ for files in the services directory
+        outFiles.push(dir ? file : `services/${file}`);
       }
       continue;
     }
@@ -74,7 +76,8 @@ export async function resolveComposeFiles(args) {
     }
 
     if (match) {
-      outFiles.push(file);
+      // Prefix with services/ for files in the services directory
+      outFiles.push(dir ? file : `services/${file}`);
     }
   }
 
@@ -130,7 +133,8 @@ export async function resolveComposeModules(args) {
       }
 
       if (allMatched) {
-        outModules.push(file);
+        // Prefix with services/ for modules in the services directory
+        outModules.push(dir ? file : `services/${file}`);
       }
       continue;
     }
@@ -151,7 +155,8 @@ export async function resolveComposeModules(args) {
     }
 
     if (match) {
-      outModules.push(file);
+      // Prefix with services/ for modules in the services directory
+      outModules.push(dir ? file : `services/${file}`);
     }
   }
 

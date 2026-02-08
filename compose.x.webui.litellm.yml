@@ -1,4 +1,0 @@
-services:
-  webui:
-    volumes:
-      - ./open-webui/configs/config.litellm.json:/app/configs/config.litellm.json

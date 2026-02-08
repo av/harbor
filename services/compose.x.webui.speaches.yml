@@ -1,0 +1,5 @@
+services:
+  webui:
+    volumes:
+      # This needs to override default tts settings if run together, hence ".z."
+      - ./services/webui/configs/config.speaches.json:/app/configs/config.z.speaches.json

@@ -9,9 +9,9 @@ This repository is a [very large modular Docker Compose project](../docs/6.-Harb
 ## What is a service?
 
 In this repository, a service is a:
-- piece of dedicated compose config, in a `compose.<service>.yml` file
+- piece of dedicated compose config, in a `services/compose.<service>.yml` file
   - It may include multiple docker compose services, representing a single software project
-- a folder `<service>` that contains:
+- a folder `services/<service>` that contains:
   - any configuration files needed for the service to run
   - any volume mounts needed for the service to run
   - a Dockerfile if the service needs one
@@ -58,8 +58,8 @@ Follow these steps in order to add a new service. Each step includes validation 
 
 **Validation:**
 ```bash
-# Check if handle exists
-ls compose.${handle}.yml 2>/dev/null && echo "Handle exists!" || echo "Handle available"
+# Check if handle exists (now in services/ directory)
+ls services/compose.${handle}.yml 2>/dev/null && echo "Handle exists!" || echo "Handle available"
 grep -q "^  ${handle}:" app/src/serviceMetadata.ts && echo "Handle in metadata!" || echo "Metadata available"
 ```
 
@@ -71,8 +71,8 @@ deno run -A ./.scripts/scaffold.ts ${handle}
 ```
 
 **Generated files:**
-- `compose.${handle}.yml` - Basic compose structure
-- `${handle}/override.env` - Service-specific environment file
+- `services/compose.${handle}.yml` - Basic compose structure
+- `services/${handle}/override.env` - Service-specific environment file
 
 **Validation:**
 - Both files should exist and have basic content
@@ -87,7 +87,7 @@ services:
     image: ${HARBOR_${HANDLE}_IMAGE}:${HARBOR_${HANDLE}_VERSION}
     env_file:
       - ./.env
-      - ./${handle}/override.env
+      - ./services/${handle}/override.env
     networks:
       - harbor-network
     # Add ports, volumes, healthcheck as needed
@@ -95,12 +95,13 @@ services:
 
 **Key requirements:**
 - Container name must use `${HARBOR_CONTAINER_PREFIX}.${handle}` format
-- Must include both `.env` and service override env file
+- Must include both `.env` (at root) and service override env file (in `services/${handle}/`)
 - Must use harbor-network
 - Environment variables must follow `HARBOR_${HANDLE}_*` pattern
 - If service exposes ports, use `${HARBOR_${HANDLE}_HOST_PORT}:${internal_port}` format
 - Main container in the compose file MUST match the service handle
 - You must not set `restart` policy in the compose file, automatic restart is not expected and considered an error
+- All volume mounts to service directories must use `./services/${handle}/...` path
 
 ### Step 4: Add Environment Variables to profiles/default.env
 
@@ -213,23 +214,23 @@ Describe any persistent data or configuration mounts.
 ### Step 8: Add to .gitignore (if needed)
 
 **Add persistent data directories:**
-- Create `.gitignore` in a service folder
+- Create `.gitignore` in a service folder (inside `services/${handle}/`)
 
 ```bash
-# Add to .gitignore if service creates persistent data
-echo "data/" >> .gitignore
-echo "cache/" >> .gitignore
-echo "logs/" >> .gitignore
+# Add to services/${handle}/.gitignore if service creates persistent data
+echo "data/" >> services/${handle}/.gitignore
+echo "cache/" >> services/${handle}/.gitignore
+echo "logs/" >> services/${handle}/.gitignore
 ```
 
 ### Step 10: Cross-Service Integration (Optional)
 
 **If service needs integration with other services:**
 
-Create cross-service files following pattern:
-- `compose.x.${handle}.${other_service}.yml` - Integration with specific service
-- `compose.x.${handle}.nvidia.yml` - GPU support
-- `compose.x.traefik.${handle}.yml` - Reverse proxy integration
+Create cross-service files in `services/` following pattern:
+- `services/compose.x.${handle}.${other_service}.yml` - Integration with specific service
+- `services/compose.x.${handle}.nvidia.yml` - GPU support
+- `services/compose.x.traefik.${handle}.yml` - Reverse proxy integration
 
 #### Ollama Integration Pattern
 

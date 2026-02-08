@@ -1,4 +1,0 @@
-services:
-  webui:
-    volumes:
-      - ./open-webui/configs/config.llamaswap.json:/app/configs/config.llamaswap.json

@@ -1,0 +1,18 @@
+services:
+  tts:
+    image: ghcr.io/matatonic/openedai-speech
+    container_name: ${HARBOR_CONTAINER_PREFIX}.tts
+    env_file:
+      - ./.env
+      - ./services/tts/override.env
+    ports:
+      - ${HARBOR_TTS_HOST_PORT}:8000
+    volumes:
+      - ${HARBOR_TTS_VOICES_FOLDER}:/app/voices
+      - ${HARBOR_TTS_CONFIG_FOLDER}:/app/config
+      - ${HARBOR_HF_CACHE}:/root/.cache/huggingface
+    environment:
+      - TTS_HOME=${HARBOR_TTS_HOME}
+      - HF_HOME=/root/.cache/huggingface
+    networks:
+      - harbor-network

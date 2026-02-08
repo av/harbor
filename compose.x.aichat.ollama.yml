@@ -1,4 +1,0 @@
-services:
-  aichat:
-    volumes:
-      - ./aichat/configs/aichat.ollama.yml:/app/configs/ollama.yml

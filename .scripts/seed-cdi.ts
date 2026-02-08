@@ -1,7 +1,9 @@
 // h dev seed-cdi
 // deno run -A ./.scripts/seed-cdi.ts
 
-import { listComposeFiles } from "../routines/paths.js";
+import * as path from "jsr:@std/path";
+
+import { listComposeFiles, paths } from "../routines/paths.js";
 
 async function main() {
   const sourceFiles = await listComposeFiles().then((files) =>
@@ -27,8 +29,9 @@ services:
               - nvidia.com/gpu=all
     `.trim() + "\n";
 
-    console.log(`Writing ${outName}...`);
-    await Deno.writeTextFile(outName, content);
+    const outPath = path.join(paths.services, outName);
+    console.log(`Writing ${outPath}...`);
+    await Deno.writeTextFile(outPath, content);
   }
 
   console.log("Done!");

@@ -1,0 +1,24 @@
+services:
+  nanobot:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.nanobot
+    image: ${HARBOR_NANOBOT_IMAGE}:${HARBOR_NANOBOT_VERSION}
+    build:
+      context: ${HARBOR_NANOBOT_GIT_REF}
+      dockerfile: Dockerfile
+    env_file:
+      - ./.env
+      - ./services/nanobot/override.env
+    environment:
+      - TERM=xterm-256color
+    volumes:
+      - ${HARBOR_NANOBOT_CONFIG_DIR}:/root/.nanobot
+      - ./services/nanobot/entrypoint.sh:/entrypoint.sh
+    ports:
+      - ${HARBOR_NANOBOT_HOST_PORT}:18790
+    init: true
+    stdin_open: true
+    tty: true
+    entrypoint: ["/bin/sh", "/entrypoint.sh"]
+    command: ["gateway"]
+    networks:
+      - harbor-network

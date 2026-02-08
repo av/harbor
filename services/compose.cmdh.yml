@@ -1,0 +1,17 @@
+services:
+  cmdh:
+    build:
+      context: ./cmdh
+      dockerfile: Dockerfile
+    container_name: ${HARBOR_CONTAINER_PREFIX}.cmdh
+    env_file:
+      - ./.env
+      - ./services/cmdh/override.env
+    volumes:
+      - ./services/cmdh/ollama.ts:/app/cmdh/src/api/ollama.ts
+      - ./services/cmdh/override.env:/app/.env
+      - ./services/cmdh/system.prompt:/app/system.prompt
+    networks:
+      - harbor-network
+    environment:
+      - LLM_HOST=${HARBOR_CMDH_LLM_HOST}

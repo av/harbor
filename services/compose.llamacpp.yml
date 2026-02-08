@@ -1,0 +1,20 @@
+services:
+  llamacpp:
+    image: ${HARBOR_LLAMACPP_IMAGE}:server
+    container_name: ${HARBOR_CONTAINER_PREFIX}.llamacpp
+    env_file:
+      - ./.env
+      - ./services/llamacpp/override.env
+    volumes:
+      - ${HARBOR_HF_CACHE}:/app/models
+      - ${HARBOR_LLAMACPP_CACHE}:/root/.cache/llama.cpp
+      - ./services/llamacpp/data:/app/data
+    ports:
+      - ${HARBOR_LLAMACPP_HOST_PORT}:8080
+    command: >
+      ${HARBOR_LLAMACPP_MODEL_SPECIFIER}
+      ${HARBOR_LLAMACPP_EXTRA_ARGS}
+      --port 8080
+      --host 0.0.0.0
+    networks:
+      - harbor-network

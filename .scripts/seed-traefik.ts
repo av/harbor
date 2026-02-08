@@ -2,8 +2,9 @@
 // deno run -A ./.scripts/seed-traefik.ts
 
 import * as yaml from "jsr:@std/yaml";
+import * as path from "jsr:@std/path";
 
-import { listComposeFiles } from "../routines/paths.js";
+import { listComposeFiles, paths } from "../routines/paths.js";
 import { log } from "../routines/utils.js";
 
 async function main() {
@@ -19,9 +20,10 @@ async function main() {
   // All services that expose a port will have a traefik file as well
   await Promise.all(
     sourceFiles.map(async (file) => {
+      const filePath = path.join(paths.services, file);
       return {
         name: file,
-        contents: yaml.parse(await Deno.readTextFile(file))
+        contents: yaml.parse(await Deno.readTextFile(filePath))
       }
     })
   )
@@ -72,8 +74,9 @@ services:
       - traefik-public
 `.trim() + "\n";
 
-        log.debug(`Writing ${outName}...`);
-        Deno.writeTextFile(outName, content);
+        const outPath = path.join(paths.services, outName);
+        log.debug(`Writing ${outPath}...`);
+        Deno.writeTextFile(outPath, content);
       });
     });
 }
