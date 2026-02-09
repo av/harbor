@@ -116,6 +116,12 @@ async function copyWithProcessor(
   const sourceContent = await Deno.readTextFile(source);
   const destContent = await processor(sourceContent);
 
+  // Ensure destination directory exists before writing
+  const dir = dest.split('/').slice(0, -1).join('/');
+  if (dir && !Array.from(Deno.readDirSync('.')).some(d => d.name === dir && d.isDirectory)) {
+    await Deno.mkdir(dir, { recursive: true });
+  }
+
   await Deno.writeTextFile(dest, destContent);
 }
 

@@ -6,7 +6,7 @@ import * as toml from 'jsr:@std/toml';
 import * as path from 'jsr:@std/path';
 import * as collections from "jsr:@std/collections/deep-merge";
 
-const VERSION = "0.4.0";
+const VERSION = "0.4.1";
 
 type ValueSeed = {
   // Path relative to the project root
@@ -26,7 +26,7 @@ const targets: ValueSeed[] = [{
     },
   },
 }, {
-  target: 'boost/pyproject.toml',
+  target: 'services/boost/pyproject.toml',
   value: {
     project: {
       version: VERSION,
