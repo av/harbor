@@ -228,7 +228,8 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
     lmdeploy: {
         name: 'lmdeploy',
         tags: [HST.backend, HST.partial],
-        projectUrl: 'https://lmdeploy.readthedocs.io/en/latest/get_started.html',
+        projectUrl: 'https://github.com/InternLM/lmdeploy',
+        logo: 'https://www.google.com/s2/favicons?domain=lmdeploy.readthedocs.io&sz=128',
         wikiUrl: `${wikiUrl}/2.2.10-Backend:-lmdeploy`,
         tooltip: '',
     },
