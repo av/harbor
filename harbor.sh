@@ -887,10 +887,15 @@ link_cli() {
         fi
     fi
 
+    # Ensure target directory exists
+    if [[ ! -d "$target_dir" ]]; then
+        log_info "Creating $target_dir..."
+        mkdir -p "$target_dir"
+    fi
+
     # Check if target directory exists in PATH
     if ! echo "$PATH" | tr ':' '\n' | grep -q "$target_dir"; then
-        log_info "Creating $target_dir and adding it to PATH..."
-        mkdir -p "$target_dir"
+        log_info "Adding $target_dir to PATH..."
 
         # Update the shell configuration file
         echo -e "\nexport PATH=\"\$PATH:$target_dir\"\n" >>"$shell_profile"
