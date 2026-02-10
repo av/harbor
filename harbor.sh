@@ -287,8 +287,16 @@ has_nvidia_cdi() {
 }
 
 has_rocm() {
-    # Check for KFD device (kernel driver presence), common tools (rocminfo, rocm-smi, amd-smi)
-    [ -e "/dev/kfd" ] || command -v rocminfo &>/dev/null || command -v rocm-smi &>/dev/null || command -v amd-smi &>/dev/null
+    # 1. Hardware/Kernel check
+    [[ -e "/dev/kfd" ]] || return 1
+
+    # 2. Docker configuration check
+    # Check if 'amd' is listed in docker runtimes
+    if docker info 2>/dev/null | grep -i "runtimes" | grep -q "amd"; then
+        return 0
+    fi
+
+    return 1
 }
 
 has_modern_compose() {
