@@ -176,11 +176,19 @@ run_harbor_doctor() {
     log_info "Running Harbor Doctor..."
     has_errors=false
 
-    # Check if Docker is installed and running
-    if command -v docker &>/dev/null && docker info &>/dev/null; then
-        log_info "${ok} Docker is installed and running"
+    # Check if Docker is installed
+    if command -v docker &>/dev/null; then
+        log_info "${ok} Docker is installed"
+
+        # Check if Docker daemon is running
+        if docker info &>/dev/null; then
+            log_info "${ok} Docker daemon is running"
+        else
+            log_error "${nok} Docker daemon is not running. Please start Docker."
+            has_errors=true
+        fi
     else
-        log_error "${nok} Docker is not installed or not running. Please install or start Docker."
+        log_error "${nok} Docker is not installed. Please install Docker."
         has_errors=true
     fi
 
@@ -279,7 +287,8 @@ has_nvidia_cdi() {
 }
 
 has_rocm() {
-    command -v rocm-smi &>/dev/null
+    # Check for KFD device (kernel driver presence), common tools (rocminfo, rocm-smi, amd-smi)
+    [ -e "/dev/kfd" ] || command -v rocminfo &>/dev/null || command -v rocm-smi &>/dev/null || command -v amd-smi &>/dev/null
 }
 
 has_modern_compose() {
