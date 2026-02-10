@@ -2470,8 +2470,11 @@ open_home_code() {
 }
 
 unsafe_update() {
-    git fetch origin +main:refs/remotes/origin/main --depth 1
-    git checkout -B main origin/main
+    git fetch origin main --depth 1
+    git reset --hard FETCH_HEAD
+    if [ "$(git rev-parse --abbrev-ref HEAD)" != "main" ]; then
+        git checkout -B main FETCH_HEAD
+    fi
 }
 
 resolve_harbor_version() {
