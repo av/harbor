@@ -2470,9 +2470,8 @@ open_home_code() {
 }
 
 unsafe_update() {
-    git fetch origin main:main --depth 1
-    git checkout main
-    git pull
+    git fetch origin +main:refs/remotes/origin/main --depth 1
+    git checkout -B main origin/main
 }
 
 resolve_harbor_version() {
