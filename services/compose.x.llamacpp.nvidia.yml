@@ -1,6 +1,6 @@
 services:
   llamacpp:
-    image: ${HARBOR_LLAMACPP_IMAGE}:server-cuda
+    image: ${HARBOR_LLAMACPP_IMAGE_NVIDIA}
     deploy:
       resources:
         reservations:

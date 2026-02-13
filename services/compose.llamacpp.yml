@@ -1,6 +1,6 @@
 services:
   llamacpp:
-    image: ${HARBOR_LLAMACPP_IMAGE}:server
+    image: ${HARBOR_LLAMACPP_IMAGE_CPU}
     container_name: ${HARBOR_CONTAINER_PREFIX}.llamacpp
     env_file:
       - ./.env
