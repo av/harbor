@@ -2503,30 +2503,37 @@ update_harbor() {
     log_info "Merging .env files..."
     merge_env_files
 
+    log_info "Running config migrations..."
+    run_migrate_command
+
     log_info "Harbor updated successfully."
 }
 
 run_migrate_command() {
     case "$1" in
     -h | --help | help)
-        echo "Harbor 0.4.0 Migration Tool"
+        echo "Harbor Migration Tool"
         echo
         echo "Usage: harbor migrate [options]"
         echo
         echo "Options:"
         echo "  --dry-run           Preview migration without making changes"
-        echo "  --force             Skip confirmation prompts"
-        echo "  --rollback=<dir>    Rollback migration from backup directory"
+        echo "  --target <version>  Override target Harbor version"
         echo "  -h, --help          Show this help message"
         echo
-        echo "This command migrates your Harbor installation to the new 0.4.0 structure"
-        echo "where all service files are organized in the services/ directory."
-        echo
-        echo "See docs/0.4.0-Migration-Guide.md for more information."
+        echo "This command migrates your Harbor configuration schema to the current Harbor version."
         ;;
     *)
         log_debug "Running migration script"
-        deno run -A --unstable-sloppy-imports "$harbor_home/.scripts/migrate-0.4.0.ts" "$@"
+        local target_config_version=$(grep '^HARBOR_CONFIG_VERSION=' "$default_profile" | cut -d '=' -f2-)
+        target_config_version="${target_config_version#\"}"
+        target_config_version="${target_config_version%\"}"
+
+        if [[ -z "$target_config_version" ]]; then
+            target_config_version="$version"
+        fi
+
+        deno run -A --unstable-sloppy-imports "$harbor_home/.scripts/migrate.ts" --target "$target_config_version" "$@"
         ;;
     esac
 }
