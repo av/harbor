@@ -180,11 +180,18 @@ run_harbor_doctor() {
     if command -v docker &>/dev/null; then
         log_info "${ok} Docker is installed"
 
-        # Check if Docker daemon is running
-        if docker info &>/dev/null; then
+        # Check if Docker can be called without sudo
+        local docker_access_output
+        docker_access_output=$(docker info 2>&1)
+        if [ $? -eq 0 ]; then
+            log_info "${ok} Docker can be called without sudo"
             log_info "${ok} Docker daemon is running"
         else
-            log_error "${nok} Docker daemon is not running. Please start Docker."
+            if echo "$docker_access_output" | grep -qi "permission denied\|got permission denied while trying to connect to the docker daemon socket"; then
+                log_error "${nok} Docker requires sudo for this user. Add your user to the 'docker' group and re-login."
+            else
+                log_error "${nok} Docker daemon is not running or not reachable. Please start Docker."
+            fi
             has_errors=true
         fi
     else
