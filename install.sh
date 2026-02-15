@@ -108,7 +108,8 @@ main() {
 
   if [ "$INSTALL_REQUIREMENTS" = true ]; then
     echo "Running post-install requirements check..."
-    harbor doctor
+    newgrp docker
+    ./harbor.sh doctor
   fi
 
   echo "Installation complete."
