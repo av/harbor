@@ -394,6 +394,7 @@ run_routine() {
 
     log_debug "Running routine: $routine_name"
     docker run --rm \
+        --network=host \
         -v "$harbor_home:$harbor_home" \
         -v harbor-deno-cache:/deno-dir:rw \
         -w "$harbor_home" \
