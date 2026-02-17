@@ -1544,11 +1544,9 @@ env_manager() {
         shift 2          # Remove 'set' and the key from the arguments
         local value="$*" # Capture all remaining arguments as the value
         if grep -q "^$prefix$upper_key=" "$env_file"; then
-            if [[ "$(uname)" == "Darwin" ]]; then
-                sed -i '' "s|^$prefix$upper_key=.*|$prefix$upper_key=\"$value\"|" "$env_file"
-            else
-                sed -i "s|^$prefix$upper_key=.*|$prefix$upper_key=\"$value\"|" "$env_file"
-            fi
+            # Use temp file approach for portability across GNU and BSD sed
+            local temp_file=$(mktemp)
+            sed "s|^$prefix$upper_key=.*|$prefix$upper_key=\"$value\"|" "$env_file" > "$temp_file" && mv "$temp_file" "$env_file"
         else
             echo "$prefix$upper_key=\"$value\"" >>"$env_file"
         fi
@@ -2611,7 +2609,11 @@ get_ip() {
 }
 
 extract_tunnel_url() {
-    grep -oP '(?<=\|  )https://[^[:space:]]+\.trycloudflare\.com(?=\s+\|)' | head -n1
+    if [[ "$(uname)" == "Darwin" ]]; then
+        grep -oE 'https://[^[:space:]]+\.trycloudflare\.com' | head -n1
+    else
+        grep -oP '(?<=\|  )https://[^[:space:]]+\.trycloudflare\.com(?=\s+\|)' | head -n1
+    fi
 }
 
 establish_tunnel() {
