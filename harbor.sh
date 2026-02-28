@@ -2858,7 +2858,7 @@ run_llamacpp_command() {
     }
 
     case "$1" in
-    models)
+    models|ls)
         shift
         curl -s $(harbor url llamacpp)/models | jq -r '.data[].id'
         ;;
@@ -4784,6 +4784,38 @@ run_mcp_command() {
     esac
 }
 
+run_openfang_command() {
+    case "$1" in
+    model)
+        shift
+        env_manager_alias openfang.model "$@"
+        return 0
+        ;;
+    provider)
+        shift
+        env_manager_alias openfang.model.provider "$@"
+        return 0
+        ;;
+    -h | --help | help)
+        echo "Please note that this is not OpenFang CLI, but a Harbor CLI to manage OpenFang service."
+        echo
+        echo "Usage: harbor openfang <command>"
+        echo
+        echo "Commands:"
+        echo "  harbor openfang model [model]       - Get or set the OpenFang model"
+        echo "  harbor openfang provider [provider]  - Get or set the OpenFang model provider"
+        return 0
+        ;;
+    esac
+
+    local services
+    services=$(get_active_services)
+
+    $(compose_with_options $services "openfang") exec \
+        openfang \
+        openfang "$@"
+}
+
 run_modularmax_command() {
     case "$1" in
     model)
@@ -5164,6 +5196,10 @@ main_entrypoint() {
     modularmax)
         shift
         run_modularmax_command "$@"
+        ;;
+    openfang)
+        shift
+        run_openfang_command "$@"
         ;;
     tunnel | t)
         shift

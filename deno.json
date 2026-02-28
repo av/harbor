@@ -14,5 +14,8 @@
       "ESNext"
     ],
     "checkJs": true
+  },
+  "imports": {
+    "@std/toml": "jsr:@std/toml@^1.0.11"
   }
 }

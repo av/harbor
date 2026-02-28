@@ -905,5 +905,13 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         wikiUrl: `${wikiUrl}/2.3.72-Satellite-Postiz`,
         tooltip: 'AI-powered social media scheduling tool for managing posts, analytics, and team collaboration.',
     },
+    openfang: {
+        name: 'OpenFang',
+        tags: [HST.satellite, HST.api, HST.tools],
+        projectUrl: 'https://github.com/RightNow-AI/openfang',
+        logo: 'https://github.com/RightNow-AI.png?size=200',
+        wikiUrl: `${wikiUrl}/2.3.73-Satellite-OpenFang`,
+        tooltip: 'Rust-based Agent Operating System for running autonomous AI agents with scheduling, 40 channel adapters, and 27 LLM providers.',
+    },
 };
 

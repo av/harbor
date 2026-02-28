@@ -2,7 +2,9 @@
   "version": "5",
   "specifiers": {
     "jsr:@std/collections@*": "1.0.10",
+    "jsr:@std/collections@^1.0.9": "1.0.10",
     "jsr:@std/fmt@*": "1.0.5",
+    "jsr:@std/toml@*": "1.0.2",
     "jsr:@std/yaml@*": "1.0.5"
   },
   "jsr": {
@@ -11,6 +13,12 @@
     },
     "@std/fmt@1.0.5": {
       "integrity": "0cfab43364bc36650d83c425cd6d99910fc20c4576631149f0f987eddede1a4d"
+    },
+    "@std/toml@1.0.2": {
+      "integrity": "5892ba489c5b512265a384238a8fe8dddbbb9498b4b210ef1b9f0336a423a39b",
+      "dependencies": [
+        "jsr:@std/collections@^1.0.9"
+      ]
     },
     "@std/yaml@1.0.5": {
       "integrity": "71ba3d334305ee2149391931508b2c293a8490f94a337eef3a09cade1a2a2742"

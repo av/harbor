@@ -51,6 +51,17 @@ export const OPENAI_COMPATIBLE_BACKENDS: Record<string, BackendInfo> = {
   ktransformers: { url: 'http://ktransformers:8088', name: 'KTransformers' },
 };
 
+/** Maps backend service names to their Harbor config model keys. */
+export const BACKEND_MODEL_KEYS: Record<string, string> = {
+  llamacpp: 'llamacpp.model',
+  vllm: 'vllm.model',
+  tabbyapi: 'tabbyapi.model',
+  mistralrs: 'mistralrs.model',
+  sglang: 'sglang.model',
+  aphrodite: 'aphrodite.model',
+  ktransformers: 'ktransformers.model',
+};
+
 /**
  * Detects which OpenAI-compatible backend to use based on active services.
  *
@@ -194,5 +205,30 @@ export function injectBackendEnv(
   } else {
     service.environment.HARBOR_BACKEND_NAME = backend.info.name;
     service.environment.HARBOR_BACKEND_URL = backend.info.url;
+  }
+}
+
+/** Appends /v1 to a URL if not already present. OpenAI-compatible drivers expect this suffix. */
+export function ensureV1Suffix(url: string): string {
+  const trimmed = url.replace(/\/+$/, '');
+  return trimmed.endsWith('/v1') ? trimmed : `${trimmed}/v1`;
+}
+
+/** Sets environment variables on a compose service, deduplicating existing entries. */
+export function setEnvVars(
+  service: ServiceDefinition,
+  vars: Record<string, string>,
+): void {
+  if (Array.isArray(service.environment)) {
+    const keys = new Set(Object.keys(vars));
+    service.environment = service.environment.filter(
+      (e: string) => !keys.has(e.split('=')[0]),
+    );
+    for (const [k, v] of Object.entries(vars)) {
+      service.environment.push(`${k}=${v}`);
+    }
+  } else {
+    if (!service.environment) service.environment = {};
+    Object.assign(service.environment as Record<string, string>, vars);
   }
 }

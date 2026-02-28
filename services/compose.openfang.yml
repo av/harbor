@@ -1,0 +1,37 @@
+services:
+  openfang:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.openfang
+    build:
+      context: ./services/openfang
+      dockerfile_inline: |
+        FROM ghcr.io/av/tools:latest
+        ARG OPENFANG_VERSION=v0.2.2
+        RUN set -e; \
+            ARCH="$$(uname -m)"; \
+            case "$$ARCH" in \
+              x86_64)  ARCH="x86_64-unknown-linux-gnu" ;; \
+              aarch64) ARCH="aarch64-unknown-linux-gnu" ;; \
+              *) echo "Unsupported arch: $$ARCH" && exit 1 ;; \
+            esac; \
+            curl -fSL "https://github.com/RightNow-AI/openfang/releases/download/$${OPENFANG_VERSION}/openfang-$${ARCH}.tar.gz" \
+              -o /tmp/openfang.tar.gz && \
+            tar -xzf /tmp/openfang.tar.gz -C /usr/local/bin && \
+            chmod +x /usr/local/bin/openfang && \
+            rm /tmp/openfang.tar.gz
+      args:
+        OPENFANG_VERSION: ${HARBOR_OPENFANG_VERSION}
+    env_file:
+      - ./.env
+      - ./services/openfang/override.env
+    environment:
+      - OPENFANG_HOME=/data
+    ports:
+      - "${HARBOR_OPENFANG_HOST_PORT}:4200"
+    volumes:
+      - openfang_data:/data
+      - ./services/openfang/agents:/root/.openfang/agents
+    networks:
+      - harbor-network
+
+volumes:
+  openfang_data:
