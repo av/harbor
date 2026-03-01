@@ -1,4 +1,4 @@
-name = 'General Assistant'
+name = 'Assistant'
 version = '1.0.0'
 description = 'A versatile conversational agent that can help with everyday tasks, answer questions, and provide recommendations.'
 author = 'Harbor'
@@ -8,8 +8,3 @@ profile = 'minimal'
 [capabilities]
 memory_read = ['*']
 memory_write = ['self.*']
-
-[model]
-provider = 'ollama'
-model = 'unsloth/Qwen3.5-35B-A3B-GGUF:UD-Q4_K_XL'
-base_url = 'http://ollama:11434/v1'

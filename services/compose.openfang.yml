@@ -29,7 +29,7 @@ services:
       - "${HARBOR_OPENFANG_HOST_PORT}:4200"
     volumes:
       - openfang_data:/data
-      - ./services/openfang/agents:/root/.openfang/agents
+      - ./services/openfang/agents:/root/.openfang/agents:ro
     networks:
       - harbor-network
 
