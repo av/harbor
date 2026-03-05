@@ -12,9 +12,6 @@ export const HarborConfigEntryEditor = ({ entry }: { entry: HarborConfigEntry })
                 disabled={config?.isReadonly}
                 value={entry.value}
                 onChange={(e) => {
-                    console.log('===============');
-                    console.log(config);
-                    console.log('===============');
                     config?.setValue(entry.id, e.target.value);
                 }}
             />

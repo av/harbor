@@ -101,7 +101,7 @@ show_help() {
     echo
     echo "  url <handle>                  - Get the URL for a service"
     echo "    url <handle>                         - Url on the local host"
-    echo "    url [-a|--adressable|--lan] <handle> - (supposed) LAN URL"
+    echo "    url [-a|--addressable|--lan] <handle> - (supposed) LAN URL"
     echo "    url [-i|--internal] <handle>         - URL within Harbor's docker network"
     echo
     echo "  qr <handle>                   - Print a QR code for a service"
@@ -115,9 +115,10 @@ show_help() {
     echo "  config [get|set|ls]           - Manage the Harbor environment configuration"
     echo "    config ls                   - All config values in ENV format"
     echo "    config get <field>          - Get a specific config value"
-    echo "    config set <field> <value>  - Get a specific config value"
+    echo "    config set <field> <value>  - Set a specific config value"
     echo "    config reset                - Reset Harbor configuration to default .env"
     echo "    config update               - Merge upstream config changes from default .env"
+    echo "    config search <query>       - Search config keys and values"
     echo
     echo "  env <service> [key] [value]   - Manage override.env variables for a service"
     echo "    env <service>               - List all variables for a service"
@@ -593,12 +594,14 @@ run_up() {
     local should_tail=false
     local should_open=false
     local should_attach=false
+    local no_defaults=false
     local filtered_args=()
     local up_args=()
 
     for arg in "$@"; do
         case "$arg" in
         --no-defaults)
+            no_defaults=true
             up_args+=("$arg")
             ;;
         --open | -o)
@@ -611,13 +614,39 @@ run_up() {
             should_attach=true
             ;;
         *)
-            filtered_args+=("$arg") # Add to filtered arguments
+            filtered_args+=("$arg")
             ;;
         esac
     done
 
+    local display_services=("${filtered_args[@]}")
+    if [ ${#display_services[@]} -eq 0 ] && ! $no_defaults; then
+        display_services=("${default_options[@]}")
+    fi
+
+    if [ ${#display_services[@]} -gt 0 ]; then
+        log_info "Starting services: ${display_services[*]}"
+    else
+        log_info "Starting services..."
+    fi
+
     log_debug "Running 'up' for services: ${up_args[@]} ${filtered_args[@]}"
     $(compose_with_options "${up_args[@]}" "${filtered_args[@]}") up -d --wait
+    local up_exit=$?
+
+    if [ $up_exit -ne 0 ]; then
+        log_error "Failed to start services (exit code: $up_exit)"
+        return $up_exit
+    fi
+
+    for service in "${display_services[@]}"; do
+        local url
+        if url=$(get_service_url "$service" 2>/dev/null); then
+            log_info "  ${c_g}${service}${c_nc} - $url"
+        else
+            log_info "  ${c_g}${service}${c_nc}"
+        fi
+    done
 
     if [ "$default_autoopen" = "true" ]; then
         run_open "$default_open"
@@ -658,8 +687,22 @@ run_down() {
 
     log_debug "Matched: ${matched_services[*]}"
 
+    if [ $# -eq 0 ]; then
+        log_info "Stopping all services..."
+    else
+        log_info "Stopping services: $*"
+    fi
+
     matched_services_str=$(printf " %s" "${matched_services[@]}")
-    $(compose_with_options "*") down --remove-orphans --timeout 1 "$@" $matched_services_str
+    $(compose_with_options "*") down --remove-orphans --timeout 10 "$@" $matched_services_str
+    local down_exit=$?
+
+    if [ $down_exit -eq 0 ]; then
+        log_info "Services stopped."
+    else
+        log_error "Failed to stop services (exit code: $down_exit)"
+        return $down_exit
+    fi
 }
 
 run_restart() {
@@ -1025,7 +1068,7 @@ get_service_url() {
     fi
 }
 
-get_adressable_url() {
+get_addressable_url() {
     local service_name="$1"
     local port
     local ip_address
@@ -1064,7 +1107,7 @@ get_intra_url() {
 
 get_url() {
     local is_local=true
-    local is_adressable=false
+    local is_addressable=false
     local is_intra=false
 
     local filtered_args=()
@@ -1074,13 +1117,13 @@ get_url() {
         case "$arg" in
         --intra | -i | --internal)
             is_local=false
-            is_adressable=false
+            is_addressable=false
             is_intra=true
             ;;
         --addressable | -a | --lan)
             is_local=false
             is_intra=false
-            is_adressable=true
+            is_addressable=true
             ;;
         *)
             filtered_args+=("$arg") # Add to filtered arguments
@@ -1096,8 +1139,8 @@ get_url() {
 
     if $is_local; then
         get_service_url "${filtered_args[@]}"
-    elif $is_adressable; then
-        get_adressable_url "${filtered_args[@]}"
+    elif $is_addressable; then
+        get_addressable_url "${filtered_args[@]}"
     elif $is_intra; then
         get_intra_url "${filtered_args[@]}"
     fi
@@ -1447,6 +1490,65 @@ swap_and_retry() {
     fi
 }
 
+levenshtein_distance() {
+    local s="$1" t="$2"
+    local s_len=${#s} t_len=${#t}
+    local -a d
+    local i j cost
+
+    for ((i = 0; i <= s_len; i++)); do d[$((i * (t_len + 1)))]=$i; done
+    for ((j = 0; j <= t_len; j++)); do d[$j]=$j; done
+
+    for ((i = 1; i <= s_len; i++)); do
+        for ((j = 1; j <= t_len; j++)); do
+            if [[ "${s:i-1:1}" == "${t:j-1:1}" ]]; then cost=0; else cost=1; fi
+            local del=$((d[((i - 1) * (t_len + 1) + j)] + 1))
+            local ins=$((d[(i * (t_len + 1) + j - 1)] + 1))
+            local sub=$((d[((i - 1) * (t_len + 1) + j - 1)] + cost))
+            local min=$del
+            ((ins < min)) && min=$ins
+            ((sub < min)) && min=$sub
+            d[$((i * (t_len + 1) + j))]=$min
+        done
+    done
+
+    echo "${d[$((s_len * (t_len + 1) + t_len))]}"
+}
+
+suggest_command() {
+    local input="$1"
+    local known_commands=(
+        up u start s down d restart r ps build shell logs l pull exec run
+        stats attach cmd help --help -h hf defaults alias aliases a link ln
+        unlink open o url qr list ls version --version -v smi top dive eject
+        ollama llamacpp tgi litellm vllm aphrodite openai opencode webui
+        tabbyapi parllama oterm plandex pdx mistralrs interpreter opint
+        cfd cloudflared cmdh fabric parler photoprism airllm txtai aider
+        nanobot chatui comfyui aichat omnichain lmeval lm_eval sglang
+        jupyter ol1 ktransformers openhands oh stt speaches boost nexa
+        repopack k6 promptfoo pf webtop langflow kobold morphic gptme mcp
+        migrate modularmax tunnel t tunnels config profile profiles p gum
+        fixfs info update how find home vscode doctor bench history h size
+        env dev tools eval routine
+    )
+
+    local best_match=""
+    local best_distance=999
+
+    for cmd in "${known_commands[@]}"; do
+        local dist
+        dist=$(levenshtein_distance "$input" "$cmd")
+        if ((dist < best_distance)); then
+            best_distance=$dist
+            best_match=$cmd
+        fi
+    done
+
+    if ((best_distance <= 3 && best_distance > 0)); then
+        echo "$best_match"
+    fi
+}
+
 set_default_log_levels() {
     default_log_levels_DEBUG=0
     default_log_levels_INFO=1
@@ -1574,10 +1676,30 @@ env_manager() {
         shift
         merge_env_files
         ;;
+    search | find)
+        if [[ -z "$2" ]]; then
+            $silent || echo "Usage: harbor config search <query>"
+            return 1
+        fi
+        local query="$2"
+        local results
+        results=$(grep -i "^$prefix" "$env_file" | grep -i "$query")
+        if [[ -z "$results" ]]; then
+            $silent || echo "No results found for: $query"
+            return 0
+        fi
+        echo "$results" | sed "s/^$prefix//" | while read -r line; do
+            key=${line%%=*}
+            value=${line#*=}
+            value=$(echo "$value" | sed -E 's/^"(.*)"$/\1/')
+            display_key=$(echo "$key" | tr '[:upper:]' '[:lower:]' | sed 's/_/./')
+            printf "%-30s %s\n" "$display_key" "$value"
+        done
+        ;;
     --help | -h)
         echo "Harbor configuration management"
         echo
-        echo "Usage: harbor config [--silent] [--env-file <file>] [--prefix <prefix>] {get|set|ls|list|reset|update} [key] [value]"
+        echo "Usage: harbor config [--silent] [--env-file <file>] [--prefix <prefix>] {get|set|ls|list|search|reset|update} [key] [value]"
         echo
         echo "Options:"
         echo " --silent        Suppress all non-essential output"
@@ -1588,12 +1710,13 @@ env_manager() {
         echo " get <key>       Get the value of a configuration key"
         echo " set <key> <value> Set the value of a configuration key"
         echo " ls|list         List all configuration keys and values"
+        echo " search|find <query> Search config keys and values"
         echo " reset           Reset Harbor configuration to default .env"
         echo " update          Merge upstream config changes from default .env"
         return 0
         ;;
     *)
-        $silent || echo "Usage: harbor config [--silent] [--env-file <file>] [--prefix <prefix>] {get|set|ls|reset} [key] [value]"
+        $silent || echo "Usage: harbor config [--silent] [--env-file <file>] [--prefix <prefix>] {get|set|ls|search|reset} [key] [value]"
         return $scramble_exit_code
         ;;
     esac
@@ -3910,12 +4033,12 @@ run_omnichain_command() {
         execute_and_process "env_manager get omnichain.workspace" "sys_open {{output}}" "No omnichain.workspace set"
         ;;
     -h | --help | help)
-        echo "Please note that this is not omnichain CLI, but a Harbor CLI to manage aichat service."
+        echo "Please note that this is not omnichain CLI, but a Harbor CLI to manage omnichain service."
         echo
-        echo "Usage: harbor aichat <command>"
+        echo "Usage: harbor omnichain <command>"
         echo
         echo "Commands:"
-        echo "  harbor omnichain workspace     - Open the aichat workspace directory"
+        echo "  harbor omnichain workspace     - Open the omnichain workspace directory"
         ;;
     *)
         return $scramble_exit_code
@@ -5363,6 +5486,15 @@ check_migration_needed "$1"
 
 # Call the main logic with argument swapping
 if ! swap_and_retry main_entrypoint "$@"; then
-    show_help
+    if [ $# -eq 0 ]; then
+        show_help
+    else
+        suggestion=$(suggest_command "$1")
+        log_error "Unknown command: $1"
+        if [ -n "$suggestion" ]; then
+            log_info "Did you mean: ${c_g}harbor ${suggestion}${c_nc}?"
+        fi
+        log_info "Run 'harbor help' for a list of commands."
+    fi
     exit 1
 fi
