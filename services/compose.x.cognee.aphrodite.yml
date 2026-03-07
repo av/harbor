@@ -1,0 +1,9 @@
+services:
+  cognee:
+    depends_on:
+      - aphrodite
+    environment:
+      - LLM_PROVIDER=openai
+      - LLM_API_KEY=sk-aphrodite
+      - LLM_MODEL=${HARBOR_APHRODITE_MODEL}
+      - LLM_ENDPOINT=http://aphrodite:2242/v1

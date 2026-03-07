@@ -1,0 +1,9 @@
+services:
+  cognee:
+    depends_on:
+      - modularmax
+    environment:
+      - LLM_PROVIDER=openai
+      - LLM_API_KEY=sk-modularmax
+      - LLM_MODEL=${HARBOR_MODULARMAX_MODEL}
+      - LLM_ENDPOINT=http://modularmax:8000/v1

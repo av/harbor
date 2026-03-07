@@ -1,0 +1,9 @@
+services:
+  cognee:
+    depends_on:
+      - localai
+    environment:
+      - LLM_PROVIDER=openai
+      - LLM_API_KEY=sk-localai
+      - LLM_MODEL=${HARBOR_COGNEE_LLM_MODEL}
+      - LLM_ENDPOINT=http://localai:8080/v1

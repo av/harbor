@@ -1,0 +1,9 @@
+services:
+  cognee:
+    depends_on:
+      - airllm
+    environment:
+      - LLM_PROVIDER=openai
+      - LLM_API_KEY=sk-airllm
+      - LLM_MODEL=${HARBOR_AIRLLM_MODEL}
+      - LLM_ENDPOINT=http://airllm:5000/v1

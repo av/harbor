@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "cognee": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "supergateway",
+        "--sse",
+        "http://cognee-mcp:8000/sse"
+      ]
+    }
+  }
+}

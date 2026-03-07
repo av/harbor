@@ -1,0 +1,9 @@
+services:
+  cognee:
+    depends_on:
+      - lmdeploy
+    environment:
+      - LLM_PROVIDER=openai
+      - LLM_API_KEY=sk-lmdeploy
+      - LLM_MODEL=${HARBOR_COGNEE_LLM_MODEL}
+      - LLM_ENDPOINT=http://lmdeploy:23333/v1

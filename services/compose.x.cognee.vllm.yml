@@ -1,0 +1,9 @@
+services:
+  cognee:
+    depends_on:
+      - vllm
+    environment:
+      - LLM_PROVIDER=openai
+      - LLM_API_KEY=sk-vllm
+      - LLM_MODEL=${HARBOR_VLLM_MODEL}
+      - LLM_ENDPOINT=http://vllm:8000/v1

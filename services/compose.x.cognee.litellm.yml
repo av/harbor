@@ -1,0 +1,9 @@
+services:
+  cognee:
+    depends_on:
+      - litellm
+    environment:
+      - LLM_PROVIDER=openai
+      - LLM_API_KEY=${HARBOR_LITELLM_MASTER_KEY}
+      - LLM_MODEL=${HARBOR_COGNEE_LLM_MODEL}
+      - LLM_ENDPOINT=http://litellm:4000/v1

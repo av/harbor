@@ -1,0 +1,9 @@
+services:
+  cognee:
+    depends_on:
+      - llamacpp
+    environment:
+      - LLM_PROVIDER=openai
+      - LLM_API_KEY=sk-llamacpp
+      - LLM_MODEL=${HARBOR_LLAMACPP_MODEL}
+      - LLM_ENDPOINT=http://llamacpp:8080/v1

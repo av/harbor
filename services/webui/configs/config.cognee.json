@@ -1,0 +1,25 @@
+{
+  "tool_server": {
+    "connections": [
+      {
+        "url": "http://cognee-mcp:8000/mcp",
+        "path": "",
+        "type": "mcp",
+        "spec_type": "url",
+        "spec": "",
+        "auth_type": "none",
+        "key": "",
+        "info": {
+          "id": "cognee",
+          "name": "Cognee",
+          "description": "Cognee knowledge graph and memory tools"
+        },
+        "config": {
+          "enable": true,
+          "access_grants": [],
+          "function_name_filter_list": ","
+        }
+      }
+    ]
+  }
+}

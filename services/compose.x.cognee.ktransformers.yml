@@ -1,0 +1,9 @@
+services:
+  cognee:
+    depends_on:
+      - ktransformers
+    environment:
+      - LLM_PROVIDER=openai
+      - LLM_API_KEY=sk-ktransformers
+      - LLM_MODEL=${HARBOR_KTRANSFORMERS_MODEL}
+      - LLM_ENDPOINT=http://ktransformers:12456/v1

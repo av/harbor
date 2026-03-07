@@ -1,0 +1,9 @@
+services:
+  cognee:
+    depends_on:
+      - kobold
+    environment:
+      - LLM_PROVIDER=openai
+      - LLM_API_KEY=sk-kobold
+      - LLM_MODEL=${HARBOR_KOBOLD_MODEL}
+      - LLM_ENDPOINT=http://kobold:5001/v1

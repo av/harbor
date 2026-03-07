@@ -1,0 +1,9 @@
+services:
+  cognee:
+    depends_on:
+      - mistralrs
+    environment:
+      - LLM_PROVIDER=openai
+      - LLM_API_KEY=sk-mistralrs
+      - LLM_MODEL=${HARBOR_MISTRALRS_MODEL}
+      - LLM_ENDPOINT=http://mistralrs:8021/v1

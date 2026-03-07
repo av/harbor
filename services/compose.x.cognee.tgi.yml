@@ -1,0 +1,9 @@
+services:
+  cognee:
+    depends_on:
+      - tgi
+    environment:
+      - LLM_PROVIDER=openai
+      - LLM_API_KEY=sk-tgi
+      - LLM_MODEL=${HARBOR_TGI_MODEL}
+      - LLM_ENDPOINT=http://tgi:80/v1

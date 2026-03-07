@@ -1,0 +1,63 @@
+services:
+  cognee:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.cognee
+    build:
+      context: ${HARBOR_COGNEE_GIT_REF}
+      dockerfile: Dockerfile
+    env_file:
+      - ./.env
+      - ./services/cognee/override.env
+    ports:
+      - ${HARBOR_COGNEE_HOST_PORT}:8000
+    environment:
+      - HOST=0.0.0.0
+      - ENVIRONMENT=local
+      - DEBUG=false
+      - LOG_LEVEL=INFO
+      - CORS_ALLOWED_ORIGINS=*
+      - LLM_API_KEY=${HARBOR_COGNEE_LLM_API_KEY:-${HARBOR_OPENAI_KEY:-}}
+      - LLM_MODEL=${HARBOR_COGNEE_LLM_MODEL}
+      - LLM_PROVIDER=${HARBOR_COGNEE_LLM_PROVIDER}
+      - LLM_ENDPOINT=${HARBOR_COGNEE_LLM_ENDPOINT:-}
+      - EMBEDDING_PROVIDER=${HARBOR_COGNEE_EMBEDDING_PROVIDER}
+      - EMBEDDING_MODEL=${HARBOR_COGNEE_EMBEDDING_MODEL}
+      - EMBEDDING_ENDPOINT=${HARBOR_COGNEE_EMBEDDING_ENDPOINT:-}
+      - EMBEDDING_DIMENSIONS=${HARBOR_COGNEE_EMBEDDING_DIMENSIONS}
+      - HUGGINGFACE_TOKENIZER=${HARBOR_COGNEE_HUGGINGFACE_TOKENIZER}
+      - DB_PROVIDER=sqlite
+      - GRAPH_DATABASE_PROVIDER=kuzu
+      - VECTOR_DB_PROVIDER=lancedb
+      - DATA_ROOT_DIRECTORY=/app/.cognee_data
+      - SYSTEM_ROOT_DIRECTORY=/app/.cognee_system
+      - CACHE_ROOT_DIRECTORY=/app/.cognee_cache
+      - REQUIRE_AUTHENTICATION=False
+      - ENABLE_BACKEND_ACCESS_CONTROL=false
+      - TELEMETRY_DISABLED=1
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ${HARBOR_COGNEE_WORKSPACE}/data:/app/.cognee_data
+      - ${HARBOR_COGNEE_WORKSPACE}/system:/app/.cognee_system
+      - ${HARBOR_COGNEE_WORKSPACE}/cache:/app/.cognee_cache
+    networks:
+      - harbor-network
+
+  cognee-mcp:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.cognee-mcp
+    image: ${HARBOR_COGNEE_MCP_IMAGE}:${HARBOR_COGNEE_MCP_VERSION}
+    env_file:
+      - ./.env
+      - ./services/cognee/override.env
+    ports:
+      - ${HARBOR_COGNEE_MCP_HOST_PORT}:8000
+    environment:
+      TRANSPORT_MODE: sse
+      API_URL: http://cognee:8000
+      PYTHONUNBUFFERED: 1
+      MCP_LOG_LEVEL: INFO
+      TELEMETRY_DISABLED: 1
+    depends_on:
+      cognee:
+        condition: service_started
+    networks:
+      - harbor-network

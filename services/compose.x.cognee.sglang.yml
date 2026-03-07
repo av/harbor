@@ -1,0 +1,9 @@
+services:
+  cognee:
+    depends_on:
+      - sglang
+    environment:
+      - LLM_PROVIDER=openai
+      - LLM_API_KEY=sk-sglang
+      - LLM_MODEL=${HARBOR_SGLANG_MODEL}
+      - LLM_ENDPOINT=http://sglang:30000/v1

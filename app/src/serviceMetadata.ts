@@ -913,5 +913,13 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         wikiUrl: `${wikiUrl}/2.3.73-Satellite-OpenFang`,
         tooltip: 'Rust-based Agent Operating System for running autonomous AI agents with scheduling, 40 channel adapters, and 27 LLM providers.',
     },
+    cognee: {
+        name: 'Cognee',
+        tags: [HST.satellite, HST.api, HST.rag],
+        projectUrl: 'https://github.com/topoteretes/cognee',
+        logo: 'https://www.google.com/s2/favicons?domain=www.cognee.ai&sz=128',
+        wikiUrl: `${wikiUrl}/2.3.74-Satellite-Cognee`,
+        tooltip: 'Knowledge engine for AI agent memory. Transforms documents into searchable graphs and vectors with built-in pipelines.',
+    },
 };
 

@@ -1,0 +1,16 @@
+services:
+  cognee-mcp:
+    environment:
+      TRANSPORT_MODE: http
+    volumes:
+      - ./services/cognee/start_mcp_http.py:/app/harbor-start-mcp-http.py:ro
+    entrypoint:
+      - /app/.venv/bin/python
+      - /app/harbor-start-mcp-http.py
+
+  webui:
+    volumes:
+      - ./services/webui/configs/config.cognee.json:/app/configs/config.cognee.json
+    depends_on:
+      cognee-mcp:
+        condition: service_started

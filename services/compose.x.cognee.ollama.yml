@@ -1,0 +1,4 @@
+services:
+  cognee:
+    depends_on:
+      - ollama

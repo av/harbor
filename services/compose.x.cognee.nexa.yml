@@ -1,0 +1,9 @@
+services:
+  cognee:
+    depends_on:
+      - nexa-proxy
+    environment:
+      - LLM_PROVIDER=openai
+      - LLM_API_KEY=sk-nexa
+      - LLM_MODEL=${HARBOR_NEXA_MODEL}
+      - LLM_ENDPOINT=http://nexa-proxy:8000/v1

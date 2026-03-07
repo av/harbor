@@ -1,0 +1,9 @@
+services:
+  cognee:
+    depends_on:
+      - tabbyapi
+    environment:
+      - LLM_PROVIDER=openai
+      - LLM_API_KEY=${HARBOR_TABBYAPI_ADMIN_KEY}
+      - LLM_MODEL=${HARBOR_TABBYAPI_MODEL}
+      - LLM_ENDPOINT=http://tabbyapi:5000/v1
