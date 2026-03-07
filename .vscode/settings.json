@@ -9,4 +9,7 @@
     }
   ],
   "chat.useAgentsMdFile": true,
+  "chat.tools.terminal.autoApprove": {
+    "harbor": true
+  },
 }
