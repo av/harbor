@@ -1625,6 +1625,27 @@ env_manager() {
 
     set -- "${filtered_args[@]}"
 
+    # Service-scoped config: harbor config <service> [command] [key] [value]
+    if [[ -n "$1" ]] && [[ -f "services/$1/override.env" ]]; then
+        env_file="services/$1/override.env"
+        prefix=""
+        shift
+
+        case "$1" in
+        get|set|ls|list|search|find|--help|-h)
+            ;;
+        *)
+            if [[ $# -eq 0 ]]; then
+                set -- "ls"
+            elif [[ $# -eq 1 ]]; then
+                set -- "get" "$1"
+            else
+                set -- "set" "$@"
+            fi
+            ;;
+        esac
+    fi
+
     case "$1" in
     get)
         if [[ -z "$2" ]]; then
@@ -1653,11 +1674,14 @@ env_manager() {
             fi
         else
             echo "$prefix$upper_key=\"$value\"" >>"$env_file"
+            if [[ "$prefix" == "HARBOR_" ]]; then
+                log_warn "Key $prefix$upper_key is not a known Harbor config variable. To set a service env var, use: harbor config <service> set <key> <value>"
+            fi
         fi
         $silent || log_info "Set $prefix$upper_key to: \"$value\""
         ;;
     list | ls)
-        grep "^$prefix" "$env_file" | sed "s/^$prefix//" | while read -r line; do
+        grep "^$prefix" "$env_file" | grep -v '^#\|^$' | sed "s/^$prefix//" | while read -r line; do
             key=${line%%=*}
             value=${line#*=}
             value=$(echo "$value" | sed -E 's/^"(.*)"$/\1/')
@@ -1699,7 +1723,10 @@ env_manager() {
     --help | -h)
         echo "Harbor configuration management"
         echo
-        echo "Usage: harbor config [--silent] [--env-file <file>] [--prefix <prefix>] {get|set|ls|list|search|reset|update} [key] [value]"
+        echo "Usage:"
+        echo "  harbor config {get|set|ls|list|search|reset|update} [key] [value]"
+        echo "  harbor config <service> [get|set|ls|search] [key] [value]"
+        echo "  harbor config <service> [key] [value]"
         echo
         echo "Options:"
         echo " --silent        Suppress all non-essential output"
@@ -1713,10 +1740,17 @@ env_manager() {
         echo " search|find <query> Search config keys and values"
         echo " reset           Reset Harbor configuration to default .env"
         echo " update          Merge upstream config changes from default .env"
+        echo
+        echo "Service-scoped config:"
+        echo " harbor config <service> ls              List service env vars"
+        echo " harbor config <service> get <key>       Get a service env var"
+        echo " harbor config <service> set <key> <val> Set a service env var"
+        echo " harbor config <service> <key>           Shorthand get"
+        echo " harbor config <service> <key> <val>     Shorthand set"
         return 0
         ;;
     *)
-        $silent || echo "Usage: harbor config [--silent] [--env-file <file>] [--prefix <prefix>] {get|set|ls|search|reset} [key] [value]"
+        $silent || echo "Usage: harbor config [options] {get|set|ls|search|reset|update} [key] [value]  OR  harbor config <service> [command] [key] [value]"
         return $scramble_exit_code
         ;;
     esac
@@ -2855,10 +2889,16 @@ run_history() {
 }
 
 run_harbor_size() {
-    # Get the cache directories
-    cache_dirs=$(harbor config ls | grep CACHE | awk '{print $NF}' | sed "s|~|$HOME|g")
-    # Add workspace dirs to the list
-    cache_dirs+=$'\n'"$(harbor config ls | grep WORKSPACE | awk '{print $NF}' | sed "s|~|$HOME|g")"
+    local cache_dirs dir size
+
+    cache_dirs=$(harbor config ls | awk -v home="$HOME" '
+        NF < 2 { next }
+        $1 ~ /CACHE/ || ($1 ~ /WORKSPACE/ && $1 !~ /WORKSPACES/) {
+            path=$NF
+            sub(/^~/, home, path)
+            print path
+        }
+    ')
     # Add $(harbor home) to the list
     cache_dirs+=$'\n'"$(harbor home)"
 
@@ -2868,12 +2908,11 @@ run_harbor_size() {
 
     # Iterate through each directory and print its size
     while IFS= read -r dir; do
-        if [ -d "$dir" ]; then
-            size=$(du -sh "$dir" 2>/dev/null | cut -f1)
-            echo "$dir: $size"
-        else
-            echo "$dir: Directory not found"
-        fi
+        [ -n "$dir" ] || continue
+        [ -d "$dir" ] || continue
+
+        size=$(du -sh "$dir" 2>/dev/null | cut -f1)
+        echo "$dir: $size"
     done <<<"$cache_dirs"
 }
 

@@ -45,6 +45,15 @@ harbor logs <service> # tails by default
 $(harbor cmd <service>)
 ```
 
+```bash
+# Working with config values in the local .env
+harbor config get <KEY>          # read a value
+harbor config set <KEY> <VALUE>  # write a value
+harbor config update             # propagate profiles/default.env → .env
+```
+
+**Never edit `.env` directly** — always use `harbor config get/set` commands.
+
 Refer to [CLI Reference](./docs/3.-Harbor-CLI-Reference.md) for more details.
 Remember that `harbor logs` TAILS LOGS BY DEFAULT. Use native `docker logs` if that is not what you expect. Use `-n 1000` to expand logs that'll be included in the initial selection.
 
