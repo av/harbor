@@ -4,4 +4,4 @@ services:
       - ./services/mcpo/configs/mcpo.cognee.json:/app/configs/mcpo.cognee.json
     depends_on:
       cognee-mcp:
-        condition: service_started
+        condition: service_healthy

@@ -27,37 +27,91 @@ services:
       - DB_PROVIDER=sqlite
       - GRAPH_DATABASE_PROVIDER=kuzu
       - VECTOR_DB_PROVIDER=lancedb
-      - DATA_ROOT_DIRECTORY=/app/.cognee_data
-      - SYSTEM_ROOT_DIRECTORY=/app/.cognee_system
-      - CACHE_ROOT_DIRECTORY=/app/.cognee_cache
+      - DATA_ROOT_DIRECTORY=/app/.cognee/data
+      - SYSTEM_ROOT_DIRECTORY=/app/.cognee/system
+      - CACHE_ROOT_DIRECTORY=/app/.cognee/cache
       - REQUIRE_AUTHENTICATION=False
       - ENABLE_BACKEND_ACCESS_CONTROL=false
       - TELEMETRY_DISABLED=1
+    depends_on:
+      ollama-init:
+        condition: service_completed_successfully
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
-      - ${HARBOR_COGNEE_WORKSPACE}/data:/app/.cognee_data
-      - ${HARBOR_COGNEE_WORKSPACE}/system:/app/.cognee_system
-      - ${HARBOR_COGNEE_WORKSPACE}/cache:/app/.cognee_cache
+      - ${HARBOR_COGNEE_WORKSPACE}:/app/.cognee
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen("http://127.0.0.1:8000/docs", timeout=5).read()
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
     networks:
       - harbor-network
 
   cognee-mcp:
     container_name: ${HARBOR_CONTAINER_PREFIX}.cognee-mcp
-    image: ${HARBOR_COGNEE_MCP_IMAGE}:${HARBOR_COGNEE_MCP_VERSION}
+    build:
+      context: .
+      dockerfile: ./services/cognee/Dockerfile.mcp
+      args:
+        COGNEE_MCP_BASE_IMAGE: ${HARBOR_COGNEE_MCP_IMAGE}:${HARBOR_COGNEE_MCP_VERSION}
+        COGNEE_GIT_REF: ${HARBOR_COGNEE_GIT_REF}
     env_file:
       - ./.env
       - ./services/cognee/override.env
+    entrypoint:
+      - /app/.venv/bin/python
+      - /app/harbor-start-mcp-http.py
     ports:
       - ${HARBOR_COGNEE_MCP_HOST_PORT}:8000
     environment:
-      TRANSPORT_MODE: sse
-      API_URL: http://cognee:8000
+      HOST: 0.0.0.0
+      ENVIRONMENT: local
+      DEBUG: "false"
+      LOG_LEVEL: INFO
+      LLM_API_KEY: ${HARBOR_COGNEE_LLM_API_KEY:-${HARBOR_OPENAI_KEY:-}}
+      LLM_MODEL: ${HARBOR_COGNEE_LLM_MODEL}
+      LLM_PROVIDER: ${HARBOR_COGNEE_LLM_PROVIDER}
+      LLM_ENDPOINT: ${HARBOR_COGNEE_LLM_ENDPOINT:-}
+      EMBEDDING_PROVIDER: ${HARBOR_COGNEE_EMBEDDING_PROVIDER}
+      EMBEDDING_MODEL: ${HARBOR_COGNEE_EMBEDDING_MODEL}
+      EMBEDDING_ENDPOINT: ${HARBOR_COGNEE_EMBEDDING_ENDPOINT:-}
+      EMBEDDING_DIMENSIONS: ${HARBOR_COGNEE_EMBEDDING_DIMENSIONS}
+      HUGGINGFACE_TOKENIZER: ${HARBOR_COGNEE_HUGGINGFACE_TOKENIZER}
+      DB_PROVIDER: sqlite
+      GRAPH_DATABASE_PROVIDER: kuzu
+      VECTOR_DB_PROVIDER: lancedb
+      DATA_ROOT_DIRECTORY: /app/.cognee/data
+      SYSTEM_ROOT_DIRECTORY: /app/.cognee/system
+      CACHE_ROOT_DIRECTORY: /app/.cognee/cache
+      REQUIRE_AUTHENTICATION: "False"
+      ENABLE_BACKEND_ACCESS_CONTROL: "false"
+      TRANSPORT_MODE: http
       PYTHONUNBUFFERED: 1
       MCP_LOG_LEVEL: INFO
       TELEMETRY_DISABLED: 1
+    volumes:
+      - ${HARBOR_COGNEE_WORKSPACE}:/app/.cognee
+      - ./services/cognee/start_mcp_http.py:/app/harbor-start-mcp-http.py:ro
+    healthcheck:
+      test:
+        - CMD
+        - /app/.venv/bin/python
+        - -c
+        - import socket; socket.create_connection(("127.0.0.1", 8000), 5).close()
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
     depends_on:
       cognee:
-        condition: service_started
+        condition: service_healthy
+      ollama-init:
+        condition: service_completed_successfully
     networks:
       - harbor-network
