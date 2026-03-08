@@ -11,6 +11,7 @@
   "chat.useAgentsMdFile": true,
   "chat.tools.terminal.autoApprove": {
     "harbor": true,
-    "sqlite3": true
+    "sqlite3": true,
+    "git tag": true
   },
 }
