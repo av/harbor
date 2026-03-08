@@ -1,0 +1,9 @@
+services:
+  fabric:
+    environment:
+      - DEFAULT_VENDOR=LiteLLM
+      - DEFAULT_MODEL=${HARBOR_FABRIC_MODEL}
+      - LITELLM_API_BASE_URL=http://litellm:4000
+      - LITELLM_API_KEY=${HARBOR_LITELLM_MASTER_KEY}
+    depends_on:
+      - litellm

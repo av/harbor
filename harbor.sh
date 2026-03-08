@@ -3701,6 +3701,10 @@ run_fabric_command() {
         echo "  harbor fabric model [user/repo] - Get or set the Fabric model repository to run"
         echo "  harbor fabric patterns          - Open the Fabric patterns directory"
         echo
+        echo "To run the Fabric REST API server:"
+        echo "  harbor fabric --serve           - Start the REST API server (port 8080)"
+        echo "  harbor fabric --serve --serveOllama - Also expose Ollama-compatible endpoints"
+        echo
         echo "Fabric CLI Help:"
         ;;
     esac
@@ -3711,7 +3715,7 @@ run_fabric_command() {
     # Container hangs for specific flags
     # We have to explicitly remove -T for them to run
     local tty_flag="-T"
-    local skip_tty=("-l" "--listpatterns" "-L" "--listmodels" "-x" "--listcontexts" "-X" "--listsessions" "--setup")
+    local skip_tty=("-l" "--listpatterns" "-L" "--listmodels" "-x" "--listcontexts" "-X" "--listsessions" "--setup" "--liststrategies" "--listvendors" "--listextensions" "--serve" "--serveOllama")
 
     for arg in "$@"; do
         for skip_arg in "${skip_tty[@]}"; do
