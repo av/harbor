@@ -1,0 +1,22 @@
+ARG COGNEE_MCP_BASE_IMAGE
+FROM ${COGNEE_MCP_BASE_IMAGE}
+
+ARG COGNEE_GIT_REF
+
+RUN set -eux; \
+    repo="${COGNEE_GIT_REF%%#*}"; \
+    ref="${COGNEE_GIT_REF#*#}"; \
+    test "${repo}" != "${COGNEE_GIT_REF}"; \
+    repo="${repo%.git}"; \
+    installed_url=""; \
+    for url in \
+      "${repo}/archive/refs/heads/${ref}.zip" \
+      "${repo}/archive/refs/tags/${ref}.zip" \
+      "${repo}/archive/${ref}.zip"; do \
+      if uv pip install --no-deps "cognee @ ${url}"; then \
+        installed_url="${url}"; \
+        break; \
+      fi; \
+    done; \
+    test -n "${installed_url}"; \
+    /app/.venv/bin/python -c "import importlib.metadata as m; print(m.version('cognee'))"

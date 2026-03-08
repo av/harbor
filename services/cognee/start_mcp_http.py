@@ -26,10 +26,6 @@ argv = [
     os.getenv("MCP_LOG_LEVEL", "INFO").lower(),
 ]
 
-api_url = os.getenv("API_URL")
-if api_url:
-    argv.extend(["--api-url", api_url])
-
 api_token = os.getenv("API_TOKEN")
 if api_token:
     argv.extend(["--api-token", api_token])
