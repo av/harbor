@@ -1,144 +1,102 @@
-## Agent: Experienced Software Engineer
+## Harbor Project
 
-You have an IQ of 180+, so your solutions are not just plausible, they represent the best possible trajectory throughout billions of possible paths. Simple >> Easy.
-You're an expert in software engineering, system architecture, and workflow optimization. You design design efficient, scalable, and maintainable systems.
+Harbor is a containerized LLM toolkit — a large Docker Compose project with a CLI and a Tauri app for managing AI services. Not to be confused with Harbor container registry which is a completely different unrelated project. This repository, Harbor, is the LLM toolkit.
 
-You must strictly adhere to the principles below:
-- You're not writing code, you're engineering software and solutions with precision and care.
-- Simple >> easy. Write the shortest, most obvious solution first. If it doesn't work, debug it—don't add layers of abstraction. Overengineered code wastes time and tokens when it inevitably breaks.
-- You're not allowed to write code without thinking it through thoroughly first. Your final solution musts be simple, as in "obvious", but not "easy to write".
-- You're not allowed to simply dump your thoughts in code - that completely against your principles and personality. Instead, you think deeply, plan thoroughly, and then write clean, well-structured code. Seven times measure, once cut.
-- Everything you do will be discarded if you do not demonstrate deep understanding of the problem and context.
-- Never act on partial information. If you only see some items from a set (e.g., duplicates in a folder), do not assume the rest. List and verify the full contents before making recommendations. This applies to deletions, refactors, migrations, or any action with irreversible consequences.
-- Avoid producing overly verbose, redundant, bloated, or repetitive content. In other words, you must cut the fluff. Every word, line of code, and section must serve a clear purpose. If it doesn't add value, it must be removed.
+### Key Locations
 
-Above behaviors are MANDATORY, non-negotiable, and must be followed at all times without exception.
+- `harbor.sh` — main CLI (too large to read in full; search for specific functions)
+- `services/` — all service directories and compose files (e.g., `services/ollama/`, `services/compose.ollama.yml`)
+- `compose.yml` — base compose file, always included
+- `app/` — Tauri GUI app
+- `docs/` — service and user documentation
+- `routines/` — CLI internals rewritten in Deno
+- `.scripts/` — dev scripts in Deno/Bash, run via `harbor dev <script>`
+- `profiles/default.env` — default config distributed to users
 
-## Project Guidelines
-
-You will not confuse this project with the Harbor container registry. This is a different project with the same name.
-Harbor is a containerized LLM toolkit that allows you to run LLMs and additional services. It consists of a CLI and a companion App that allows you to manage and run AI services with ease.
-Harbor is in essence a very large Docker Compose project with extra conventions and tools for managing it.
-You can't read `harbor.sh` in its entirety, it's too large for you.
-When adding new service, read [instructions for adding new service](./.github/copilot-new-service.md).
-When user shows you a new or not obvious command for you - document it in this AGENTS.md file.
-
-Important locations:
-- '.' - root, also referred to as `$(harbor home)`
-- `harbor.sh` - the main CLI script, it is very large and complex, but it contains the main entry point for the CLI
-- `/services` - **all service directories and compose files** (e.g., `services/ollama/`, `services/compose.ollama.yml`)
-- `/app` - the Tauri app that provides a GUI for managing services
-- `/docs` - documentation for the project and services
-- `/routines` - part of the CLI that was rewritten in Deno
-- `/.scripts` - scripts for development tasks, written in Deno and Bash
-- `/profiles/default.env` - default harbor config that will be distributed to the users
-- `compose.yml` - base compose file at root (always included)
-
-The CLI is already installed globally for your tests, you may run `harbor <command>` directly.
+### CLI Reference
 
 ```bash
-harbor help
-harbor ps # list running services
+harbor ps                        # list running containers
+harbor ls                        # list all available services
+harbor up <service>              # start service(s)
+harbor down                      # stop and remove containers
+harbor logs <service>            # tail logs (use docker logs for non-tailing)
 harbor build <service>
-harbor logs <service> # tails by default
-# Raw compose command for the service
-$(harbor cmd <service>)
+harbor shell <service>           # interactive shell in container
+harbor exec <service> <cmd>
+harbor eject                     # output standalone Compose config for current selection
+$(harbor cmd <service>)          # raw docker compose command for a service
 ```
 
 ```bash
-# Working with config values in the local .env
-harbor config get <KEY>          # read a value
-harbor config set <KEY> <VALUE>  # write a value
+harbor config get <KEY>
+harbor config set <KEY> <VALUE>
 harbor config update             # propagate profiles/default.env → .env
+harbor config search <query>     # search config keys and values
 ```
 
-**Never edit `.env` directly** — always use `harbor config get/set` commands.
-
-Refer to [CLI Reference](./docs/3.-Harbor-CLI-Reference.md) for more details.
-Remember that `harbor logs` TAILS LOGS BY DEFAULT. Use native `docker logs` if that is not what you expect. Use `-n 1000` to expand logs that'll be included in the initial selection.
-
-### Running dev scripts
-
-You will always use `harbor` CLI to run project dev scripts, for example:
+**Never edit `.env` directly** — always use `harbor config get/set`.
 
 ```bash
-harbor dev scaffold <service_name>
-harbor dev docs
-harbor dev seeed
+harbor env <service>                    # list override vars for a service
+harbor env <service> <key>              # get a specific var
+harbor env <service> <key> <value>      # set a specific var
 ```
 
-This means that you're not allowed to run those scripts with `deno run` directly.
-
-### Updating default profile
-
-When you make changes to `/profiles/default.env`, you then need to update the current profile with:
 ```bash
-harbor config update
+harbor dev scaffold <service_name>      # scaffold a new service
+harbor dev docs                         # regenerate docs
+harbor dev seed                         # seed test data
+harbor dev add-logos [--dry-run]        # resolve and write service logos
 ```
 
-**Important for development:** Changes to `/profiles/default.env` are NOT automatically propagated to your current profile (`.env`). During development, you need to update both files:
-1. Update `/profiles/default.env` for distribution to users
-2. Update `.env` (or run `harbor config update`) to apply changes to your current profile
+Dev scripts live in `.scripts/` and must be run via `harbor dev`, not `deno run` directly.
 
-### Code Quality
+```bash
+harbor routine <name>            # run internal Deno routines (routines/)
+```
 
-**STRICTLY PROHIBITED:** Adding useless or obvious comments to code. Comments should only explain complex logic, non-obvious decisions, or provide necessary context. Never add comments that merely restate what the code clearly does.
+### Adding a New Service
 
-**STRICTLY PROHIBITED:** Using emojis in copy, UI text, or user-facing content. Always use Lucide icons (https://lucide.dev) or similar icon libraries instead. Emojis are inconsistent across platforms and lack the professional appearance required for Harbor's interface.
+Use the `new-service` skill: `.agents/skills/new-service/SKILL.md`.
+
+### Config & Profiles
+
+After editing `profiles/default.env`, run `harbor config update` to apply changes to the current `.env`. The two files are not automatically synced.
 
 ### Cross-file Patterns (Service Integration)
 
-Cross-files (`services/compose.x.<service>.<integration>.yml`) are applied when multiple services are running together. This is the standard way to integrate services like Ollama into supporting satellites.
+`services/compose.x.<service>.<integration>.yml` files are applied when multiple services run together. When a satellite service can use a backend (e.g., Ollama):
 
-**Pattern:** When a satellite service can use Ollama (or another backend), create a cross-file that:
-1. Adds `depends_on` for the backend service
-2. Mounts any config templates needed for the integration
-3. Sets environment variables for the integration
-4. Overrides entrypoint if config rendering is needed at startup
+1. Add `depends_on` for the backend
+2. Mount config templates needed for the integration
+3. Set environment variables
+4. Override entrypoint if config rendering is needed at startup
 
-**Example:** `services/compose.x.photoprism.ollama.yml` adds vision model config only when PhotoPrism runs with Ollama.
+Example: `services/compose.x.photoprism.ollama.yml`
 
 ### Configurable Models and Backends
 
-When adding or modifying services that use AI models:
+- Default model: `HARBOR_<SERVICE>_MODEL` in `profiles/default.env`
+- Config templates use `${HARBOR_*}` vars rendered at container startup
+- Run `harbor config update` after changing `profiles/default.env`
 
-1. **Default models must be configurable** via `HARBOR_<SERVICE>_MODEL` (or similar) in `/profiles/default.env`
-2. **Default inference backends should be configurable** when the service supports multiple backends
-3. **Config templates** should use `${HARBOR_*}` variables that get rendered at container startup
-4. **Run `harbor config update`** after modifying `/profiles/default.env` to propagate changes to your dev environment
+### Documentation
 
-### Documentation Requirements
-
-**CRITICAL:** After any update to service shape (volumes, init behaviors, config options, integrations), you MUST update the corresponding service documentation in `/docs/` immediately.
-
-Documentation must include:
-- All new environment variables in the Configuration section
-- Any new startup behaviors or first-launch notes
-- Integration instructions (e.g., how to use with Ollama)
-- How to change default values
-
-No behavior should be a surprise for the end user. If you add it, document it.
+After any change to service shape (volumes, config, integrations), update the corresponding doc in `docs/` immediately. Cover all new env vars, startup behaviors, and integration steps.
 
 ### Service Logos
 
-Service logos are managed via the `logo` field in [serviceMetadata.ts](./app/src/serviceMetadata.ts).
-
-**Logo Strategy:**
-- Logos are **static URL strings** in serviceMetadata.ts (no runtime resolution)
-- Resolved once via `harbor dev add-logos` and written to the file
-- Resolution chain: homepage favicon → dashboardicons.com → GitHub owner avatar
-
-**Adding logos:**
+Logos are static URL strings in [app/src/serviceMetadata.ts](./app/src/serviceMetadata.ts), resolved once via:
 
 ```bash
-# Resolve and write logos for services without one
-harbor dev add-logos
-
-# Preview changes without writing
-harbor dev add-logos --dry-run
+harbor dev add-logos             # resolve and write
+harbor dev add-logos --dry-run   # preview only
 ```
 
-**Resolution order:**
-1. GitHub homepage favicon (via Google's favicon service)
-2. dashboardicons.com (common service icons)
-3. GitHub owner avatar (fallback)
+Resolution order: GitHub homepage favicon → dashboardicons.com → GitHub owner avatar.
+
+### Code Quality
+
+- Comments only for non-obvious logic — never restate what the code does
+- No emojis in UI or copy — use Lucide icons instead
