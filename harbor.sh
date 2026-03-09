@@ -94,6 +94,7 @@ show_help() {
     echo "    hf find <query> - Open HF Hub with a query (trending by default)"
     echo "    hf path <spec>  - Print a folder in HF cache for a given model spec"
     echo "    hf *            - Anything else is passed to the official Hugging Face CLI"
+    echo "  models            - Manage models across Ollama and HuggingFace caches"
     echo "  k6                - Run K6 CLI"
     echo
     echo "Harbor CLI Commands:"
@@ -1653,6 +1654,7 @@ env_manager() {
             return 1
         fi
         local upper_key=$(echo "$2" | tr '[:lower:]' '[:upper:]' | tr '.' '_')
+        upper_key="${upper_key#$prefix}"
         value=$(grep "^$prefix$upper_key=" "$env_file" | cut -d '=' -f2-)
         value="${value#\"}" # Remove leading quote if present
         value="${value%\"}" # Remove trailing quote if present
@@ -1664,6 +1666,7 @@ env_manager() {
             return 1
         fi
         local upper_key=$(echo "$2" | tr '[:lower:]' '[:upper:]' | tr '.' '_')
+        upper_key="${upper_key#$prefix}"
         shift 2          # Remove 'set' and the key from the arguments
         local value="$*" # Capture all remaining arguments as the value
         if grep -q "^$prefix$upper_key=" "$env_file"; then
@@ -3206,6 +3209,86 @@ run_hf_command() {
     esac
 
     run_hf_docker_cli "$@"
+}
+
+show_models_help() {
+    echo "Manage models across Ollama and HuggingFace caches"
+    echo ""
+    echo "Usage: harbor models <command> [options]"
+    echo ""
+    echo "Commands:"
+    echo "  ls [--json]       List all cached models"
+    echo "  pull <model>      Download a model (Ollama or HuggingFace)"
+    echo "  rm <model>        Remove a model from cache"
+    echo ""
+    echo "Examples:"
+    echo "  harbor models ls"
+    echo "  harbor models ls --json"
+    echo "  harbor models pull qwen3:8b"
+    echo "  harbor models pull bartowski/Llama-3.2-1B-Instruct-GGUF"
+    echo "  harbor models rm qwen3:8b"
+}
+
+run_models_routine() {
+    local hf_cache
+    hf_cache=$(env_manager get hf.cache)
+    hf_cache="${hf_cache/#\~/$HOME}"
+    local ollama_url
+    ollama_url=$(env_manager get ollama.internal.url)
+    local llamacpp_cache
+    llamacpp_cache=$(env_manager get llamacpp.cache)
+    llamacpp_cache="${llamacpp_cache/#\~/$HOME}"
+
+    docker run --rm \
+        --network=harbor_harbor-network \
+        -v "$harbor_home:$harbor_home" \
+        -v "$hf_cache:$hf_cache:rw" \
+        -v "$llamacpp_cache:$llamacpp_cache:rw" \
+        -v harbor-deno-cache:/deno-dir:rw \
+        -w "$harbor_home" \
+        -e "HARBOR_LOG_LEVEL=$default_log_level" \
+        -e "HARBOR_HF_CACHE=$hf_cache" \
+        -e "HARBOR_OLLAMA_URL=$ollama_url" \
+        -e "HARBOR_LLAMACPP_CACHE=$llamacpp_cache" \
+        $default_routine_runtime \
+        ./routines/models.ts "$@"
+}
+
+run_models_pull() {
+    local model="$1"
+    local repo="${model%:*}"
+
+    if [[ "$model" == *"/"* ]] && \
+       curl -sf --head --connect-timeout 5 "https://huggingface.co/$repo" > /dev/null; then
+        run_hf_docker_cli download "$model"
+    else
+        run_ollama_command pull "$model"
+    fi
+}
+
+run_models_command() {
+    case "$1" in
+    ls|list)
+        shift
+        run_models_routine ls "$@"
+        ;;
+    pull)
+        shift
+        run_models_pull "$@"
+        ;;
+    rm|remove)
+        shift
+        run_models_routine rm "$@"
+        ;;
+    -h|--help|help|"")
+        show_models_help
+        ;;
+    *)
+        log_error "Unknown models subcommand: $1"
+        show_models_help
+        exit 1
+        ;;
+    esac
 }
 
 run_vllm_command() {
@@ -5114,6 +5197,10 @@ main_entrypoint() {
     hf)
         shift
         run_hf_command "$@"
+        ;;
+    models)
+        shift
+        run_models_command "$@"
         ;;
     defaults)
         shift

@@ -5,7 +5,9 @@
     "jsr:@std/collections@^1.0.9": "1.0.10",
     "jsr:@std/fmt@*": "1.0.5",
     "jsr:@std/toml@*": "1.0.2",
-    "jsr:@std/yaml@*": "1.0.5"
+    "jsr:@std/yaml@*": "1.0.5",
+    "npm:@huggingface/gguf@*": "0.3.6",
+    "npm:@huggingface/hub@*": "2.10.5"
   },
   "jsr": {
     "@std/collections@1.0.10": {
@@ -22,6 +24,57 @@
     },
     "@std/yaml@1.0.5": {
       "integrity": "71ba3d334305ee2149391931508b2c293a8490f94a337eef3a09cade1a2a2742"
+    }
+  },
+  "npm": {
+    "@huggingface/gguf@0.3.6": {
+      "integrity": "sha512-7VEwAbqhsIlJ2XxriAnVwgkO6ob5np1BsJ/lant2Jt5Pe520yXgINaWWX+T9D9PlwPpKL5p3uncwsjIzsRh5yQ==",
+      "dependencies": [
+        "@huggingface/tasks"
+      ],
+      "bin": true
+    },
+    "@huggingface/hub@2.10.5": {
+      "integrity": "sha512-g1gmvztiUw4t9rx8hPECBXOXw0y1Iprlb1JVGH3NvzBeZEHvMEMFpaRj1Vb1Q+YyY9g8VEf6jfmYJxAydQdFjA==",
+      "dependencies": [
+        "@huggingface/tasks"
+      ],
+      "optionalDependencies": [
+        "cli-progress"
+      ],
+      "bin": true
+    },
+    "@huggingface/tasks@0.19.90": {
+      "integrity": "sha512-nfV9luJbvwGQ/5oKXkKhCV9h4X7mwh1YaGG3ORd6UMLDSwr1OFSSatcBX0O9OtBtmNK19aGSjbLFqqgcIR6+IA=="
+    },
+    "ansi-regex@5.0.1": {
+      "integrity": "sha512-quJQXlTSUGL2LH9SUXo8VwsY4soanhgo6LNSm84E1LBcE8s3O0wpdiRzyR9z/ZZJMlMWv37qOOb9pdJlMUEKFQ=="
+    },
+    "cli-progress@3.12.0": {
+      "integrity": "sha512-tRkV3HJ1ASwm19THiiLIXLO7Im7wlTuKnvkYaTkyoAPefqjNg7W7DHKUlGRxy9vxDvbyCYQkQozvptuMkGCg8A==",
+      "dependencies": [
+        "string-width"
+      ]
+    },
+    "emoji-regex@8.0.0": {
+      "integrity": "sha512-MSjYzcWNOA0ewAHpz0MxpYFvwg6yjy1NG3xteoqz644VCo/RPgnr1/GGt+ic3iJTzQ8Eu3TdM14SawnVUmGE6A=="
+    },
+    "is-fullwidth-code-point@3.0.0": {
+      "integrity": "sha512-zymm5+u+sCsSWyD9qNaejV3DFvhCKclKdizYaJUuHA83RLjb7nSuGnddCHGv0hk+KY7BMAlsWeK4Ueg6EV6XQg=="
+    },
+    "string-width@4.2.3": {
+      "integrity": "sha512-wKyQRQpjJ0sIp62ErSZdGsjMJWsap5oRNihHhu6G7JVO/9jIB6UyevL+tXuOqrng8j/cxKTWyWUwvSTriiZz/g==",
+      "dependencies": [
+        "emoji-regex",
+        "is-fullwidth-code-point",
+        "strip-ansi"
+      ]
+    },
+    "strip-ansi@6.0.1": {
+      "integrity": "sha512-Y38VPSHcqkFrCpFnQ9vuSXmquuv5oXOKpGeT6aGrr3o3Gc9AlVa6JBfUSOCnbxGGZF+/0ooI7KrPuUSztUdU5A==",
+      "dependencies": [
+        "ansi-regex"
+      ]
     }
   }
 }
