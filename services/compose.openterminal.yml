@@ -1,0 +1,30 @@
+services:
+  openterminal:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.openterminal
+    image: ${HARBOR_OPENTERMINAL_IMAGE}:${HARBOR_OPENTERMINAL_VERSION}
+    env_file:
+      - ./.env
+      - ./services/openterminal/override.env
+    ports:
+      - ${HARBOR_OPENTERMINAL_HOST_PORT}:8000
+    environment:
+      - OPEN_TERMINAL_API_KEY=${HARBOR_OPENTERMINAL_API_KEY}
+      - OPEN_TERMINAL_PACKAGES=${HARBOR_OPENTERMINAL_PACKAGES}
+      - OPEN_TERMINAL_PIP_PACKAGES=${HARBOR_OPENTERMINAL_PIP_PACKAGES}
+      - OPEN_TERMINAL_EXECUTE_TIMEOUT=${HARBOR_OPENTERMINAL_EXECUTE_TIMEOUT}
+      - OPEN_TERMINAL_ENABLE_TERMINAL=${HARBOR_OPENTERMINAL_ENABLE_TERMINAL}
+      - OPEN_TERMINAL_ENABLE_NOTEBOOKS=${HARBOR_OPENTERMINAL_ENABLE_NOTEBOOKS}
+    volumes:
+      - ${HARBOR_OPENTERMINAL_WORKSPACE}:/home/user
+    healthcheck:
+      test:
+        - CMD
+        - curl
+        - -fsS
+        - http://127.0.0.1:8000/health
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    networks:
+      - harbor-network

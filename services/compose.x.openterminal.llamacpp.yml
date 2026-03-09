@@ -1,0 +1,11 @@
+services:
+  openterminal:
+    depends_on:
+      - llamacpp
+    environment:
+      - HARBOR_LLAMACPP_URL=http://llamacpp:8080
+      - HARBOR_LLAMACPP_OPENAI_URL=http://llamacpp:8080/v1
+      - HARBOR_LLAMACPP_API_KEY=sk-llamacpp
+      - HARBOR_LLAMACPP_MODEL=${HARBOR_LLAMACPP_MODEL}
+      - HARBOR_LLAMACPP_MODEL_SPECIFIER=${HARBOR_LLAMACPP_MODEL_SPECIFIER}
+      - HARBOR_LLAMACPP_EXTRA_ARGS=${HARBOR_LLAMACPP_EXTRA_ARGS}

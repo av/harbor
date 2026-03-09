@@ -1,0 +1,16 @@
+{
+  "terminal_server": {
+    "connections": [
+      {
+        "id": "openterminal",
+        "name": "Harbor Open Terminal",
+        "enabled": true,
+        "url": "http://openterminal:8000",
+        "path": "/openapi.json",
+        "key": "${HARBOR_OPENTERMINAL_API_KEY}",
+        "auth_type": "bearer",
+        "config": {}
+      }
+    ]
+  }
+}

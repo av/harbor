@@ -913,6 +913,14 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         wikiUrl: `${wikiUrl}/2.3.73-Satellite-OpenFang`,
         tooltip: 'Rust-based Agent Operating System for running autonomous AI agents with scheduling, 40 channel adapters, and 27 LLM providers.',
     },
+    openterminal: {
+        name: 'Open Terminal',
+        tags: [HST.satellite, HST.api, HST.tools],
+        projectUrl: 'https://github.com/open-webui/open-terminal',
+        logo: 'https://github.com/open-webui.png?size=200',
+        wikiUrl: `${wikiUrl}/2.3.75-Satellite-Open-Terminal`,
+        tooltip: 'Remote terminal and file-management API for AI agents, pre-wired for Open WebUI and Harbor backends.',
+    },
     cognee: {
         name: 'Cognee',
         tags: [HST.satellite, HST.api, HST.rag],
