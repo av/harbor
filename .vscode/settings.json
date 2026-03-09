@@ -3,15 +3,22 @@
     "**/.git": false
   },
   "deno.enable": true,
-  "github.copilot.chat.codeGeneration.instructions": [
-    {
-      "file": ".copilot-instructions.md"
-    }
-  ],
   "chat.useAgentsMdFile": true,
   "chat.tools.terminal.autoApprove": {
     "harbor": true,
     "sqlite3": true,
     "git tag": true
   },
+  "chat.tools.edits.autoApprove": {
+    "**/*": true,
+    "/tmp/**/*": true,
+    "/tmp/**": true,
+    "**/.vscode/*.json": false,
+    "**/.git/**": false,
+    "**/{package.json,server.xml,build.rs,web.config,.gitattributes,.env}": false,
+    "**/*.{code-workspace,csproj,fsproj,vbproj,vcxproj,proj,targets,props}": false,
+    "**/*.lock": false,
+    "**/*-lock.{yaml,json}": false
+  },
+  "chat.tools.terminal.enableAutoApprove": true,
 }
