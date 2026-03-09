@@ -4,10 +4,10 @@ echo "Harbor: Custom Open WebUI Entrypoint"
 python --version
 
 echo "JSON Merger is starting..."
-python /app/json_config_merger.py --pattern ".json" --output "/app/backend/data/configs/config.json" --directory "/app/configs"
+python /app/json_config_merger.py --pattern ".json" --output "/app/backend/data/config.json" --directory "/app/configs"
 
 echo "Merged Configs:"
-cat /app/backend/data/configs/config.json
+cat /app/backend/data/config.json
 
 echo
 echo "Starting Open WebUI..."
