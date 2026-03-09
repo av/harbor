@@ -43,6 +43,40 @@ function parseManifestCanonicalId(filename: string): string | null {
   return null;
 }
 
+async function buildPrefixMap(cacheDir: string): Promise<Map<string, string>> {
+  const prefixMap = new Map<string, string>();
+  try {
+    for await (const entry of Deno.readDir(cacheDir)) {
+      if (!entry.isFile || !entry.name.startsWith('manifest=') || !entry.name.endsWith('.json')) continue;
+      const canonicalId = parseManifestCanonicalId(entry.name);
+      if (!canonicalId) continue;
+      const [org, repo] = canonicalId.split('/');
+      prefixMap.set(`${org}_${repo}_`, canonicalId);
+    }
+  } catch { /* ignore */ }
+  return prefixMap;
+}
+
+async function resolveFileCanonicalId(
+  name: string,
+  relDir: string,
+  cacheDir: string,
+  prefixMap: Map<string, string>,
+): Promise<string> {
+  if (relDir) return relDir;
+  for (const [prefix, id] of prefixMap) {
+    if (name.startsWith(prefix)) return id;
+  }
+  const sidecarPath = `${cacheDir}/${name}.json`;
+  try {
+    const sidecar = JSON.parse(await Deno.readTextFile(sidecarPath));
+    const url: string = sidecar.url ?? '';
+    const m = url.match(/huggingface\.co\/([^/]+\/[^/]+)\//);
+    if (m) return m[1];
+  } catch { /* no sidecar */ }
+  return name.replace(/\.gguf$/i, '');
+}
+
 export async function listLlamacppModels(): Promise<ModelEntry[]> {
   const cacheDir = process.env.HARBOR_LLAMACPP_CACHE;
   if (!cacheDir) return [];
@@ -54,17 +88,7 @@ export async function listLlamacppModels(): Promise<ModelEntry[]> {
     return [];
   }
 
-  // Build "{org}_{repo}_" prefix → "org/repo" canonical ID map from manifest files
-  const prefixMap = new Map<string, string>();
-  try {
-    for await (const entry of Deno.readDir(cacheDir)) {
-      if (!entry.isFile || !entry.name.startsWith('manifest=') || !entry.name.endsWith('.json')) continue;
-      const canonicalId = parseManifestCanonicalId(entry.name);
-      if (!canonicalId) continue;
-      const [org, repo] = canonicalId.split('/');
-      prefixMap.set(`${org}_${repo}_`, canonicalId);
-    }
-  } catch { /* ignore */ }
+  const prefixMap = await buildPrefixMap(cacheDir);
 
   type FileItem = { fullPath: string; name: string; stat: Deno.FileInfo; relDir: string };
   const items: FileItem[] = [];
@@ -88,26 +112,11 @@ export async function listLlamacppModels(): Promise<ModelEntry[]> {
 
   await collectDir(cacheDir);
 
-  async function resolveCanonicalId(item: FileItem): Promise<string> {
-    if (item.relDir) return item.relDir;
-    for (const [prefix, id] of prefixMap) {
-      if (item.name.startsWith(prefix)) return id;
-    }
-    const sidecarPath = `${cacheDir}/${item.name}.json`;
-    try {
-      const sidecar = JSON.parse(await Deno.readTextFile(sidecarPath));
-      const url: string = sidecar.url ?? '';
-      const m = url.match(/huggingface\.co\/([^/]+\/[^/]+)\//);
-      if (m) return m[1];
-    } catch { /* no sidecar */ }
-    return item.name.replace(/\.gguf$/i, '');
-  }
-
   return Promise.all(
     items
       .filter(item => !item.name.toLowerCase().includes('mmproj'))
       .map(async item => {
-        const canonicalId = await resolveCanonicalId(item);
+        const canonicalId = await resolveFileCanonicalId(item.name, item.relDir, cacheDir, prefixMap);
         const details = await resolveGgufWithWorker(item.fullPath, item.name);
         const quant =
           details.quantization ??
@@ -195,6 +204,22 @@ export async function removeLlamacppModel(modelSpec: string): Promise<boolean> {
           await Deno.remove(`${cacheDir}/${entry.name}`);
           removed = true;
         }
+      }
+    } catch { /* ignore */ }
+  }
+
+  // Sidecar scan: flat .gguf files whose repo identity comes only from a .gguf.json sidecar
+  if (org && repo) {
+    const prefixMap = await buildPrefixMap(cacheDir);
+    try {
+      for await (const entry of Deno.readDir(cacheDir)) {
+        if (!entry.isFile || !entry.name.endsWith('.gguf')) continue;
+        const canonicalId = await resolveFileCanonicalId(entry.name, '', cacheDir, prefixMap);
+        if (canonicalId !== repoSpec) continue;
+        if (!quantMatches(entry.name)) continue;
+        await Deno.remove(`${cacheDir}/${entry.name}`);
+        try { await Deno.remove(`${cacheDir}/${entry.name}.json`); } catch { /* no sidecar */ }
+        removed = true;
       }
     } catch { /* ignore */ }
   }

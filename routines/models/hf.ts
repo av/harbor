@@ -193,8 +193,22 @@ export async function removeHfModel(modelSpec: string): Promise<boolean> {
   const dirName = 'models--' + modelSpec.replace('/', '--');
   const dirPath = `${hfCache}/hub/${dirName}`;
 
-  if (!(await dirExists(dirPath))) return false;
+  if (await dirExists(dirPath)) {
+    await Deno.remove(dirPath, { recursive: true });
+    return true;
+  }
 
-  await Deno.remove(dirPath, { recursive: true });
-  return true;
+  const baseName = modelSpec.replace(/\.gguf$/i, '');
+  const ggufName = baseName + '.gguf';
+  for (const loosePath of [`${hfCache}/${ggufName}`, `${hfCache}/gguf/${ggufName}`]) {
+    try {
+      await Deno.stat(loosePath);
+      await Deno.remove(loosePath);
+      return true;
+    } catch {
+      // not found, try next
+    }
+  }
+
+  return false;
 }
