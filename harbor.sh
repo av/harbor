@@ -674,6 +674,7 @@ run_up() {
 run_down() {
     local services=$(get_active_services)
     local matched_services=()
+    local compose_targets=("$@")
 
     log_debug "Active services: $services"
 
@@ -690,12 +691,13 @@ run_down() {
 
     if [ $# -eq 0 ]; then
         log_info "Stopping all services..."
+        compose_targets=("*")
     else
         log_info "Stopping services: $*"
     fi
 
     matched_services_str=$(printf " %s" "${matched_services[@]}")
-    $(compose_with_options "*") down --remove-orphans --timeout 10 "$@" $matched_services_str
+    $(compose_with_options "${compose_targets[@]}") down --remove-orphans --timeout 10 "$@" $matched_services_str
     local down_exit=$?
 
     if [ $down_exit -eq 0 ]; then
@@ -712,7 +714,13 @@ run_restart() {
 }
 
 run_ps() {
-    $(compose_with_options "*") ps
+    local compose_targets=("$@")
+
+    if [ $# -eq 0 ]; then
+        compose_targets=("*")
+    fi
+
+    $(compose_with_options "${compose_targets[@]}") ps "$@"
 }
 
 run_build() {
@@ -1446,6 +1454,7 @@ swap_and_retry() {
                     case $exit_code in
                     0)
                         log_debug "Process completed successfully"
+                        return 0
                         ;;
                     1)
                         log_error "General error occurred"
@@ -1479,15 +1488,18 @@ swap_and_retry() {
                         ;;
                     *)
                         log_info "Exit code: $exit_code"
-                        return 1
                         ;;
                     esac
+
+                    return $exit_code
                 fi
             else
                 # Less than two arguments, retry is impossible
-                return 1
+                return $exit_code
             fi
         fi
+
+        return $exit_code
     fi
 }
 
@@ -5615,16 +5627,29 @@ check_migration_needed() {
 check_migration_needed "$1"
 
 # Call the main logic with argument swapping
-if ! swap_and_retry main_entrypoint "$@"; then
-    if [ $# -eq 0 ]; then
-        show_help
-    else
-        suggestion=$(suggest_command "$1")
-        log_error "Unknown command: $1"
-        if [ -n "$suggestion" ]; then
-            log_info "Did you mean: ${c_g}harbor ${suggestion}${c_nc}?"
-        fi
-        log_info "Run 'harbor help' for a list of commands."
-    fi
-    exit 1
+if swap_and_retry main_entrypoint "$@"; then
+    exit_code=0
+else
+    exit_code=$?
 fi
+
+if [ $exit_code -eq 0 ]; then
+    exit 0
+fi
+
+if [ $exit_code -ne $scramble_exit_code ]; then
+    exit $exit_code
+fi
+
+if [ $# -eq 0 ]; then
+    show_help
+else
+    suggestion=$(suggest_command "$1")
+    log_error "Unknown command: $1"
+    if [ -n "$suggestion" ]; then
+        log_info "Did you mean: ${c_g}harbor ${suggestion}${c_nc}?"
+    fi
+    log_info "Run 'harbor help' for a list of commands."
+fi
+
+exit 1

@@ -151,7 +151,10 @@ export async function mergeComposeFiles(args) {
   let shouldMerge = !consumeFlagArg(args, ["--no-merge"]);
   const includeDefaults = !consumeFlagArg(args, ['--no-defaults']);
   const dir = args.find(arg => arg.startsWith('--dir='))?.split('=')[1];
-  const sourceFiles = await resolveComposeFiles(args);
+  // consumeFlagArg above already removed --no-defaults from args, so re-inject
+  // it for resolveComposeFiles/resolveComposeModules which consume it themselves.
+  const resolveArgs = includeDefaults ? args : ['--no-defaults', ...args];
+  const sourceFiles = await resolveComposeFiles(resolveArgs);
   let targetFiles = []
 
   // Extract services and capabilities from args (after flags are consumed)
@@ -180,7 +183,7 @@ export async function mergeComposeFiles(args) {
     let merged: ComposeObject = contents.reduce((acc, next) => deepMerge(acc, next), {});
 
     // Apply TypeScript compose modules
-    const tsModules = await resolveComposeModules([...args]);
+    const tsModules = await resolveComposeModules(includeDefaults ? [...args] : ['--no-defaults', ...args]);
     if (tsModules.length > 0) {
       log.debug(`Applying ${tsModules.length} TypeScript compose module(s)`);
       merged = await applyComposeModules(merged, tsModules, args, sourceFiles, dir, shouldMerge, services, capabilities, explicitServices);
@@ -191,7 +194,7 @@ export async function mergeComposeFiles(args) {
   } else {
     // Keep files as they are
     // Note: TypeScript modules are skipped when --no-merge is used
-    const tsModules = await resolveComposeModules([...args]);
+    const tsModules = await resolveComposeModules(includeDefaults ? [...args] : ['--no-defaults', ...args]);
     if (tsModules.length > 0) {
       log.warn("TypeScript compose modules are ignored with --no-merge flag");
     }

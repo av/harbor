@@ -1,0 +1,14 @@
+#cloud-config
+
+# Harbor integration test VM - cloud-init
+# Minimal setup; Harbor bootstrap handles the rest.
+
+runcmd:
+  - mkdir -p /workspace/harbor
+  - chown -R ubuntu:ubuntu /workspace
+
+write_files:
+  - path: /etc/environment
+    append: true
+    content: |
+      HARBOR_INT_VM=1

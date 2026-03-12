@@ -1,0 +1,12 @@
+# Test run artifacts (auto-generated)
+artifacts/*/
+reports/*/
+tmp/
+
+# Keep placeholder files
+!artifacts/.gitkeep
+!reports/.gitkeep
+!tmp/.gitkeep
+
+# Debug/scratch HTTP files
+debug*.http

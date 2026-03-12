@@ -1,0 +1,53 @@
+name: Integration Tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'integration/**'
+      - '.scripts/integration.ts'
+      - 'services/compose.mock-openai.yml'
+      - 'services/mock-openai/override.env'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'integration/**'
+      - '.scripts/integration.ts'
+      - 'services/compose.mock-openai.yml'
+      - 'services/mock-openai/override.env'
+  workflow_dispatch:
+  workflow_call:
+
+jobs:
+  integration:
+    name: Integration Smoke Suite
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify Docker
+        run: |
+          docker --version
+          docker compose version
+
+      - name: Make scripts executable
+        run: |
+          chmod +x harbor.sh
+          chmod +x integration/guest/run.sh
+          chmod +x integration/guest/preflight.sh
+          chmod +x integration/guest/collect-artifacts.sh
+
+      - name: Run integration suite
+        run: bash integration/guest/run.sh --inside-vm
+        env:
+          HARBOR_INT_ARTIFACTS_DIR: ${{ github.workspace }}/integration/artifacts/${{ github.run_id }}
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-artifacts-${{ github.run_id }}
+          path: integration/artifacts/
+          retention-days: 7

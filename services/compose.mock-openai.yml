@@ -1,0 +1,15 @@
+services:
+  mock-openai:
+    build:
+      context: ./integration/fixtures/mock-openai
+      dockerfile: Dockerfile
+    image: harbor.mock-openai
+    container_name: harbor.mock-openai
+    ports:
+      - "${HARBOR_MOCK_OPENAI_HOST_PORT:-29350}:8080"
+    env_file:
+      - ./.env
+      - ./services/mock-openai/override.env
+    environment:
+      - PORT=8080
+    restart: unless-stopped

@@ -11,7 +11,12 @@ on:
     types: [published]
 
 jobs:
+  integration:
+    name: Integration Smoke Suite
+    uses: ./.github/workflows/integration.yml
+
   publish-tauri:
+    needs: integration
     permissions:
       contents: write
     strategy:

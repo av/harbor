@@ -1,0 +1,2 @@
+# CLI smoke tests are run as bash commands in integration/guest/run.sh
+# This file is reserved for future HTTP-based CLI integration checks.

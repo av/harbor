@@ -1,0 +1,37 @@
+@mock_openai_port = 29350
+@base_url = http://localhost:{{mock_openai_port}}
+@mock_model = mock-model
+
+### Health endpoint is reachable
+# @name health-check
+GET {{base_url}}/health
+
+?? status == 200
+?? body status == ok
+
+###
+
+### GET /v1/models returns model list
+# @name models-list
+GET {{base_url}}/v1/models
+
+?? status == 200
+?? body object == list
+?? js response.parsedBody.data[0].id == mock-model
+
+###
+
+### POST /v1/chat/completions returns valid response
+# @name chat-completions
+POST {{base_url}}/v1/chat/completions
+Content-Type: application/json
+
+{
+  "model": "{{mock_model}}",
+  "messages": [{"role": "user", "content": "Hello"}]
+}
+
+?? status == 200
+?? body object == chat.completion
+?? js response.parsedBody.choices[0].message.role == assistant
+?? js response.parsedBody.choices[0].finish_reason == stop

@@ -1,0 +1,6 @@
+# Integration test variables
+# Override these via environment variables or httpYac --variables flag
+
+@mock_openai_port = 29350
+@base_url = http://localhost:{{mock_openai_port}}
+@mock_model = mock-model
