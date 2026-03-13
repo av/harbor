@@ -40,7 +40,7 @@ const targets: ValueSeed[] = [{
 }, {
   target: 'harbor.sh:replace',
   value: {
-    'version=".*"': `version="${VERSION}"`,
+    '^version=".*"': `version="${VERSION}"`,
   },
 }, {
   target: 'app/package.json',
@@ -104,7 +104,7 @@ async function seedReplace(value: ValueSeed) {
 
   let result = source;
   for (const [pattern, replacement] of Object.entries(value.value)) {
-    result = result.replace(new RegExp(pattern), replacement);
+    result = result.replace(new RegExp(pattern, 'm'), replacement);
   }
 
   await Deno.writeTextFile(target, result);

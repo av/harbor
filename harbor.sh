@@ -2705,7 +2705,6 @@ run_migrate_command() {
     *)
         log_debug "Running migration script"
         local target_config_version=$(grep '^HARBOR_CONFIG_VERSION=' "$default_profile" | cut -d '=' -f2-)
-        target_config_version="0.4.4"
         target_config_version="${target_config_version%\"}"
 
         if [[ -z "$target_config_version" ]]; then
@@ -5106,7 +5105,7 @@ run_modularmax_command() {
 # ========================================================================
 
 # Globals
-version="0.4.1"
+version="0.4.4"
 harbor_repo_url="https://github.com/av/harbor.git"
 harbor_release_url="https://api.github.com/repos/av/harbor/releases/latest"
 delimiter="|"

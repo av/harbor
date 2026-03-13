@@ -2,7 +2,7 @@ services:
   webtop:
     # We add a few of extra dependencies to the image
     build:
-      context: ./webtop
+      context: ./services/webtop
       dockerfile: Dockerfile
       args:
         HARBOR_WEBTOP_IMAGE: ${HARBOR_WEBTOP_IMAGE}
