@@ -34,6 +34,9 @@ services:
     image: postgres:18
     restart: always
     container_name: ${HARBOR_CONTAINER_PREFIX}.litellm-db
+    env_file:
+      - ./.env
+      - ./services/litellm/override.env
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 3s

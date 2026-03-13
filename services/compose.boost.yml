@@ -2,7 +2,7 @@ services:
   boost:
     container_name: ${HARBOR_CONTAINER_PREFIX}.boost
     build:
-      context: ./boost
+      context: ./services/boost
       dockerfile: Dockerfile
     env_file:
       - ./.env

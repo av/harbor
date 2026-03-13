@@ -1,5 +1,11 @@
 services:
   gum:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.gum
     build:
-      context: ./gum
+      context: ./services/gum
       dockerfile: Dockerfile
+    env_file:
+      - ./.env
+      - ./services/gum/override.env
+    networks:
+      - harbor-network

@@ -2,15 +2,15 @@ services:
   mcp-inspector:
     container_name: ${HARBOR_CONTAINER_PREFIX}.mcp-inspector
     build:
-      context: ./mcp
+      context: ./services/mcp
       dockerfile_inline: |
         FROM ghcr.io/av/tools:latest
         RUN apt-get update && apt-get install -y socat
     entrypoint: /app/inspector-entrypoint.sh
     command: npx @modelcontextprotocol/inspector
     ports:
-      - 6274:6274
-      - 6277:6277
+      - ${HARBOR_MCP_INSPECTOR_HOST_PORT}:6274
+      - ${HARBOR_MCP_INSPECTOR_CLIENT_HOST_PORT}:6277
     volumes:
       - ./services/mcp/cache:/app/cache
       - ./services/mcp/inspector-entrypoint.sh:/app/inspector-entrypoint.sh

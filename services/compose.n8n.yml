@@ -35,7 +35,7 @@ services:
       - ${HARBOR_N8N_PG_HOST_PORT}:5432
     env_file:
       - ./.env
-      - ${HARBOR_N8N_WORKSPACE}/override.env
+      - ./services/n8n/override.env
     environment:
       - POSTGRES_USER=${HARBOR_N8N_PG_USER}
       - POSTGRES_PASSWORD=${HARBOR_N8N_PG_PASSWORD}

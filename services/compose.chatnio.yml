@@ -3,7 +3,7 @@ services:
     # image: ${HARBOR_CHATNIO_IMAGE}:${HARBOR_CHATNIO_VERSION}
     # We add a few of extra dependencies to the image
     build:
-      context: ./chatnio
+      context: ./services/chatnio
       dockerfile: Dockerfile
       args:
         HARBOR_CHATNIO_IMAGE: ${HARBOR_CHATNIO_IMAGE}

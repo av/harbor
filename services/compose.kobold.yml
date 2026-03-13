@@ -4,7 +4,7 @@ services:
     image: ${HARBOR_KOBOLD_IMAGE}:${HARBOR_KOBOLD_VERSION}
     env_file:
       - ./.env
-      - kobold/override.env
+      - ./services/kobold/override.env
     volumes:
       - ${HARBOR_KOBOLD_WORKSPACE}:/workspace/:rw
       - ${HARBOR_OLLAMA_CACHE}:/ollama

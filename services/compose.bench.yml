@@ -1,7 +1,7 @@
 services:
   bench:
     build:
-      context: ./bench
+      context: ./services/bench
       dockerfile: Dockerfile
     container_name: ${HARBOR_CONTAINER_PREFIX}.bench
     env_file:

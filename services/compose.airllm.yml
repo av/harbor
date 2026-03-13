@@ -1,7 +1,7 @@
 services:
   airllm:
     build:
-      context: ./airllm
+      context: ./services/airllm
       dockerfile: ./Dockerfile
     container_name: ${HARBOR_CONTAINER_PREFIX}.airllm
     env_file:

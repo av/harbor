@@ -5,7 +5,7 @@ services:
       - ./.env
       - ./services/jupyter/override.env
     build:
-      context: ./jupyter
+      context: ./services/jupyter
       dockerfile: Dockerfile
       args:
         HARBOR_JUPYTER_IMAGE: ${HARBOR_JUPYTER_IMAGE}

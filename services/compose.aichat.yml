@@ -2,7 +2,7 @@ services:
   aichat:
     container_name: ${HARBOR_CONTAINER_PREFIX}.aichat
     build:
-      context: ./aichat
+      context: ./services/aichat
       dockerfile: Dockerfile
     env_file:
       - ./.env

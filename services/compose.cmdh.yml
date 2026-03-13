@@ -1,7 +1,7 @@
 services:
   cmdh:
     build:
-      context: ./cmdh
+      context: ./services/cmdh
       dockerfile: Dockerfile
     container_name: ${HARBOR_CONTAINER_PREFIX}.cmdh
     env_file:

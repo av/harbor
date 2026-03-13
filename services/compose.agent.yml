@@ -1,7 +1,7 @@
 services:
   agent:
     build:
-      context: ./agent
+      context: ./services/agent
       dockerfile: Dockerfile
       args:
         HARBOR_AGENT_IMAGE: ${HARBOR_AGENT_IMAGE}

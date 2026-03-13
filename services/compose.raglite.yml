@@ -2,13 +2,13 @@ services:
   raglite:
     container_name: ${HARBOR_CONTAINER_PREFIX}.raglite
     build:
-      context: ./raglite
+      context: ./services/raglite
       dockerfile: Dockerfile
     ports:
       - ${HARBOR_RAGLIT_HOST_PORT}:8000
     env_file:
       - ./.env
-      - raglite/override.env
+      - ./services/raglite/override.env
     volumes:
       - ${HARBOR_HF_CACHE}:/root/.cache/huggingface
       - ${HARBOR_RAGLITE_WORKSPACE}/raglite:/root/raglite

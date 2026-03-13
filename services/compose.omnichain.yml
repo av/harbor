@@ -2,7 +2,7 @@ services:
   omnichain:
     container_name: ${HARBOR_CONTAINER_PREFIX}.omnichain
     build:
-      context: ./omnichain
+      context: ./services/omnichain
       dockerfile: Dockerfile
     env_file:
       - ./.env

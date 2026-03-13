@@ -9,12 +9,15 @@ services:
       - ${HARBOR_MORPHIC_HOST_PORT}:3000
     env_file:
       - ./.env
-      - morphic/override.env
+      - ./services/morphic/override.env
     networks:
       - harbor-network
 
   morphic-redis:
     container_name: ${HARBOR_CONTAINER_PREFIX}.morphic-redis
+    env_file:
+      - ./.env
+      - ./services/morphic/override.env
     image: redis:alpine
     volumes:
       - ./services/morphic/redis:/data

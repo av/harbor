@@ -7,7 +7,7 @@ services:
       dockerfile: Dockerfile
     env_file:
       - ./.env
-      - optillm/override.env
+      - ./services/optillm/override.env
     volumes:
       - ${HARBOR_OPTILLM_WORKSPACE}:/root/.config/optillm
     ports:

@@ -29,6 +29,9 @@ services:
   chatui-db:
     image: mongo:latest
     container_name: ${HARBOR_CONTAINER_PREFIX}.chatui-db
+    env_file:
+      - ./.env
+      - ./services/chatui/override.env
     volumes:
       - ./services/chatui/data:/data/db
     networks:

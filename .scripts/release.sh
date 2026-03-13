@@ -6,6 +6,7 @@ echo "Seeding..."
 harbor dev seed
 harbor dev seed-cdi
 harbor dev seed-traefik
+harbor dev lint
 
 echo "Moving docs..."
 harbor dev docs

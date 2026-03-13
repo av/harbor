@@ -1,7 +1,9 @@
 services:
   mistralrs:
     container_name: ${HARBOR_CONTAINER_PREFIX}.mistralrs
-    env_file: ./.env
+    env_file:
+      - ./.env
+      - ./services/mistralrs/override.env
     # See .nvidia. file for an alternative image
     image: ghcr.io/ericlbuehler/mistral.rs:cpu-${HARBOR_MISTRALRS_VERSION}
     ports:

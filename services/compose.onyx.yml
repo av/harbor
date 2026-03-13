@@ -23,7 +23,7 @@ services:
 
   onyx-web:
     image: onyxdotapp/onyx-web-server:${HARBOR_ONYX_VERSION}
-    container_name: ${HARBOR_CONTAINER_PREFIX}.onyx.web
+    container_name: ${HARBOR_CONTAINER_PREFIX}.onyx-web
     env_file:
       - ./.env
       - ./services/onyx/override.env
@@ -39,7 +39,7 @@ services:
 
   onyx-api:
     image: onyxdotapp/onyx-backend:${HARBOR_ONYX_VERSION}
-    container_name: ${HARBOR_CONTAINER_PREFIX}.onyx.api
+    container_name: ${HARBOR_CONTAINER_PREFIX}.onyx-api
     command: >
       /bin/sh -c "
       alembic upgrade head &&
@@ -84,7 +84,7 @@ services:
 
   onyx-background:
     image: onyxdotapp/onyx-backend:${HARBOR_ONYX_VERSION}
-    container_name: ${HARBOR_CONTAINER_PREFIX}.onyx.background
+    container_name: ${HARBOR_CONTAINER_PREFIX}.onyx-background
     command: >
       /bin/sh -c "/app/scripts/supervisord_entrypoint.sh"
     env_file:
@@ -126,7 +126,7 @@ services:
 
   onyx-db:
     image: postgres:15.2-alpine
-    container_name: ${HARBOR_CONTAINER_PREFIX}.onyx.db
+    container_name: ${HARBOR_CONTAINER_PREFIX}.onyx-db
     env_file:
       - ./.env
       - ./services/onyx/override.env
@@ -148,7 +148,10 @@ services:
 
   onyx-cache:
     image: redis:7.4-alpine
-    container_name: ${HARBOR_CONTAINER_PREFIX}.onyx.cache
+    container_name: ${HARBOR_CONTAINER_PREFIX}.onyx-cache
+    env_file:
+      - ./.env
+      - ./services/onyx/override.env
     command: redis-server --save "" --appendonly no
     tmpfs:
       - /data
@@ -158,7 +161,10 @@ services:
 
   onyx-index:
     image: vespaengine/vespa:${HARBOR_ONYX_VESPA_VERSION}
-    container_name: ${HARBOR_CONTAINER_PREFIX}.onyx.index
+    container_name: ${HARBOR_CONTAINER_PREFIX}.onyx-index
+    env_file:
+      - ./.env
+      - ./services/onyx/override.env
     environment:
       VESPA_SKIP_UPGRADE_CHECK: "true"
     volumes:
@@ -169,7 +175,10 @@ services:
 
   onyx-minio:
     image: minio/minio:${HARBOR_ONYX_MINIO_VERSION}
-    container_name: ${HARBOR_CONTAINER_PREFIX}.onyx.minio
+    container_name: ${HARBOR_CONTAINER_PREFIX}.onyx-minio
+    env_file:
+      - ./.env
+      - ./services/onyx/override.env
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${HARBOR_ONYX_MINIO_USER:-minioadmin}

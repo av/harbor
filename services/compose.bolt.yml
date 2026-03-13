@@ -13,3 +13,5 @@ services:
     volumes:
       - ./services/bolt/.env.local:/app/.env.local
     command: bash -c "pnpm run build && pnpm run dockerstart"
+    networks:
+      - harbor-network

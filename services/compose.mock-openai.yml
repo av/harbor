@@ -4,7 +4,7 @@ services:
       context: ./integration/fixtures/mock-openai
       dockerfile: Dockerfile
     image: harbor.mock-openai
-    container_name: harbor.mock-openai
+    container_name: ${HARBOR_CONTAINER_PREFIX}.mock-openai
     ports:
       - "${HARBOR_MOCK_OPENAI_HOST_PORT:-29350}:8080"
     env_file:
@@ -13,3 +13,5 @@ services:
     environment:
       - PORT=8080
     restart: unless-stopped
+    networks:
+      - harbor-network

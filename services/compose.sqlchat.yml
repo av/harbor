@@ -6,6 +6,6 @@ services:
       - ${HARBOR_SQLCHAT_HOST_PORT}:3000
     env_file:
       - ./.env
-      - sqlchat/override.env
+      - ./services/sqlchat/override.env
     networks:
       - harbor-network

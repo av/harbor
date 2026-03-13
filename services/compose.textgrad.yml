@@ -2,7 +2,7 @@ services:
   textgrad:
     container_name: ${HARBOR_CONTAINER_PREFIX}.textgrad
     build:
-      context: ./textgrad
+      context: ./services/textgrad
       dockerfile: Dockerfile
     env_file:
       - ./.env

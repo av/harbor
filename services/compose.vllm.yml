@@ -5,7 +5,7 @@ services:
       - ./.env
       - ./services/vllm/override.env
     build:
-      context: ./vllm
+      context: ./services/vllm
       dockerfile: Dockerfile
       args:
         HARBOR_VLLM_IMAGE: ${HARBOR_VLLM_IMAGE}

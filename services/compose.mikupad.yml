@@ -13,6 +13,6 @@ services:
         CMD ["http-server"]
     env_file:
       - ./.env
-      - mikupad/override.env
+      - ./services/mikupad/override.env
     networks:
       - harbor-network

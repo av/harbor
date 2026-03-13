@@ -1,7 +1,7 @@
 services:
   repopack:
     build:
-      context: ./repopack
+      context: ./services/repopack
       dockerfile: Dockerfile
     container_name: ${HARBOR_CONTAINER_PREFIX}.repopack
     env_file:

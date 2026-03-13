@@ -1,7 +1,7 @@
 services:
   omniparser:
     build:
-      context: ./omniparser
+      context: ./services/omniparser
       dockerfile: Dockerfile
     container_name: ${HARBOR_CONTAINER_PREFIX}.omniparser
     env_file:

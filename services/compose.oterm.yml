@@ -2,11 +2,11 @@ services:
   oterm:
     container_name: ${HARBOR_CONTAINER_PREFIX}.oterm
     build:
-      context: ./oterm
+      context: ./services/oterm
       dockerfile: Dockerfile
     env_file:
       - ./.env
-      - oterm/override.env
+      - ./services/oterm/override.env
     networks:
       - harbor-network
     volumes:

@@ -5,7 +5,7 @@ services:
       - ./.env
       - ./services/ol1/override.env
     build:
-      context: ./ol1
+      context: ./services/ol1
       dockerfile: Dockerfile
     ports:
       - ${HARBOR_OL1_HOST_PORT}:8501

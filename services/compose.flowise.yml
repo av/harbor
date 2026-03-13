@@ -10,6 +10,6 @@ services:
       - ${HARBOR_FLOWISE_WORKSPACE}:/root/.flowise
     env_file:
       - ./.env
-      - flowise/override.env
+      - ./services/flowise/override.env
     networks:
       - harbor-network

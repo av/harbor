@@ -2,7 +2,7 @@ services:
   nexa:
     container_name: ${HARBOR_CONTAINER_PREFIX}.nexa
     build:
-      context: ./nexa
+      context: ./services/nexa
       dockerfile: Dockerfile
       # This can (and will) be overridden by .x.nvidia file
       args:
@@ -27,9 +27,12 @@ services:
 
   nexa-proxy:
     build:
-      context: ./nexa
+      context: ./services/nexa
       dockerfile: proxy.Dockerfile
     container_name: ${HARBOR_CONTAINER_PREFIX}.nexa-proxy
+    env_file:
+      - ./.env
+      - ./services/nexa/override.env
     ports:
       - ${HARBOR_NEXA_HOST_PORT}:8000
     volumes:

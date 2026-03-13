@@ -2,6 +2,9 @@ services:
   lmdeploy:
     image: openmmlab/lmdeploy:latest
     container_name: ${HARBOR_CONTAINER_PREFIX}.lmdeploy
+    env_file:
+      - ./.env
+      - ./services/lmdeploy/override.env
     volumes:
       - ${HARBOR_HF_CACHE}:/root/.cache/huggingface
     ports:

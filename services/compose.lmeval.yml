@@ -1,7 +1,7 @@
 services:
   lmeval:
     build:
-      context: ./lmeval
+      context: ./services/lmeval
       dockerfile: Dockerfile
     container_name: ${HARBOR_CONTAINER_PREFIX}.lmeval
     env_file:

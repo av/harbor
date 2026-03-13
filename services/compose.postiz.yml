@@ -38,6 +38,9 @@ services:
 
   postiz-postgres:
     container_name: ${HARBOR_CONTAINER_PREFIX}.postiz-postgres
+    env_file:
+      - ./.env
+      - ./services/postiz/override.env
     image: postgres:17-alpine
     environment:
       POSTGRES_USER: ${HARBOR_POSTIZ_DB_USER}
@@ -55,6 +58,9 @@ services:
 
   postiz-redis:
     container_name: ${HARBOR_CONTAINER_PREFIX}.postiz-redis
+    env_file:
+      - ./.env
+      - ./services/postiz/override.env
     image: redis:7.2
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -68,6 +74,9 @@ services:
 
   postiz-temporal-postgres:
     container_name: ${HARBOR_CONTAINER_PREFIX}.postiz-temporal-postgres
+    env_file:
+      - ./.env
+      - ./services/postiz/override.env
     image: postgres:16
     environment:
       POSTGRES_USER: temporal
@@ -79,6 +88,9 @@ services:
 
   postiz-elasticsearch:
     container_name: ${HARBOR_CONTAINER_PREFIX}.postiz-elasticsearch
+    env_file:
+      - ./.env
+      - ./services/postiz/override.env
     image: elasticsearch:7.17.18
     user: "1000:1000"
     environment:
@@ -92,6 +104,9 @@ services:
 
   postiz-temporal:
     container_name: ${HARBOR_CONTAINER_PREFIX}.postiz-temporal
+    env_file:
+      - ./.env
+      - ./services/postiz/override.env
     image: temporalio/auto-setup:1.28.1
     environment:
       - DB=postgres12
@@ -117,6 +132,9 @@ services:
 
   postiz-temporal-ui:
     container_name: ${HARBOR_CONTAINER_PREFIX}.postiz-temporal-ui
+    env_file:
+      - ./.env
+      - ./services/postiz/override.env
     image: temporalio/ui:2.34.0
     environment:
       - TEMPORAL_ADDRESS=postiz-temporal:7233

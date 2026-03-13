@@ -33,6 +33,9 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    env_file:
+      - ./.env
+      - ./services/windmill/override.env
     volumes:
       - ${HARBOR_WINDMILL_WORKSPACE}/db:/var/lib/postgresql/data
     networks:
@@ -106,5 +109,8 @@ services:
     restart: unless-stopped
     volumes:
       - ${HARBOR_WINDMILL_WORKSPACE}/lsp_cache:/pyls/.cache
+    env_file:
+      - ./.env
+      - ./services/windmill/override.env
     networks:
       - harbor-network

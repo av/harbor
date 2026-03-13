@@ -1,6 +1,11 @@
 services:
   qrgen:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.qrgen
     build:
-      context: ./qrgen
+      context: ./services/qrgen
       dockerfile: Dockerfile
-
+    env_file:
+      - ./.env
+      - ./services/qrgen/override.env
+    networks:
+      - harbor-network

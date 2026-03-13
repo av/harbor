@@ -6,7 +6,7 @@ services:
       - ${HARBOR_LLAMASWAP_HOST_PORT}:8080
     env_file:
       - ./.env
-      - llamaswap/override.env
+      - ./services/llamaswap/override.env
     networks:
       - harbor-network
     volumes:

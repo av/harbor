@@ -10,7 +10,7 @@ services:
       - harbor-network
     env_file:
       - ./.env
-      - langflow/override.env
+      - ./services/langflow/override.env
     labels:
       - "harbor.service=langflow"
       - "harbor.port=7860"

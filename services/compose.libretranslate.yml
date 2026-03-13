@@ -6,7 +6,7 @@ services:
       - ${HARBOR_LIBRETRANSLATE_HOST_PORT}:5000
     env_file:
       - ./.env
-      - libretranslate/override.env
+      - ./services/libretranslate/override.env
     volumes:
       - ${HARBOR_LIBRETRANSLATE_WORKSPACE}/keys:/app/db
       - ${HARBOR_LIBRETRANSLATE_WORKSPACE}/local:/home/libretranslate/.local

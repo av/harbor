@@ -2,7 +2,7 @@ services:
   # Dockerized CLI
   plandex:
     build:
-      context: ./plandex
+      context: ./services/plandex
       dockerfile: Dockerfile
     container_name: ${HARBOR_CONTAINER_PREFIX}.plandex
     env_file:

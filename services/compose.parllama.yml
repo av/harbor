@@ -5,7 +5,7 @@ services:
       - ./.env
       - ./services/parllama/override.env
     build:
-      context: ./parllama
+      context: ./services/parllama
       dockerfile: Dockerfile
     volumes:
       - ${HARBOR_PARLLAMA_CACHE}:/root/.local/share/parllama

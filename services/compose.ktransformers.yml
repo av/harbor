@@ -6,7 +6,7 @@ services:
       - ./services/ktransformers/override.env
     ipc: host
     build:
-      context: ./ktransformers
+      context: ./services/ktransformers
       dockerfile: Dockerfile
     ports:
       - ${HARBOR_KTRANSFORMERS_HOST_PORT}:12456

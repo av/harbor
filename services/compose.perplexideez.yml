@@ -4,6 +4,9 @@ services:
   perplexideez:
     container_name: ${HARBOR_CONTAINER_PREFIX}.perplexideez
     image: nginx:alpine
+    env_file:
+      - ./.env
+      - ./services/perplexideez/override.env
     ports:
       - ${HARBOR_PERPLEXIDEEZ_HOST_PORT}:80
     depends_on:

@@ -1,7 +1,7 @@
 services:
   hf:
     build:
-      context: ./hf
+      context: ./services/hf
       dockerfile: Dockerfile
     container_name: ${HARBOR_CONTAINER_PREFIX}.hf
     env_file:

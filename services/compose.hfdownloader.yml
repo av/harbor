@@ -4,7 +4,7 @@
 services:
   hfdownloader:
     build:
-      context: ./hfdownloader
+      context: ./services/hfdownloader
       dockerfile: Dockerfile
     container_name: ${HARBOR_CONTAINER_PREFIX}.hfdownloader
     env_file:

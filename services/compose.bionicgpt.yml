@@ -25,30 +25,45 @@ services:
         condition: service_healthy
       bionicgpt-migrations:
         condition: service_completed_successfully
+    env_file:
+      - ./.env
+      - ./services/bionicgpt/override.env
     networks:
       - harbor-network
 
   bionicgpt-llmapi:
     container_name: ${HARBOR_CONTAINER_PREFIX}.bionicgpt-llmapi
     image: ghcr.io/bionic-gpt/llama-3-8b-chat:1.1.1
+    env_file:
+      - ./.env
+      - ./services/bionicgpt/override.env
     networks:
       - harbor-network
 
   bionicgpt-embeddingsapi:
     container_name: ${HARBOR_CONTAINER_PREFIX}.bionicgpt-embeddingsapi
     image: ghcr.io/bionic-gpt/bionicgpt-embeddings-api:cpu-0.6
+    env_file:
+      - ./.env
+      - ./services/bionicgpt/override.env
     networks:
       - harbor-network
 
   bionicgpt-chunkingengine:
     container_name: ${HARBOR_CONTAINER_PREFIX}.bionicgpt-chunkingengine
     image: downloads.unstructured.io/unstructured-io/unstructured-api:4ffd8bc
+    env_file:
+      - ./.env
+      - ./services/bionicgpt/override.env
     networks:
       - harbor-network
 
   bionicgpt-postgres:
     container_name: ${HARBOR_CONTAINER_PREFIX}.bionicgpt-postgres
     image: ankane/pgvector
+    env_file:
+      - ./.env
+      - ./services/bionicgpt/override.env
     platform: linux/amd64
     environment:
       POSTGRES_PASSWORD: testpassword
@@ -67,6 +82,9 @@ services:
   bionicgpt-barricade:
     container_name: ${HARBOR_CONTAINER_PREFIX}.bionicgpt-barricade
     image: purtontech/barricade:1.2.10
+    env_file:
+      - ./.env
+      - ./services/bionicgpt/override.env
     environment:
         # This secret key is used to encrypt cookies.
         SECRET_KEY: 190a5bf4b3cbb6c0991967ab1c48ab30790af876720f1835cbbf3820f4f5d949
@@ -85,6 +103,9 @@ services:
   bionicgpt-migrations:
     container_name: ${HARBOR_CONTAINER_PREFIX}.bionicgpt-migrations
     image: ghcr.io/bionic-gpt/bionicgpt-db-migrations:1.7.41
+    env_file:
+      - ./.env
+      - ./services/bionicgpt/override.env
     environment:
       DATABASE_URL: postgresql://postgres:testpassword@bionicgpt-postgres:5432/bionic-gpt?sslmode=disable
     depends_on:
@@ -97,6 +118,9 @@ services:
   bionicgpt-pipelinejob:
     container_name: ${HARBOR_CONTAINER_PREFIX}.bionicgpt-pipelinejob
     image: ghcr.io/bionic-gpt/bionicgpt-pipeline-job:1.7.41
+    env_file:
+      - ./.env
+      - ./services/bionicgpt/override.env
     environment:
       APP_DATABASE_URL: postgresql://bionic_application:testpassword@bionicgpt-postgres:5432/bionic-gpt?sslmode=disable
     depends_on:
@@ -104,3 +128,5 @@ services:
         condition: service_healthy
       bionicgpt-migrations:
         condition: service_completed_successfully
+    networks:
+      - harbor-network

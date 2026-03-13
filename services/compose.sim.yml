@@ -98,6 +98,9 @@ services:
       - POSTGRES_USER=${HARBOR_SIM_DB_USER}
       - POSTGRES_PASSWORD=${HARBOR_SIM_DB_PASSWORD}
       - POSTGRES_DB=${HARBOR_SIM_DB_NAME}
+    env_file:
+      - ./.env
+      - ./services/sim/override.env
     volumes:
       - ${HARBOR_SIM_WORKSPACE}/postgres:/var/lib/postgresql/data
     healthcheck:

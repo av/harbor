@@ -105,7 +105,7 @@ services:
     depends_on:
       - librechat-vector
     env_file:
-      - .env
+      - ./.env
       - ./services/librechat/.env
       - ./services/librechat/override.env
     networks:

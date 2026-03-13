@@ -1,7 +1,7 @@
 services:
   opint:
     build:
-      context: ./openinterpreter
+      context: ./services/openinterpreter
       dockerfile: Dockerfile
     container_name: ${HARBOR_CONTAINER_PREFIX}.opint
     env_file:
