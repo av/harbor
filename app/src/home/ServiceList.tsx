@@ -1,10 +1,8 @@
-import { ChangeEvent, useState } from "react";
+import { ChangeEvent } from "react";
 
 import { IconRotateCW } from "../Icons";
 import { Section } from "../Section";
 import { ServiceCard } from "./ServiceCard";
-import { useServiceList } from "./useServiceList";
-import { useArrayState } from "../useArrayState";
 import { Loader } from "../Loading";
 import { IconButton } from "../IconButton";
 import { HarborService } from "../serviceMetadata";
@@ -16,6 +14,7 @@ import { toasted } from "../utils";
 import { SearchInput } from "../SearchInput";
 import { useSearch } from "../useSearch";
 import { LostSquirrel } from "../LostSquirrel";
+import { useState } from "react";
 
 const serviceOrderBy = (a: HarborService, b: HarborService) => {
   if ((a.isRunning || a.isDefault) && !(b.isRunning || b.isDefault)) {
@@ -31,25 +30,48 @@ const serviceOrderBy = (a: HarborService, b: HarborService) => {
   });
 };
 
-export const ServiceList = () => {
+type ServiceListProps = {
+  services: HarborService[];
+  loading: boolean;
+  error: unknown;
+  rerun: () => void;
+  tagFilter: string[];
+  onTagFilterChange: (tags: string[]) => void;
+  pinnedIds: string[];
+  onTogglePin: (handle: string) => void;
+  pinnedSection?: React.ReactNode;
+};
+
+export const ServiceList = ({
+  services,
+  loading,
+  error,
+  rerun,
+  tagFilter,
+  onTagFilterChange,
+  pinnedIds,
+  onTogglePin,
+  pinnedSection,
+}: ServiceListProps) => {
   const serviceSearch = useSearch("services");
-  const { services, loading, error, rerun } = useServiceList();
-  const { toggle, items } = useArrayState(useState<string[]>([]));
   const [changing, setChanging] = useState(false);
 
   const handleTagsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, checked } = e.target;
-    toggle(name, checked);
+    const next = checked
+      ? [...tagFilter, name].filter((v, i, a) => a.indexOf(v) === i)
+      : tagFilter.filter((v) => v !== name);
+    onTagFilterChange(next);
   };
 
   const handleServiceUpdate = () => {
     rerun();
   };
 
-  const filteredServices = services?.filter((service) => {
-    const matchesTags = items.length === 0 || service.tags.some((tag) => {
-      return items.includes(tag);
-    });
+  const filteredServices = services.filter((service) => {
+    const matchesTags =
+      tagFilter.length === 0 ||
+      service.tags.some((tag) => tagFilter.includes(tag));
 
     const matchesSearch = [
       serviceSearch.matches(service.name ?? service.handle),
@@ -59,10 +81,12 @@ export const ServiceList = () => {
     return matchesTags && matchesSearch;
   });
 
-  const filtered = services.length - filteredServices.length;
+  const unpinnedServices = services.filter(s => !pinnedIds.includes(s.handle));
+  const unpinnedFiltered = filteredServices.filter(s => !pinnedIds.includes(s.handle));
+  const filtered = unpinnedServices.length - unpinnedFiltered.length;
 
-  const orderedServices = filteredServices?.sort(serviceOrderBy);
-  const anyRunning = orderedServices?.some((service) => service.isRunning);
+  const orderedServices = unpinnedFiltered.sort(serviceOrderBy);
+  const anyRunning = orderedServices.some((service) => service.isRunning);
   const actionIcon = changing
     ? ACTION_ICONS.loading
     : anyRunning
@@ -75,21 +99,19 @@ export const ServiceList = () => {
 
     const action = () => {
       setChanging(true);
-      return runHarbor([
-        anyRunning ? "down" : "up",
-      ]);
+      return runHarbor([anyRunning ? "down" : "up"]);
     };
     const ok = anyRunning
       ? msg("All services stopped")
       : msg("Started default services");
-    const error = anyRunning
+    const err = anyRunning
       ? msg("Failed to stop all services")
       : msg("Failed to start default services");
 
     toasted({
       action,
       ok,
-      error,
+      error: err,
       finally() {
         setChanging(false);
         handleServiceUpdate();
@@ -112,6 +134,7 @@ export const ServiceList = () => {
                       onChange={handleTagsChange}
                       type="checkbox"
                       name={tag}
+                      checked={tagFilter.includes(tag)}
                       aria-label={tag}
                     />
                     <ServiceTag tag={tag} />
@@ -121,10 +144,7 @@ export const ServiceList = () => {
             })}
           </div>
 
-          <span
-            className="tooltip tooltip-bottom"
-            data-tip={actionTip}
-          >
+          <span className="tooltip tooltip-bottom" data-tip={actionTip}>
             <IconButton
               icon={actionIcon}
               onClick={handleToggle}
@@ -139,33 +159,32 @@ export const ServiceList = () => {
           <SearchInput
             defaultValue={serviceSearch.query}
             onChange={(e: ChangeEvent<HTMLInputElement>) =>
-              serviceSearch.setQuery(e.target.value)}
+              serviceSearch.setQuery(e.target.value)
+            }
           />
         </div>
       }
       children={
         <div className="rounded-box">
           <Loader loading={loading} loader="overlay" />
-          {error && <div className="my-2">{error.message}</div>}
+          {!!error && <div className="my-2">{String((error as Error).message ?? error)}</div>}
+          {pinnedSection}
           {services && (
             <ul className="flex gap-4 flex-wrap">
-              {orderedServices.map((service) => {
-                return (
-                  <li
-                    key={service.handle}
-                    className="m-0 p-0"
-                  >
-                    <ServiceCard
-                      service={service}
-                      onUpdate={handleServiceUpdate}
-                    />
-                  </li>
-                );
-              })}
+              {orderedServices.map((service) => (
+                <li key={service.handle} className="m-0 p-0">
+                  <ServiceCard
+                    service={service}
+                    onUpdate={handleServiceUpdate}
+                    isPinned={pinnedIds.includes(service.handle)}
+                    onTogglePin={onTogglePin}
+                  />
+                </li>
+              ))}
 
               {filtered > 0 && !loading && (
                 <li className="p-6 rounded-box cursor-default bg-base-200/50 relative flex items-center">
-                  {filtered === services.length && (
+                  {filtered === unpinnedServices.length && (
                     <LostSquirrel className="text-base-content/40 text-2xl mr-4" />
                   )}
                   {filtered < services.length ? filtered : "Everything"}{" "}

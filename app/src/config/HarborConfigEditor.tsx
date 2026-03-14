@@ -20,6 +20,7 @@ import { SearchInput } from "../SearchInput";
 import { useSearch } from "../useSearch";
 import { ChangeEvent } from "react";
 import { runOpen } from "../useOpen";
+import { useSharedState } from "../useSharedState";
 
 export const HarborConfigEditor = (
     { config }: { config: HarborConfig },
@@ -29,6 +30,7 @@ export const HarborConfigEditor = (
     const overlays = useOverlays();
     const [, setSelectedProfile] = useSelectedProfile();
     const search = useSearch("config");
+    const [, setConfigVersion] = useSharedState("configVersion", 0);
 
     const maybeExtra = EXTRA[config.profile.name];
     const handleFileOpen = async () => {
@@ -59,7 +61,7 @@ export const HarborConfigEditor = (
                     await config.saveAs(name);
                     setSelectedProfile(name);
                     overlays.close();
-                    window.location.reload();
+                    setConfigVersion(v => v + 1);
                 }}
             />,
         );
@@ -91,7 +93,7 @@ export const HarborConfigEditor = (
                 onConfirm={async () => {
                     await config.delete();
                     setSelectedProfile(CURRENT_PROFILE);
-                    window.location.reload();
+                    setConfigVersion(v => v + 1);
                 }}
             >
                 <h2 className="text-2xl mb-2 font-bold">Delete?</h2>

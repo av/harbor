@@ -2,9 +2,21 @@ import { useState } from "react";
 
 import { Modal } from "../Modal";
 import { useOverlays } from "../OverlayContext";
-import { noSpaces, notEmpty, validate } from "../utils";
+import { validate } from "../utils";
 import { useCalled } from "../useCalled";
 import { KEY_CODES, useGlobalKeydown } from "../useGlobalKeydown";
+
+const validProfileName = (value: string) => {
+    if (value.length === 0) {
+        return "The value should not be empty";
+    }
+    if (value.length > 64) {
+        return "The name must be 64 characters or fewer";
+    }
+    if (!/^[a-zA-Z0-9_-]+$/.test(value)) {
+        return "Only letters, numbers, hyphens, and underscores are allowed";
+    }
+};
 
 export const ConfigNameModal = ({
     onCreate,
@@ -15,8 +27,7 @@ export const ConfigNameModal = ({
     const [name, setName] = useState("");
 
     const maybeError = validate(name, [
-        notEmpty,
-        noSpaces,
+        validProfileName,
     ]);
     const handleNameChange = useCalled((e) => {
         setName(e.target.value);
@@ -36,7 +47,7 @@ export const ConfigNameModal = ({
                 <div className="label gap-2">
                     <div className="label-text">Name</div>
                     <div className="label-text-alt text-right text-base-content/50">
-                        Consider something easy to type
+                        Letters, numbers, hyphens, underscores only
                     </div>
                 </div>
                 <input

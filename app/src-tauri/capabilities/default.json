@@ -9,7 +9,21 @@
     "core:default",
     "shell:allow-open",
     "shell:default",
-    "shell:allow-spawn",
+    {
+      "identifier": "shell:allow-spawn",
+      "allow": [
+        {
+          "name": "harbor",
+          "cmd": "harbor",
+          "args": true
+        },
+        {
+          "name": "wsl.exe",
+          "cmd": "wsl.exe",
+          "args": true
+        }
+      ]
+    },
     "os:default",
     "store:default",
     "fs:default",

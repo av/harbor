@@ -3,6 +3,9 @@ import { useSearch } from "../useSearch";
 import { useStoredState } from "../useStoredState";
 import { HarborConfigSection } from "./HarborConfig";
 import { HarborConfigEntryEditor } from "./HarborConfigEntryEditor";
+import { useSharedState } from "../useSharedState";
+import { useLayoutEffect, useRef } from "react";
+import { normalizeServiceKey } from "../utils";
 
 export const HarborConfigSectionEditor = (
     { section }: { section: HarborConfigSection },
@@ -10,6 +13,27 @@ export const HarborConfigSectionEditor = (
     const search = useSearch("config");
     let [open, setOpen] = useStoredState(`section:${section.name}`, false);
     const maybeExtra = SECTIONS_EXTRA[section.name];
+    const [configDeepLink, setConfigDeepLink] = useSharedState<string | null>("configDeepLink", null);
+    const sectionRef = useRef<HTMLDivElement>(null);
+    const scrollFiredRef = useRef(false);
+
+    const isDeepLinked = configDeepLink !== null &&
+        normalizeServiceKey(configDeepLink) === normalizeServiceKey(section.name);
+
+    // Force-expand and scroll if this section matches the deep link.
+    // useLayoutEffect ensures this runs synchronously after every render,
+    // so it fires as soon as the section mounts with a matching configDeepLink.
+    useLayoutEffect(() => {
+        if (isDeepLinked && !scrollFiredRef.current) {
+            scrollFiredRef.current = true;
+            setOpen(true);
+            setConfigDeepLink(null);
+
+            setTimeout(() => {
+                sectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+            }, 100);
+        }
+    }, [isDeepLinked]);
 
     const filteredEntries = section.entries.filter((entry) => {
         return search.matches(entry.id);
@@ -28,7 +52,7 @@ export const HarborConfigSectionEditor = (
 
     return (
         <>
-            <div className="collapse collapse-arrow bg-base-200 max-w-2xl">
+            <div ref={sectionRef} className="collapse collapse-arrow bg-base-200 max-w-2xl">
                 <input
                     type="checkbox"
                     checked={open}

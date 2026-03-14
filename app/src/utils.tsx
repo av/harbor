@@ -90,12 +90,6 @@ export const notEmpty = (value: string) => {
     }
 };
 
-export const noSpaces = (value: string) => {
-    if (value.includes(" ")) {
-        return "The value should not contain spaces";
-    }
-};
-
 export type DebounceOptions = {
     leading?: boolean
     trailing?: boolean
@@ -113,7 +107,7 @@ export const debounce = <T extends (...args: any) => ReturnType<T>>(
     wait: number,
     options?: DebounceOptions,
 ): ControlFunctions => {
-    let timeout: number | undefined;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
 
     const debounced = (...args: Parameters<T>) => {
         const later = () => {
@@ -178,4 +172,8 @@ export function markHandled(e: React.SyntheticEvent) {
 
 export function isHandled(e: React.SyntheticEvent) {
     return '__handled' in e.nativeEvent;
+}
+
+export function normalizeServiceKey(handle: string): string {
+    return handle.toUpperCase().replace(/-/g, "_").split("_")[0];
 }

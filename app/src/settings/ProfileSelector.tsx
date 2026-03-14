@@ -8,12 +8,14 @@ import { useSelectedProfile } from "../useSelectedProfile";
 import { useOverlays } from "../OverlayContext";
 import { ConfigNameModal } from "../config/ConfigNameModal";
 import { useEffect } from "react";
+import { useSharedState } from "../useSharedState";
 
 export const ProfileSelector = (
     { configs }: { configs: HarborConfig[] },
 ) => {
     const overlays = useOverlays();
     const [selected, setSelected] = useSelectedProfile();
+    const [, setConfigVersion] = useSharedState("configVersion", 0);
 
     const configMap = new Map(
         configs.map((config) => [config.profile.name, config]),
@@ -42,7 +44,7 @@ export const ProfileSelector = (
                     def?.saveAs(name);
                     setSelected(name);
                     overlays.close();
-                    window.location.reload();
+                    setConfigVersion(v => v + 1);
                 }}
             />,
         );
@@ -95,3 +97,4 @@ export const ProfileSelector = (
         </div>
     );
 };
+

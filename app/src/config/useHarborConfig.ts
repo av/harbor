@@ -5,14 +5,20 @@ import { join } from "@tauri-apps/api/path";
 import { resolveHarborHome, resolveProfilesDir } from "../useHarbor";
 import { HarborConfig } from "./HarborConfig";
 import { CURRENT_PROFILE } from "../configMetadata";
+import { useSharedState } from "../useSharedState";
 
 export const useHarborConfig = () => {
     const [configs, setConfigs] = useState<HarborConfig[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<unknown | null>(null);
+    const [configVersion] = useSharedState("configVersion", 0);
 
     useEffect(() => {
+        let cancelled = false;
+
         async function readProfiles() {
+            HarborConfig.cache.clear();
+
             try {
                 setLoading(true);
 
@@ -45,7 +51,7 @@ export const useHarborConfig = () => {
                     targets
                         .map(async (profile) => {
                             const content = await readTextFile(profile.path);
-                            
+
                             return HarborConfig.cached({
                                 name: profile.name.replace(".env", ""),
                                 file: profile.path,
@@ -54,17 +60,27 @@ export const useHarborConfig = () => {
                         }),
                 );
 
-                setConfigs(configs);
+                if (!cancelled) {
+                    setConfigs(configs);
+                }
             } catch (error: unknown) {
-                console.error(error);
-                setError(error);
+                if (!cancelled) {
+                    console.error(error);
+                    setError(error);
+                }
             } finally {
-                setLoading(false);
+                if (!cancelled) {
+                    setLoading(false);
+                }
             }
         }
 
         readProfiles();
-    }, []);
+
+        return () => {
+            cancelled = true;
+        };
+    }, [configVersion]);
 
     return {
         configs,

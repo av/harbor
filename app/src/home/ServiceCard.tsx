@@ -3,17 +3,22 @@ import { ServiceTags } from "../ServiceTags";
 import { HST } from "../serviceMetadata";
 import { HSTColors } from "../ServiceTags";
 import { HSTColorOpts } from "../ServiceTags";
-import { isHandled } from "../utils";
+import { isHandled, markHandled } from "../utils";
 import { useNavigate } from "react-router-dom";
 import { ServiceActions } from "../service/ServiceActions";
 import { ServiceName } from '../service/ServiceName';
+import { IconPin, IconPinOff } from "../Icons";
 
 export const ServiceCard = ({
   service,
   onUpdate,
+  isPinned,
+  onTogglePin,
 }: {
   service: HarborService;
   onUpdate: () => void;
+  isPinned?: boolean;
+  onTogglePin?: (handle: string) => void;
 }) => {
   const navigate = useNavigate();
 
@@ -23,6 +28,12 @@ export const ServiceCard = ({
     }
 
     navigate(`/services/${service.handle}`);
+  };
+
+  const handlePinClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    markHandled(e);
+    onTogglePin?.(service.handle);
   };
 
   const gradientTag = service.tags.find((t) => HSTColorOpts.includes(t as HST));
@@ -40,6 +51,15 @@ export const ServiceCard = ({
       <h2 className="flex items-center gap-1 text-2xl pb-2">
         <ServiceName service={service} />
         <ServiceActions service={service} onUpdate={onUpdate} />
+        {onTogglePin && (
+          <button
+            className="btn btn-ghost btn-xs btn-circle ml-1 text-base-content/40 hover:text-base-content"
+            onClick={handlePinClick}
+            aria-label={isPinned ? "Unpin service" : "Pin service"}
+          >
+            {isPinned ? <IconPin className="w-4 h-4" /> : <IconPinOff className="w-4 h-4" />}
+          </button>
+        )}
       </h2>
       <ServiceTags service={service} />
     </div>

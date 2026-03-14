@@ -12,7 +12,7 @@ export function IconCheck(props: SVGProps<SVGSVGElement>) {
             strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"
-            className="lucide lucide-bandage"
+            className="lucide lucide-check"
             {...props}
         >
             <path d="M20 6 9 17l-5-5" />
@@ -415,7 +415,7 @@ export function IconSettings(props: SVGProps<SVGSVGElement>) {
             strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"
-            className="lucide lucide-bolt"
+            className="lucide lucide-settings"
             {...props}
         >
             <path d="M20 7h-9" />
@@ -592,7 +592,7 @@ export function IconPocketKnife({ className, ...rest }: SVGProps<SVGSVGElement>)
             strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"
-            className={`lucide lucide-pocket-knife-icon lucide-pocket-knife ${className}`}
+            className={`lucide lucide-pocket-knife ${className}`}
             {...rest}
         >
             <path d="M3 2v1c0 1 2 1 2 2S3 6 3 7s2 1 2 2-2 1-2 2 2 1 2 2" />
@@ -600,6 +600,179 @@ export function IconPocketKnife({ className, ...rest }: SVGProps<SVGSVGElement>)
             <path d="M6 18h.01" />
             <path d="M20.83 8.83a4 4 0 0 0-5.66-5.66l-12 12a4 4 0 1 0 5.66 5.66Z" />
             <path d="M18 11.66V22a4 4 0 0 0 4-4V6" />
+        </svg>
+    );
+}
+
+export function IconPin({ className, ...rest }: SVGProps<SVGSVGElement>) {
+    return (
+        <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="1em"
+            height="1em"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={`lucide lucide-pin ${className ?? ""}`}
+            {...rest}
+        >
+            <line x1="12" x2="12" y1="17" y2="22" />
+            <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z" />
+        </svg>
+    );
+}
+
+export function IconPlay(props: SVGProps<SVGSVGElement>) {
+    return (
+        <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="1em"
+            height="1em"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="lucide lucide-play"
+            {...props}
+        >
+            <polygon points="6 3 20 12 6 21 6 3" />
+        </svg>
+    );
+}
+
+export function IconStop(props: SVGProps<SVGSVGElement>) {
+    return (
+        <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="1em"
+            height="1em"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="lucide lucide-square"
+            {...props}
+        >
+            <rect x="3" y="3" width="18" height="18" rx="2" />
+        </svg>
+    );
+}
+
+export function IconX(props: SVGProps<SVGSVGElement>) {
+    return (
+        <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="1em"
+            height="1em"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="lucide lucide-x"
+            {...props}
+        >
+            <path d="M18 6 6 18" />
+            <path d="m6 6 12 12" />
+        </svg>
+    );
+}
+
+export function IconArrowDownToLine(props: SVGProps<SVGSVGElement>) {
+    return (
+        <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="1em"
+            height="1em"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="lucide lucide-arrow-down-to-line"
+            {...props}
+        >
+            <path d="M12 17V3" />
+            <path d="m6 11 6 6 6-6" />
+            <path d="M19 21H5" />
+        </svg>
+    );
+}
+
+export function IconPackage(props: SVGProps<SVGSVGElement>) {
+    return (
+        <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="1em"
+            height="1em"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="lucide lucide-package"
+            {...props}
+        >
+            <path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z" />
+            <path d="M12 22V12" />
+            <path d="m3.3 7 7.703 4.734a2 2 0 0 0 1.994 0L20.7 7" />
+            <path d="m7.5 4.27 9 5.15" />
+        </svg>
+    );
+}
+
+export function IconArrowUpDown(props: SVGProps<SVGSVGElement>) {
+    return (
+        <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="1em"
+            height="1em"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="lucide lucide-arrow-up-down"
+            {...props}
+        >
+            <path d="m21 16-4 4-4-4" />
+            <path d="M17 20V4" />
+            <path d="m3 8 4-4 4 4" />
+            <path d="M7 4v16" />
+        </svg>
+    );
+}
+
+export function IconPinOff({ className, ...rest }: SVGProps<SVGSVGElement>) {
+    return (
+        <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="1em"
+            height="1em"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={`lucide lucide-pin-off ${className ?? ""}`}
+            {...rest}
+        >
+            <line x1="2" x2="22" y1="2" y2="22" />
+            <line x1="12" x2="12" y1="17" y2="22" />
+            <path d="M9 9v1.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V17h12" />
+            <path d="M15 9.34V6h1a2 2 0 0 0 0-4H7.89" />
         </svg>
     );
 }

@@ -16,7 +16,7 @@ export const Loader = ({ loading, loader = "linear" }: { loading: boolean, loade
     const loaderComponent = LoaderElements[loader];
 
     useEffect(() => {
-        let timer: number;
+        let timer: ReturnType<typeof setTimeout>;
 
         if (loading) {
             timer = setTimeout(() => setShowLoader(true), TOGGLE_DELAY);

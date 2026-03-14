@@ -1,12 +1,13 @@
 import { ReactNode } from "react";
 import { RouteProps } from "react-router-dom";
 
-import { IconBolt, IconLayoutDashboard, IconSettings, IconTerminal } from "./Icons";
+import { IconBolt, IconLayoutDashboard, IconPackage, IconSettings, IconTerminal } from "./Icons";
 
 import { Home } from "./home/Home";
 import { Config } from "./config/Config";
 import { Settings } from "./settings/Settings";
 import { CLI } from "./cli/CLI";
+import { Models } from "./models/Models";
 import { ServiceDetails } from "./service/ServiceDetails";
 
 type HarborRoute = {
@@ -30,9 +31,15 @@ export const ROUTES: Record<string, HarborRoute> = {
     },
     cli: {
         id: 'cli',
-        name: <div className="flex items-center gap-2"><IconTerminal />CLI</div>,
+        name: <span className="flex items-center gap-2"><IconTerminal />CLI</span>,
         path: '/cli',
         element: <CLI />,
+    },
+    models: {
+        id: 'models',
+        name: <span className="flex items-center gap-2"><IconPackage />Models</span>,
+        path: '/models',
+        element: <Models />,
     },
     settings: {
         id: 'settings',
