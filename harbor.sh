@@ -3250,6 +3250,11 @@ run_models_routine() {
     llamacpp_cache=$(env_manager get llamacpp.cache)
     llamacpp_cache="${llamacpp_cache/#\~/$HOME}"
 
+    if ! is_service_running "ollama"; then
+        log_debug "Ollama is not running, launching..."
+        run_up --no-defaults ollama
+    fi
+
     docker run --rm \
         --network=harbor_harbor-network \
         -v "$harbor_home:$harbor_home" \
