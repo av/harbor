@@ -20,6 +20,7 @@ serde_json = "1"
 tauri-plugin-store = "2.2.0"
 tauri-plugin-fs = "2.2.0"
 tauri-plugin-os = "2"
+tauri-plugin-pty = "0.2"
 
 [dependencies.tauri]
 version = "2.4.0"

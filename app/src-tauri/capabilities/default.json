@@ -28,6 +28,7 @@
     "store:default",
     "fs:default",
     "autostart:default",
+    "pty:default",
     {
       "identifier": "shell:allow-execute",
       "allow": [

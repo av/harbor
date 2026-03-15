@@ -17,7 +17,9 @@ export interface UseHarborStreamResult {
     clear: () => void;
 }
 
-export function useHarborStream(args: string[]): UseHarborStreamResult {
+export function useHarborStream(args: string[], options?: { raw?: boolean }): UseHarborStreamResult {
+    const raw = options?.raw ?? false;
+
     const [lines, setLines] = useState<string[]>([]);
     const [isStreaming, setIsStreaming] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -27,6 +29,9 @@ export function useHarborStream(args: string[]): UseHarborStreamResult {
     const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
     // Track whether the buffer has been modified since last flush
     const dirtyRef = useRef(false);
+    // Incremented on each start() call so stale close/error handlers from
+    // previous sessions (e.g. React StrictMode double-invoke) are ignored.
+    const generationRef = useRef(0);
 
     const stopInterval = useCallback(() => {
         if (intervalRef.current !== null) {
@@ -48,6 +53,7 @@ export function useHarborStream(args: string[]): UseHarborStreamResult {
     }, []);
 
     const stop = useCallback(() => {
+        generationRef.current++;
         killChild();
         stopInterval();
         setIsStreaming(false);
@@ -69,6 +75,12 @@ export function useHarborStream(args: string[]): UseHarborStreamResult {
         setError(null);
         setIsStreaming(true);
 
+        // Each start() call gets a unique generation id. Close/error handlers
+        // from a previous session (e.g. the one killed during React StrictMode
+        // double-invoke cleanup) check this before touching shared state so
+        // they cannot clobber a newer session's streaming state.
+        const generation = ++generationRef.current;
+
         try {
             const windows = await isWindows();
             const command = windows
@@ -76,7 +88,9 @@ export function useHarborStream(args: string[]): UseHarborStreamResult {
                 : Command.create("harbor", args);
 
             command.stdout.on("data", (line: string) => {
-                bufRef.current.push(converter.toHtml(line));
+                if (generationRef.current !== generation) return;
+                const htmlLine = raw ? line : converter.toHtml(line);
+                bufRef.current.push(htmlLine);
                 if (bufRef.current.length > BUFFER_CAP) {
                     bufRef.current = [
                         "(older lines trimmed)",
@@ -87,7 +101,9 @@ export function useHarborStream(args: string[]): UseHarborStreamResult {
             });
 
             command.stderr.on("data", (line: string) => {
-                bufRef.current.push(converter.toHtml(line));
+                if (generationRef.current !== generation) return;
+                const htmlLine = raw ? line : converter.toHtml(line);
+                bufRef.current.push(htmlLine);
                 if (bufRef.current.length > BUFFER_CAP) {
                     bufRef.current = [
                         "(older lines trimmed)",
@@ -98,6 +114,7 @@ export function useHarborStream(args: string[]): UseHarborStreamResult {
             });
 
             command.on("close", (payload: { code: number | null }) => {
+                if (generationRef.current !== generation) return;
                 childRef.current = null;
                 stopInterval();
                 setLines([...bufRef.current]);
@@ -111,6 +128,7 @@ export function useHarborStream(args: string[]): UseHarborStreamResult {
             });
 
             command.on("error", (err: string) => {
+                if (generationRef.current !== generation) return;
                 childRef.current = null;
                 stopInterval();
                 setError(err);
@@ -127,6 +145,7 @@ export function useHarborStream(args: string[]): UseHarborStreamResult {
                 }
             }, FLUSH_INTERVAL_MS);
         } catch (e) {
+            if (generationRef.current !== generation) return;
             const msg = e instanceof Error ? e.message : String(e);
             setError(msg);
             setIsStreaming(false);

@@ -2,6 +2,7 @@ import { Section } from "../Section";
 import { IconChevronDown } from "../Icons";
 import { THEMES, useTheme } from "../theme";
 import { useAutostart } from "../useAutostart";
+import { Slider } from "../Slider";
 
 export const Settings = () => {
   const theme = useTheme();
@@ -84,10 +85,7 @@ export const Settings = () => {
                 Adjust the hue of the theme color.
               </p>
 
-              <input
-                type="range" min="0" max="360" value={theme.hue}
-                className="range" onChange={(e) => theme.setHue(parseInt(e.target.value))}
-              />
+              <Slider min={0} max={360} value={theme.hue} onChange={(e) => theme.setHue(parseInt(e.target.value))} />
             </div>
 
             <div className="max-w-xl">
@@ -96,10 +94,7 @@ export const Settings = () => {
                 How vibrant the colors are.
               </p>
 
-              <input
-                type="range" min="0" max="100" value={theme.saturation}
-                className="range" onChange={(e) => theme.setSaturation(parseInt(e.target.value))}
-              />
+              <Slider min={0} max={100} value={theme.saturation} onChange={(e) => theme.setSaturation(parseInt(e.target.value))} />
             </div>
 
             <div className="max-w-xl">
@@ -108,10 +103,7 @@ export const Settings = () => {
                 The difference between the lightest and darkest colors.
               </p>
 
-              <input
-                type="range" min="0" max="200" value={theme.contrast}
-                className="range" onChange={(e) => theme.setContrast(parseInt(e.target.value))}
-              />
+              <Slider min={0} max={200} value={theme.contrast} onChange={(e) => theme.setContrast(parseInt(e.target.value))} />
             </div>
 
             <div className="max-w-xl">
@@ -120,10 +112,7 @@ export const Settings = () => {
                 The overall lightness or darkness of the theme.
               </p>
 
-              <input
-                type="range" min="10" max="100" value={theme.brightness}
-                className="range" onChange={(e) => theme.setBrightness(parseInt(e.target.value))}
-              />
+              <Slider min={10} max={100} value={theme.brightness} onChange={(e) => theme.setBrightness(parseInt(e.target.value))} />
             </div>
 
             <div className="max-w-xl">
@@ -132,10 +121,7 @@ export const Settings = () => {
                 Change the colors to their opposites.
               </p>
 
-              <input
-                type="range" min="0" max="100" value={theme.invert}
-                className="range" onChange={(e) => theme.setInvert(parseInt(e.target.value))}
-              />
+              <Slider min={0} max={100} value={theme.invert} onChange={(e) => theme.setInvert(parseInt(e.target.value))} />
             </div>
           </div>
         }

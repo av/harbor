@@ -9,6 +9,7 @@ import { OverlayProvider } from "./OverlayContext";
 
 import "./font.css";
 import "./main.css";
+import "@xterm/xterm/css/xterm.css";
 
 init();
 

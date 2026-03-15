@@ -3,7 +3,8 @@ import { runHarbor } from "../useHarbor";
 import { useOverlays } from "../OverlayContext";
 import { ConfirmModal } from "../ConfirmModal";
 import { Loader } from "../Loading";
-import { IconTrash, IconRotateCW, IconArrowUpDown, IconArrowDownToLine } from "../Icons";
+import { IconTrash, IconRotateCW, IconArrowUpDown, IconArrowDownToLine, IconBrandOllama, IconBrandHuggingFace } from "../Icons";
+import { runOpen } from "../useOpen";
 import { IconButton } from "../IconButton";
 import { Section } from "../Section";
 import { useModels } from "./useModels";
@@ -137,6 +138,16 @@ export const Models = () => {
                             disabled={status === "loading"}
                             title="Refresh"
                         />
+                        <IconButton
+                            icon={<span className="text-[1.25em]"><IconBrandOllama /></span>}
+                            onClick={() => runOpen(["https://ollama.com/search"])}
+                            title="Browse Ollama models"
+                        />
+                        <IconButton
+                            icon={<span className="text-[1.25em]"><IconBrandHuggingFace /></span>}
+                            onClick={() => runOpen(["https://huggingface.co/models?library=gguf"])}
+                            title="Browse HuggingFace models"
+                        />
                     </>
                 }
             >
@@ -154,15 +165,15 @@ export const Models = () => {
                         disabled={isPulling}
                     />
                     <button
-                        className="btn btn-primary"
+                        className="btn btn-sm btn-primary"
                         onClick={handlePull}
                         disabled={isPulling || !pullInput.trim()}
                     >
-                        <IconArrowDownToLine />
+                        <IconArrowDownToLine className="w-4 h-4" />
                         {isPulling ? "Pulling…" : "Pull"}
                     </button>
                     {hasPullOutput && !isPulling && (
-                        <button className="btn btn-ghost" onClick={handlePullDone}>
+                        <button className="btn btn-sm btn-outline" onClick={handlePullDone}>
                             Done
                         </button>
                     )}
@@ -224,8 +235,8 @@ export const Models = () => {
             {status === "error" && (
                 <div className="alert alert-error flex items-center gap-3">
                     <span className="flex-1">{error}</span>
-                    <button className="btn btn-ghost btn-sm" onClick={reload}>
-                        <IconRotateCW /> Retry
+                    <button className="btn btn-sm btn-outline" onClick={reload}>
+                        <IconRotateCW className="w-4 h-4" /> Retry
                     </button>
                 </div>
             )}
@@ -276,7 +287,7 @@ export const Models = () => {
                             {filtered.map((entry) => {
                                 const isRemoving = removingModel === entry.model;
                                 return (
-                                    <tr key={`${entry.source}::${entry.model}`} className={isRemoving ? "opacity-50" : ""}>
+                                    <tr key={`${entry.source}::${entry.model}`} className={`group ${isRemoving ? "opacity-50" : ""}`}>
                                         <td>
                                             <span className={`badge badge-sm font-mono ${sourceBadgeClass(entry.source)}`}>
                                                 {entry.source}
@@ -294,14 +305,13 @@ export const Models = () => {
                                         <td className="text-sm tabular-nums whitespace-nowrap">{formatSize(entry.size)}</td>
                                         <td className="text-sm text-base-content/60 whitespace-nowrap">{formatDate(entry.modified)}</td>
                                         <td>
-                                            <button
-                                                className="btn btn-ghost btn-xs text-error"
+                                            <IconButton
+                                                icon={<IconTrash />}
+                                                className="opacity-0 group-hover:opacity-100 transition-opacity"
                                                 onClick={() => handleRemove(entry)}
                                                 disabled={isRemoving}
                                                 title="Remove model"
-                                            >
-                                                <IconTrash />
-                                            </button>
+                                            />
                                         </td>
                                     </tr>
                                 );

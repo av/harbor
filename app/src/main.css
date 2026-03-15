@@ -2,6 +2,72 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Custom slider: replaces DaisyUI .range whose box-shadow fill trick does not
+ * work in webkitgtk (used by Tauri on Linux). The fill is driven by the CSS
+ * custom property --slider-fill-ratio (0–1), set as an inline style from React.
+ *
+ * The gradient stop is positioned at the thumb center, not the raw percentage,
+ * so it aligns correctly at both 0% and 100% positions. The thumb is 1.5rem
+ * wide, so its center travels from 0.75rem to calc(100% - 0.75rem).
+ * Stop position = calc(0.75rem + ratio * (100% - 1.5rem))
+ */
+.harbor-slider {
+    height: 1.5rem;
+    width: 100%;
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    border-radius: var(--rounded-box, 1rem);
+    background: linear-gradient(
+        to right,
+        var(--fallback-bc, oklch(var(--bc) / 1))
+            calc(0.75rem + var(--slider-fill-ratio, 0) * (100% - 1.5rem)),
+        var(--fallback-bc, oklch(var(--bc) / 0.1))
+            calc(0.75rem + var(--slider-fill-ratio, 0) * (100% - 1.5rem))
+    );
+}
+
+.harbor-slider:focus {
+    outline: none;
+}
+
+.harbor-slider::-webkit-slider-runnable-track {
+    height: 0.5rem;
+    width: 100%;
+    border-radius: var(--rounded-box, 1rem);
+    background: transparent;
+}
+
+.harbor-slider::-moz-range-track {
+    height: 0.5rem;
+    width: 100%;
+    border-radius: var(--rounded-box, 1rem);
+    background: transparent;
+}
+
+.harbor-slider::-webkit-slider-thumb {
+    position: relative;
+    height: 1.5rem;
+    width: 1.5rem;
+    border-radius: var(--rounded-box, 1rem);
+    border-style: none;
+    background-color: var(--fallback-b1, oklch(var(--b1) / 1));
+    appearance: none;
+    -webkit-appearance: none;
+    margin-top: calc((0.5rem - 1.5rem) / 2);
+    box-shadow: 0 0 0 3px var(--fallback-bc, oklch(var(--bc) / 1)) inset;
+}
+
+.harbor-slider::-moz-range-thumb {
+    height: 1.5rem;
+    width: 1.5rem;
+    border-radius: var(--rounded-box, 1rem);
+    border-style: none;
+    background-color: var(--fallback-b1, oklch(var(--b1) / 1));
+    box-shadow: 0 0 0 3px var(--fallback-bc, oklch(var(--bc) / 1)) inset;
+}
+
 :root {
     font-family: Inter;
     font-size: 18px;

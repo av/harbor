@@ -24,6 +24,10 @@ export const Shortcuts = {
         key: KEY_CODES.F,
         ctrlKey: true,
     },
+    terminal: {
+        key: "`",
+        ctrlKey: true,
+    },
 };
 
 export const matches = (event: KeyboardEvent, match: KeyMatch) => {
