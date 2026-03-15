@@ -5179,7 +5179,7 @@ main_entrypoint() {
         shift
         run_shell "$@"
         ;;
-    logs | l)
+    logs | log | l)
         shift
         run_logs "$@"
         ;;
