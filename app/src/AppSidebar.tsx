@@ -40,6 +40,7 @@ export const AppSidebarContent: FC = () => {
                                     location.pathname === `/services/${service.handle}` ? "active" : ""
                                 }`}
                             >
+                                <span className="inline-block w-2 h-2 rounded-full bg-success shrink-0" />
                                 {service.name ?? service.handle}
                             </Link>
                         </li>

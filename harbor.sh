@@ -3276,7 +3276,7 @@ run_models_pull() {
 
     if [[ "$model" == *"/"* ]] && \
        curl -sf --head --connect-timeout 5 "https://huggingface.co/$repo" > /dev/null; then
-        run_hf_docker_cli download "$model"
+        run_llamacpp_pull "$model"
     else
         run_ollama_command pull "$model"
     fi

@@ -53,7 +53,7 @@ export const ServiceCard = ({
         {!service.tags.includes(HST.cli) && (
           <span className={`inline-block shrink-0 w-2 h-2 rounded-full ${service.isRunning ? "bg-success" : "bg-base-content/20"}`} />
         )}
-        <span className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+        <span className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 [&_.service-status-dot]:hidden">
           <ServiceActions service={service} onUpdate={onUpdate} />
         </span>
         {onTogglePin && (

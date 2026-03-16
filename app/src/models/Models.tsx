@@ -146,8 +146,7 @@ export const Models = () => {
                 }
             >
             {/* Pull input */}
-            <div className="rounded-box bg-base-200 p-4 flex flex-col gap-3">
-                <span className="font-semibold">Pull a model</span>
+            <div className="rounded-box border border-base-content/10 p-4 flex flex-col gap-3">
                 <form
                     className="flex gap-2"
                     onSubmit={(e) => {
@@ -158,22 +157,25 @@ export const Models = () => {
                     <input
                         ref={pullInputRef}
                         className="input input-bordered flex-1"
-                        placeholder="e.g. llama3.2:3b or unsloth/Qwen3-4B-Instruct-GGUF"
+                        placeholder="unsloth/Qwen3.5-9B-GGUF:UD-Q4_K_XL or qwen3.5:9b"
                         value={pullInput}
                         onChange={(e) => setPullInput(e.target.value)}
                         disabled={isPulling}
                     />
                     <button
                         type="submit"
-                        className="btn btn-sm btn-primary"
+                        className="btn btn-primary gap-2"
                         disabled={isPulling || !pullInput.trim()}
                     >
-                        <IconArrowDownToLine className="w-4 h-4" />
+                        {isPulling
+                            ? <span className="loading loading-spinner loading-xs" />
+                            : <IconArrowDownToLine className="w-4 h-4" />
+                        }
                         {isPulling ? "Pulling…" : "Pull"}
                     </button>
                 </form>
                 <p className="text-xs text-base-content/50">
-                    Accepts Ollama model IDs (e.g. <span className="font-mono">llama3.2:3b</span>, <span className="font-mono">qwen3.5:9b</span>) or HuggingFace repo IDs (e.g. <span className="font-mono">unsloth/Qwen3-4B-Instruct-GGUF</span>).
+                    Model ID for llama.cpp (e.g. <span className="font-mono">unsloth/Qwen3.5-9B-GGUF:UD-Q4_K_XL</span>), HuggingFace (e.g. <span className="font-mono">Systran/faster-distil-whisper-large-v3</span>), or Ollama (e.g. <span className="font-mono">qwen3.5:9b</span>).
                 </p>
                 {pullSession && (
                     <ModelPullPane
