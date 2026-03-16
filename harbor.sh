@@ -400,6 +400,7 @@ run_routine() {
         -v harbor-deno-cache:/deno-dir:rw \
         -w "$harbor_home" \
         -e "HARBOR_LOG_LEVEL=$default_log_level" \
+        -e "HARBOR_COMPOSE_CACHE=$HARBOR_COMPOSE_CACHE" \
         $default_routine_runtime \
         $routine_path "$@"
 }
@@ -3263,6 +3264,7 @@ run_models_routine() {
         -v harbor-deno-cache:/deno-dir:rw \
         -w "$harbor_home" \
         -e "HARBOR_LOG_LEVEL=$default_log_level" \
+        -e "HARBOR_COMPOSE_CACHE=$HARBOR_COMPOSE_CACHE" \
         -e "HARBOR_HF_CACHE=$hf_cache" \
         -e "HARBOR_OLLAMA_URL=$ollama_url" \
         -e "HARBOR_LLAMACPP_CACHE=$llamacpp_cache" \
@@ -5120,6 +5122,9 @@ profiles_dir="$harbor_home/profiles"
 default_profile="$profiles_dir/default.env"
 default_current_env="$harbor_home/.env"
 default_gum_image="ghcr.io/charmbracelet/gum"
+
+export HARBOR_COMPOSE_CACHE="__harbor_$$.yml"
+trap 'rm -f "$harbor_home/$HARBOR_COMPOSE_CACHE" 2>/dev/null' EXIT
 
 # Desired compose version
 desired_compose_major="2"

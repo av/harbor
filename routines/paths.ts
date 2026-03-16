@@ -8,7 +8,7 @@ export const paths = {
   home: path.resolve(__dirname, '..'),
   routines: path.resolve(__dirname),
   services: path.resolve(__dirname, '..', 'services'),
-  mergedYaml: '__harbor.yml',
+  mergedYaml: Deno.env.get('HARBOR_COMPOSE_CACHE') || '__harbor.yml',
   tools: path.resolve(__dirname, '..', 'tools'),
   toolsConfig: '__tools.yml',
   toolsCompose: 'compose.tools.yml',
