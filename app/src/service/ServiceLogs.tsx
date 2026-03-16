@@ -11,7 +11,7 @@ interface ServiceLogsProps {
 }
 
 export const ServiceLogs = ({ service, onClose }: ServiceLogsProps) => {
-    const { lines, isStreaming, error, start, stop, clear } = useHarborStream(
+    const { chunks, bufferVersion, isStreaming, error, start, stop, clear } = useHarborStream(
         ["logs", service.handle],
         { raw: true },
     );
@@ -35,6 +35,8 @@ export const ServiceLogs = ({ service, onClose }: ServiceLogsProps) => {
         stop();
         onClose();
     };
+
+    const hasOutput = chunks.length > 0;
 
     return (
         <div className="border border-base-content/10 rounded-box overflow-hidden">
@@ -72,26 +74,31 @@ export const ServiceLogs = ({ service, onClose }: ServiceLogsProps) => {
                         <span>{error}</span>
                     </div>
                 </div>
-            ) : lines.length === 0 && isStreaming ? (
-                <div className="bg-base-200 px-3 py-4">
-                    <div className="flex items-center gap-2 text-base-content/50 text-sm">
-                        <span className="loading loading-spinner loading-xs" />
-                        Connecting to log stream...
-                    </div>
-                </div>
-            ) : lines.length === 0 && !isStreaming ? (
-                <div className="bg-base-200 px-3 py-4">
-                    <p className="text-base-content/40 text-sm">
-                        No log output yet.
-                    </p>
-                </div>
             ) : (
-                <div style={{ resize: "vertical", overflow: "hidden", minHeight: "150px" }}>
+                <div
+                    className="relative bg-base-200"
+                    style={{ resize: "vertical", overflow: "hidden", minHeight: "150px" }}
+                >
                     <XTermView
-                        lines={lines}
+                        chunks={chunks}
+                        bufferVersion={bufferVersion}
                         height="100%"
                         onReady={(t) => { xtermRef.current = t; }}
                     />
+                    {!hasOutput && (
+                        <div className="absolute inset-0 flex items-center px-3 py-4 pointer-events-none">
+                            {isStreaming ? (
+                                <div className="flex items-center gap-2 text-base-content/50 text-sm">
+                                    <span className="loading loading-spinner loading-xs" />
+                                    Connecting to log stream...
+                                </div>
+                            ) : (
+                                <p className="text-base-content/40 text-sm">
+                                    No log output yet.
+                                </p>
+                            )}
+                        </div>
+                    )}
                 </div>
             )}
         </div>

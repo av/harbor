@@ -5,20 +5,26 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { buildXtermTheme, watchTheme } from "./terminalTheme";
 
 interface XTermViewProps {
-    /** Lines of raw output to display. New lines appended to end are written to terminal. */
-    lines: string[];
+    /** Backwards-compatible textual output segments. Written with terminal.write(...). */
+    lines?: string[];
+    /** Raw terminal chunks for accurate xterm replay. Preferred over lines when provided. */
+    chunks?: Uint8Array[];
+    /** Increment when the underlying buffer is reset, trimmed, or replayed from scratch. */
+    bufferVersion?: number;
     /** Optional CSS height for the container. Default "256px" */
     height?: string;
     /** Called when terminal is ready — useful for clearing etc. */
     onReady?: (terminal: Terminal) => void;
 }
 
-export const XTermView = ({ lines, height = "256px", onReady }: XTermViewProps) => {
+export const XTermView = ({ lines, chunks, bufferVersion, height = "256px", onReady }: XTermViewProps) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const terminalRef = useRef<Terminal | null>(null);
     const fitAddonRef = useRef<FitAddon | null>(null);
     const openedRef = useRef(false);
-    const lineCountRef = useRef(0); // how many lines have been written so far
+    const segmentCountRef = useRef(0);
+    const sourceModeRef = useRef<"lines" | "chunks" | null>(null);
+    const bufferVersionRef = useRef<number | undefined>(undefined);
 
     useEffect(() => {
         if (openedRef.current || !containerRef.current) return;
@@ -62,20 +68,38 @@ export const XTermView = ({ lines, height = "256px", onReady }: XTermViewProps) 
             terminalRef.current = null;
             fitAddonRef.current = null;
             openedRef.current = false;
-            lineCountRef.current = 0;
+            segmentCountRef.current = 0;
+            sourceModeRef.current = null;
+            bufferVersionRef.current = undefined;
         };
     }, []);
 
-    // Write only new lines (append-only, never rewrite)
+    // Write only new data when append-only, otherwise reset and replay.
     useEffect(() => {
         const terminal = terminalRef.current;
         if (!terminal) return;
-        const newLines = lines.slice(lineCountRef.current);
-        for (const line of newLines) {
-            terminal.writeln(line);
+
+        const nextMode: "lines" | "chunks" = chunks !== undefined ? "chunks" : "lines";
+        const nextSegments = nextMode === "chunks" ? (chunks ?? []) : (lines ?? []);
+
+        if (
+            sourceModeRef.current !== nextMode
+            || bufferVersionRef.current !== bufferVersion
+            || nextSegments.length < segmentCountRef.current
+        ) {
+            terminal.reset();
+            segmentCountRef.current = 0;
         }
-        lineCountRef.current = lines.length;
-    }, [lines]);
+
+        const newSegments = nextSegments.slice(segmentCountRef.current);
+        for (const segment of newSegments) {
+            terminal.write(segment);
+        }
+
+        sourceModeRef.current = nextMode;
+        bufferVersionRef.current = bufferVersion;
+        segmentCountRef.current = nextSegments.length;
+    }, [bufferVersion, chunks, lines]);
 
     return (
         <div

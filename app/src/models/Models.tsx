@@ -3,14 +3,15 @@ import { runHarbor } from "../useHarbor";
 import { useOverlays } from "../OverlayContext";
 import { ConfirmModal } from "../ConfirmModal";
 import { Loader } from "../Loading";
-import { IconTrash, IconRotateCW, IconArrowUpDown, IconArrowDownToLine, IconBrandOllama, IconBrandHuggingFace } from "../Icons";
+import { IconTrash, IconRotateCW, IconArrowUpDown, IconArrowDownToLine, IconBrandOllama, IconBrandHuggingFace, IconCopy, IconCheck } from "../Icons";
 import { runOpen } from "../useOpen";
 import { IconButton } from "../IconButton";
 import { Section } from "../Section";
 import { useModels } from "./useModels";
 import { ModelEntry, formatSize, formatDate, detailSummary } from "./ModelEntry";
-import { useHarborStream } from "../service/useHarborStream";
 import { LostSquirrel } from "../LostSquirrel";
+import { useModelPull } from "./ModelPullContext";
+import { ModelPullPane } from "./ModelPullPane";
 
 type SortField = "model" | "size" | "modified";
 type SortDir = "asc" | "desc";
@@ -27,6 +28,7 @@ function sourceBadgeClass(source: string): string {
 
 export const Models = () => {
     const { models, status, error, reload } = useModels();
+    const { session: pullSession, startPull, cancelPull, dismissSession } = useModelPull();
     const overlays = useOverlays();
 
     const [sourceFilter, setSourceFilter] = useState<string | null>(null);
@@ -35,9 +37,8 @@ export const Models = () => {
     const [sortDir, setSortDir] = useState<SortDir>("desc");
     const [pullInput, setPullInput] = useState("");
     const [removingModel, setRemovingModel] = useState<string | null>(null);
+    const [copiedModel, setCopiedModel] = useState<string | null>(null);
 
-    const pullArgs = useMemo(() => ["models", "pull", pullInput], [pullInput]);
-    const pullStream = useHarborStream(pullArgs);
     const pullInputRef = useRef<HTMLInputElement>(null);
     const nameFilterRef = useRef<HTMLInputElement>(null);
 
@@ -89,14 +90,8 @@ export const Models = () => {
     const handlePull = () => {
         const name = pullInput.trim();
         if (!name) return;
-        pullStream.clear();
-        pullStream.start();
-    };
-
-    const handlePullDone = () => {
         setPullInput("");
-        pullStream.clear();
-        reload();
+        startPull(name);
     };
 
     const handleRemove = (entry: ModelEntry) => {
@@ -123,8 +118,7 @@ export const Models = () => {
         );
     };
 
-    const isPulling = pullStream.isStreaming;
-    const hasPullOutput = pullStream.lines.length > 0;
+    const isPulling = pullSession?.isActive ?? false;
 
     return (
         <div className="flex flex-col gap-4 max-w-4xl">
@@ -154,41 +148,39 @@ export const Models = () => {
             {/* Pull input */}
             <div className="rounded-box bg-base-200 p-4 flex flex-col gap-3">
                 <span className="font-semibold">Pull a model</span>
-                <div className="flex gap-2">
+                <form
+                    className="flex gap-2"
+                    onSubmit={(e) => {
+                        e.preventDefault();
+                        handlePull();
+                    }}
+                >
                     <input
                         ref={pullInputRef}
                         className="input input-bordered flex-1"
-                        placeholder="e.g. qwen3:8b or bartowski/Llama-3.2-1B-Instruct-GGUF"
+                        placeholder="e.g. llama3.2:3b or unsloth/Qwen3-4B-Instruct-GGUF"
                         value={pullInput}
                         onChange={(e) => setPullInput(e.target.value)}
-                        onKeyDown={(e) => e.key === "Enter" && handlePull()}
                         disabled={isPulling}
                     />
                     <button
+                        type="submit"
                         className="btn btn-sm btn-primary"
-                        onClick={handlePull}
                         disabled={isPulling || !pullInput.trim()}
                     >
                         <IconArrowDownToLine className="w-4 h-4" />
                         {isPulling ? "Pulling…" : "Pull"}
                     </button>
-                    {hasPullOutput && !isPulling && (
-                        <button className="btn btn-sm btn-outline" onClick={handlePullDone}>
-                            Done
-                        </button>
-                    )}
-                </div>
-                {hasPullOutput && (
-                    <div className="bg-base-100 rounded-box p-3 max-h-48 overflow-y-auto font-mono text-sm">
-                        {pullStream.lines.map((line, i) => (
-                            <div key={i} dangerouslySetInnerHTML={{ __html: line }} />
-                        ))}
-                    </div>
-                )}
-                {pullStream.error && (
-                    <div className="alert alert-error text-sm">
-                        <span>{pullStream.error}</span>
-                    </div>
+                </form>
+                <p className="text-xs text-base-content/50">
+                    Accepts Ollama model IDs (e.g. <span className="font-mono">llama3.2:3b</span>, <span className="font-mono">qwen3.5:9b</span>) or HuggingFace repo IDs (e.g. <span className="font-mono">unsloth/Qwen3-4B-Instruct-GGUF</span>).
+                </p>
+                {pullSession && (
+                    <ModelPullPane
+                        session={pullSession}
+                        onCancel={cancelPull}
+                        onDismiss={dismissSession}
+                    />
                 )}
             </div>
 
@@ -294,12 +286,28 @@ export const Models = () => {
                                             </span>
                                         </td>
                                         <td className="max-w-xs">
-                                            <span
-                                                className="font-mono text-sm truncate block max-w-xs"
-                                                title={entry.model}
-                                            >
-                                                {entry.model}
-                                            </span>
+                                            <div className="flex items-center gap-1 max-w-xs">
+                                                <span
+                                                    className="font-mono text-sm truncate"
+                                                    title={entry.model}
+                                                >
+                                                    {entry.model}
+                                                </span>
+                                                <button
+                                                    className="opacity-0 group-hover:opacity-100 transition-opacity btn btn-ghost btn-xs btn-circle shrink-0"
+                                                    title="Copy model ID"
+                                                    onClick={() => {
+                                                        navigator.clipboard.writeText(entry.model);
+                                                        setCopiedModel(entry.model);
+                                                        setTimeout(() => setCopiedModel(null), 1500);
+                                                    }}
+                                                >
+                                                    {copiedModel === entry.model
+                                                        ? <IconCheck className="w-3 h-3 text-success" />
+                                                        : <IconCopy className="w-3 h-3" />
+                                                    }
+                                                </button>
+                                            </div>
                                         </td>
                                         <td className="text-sm text-base-content/60">{detailSummary(entry)}</td>
                                         <td className="text-sm tabular-nums whitespace-nowrap">{formatSize(entry.size)}</td>

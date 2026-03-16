@@ -122,9 +122,9 @@ export const ServiceList = ({
   return (
     <Section
       header={
-        <div className="flex flex-wrap gap-4 items-center mb-4">
-          <span>Services</span>
-          <div className="flex flex-wrap gap-1">
+        <div className="flex flex-wrap gap-2 items-center mb-4">
+          <span className="mr-1">Services</span>
+          <div className="flex flex-wrap gap-1 items-center">
             {Object.values(HST).map((tag) => {
               return (
                 <div className="form-control group" key={tag}>
@@ -144,7 +144,7 @@ export const ServiceList = ({
             })}
           </div>
 
-          <span className="tooltip tooltip-bottom" data-tip={actionTip}>
+          <span className="tooltip tooltip-bottom ml-2" data-tip={actionTip}>
             <IconButton
               icon={actionIcon}
               onClick={handleToggle}

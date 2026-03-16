@@ -58,7 +58,7 @@ export const ServiceTag = (
     <span className="tooltip tooltip-bottom label-text" data-tip={HSTTooltips[tag]}>
       <span
         key={tag}
-        className="badge bg-base-300/50 text-base-content/80 group-has-[input:checked]:badge-neutral"
+        className="badge px-3 py-1 bg-base-300/50 text-base-content/80 group-has-[input:checked]:badge-neutral"
       >
         {maybeAdornment}
         {tag}

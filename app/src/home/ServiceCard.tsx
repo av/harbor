@@ -44,20 +44,25 @@ export const ServiceCard = ({
 
   return (
     <div
-      className={`p-4 rounded-box bg-base-200/50 hover:bg-base-200 relative tooltip tooltip-top label-text cursor-pointer ${gradientClass}`}
+      className={`group p-4 rounded-box bg-base-200/50 hover:bg-base-200 relative tooltip tooltip-top label-text cursor-pointer ${gradientClass}`}
       data-tip={service.tooltip}
       onClick={handleCardClick}
     >
       <h2 className="flex items-center gap-1 text-2xl pb-2">
         <ServiceName service={service} />
-        <ServiceActions service={service} onUpdate={onUpdate} />
+        {!service.tags.includes(HST.cli) && (
+          <span className={`inline-block shrink-0 w-2 h-2 rounded-full ${service.isRunning ? "bg-success" : "bg-base-content/20"}`} />
+        )}
+        <span className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+          <ServiceActions service={service} onUpdate={onUpdate} />
+        </span>
         {onTogglePin && (
           <button
-            className="btn btn-ghost btn-xs btn-circle ml-1 text-base-content/40 hover:text-base-content"
+            className="btn btn-ghost btn-xs btn-circle ml-1 text-base-content/40 hover:text-base-content opacity-0 group-hover:opacity-100 transition-opacity"
             onClick={handlePinClick}
             aria-label={isPinned ? "Unpin service" : "Pin service"}
           >
-            {isPinned ? <IconPin className="w-4 h-4" /> : <IconPinOff className="w-4 h-4" />}
+            {isPinned ? <IconPinOff className="w-4 h-4" /> : <IconPin className="w-4 h-4" />}
           </button>
         )}
       </h2>

@@ -2,9 +2,12 @@ import { FC, Fragment } from "react";
 import { Link, useLocation } from "react-router-dom";
 
 import { ROUTES_LIST } from "./AppRoutes";
+import { useServiceList } from "./home/useServiceList";
 
 export const AppSidebarContent: FC = () => {
     const location = useLocation();
+    const { services } = useServiceList();
+    const runningServices = services.filter((s) => s.isRunning);
 
     return (
         <Fragment>
@@ -26,6 +29,23 @@ export const AppSidebarContent: FC = () => {
                     </li>
                 );
             })}
+
+            {runningServices.length > 0 && (
+                <Fragment>
+                    {runningServices.map((service) => (
+                        <li key={service.handle}>
+                            <Link
+                                to={`/services/${service.handle}`}
+                                className={`menu-item text-sm ${
+                                    location.pathname === `/services/${service.handle}` ? "active" : ""
+                                }`}
+                            >
+                                {service.name ?? service.handle}
+                            </Link>
+                        </li>
+                    ))}
+                </Fragment>
+            )}
         </Fragment>
     );
 };

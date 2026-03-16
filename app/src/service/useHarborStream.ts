@@ -1,37 +1,71 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Child, Command } from "@tauri-apps/plugin-shell";
 import AnsiToHtml from "ansi-to-html";
-import { isWindows } from "../utils";
+import { spawnHarborPty } from "../terminal/harborPty";
+import type { IPty } from "../terminal/harborPty";
 
 const converter = new AnsiToHtml({ escapeXML: false });
 const BUFFER_CAP = 2000;
 const BUFFER_TRIM = 200;
 const FLUSH_INTERVAL_MS = 100;
+const CANCEL_KILL_DELAY_MS = 250;
 
 export interface UseHarborStreamResult {
     lines: string[];
+    chunks: Uint8Array[];
+    bufferVersion: number;
     isStreaming: boolean;
     error: string | null;
-    start: () => void;
+    completion: HarborStreamCompletion | null;
+    start: (nextArgs?: string[]) => void;
     stop: () => void;
     clear: () => void;
 }
 
-export function useHarborStream(args: string[], options?: { raw?: boolean }): UseHarborStreamResult {
+export type HarborStreamCompletionStatus = "success" | "failure" | "cancelled";
+
+export interface HarborStreamCompletion {
+    status: HarborStreamCompletionStatus;
+    exitCode: number | null;
+    error: string | null;
+}
+
+interface UseHarborStreamOptions {
+    raw?: boolean;
+    appendExitMessage?: boolean;
+    onComplete?: (completion: HarborStreamCompletion) => void;
+}
+
+export function useHarborStream(args: string[], options?: UseHarborStreamOptions): UseHarborStreamResult {
     const raw = options?.raw ?? false;
 
     const [lines, setLines] = useState<string[]>([]);
+    const [chunks, setChunks] = useState<Uint8Array[]>([]);
+    const [bufferVersion, setBufferVersion] = useState(0);
     const [isStreaming, setIsStreaming] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [completion, setCompletion] = useState<HarborStreamCompletion | null>(null);
 
-    const childRef = useRef<Child | null>(null);
-    const bufRef = useRef<string[]>([]);
+    const ptyRef = useRef<IPty | null>(null);
+    const textBufRef = useRef<string[]>([]);
+    const chunkBufRef = useRef<Uint8Array[]>([]);
     const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-    // Track whether the buffer has been modified since last flush
     const dirtyRef = useRef(false);
-    // Incremented on each start() call so stale close/error handlers from
-    // previous sessions (e.g. React StrictMode double-invoke) are ignored.
     const generationRef = useRef(0);
+    const bufferVersionRef = useRef(0);
+    const decoderRef = useRef(new TextDecoder());
+    const cancelTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const stopCancelTimeout = useCallback(() => {
+        if (cancelTimeoutRef.current !== null) {
+            clearTimeout(cancelTimeoutRef.current);
+            cancelTimeoutRef.current = null;
+        }
+    }, []);
+
+    const bumpBufferVersion = useCallback(() => {
+        bufferVersionRef.current += 1;
+        setBufferVersion(bufferVersionRef.current);
+    }, []);
 
     const stopInterval = useCallback(() => {
         if (intervalRef.current !== null) {
@@ -40,125 +74,226 @@ export function useHarborStream(args: string[], options?: { raw?: boolean }): Us
         }
     }, []);
 
-    const killChild = useCallback(async () => {
-        const child = childRef.current;
-        if (child) {
-            childRef.current = null;
+    const flushBuffers = useCallback(() => {
+        setLines([...textBufRef.current]);
+        setChunks([...chunkBufRef.current]);
+    }, []);
+
+    const emitCompletion = useCallback((nextCompletion: HarborStreamCompletion) => {
+        setCompletion(nextCompletion);
+        options?.onComplete?.(nextCompletion);
+    }, [options]);
+
+    const trimBuffers = useCallback(() => {
+        if (chunkBufRef.current.length <= BUFFER_CAP) {
+            return;
+        }
+
+        chunkBufRef.current = chunkBufRef.current.slice(BUFFER_TRIM);
+        textBufRef.current = textBufRef.current.slice(BUFFER_TRIM);
+        bumpBufferVersion();
+    }, [bumpBufferVersion]);
+
+    const flushDecoderTail = useCallback(() => {
+        const remainder = decoderRef.current.decode();
+
+        if (!remainder) {
+            return;
+        }
+
+        textBufRef.current.push(raw ? remainder : converter.toHtml(remainder));
+        trimBuffers();
+        dirtyRef.current = true;
+    }, [raw, trimBuffers]);
+
+    const killPty = useCallback((pty: IPty | null = ptyRef.current) => {
+        if (pty) {
             try {
-                await child.kill();
+                pty.kill();
             } catch {
                 // process may have already exited
             }
         }
     }, []);
 
-    const stop = useCallback(() => {
-        generationRef.current++;
-        killChild();
-        stopInterval();
-        setIsStreaming(false);
-    }, [killChild, stopInterval]);
+    const stopStream = useCallback(async () => {
+        const pty = ptyRef.current;
 
-    const clear = useCallback(() => {
-        bufRef.current = [];
-        dirtyRef.current = true;
-        setLines([]);
-    }, []);
+        if (!pty) {
+            const generation = ++generationRef.current;
+            stopCancelTimeout();
+            stopInterval();
+            if (isStreaming && generationRef.current === generation) {
+                flushBuffers();
+                setError(null);
+                emitCompletion({
+                    status: "cancelled",
+                    exitCode: null,
+                    error: null,
+                });
+            }
+            setIsStreaming(false);
+            return;
+        }
 
-    const start = useCallback(async () => {
-        await killChild();
-        stopInterval();
-
-        bufRef.current = [];
-        dirtyRef.current = false;
-        setLines([]);
-        setError(null);
-        setIsStreaming(true);
-
-        // Each start() call gets a unique generation id. Close/error handlers
-        // from a previous session (e.g. the one killed during React StrictMode
-        // double-invoke cleanup) check this before touching shared state so
-        // they cannot clobber a newer session's streaming state.
         const generation = ++generationRef.current;
+        ptyRef.current = null;
+        stopCancelTimeout();
+        stopInterval();
 
         try {
-            const windows = await isWindows();
-            const command = windows
-                ? Command.create("wsl.exe", ["-e", "bash", "-lic", `harbor ${args.join(" ")}`])
-                : Command.create("harbor", args);
+            pty.write("\x03");
+        } catch {
+            // process may already be exiting
+        }
 
-            command.stdout.on("data", (line: string) => {
+        cancelTimeoutRef.current = setTimeout(() => {
+            killPty(pty);
+        }, CANCEL_KILL_DELAY_MS);
+
+        if (generationRef.current !== generation) return;
+
+        flushBuffers();
+        setError(null);
+        emitCompletion({
+            status: "cancelled",
+            exitCode: null,
+            error: null,
+        });
+        setIsStreaming(false);
+    }, [emitCompletion, flushBuffers, isStreaming, killPty, stopCancelTimeout, stopInterval]);
+
+    const stop = useCallback(() => {
+        void stopStream();
+    }, [stopStream]);
+
+    const clear = useCallback(() => {
+        textBufRef.current = [];
+        chunkBufRef.current = [];
+        decoderRef.current = new TextDecoder();
+        dirtyRef.current = true;
+        setLines([]);
+        setChunks([]);
+        setError(null);
+        setCompletion(null);
+        bumpBufferVersion();
+    }, [bumpBufferVersion]);
+
+    const startStream = useCallback(async (nextArgs?: string[]) => {
+        const runArgs = nextArgs ?? args;
+        const previousPty = ptyRef.current;
+        const generation = ++generationRef.current;
+
+        ptyRef.current = null;
+        stopCancelTimeout();
+
+        textBufRef.current = [];
+        chunkBufRef.current = [];
+        decoderRef.current = new TextDecoder();
+        dirtyRef.current = false;
+        setLines([]);
+        setChunks([]);
+        setError(null);
+        setCompletion(null);
+        setIsStreaming(true);
+        bumpBufferVersion();
+
+        killPty(previousPty);
+        stopInterval();
+
+        if (generationRef.current !== generation) {
+            return;
+        }
+
+        try {
+            const pty = await spawnHarborPty(runArgs);
+
+            if (generationRef.current !== generation) {
+                killPty(pty);
+                return;
+            }
+
+            pty.onData((data: Uint8Array) => {
                 if (generationRef.current !== generation) return;
-                const htmlLine = raw ? line : converter.toHtml(line);
-                bufRef.current.push(htmlLine);
-                if (bufRef.current.length > BUFFER_CAP) {
-                    bufRef.current = [
-                        "(older lines trimmed)",
-                        ...bufRef.current.slice(BUFFER_TRIM),
-                    ];
+
+                const chunk = new Uint8Array(data);
+                chunkBufRef.current.push(chunk);
+
+                const text = decoderRef.current.decode(chunk, { stream: true });
+                if (text) {
+                    textBufRef.current.push(raw ? text : converter.toHtml(text));
                 }
+
+                trimBuffers();
                 dirtyRef.current = true;
             });
 
-            command.stderr.on("data", (line: string) => {
+            pty.onExit((payload: { exitCode: number | null }) => {
                 if (generationRef.current !== generation) return;
-                const htmlLine = raw ? line : converter.toHtml(line);
-                bufRef.current.push(htmlLine);
-                if (bufRef.current.length > BUFFER_CAP) {
-                    bufRef.current = [
-                        "(older lines trimmed)",
-                        ...bufRef.current.slice(BUFFER_TRIM),
-                    ];
-                }
-                dirtyRef.current = true;
-            });
-
-            command.on("close", (payload: { code: number | null }) => {
-                if (generationRef.current !== generation) return;
-                childRef.current = null;
+                ptyRef.current = null;
+                stopCancelTimeout();
                 stopInterval();
-                setLines([...bufRef.current]);
-                if (payload.code !== null && payload.code !== 0) {
-                    setError(`Process exited with code ${payload.code}`);
+                flushDecoderTail();
+
+                if (payload.exitCode !== null && payload.exitCode !== 0) {
+                    const message = `Process exited with code ${payload.exitCode}`;
+                    flushBuffers();
+                    setError(message);
+                    emitCompletion({
+                        status: "failure",
+                        exitCode: payload.exitCode,
+                        error: message,
+                    });
                 } else {
-                    bufRef.current.push("Stream ended — service stopped.");
-                    setLines([...bufRef.current]);
+                    flushBuffers();
+                    setError(null);
+                    emitCompletion({
+                        status: "success",
+                        exitCode: payload.exitCode,
+                        error: null,
+                    });
                 }
                 setIsStreaming(false);
             });
 
-            command.on("error", (err: string) => {
-                if (generationRef.current !== generation) return;
-                childRef.current = null;
-                stopInterval();
-                setError(err);
-                setIsStreaming(false);
-            });
-
-            const child = await command.spawn();
-            childRef.current = child;
+            ptyRef.current = pty;
 
             intervalRef.current = setInterval(() => {
                 if (dirtyRef.current) {
                     dirtyRef.current = false;
-                    setLines([...bufRef.current]);
+                    flushBuffers();
                 }
             }, FLUSH_INTERVAL_MS);
         } catch (e) {
             if (generationRef.current !== generation) return;
+            ptyRef.current = null;
             const msg = e instanceof Error ? e.message : String(e);
+            stopCancelTimeout();
+            flushBuffers();
             setError(msg);
+            emitCompletion({
+                status: "failure",
+                exitCode: null,
+                error: msg,
+            });
             setIsStreaming(false);
             stopInterval();
         }
-    }, [args, killChild, stopInterval]);
+    }, [args, bumpBufferVersion, emitCompletion, flushBuffers, flushDecoderTail, killPty, raw, stopCancelTimeout, stopInterval, trimBuffers]);
+
+    const start = useCallback((nextArgs?: string[]) => {
+        void startStream(nextArgs);
+    }, [startStream]);
 
     useEffect(() => {
         return () => {
-            killChild();
+            const pty = ptyRef.current;
+            ptyRef.current = null;
+            stopCancelTimeout();
+            killPty(pty);
             stopInterval();
         };
-    }, [killChild, stopInterval]);
+    }, [killPty, stopCancelTimeout, stopInterval]);
 
-    return { lines, isStreaming, error, start, stop, clear };
+    return { lines, chunks, bufferVersion, isStreaming, error, completion, start, stop, clear };
 }
