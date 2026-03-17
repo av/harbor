@@ -223,16 +223,42 @@ HARBOR_BOOST_OPENAI_KEY_HF=sk-hf456
 """.strip()
 )
 
+# Cloud provider shortcuts
+# When a cloud API key is set, automatically
+# register the corresponding OpenAI-compatible endpoint.
+HARBOR_MINIMAX_API_KEY = Config[str](
+  name='HARBOR_MINIMAX_API_KEY',
+  type=str,
+  default='',
+  description="""
+MiniMax API key. When set, the MiniMax OpenAI-compatible
+endpoint (https://api.minimax.io/v1) is automatically
+registered as a boost backend with MiniMax-M2.5 and
+MiniMax-M2.5-highspeed models.
+""".strip()
+)
+
+MINIMAX_BASE_URL = 'https://api.minimax.io/v1'
+
+# Static model definitions for providers that don't
+# expose a /models endpoint.
+MINIMAX_MODELS = [
+  {'id': 'MiniMax-M2.5', 'object': 'model', 'created': 0, 'owned_by': 'minimax'},
+  {'id': 'MiniMax-M2.5-highspeed', 'object': 'model', 'created': 0, 'owned_by': 'minimax'},
+] if HARBOR_MINIMAX_API_KEY.value else []
+
 # Combining all the sources from
 # above into a single list
 BOOST_APIS = [
   *HARBOR_OPENAI_URLS.value, *HARBOR_BOOST_OPENAI_URLS.value,
-  *HARBOR_BOOST_EXTRA_OPENAI_URLS.value
+  *HARBOR_BOOST_EXTRA_OPENAI_URLS.value,
+  *([MINIMAX_BASE_URL] if HARBOR_MINIMAX_API_KEY.value else []),
 ]
 
 BOOST_KEYS = [
   *HARBOR_OPENAI_KEYS.value, *HARBOR_BOOST_OPENAI_KEYS.value,
-  *HARBOR_BOOST_EXTRA_OPENAI_KEYS.value
+  *HARBOR_BOOST_EXTRA_OPENAI_KEYS.value,
+  *([HARBOR_MINIMAX_API_KEY.value] if HARBOR_MINIMAX_API_KEY.value else []),
 ]
 
 EXTRA_LLM_PARAMS = Config[ConfigDict](
