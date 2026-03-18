@@ -48,6 +48,13 @@ async def list_downstream():
     except Exception as e:
       logger.error(f"Failed to fetch models from {endpoint}: {e}")
 
+  # Register static models for providers without /models endpoint
+  for model in config.MINIMAX_MODELS:
+    if model["id"] not in MODEL_TO_BACKEND:
+      MODEL_TO_BACKEND[model["id"]] = config.MINIMAX_BASE_URL
+      all_models.append(model)
+      logger.debug(f"Registered static model: {model['id']}")
+
   return all_models
 
 
