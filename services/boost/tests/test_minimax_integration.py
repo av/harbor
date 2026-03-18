@@ -20,6 +20,25 @@ MINIMAX_BASE_URL = 'https://api.minimax.io/v1'
 class TestMiniMaxIntegration(unittest.TestCase):
     """Integration tests verifying MiniMax API connectivity."""
 
+    def test_chat_completion_m27(self):
+        body = json.dumps({
+            'model': 'MiniMax-M2.7',
+            'messages': [{'role': 'user', 'content': 'Say hello in one word.'}],
+            'max_tokens': 20,
+            'temperature': 1.0,
+        }).encode()
+        req = urllib.request.Request(
+            f'{MINIMAX_BASE_URL}/chat/completions',
+            data=body,
+            headers={
+                'Authorization': f'Bearer {MINIMAX_API_KEY}',
+                'Content-Type': 'application/json',
+            },
+        )
+        resp = json.loads(urllib.request.urlopen(req, timeout=60).read())
+        content = resp['choices'][0]['message']['content']
+        self.assertTrue(len(content) > 0)
+
     def test_chat_completion_m25(self):
         body = json.dumps({
             'model': 'MiniMax-M2.5',
@@ -68,6 +87,8 @@ class TestMiniMaxIntegration(unittest.TestCase):
 
             self.assertIn(MINIMAX_BASE_URL, config.BOOST_APIS)
             model_ids = [m['id'] for m in config.MINIMAX_MODELS]
+            self.assertIn('MiniMax-M2.7', model_ids)
+            self.assertIn('MiniMax-M2.7-highspeed', model_ids)
             self.assertIn('MiniMax-M2.5', model_ids)
             self.assertIn('MiniMax-M2.5-highspeed', model_ids)
 
