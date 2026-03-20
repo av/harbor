@@ -929,5 +929,13 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         wikiUrl: `${wikiUrl}/2.3.74-Satellite-Cognee`,
         tooltip: 'Knowledge engine for AI agent memory. Transforms documents into searchable graphs and vectors with built-in pipelines.',
     },
+    sillytavern: {
+        name: 'SillyTavern',
+        tags: [HST.frontend],
+        projectUrl: 'https://github.com/SillyTavern/SillyTavern',
+        logo: 'https://www.google.com/s2/favicons?domain=sillytavern.app&sz=128',
+        wikiUrl: `${wikiUrl}/2.1.15-Frontend-SillyTavern`,
+        tooltip: 'Feature-rich LLM chat frontend for power users. Supports multiple AI backends, personas, advanced prompting, and extensions.',
+    },
 };
 

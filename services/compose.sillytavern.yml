@@ -1,0 +1,23 @@
+services:
+  sillytavern:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.sillytavern
+    image: ${HARBOR_SILLYTAVERN_IMAGE}:${HARBOR_SILLYTAVERN_VERSION}
+    env_file:
+      - ./.env
+      - ./services/sillytavern/override.env
+    ports:
+      - ${HARBOR_SILLYTAVERN_HOST_PORT}:8000
+    entrypoint: ["/sbin/tini", "--", "/home/node/app/harbor-init.sh"]
+    volumes:
+      - ${HARBOR_SILLYTAVERN_WORKSPACE}/config:/home/node/app/config
+      - ${HARBOR_SILLYTAVERN_WORKSPACE}/data:/home/node/app/data
+      - ${HARBOR_SILLYTAVERN_WORKSPACE}/plugins:/home/node/app/plugins
+      - ${HARBOR_SILLYTAVERN_WORKSPACE}/extensions:/home/node/app/public/scripts/extensions/third-party
+      - ./services/sillytavern/harbor-init.sh:/home/node/app/harbor-init.sh:ro
+    environment:
+      - SILLYTAVERN_LISTEN=true
+      - SILLYTAVERN_PORT=8000
+      - SILLYTAVERN_WHITELIST=["0.0.0.0/0"]
+      - SILLYTAVERN_HEARTBEATINTERVAL=30
+    networks:
+      - harbor-network

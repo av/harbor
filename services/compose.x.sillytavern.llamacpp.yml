@@ -1,0 +1,6 @@
+services:
+  sillytavern:
+    depends_on:
+      - llamacpp
+    environment:
+      - SILLYTAVERN_LLAMACPP_URL=http://llamacpp:8080

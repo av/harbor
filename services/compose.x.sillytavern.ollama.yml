@@ -1,0 +1,6 @@
+services:
+  sillytavern:
+    depends_on:
+      - ollama
+    environment:
+      - SILLYTAVERN_OLLAMA_URL=http://ollama:11434
