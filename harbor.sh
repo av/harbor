@@ -241,7 +241,7 @@ run_harbor_doctor() {
     fi
 
     # Check if CLI is linked
-    if [ -L "$(eval echo "$(env_manager get cli.path)")/$(env_manager get cli.name)" ]; then
+    if [ -L "$(expand_path "$(env_manager get cli.path)")/$(env_manager get cli.name)" ]; then
         log_info "${ok} CLI is linked"
     else
         log_error "${nok} CLI is not linked. Run 'harbor link' to create a symlink."
@@ -823,9 +823,9 @@ run_llamacpp_pull() {
     tail -f \"$c_log\" &
     TAIL_PID=\$!
 
-    log_info 'Starting download process for $model...' >> \"$c_log\"
+    log_info \"Starting download process for \$HARBOR_PULL_MODEL...\" >> \"$c_log\"
 
-    /app/llama-server -hf '$model' --port 8080 --host 0.0.0.0 --n-gpu-layers 0 -c 128 >> \"$c_log\" 2>&1 &
+    /app/llama-server -hf \"\$HARBOR_PULL_MODEL\" --port 8080 --host 0.0.0.0 --n-gpu-layers 0 -c 128 >> \"$c_log\" 2>&1 &
     SRV_PID=\$!
 
     while true; do
@@ -863,6 +863,7 @@ run_llamacpp_pull() {
 
     $(compose_with_options "llamacpp") run \
         --rm \
+        -e "HARBOR_PULL_MODEL=$model" \
         --entrypoint /bin/sh \
         llamacpp \
         -c "$cmd"
@@ -877,8 +878,10 @@ run_run() {
 
     if [ -n "$maybe_cmd" ]; then
         log_info "Running alias $service -> \"$maybe_cmd\""
-        eval "$maybe_cmd"
-        return 0
+        # Re-dispatch alias through Harbor's own command handler
+        # instead of raw shell evaluation to prevent command injection
+        $0 $maybe_cmd
+        return $?
     fi
 
     log_debug "'harbor run': no alias found for $service, running as service"
@@ -917,7 +920,7 @@ run_hf_open() {
 }
 
 link_cli() {
-    local target_dir=$(eval echo "$(env_manager get cli.path)")
+    local target_dir=$(expand_path "$(env_manager get cli.path)")
     local script_name=$(env_manager get cli.name)
     local short_name=$(env_manager get cli.short)
     local script_path="$harbor_home/harbor.sh"
@@ -1002,7 +1005,7 @@ link_cli() {
 }
 
 unlink_cli() {
-    local target_dir=$(eval echo "$(env_manager get cli.path)")
+    local target_dir=$(expand_path "$(env_manager get cli.path)")
     local script_name=$(env_manager get cli.name)
     local short_name=$(env_manager get cli.short)
 
@@ -1575,16 +1578,29 @@ set_default_log_levels() {
     default_logl_labels_ERROR="${c_r}ERROR${c_nc}"
 }
 
+# Safely expand ~ in paths without using shell evaluation
+expand_path() {
+    local path="$1"
+    if [[ "$path" == "~/"* ]]; then
+        echo "${HOME}/${path#~/}"
+    elif [[ "$path" == "~" ]]; then
+        echo "${HOME}"
+    else
+        echo "$path"
+    fi
+}
+
+
 get_default_log_level() {
     local level="$1"
     local var_name="default_log_levels_$level"
-    eval echo \$$var_name
+    echo "${!var_name}"
 }
 
 get_default_log_label() {
     local level="$1"
     local var_name="default_logl_labels_$level"
-    eval echo \$$var_name
+    echo "${!var_name}"
 }
 
 log() {
@@ -2357,6 +2373,17 @@ download_profile() {
             return 1
         fi
 
+        # Security: reject values with shell metacharacters that could
+        # lead to command injection when config values are consumed
+        if grep -qE '^[^#]*=.*[\x60]' "$profile_file" 2>/dev/null || \
+           grep -qP '^[^#]*=.*\$\(' "$profile_file" 2>/dev/null; then
+            log_error "Downloaded profile contains potentially unsafe values (shell metacharacters detected)"
+            log_error "Please review the profile manually before use"
+            rm -f "$profile_file"
+            return 1
+        fi
+
+        log_warn "Profile downloaded from remote URL. Review contents before use."
         log_info "Successfully downloaded profile as: $profile_name"
         return 0
     else
@@ -2473,11 +2500,11 @@ run_harbor_find() {
     local dir
 
     for dir in \
-        "$(eval echo "$(env_manager get hf.cache)")" \
-        "$(eval echo "$(env_manager get llamacpp.cache)")" \
-        "$(eval echo "$(env_manager get ollama.cache)")" \
-        "$(eval echo "$(env_manager get vllm.cache)")" \
-        "$(eval echo "$(env_manager get comfyui.workspace)")"; do
+        "$(expand_path "$(env_manager get hf.cache)")" \
+        "$(expand_path "$(env_manager get llamacpp.cache)")" \
+        "$(expand_path "$(env_manager get ollama.cache)")" \
+        "$(expand_path "$(env_manager get vllm.cache)")" \
+        "$(expand_path "$(env_manager get comfyui.workspace)")"; do
         if [ -d "$dir" ]; then
             dirs="$dirs $dir"
         fi
@@ -2575,18 +2602,18 @@ run_fixfs() {
     # Collect all paths that need fixing
     local paths=(
         "$harbor_home"
-        "$(eval echo "$(env_manager get hf.cache)")"
-        "$(eval echo "$(env_manager get vllm.cache)")"
-        "$(eval echo "$(env_manager get llamacpp.cache)")"
-        "$(eval echo "$(env_manager get ollama.cache)")"
-        "$(eval echo "$(env_manager get parllama.cache)")"
-        "$(eval echo "$(env_manager get opint.config.path)")"
-        "$(eval echo "$(env_manager get fabric.config.path)")"
-        "$(eval echo "$(env_manager get txtai.cache)")"
-        "$(eval echo "$(env_manager get nexa.cache)")"
-        "$(eval echo "$(env_manager get aichat.config_path)")"
-        "$(eval echo "$(env_manager get comfyui.workspace)")"
-        "$(eval echo "$(env_manager get openclaw.config_dir)")"
+        "$(expand_path "$(env_manager get hf.cache)")"
+        "$(expand_path "$(env_manager get vllm.cache)")"
+        "$(expand_path "$(env_manager get llamacpp.cache)")"
+        "$(expand_path "$(env_manager get ollama.cache)")"
+        "$(expand_path "$(env_manager get parllama.cache)")"
+        "$(expand_path "$(env_manager get opint.config.path)")"
+        "$(expand_path "$(env_manager get fabric.config.path)")"
+        "$(expand_path "$(env_manager get txtai.cache)")"
+        "$(expand_path "$(env_manager get nexa.cache)")"
+        "$(expand_path "$(env_manager get aichat.config_path)")"
+        "$(expand_path "$(env_manager get comfyui.workspace)")"
+        "$(expand_path "$(env_manager get openclaw.config_dir)")"
     )
 
     # Create missing directories and build volume mounts
@@ -2893,7 +2920,8 @@ run_history() {
 
         if [ -s "$output_file" ]; then
             log_debug "Selected command: $(cat "$output_file")"
-            eval "$(cat "$output_file")"
+            # Re-dispatch through Harbor command handler instead of raw shell evaluation
+            $0 $(cat "$output_file")
         else
             log_info "No command selected"
         fi
