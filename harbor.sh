@@ -2572,23 +2572,17 @@ run_fixfs() {
     local uid=$(id -u)
     local gid=$(id -g)
 
-    # Collect all paths that need fixing
-    local paths=(
-        "$harbor_home"
-        "$(eval echo "$(env_manager get hf.cache)")"
-        "$(eval echo "$(env_manager get vllm.cache)")"
-        "$(eval echo "$(env_manager get llamacpp.cache)")"
-        "$(eval echo "$(env_manager get ollama.cache)")"
-        "$(eval echo "$(env_manager get parllama.cache)")"
-        "$(eval echo "$(env_manager get opint.config.path)")"
-        "$(eval echo "$(env_manager get fabric.config.path)")"
-        "$(eval echo "$(env_manager get txtai.cache)")"
-        "$(eval echo "$(env_manager get nexa.cache)")"
-        "$(eval echo "$(env_manager get aichat.config_path)")"
-        "$(eval echo "$(env_manager get comfyui.workspace)")"
-        "$(eval echo "$(env_manager get jupyter.workspace)")"
-        "$(eval echo "$(env_manager get openclaw.config_dir)")"
-    )
+    local paths=("$harbor_home")
+
+    # Discover external folder-type config values via env_manager search
+    # Paths starting with ./ are under harbor_home, already covered above
+    local suffixes=("_CACHE" "_WORKSPACE" "_CONFIG_PATH" "_CONFIG_DIR")
+    for suffix in "${suffixes[@]}"; do
+        while read -r _key value; do
+            [[ -z "$value" || "$value" == ./* ]] && continue
+            paths+=("${value/#\~/$HOME}")
+        done < <(env_manager --silent search "$suffix")
+    done
 
     # Create missing directories and build volume mounts
     local volume_args=()
