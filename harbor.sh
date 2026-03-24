@@ -2586,6 +2586,7 @@ run_fixfs() {
         "$(eval echo "$(env_manager get nexa.cache)")"
         "$(eval echo "$(env_manager get aichat.config_path)")"
         "$(eval echo "$(env_manager get comfyui.workspace)")"
+        "$(eval echo "$(env_manager get jupyter.workspace)")"
         "$(eval echo "$(env_manager get openclaw.config_dir)")"
     )
 
