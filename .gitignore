@@ -123,7 +123,7 @@ pipelines/
 qdrant/storage
 
 # Merged compose
-__harbor.yml
+__harbor*.yml
 
 # Migration backups
 .migration-backup-*
@@ -132,6 +132,9 @@ __harbor.yml
 .local
 .npm
 .pkgx
+
+# Skills
+skills-lock.json
 
 # Parcel
 .parcel-cache
