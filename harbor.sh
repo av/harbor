@@ -1582,7 +1582,7 @@ set_default_log_levels() {
 expand_path() {
     local path="$1"
     if [[ "$path" == "~/"* ]]; then
-        echo "${HOME}/${path#~/}"
+        echo "${HOME}/${path#"~/"}"
     elif [[ "$path" == "~" ]]; then
         echo "${HOME}"
     else
@@ -2375,8 +2375,8 @@ download_profile() {
 
         # Security: reject values with shell metacharacters that could
         # lead to command injection when config values are consumed
-        if grep -qE '^[^#]*=.*[\x60]' "$profile_file" 2>/dev/null || \
-           grep -qP '^[^#]*=.*\$\(' "$profile_file" 2>/dev/null; then
+        if grep -qE '^[^#]*=.*`' "$profile_file" 2>/dev/null || \
+           grep -qE '^[^#]*=.*\$\(' "$profile_file" 2>/dev/null; then
             log_error "Downloaded profile contains potentially unsafe values (shell metacharacters detected)"
             log_error "Please review the profile manually before use"
             rm -f "$profile_file"
