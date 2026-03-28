@@ -15,7 +15,7 @@ services:
     ports:
       - ${HARBOR_OLLAMA_HOST_PORT}:11434
     healthcheck:
-      test:  [ "CMD-SHELL", "bash", "-c", "{ printf >&3 'GET / HTTP/1.0\\r\\n\\r\\n'; cat <&3; } 3<>/dev/tcp/localhost/11434 | grep 'Ollama is' || exit 1"  ]
+      test: ["CMD-SHELL", "bash -c '{ printf \"GET / HTTP/1.0\\r\\n\\r\\n\" >&3; cat <&3; } 3<>/dev/tcp/localhost/11434 | grep -q \"Ollama is\" || exit 1'"]
       interval: 1s
       timeout: 5s
       retries: 3

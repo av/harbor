@@ -11,6 +11,11 @@ services:
       - ./services/llamacpp/data:/app/data
     ports:
       - ${HARBOR_LLAMACPP_HOST_PORT}:8080
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '{ printf \"GET /health HTTP/1.0\\r\\n\\r\\n\" >&3; cat <&3; } 3<>/dev/tcp/127.0.0.1/8080 | grep -q ok || exit 1'"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
     command: >
       ${HARBOR_LLAMACPP_MODEL_SPECIFIER}
       ${HARBOR_LLAMACPP_EXTRA_ARGS}

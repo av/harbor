@@ -126,6 +126,8 @@ show_help() {
     echo "    env <service>               - List all variables for a service"
     echo "    env <service> <key>         - Get a specific variable for a service"
     echo "    env <service> <key> <value> - Set a specific variable for a service"
+    echo "    env <service> get <key>     - Get a specific variable (explicit form)"
+    echo "    env <service> unset <key>   - Remove a specific variable for a service"
     echo
     echo "  profile|profiles|p [ls|rm|add] - Manage Harbor profiles"
     echo "    profile ls|list             - List all profiles"
@@ -1697,6 +1699,24 @@ env_manager() {
         fi
         $silent || log_info "Set $prefix$upper_key to: \"$value\""
         ;;
+    unset | rm | remove)
+        if [[ -z "$2" ]]; then
+            $silent || log_info "Usage: env_manager unset <key>"
+            return 1
+        fi
+        local upper_key=$(echo "$2" | tr '[:lower:]' '[:upper:]' | tr '.' '_')
+        upper_key="${upper_key#$prefix}"
+        if grep -q "^$prefix$upper_key=" "$env_file"; then
+            if [[ "$(uname)" == "Darwin" ]]; then
+                sed -i '' "/^$prefix$upper_key=/d" "$env_file"
+            else
+                sed -i "/^$prefix$upper_key=/d" "$env_file"
+            fi
+            $silent || log_info "Removed $prefix$upper_key"
+        else
+            $silent || log_warn "Key $prefix$upper_key is not set in $env_file"
+        fi
+        ;;
     list | ls)
         grep "^$prefix" "$env_file" | grep -v '^#\|^$' | sed "s/^$prefix//" | while read -r line; do
             key=${line%%=*}
@@ -2937,17 +2957,30 @@ run_harbor_env() {
     fi
 
     shift
-    local env_var=$1
-    local env_val=$2
     local mgr_cmd="ls"
+    local env_var=""
+    local env_val=""
 
-    if [ -n "$env_var" ]; then
-        if [ -n "$env_val" ]; then
+    case "$1" in
+    get|set|ls|list|search|find|unset|rm|remove)
+        mgr_cmd=$1
+        env_var=$2
+        shift 2
+        env_val="$*"
+        ;;
+    "")
+        ;;
+    *)
+        env_var=$1
+        shift
+        if [ $# -gt 0 ]; then
             mgr_cmd="set"
+            env_val="$*"
         else
             mgr_cmd="get"
         fi
-    fi
+        ;;
+    esac
 
     local env_file="services/$service/override.env"
 
@@ -2958,7 +2991,13 @@ run_harbor_env() {
         return 1
     fi
 
-    env_manager --env-file "$env_file" --prefix "" "$mgr_cmd" "$env_var" "$env_val"
+    if [ -n "$env_val" ]; then
+        env_manager --env-file "$env_file" --prefix "" "$mgr_cmd" "$env_var" "$env_val"
+    elif [ -n "$env_var" ]; then
+        env_manager --env-file "$env_file" --prefix "" "$mgr_cmd" "$env_var"
+    else
+        env_manager --env-file "$env_file" --prefix "" "$mgr_cmd"
+    fi
 }
 
 # Corresponds to the ".scripts" folder
