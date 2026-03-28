@@ -16,6 +16,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 12
+      start_period: 30s
     command: >
       ${HARBOR_LLAMACPP_MODEL_SPECIFIER}
       ${HARBOR_LLAMACPP_EXTRA_ARGS}

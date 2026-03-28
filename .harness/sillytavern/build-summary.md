@@ -24,11 +24,14 @@
 - Replaced `curl -fsS` with a bash `/dev/tcp` approach since the llamacpp server image does not include curl
 - Uses the `/health` endpoint which returns "ok" when the server is ready
 - Format: `bash -c '{ printf "GET /health HTTP/1.0\r\n\r\n" >&3; cat <&3; } 3<>/dev/tcp/127.0.0.1/8080 | grep -q ok || exit 1'`
+- Added `start_period: 30s` to give llamacpp time to load the model before healthcheck failures count
 
-### 5. Fixed Ollama healthcheck syntax (services/compose.ollama.yml)
+### 5. Fixed Ollama healthcheck (services/compose.ollama.yml)
 - The original healthcheck used incorrect CMD-SHELL array syntax with separate elements for `bash`, `-c`, and the command string
 - Fixed to use a single string argument to CMD-SHELL: `bash -c '...'`
 - Uses the same `/dev/tcp` approach to check the Ollama HTTP endpoint
+- Increased `interval` from 1s to 2s, `retries` from 3 to 5, and added `start_period: 10s`
+- The previous settings (interval 1s, retries 3, no start_period) gave Ollama only ~3 seconds before being declared unhealthy, causing dependent services to fail immediately
 
 ### 6. Cleaned up .gitignore (services/sillytavern/.gitignore)
 - Removed duplicate `extensions/` entry
