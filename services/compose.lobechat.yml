@@ -6,5 +6,7 @@ services:
       - ./.env
     ports:
       - ${HARBOR_LOBECHAT_HOST_PORT}:3210
+    environment:
+      - MINIMAX_API_KEY=${HARBOR_MINIMAX_API_KEY:-}
     networks:
       - harbor-network
