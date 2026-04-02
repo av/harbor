@@ -6,7 +6,7 @@ services:
       - ./.env
       - ./services/llamacpp/override.env
     volumes:
-      - ${HARBOR_HF_CACHE}:/app/models
+      - ${HARBOR_HF_CACHE}:/root/.cache/huggingface
       - ${HARBOR_LLAMACPP_CACHE}:/root/.cache/llama.cpp
       - ./services/llamacpp/data:/app/data
     ports:
