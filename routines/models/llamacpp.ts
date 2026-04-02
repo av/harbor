@@ -77,10 +77,9 @@ async function resolveFileCanonicalId(
   return name.replace(/\.gguf$/i, '');
 }
 
-export async function listLlamacppModels(): Promise<ModelEntry[]> {
-  const cacheDir = process.env.HARBOR_LLAMACPP_CACHE;
-  if (!cacheDir) return [];
-
+// Legacy llamacpp cache (flat GGUFs, manifests, sidecars).
+// Kept for backwards compat — migration to HF cache may be partial.
+async function listLegacyCache(cacheDir: string): Promise<ModelEntry[]> {
   try {
     const s = await Deno.stat(cacheDir);
     if (!s.isDirectory) return [];
@@ -138,9 +137,17 @@ export async function listLlamacppModels(): Promise<ModelEntry[]> {
   );
 }
 
-export async function removeLlamacppModel(modelSpec: string): Promise<boolean> {
+// New models go to HF cache; legacy models may remain in HARBOR_LLAMACPP_CACHE.
+export async function listLlamacppModels(): Promise<ModelEntry[]> {
   const cacheDir = process.env.HARBOR_LLAMACPP_CACHE;
-  if (!cacheDir) return false;
+  if (!cacheDir) return [];
+  return listLegacyCache(cacheDir);
+}
+
+// Try HF cache first (new layout), then fall back to the legacy cache.
+export async function removeLlamacppModel(modelSpec: string): Promise<boolean> {
+  const hfCache = process.env.HARBOR_HF_CACHE;
+  const legacyCache = process.env.HARBOR_LLAMACPP_CACHE;
 
   const colonIdx = modelSpec.indexOf(':');
   const repoSpec = colonIdx >= 0 ? modelSpec.slice(0, colonIdx) : modelSpec;
@@ -151,6 +158,22 @@ export async function removeLlamacppModel(modelSpec: string): Promise<boolean> {
 
   let removed = false;
 
+  // --- New HF cache layout: models--org--repo/ ---
+  if (hfCache && repoSpec.includes('/')) {
+    const dirName = 'models--' + repoSpec.replace('/', '--');
+    const dirPath = `${hfCache}/hub/${dirName}`;
+    try {
+      const s = await Deno.stat(dirPath);
+      if (s.isDirectory) {
+        await Deno.remove(dirPath, { recursive: true });
+        removed = true;
+      }
+    } catch { /* not found */ }
+  }
+
+  // --- Legacy cache layouts ---
+  if (!legacyCache) return removed;
+
   function quantMatches(filename: string): boolean {
     if (!quantTag) return true;
     const fileQuant = parseGGUFQuantLabel(filename);
@@ -160,7 +183,7 @@ export async function removeLlamacppModel(modelSpec: string): Promise<boolean> {
 
   // Subdirectory layout: {cacheDir}/{org}/{repo}/{file}.gguf
   if (org && repo) {
-    const subRepoDir = `${cacheDir}/${org}/${repo}`;
+    const subRepoDir = `${legacyCache}/${org}/${repo}`;
     try {
       for await (const entry of Deno.readDir(subRepoDir)) {
         if (!entry.isFile || !entry.name.endsWith('.gguf')) continue;
@@ -175,7 +198,7 @@ export async function removeLlamacppModel(modelSpec: string): Promise<boolean> {
       };
       if (await isEmpty(subRepoDir)) {
         await Deno.remove(subRepoDir);
-        const orgDir = `${cacheDir}/${org}`;
+        const orgDir = `${legacyCache}/${org}`;
         if (await isEmpty(orgDir)) await Deno.remove(orgDir);
       }
     } catch { /* subdir doesn't exist */ }
@@ -185,11 +208,11 @@ export async function removeLlamacppModel(modelSpec: string): Promise<boolean> {
   if (org && repo) {
     const flatPrefix = `${org}_${repo}_`;
     try {
-      for await (const entry of Deno.readDir(cacheDir)) {
+      for await (const entry of Deno.readDir(legacyCache)) {
         if (!entry.isFile || !entry.name.startsWith(flatPrefix) || !entry.name.endsWith('.gguf')) continue;
         if (!quantMatches(entry.name)) continue;
-        await Deno.remove(`${cacheDir}/${entry.name}`);
-        try { await Deno.remove(`${cacheDir}/${entry.name}.json`); } catch { /* no sidecar */ }
+        await Deno.remove(`${legacyCache}/${entry.name}`);
+        try { await Deno.remove(`${legacyCache}/${entry.name}.json`); } catch { /* no sidecar */ }
         removed = true;
       }
     } catch { /* ignore */ }
@@ -198,10 +221,10 @@ export async function removeLlamacppModel(modelSpec: string): Promise<boolean> {
   // Manifest files — only when removing the entire repo (no quant filter)
   if (!quantTag && org && repo) {
     try {
-      for await (const entry of Deno.readDir(cacheDir)) {
+      for await (const entry of Deno.readDir(legacyCache)) {
         if (!entry.isFile || !entry.name.startsWith('manifest=')) continue;
         if (entry.name.includes(`=${org}=${repo}=`) || entry.name.includes(`=${org}_${repo}=`)) {
-          await Deno.remove(`${cacheDir}/${entry.name}`);
+          await Deno.remove(`${legacyCache}/${entry.name}`);
           removed = true;
         }
       }
@@ -210,15 +233,15 @@ export async function removeLlamacppModel(modelSpec: string): Promise<boolean> {
 
   // Sidecar scan: flat .gguf files whose repo identity comes only from a .gguf.json sidecar
   if (org && repo) {
-    const prefixMap = await buildPrefixMap(cacheDir);
+    const prefixMap = await buildPrefixMap(legacyCache);
     try {
-      for await (const entry of Deno.readDir(cacheDir)) {
+      for await (const entry of Deno.readDir(legacyCache)) {
         if (!entry.isFile || !entry.name.endsWith('.gguf')) continue;
-        const canonicalId = await resolveFileCanonicalId(entry.name, '', cacheDir, prefixMap);
+        const canonicalId = await resolveFileCanonicalId(entry.name, '', legacyCache, prefixMap);
         if (canonicalId !== repoSpec) continue;
         if (!quantMatches(entry.name)) continue;
-        await Deno.remove(`${cacheDir}/${entry.name}`);
-        try { await Deno.remove(`${cacheDir}/${entry.name}.json`); } catch { /* no sidecar */ }
+        await Deno.remove(`${legacyCache}/${entry.name}`);
+        try { await Deno.remove(`${legacyCache}/${entry.name}.json`); } catch { /* no sidecar */ }
         removed = true;
       }
     } catch { /* ignore */ }

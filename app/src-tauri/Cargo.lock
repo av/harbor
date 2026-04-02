@@ -1475,7 +1475,7 @@ dependencies = [
 
 [[package]]
 name = "harbor-app"
-version = "0.4.5"
+version = "0.4.6"
 dependencies = [
  "fix-path-env",
  "serde",
