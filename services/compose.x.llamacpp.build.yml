@@ -1,0 +1,6 @@
+services:
+  llamacpp:
+    build:
+      context: https://github.com/ggml-org/llama.cpp.git#${HARBOR_LLAMACPP_BUILD_REF:-master}
+      dockerfile: .devops/cpu.Dockerfile
+      target: server

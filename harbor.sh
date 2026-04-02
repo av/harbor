@@ -63,6 +63,7 @@ show_help() {
     echo "  morphic   - Configure Morphic service"
     echo "  modularmax - Configure Modular MAX service"
     echo "  boost     - Configure Harbor Boost service"
+    echo "  hermes    - Configure Hermes Agent service"
     echo "  stt       - Configure Speech-to-Text service"
     echo "  speaches  - Configure Speaches service"
     echo "  webtop    - Configure Webtop service"
@@ -549,7 +550,7 @@ compose_with_options() {
 
 is_capability() {
     local capability="$1"
-    local capabilities=("nvidia" "mdc" "cdi" "${default_capabilities[@]}")
+    local capabilities=("nvidia" "mdc" "cdi" "rocm" "build" "${default_capabilities[@]}")
 
     for cap in "${capabilities[@]}"; do
         if [ "$cap" = "$capability" ]; then
@@ -562,7 +563,7 @@ is_capability() {
 
 is_capability_file() {
     local filename="$1"
-    local capabilities=("nvidia" "mdc" "cdi" "${default_capabilities[@]}")
+    local capabilities=("nvidia" "mdc" "cdi" "rocm" "build" "${default_capabilities[@]}")
 
     for cap in "${capabilities[@]}"; do
         if [[ $filename == *".$cap."* ]]; then
@@ -1540,7 +1541,7 @@ suggest_command() {
         cfd cloudflared cmdh fabric parler photoprism airllm txtai aider
         nanobot chatui comfyui aichat omnichain lmeval lm_eval sglang
         jupyter ol1 ktransformers openhands oh stt speaches boost nexa
-        repopack k6 promptfoo pf webtop langflow kobold morphic gptme mcp
+        repopack k6 promptfoo pf webtop langflow kobold morphic gptme hermes mcp
         migrate modularmax tunnel t tunnels config profile profiles p gum
         fixfs info update how find home vscode doctor bench history h size
         env dev tools eval routine
@@ -3046,6 +3047,41 @@ run_llamacpp_command() {
         shift
         env_manager_alias llamacpp.extra.args "$@"
         ;;
+    build)
+        shift
+        case "$1" in
+        on)
+            local current_caps=$(env_manager get capabilities.default)
+            if [[ ! ";${current_caps};" =~ ";build;" ]]; then
+                if [ -z "$current_caps" ]; then
+                    env_manager set capabilities.default "build"
+                else
+                    env_manager set capabilities.default "${current_caps};build"
+                fi
+            fi
+            log_info "Build from source enabled for llamacpp"
+            log_info "Run 'harbor build llamacpp' to build, then 'harbor up llamacpp'"
+            ;;
+        off)
+            local current_caps=$(env_manager get capabilities.default)
+            local new_caps=$(echo "$current_caps" | sed 's/;*build//g; s/^;//; s/;$//')
+            env_manager set capabilities.default "$new_caps"
+            log_info "Build from source disabled for llamacpp"
+            ;;
+        ref)
+            shift
+            env_manager_alias llamacpp.build.ref "$@"
+            ;;
+        *)
+            echo "Usage: harbor llamacpp build <command>"
+            echo
+            echo "Commands:"
+            echo "  on              - Enable building llamacpp from source"
+            echo "  off             - Disable building from source (use pre-built images)"
+            echo "  ref [git ref]   - Get or set git ref to build (branch/tag/commit)"
+            ;;
+        esac
+        ;;
     -h | --help | help)
         echo "Please note that this is not llama.cpp CLI, but a Harbor CLI to manage llama.cpp service."
         echo "Access llama.cpp own CLI by running 'harbor exec llamacpp' when it's running."
@@ -3056,6 +3092,7 @@ run_llamacpp_command() {
         echo "  harbor llamacpp model [Hugging Face URL] - Get or set the llamacpp model to run"
         echo "  harbor llamacpp gguf [gguf path]         - Get or set the path to GGUF to run"
         echo "  harbor llamacpp args [args]              - Get or set extra args to pass to the llama.cpp CLI"
+        echo "  harbor llamacpp build on|off|ref         - Manage building from source"
         ;;
     *)
         return $scramble_exit_code
@@ -5036,6 +5073,36 @@ run_gptme_command() {
         gptme -m $model_spec "$@"
 }
 
+run_hermes_command() {
+    case "$1" in
+    version)
+        shift
+        env_manager_alias hermes.version "$@"
+        return 0
+        ;;
+    api_key)
+        shift
+        env_manager_alias hermes.api_key "$@"
+        return 0
+        ;;
+    -h | --help | help)
+        echo "Usage: harbor hermes <command>"
+        echo
+        echo "Harbor Commands:"
+        echo "  harbor hermes version [version] - Get or set the Hermes Agent version"
+        echo "  harbor hermes api_key [key]     - Get or set the Hermes Agent API key"
+        echo "  harbor hermes ...               - Any other Hermes CLI command (proxied to container)"
+        echo
+        ;;
+    esac
+
+    local services=$(get_active_services)
+
+    $(compose_with_options $services "hermes") exec \
+        hermes \
+        hermes "$@"
+}
+
 run_mcp_command() {
     case "$1" in
     inspector)
@@ -5107,7 +5174,7 @@ run_modularmax_command() {
 # ========================================================================
 
 # Globals
-version="0.4.6"
+version="0.4.7"
 harbor_repo_url="https://github.com/av/harbor.git"
 harbor_release_url="https://api.github.com/repos/av/harbor/releases/latest"
 delimiter="|"
@@ -5453,6 +5520,10 @@ main_entrypoint() {
     gptme)
         shift
         run_gptme_command "$@"
+        ;;
+    hermes)
+        shift
+        run_hermes_command "$@"
         ;;
     mcp)
         shift

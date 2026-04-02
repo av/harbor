@@ -13,7 +13,8 @@ description: >
 
 Releasing Harbor is a sequential pipeline: bump the version constant, run codegen
 (which propagates the version across the monorepo and syncs docs to the wiki),
-commit, push, research what changed, and open a pre-filled GitHub release form.
+commit, push, research what changed, update the README News section, and open a
+pre-filled GitHub release form.
 
 ## Pre-flight
 
@@ -91,7 +92,24 @@ For merged PRs, check:
 git log vPREV..HEAD --oneline --merges
 ```
 
-## Step 5 — Open GitHub Release Form
+## Step 5 — Update README News Section
+
+Update the `## News` table in `README.md` to include the new release. The table
+lives between the screenshot image and the `## Documentation` heading.
+
+1. Add a new row at the **top** of the table body for `vX.Y.Z` with a short
+   highlights summary (one sentence, 2-3 key changes from Step 4).
+2. Remove the **oldest row** (bottom) so the table always shows exactly 7 releases.
+
+The row format is:
+
+```
+| **vX.Y.Z** | Mon YYYY | Short highlights sentence |
+```
+
+Use abbreviated month + year for the date (e.g. `Apr 2025`, `Feb 2026`).
+
+## Step 6 — Open GitHub Release Form
 
 Construct the URL and open it with `xdg-open` (not an internal browser).
 

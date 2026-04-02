@@ -1,7 +1,7 @@
 import { red, yellow, gray } from "jsr:@std/fmt/colors";
 import process from 'node:process';
 
-export const BUILTIN_CAPS = ["nvidia", "mdc", "cdi"];
+export const BUILTIN_CAPS = ["nvidia", "mdc", "cdi", "rocm", "build"];
 export const CONFIG_PREFIX = "HARBOR_";
 export const LOG_LEVELS = ["debug", "info", "warn", "error"];
 

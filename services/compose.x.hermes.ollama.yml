@@ -1,0 +1,6 @@
+services:
+  hermes:
+    depends_on:
+      - ollama
+    environment:
+      - OPENAI_BASE_URL=${HARBOR_OLLAMA_INTERNAL_URL}/v1

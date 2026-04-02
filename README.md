@@ -5,8 +5,6 @@ https://github.com/user-attachments/assets/8a7705e1-6f0e-4374-8784-62b95816aebc
 
 
 [![GitHub Tag](https://img.shields.io/github/v/tag/av/harbor)](https://github.com/av/harbor/releases)
-[![NPM Version](https://img.shields.io/npm/v/%40avcodes%2Fharbor?labelColor=red&color=white)](https://www.npmjs.com/package/@avcodes/harbor)
-[![PyPI - Version](https://img.shields.io/pypi/v/llm-harbor?labelColor=blue)](https://pypi.org/project/llm-harbor/)
 ![GitHub repo size](https://img.shields.io/github/repo-size/av/harbor)
 ![GitHub repo file or directory count](https://img.shields.io/github/directory-file-count/av/harbor?type=file&extension=yml&label=compose%20files&color=orange)
 ![GitHub language count](https://img.shields.io/github/languages/count/av/harbor)
@@ -34,20 +32,22 @@ Harbor is a CLI and companion app that lets you spin up a complete local LLM sta
 
 ![Screenshot of Harbor CLI and App together](https://github.com/av/harbor/wiki/harbor-app-3.png)
 
-> **🔄 Migrating to Harbor 0.4.0?**
->
-> Harbor 0.4.0 introduces a new directory structure where all service files are organized in a `services/` directory for better maintainability and a cleaner root directory.
->
-> **Existing users:** Run `harbor migrate --dry-run` to preview changes, then `harbor migrate` to upgrade. See the [Migration Guide](docs/0.4.0-Migration-Guide.md) for details.
->
-> **New users:** No action needed—everything is already organized!
+## News
+
+| Version | Date | Highlights |
+|---------|------|------------|
+| **v0.4.7** | Apr 2026 | Hermes Agent service, llama.cpp build-from-source support, updated llama.cpp docs |
+| **v0.4.6** | Apr 2025 | SillyTavern service, fixed llama.cpp cache paths, improved Jupyter workspace |
+| **v0.4.5** | Mar 2025 | Harbor App: built-in terminal, service logs, model management |
+| **v0.4.4** | Mar 2025 | Harbor integration test suite with mock OpenAI, enhanced service management UI |
+| **v0.4.3** | Mar 2025 | Cognee service, cross-source model management CLI (`harbor models`), Open Terminal service |
+| **v0.4.2** | Feb 2025 | OpenFang agent framework service |
+| **v0.4.1** | Feb 2025 | Improved Docker checks, GPU setup for NVIDIA/ROCm, Harbor migration system |
 
 ## Documentation
 
 - [Installing Harbor](https://github.com/av/harbor/wiki/1.0.-Installing-Harbor)<br/>
   Guides to install Harbor CLI and App
-- [**Migration Guide (v0.4.0)**](docs/0.4.0-Migration-Guide.md)<br/>
-  **Important:** Guide for upgrading to Harbor 0.4.0 with the new directory structure
 - [Harbor User Guide](https://github.com/av/harbor/wiki/1.-Harbor-User-Guide)<br/>
   High-level overview of working with Harbor
 - [Harbor App](https://github.com/av/harbor/wiki/1.1-Harbor-App)<br/>

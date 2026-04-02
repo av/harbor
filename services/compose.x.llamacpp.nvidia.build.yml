@@ -1,0 +1,6 @@
+services:
+  llamacpp:
+    build:
+      dockerfile: .devops/cuda.Dockerfile
+      args:
+        CUDA_DOCKER_ARCH: ${HARBOR_LLAMACPP_BUILD_CUDA_ARCH:-default}

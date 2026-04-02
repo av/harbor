@@ -1,0 +1,22 @@
+services:
+  hermes:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.hermes
+    image: ${HARBOR_HERMES_IMAGE}:${HARBOR_HERMES_VERSION}
+    env_file:
+      - ./.env
+      - ./services/hermes/override.env
+    ports:
+      - ${HARBOR_HERMES_HOST_PORT}:8642
+    volumes:
+      - ${HARBOR_HERMES_WORKSPACE}/data:/opt/data
+    shm_size: "1g"
+    tty: true
+    stdin_open: true
+    command: ["gateway", "run"]
+    environment:
+      - API_SERVER_ENABLED=true
+      - API_SERVER_HOST=0.0.0.0
+      - API_SERVER_PORT=8642
+      - API_SERVER_KEY=${HARBOR_HERMES_API_KEY}
+    networks:
+      - harbor-network

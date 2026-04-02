@@ -169,6 +169,14 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         name: 'HuggingFace Downloader',
         tags: [HST.satellite, HST.cli],
     },
+    hermes: {
+        name: 'Hermes Agent',
+        tags: [HST.satellite, HST.cli, HST.tools],
+        projectUrl: 'https://github.com/NousResearch/hermes-agent',
+        logo: 'https://github.com/NousResearch.png?size=200',
+        wikiUrl: `${wikiUrl}/2.3.76-Satellite-Hermes-Agent`,
+        tooltip: 'Autonomous AI agent with persistent memory, skills, and multi-platform gateway.',
+    },
     hollama: {
         name: 'Hollama',
         tags: [HST.frontend],
