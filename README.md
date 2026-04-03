@@ -448,4 +448,4 @@ In the demo, Harbor App is used to launch a default stack with [Ollama](./2.2.1-
 ![@burnth3heretic](https://ui-avatars.com/api/?size=32&name=BTH&rounded=true)
 ![@vood](https://ui-avatars.com/api/?size=32&name=VD&rounded=true)
 ![@anonymous](https://ui-avatars.com/api/?size=32&name=🥷&rounded=true&background=bada55)
-<a href="https://x.com/TheAhmadOsman"><img src="docs/supporters-ahmad-osman.png" width="32" height="32" style="border-radius:50%" alt="@TheAhmadOsman" /></a>
+<a href="https://x.com/TheAhmadOsman"><img src="docs/supporters-ahmad-osman.png" width="32" height="32" alt="@TheAhmadOsman" /></a>
