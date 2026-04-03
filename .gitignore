@@ -116,7 +116,7 @@ dist/
 .aider.chat.history.md
 
 # Open WebUI Pipelines
-pipelines/
+pipelines/*
 !pipelines/override.env
 
 # Qdrant
