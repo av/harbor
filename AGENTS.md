@@ -20,7 +20,7 @@ harbor ps                        # list running containers
 harbor ls                        # list all available services
 harbor up <service>              # start service(s)
 harbor down                      # stop and remove containers
-harbor logs <service>            # tail logs (use docker logs for non-tailing)
+harbor logs <service>            # ⚠️ TAILS BY DEFAULT (HANGS AGENT). Use docker logs <container> instead
 harbor build <service>
 harbor shell <service>           # interactive shell in container
 harbor exec <service> <cmd>

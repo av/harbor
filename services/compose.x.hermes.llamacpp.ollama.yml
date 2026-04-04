@@ -1,0 +1,4 @@
+services:
+  hermes:
+    environment:
+      - OPENAI_BASE_URL=http://llamacpp:8080/v1

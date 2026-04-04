@@ -40,7 +40,7 @@ Use these decision trees to determine what action to take for common user reques
 2. Check Container Toolkit: docker run --rm --gpus all nvidia/cuda:12.0-base nvidia-smi
    → FAIL: Install NVIDIA Container Toolkit, restart Docker
    → OK: Continue
-3. Check service logs: harbor logs <service>
+3. Check service logs: harbor logs <service>  # ⚠️ TAILS INDEFINITELY! (Agents: use `docker logs harbor.<service>` instead)
    → Look for: "CUDA error", "out of memory", "no GPU"
    → OOM: See "Model won't load / OOM" troubleshooting
    → No GPU detected: Check /etc/docker/daemon.json for nvidia runtime
@@ -67,7 +67,7 @@ Use these decision trees to determine what action to take for common user reques
    → llama.cpp (single model): harbor llamacpp model <url> → harbor restart llamacpp
    → llama.cpp (router mode): harbor pull <org/repo> → model auto-discovered
    → vLLM: harbor vllm model <user/repo> → harbor restart vllm
-3. Verify: harbor logs <backend> → wait for ready message
+3. Verify: docker logs harbor.<backend> → wait for ready message
 ```
 
 ### User wants code execution in chat
@@ -174,14 +174,16 @@ harbor ollama list
 
 ## Core Commands
 
+> ⚠️ **CRITICAL WARNING FOR AI AGENTS**: `harbor logs` tails indefinitely by default (passes `-f`). If you use this in your Bash tool, it will hang your execution until timeout. **ALWAYS use `docker logs harbor.<service>` instead** to read logs safely.
+
 | Command | Purpose |
 |---------|---------|
 | `harbor up [services...]` | Start services (defaults + specified) |
 | `harbor up --no-defaults <svc>` | Start only specified services |
 | `harbor down` | Stop all services |
 | `harbor ps` | Show running services |
-| `harbor logs [service]` | Tail logs |
-| `harbor logs -n 1000 <service>` | Extended logs |
+| `harbor logs [service]` | ⚠️ TAILS INDEFINITELY (HANGS AGENTS). Use docker logs instead |
+| `docker logs harbor.<service>` | Non-tailing logs (SAFE FOR AGENTS) |
 | `harbor open [service]` | Open in browser |
 | `harbor url [service]` | Print service URL |
 | `harbor url --lan <service>` | Print LAN URL |
@@ -363,7 +365,7 @@ harbor config set ollama.internal_url http://172.17.0.1:11434
 
 **Model loading failures:**
 ```bash
-harbor logs ollama          # Check for errors
+docker logs harbor.ollama          # Check for errors
 # Common: insufficient VRAM → try smaller quant
 harbor pull model:q4_k_m    # Instead of larger quant
 ```
@@ -543,7 +545,7 @@ harbor restart llamacpp
 
 **Model fails to load:**
 ```bash
-harbor logs llamacpp            # Check for errors
+docker logs harbor.llamacpp            # Check for errors
 # Reduce GPU layers or context to fit VRAM
 harbor llamacpp args '-c 2048 --n-gpu-layers 20'
 harbor restart llamacpp
@@ -583,7 +585,7 @@ harbor vllm model meta-llama/Llama-3.2-8B-Instruct
 harbor up vllm
 
 # Monitor startup (wait for "Application startup complete")
-harbor logs vllm
+docker logs harbor.vllm
 ```
 
 ### vLLM VRAM Optimization
@@ -646,7 +648,7 @@ harbor config set vllm.host.port 4090
 
 **OOM on startup:**
 ```bash
-harbor logs vllm  # Look for "OutOfMemoryError"
+docker logs harbor.vllm  # Look for "OutOfMemoryError"
 # Apply VRAM optimization strategies above
 harbor vllm args '--max-model-len 2048 --enforce-eager'
 harbor restart vllm
@@ -736,7 +738,7 @@ harbor env webui ENABLE_REALTIME_CHAT_SAVE false
 
 ### Open WebUI Troubleshooting
 
-**Can't create admin account:** Clear browser cache, try incognito. Check `harbor logs webui`.
+**Can't create admin account:** Clear browser cache, try incognito. Check `docker logs harbor.webui`.
 
 **Backend models not showing:** Check Settings → Connections in UI. Verify backend running with `harbor ps`.
 
@@ -788,7 +790,7 @@ Config files are in `$(harbor home)/searxng/` (settings.yml, limiter.toml). See 
 **Web search not appearing in WebUI:**
 ```bash
 harbor ps | grep searxng       # Confirm running
-harbor logs searxng            # Check for errors
+docker logs harbor.searxng            # Check for errors
 harbor restart webui           # Restart WebUI to pick up connection
 ```
 
@@ -868,7 +870,7 @@ harbor restart openterminal
 ### Open Terminal Troubleshooting
 
 ```bash
-harbor logs openterminal                        # Check logs
+docker logs harbor.openterminal                        # Check logs
 curl http://localhost:34771/health              # Check health
 
 # Reset sandbox
@@ -956,7 +958,7 @@ harbor tunnels rm webui     # Remove auto-tunnel
 harbor ps
 
 # 2. Check for errors in logs
-harbor logs <service>
+harbor logs <service>  # ⚠️ TAILS INDEFINITELY! (Agents: use `docker logs harbor.<service>` instead)
 
 # 3. Check for crash loops
 docker ps -a | grep harbor
@@ -1045,7 +1047,7 @@ harbor ollama list
 # Settings → Connections in the UI
 
 # 4. Check for connection errors
-harbor logs webui
+docker logs harbor.webui
 
 # 5. Restart WebUI if needed
 harbor restart webui
@@ -1058,7 +1060,7 @@ harbor restart webui
 harbor ps | grep searxng
 
 # 2. Check SearXNG logs
-harbor logs searxng
+docker logs harbor.searxng
 
 # 3. If SearXNG started after WebUI, restart WebUI
 harbor restart webui
@@ -1074,17 +1076,17 @@ harbor url searxng
 harbor top
 
 # 2. Check if model is loading (first inference is slow)
-harbor logs <backend>
+docker logs harbor.<backend>
 
 # 3. For Ollama: check if multiple models are loaded
 harbor ollama ps
 
 # 4. For vLLM: check if CUDA graphs are compiling
-harbor logs vllm
+docker logs harbor.vllm
 # Wait for "Application startup complete"
 
 # 5. Check for CPU fallback (no GPU detected)
-harbor logs <backend> | grep -i "cpu\|gpu\|cuda"
+docker logs harbor.<backend> | grep -i "cpu\|gpu\|cuda"
 ```
 
 ## Common Workflows
@@ -1114,7 +1116,7 @@ harbor vllm args '--max-model-len 4096 --load-format bitsandbytes --quantization
 harbor up vllm
 
 # Monitor startup
-harbor logs vllm  # Wait for "Application startup complete"
+docker logs harbor.vllm  # Wait for "Application startup complete"
 ```
 
 ### Set Up Web-Augmented Chat
