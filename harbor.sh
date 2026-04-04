@@ -713,8 +713,42 @@ run_down() {
 }
 
 run_restart() {
-    run_down "$@"
-    run_up "$@"
+    local active_services=$(get_active_services)
+
+    if [ -z "$active_services" ] && [ $# -eq 0 ]; then
+        log_error "No active services to restart."
+        return 0
+    fi
+
+    local services=()
+    local flags=()
+
+    for arg in "$@"; do
+        if [[ "$arg" == -* ]]; then
+            flags+=("$arg")
+        else
+            services+=("$arg")
+        fi
+    done
+
+    local unique_services=()
+    local all_services=($active_services "${services[@]}")
+
+    for s in "${all_services[@]}"; do
+        local is_seen=0
+        for u in "${unique_services[@]}"; do
+            if [[ "$s" == "$u" ]]; then
+                is_seen=1
+                break
+            fi
+        done
+        if (( ! is_seen )); then
+            unique_services+=("$s")
+        fi
+    done
+
+    run_down "${services[@]}"
+    run_up "${unique_services[@]}" "${flags[@]}"
 }
 
 run_ps() {
