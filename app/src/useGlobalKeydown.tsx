@@ -24,15 +24,21 @@ export const Shortcuts = {
         key: KEY_CODES.F,
         ctrlKey: true,
     },
-    terminal: {
-        key: "`",
-        ctrlKey: true,
-    },
+    terminal: [
+        {
+            key: "j",
+            ctrlKey: true,
+        },
+        {
+            key: "j",
+            metaKey: true,
+        }
+    ],
 };
 
 export const matches = (event: KeyboardEvent, match: KeyMatch) => {
     return (
-        event.key === match.key &&
+        event.key.toLowerCase() === match.key.toLowerCase() &&
         event.ctrlKey === !!match.ctrlKey &&
         event.shiftKey === !!match.shiftKey &&
         event.metaKey === !!match.metaKey &&

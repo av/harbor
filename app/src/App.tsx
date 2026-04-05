@@ -6,7 +6,7 @@ import { TerminalProvider, useTerminalPanel } from './terminal/TerminalContext';
 import { TerminalPanel } from './terminal/TerminalPanel';
 import { IconTerminal } from './Icons';
 import { IconButton } from './IconButton';
-import { useGlobalKeydown } from './useGlobalKeydown';
+import { Shortcuts, useGlobalKeydown } from './useGlobalKeydown';
 import { ModelsProvider } from './models/ModelsContext';
 import { ModelPullProvider } from './models/ModelPullContext';
 
@@ -14,7 +14,7 @@ export const DRAWER_ID = "app-drawer";
 
 const NavTerminalButton: FC = () => {
     const { isOpen, close, openAndFocus } = useTerminalPanel();
-    useGlobalKeydown({ key: "`", ctrlKey: true }, (e) => {
+    useGlobalKeydown(Shortcuts.terminal, (e) => {
         e.preventDefault();
         if (isOpen) {
             close();
