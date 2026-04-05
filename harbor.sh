@@ -629,6 +629,17 @@ run_up() {
         display_services=("${default_options[@]}")
     fi
 
+    # Verify that requested services exist
+    for service in "${filtered_args[@]}"; do
+        if is_capability "$service"; then
+            continue
+        fi
+        if [ ! -f "$harbor_home/services/compose.$service.yml" ] && [ ! -f "$harbor_home/services/compose.$service.ts" ]; then
+            log_error "Service '$service' not found."
+            return 1
+        fi
+    done
+
     if [ ${#display_services[@]} -gt 0 ]; then
         log_info "Starting services: ${display_services[*]}"
     else
@@ -1847,7 +1858,7 @@ env_manager() {
         ;;
     *)
         $silent || echo "Usage: harbor config [options] {get|set|ls|search|reset|update} [key] [value]  OR  harbor config <service> [command] [key] [value]"
-        return $scramble_exit_code
+        return 1
         ;;
     esac
 }
@@ -2043,7 +2054,7 @@ env_manager_arr() {
         echo "Usage: $field [--on-get <command>] [--on-set <command>] [--on-add <command>] [--on-remove <command>] {ls|rm|add} [value]"
         ;;
     *)
-        return $scramble_exit_code
+        return 1
         ;;
     esac
 }
@@ -2198,7 +2209,7 @@ env_manager_dict() {
         echo "Usage: $field [--on-get <command>] [--on-set <command>] {ls|get|set|rm} [key] [value]"
         ;;
     *)
-        return $scramble_exit_code
+        return 1
         ;;
     esac
 }
@@ -2306,7 +2317,7 @@ run_profile_command() {
         ;;
     *)
         echo "Usage: $0 profile {save|set|load|remove|list} [profile_name]"
-        return $scramble_exit_code
+        return 1
         ;;
     esac
 }
@@ -3204,7 +3215,7 @@ run_llamacpp_command() {
         echo "  harbor llamacpp build on|off|ref         - Manage building from source"
         ;;
     *)
-        return $scramble_exit_code
+        return 1
         ;;
     esac
 }
@@ -3263,7 +3274,7 @@ run_tgi_command() {
         echo "  harbor tgi args [args]         - Get or set extra args to pass to the TGI CLI"
         ;;
     *)
-        return $scramble_exit_code
+        return 1
         ;;
     esac
 }
@@ -3298,7 +3309,7 @@ run_litellm_command() {
         echo "  harbor litellm ui                  - Open LiteLLM UI screen"
         ;;
     *)
-        return $scramble_exit_code
+        return 1
         ;;
     esac
 }
@@ -3495,7 +3506,7 @@ run_vllm_command() {
         echo "  harbor vllm version [version]   - Get or set VLLM version (docker tag)"
         ;;
     *)
-        return $scramble_exit_code
+        return 1
         ;;
     esac
 }
@@ -3526,7 +3537,7 @@ run_aphrodite_command() {
         echo "  harbor aphrodite version <version>   - Get/set Aphrodite version docker tag"
         ;;
     *)
-        return $scramble_exit_code
+        return 1
         ;;
     esac
 }
@@ -3545,7 +3556,7 @@ run_opencode_command() {
         echo "                                             Workspaces are mounted as /root/<name> in the container"
         ;;
     *)
-        return $scramble_exit_code
+        return 1
         ;;
     esac
 }
@@ -3580,7 +3591,7 @@ run_open_ai_command() {
         echo "  harbor openai urls [ls|rm|add]   - Get/set the API URLs for the OpenAI-compatible APIs."
         ;;
     *)
-        return $scramble_exit_code
+        return 1
         ;;
     esac
 }
@@ -3616,7 +3627,7 @@ run_webui_command() {
         return 1
         ;;
     *)
-        return $scramble_exit_code
+        return 1
         ;;
     esac
 }
@@ -3663,7 +3674,7 @@ run_tabbyapi_command() {
         echo "  harbor tabbyapi apidoc              - Open TabbyAPI built-in API documentation"
         ;;
     *)
-        return $scramble_exit_code
+        return 1
         ;;
     esac
 }
@@ -3998,7 +4009,7 @@ run_parler_command() {
         echo "  harbor parler -h|--help|help - Show this help message"
         ;;
     *)
-        return $scramble_exit_code
+        return 1
         ;;
     esac
 }
@@ -4028,7 +4039,7 @@ run_airllm_command() {
         echo "  harbor airllm compression [4bit|8bit|none] - Get or set compression level for AirLLM"
         ;;
     *)
-        return $scramble_exit_code
+        return 1
         ;;
     esac
 }
@@ -4053,7 +4064,7 @@ run_txtairag_command() {
         echo "  harbor txtai rag embeddings [path] - Get or set the path to the embeddings file"
         ;;
     *)
-        return $scramble_exit_code
+        return 1
         ;;
     esac
 }
@@ -4078,7 +4089,7 @@ run_txtai_command() {
         echo "  harbor txtai rag   - Run commands related to txtai rag application"
         ;;
     *)
-        return $scramble_exit_code
+        return 1
         ;;
     esac
 }
@@ -4165,7 +4176,7 @@ run_chatui_command() {
         echo "  harbor chatui model [id]        - Get or set the Ollama model to target"
         ;;
     *)
-        return $scramble_exit_code
+        return 1
         ;;
     esac
 }
@@ -4190,7 +4201,7 @@ run_comfyui_workspace_command() {
         log_info "Restart Harbor to re-init Comfy UI"
         ;;
     *)
-        return $scramble_exit_code
+        return 1
         ;;
     esac
 }
@@ -4237,7 +4248,7 @@ run_comfyui_command() {
         echo "  harbor comfyui output             - Open folder containing ComfyUI output in the File Manager"
         ;;
     *)
-        return $scramble_exit_code
+        return 1
         ;;
     esac
 }
@@ -4326,7 +4337,7 @@ run_omnichain_command() {
         echo "  harbor omnichain workspace     - Open the omnichain workspace directory"
         ;;
     *)
-        return $scramble_exit_code
+        return 1
         ;;
     esac
 }
@@ -4417,7 +4428,7 @@ run_bench_command() {
         $(compose_with_options $services "bench") run --rm "bench" "$@"
         ;;
     *)
-        return $scramble_exit_code
+        return 1
         ;;
     esac
 }
@@ -4547,7 +4558,7 @@ run_jupyter_command() {
         echo "  harbor jupyter deps [deps]   - Manage extra dependencies to install in the Jupyter image"
         ;;
     *)
-        return $scramble_exit_code
+        return 1
         ;;
     esac
 }
@@ -4832,7 +4843,7 @@ run_langflow_command() {
         echo "  PostgreSQL       - Start with 'harbor up langflow langflow-db'"
         ;;
     *)
-        return $scramble_exit_code
+        return 1
         ;;
     esac
 }
@@ -4905,7 +4916,7 @@ run_stt_command() {
         echo "  harbor stt version [version] - Get or set the STT docker tag"
         ;;
     *)
-        return $scramble_exit_code
+        return 1
         ;;
     esac
 }
@@ -4937,7 +4948,7 @@ run_speaches_command() {
         echo "  harbor speaches tts_voice [voice]     - Get or set the TTS voice to use"
         ;;
     *)
-        return $scramble_exit_code
+        return 1
         ;;
     esac
 }
@@ -5120,7 +5131,7 @@ run_kobold_command() {
         echo "  harbor kobold model [user/repo] - Get or set the Kobold model repository to run"
         ;;
     *)
-        return $scramble_exit_code
+        return 1
         ;;
     esac
 }
@@ -5146,7 +5157,7 @@ run_morphic_command() {
         echo "  harbor morphic model [user/repo] - Get or set the Morphic model repository to run"
         ;;
     *)
-        return $scramble_exit_code
+        return 1
         ;;
     esac
 }
