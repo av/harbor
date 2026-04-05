@@ -924,7 +924,11 @@ run_run() {
 }
 
 run_stats() {
-    $(compose_with_options "*") stats
+    if [ ! -t 1 ]; then
+        $(compose_with_options "*") stats --no-stream "$@"
+    else
+        $(compose_with_options "*") stats "$@"
+    fi
 }
 
 run_attach() {
@@ -1429,6 +1433,21 @@ merge_env_files() {
         fi
         prev_line="$line"
     done <"$default_file"
+
+    local added_custom=false
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        if [[ "$line" =~ ^[[:alnum:]_]+=.* ]]; then
+            var_name="${line%%=*}"
+            if ! grep -q "^$var_name=" "$default_file"; then
+                if ! $added_custom; then
+                    echo "" >> "$temp_file"
+                    echo "# Custom Variables" >> "$temp_file"
+                    added_custom=true
+                fi
+                echo "$line" >> "$temp_file"
+            fi
+        fi
+    done <"$target_file"
 
     # Remove trailing newlines from the temp file
     if [[ "$(uname)" == "Darwin" ]]; then
@@ -3080,6 +3099,13 @@ run_harbor_tools() {
 __anchor_service_clis=true
 
 run_gum() {
+    if [ ! -t 0 ] || [ ! -t 1 ]; then
+        if [ "$1" = "confirm" ]; then
+            return 0
+        fi
+        log_error "gum requires a TTY"
+        return 1
+    fi
     docker run --rm -it -e "TERM=xterm-256color" $default_gum_image "$@"
 }
 
