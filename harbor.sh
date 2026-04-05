@@ -586,6 +586,18 @@ resolve_compose_command() {
         ;;
     esac
 
+    for arg in "$@"; do
+        if [[ "$arg" == --* ]]; then
+            continue
+        fi
+        if ! is_capability "$arg"; then
+            if [ ! -f "$harbor_home/services/compose.$arg.yml" ] && [ ! -f "$harbor_home/services/compose.$arg.ts" ]; then
+                log_error "Service '$arg' not found."
+                return 1
+            fi
+        fi
+    done
+
     local cmd=$(compose_with_options --no-merge "$@")
 
     if $is_human; then
@@ -1736,7 +1748,7 @@ env_manager() {
     case "$1" in
     get)
         if [[ -z "$2" ]]; then
-            $silent || log_info "Usage: env_manager get <key>"
+            $silent || log_info "Usage: harbor config get <key>"
             return 1
         fi
         local upper_key=$(echo "$2" | tr '[:lower:]' '[:upper:]' | tr '.' '_')
@@ -1748,7 +1760,7 @@ env_manager() {
         ;;
     set)
         if [[ -z "$2" ]]; then
-            $silent || log_info "Usage: env_manager set <key> <value>"
+            $silent || log_info "Usage: harbor config set <key> <value>"
             return 1
         fi
         local upper_key=$(echo "$2" | tr '[:lower:]' '[:upper:]' | tr '.' '_')
@@ -1771,7 +1783,7 @@ env_manager() {
         ;;
     unset | rm | remove)
         if [[ -z "$2" ]]; then
-            $silent || log_info "Usage: env_manager unset <key>"
+            $silent || log_info "Usage: harbor config unset <key>"
             return 1
         fi
         local upper_key=$(echo "$2" | tr '[:lower:]' '[:upper:]' | tr '.' '_')
