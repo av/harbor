@@ -20,8 +20,8 @@ const targets = {
 };
 
 const docgenTargets = {
-  'harbor run boost uv run config.py': './docs/5.2.2-Harbor-Boost-Configuration.md',
-  'harbor run boost uv run mods.py': './docs/5.2.3-Harbor-Boost-Modules.md',
+  '/bin/bash ./harbor.sh run boost uv run config.py': './docs/5.2.2-Harbor-Boost-Configuration.md',
+  '/bin/bash ./harbor.sh run boost uv run mods.py': './docs/5.2.3-Harbor-Boost-Modules.md',
 }
 
 main().catch(console.error);
