@@ -920,7 +920,13 @@ run_run() {
 
     log_debug "'harbor run': no alias found for $service, running as service"
     local services=$(get_active_services)
-    $(compose_with_options $services "$service") run --rm "$service" "$@"
+    
+    local tty_opt=""
+    if [ ! -t 0 ] || [ ! -t 1 ]; then
+        tty_opt="-T"
+    fi
+    
+    $(compose_with_options $services "$service") run $tty_opt --rm "$service" "$@"
 }
 
 run_stats() {
@@ -3101,7 +3107,7 @@ __anchor_service_clis=true
 run_gum() {
     if [ ! -t 0 ] || [ ! -t 1 ]; then
         if [ "$1" = "confirm" ]; then
-            return 0
+            return 1
         fi
         log_error "gum requires a TTY"
         return 1
