@@ -84,9 +84,9 @@ export const TerminalPanel = () => {
         focusRef.current = () => terminal.focus();
 
         // Allow all key combos (Alt+Left/Right, Ctrl+Left/Right, etc.) to reach onData
-        // Ctrl+` is explicitly passed through so the global shortcut handler can receive it
+        // Ctrl+` or Cmd+` is explicitly passed through so the global shortcut handler can receive it
         terminal.attachCustomKeyEventHandler((ev: KeyboardEvent) => {
-            if (ev.key === "`" && ev.ctrlKey) return false;
+            if ((ev.key === "`" || ev.key === "~") && (ev.ctrlKey || ev.metaKey)) return false;
             return true;
         });
 

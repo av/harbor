@@ -26,11 +26,19 @@ export const Shortcuts = {
     },
     terminal: [
         {
-            key: "j",
+            key: "`",
             ctrlKey: true,
         },
         {
-            key: "j",
+            key: "~",
+            ctrlKey: true,
+        },
+        {
+            key: "`",
+            metaKey: true,
+        },
+        {
+            key: "~",
             metaKey: true,
         }
     ],
