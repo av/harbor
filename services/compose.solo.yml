@@ -1,0 +1,16 @@
+services:
+  solo:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.solo
+    build:
+      context: ./services/solo
+      args:
+        GIT_REF: ${HARBOR_SOLO_GIT_REF}
+    env_file:
+      - ./.env
+      - ./services/solo/override.env
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${HARBOR_SOLO_WORKSPACE}/config:/root/.solo
+      - ${HARBOR_SOLO_WORKSPACE}/data:/app/data
+    networks:
+      - harbor-network
