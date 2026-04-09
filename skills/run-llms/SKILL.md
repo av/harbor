@@ -564,8 +564,6 @@ harbor vllm model               # Get current model
 harbor vllm model <user/repo>   # Set model
 harbor vllm args                 # Get current extra args
 harbor vllm args '<args>'        # Set extra args
-harbor vllm attention            # Get attention backend
-harbor vllm attention ROCM_FLASH # Set attention backend
 harbor vllm version              # Get current version
 harbor vllm version <tag>        # Set version (docker tag)
 harbor run vllm --help           # Show engine CLI help

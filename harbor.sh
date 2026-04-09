@@ -3438,10 +3438,6 @@ run_vllm_command() {
         shift
         env_manager_alias vllm.extra.args "$@"
         ;;
-    attention)
-        shift
-        env_manager_alias vllm.attention_backend "$@"
-        ;;
     version)
         shift
         env_manager_alias vllm.version "$@"
@@ -3455,7 +3451,6 @@ run_vllm_command() {
         echo "Commands:"
         echo "  harbor vllm model [user/repo]   - Get or set the VLLM model repository to run"
         echo "  harbor vllm args [args]         - Get or set extra args to pass to the VLLM CLI"
-        echo "  harbor vllm attention [backend] - Get or set the attention backend to use"
         echo "  harbor vllm version [version]   - Get or set VLLM version (docker tag)"
         ;;
     *)
