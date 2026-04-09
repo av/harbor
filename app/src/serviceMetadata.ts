@@ -255,7 +255,7 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         projectUrl: 'https://github.com/lobehub/lobe-chat',
         logo: 'https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/lobe-chat.png',
         wikiUrl: `${wikiUrl}/2.1.5-Frontend:-Lobe-Chat`,
-        tooltip: 'An open-source, modern-design AI chat framework. Supports Multi AI Providers( OpenAI / Claude 3 / Gemini / Ollama / Azure / DeepSeek), Knowledge Base (file upload / knowledge management / RAG ), Multi-Modals (Vision/TTS) and plugin system.',
+        tooltip: 'An open-source, modern-design AI chat framework. Supports Multi AI Providers( OpenAI / Claude 3 / Gemini / Ollama / Azure / DeepSeek / MiniMax), Knowledge Base (file upload / knowledge management / RAG ), Multi-Modals (Vision/TTS) and plugin system.',
     },
     mistralrs: {
         name: 'mistral.rs',
@@ -944,6 +944,22 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         logo: 'https://www.google.com/s2/favicons?domain=sillytavern.app&sz=128',
         wikiUrl: `${wikiUrl}/2.1.15-Frontend-SillyTavern`,
         tooltip: 'Feature-rich LLM chat frontend for power users. Supports multiple AI backends, personas, advanced prompting, and extensions.',
+    },
+    solo: {
+        name: 'Solo CLI',
+        tags: [HST.satellite, HST.cli, HST.tools],
+        projectUrl: 'https://github.com/GetSoloTech/solo-cli',
+        logo: 'https://github.com/GetSoloTech.png?size=200',
+        wikiUrl: `${wikiUrl}/2.3.77-Satellite-Solo-CLI`,
+        tooltip: 'Fastest way to deploy Physical AI on your edge devices. Manages model servers and supports MCP tools.',
+    },
+    'ros-mcp': {
+        name: 'ROS MCP Server',
+        tags: [HST.satellite, HST.api, HST.tools],
+        projectUrl: 'https://github.com/robotmcp/ros-mcp-server',
+        logo: 'https://github.com/robotmcp.png?size=200',
+        wikiUrl: `${wikiUrl}/2.3.78-Satellite-ROS-MCP-Server`,
+        tooltip: 'Model Context Protocol (MCP) server for Robot Operating System (ROS). Connects LLMs to robots.',
     },
 };
 
