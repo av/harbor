@@ -37,6 +37,8 @@ services:
       - IBM_ENDPOINT=${IBM_ENDPOINT:-https://us-south.ml.cloud.ibm.com}
       - IBM_API_KEY=${HARBOR_IBM_API_KEY:-}
       - IBM_PROJECT_ID=${HARBOR_IBM_PROJECT_ID:-}
+      - MINIMAX_ENDPOINT=${MINIMAX_ENDPOINT:-https://api.minimax.io/v1}
+      - MINIMAX_API_KEY=${HARBOR_MINIMAX_API_KEY:-}
       # Application Settings
       - ANONYMIZED_TELEMETRY=${HARBOR_BROWSERUSE_ANONYMIZED_TELEMETRY:-false}
       - BROWSER_USE_LOGGING_LEVEL=${HARBOR_BROWSERUSE_LOGGING_LEVEL:-info}

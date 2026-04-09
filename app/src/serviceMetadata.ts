@@ -255,7 +255,7 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         projectUrl: 'https://github.com/lobehub/lobe-chat',
         logo: 'https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/lobe-chat.png',
         wikiUrl: `${wikiUrl}/2.1.5-Frontend:-Lobe-Chat`,
-        tooltip: 'An open-source, modern-design AI chat framework. Supports Multi AI Providers( OpenAI / Claude 3 / Gemini / Ollama / Azure / DeepSeek), Knowledge Base (file upload / knowledge management / RAG ), Multi-Modals (Vision/TTS) and plugin system.',
+        tooltip: 'An open-source, modern-design AI chat framework. Supports Multi AI Providers( OpenAI / Claude 3 / Gemini / Ollama / Azure / DeepSeek / MiniMax), Knowledge Base (file upload / knowledge management / RAG ), Multi-Modals (Vision/TTS) and plugin system.',
     },
     mistralrs: {
         name: 'mistral.rs',
