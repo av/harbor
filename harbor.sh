@@ -3036,6 +3036,7 @@ run_harbor_env() {
 
 # Corresponds to the ".scripts" folder
 run_harbor_dev() {
+    local use_container=false
     local filtered_args=()
 
     for arg in "$@"; do
@@ -3051,7 +3052,6 @@ run_harbor_dev() {
 
     local script="${filtered_args[0]}"
     local script_args=("${filtered_args[@]:1}")
-    local use_container=false
 
     if $use_container; then
         log_debug "running in container: $script"

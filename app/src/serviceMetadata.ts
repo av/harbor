@@ -945,5 +945,21 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         wikiUrl: `${wikiUrl}/2.1.15-Frontend-SillyTavern`,
         tooltip: 'Feature-rich LLM chat frontend for power users. Supports multiple AI backends, personas, advanced prompting, and extensions.',
     },
+    solo: {
+        name: 'Solo CLI',
+        tags: [HST.satellite, HST.cli, HST.tools],
+        projectUrl: 'https://github.com/GetSoloTech/solo-cli',
+        logo: 'https://github.com/GetSoloTech.png?size=200',
+        wikiUrl: `${wikiUrl}/2.3.77-Satellite-Solo-CLI`,
+        tooltip: 'Fastest way to deploy Physical AI on your edge devices. Manages model servers and supports MCP tools.',
+    },
+    'ros-mcp': {
+        name: 'ROS MCP Server',
+        tags: [HST.satellite, HST.api, HST.tools],
+        projectUrl: 'https://github.com/robotmcp/ros-mcp-server',
+        logo: 'https://github.com/robotmcp.png?size=200',
+        wikiUrl: `${wikiUrl}/2.3.78-Satellite-ROS-MCP-Server`,
+        tooltip: 'Model Context Protocol (MCP) server for Robot Operating System (ROS). Connects LLMs to robots.',
+    },
 };
 
