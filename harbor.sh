@@ -2816,7 +2816,15 @@ run_migrate_command() {
 }
 
 get_active_services() {
-    docker compose ps --format "{{.Service}}" | tr '\n' ' '
+    local services
+    services=$(docker compose ps --format "{{.Service}}")
+    local valid_services=()
+    for s in $services; do
+        if [[ -f "$harbor_home/services/compose.$s.yml" ]]; then
+            valid_services+=("$s")
+        fi
+    done
+    echo "${valid_services[@]}"
 }
 
 is_service_running() {

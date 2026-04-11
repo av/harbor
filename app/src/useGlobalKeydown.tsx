@@ -34,12 +34,22 @@ export const Shortcuts = {
             ctrlKey: true,
         },
         {
+            key: "~",
+            ctrlKey: true,
+            shiftKey: true,
+        },
+        {
             key: "`",
             metaKey: true,
         },
         {
             key: "~",
             metaKey: true,
+        },
+        {
+            key: "~",
+            metaKey: true,
+            shiftKey: true,
         }
     ],
 };
