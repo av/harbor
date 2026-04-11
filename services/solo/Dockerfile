@@ -18,7 +18,7 @@ WORKDIR /app
 ARG GIT_REF=https://github.com/GetSoloTech/solo-cli#main
 RUN git clone ${GIT_REF%#*} . && \
     if [ "${GIT_REF}" != "${GIT_REF#*#}" ]; then git checkout ${GIT_REF#*#}; fi && \
-    uv pip install --system -e .
+    uv pip install --system --no-cache -e . --extra-index-url https://download.pytorch.org/whl/cpu --index-strategy unsafe-best-match
 
 # Create a directory for solo config
 RUN mkdir -p /root/.solo
