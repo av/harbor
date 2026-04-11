@@ -11,7 +11,7 @@ WORKDIR /app
 ARG GIT_REF=https://github.com/robotmcp/ros-mcp-server#main
 RUN git clone ${GIT_REF%#*} . && \
     git checkout ${GIT_REF#*#} || true && \
-    pip install --no-cache-dir -r requirements.txt || pip install --no-cache-dir mcp roslibpy asyncio
+    pip install --no-cache-dir -r requirements.txt || pip install --no-cache-dir fastmcp mcp roslibpy asyncio opencv-python-headless numpy
 
 # Set default env vars for rosbridge
 ENV ROSBRIDGE_HOST=host.docker.internal

@@ -5,6 +5,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     git \
     docker.io \
+    build-essential \
+    linux-libc-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv
