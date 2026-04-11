@@ -17,7 +17,7 @@ WORKDIR /app
 # Clone and install solo-cli
 ARG GIT_REF=https://github.com/GetSoloTech/solo-cli#main
 RUN git clone ${GIT_REF%#*} . && \
-    git checkout ${GIT_REF#*#} || true && \
+    if [ "${GIT_REF}" != "${GIT_REF#*#}" ]; then git checkout ${GIT_REF#*#}; fi && \
     uv pip install --system -e .
 
 # Create a directory for solo config
