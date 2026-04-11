@@ -150,7 +150,7 @@ harbor boost g1 --help
 harbor boost urls add http://localhost:11434/v1
 harbor boost urls rm http://localhost:11434/v1
 harbor boost urls rm 0 # by index
-harobr boost urls ls
+harbor boost urls ls
 
 # Keys for the OpenAI-compatible APIs to boost. Semicolon-separated list.
 # ⚠️ These are index-matched with the URLs. Even if the API doesn't require a key,
@@ -191,8 +191,6 @@ open $(harbor home)/services/boost/override.env
 ```
 
 See all supported environment variables in the [Environment Variables Reference](../docs/5.2.2-Harbor-Boost-Configuration).
-
-There's no configuration for this module yet.
 
 ### API
 

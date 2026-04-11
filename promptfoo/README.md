@@ -1,7 +1,7 @@
 ### [Promptfoo](https://github.com/promptfoo/promptfoo)
 
 > Handle: `promptfoo`<br/>
-> URL: [http://localhost:34233](http://localhost:34233)<br/>
+> URL: [http://localhost:34241](http://localhost:34241)<br/>
 
 ![Promptfoo example screenshot](../docs/promptfoo.png)
 

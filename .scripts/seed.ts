@@ -6,7 +6,7 @@ import * as toml from 'jsr:@std/toml';
 import * as path from 'jsr:@std/path';
 import * as collections from "jsr:@std/collections/deep-merge";
 
-const VERSION = "0.4.7";
+const VERSION = "0.4.8";
 
 type ValueSeed = {
   // Path relative to the project root
@@ -71,7 +71,7 @@ const seeders = {
  * Poetry can't configure this out of the box :(
  */
 async function resolveIncludes() {
-  const command = new Deno.Command('git', {
+  const command = new Deno.Command('/usr/bin/git', {
     args: ['ls-tree', '-r', 'HEAD', '--name-only'],
   });
 
