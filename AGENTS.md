@@ -100,3 +100,7 @@ Resolution order: GitHub homepage favicon → dashboardicons.com → GitHub owne
 
 - Comments only for non-obvious logic — never restate what the code does
 - No emojis in UI or copy — use Lucide icons instead
+
+### Release Notes
+
+When updating the `## News` / changelog section in the `README.md`, always use a bulleted list format: `- **vx.x.x** - one sentence`. Do not use a table.
