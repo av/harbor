@@ -1751,7 +1751,7 @@ env_manager() {
             $silent || log_info "Usage: harbor config get <key>"
             return 1
         fi
-        local upper_key=$(echo "$2" | tr '[:lower:]' '[:upper:]' | tr '.' '_')
+        local upper_key=$(echo "$2" | tr '[:lower:]' '[:upper:]' | tr '.-' '__')
         upper_key="${upper_key#$prefix}"
         value=$(grep "^$prefix$upper_key=" "$env_file" | cut -d '=' -f2-)
         value="${value#\"}" # Remove leading quote if present
@@ -1763,7 +1763,7 @@ env_manager() {
             $silent || log_info "Usage: harbor config set <key> <value>"
             return 1
         fi
-        local upper_key=$(echo "$2" | tr '[:lower:]' '[:upper:]' | tr '.' '_')
+        local upper_key=$(echo "$2" | tr '[:lower:]' '[:upper:]' | tr '.-' '__')
         upper_key="${upper_key#$prefix}"
         shift 2          # Remove 'set' and the key from the arguments
         local value="$*" # Capture all remaining arguments as the value
@@ -1786,7 +1786,7 @@ env_manager() {
             $silent || log_info "Usage: harbor config unset <key>"
             return 1
         fi
-        local upper_key=$(echo "$2" | tr '[:lower:]' '[:upper:]' | tr '.' '_')
+        local upper_key=$(echo "$2" | tr '[:lower:]' '[:upper:]' | tr '.-' '__')
         upper_key="${upper_key#$prefix}"
         if grep -q "^$prefix$upper_key=" "$env_file"; then
             if [[ "$(uname)" == "Darwin" ]]; then

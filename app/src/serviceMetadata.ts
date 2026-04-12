@@ -953,7 +953,7 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         wikiUrl: `${wikiUrl}/2.3.77-Satellite-Solo-CLI`,
         tooltip: 'Fastest way to deploy Physical AI on your edge devices. Manages model servers and supports MCP tools.',
     },
-    'ros-mcp': {
+    'ros-mcp-server': {
         name: 'ROS MCP Server',
         tags: [HST.satellite, HST.api, HST.tools],
         projectUrl: 'https://github.com/robotmcp/ros-mcp-server',

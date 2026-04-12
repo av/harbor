@@ -4,13 +4,13 @@ services:
     build:
       context: ./services/ros-mcp-server
       args:
-        GIT_REF: ${HARBOR_ROS_MCP_GIT_REF}
+        GIT_REF: ${HARBOR_ROS_MCP_SERVER_GIT_REF}
     env_file:
       - ./.env
       - ./services/ros-mcp-server/override.env
     environment:
-      - ROSBRIDGE_HOST=${HARBOR_ROS_MCP_ROSBRIDGE_HOST:-host.docker.internal}
-      - ROSBRIDGE_PORT=${HARBOR_ROS_MCP_ROSBRIDGE_PORT:-9090}
+      - ROSBRIDGE_HOST=${HARBOR_ROS_MCP_SERVER_ROSBRIDGE_HOST:-host.docker.internal}
+      - ROSBRIDGE_PORT=${HARBOR_ROS_MCP_SERVER_ROSBRIDGE_PORT:-9090}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
