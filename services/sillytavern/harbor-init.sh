@@ -33,8 +33,10 @@ function patchSettings(filePath) {
     settings.main_api = 'textgenerationwebui';
     if (!settings.textgenerationwebui_settings) settings.textgenerationwebui_settings = {};
     settings.textgenerationwebui_settings.type        = primaryType;
+    const existingUrls = settings.textgenerationwebui_settings.server_urls;
+    const isObject = typeof existingUrls === 'object' && existingUrls !== null && !Array.isArray(existingUrls);
     settings.textgenerationwebui_settings.server_urls = Object.assign(
-        settings.textgenerationwebui_settings.server_urls || {},
+        isObject ? existingUrls : {},
         serverUrls
     );
     fs.writeFileSync(filePath, JSON.stringify(settings, null, 4), 'utf8');
