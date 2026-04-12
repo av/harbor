@@ -71,7 +71,7 @@ const seeders = {
  * Poetry can't configure this out of the box :(
  */
 async function resolveIncludes() {
-  const command = new Deno.Command('/usr/bin/git', {
+  const command = new Deno.Command('git', {
     args: ['ls-tree', '-r', 'HEAD', '--name-only'],
   });
 
