@@ -2821,7 +2821,17 @@ get_active_services() {
     local valid_services=()
     for s in $services; do
         if [[ -f "$harbor_home/services/compose.$s.yml" ]]; then
-            valid_services+=("$s")
+            # Deduplicate by checking if it is already in valid_services
+            local found=0
+            for v in "${valid_services[@]}"; do
+                if [[ "$v" == "$s" ]]; then
+                    found=1
+                    break
+                fi
+            done
+            if [[ $found -eq 0 ]]; then
+                valid_services+=("$s")
+            fi
         fi
     done
     echo "${valid_services[@]}"

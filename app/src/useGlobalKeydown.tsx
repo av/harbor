@@ -30,6 +30,11 @@ export const Shortcuts = {
             ctrlKey: true,
         },
         {
+            key: "`",
+            ctrlKey: true,
+            shiftKey: true,
+        },
+        {
             key: "~",
             ctrlKey: true,
         },
@@ -41,6 +46,11 @@ export const Shortcuts = {
         {
             key: "`",
             metaKey: true,
+        },
+        {
+            key: "`",
+            metaKey: true,
+            shiftKey: true,
         },
         {
             key: "~",
