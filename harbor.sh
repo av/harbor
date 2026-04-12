@@ -3104,7 +3104,6 @@ run_harbor_env() {
 run_harbor_dev() {
     local use_container=false
     local filtered_args=()
-    local use_container=false
 
     if ! command -v deno &>/dev/null; then
         use_container=true
@@ -3132,7 +3131,7 @@ run_harbor_dev() {
             -w "$harbor_home" \
             denoland/deno:distroless \
             run -A --unstable-sloppy-imports \
-            "./.scripts/$script.ts" $script_args[@]
+            "./.scripts/$script.ts" "${script_args[@]}"
     else
         log_debug "running on host: $script"
         deno run -A --unstable-sloppy-imports "./.scripts/$script.ts" "${script_args[@]}"

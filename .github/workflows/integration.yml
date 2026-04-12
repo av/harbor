@@ -4,15 +4,21 @@ on:
   push:
     branches: [main]
     paths:
+      - '.github/workflows/integration.yml'
       - 'integration/**'
       - '.scripts/integration.ts'
+      - 'harbor.sh'
+      - 'requirements.sh'
       - 'services/compose.mock-openai.yml'
       - 'services/mock-openai/override.env'
   pull_request:
     branches: [main]
     paths:
+      - '.github/workflows/integration.yml'
       - 'integration/**'
       - '.scripts/integration.ts'
+      - 'harbor.sh'
+      - 'requirements.sh'
       - 'services/compose.mock-openai.yml'
       - 'services/mock-openai/override.env'
   workflow_dispatch:
@@ -22,27 +28,25 @@ jobs:
   integration:
     name: Integration Smoke Suite
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2.0.4
+        with:
+          deno-version: lts
+          cache: true
 
       - name: Verify Docker
         run: |
           docker --version
           docker compose version
 
-      - name: Make scripts executable
-        run: |
-          chmod +x harbor.sh
-          chmod +x integration/guest/run.sh
-          chmod +x integration/guest/preflight.sh
-          chmod +x integration/guest/collect-artifacts.sh
-
       - name: Run integration suite
-        run: bash integration/guest/run.sh --inside-vm
-        env:
-          HARBOR_INT_ARTIFACTS_DIR: ${{ github.workspace }}/integration/artifacts/${{ github.run_id }}
+        run: bash harbor.sh dev integration --no-provision --artifacts-dir "${{ github.workspace }}/integration/artifacts/${{ github.run_id }}"
 
       - name: Upload artifacts
         if: always()
