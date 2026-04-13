@@ -4,3 +4,9 @@ services:
       - /dev/kfd
       - /dev/dri
     image: ollama/ollama:rocm
+
+  ollama-init:
+    devices:
+      - /dev/kfd
+      - /dev/dri
+    image: ollama/ollama:rocm

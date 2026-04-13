@@ -2,6 +2,7 @@
 import process from 'node:process';
 import { log } from '../utils';
 import type { ModelEntry } from './types';
+import { compareGgufShardNames, parseGgufShardInfo } from './shards';
 
 // @ts-ignore npm specifier
 import { parseGGUFQuantLabel } from 'npm:@huggingface/gguf';
@@ -111,30 +112,46 @@ async function listLegacyCache(cacheDir: string): Promise<ModelEntry[]> {
 
   await collectDir(cacheDir);
 
-  return Promise.all(
-    items
-      .filter(item => !item.name.toLowerCase().includes('mmproj'))
-      .map(async item => {
-        const canonicalId = await resolveFileCanonicalId(item.name, item.relDir, cacheDir, prefixMap);
-        const details = await resolveGgufWithWorker(item.fullPath, item.name);
-        const quant =
-          details.quantization ??
-          parseGGUFQuantLabel(item.name) ??
-          item.name.replace(/\.gguf$/i, '');
-        return {
-          source: 'llamacpp' as const,
-          model: `${canonicalId}:${quant}`,
-          size: item.stat.size,
-          modified: item.stat.mtime ? item.stat.mtime.toISOString() : new Date().toISOString(),
-          details: {
-            ...(details.architecture && { architecture: details.architecture }),
-            ...(details.parameters && { parameters: details.parameters }),
-            ...(details.quantization && { quantization: details.quantization }),
-            ...(details.contextLength && { context_length: details.contextLength }),
-          },
-        } satisfies ModelEntry;
-      })
-  );
+  const groupedItems = new Map<string, Array<FileItem & { canonicalId: string; logicalName: string }>>();
+
+  for (const item of items.filter(item => !item.name.toLowerCase().includes('mmproj'))) {
+    const canonicalId = await resolveFileCanonicalId(item.name, item.relDir, cacheDir, prefixMap);
+    const logicalName = parseGgufShardInfo(item.name).logicalName;
+    const key = `${canonicalId}\u0000${logicalName}`;
+    const group = groupedItems.get(key) ?? [];
+    group.push({ ...item, canonicalId, logicalName });
+    groupedItems.set(key, group);
+  }
+
+  return Promise.all(Array.from(groupedItems.values()).map(async group => {
+    const sortedGroup = [...group].sort((a, b) => compareGgufShardNames(a.name, b.name));
+    const primary = sortedGroup[0];
+    const details = await resolveGgufWithWorker(primary.fullPath, primary.logicalName);
+    const quant =
+      details.quantization ??
+      parseGGUFQuantLabel(primary.logicalName) ??
+      primary.logicalName.replace(/\.gguf$/i, '');
+    const modified = sortedGroup.reduce(
+      (latest, item) => {
+        const mtime = item.stat.mtime?.getTime() ?? 0;
+        return mtime > latest ? mtime : latest;
+      },
+      0,
+    );
+
+    return {
+      source: 'llamacpp' as const,
+      model: `${primary.canonicalId}:${quant}`,
+      size: sortedGroup.reduce((sum, item) => sum + item.stat.size, 0),
+      modified: modified > 0 ? new Date(modified).toISOString() : new Date().toISOString(),
+      details: {
+        ...(details.architecture && { architecture: details.architecture }),
+        ...(details.parameters && { parameters: details.parameters }),
+        ...(details.quantization && { quantization: details.quantization }),
+        ...(details.contextLength && { context_length: details.contextLength }),
+      },
+    } satisfies ModelEntry;
+  }));
 }
 
 // New models go to HF cache; legacy models may remain in HARBOR_LLAMACPP_CACHE.
@@ -176,9 +193,15 @@ export async function removeLlamacppModel(modelSpec: string): Promise<boolean> {
 
   function quantMatches(filename: string): boolean {
     if (!quantTag) return true;
-    const fileQuant = parseGGUFQuantLabel(filename);
-    const stem = filename.replace(/\.gguf$/i, '');
-    return fileQuant === quantTag || stem === quantTag || stem.endsWith(`_${quantTag}`);
+    const shardInfo = parseGgufShardInfo(filename);
+    const fileQuant = parseGGUFQuantLabel(shardInfo.logicalName);
+    const stem = shardInfo.logicalStem;
+    return (
+      fileQuant === quantTag ||
+      stem === quantTag ||
+      stem.endsWith(`_${quantTag}`) ||
+      stem.endsWith(`-${quantTag}`)
+    );
   }
 
   // Subdirectory layout: {cacheDir}/{org}/{repo}/{file}.gguf

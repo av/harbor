@@ -2,6 +2,7 @@
 import process from 'node:process';
 import { log } from '../utils';
 import type { HfRepoInfo, HfFileInfo } from './types';
+import { compareGgufShardNames, parseGgufShardInfo } from './shards';
 
 // @ts-ignore npm specifier
 import { scanCacheDir } from 'npm:@huggingface/hub';
@@ -65,14 +66,28 @@ async function scanLooseGgufs(dir: string): Promise<HfRepoInfo[]> {
     log.warn(`HF loose GGUF scan error in ${dir}: ${err}`);
     return [];
   }
-  return Promise.all(rawItems.map(async ({ name, filePath, size, mtime }) => {
-    const details = await resolveGgufDetails(filePath, name);
+
+  const groupedItems = new Map<string, RawItem[]>();
+  for (const item of rawItems) {
+    const shard = parseGgufShardInfo(item.name);
+    const group = groupedItems.get(shard.logicalName) ?? [];
+    group.push(item);
+    groupedItems.set(shard.logicalName, group);
+  }
+
+  return Promise.all(Array.from(groupedItems.entries()).map(async ([logicalName, group]) => {
+    const sortedGroup = [...group].sort((a, b) => compareGgufShardNames(a.name, b.name));
+    const primary = sortedGroup[0];
+    const details = await resolveGgufDetails(primary.filePath, logicalName);
     return {
-      repo: name.replace(/\.gguf$/i, ''),
-      path: filePath,
-      size,
-      modified: mtime,
-      files: [{ name, size }],
+      repo: logicalName.replace(/\.gguf$/i, ''),
+      path: primary.filePath,
+      size: sortedGroup.reduce((sum, item) => sum + item.size, 0),
+      modified: sortedGroup.reduce(
+        (latest, item) => item.mtime.getTime() > latest.getTime() ? item.mtime : latest,
+        primary.mtime,
+      ),
+      files: sortedGroup.map(({ name, size }) => ({ name, size })),
       details,
     };
   }));
@@ -136,10 +151,14 @@ export async function listHfModels(): Promise<HfRepoInfo[]> {
       for (const f of ggufFiles) {
         significantFiles.push({ name: f.fileName, size: f.size });
       }
-      if (ggufFiles[0].blobPath) {
-        details = await resolveGgufDetails(ggufFiles[0].blobPath, ggufFiles[0].fileName);
+      const metadataCandidate = [...ggufFiles]
+        .filter(f => !f.fileName.toLowerCase().includes('mmproj'))
+        .sort((a, b) => compareGgufShardNames(a.fileName, b.fileName))[0] ?? ggufFiles[0];
+      const shardInfo = parseGgufShardInfo(metadataCandidate.fileName);
+      if (metadataCandidate.blobPath) {
+        details = await resolveGgufDetails(metadataCandidate.blobPath, shardInfo.logicalName);
       } else {
-        const quantization = parseGGUFQuantLabel(ggufFiles[0].fileName) ?? undefined;
+        const quantization = parseGGUFQuantLabel(shardInfo.logicalName) ?? undefined;
         details = { quantization };
       }
     } else if (safetensorFiles.length > 0) {
@@ -199,16 +218,19 @@ export async function removeHfModel(modelSpec: string): Promise<boolean> {
   }
 
   const baseName = modelSpec.replace(/\.gguf$/i, '');
-  const ggufName = baseName + '.gguf';
-  for (const loosePath of [`${hfCache}/${ggufName}`, `${hfCache}/gguf/${ggufName}`]) {
+  let removed = false;
+  for (const looseDir of [hfCache, `${hfCache}/gguf`]) {
     try {
-      await Deno.stat(loosePath);
-      await Deno.remove(loosePath);
-      return true;
+      for await (const entry of Deno.readDir(looseDir)) {
+        if (!entry.isFile || !entry.name.endsWith('.gguf')) continue;
+        if (parseGgufShardInfo(entry.name).logicalStem !== baseName) continue;
+        await Deno.remove(`${looseDir}/${entry.name}`);
+        removed = true;
+      }
     } catch {
       // not found, try next
     }
   }
 
-  return false;
+  return removed;
 }
