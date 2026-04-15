@@ -651,7 +651,7 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         tags: [HST.satellite],
         projectUrl: 'https://github.com/LibreTranslate/LibreTranslate',
         logo: 'https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/libretranslate.png',
-        wikiUrl: `${wikiUrl}/2.3.41-Satellite-LibreTranslate`,
+        wikiUrl: `${wikiUrl}/2.3.41-Satellite-libretranslate`,
         tooltip: 'A free and open-source machine translation.',
     },
     metamcp: {
@@ -659,7 +659,7 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         tags: [HST.satellite, HST.tools],
         projectUrl: 'https://github.com/metatool-ai/metatool-app',
         logo: 'https://github.com/metatool-ai.png?size=200',
-        wikiUrl: `${wikiUrl}/2.3.42-Satellite-MetaMCP`,
+        wikiUrl: `${wikiUrl}/2.3.42-Satellite-metamcp`,
         tooltip: 'Allows to manage MCPs via a WebUI, exposes multiple MCPs as a single server.'
     },
     mcpo: {
@@ -962,4 +962,3 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         tooltip: 'Model Context Protocol (MCP) server for Robot Operating System (ROS). Connects LLMs to robots.',
     },
 };
-

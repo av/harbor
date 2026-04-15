@@ -80,13 +80,13 @@ harbor pf view
 ```
 
 > [!NOTE]
-> If you're seeing any kind of file system permission errors you'll need to ensure that files written from within a container are [accessible to your user](../docs/1.-Harbor-User-Guide#file-system-permissions).
+> If you're seeing any kind of file system permission errors you'll need to ensure that files written from within a container are [accessible to your user](../docs/1.-Harbor-User-Guide.md#file-system-permissions).
 
 #### Configuration
 
 Harbor pre-configures `promptfoo` to run against `ollama` out of the box (must be started before `pf eval`). Any other providers can be configured via:
 
-- env vars (see [`harbor env`](../docs/3.-Harbor-CLI-Reference#harbor-env))
+- env vars (see [`harbor env`](../docs/3.-Harbor-CLI-Reference.md#harbor-env))
 - directly in promptfooconfig files (see [Providers reference](https://www.promptfoo.dev/docs/providers/) in the official documentation)
 
 ```bash

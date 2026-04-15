@@ -1,19 +1,20 @@
+/// <reference lib="deno.ns" />
+
 // Sync for wiki <-> docs in the repo
 // h dev docs
 // deno run -A ./.scripts/docs.ts
 
-import remarkParse from "npm:remark-parse";
-import remarkStringify from "npm:remark-stringify";
-import { unified } from "npm:unified";
-import { visit } from "npm:unist-util-visit";
+import remarkParse from "remark-parse";
+import remarkStringify from "remark-stringify";
+import { unified } from "unified";
+import { visit } from "unist-util-visit";
 
+import { createDocsPageSet, rewriteLinkForPackageReadme, rewriteLinkForWiki } from './docs-links.ts'
 import { copyDocsToApp } from './docs-to-app.ts'
 
 const wikiUrl = 'https://github.com/av/harbor/wiki'
 const wikiLocation = "../harbor.wiki";
 const docsLocation = "./docs";
-const appLocation = "./app/src/docs"
-
 const targets = {
   "./docs/5.2.-Harbor-Boost.md": "./boost/README.md",
   "./docs/2.3.28-Satellite&colon-Promptfoo.md": "./promptfoo/README.md",
@@ -24,7 +25,9 @@ const docgenTargets = {
   '/bin/bash ./harbor.sh run boost uv run mods.py': './docs/5.2.3-Harbor-Boost-Modules.md',
 }
 
-main().catch(console.error);
+if (import.meta.main) {
+  main().catch(console.error);
+}
 
 async function main() {
   await Promise.all([
@@ -39,7 +42,7 @@ async function main() {
   ])
 }
 
-async function copyDocsFromWiki() {
+async function _copyDocsFromWiki() {
   const wikiPath = Deno.realPathSync(wikiLocation);
   const wikiFiles = Deno.readDirSync(wikiPath);
   for (const file of wikiFiles) {
@@ -60,8 +63,13 @@ async function copyDocsToWiki() {
   console.debug("Copying docs to wiki...");
 
   const docsPath = Deno.realPathSync(docsLocation);
+  const wikiPath = Deno.realPathSync(wikiLocation);
+  await clearRootFiles(wikiPath);
   const docsFiles = Array.from(Deno.readDirSync(docsPath));
-  const processor = await createProcessor([relativeLinksToWiki])
+  const docsPages = createDocsPageSet(
+    docsFiles.filter((file) => file.isFile).map((file) => file.name),
+  );
+  const processor = await createProcessor([() => relativeLinksToWiki(docsPages)])
   let copied = 0;
 
 
@@ -97,7 +105,12 @@ function toWikiFileName(name: string) {
 
 async function copyTargets() {
   console.debug("Copying targets...");
-  const processor = await createProcessor([replaceRelativeLinks])
+  const docsPages = createDocsPageSet(
+    Array.from(Deno.readDirSync(Deno.realPathSync(docsLocation)))
+      .filter((file) => file.isFile)
+      .map((file) => file.name),
+  );
+  const processor = await createProcessor([() => replaceRelativeLinks(docsPages)])
 
   for (const [source, dest] of Object.entries(targets)) {
     await copyWithProcessor(
@@ -111,7 +124,7 @@ async function copyTargets() {
 async function copyWithProcessor(
   source: string,
   dest: string,
-  processor: (any) => Promise<any>
+  processor: (doc: string) => Promise<string>
 ) {
   const sourceContent = await Deno.readTextFile(source);
   const destContent = await processor(sourceContent);
@@ -125,34 +138,35 @@ async function copyWithProcessor(
   await Deno.writeTextFile(dest, destContent);
 }
 
-function replaceRelativeLinks() {
-  return (tree: any) => {
-    visit(tree, "link", (node: any) => {
-      if (node.url.startsWith("./")) {
-        node.url = node.url.replace("./", "../docs/");
-      }
+type UrlNode = {
+  url: string;
+};
+
+function replaceRelativeLinks(docsPages: ReadonlySet<string>) {
+  return (tree: unknown) => {
+    visit(tree as Parameters<typeof visit>[0], "link", (node: unknown) => {
+      const urlNode = node as UrlNode;
+      urlNode.url = rewriteLinkForPackageReadme(urlNode.url, docsPages);
     });
 
-    visit(tree, "image", (node: any) => {
-      if (node.url.startsWith("./")) {
-        node.url = node.url.replace("./", "../docs/");
-      }
-    });
-  };
-}
-
-function relativeLinksToWiki() {
-  return (tree: any) => {
-    visit(tree, "link", (node: any) => {
-      if (node.url.startsWith('./') && node.url.includes('.md')) {
-        node.url = node.url.replace(".md", "").replace("./", wikiUrl + '/');
-      }
+    visit(tree as Parameters<typeof visit>[0], "image", (node: unknown) => {
+      const urlNode = node as UrlNode;
+      urlNode.url = rewriteLinkForPackageReadme(urlNode.url, docsPages);
     });
   };
 }
 
-async function createProcessor(
-  plugins: any[] = []
+function relativeLinksToWiki(docsPages: ReadonlySet<string>) {
+  return (tree: unknown) => {
+    visit(tree as Parameters<typeof visit>[0], "link", (node: unknown) => {
+      const urlNode = node as UrlNode;
+      urlNode.url = rewriteLinkForWiki(urlNode.url, docsPages, wikiUrl);
+    });
+  };
+}
+
+function createProcessor(
+  plugins: Array<() => (tree: unknown) => void> = []
 ) {
   let processor = unified()
     .use(remarkParse)
@@ -161,19 +175,41 @@ async function createProcessor(
     processor = processor.use(plugin);
   }
 
-  processor = processor.use(remarkStringify, {
+  const stringifyOptions = {
     bullet: "-",
     handlers: {
       text: textHandle,
     },
     resourceLink: true,
-  })
-  processor = await processor;
+  };
+  const stringifierProcessor = processor.use(
+    remarkStringify as never,
+    stringifyOptions as never,
+  );
 
-  return (doc) => processor.process(doc);
+  return async (doc: string) => normalizeSerializedMarkdown(String(await stringifierProcessor.process(doc)));
 }
 
-function unsafeFilter(rule: Unsafe): boolean {
+export function normalizeSerializedMarkdown(doc: string) {
+  return doc
+    .replaceAll("\\&colon;", "&colon;")
+    .replaceAll("\\&colon", "&colon");
+}
+
+type UnsafeRule = {
+  character?: string;
+};
+
+type TextNode = {
+  value: string;
+};
+
+type TextState = {
+  unsafe: UnsafeRule[];
+  safe: (value: string, info: unknown) => string;
+};
+
+function unsafeFilter(rule: UnsafeRule): boolean {
   // We don't want to escape '[' as it's wildly used in - checkbox, backlink, GitHub notes.
   if (rule.character === '[') {
     return false
@@ -186,11 +222,26 @@ function unsafeFilter(rule: Unsafe): boolean {
   return true
 }
 
-export function text(node, _, state, info) {
+export function text(node: TextNode, _: unknown, state: TextState, info: unknown) {
   return state.safe(node.value, info)
 }
 
-function textHandle(node, parent, context, safeOptions) {
+export async function clearRootFiles(dirPath: string) {
+  for await (const entry of Deno.readDir(dirPath)) {
+    if (!entry.isFile) {
+      continue;
+    }
+
+    await Deno.remove(`${dirPath}/${entry.name}`);
+  }
+}
+
+function textHandle(
+  node: TextNode,
+  parent: unknown,
+  context: TextState,
+  safeOptions: unknown,
+) {
   return text(
     node,
     parent,
@@ -213,21 +264,24 @@ async function renderServiceIndex() {
   )
     .filter((s) => !!s.wikiUrl && !!s.name);
   const tags = metadata.HST;
-  const byTag = (tag: typeof tags) =>
+  const byTag = (tag: string) =>
     services
-      .filter((s) => (s.tags ?? []).includes(tag))
+      .filter((s) => (s.tags ?? []).some((serviceTag) => serviceTag === tag))
       .sort((a, b) => a.name.localeCompare(b.name));
 
   const frontends = byTag(tags.frontend);
   const backends = byTag(tags.backend);
   const satellites = byTag(tags.satellite);
 
-  const renderService = (s) => {
+  const renderService = (
+    s: { name: string; tooltip: string; wikiUrl?: string; logo?: string; tags?: string[] },
+  ) => {
     const logoImg = s.logo
       ? `<img src="${s.logo}" alt="${s.name} logo" width="12" height="12" /> `
       : '';
-    const tags = `<span style="opacity: 0.5;">${s.tags.map((t) => `\`${t}\``).join(', ')}</span>`;
-    const serviceLink = `<a href="${s.wikiUrl}">${logoImg}${s.name}</a>`;
+    const serviceTags = s.tags ?? [];
+    const tags = `<span style="opacity: 0.5;">${serviceTags.map((t: string) => `\`${t}\``).join(', ')}</span>`;
+    const serviceLink = `<a href="${s.wikiUrl ?? '#'}">${logoImg}${s.name}</a>`;
 
     return `
 - ${serviceLink} ${tags}<br/>
@@ -263,21 +317,18 @@ async function docgen() {
   await Promise.all(
     Object.entries(docgenTargets).map(async ([cmd, dest]) => {
       console.debug(`Rendering target: ${cmd} -> ${dest}`);
-      const process = Deno.run({
-        cmd: cmd.split(" "),
+      const commandParts = cmd.split(" ");
+      const process = new Deno.Command(commandParts[0], {
+        args: commandParts.slice(1),
         stdout: "piped",
         stderr: "piped",
       });
 
-      const [status, stdout, stderr] = await Promise.all([
-        process.status(),
-        process.output(),
-        process.stderrOutput(),
-      ]);
+      const { code, success, stdout, stderr } = await process.output();
 
-      if (!status.success) {
+      if (!success) {
         const error = new TextDecoder().decode(stderr);
-        console.error(`Error running command "${cmd}": ${error}`);
+        console.error(`Error running command "${cmd}" (exit ${code}): ${error}`);
         throw new Error(`Command failed: ${error}`);
       }
 

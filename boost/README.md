@@ -11,9 +11,9 @@
 - [Starting](#starting)
 - [Configuration](#configuration)
 - [API](#api)
-- [Environment Variables Reference](../docs/5.2.2-Harbor-Boost-Configuration)
-- [Built-in Modules Reference](../docs/5.2.3-Harbor-Boost-Modules)
-- [Custom Modules Guide](../docs/5.2.1.-Harbor-Boost-Custom-Modules)
+- [Environment Variables Reference](../docs/5.2.2-Harbor-Boost-Configuration.md)
+- [Built-in Modules Reference](../docs/5.2.3-Harbor-Boost-Modules.md)
+- [Custom Modules Guide](../docs/5.2.1.-Harbor-Boost-Custom-Modules.md)
 - [Standalone Usage Guide](#standalone-usage)
 - [Boost Starter repo](https://github.com/av/boost-starter)
 
@@ -49,21 +49,21 @@ POST http://localhost:34131/v1/chat/completions
 }
 ```
 
-Boost comes with [a lot of built-in modules](../docs/5.2.3-Harbor-Boost-Modules) with various functions. You can use them directly or as a base for your own creations.
+Boost comes with [a lot of built-in modules](../docs/5.2.3-Harbor-Boost-Modules.md) with various functions. You can use them directly or as a base for your own creations.
 
-| [`markov`](../docs/5.2.3-Harbor-Boost-Modules#markov) | [`concept`](../docs/5.2.3-Harbor-Boost-Modules#concept) |
+| [`markov`](../docs/5.2.3-Harbor-Boost-Modules.md#markov) | [`concept`](../docs/5.2.3-Harbor-Boost-Modules.md#concept) |
 |-|-|
 | ![](../docs/boost-markov.png) | ![](../docs/boost-concept.png) |
 
-| [`nbs`](../docs/5.2.3-Harbor-Boost-Modules#nbs) |
+| [`nbs`](../docs/5.2.3-Harbor-Boost-Modules.md#nbs) |
 |-|
 | ![](../docs/boost-nbs.png) |
 
-| [`dnd`](../docs/5.2.3-Harbor-Boost-Modules#dnd) | [`promx`](../docs/5.2.3-Harbor-Boost-Modules#promx) |
+| [`dnd`](../docs/5.2.3-Harbor-Boost-Modules.md#dnd) | [`promx`](../docs/5.2.3-Harbor-Boost-Modules.md#promx) |
 |-|-|
 | ![](../docs/boost-dnd.png) | ![](../docs/boost-promx.png) |
 
-| [`dot`](../docs/5.2.3-Harbor-Boost-Modules#dot) | [`klmbr`](../docs/5.2.3-Harbor-Boost-Modules#klmbr) | [`r0`](../docs/5.2.3-Harbor-Boost-Modules#r0) |
+| [`dot`](../docs/5.2.3-Harbor-Boost-Modules.md#dot) | [`klmbr`](../docs/5.2.3-Harbor-Boost-Modules.md#klmbr) | [`r0`](../docs/5.2.3-Harbor-Boost-Modules.md#r0) |
 |-|-|-|
 | ![](../docs/boost-dot.png) | ![](../docs/boost-klmbr.png) | ![](../docs/boost-r0.png) |
 
@@ -78,7 +78,7 @@ def apply(llm, chat):
   await llm.emit_message(prompt=chat.tail.content)
 ```
 
-See the [Custom Modules](../docs/5.2.1.-Harbor-Boost-Custom-Modules) guide for more information on how to create your own modules and overview of available interfaces.
+See the [Custom Modules](../docs/5.2.1.-Harbor-Boost-Custom-Modules.md) guide for more information on how to create your own modules and overview of available interfaces.
 
 ### Starting
 
@@ -94,7 +94,7 @@ harbor up boost
 
 - Harbor connects `boost` with:
   - to all included LLM backends (`ollama`, `llamacpp`, `vllm`, etc.)
-  - [`optillm`](../docs/2.3.33-Satellite\&colon-OptiLLM) as a backend
+  - [`optillm`](../docs/2.3.33-Satellite&colon-OptiLLM.md) as a backend
   - `webui` and `dify` frontends
 
 ```bash
@@ -122,7 +122,7 @@ See [standalone usage](#standalone-usage) guide below.
 
 ### Configuration
 
-[Configuration](1.-Harbor-User-Guide#configuring-services) can be performed via Harbor CLI, [`harbor config`](../docs/3.-Harbor-CLI-Reference#harbor-config), [`harbor env`](../docs/3.-Harbor-CLI-Reference#harbor-env) or the `.env` file.
+[Configuration](../docs/1.-Harbor-User-Guide.md#configuring-services) can be performed via Harbor CLI, [`harbor config`](../docs/3.-Harbor-CLI-Reference.md#harbor-config), [`harbor env`](../docs/3.-Harbor-CLI-Reference.md#harbor-env) or the `.env` file.
 
 All of the above ways are interchangeable and result in setting environment variables for the service.
 
@@ -163,7 +163,7 @@ harbor boost keys ls
 
 #### Harbor Config
 
-More options are available via [`harbor config`](../docs/3.-Harbor-CLI-Reference#harbor-config).
+More options are available via [`harbor config`](../docs/3.-Harbor-CLI-Reference.md#harbor-config).
 
 ```bash
 # See all available options
@@ -175,11 +175,11 @@ harbor config set boost.api.key sk-boost
 harbor config set boost.api.keys sk-user1;sk-user2;sk-user3
 ```
 
-Below are additional configuration options that do not have an alias in the Harbor CLI (so you need to use [`harbor config`](../docs/3.-Harbor-CLI-Reference#harbor-config) directly). For example `harbor config set boost.intermediate_output true`.
+Below are additional configuration options that do not have an alias in the Harbor CLI (so you need to use [`harbor config`](../docs/3.-Harbor-CLI-Reference.md#harbor-config) directly). For example `harbor config set boost.intermediate_output true`.
 
 #### Environment Variables
 
-Most comprehensive way to configure `boost` is to use environment variables. You can set them in the `.env` file or via [`harbor env`](../docs/3.-Harbor-CLI-Reference#harbor-env).
+Most comprehensive way to configure `boost` is to use environment variables. You can set them in the `.env` file or via [`harbor env`](../docs/3.-Harbor-CLI-Reference.md#harbor-env).
 
 ```bash
 # Using harbor env
@@ -190,7 +190,7 @@ open $(harbor home)/.env
 open $(harbor home)/services/boost/override.env
 ```
 
-See all supported environment variables in the [Environment Variables Reference](../docs/5.2.2-Harbor-Boost-Configuration).
+See all supported environment variables in the [Environment Variables Reference](../docs/5.2.2-Harbor-Boost-Configuration.md).
 
 ### API
 
@@ -291,4 +291,4 @@ You can take a look at a [`boost-starter`](https://github.com/av/boost-starter) 
 
 **Configuration**
 
-See [Environment Variables Reference](../docs/5.2.2-Harbor-Boost-Configuration).
+See [Environment Variables Reference](../docs/5.2.2-Harbor-Boost-Configuration.md).

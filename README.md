@@ -58,6 +58,39 @@ Harbor is a CLI and companion app that lets you spin up a complete local LLM sta
 - [Join our Discord](https://discord.gg/8nDRphrhSF)<br/>
   Get help, share your experience, and contribute to the project.
 
+### Maintainers: regenerate docs
+
+Run the docs workflow from the Harbor repo root with:
+
+```bash
+harbor dev docs
+```
+
+Fresh-maintainer prerequisites:
+
+- Check out the wiki repo as a sibling directory at `../harbor.wiki`, because the docs script copies the generated wiki pages there.
+
+  ```bash
+  git clone https://github.com/av/harbor.wiki.git ../harbor.wiki
+  ```
+
+- Use the Harbor CLI from this checkout. If `harbor` is not already on your `PATH`, either run the repo-local entrypoint directly:
+
+  ```bash
+  ./harbor.sh dev docs
+  ```
+
+  or link the checkout first and then use the maintainer command above:
+
+  ```bash
+  ./harbor.sh link
+  harbor dev docs
+  ```
+
+- Docker Engine with `docker compose` must be working before you regenerate docs. The docs script shells out to `harbor run boost uv run ...` to rebuild the Boost-generated pages, so Docker is required even when Harbor falls back to a containerized Deno runtime.
+
+This workflow updates `docs/`, syncs the sibling wiki checkout, refreshes the app docs copy, and rewrites the generated package READMEs.
+
 ## What can Harbor do?
 
 ![Diagram outlining Harbor's service structure](https://raw.githubusercontent.com/wiki/av/harbor/harbor-arch-diag.png)

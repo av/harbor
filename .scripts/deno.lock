@@ -9,9 +9,13 @@
     "jsr:@std/yaml@*": "1.0.5",
     "npm:mdast-util-to-markdown@*": "2.1.2",
     "npm:remark-parse@*": "11.0.0",
+    "npm:remark-parse@11": "11.0.0",
     "npm:remark-stringify@*": "11.0.0",
+    "npm:remark-stringify@11": "11.0.0",
     "npm:unified@*": "11.0.5",
+    "npm:unified@11": "11.0.5",
     "npm:unist-util-visit@*": "5.0.0",
+    "npm:unist-util-visit@5": "5.0.0",
     "npm:web-resource-inliner@*": "7.0.0"
   },
   "jsr": {
@@ -592,7 +596,11 @@
   },
   "workspace": {
     "dependencies": [
-      "jsr:@std/assert@1"
+      "jsr:@std/assert@1",
+      "npm:remark-parse@11",
+      "npm:remark-stringify@11",
+      "npm:unified@11",
+      "npm:unist-util-visit@5"
     ]
   }
 }

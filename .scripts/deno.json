@@ -1,5 +1,10 @@
 {
+  "nodeModulesDir": "auto",
   "imports": {
-    "@std/assert": "jsr:@std/assert@1"
+    "@std/assert": "jsr:@std/assert@1",
+    "remark-parse": "npm:remark-parse@11",
+    "remark-stringify": "npm:remark-stringify@11",
+    "unified": "npm:unified@11",
+    "unist-util-visit": "npm:unist-util-visit@5"
   }
 }

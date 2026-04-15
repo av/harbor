@@ -1,4 +1,5 @@
 {
+  "nodeModulesDir": "auto",
   "unstable": [
     "sloppy-imports"
   ],
@@ -11,11 +12,16 @@
   },
   "compilerOptions": {
     "lib": [
-      "ESNext"
+      "ESNext",
+      "DOM"
     ],
     "checkJs": true
   },
   "imports": {
-    "@std/toml": "jsr:@std/toml@^1.0.11"
+    "@std/toml": "jsr:@std/toml@^1.0.11",
+    "remark-parse": "npm:remark-parse@11",
+    "remark-stringify": "npm:remark-stringify@11",
+    "unified": "npm:unified@11",
+    "unist-util-visit": "npm:unist-util-visit@5"
   }
 }
