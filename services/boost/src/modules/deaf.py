@@ -45,7 +45,20 @@ async def apply(chat: 'ch.Chat', llm: 'llm.LLM'):
   original = node.content
   logger.debug(f'{ID_PREFIX}: Original query: {original[:50]}...')
 
-  misheard = await llm.chat_completion(
+  # Intermediate call only needs the model — create a bare LLM
+  # sharing only model/url/auth from the incoming request,
+  # nothing else (no tools, no stream, no Open WebUI params)
+  intermediate = type(llm)(
+    url=llm.url,
+    headers=llm.headers,
+    query_params=llm.query_params,
+    model=llm.model,
+    params={},
+    messages=[{'role': 'user', 'content': ''}],
+    module=None,
+  )
+
+  misheard = await intermediate.chat_completion(
     prompt=deaf_prompt.format(original=original),
     resolve=True,
   )
