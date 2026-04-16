@@ -576,6 +576,21 @@ is_capability_file() {
     return 1
 }
 
+service_compose_exists() {
+    local service="$1"
+    local services_dir="${2:-$harbor_home/services}"
+
+    if [ -f "$services_dir/compose.$service.yml" ] || [ -f "$services_dir/compose.$service.ts" ]; then
+        return 0
+    fi
+
+    if compgen -G "$services_dir/compose.$service.*.yml" >/dev/null || compgen -G "$services_dir/compose.$service.*.ts" >/dev/null; then
+        return 0
+    fi
+
+    return 1
+}
+
 resolve_compose_command() {
     local is_human=false
 
@@ -590,11 +605,9 @@ resolve_compose_command() {
         if [[ "$arg" == --* ]]; then
             continue
         fi
-        if ! is_capability "$arg"; then
-            if [ ! -f "$harbor_home/services/compose.$arg.yml" ] && [ ! -f "$harbor_home/services/compose.$arg.ts" ]; then
-                log_error "Service '$arg' not found."
-                return 1
-            fi
+        if ! is_capability "$arg" && ! service_compose_exists "$arg"; then
+            log_error "Service '$arg' not found."
+            return 1
         fi
     done
 
@@ -646,7 +659,7 @@ run_up() {
         if is_capability "$service"; then
             continue
         fi
-        if [ ! -f "$harbor_home/services/compose.$service.yml" ] && [ ! -f "$harbor_home/services/compose.$service.ts" ]; then
+        if ! service_compose_exists "$service"; then
             log_error "Service '$service' not found."
             return 1
         fi
@@ -2820,7 +2833,7 @@ get_active_services() {
     services=$(docker compose ps --format "{{.Service}}")
     local valid_services=()
     for s in $services; do
-        if [[ -f "$harbor_home/services/compose.$s.yml" ]]; then
+        if service_compose_exists "$s"; then
             # Deduplicate by checking if it is already in valid_services
             local found=0
             for v in "${valid_services[@]}"; do
