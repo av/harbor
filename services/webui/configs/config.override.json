@@ -7,5 +7,10 @@
       "${...HARBOR_OPENAI_KEYS}"
     ],
     "enabled": true
+  },
+  "models": {
+    "default_params": {
+      "function_calling": "native"
+    }
   }
 }
