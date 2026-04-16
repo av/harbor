@@ -34,13 +34,13 @@ Harbor is a CLI and companion app that lets you spin up a complete local LLM sta
 
 ## News
 
+- **v0.4.10** - Fixed SearXNG JSON format and workspace config, fixed CDI seed script skipping build variants
 - **v0.4.9** - Two new Boost modules (`analogical`, `deaf`), Open WebUI native function calling enabled by default, CLI validation fixes
 - **v0.4.8** - Solo CLI and ROS MCP Server services, MiniMax cloud provider, extensive documentation updates
 - **v0.4.7** - Hermes Agent service, llama.cpp build-from-source support, updated llama.cpp docs
 - **v0.4.6** - SillyTavern service, fixed llama.cpp cache paths, improved Jupyter workspace
 - **v0.4.5** - Harbor App: built-in terminal, service logs, model management
 - **v0.4.4** - Harbor integration test suite with mock OpenAI, enhanced service management UI
-- **v0.4.3** - Cognee service, cross-source model management CLI (`harbor models`), Open Terminal service
 
 ## Documentation
 
