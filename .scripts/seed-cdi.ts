@@ -7,7 +7,7 @@ import { listComposeFiles, paths } from "../routines/paths.js";
 
 async function main() {
   const sourceFiles = await listComposeFiles().then((files) =>
-    files.filter((name) => name.includes(".nvidia."))
+    files.filter((name) => name.includes(".nvidia.") && !name.endsWith(".build.yml"))
   );
 
   for (const file of sourceFiles) {
