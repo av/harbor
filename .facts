@@ -43,75 +43,96 @@
   command: grep -q '"react"' app/package.json && grep -q '"@tauri-apps/cli"' app/package.json && grep -q '"tailwindcss"' app/package.json && grep -q '"daisyui"' app/package.json
 - label: the app has two custom DaisyUI themes: harborLight and harborDark
   command: grep -q 'harborLight' app/tailwind.config.js && grep -q 'harborDark' app/tailwind.config.js
-- label: the app communicates with harbor CLI via Command.create
-  command: grep -q 'Command.create' app/src/useHarbor.ts || grep -rq 'Command.create' app/src/
-  tags: [tauri-apps/plugin-shell]
-- label: the app uses React Context for state management with no external state libraries
-  command: ! grep -q '"zustand\|"redux\|"mobx\|"jotai\|"recoil' app/package.json
 - label: the app has 6 routes: home, config, cli, models, settings, and services detail
   command: grep -q '/config' app/src/AppRoutes.tsx && grep -q '/cli' app/src/AppRoutes.tsx && grep -q '/models' app/src/AppRoutes.tsx && grep -q '/settings' app/src/AppRoutes.tsx && grep -q '/services' app/src/AppRoutes.tsx
 - label: xterm.js provides terminal rendering driven by tauri-pty for interactive sessions
   command: grep -q '@xterm/xterm' app/package.json && grep -q 'tauri-plugin-pty' app/src-tauri/Cargo.toml
 - label: serviceMetadata.ts defines metadata for 100+ services with name, handle, tags, logo, and URLs
   command: test -f app/src/serviceMetadata.ts && test $(grep -c 'projectUrl' app/src/serviceMetadata.ts) -ge 100
-- label: the Tauri backend is minimal: 3 Rust source files delegating to Tauri plugins
-  command: test $(find app/src-tauri/src -name '*.rs' | wc -l) -le 5
-- label: service tags are defined as enum HST with 13+ values including Backend, Frontend, Satellite, API, CLI, Eval, Audio, RAG, Image, Workflows, Tools, and Infra
-  command: grep -q 'enum HST' app/src/serviceMetadata.ts || grep -q 'Backend' app/src/serviceMetadata.ts
 
 ## layout
 - label: the app layout is a DaisyUI drawer with responsive sidebar: hamburger on mobile, persistent nav at lg breakpoint
   command: grep -q 'drawer' app/src/App.tsx && grep -q 'lg:hidden' app/src/App.tsx
-- label: the terminal panel is a draggable, resizable xterm.js pane at the bottom, toggled via Ctrl+backtick
-  command: grep -q 'TerminalPanel' app/src/App.tsx && grep -q 'resize\|drag\|height' app/src/terminal/TerminalPanel.tsx
-- label: the sidebar dynamically appends running services as green-dotted links below the main navigation
-  command: grep -q 'isRunning\|running' app/src/AppSidebar.tsx
-
-## icons
-- label: icons are 39 custom inline SVG components defined in Icons.tsx, not an external icon library
-  command: test -f app/src/Icons.tsx && test $(grep -c 'function Icon' app/src/Icons.tsx) -ge 30
-
-## theme
-- label: theme switching sets data-theme on documentElement and applies CSS filters (hue-rotate, saturate, contrast, brightness, invert) on body
-  command: grep -q 'data-theme' app/src/theme.tsx && grep -q 'hue-rotate\|saturate\|contrast\|brightness\|invert' app/src/theme.tsx
-- label: the app ships Inter font family via 38 WOFF2 files with declarations
-  command: test $(find app/src/assets/font -name '*.woff2' | wc -l) -ge 30 && test -f app/src/font.css
-  tags: [font-face]
-- label: a custom .harbor-slider CSS component replaces DaisyUI range input for Tauri/Linux webkit-gtk compatibility
-  command: grep -q 'harbor-slider' app/src/main.css
-- label: terminal theme syncs with DaisyUI by converting oklch CSS variables to hex via a MutationObserver on data-theme
-  command: grep -q 'oklch' app/src/terminal/terminalTheme.ts && grep -q 'MutationObserver' app/src/terminal/terminalTheme.ts && grep -q 'data-theme' app/src/terminal/terminalTheme.ts
-
-## pages
-- label: the home page shows a service card grid with tag filtering, search, and pin-to-top
-  command: test -f app/src/home/ServiceList.tsx && test -f app/src/home/ServiceCard.tsx && test -f app/src/home/PinnedServices.tsx
-- label: the models page manages Ollama/HF/llama.cpp models with pull, delete, and source filtering
-  command: test -f app/src/models/Models.tsx && grep -q 'ollama\|hf\|llamacpp' app/src/models/Models.tsx
-- label: the settings page offers theme selection and 5 CSS filter sliders: hue, saturation, contrast, brightness, invert
-  command: grep -q 'hue\|saturation\|contrast\|brightness\|invert' app/src/settings/Settings.tsx
-- label: the service detail page shows description, docs, config link, and live log streaming via xterm
-  command: test -f app/src/service/ServiceDetails.tsx && test -f app/src/service/ServiceLogs.tsx && test -f app/src/service/ServiceDocs.tsx
-- label: the config page is a profile-based editor for harbor environment variables with deep-link support via query param
-  command: test -f app/src/config/Config.tsx && test -f app/src/config/HarborConfigEditor.tsx && grep -q 'service' app/src/config/Config.tsx
-- label: markdown rendering uses for service documentation display
-  command: grep -q 'react-markdown-preview\|MarkdownPreview\|@uiw' app/src/service/ServiceDocs.tsx || grep -q '@uiw/react-markdown-preview' app/package.json
-  tags: [uiw/react-markdown-preview]
 
 ## hooks
-- label: useHarbor hook executes harbor CLI via Tauri shell plugin and returns {result, loading, error, rerun}
-  command: test -f app/src/useHarbor.tsx && grep -q 'loading\|error\|rerun' app/src/useHarbor.tsx
-- label: useSharedState hook provides cross-component state via a global Map registry without provider nesting
-  command: test -f app/src/useSharedState.tsx && grep -q 'Map\|globalThis\|__sharedStates' app/src/useSharedState.tsx
 - label: global keyboard shortcuts include Ctrl+F (search), Ctrl+backtick (terminal), Escape (close modal), Enter (confirm)
   command: test -f app/src/useGlobalKeydown.tsx
 
+## home
+- label: home page shows a list of harbor services as cards in a grid
+  command: test -f app/src/home/ServiceList.tsx && test -f app/src/home/ServiceCard.tsx
+- label: services can be started and stopped from the home page
+  command: grep -q 'up\|down\|start\|stop' app/src/home/ServiceCard.tsx
+- label: services can be pinned to the top of the list
+  command: grep -q 'pin\|Pin' app/src/home/ServiceCard.tsx && test -f app/src/home/PinnedServices.tsx
+- label: service cards show a green dot when the service is running
+  command: grep -q 'isRunning\|running' app/src/home/ServiceCard.tsx && grep -q 'green\|success' app/src/home/ServiceCard.tsx
+- label: services can be filtered by tag and searched by name
+  command: grep -q 'search\|filter\|tag' app/src/home/ServiceList.tsx
+- label: clicking a service card navigates to its detail page
+  command: grep -q 'navigate\|/services/' app/src/home/ServiceCard.tsx
+- label: a toggle button starts or stops all default services at once
+  command: grep -q 'all\|default' app/src/home/ServiceList.tsx
+
+## service
+- label: service detail page shows name, handle, tags, and description
+  command: test -f app/src/service/ServiceName.tsx && test -f app/src/service/ServiceHandle.tsx && test -f app/src/service/ServiceDescription.tsx
+- label: service logs can be viewed in real-time when the service is running
+  command: test -f app/src/service/ServiceLogs.tsx && grep -q 'logs\|stream' app/src/service/ServiceLogs.tsx
+- label: service URL can be opened in the browser when the service is running
+  command: grep -q 'open\|url\|Open' app/src/service/ServiceActions.tsx
+- label: Configure button navigates to the config page with the service pre-selected
+  command: grep -q 'config\|Configure\|service=' app/src/service/ServiceDetails.tsx
+- label: service documentation is rendered as markdown on the detail page
+  command: test -f app/src/service/ServiceDocs.tsx && grep -q 'Markdown\|markdown\|MarkdownPreview' app/src/service/ServiceDocs.tsx
+
+## models
+- label: models page shows a sortable table of pulled models with source, size, and date
+  command: grep -q 'sort\|Sort' app/src/models/Models.tsx && grep -q 'size\|Size' app/src/models/Models.tsx
+- label: models can be pulled by entering an Ollama, HuggingFace, or llama.cpp model ID
+  command: grep -q 'pull\|Pull' app/src/models/Models.tsx && grep -q 'ollama\|hf\|llamacpp' app/src/models/Models.tsx
+- label: model pull shows real-time progress with cancel support
+  command: test -f app/src/models/ModelPullPane.tsx && grep -q 'cancel\|Cancel' app/src/models/ModelPullPane.tsx
+- label: models can be deleted via a confirmation dialog
+  command: grep -q 'delete\|Delete\|remove\|Remove' app/src/models/Models.tsx && grep -q 'confirm\|Confirm' app/src/models/Models.tsx
+- label: model IDs can be copied to clipboard on hover
+  command: grep -q 'copy\|Copy\|clipboard' app/src/models/Models.tsx
+
+## config
+- label: config profiles can be created, saved, applied, reset to defaults, and deleted
+  command: grep -q 'save\|Save' app/src/config/HarborConfigEditor.tsx && grep -q 'delete\|Delete\|reset\|Reset' app/src/config/HarborConfigEditor.tsx
+- label: config settings are organized into collapsible sections
+  command: test -f app/src/config/HarborConfigSectionEditor.tsx
+- label: Ctrl+S saves the current config profile
+  command: grep -q 'Ctrl\|ctrl\|save\|Save' app/src/config/HarborConfigEditor.tsx
+
+## settings
+- label: settings page has an autostart toggle for launching at system startup
+  command: grep -q 'autostart\|Autostart\|auto.start\|Auto Start' app/src/settings/Settings.tsx
+- label: settings page offers a theme dropdown with 23+ themes and five sliders that adjust visuals in real-time
+  command: grep -q 'theme\|Theme' app/src/settings/Settings.tsx && grep -q 'hue\|saturation\|contrast\|brightness\|invert' app/src/settings/Settings.tsx
+
+## cli
+- label: CLI page shows doctor health checks and a command runner for executing harbor commands
+  command: test -f app/src/cli/CLI.tsx && test -f app/src/cli/CommandRunner.tsx
+- label: command runner supports history navigation with arrow keys and preserves ANSI colors in output
+  command: grep -q 'history\|History\|ArrowUp\|ArrowDown' app/src/cli/CommandRunner.tsx && grep -q 'ansi\|ANSI\|ansiToHtml\|color' app/src/cli/CommandRunner.tsx
+
+## terminal
+- label: terminal panel provides an interactive shell at the bottom of the window
+  command: test -f app/src/terminal/TerminalPanel.tsx && grep -q 'pty\|spawn\|shell' app/src/terminal/TerminalPanel.tsx
+- label: terminal panel can be resized by dragging its top edge
+  command: grep -q 'drag\|resize\|mousedown\|clientY' app/src/terminal/TerminalPanel.tsx
+
 ## ui
-- label: toasts use react-hot-toast positioned at bottom-right with backdrop-blur styling
-  command: grep -q 'react-hot-toast' app/package.json
-- label: modals use OverlayContext for stack management with Escape to close and Enter to confirm
-  command: test -f app/src/OverlayContext.tsx && test -f app/src/Modal.tsx && test -f app/src/ConfirmModal.tsx
-- label: the Loading component has linear (progress bar) and overlay variants with a 250ms delay to avoid flash
-  command: test -f app/src/Loading.tsx && grep -q '250\|delay\|linear\|overlay' app/src/Loading.tsx
+- label: confirmation dialogs appear before destructive actions like deleting models, resetting config, or deleting profiles
+  command: test -f app/src/ConfirmModal.tsx
+- label: toast notifications appear for service start/stop, config save/apply, and errors
+  command: grep -rq 'toast\|toasted' app/src/home/ app/src/service/ app/src/config/
+
+## nav
+- label: running services appear in the sidebar with a green dot and link to their detail page
+  command: grep -q 'isRunning\|running' app/src/AppSidebar.tsx && grep -q '/services/' app/src/AppSidebar.tsx
 
 # boost
 - label: Boost is an LLM proxy built with Python/FastAPI that transforms chat completions via pluggable modules
