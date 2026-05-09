@@ -87,6 +87,7 @@ show_help() {
     echo "  gptme             - Run gptme CLI, configure the service"
     echo "  nanobot           - Run nanobot CLI"
     echo "  promptfoo|pf      - Run promptfoo CLI for LLM testing and evaluation"
+    echo "  tokscale           - Run tokscale CLI to monitor AI token usage and costs"
     echo "  hf                - Run the Harbor's Hugging Face CLI. Expanded with a few additional commands."
     echo "    hf dl           - HuggingFaceModelDownloader CLI"
     echo "    hf parse-url    - Parse file URL from Hugging Face"
@@ -1646,7 +1647,7 @@ suggest_command() {
         cfd cloudflared cmdh fabric parler photoprism airllm txtai aider
         nanobot chatui comfyui aichat omnichain lmeval lm_eval sglang
         jupyter ol1 ktransformers openhands oh stt speaches boost nexa
-        repopack k6 promptfoo pf webtop langflow kobold morphic gptme hermes mcp
+        repopack k6 promptfoo pf webtop langflow kobold morphic gptme hermes mcp tokscale
         migrate modularmax tunnel t tunnels config profile profiles p gum
         fixfs info update how find home vscode doctor bench history h size
         env dev tools eval routine
@@ -2631,6 +2632,10 @@ run_harbor_find() {
 
 run_hf_docker_cli() {
     $(compose_with_options "hf") run --rm hf "$@"
+}
+
+run_tokscale_cli() {
+    $(compose_with_options "tokscale") run --rm tokscale "$@"
 }
 
 check_hf_cache() {
@@ -5472,6 +5477,10 @@ main_entrypoint() {
     hf)
         shift
         run_hf_command "$@"
+        ;;
+    tokscale)
+        shift
+        run_tokscale_cli "$@"
         ;;
     models)
         shift

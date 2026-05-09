@@ -1,0 +1,20 @@
+services:
+  tokscale:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.tokscale
+    build:
+      context: ./services/tokscale
+      dockerfile_inline: |
+        FROM ghcr.io/av/tools:latest
+        ARG TOKSCALE_VERSION=latest
+        RUN npm install -g tokscale@$${TOKSCALE_VERSION}
+        ENTRYPOINT ["tokscale"]
+      args:
+        TOKSCALE_VERSION: ${HARBOR_TOKSCALE_VERSION}
+    env_file:
+      - ./.env
+      - ./services/tokscale/override.env
+    volumes:
+      - ${HARBOR_TOKSCALE_HOME_DIR}:/root:ro
+      - ${HARBOR_TOKSCALE_CONFIG_DIR}:/root/.config/tokscale
+    networks:
+      - harbor-network

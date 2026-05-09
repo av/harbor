@@ -1,0 +1,4 @@
+services:
+  tokscale:
+    volumes:
+      - ${HARBOR_OPENCLAW_CONFIG_DIR}:/root/.openclaw:ro

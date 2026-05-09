@@ -1,0 +1,4 @@
+services:
+  tokscale:
+    volumes:
+      - ${HARBOR_OPENCODE_DATA}:/root/.local/share/opencode:ro

@@ -1001,4 +1001,12 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         wikiUrl: `${wikiUrl}/2.3.85-Satellite-SurfSense`,
         tooltip: 'Private NotebookLM-style research workspace with RAG, citations, browser capture, reports, and podcast generation.',
     },
+    tokscale: {
+        name: 'tokscale',
+        tags: [HST.satellite, HST.cli],
+        projectUrl: 'https://github.com/junhoyeo/tokscale',
+        logo: 'https://www.google.com/s2/favicons?domain=tokscale.ai&sz=128',
+        wikiUrl: `${wikiUrl}/2.3.86-Satellite-Tokscale`,
+        tooltip: 'Monitor AI token usage and costs across coding assistants.',
+    },
 };
