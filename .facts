@@ -1,0 +1,174 @@
+# project
+- Harbor is a containerized LLM toolkit distributed as a Docker Compose project with a CLI and Tauri desktop app
+- label: the project is licensed under Apache 2.0
+  command: head -1 LICENSE | grep -q 'Apache'
+
+## distribution
+- label: the npm package name is
+  command: jq -e -r '.name' package.json | grep -q '@avcodes/harbor'
+  tags: [avcodes/harbor]
+- label: the PyPI package name is llm-harbor
+  command: grep -q 'name = "llm-harbor"' pyproject.toml
+- label: version is synchronized across package.json, pyproject.toml, and app/package.json
+  command: V=$(jq -r .version package.json) && grep -q "version = \"$V\"" pyproject.toml && jq -e --arg v "$V" ".version == \$v" app/package.json >/dev/null
+- label: install.sh and requirements.sh handle platform-specific installation and dependency detection
+  command: test -f install.sh && test -f requirements.sh
+
+# cli
+- label: harbor.sh is the main CLI entrypoint, a Bash script over 5000 lines
+  command: test -x harbor.sh && test $(wc -l < harbor.sh) -ge 5000
+- label: CLI internals are rewritten in Deno TypeScript under routines/
+  command: test -f routines/deno.json && test $(find routines -name '*.ts' | wc -l) -ge 10
+- label: dev scripts live in .scripts/ and must be run via 'harbor dev', not directly
+  command: test -d .scripts && test $(find .scripts -name '*.ts' -o -name '*.sh' | wc -l) -ge 20
+
+# services
+- label: compose.yml is the base layer, defining only the harbor-network
+  command: grep -q 'harbor-network' compose.yml && ! grep -q 'services:' compose.yml
+- label: each service has its own compose file at services/compose.SERVICE.yml
+  command: test $(find services -maxdepth 1 -name 'compose.*.yml' ! -name 'compose.x.*' | wc -l) -ge 100
+- label: cross-service integrations use compose.x.PRIMARY.SECONDARY.yml files
+  command: test $(find services -maxdepth 1 -name 'compose.x.*.yml' | wc -l) -ge 300
+- label: nearly all service directories contain an override.env file
+  command: test $(find services -mindepth 2 -maxdepth 2 -name 'override.env' | wc -l) -ge 120
+- label: services are categorized as backend, frontend, or satellite
+  command: grep -q 'Backend' app/src/serviceMetadata.ts && grep -q 'Frontend' app/src/serviceMetadata.ts && grep -q 'Satellite' app/src/serviceMetadata.ts
+
+## config
+- label: profiles/default.env contains over 800 HARBOR_* configuration keys
+  command: test $(grep -c '^HARBOR_' profiles/default.env) -ge 800
+
+# app
+- label: the desktop app is built with Tauri 2.x, React 18, Vite, Tailwind CSS, and DaisyUI
+  command: grep -q '"react"' app/package.json && grep -q '"@tauri-apps/cli"' app/package.json && grep -q '"tailwindcss"' app/package.json && grep -q '"daisyui"' app/package.json
+- label: the app has two custom DaisyUI themes: harborLight and harborDark
+  command: grep -q 'harborLight' app/tailwind.config.js && grep -q 'harborDark' app/tailwind.config.js
+- label: the app communicates with harbor CLI via Command.create
+  command: grep -q 'Command.create' app/src/useHarbor.ts || grep -rq 'Command.create' app/src/
+  tags: [tauri-apps/plugin-shell]
+- label: the app uses React Context for state management with no external state libraries
+  command: ! grep -q '"zustand\|"redux\|"mobx\|"jotai\|"recoil' app/package.json
+- label: the app has 6 routes: home, config, cli, models, settings, and services detail
+  command: grep -q '/config' app/src/AppRoutes.tsx && grep -q '/cli' app/src/AppRoutes.tsx && grep -q '/models' app/src/AppRoutes.tsx && grep -q '/settings' app/src/AppRoutes.tsx && grep -q '/services' app/src/AppRoutes.tsx
+- label: xterm.js provides terminal rendering driven by tauri-pty for interactive sessions
+  command: grep -q '@xterm/xterm' app/package.json && grep -q 'tauri-plugin-pty' app/src-tauri/Cargo.toml
+- label: serviceMetadata.ts defines metadata for 100+ services with name, handle, tags, logo, and URLs
+  command: test -f app/src/serviceMetadata.ts && test $(grep -c 'projectUrl' app/src/serviceMetadata.ts) -ge 100
+- label: the Tauri backend is minimal: 3 Rust source files delegating to Tauri plugins
+  command: test $(find app/src-tauri/src -name '*.rs' | wc -l) -le 5
+- label: service tags are defined as enum HST with 13+ values including Backend, Frontend, Satellite, API, CLI, Eval, Audio, RAG, Image, Workflows, Tools, and Infra
+  command: grep -q 'enum HST' app/src/serviceMetadata.ts || grep -q 'Backend' app/src/serviceMetadata.ts
+
+## layout
+- label: the app layout is a DaisyUI drawer with responsive sidebar: hamburger on mobile, persistent nav at lg breakpoint
+  command: grep -q 'drawer' app/src/App.tsx && grep -q 'lg:hidden' app/src/App.tsx
+- label: the terminal panel is a draggable, resizable xterm.js pane at the bottom, toggled via Ctrl+backtick
+  command: grep -q 'TerminalPanel' app/src/App.tsx && grep -q 'resize\|drag\|height' app/src/terminal/TerminalPanel.tsx
+- label: the sidebar dynamically appends running services as green-dotted links below the main navigation
+  command: grep -q 'isRunning\|running' app/src/AppSidebar.tsx
+
+## icons
+- label: icons are 39 custom inline SVG components defined in Icons.tsx, not an external icon library
+  command: test -f app/src/Icons.tsx && test $(grep -c 'function Icon' app/src/Icons.tsx) -ge 30
+
+## theme
+- label: theme switching sets data-theme on documentElement and applies CSS filters (hue-rotate, saturate, contrast, brightness, invert) on body
+  command: grep -q 'data-theme' app/src/theme.tsx && grep -q 'hue-rotate\|saturate\|contrast\|brightness\|invert' app/src/theme.tsx
+- label: the app ships Inter font family via 38 WOFF2 files with declarations
+  command: test $(find app/src/assets/font -name '*.woff2' | wc -l) -ge 30 && test -f app/src/font.css
+  tags: [font-face]
+- label: a custom .harbor-slider CSS component replaces DaisyUI range input for Tauri/Linux webkit-gtk compatibility
+  command: grep -q 'harbor-slider' app/src/main.css
+- label: terminal theme syncs with DaisyUI by converting oklch CSS variables to hex via a MutationObserver on data-theme
+  command: grep -q 'oklch' app/src/terminal/terminalTheme.ts && grep -q 'MutationObserver' app/src/terminal/terminalTheme.ts && grep -q 'data-theme' app/src/terminal/terminalTheme.ts
+
+## pages
+- label: the home page shows a service card grid with tag filtering, search, and pin-to-top
+  command: test -f app/src/home/ServiceList.tsx && test -f app/src/home/ServiceCard.tsx && test -f app/src/home/PinnedServices.tsx
+- label: the models page manages Ollama/HF/llama.cpp models with pull, delete, and source filtering
+  command: test -f app/src/models/Models.tsx && grep -q 'ollama\|hf\|llamacpp' app/src/models/Models.tsx
+- label: the settings page offers theme selection and 5 CSS filter sliders: hue, saturation, contrast, brightness, invert
+  command: grep -q 'hue\|saturation\|contrast\|brightness\|invert' app/src/settings/Settings.tsx
+- label: the service detail page shows description, docs, config link, and live log streaming via xterm
+  command: test -f app/src/service/ServiceDetails.tsx && test -f app/src/service/ServiceLogs.tsx && test -f app/src/service/ServiceDocs.tsx
+- label: the config page is a profile-based editor for harbor environment variables with deep-link support via query param
+  command: test -f app/src/config/Config.tsx && test -f app/src/config/HarborConfigEditor.tsx && grep -q 'service' app/src/config/Config.tsx
+- label: markdown rendering uses for service documentation display
+  command: grep -q 'react-markdown-preview\|MarkdownPreview\|@uiw' app/src/service/ServiceDocs.tsx || grep -q '@uiw/react-markdown-preview' app/package.json
+  tags: [uiw/react-markdown-preview]
+
+## hooks
+- label: useHarbor hook executes harbor CLI via Tauri shell plugin and returns {result, loading, error, rerun}
+  command: test -f app/src/useHarbor.tsx && grep -q 'loading\|error\|rerun' app/src/useHarbor.tsx
+- label: useSharedState hook provides cross-component state via a global Map registry without provider nesting
+  command: test -f app/src/useSharedState.tsx && grep -q 'Map\|globalThis\|__sharedStates' app/src/useSharedState.tsx
+- label: global keyboard shortcuts include Ctrl+F (search), Ctrl+backtick (terminal), Escape (close modal), Enter (confirm)
+  command: test -f app/src/useGlobalKeydown.tsx
+
+## ui
+- label: toasts use react-hot-toast positioned at bottom-right with backdrop-blur styling
+  command: grep -q 'react-hot-toast' app/package.json
+- label: modals use OverlayContext for stack management with Escape to close and Enter to confirm
+  command: test -f app/src/OverlayContext.tsx && test -f app/src/Modal.tsx && test -f app/src/ConfirmModal.tsx
+- label: the Loading component has linear (progress bar) and overlay variants with a 250ms delay to avoid flash
+  command: test -f app/src/Loading.tsx && grep -q '250\|delay\|linear\|overlay' app/src/Loading.tsx
+
+# boost
+- label: Boost is an LLM proxy built with Python/FastAPI that transforms chat completions via pluggable modules
+  command: grep -q 'fastapi' services/boost/pyproject.toml
+
+## modules
+- label: Boost modules are Python files exporting ID_PREFIX and an async apply(chat, llm) function
+  command: grep -rq 'ID_PREFIX' services/boost/src/modules/ && grep -rq 'async def apply' services/boost/src/modules/
+- label: Boost has 19 built-in modules and 25+ custom modules
+  command: test $(find services/boost/src/modules -name '*.py' ! -name '__*' | wc -l) -ge 19 && test $(find services/boost/src/custom_modules -name '*.py' ! -name '__*' | wc -l) -ge 25
+- label: Boost modules are loaded dynamically from modules/ and custom_modules/ directories via importlib
+  command: grep -q 'importlib' services/boost/src/mods.py
+
+## api
+- label: Boost exposes OpenAI-compatible endpoints: /v1/models and /v1/chat/completions
+  command: grep -q '/v1/models' services/boost/src/main.py && grep -q '/v1/chat/completions' services/boost/src/main.py
+- label: Boost supports SSE streaming and WebSocket event delivery
+  command: grep -q 'WebSocket' services/boost/src/main.py && grep -q 'EventSourceResponse\|StreamingResponse' services/boost/src/main.py
+- label: Boost CORS is enabled for all origins
+  command: grep -q 'allow_origins' services/boost/src/main.py
+
+## config
+- label: Boost upstream APIs are configured via semicolon-separated HARBOR_BOOST_OPENAI_URLS and HARBOR_BOOST_OPENAI_KEYS
+  command: grep -q 'HARBOR_BOOST_OPENAI_URLS' services/boost/src/config.py && grep -q 'HARBOR_BOOST_OPENAI_KEYS' services/boost/src/config.py
+
+## internals
+- label: Boost Chat is a linked list of ChatNode objects with parent/children pointers
+  command: grep -q 'class ChatNode' services/boost/src/chat_node.py && grep -q 'parent' services/boost/src/chat_node.py && grep -q 'children' services/boost/src/chat_node.py
+- label: Boost LLM object extends AsyncEventEmitter and provides stream_final_completion, chat_completion, emit_message, and emit_status methods
+  command: grep -q 'AsyncEventEmitter' services/boost/src/llm.py && grep -q 'stream_final_completion' services/boost/src/llm.py && grep -q 'emit_message' services/boost/src/llm.py && grep -q 'emit_status' services/boost/src/llm.py
+- label: Boost has a request-scoped tool registry allowing modules to define LLM-callable functions
+  command: test -f services/boost/src/tools/registry.py && grep -q 'set_local_tool' services/boost/src/tools/registry.py
+
+# testing
+- label: tests use a Deno-based orchestrator running sequential suites across parallel containerized distros
+  command: test -f tests/run.ts && test $(find tests/suites -name '*.sh' | wc -l) -ge 4
+- label: test suites are sequential Bash scripts: install, cli, smoke, and integration
+  command: test -f tests/suites/01-install.sh && test -f tests/suites/02-cli.sh && test -f tests/suites/03-smoke.sh && test -f tests/suites/04-integration.sh
+- label: test rows target 7+ Linux distros including Alpine, Arch, Debian, Fedora, Rocky, and Ubuntu
+  command: test $(find tests/containers -name '*.Containerfile' ! -name 'base.*' | wc -l) -ge 6
+
+# lint
+- label: lint uses a custom 3-pass Deno orchestrator with 10 HARBOR-prefixed rules
+  command: test -f scripts/lint/run.ts && test -f scripts/lint/rules.yaml && grep -c 'HARBOR0' scripts/lint/rules.yaml | grep -q '[0-9]'
+- label: lint self-tests validate rules against fixture files
+  command: test -f scripts/lint/self-test.ts && test -d scripts/lint/fixtures
+
+# docs
+- label: documentation lives in docs/ with hierarchical numbering and covers 100+ services
+  command: test $(find docs -name '*.md' | wc -l) -ge 100
+- label: docs are auto-generated via 'harbor dev docs'
+  command: test -f .scripts/docs.ts
+
+# ci
+- label: CI has 5 GitHub Actions workflows: app-release, bench-docker, boost-docker, lint, and test
+  command: test $(find .github/workflows -name '*.yml' | wc -l) -ge 5
+
+# shared
+- label: shared/ contains utility scripts used across service containers: entrypoints, config mergers, and CLI init
+  command: test -f shared/harbor_cli_init.sh && test -f shared/json_config_merger.py && test -f shared/yaml_config_merger.py

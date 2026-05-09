@@ -1,6 +1,30 @@
 {
   "version": 1,
   "skills": {
+    "facts": {
+      "source": "av/facts",
+      "sourceType": "github",
+      "skillPath": "skills/facts/SKILL.md",
+      "computedHash": "e5f6388380c4e7794e84949c7f21cb3e495c3124ee445457d5d7bd58cd459f21"
+    },
+    "facts-discover": {
+      "source": "av/facts",
+      "sourceType": "github",
+      "skillPath": "skills/facts-discover/SKILL.md",
+      "computedHash": "de3ecc579e19d240bfeb3c0fe54fbc4ba50cb300e7a260867aa7c3d39bb93683"
+    },
+    "facts-implement": {
+      "source": "av/facts",
+      "sourceType": "github",
+      "skillPath": "skills/facts-implement/SKILL.md",
+      "computedHash": "c6f18425d0e4394d0cd1c037eed82fff967ef00db2265db287cbc17cde59582a"
+    },
+    "facts-refine": {
+      "source": "av/facts",
+      "sourceType": "github",
+      "skillPath": "skills/facts-refine/SKILL.md",
+      "computedHash": "8094a478cb12607c8ce84314d010f6fa84e1ab04ff84351fec67aa2bf4541635"
+    },
     "skill-creator": {
       "source": "anthropics/skills",
       "sourceType": "github",
