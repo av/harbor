@@ -2462,6 +2462,62 @@ resolve_raw_url() {
     return 0
 }
 
+# Validate profile content downloaded from a remote URL.
+#
+# Profile (.env) values are later consumed via shell substitution in several
+# code paths (for example, "$(env_manager get cli.path)" expanded inside an
+# `eval` invocation). A malicious remote profile can therefore achieve
+# arbitrary command execution by embedding command substitution `$(...)` or
+# backticks `` `...` `` in a value. This function inspects each non-comment,
+# non-empty line of a downloaded profile and rejects the file if it contains
+# constructs that could be evaluated as code, or if a key is not a plain
+# identifier.
+#
+# Locally authored profiles (saved via `harbor profile add`) are not passed
+# through this check because their content is produced by Harbor itself.
+validate_profile_content() {
+    local file="$1"
+    local lineno=0
+    local line key value
+
+    while IFS= read -r line || [ -n "$line" ]; do
+        lineno=$((lineno + 1))
+
+        # Skip blank lines and comments
+        case "$line" in
+            "" | \#*) continue ;;
+        esac
+
+        # Strip leading "export " if present
+        line="${line#export }"
+
+        # Must be KEY=VALUE
+        if [[ "$line" != *=* ]]; then
+            log_error "Profile validation failed at line $lineno: not a KEY=VALUE assignment"
+            return 1
+        fi
+
+        key="${line%%=*}"
+        value="${line#*=}"
+
+        # Key must be a plain identifier
+        if [[ ! "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+            log_error "Profile validation failed at line $lineno: invalid key \"$key\""
+            return 1
+        fi
+
+        # Reject command substitution and backticks anywhere in the value.
+        # Even inside double quotes these would be expanded when the value is
+        # later interpolated through shell evaluation.
+        if [[ "$value" == *'$('* ]] || [[ "$value" == *'`'* ]]; then
+            log_error "Profile validation failed at line $lineno: value for \"$key\" contains command substitution"
+            return 1
+        fi
+    done < "$file"
+
+    return 0
+}
+
 # Helper function to download a profile from URL
 download_profile() {
     local url="$1"
@@ -2497,6 +2553,17 @@ download_profile() {
             return 1
         fi
 
+        # Security validation: reject profiles whose values could trigger
+        # arbitrary command execution when later consumed via shell expansion.
+        # See validate_profile_content() above for the threat model.
+        if ! validate_profile_content "$profile_file"; then
+            log_error "Refusing to install profile from $url: unsafe content detected"
+            rm -f "$profile_file"
+            return 1
+        fi
+
+        log_warn "Loaded profile from a remote URL ($url)."
+        log_warn "Remote profiles can change Harbor configuration; review with: cat \"$profile_file\""
         log_info "Successfully downloaded profile as: $profile_name"
         return 0
     else
