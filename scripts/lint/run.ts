@@ -144,6 +144,8 @@ const BASH_EXCLUDES = [
   // Rule fixtures are self-test fodder for the bash pass; shellcheck does not
   // help us there (fixtures intentionally break the rule).
   "scripts/lint/fixtures/**/*.sh",
+  // Vendored third-party caches are not Harbor code.
+  "lemonade/cache/**/*.sh",
 ];
 
 const RULES_PATH = `${REPO_ROOT}/scripts/lint/rules.yaml`;
