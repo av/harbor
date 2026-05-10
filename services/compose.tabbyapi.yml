@@ -1,6 +1,6 @@
 services:
   tabbyapi:
-    image: nschle/tabbyapi:12.4.1-runtime-ubuntu22.04-runpod
+    image: ghcr.io/theroyallab/tabbyapi:latest
     container_name: ${HARBOR_CONTAINER_PREFIX}.tabbyapi
     env_file:
       - ./.env
@@ -10,8 +10,8 @@ services:
     environment:
       - NAME=TabbyAPI
     volumes:
-      - ${HARBOR_HF_CACHE:-./services/tabbyapi/.hf-cache}:/models/hf
-      - ${HARBOR_LLAMACPP_CACHE}:/models/llama.cpp
+      - ${HARBOR_HF_CACHE:-./services/tabbyapi/.hf-cache}:/app/models/hf
+      - ${HARBOR_LLAMACPP_CACHE}:/app/models/llama.cpp
 
       - ./shared/yaml_config_merger.py:/app/yaml_config_merger.py
       - ./services/tabbyapi/start_tabbyapi.sh:/app/start_tabbyapi.sh

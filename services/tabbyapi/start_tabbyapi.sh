@@ -1,16 +1,16 @@
 #!/bin/bash
 
 echo "Harbor: Custom Tabby API Entrypoint"
-python --version
+python3 --version
 
-python /app/yaml_config_merger.py --pattern ".yml" --output "/config.yml" --directory "/app/configs"
-python /app/yaml_config_merger.py --pattern ".yml" --output "/api_tokens.yml" --directory "/app/tokens"
+python3 /app/yaml_config_merger.py --pattern ".yml" --output "/app/config.yml" --directory "/app/configs"
+python3 /app/yaml_config_merger.py --pattern ".yml" --output "/app/api_tokens.yml" --directory "/app/tokens"
 
 echo "Merged Configs:"
-cat /config.yml
+cat /app/config.yml
 
 echo "Merged Tokens:"
-cat /api_tokens.yml
+cat /app/api_tokens.yml
 
 # Original entrypoint
 python3 /app/main.py "$@"
