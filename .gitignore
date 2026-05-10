@@ -143,6 +143,10 @@ skills-lock.json
 # Claude local runtime state
 .claude/scheduled_tasks.lock
 
+# Lemonade
+lemonade/cache/
+lemonade/llama/
+
 # Parcel
 .parcel-cache
 

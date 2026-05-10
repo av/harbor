@@ -1009,4 +1009,12 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         wikiUrl: `${wikiUrl}/2.3.86-Satellite-Tokscale`,
         tooltip: 'Monitor AI token usage and costs across coding assistants.',
     },
+    lemonade: {
+        name: 'Lemonade',
+        tags: [HST.backend, HST.api, HST.audio, HST.image],
+        projectUrl: 'https://github.com/lemonade-sdk/lemonade',
+        logo: 'https://www.google.com/s2/favicons?domain=lemonade-server.ai&sz=128',
+        wikiUrl: `${wikiUrl}/2.2.19-Backend-Lemonade`,
+        tooltip: 'Local AI server with LLM chat, speech-to-text, text-to-speech, and image generation. Optimized for AMD hardware.',
+    },
 };

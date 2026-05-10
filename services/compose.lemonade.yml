@@ -1,0 +1,25 @@
+services:
+  lemonade:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.lemonade
+    image: ${HARBOR_LEMONADE_IMAGE}:${HARBOR_LEMONADE_VERSION}
+    env_file:
+      - ./.env
+      - ./services/lemonade/override.env
+    environment:
+      - LEMONADE_LLAMACPP=${HARBOR_LEMONADE_LLAMACPP}
+      - LEMONADE_HOST=0.0.0.0
+      - LEMONADE_PORT=13305
+    ports:
+      - ${HARBOR_LEMONADE_HOST_PORT}:13305
+    volumes:
+      - ${HARBOR_HF_CACHE}:/root/.cache/huggingface
+      - ${HARBOR_LEMONADE_WORKSPACE}/llama:/opt/lemonade/llama
+      - ${HARBOR_LEMONADE_WORKSPACE}/cache:/root/.cache/lemonade
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:13305/live || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    networks:
+      - harbor-network
