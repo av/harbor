@@ -86,7 +86,7 @@ model:
   # An initial model to load. Make sure the model is located in the model directory!
   # A model can be loaded later via the API.
   # REQUIRED: This must be filled out to load a model on startup!
-  model_name: hf/${HARBOR_TABBYAPI_MODEL_SPECIFIER}
+  model_name: hf/${HARBOR_TABBYAPI_MODEL}
 
   # The below parameters only apply for initial loads
   # All API based loads do NOT inherit these settings unless specified in use_as_default

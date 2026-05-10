@@ -6,5 +6,6 @@ SHELL ["/bin/bash", "-c"]
 RUN apt-get update && apt-get install -y curl
 
 WORKDIR /app
-RUN bash <(curl -sSL https://g.bodaay.io/hfd) -h
+RUN bash <(curl -sSL https://g.bodaay.io/hfd) -h && \
+    cp /tmp/hfdownloader_* /app/hfdownloader
 ENTRYPOINT ["/app/hfdownloader"]
