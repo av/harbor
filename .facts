@@ -45,6 +45,9 @@
 - label: ml-intern's llama.cpp integration defaults to a model id that is advertised by Harbor's llama.cpp OpenAI-compatible /v1/models catalog instead of the placeholder local-model
   command: grep -q 'HARBOR_ML_INTERN_LLAMACPP_MODEL="auto"' profiles/default.env && grep -q 'ML_INTERN_MODEL=llamacpp/${HARBOR_ML_INTERN_LLAMACPP_MODEL}' services/compose.x.ml-intern.llamacpp.yml && grep -q 'v1/models' services/ml-intern/start.sh && grep -q 'llamacpp/auto' services/ml-intern/start.sh && ! grep -q 'HARBOR_ML_INTERN_LLAMACPP_MODEL="local-model"' profiles/default.env
   tags: [spec, implemented]
+- label: ml-intern's llama.cpp auto mode ranks advertised router models for text/code suitability and documents how users pin an exact llama.cpp model id
+  command: grep -q 'score_llamacpp_model' services/ml-intern/start.sh && grep -q 'coder' services/ml-intern/start.sh && grep -q 'image' services/ml-intern/start.sh && grep -q 'ranked' docs/2.3.87-Satellite-ML-Intern.md && grep -q 'harbor config set ml-intern.llamacpp.model' docs/2.3.87-Satellite-ML-Intern.md
+  tags: [spec, implemented]
 
 # app
 - label: the desktop app is built with Tauri 2.x, React 18, Vite, Tailwind CSS, and DaisyUI

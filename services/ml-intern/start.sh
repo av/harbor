@@ -23,17 +23,104 @@ import urllib.error
 url = sys.argv[1]
 last_error = None
 
+def score_llamacpp_model(model_id: str, status: str) -> tuple[int, str]:
+    normalized = model_id.lower()
+    score = 0
+
+    if status.lower() in {"loaded", "ready", "running"}:
+        score += 25
+
+    unsuitable_terms = [
+        "image",
+        "vision",
+        "vl",
+        "clip",
+        "embed",
+        "embedding",
+        "bge",
+        "rerank",
+        "whisper",
+        "stt",
+        "tts",
+        "audio",
+    ]
+    if any(term in normalized for term in unsuitable_terms):
+        score -= 1000
+
+    quality_hints = [
+        ("coder", 300),
+        ("code", 220),
+        ("instruct", 220),
+        ("chat", 180),
+        ("qwen", 120),
+        ("llama", 100),
+        ("gemma", 100),
+        ("mistral", 100),
+        ("deepseek", 100),
+        ("phi", 80),
+    ]
+    for term, value in quality_hints:
+        if term in normalized:
+            score += value
+            break
+
+    quant_bonus = [
+        ("q8", 35),
+        ("q6", 30),
+        ("q5", 25),
+        ("q4", 20),
+        ("iq4", 20),
+        ("q3", 5),
+        ("iq3", 5),
+        ("q2", -20),
+        ("q1", -60),
+    ]
+    for term, value in quant_bonus:
+        if term in normalized:
+            score += value
+            break
+
+    import re
+
+    sizes = [float(match.group(1)) for match in re.finditer(r"(\d+(?:\.\d+)?)b", normalized)]
+    if sizes:
+        size = max(sizes)
+        if 4 <= size <= 14:
+            score += 80
+        elif 2 <= size < 4:
+            score += 40
+        elif 14 < size <= 35:
+            score += 25
+        elif size < 2:
+            score -= 20
+    else:
+        score -= 360
+
+    return score, model_id
+
+
 for _ in range(60):
     try:
         with urllib.request.urlopen(url, timeout=5) as response:
             payload = json.load(response)
 
-        models = payload.get("data") or []
-        for model in models:
-            model_id = model.get("id")
-            if model_id:
-                print(model_id)
-                raise SystemExit(0)
+        models = [model for model in payload.get("data") or [] if model.get("id")]
+        if models:
+            ranked = sorted(
+                models,
+                key=lambda model: score_llamacpp_model(
+                    model.get("id", ""),
+                    ((model.get("status") or {}).get("value") or ""),
+                ),
+                reverse=True,
+            )
+            print(ranked[0]["id"])
+            print(
+                "Selected llama.cpp model "
+                f"{ranked[0]['id']} from {len(models)} advertised models",
+                file=sys.stderr,
+            )
+            raise SystemExit(0)
 
         last_error = f"No models returned by {url}"
     except (OSError, urllib.error.URLError) as exc:
