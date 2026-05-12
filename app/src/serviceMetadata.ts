@@ -1017,4 +1017,12 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         wikiUrl: `${wikiUrl}/2.2.19-Backend-Lemonade`,
         tooltip: 'Local AI server with LLM chat, speech-to-text, text-to-speech, and image generation. Optimized for AMD hardware.',
     },
+    'ml-intern': {
+        name: 'ML Intern',
+        tags: [HST.satellite, HST.api, HST.tools],
+        projectUrl: 'https://github.com/huggingface/ml-intern',
+        logo: 'https://github.com/huggingface.png?size=200',
+        wikiUrl: `${wikiUrl}/2.3.87-Satellite-ML-Intern`,
+        tooltip: 'Hugging Face ML engineering agent that researches papers, trains models, and ships ML code with local or cloud LLM backends.',
+    },
 };

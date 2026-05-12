@@ -38,6 +38,14 @@
 - label: profiles/default.env contains over 800 HARBOR_* configuration keys
   command: test $(grep -c '^HARBOR_' profiles/default.env) -ge 800
 
+## ml-intern
+- label: ml-intern is integrated as a Harbor satellite service with compose config, default env, metadata, docs, service directory, and Ollama/llamacpp/vLLM cross-service files
+  command: test -f services/compose.ml-intern.yml && test -f services/compose.x.ml-intern.ollama.yml && test -f services/compose.x.ml-intern.llamacpp.yml && test -f services/compose.x.ml-intern.vllm.yml && test -f services/ml-intern/override.env && test -f services/ml-intern/.gitignore && grep -q 'HARBOR_ML_INTERN_HOST_PORT' profiles/default.env && grep -q "'ml-intern'" app/src/serviceMetadata.ts && test -f docs/2.3.87-Satellite-ML-Intern.md && test -f docs/harbor-ml-intern.png
+  tags: [spec, implemented]
+- label: ml-intern's llama.cpp integration defaults to a model id that is advertised by Harbor's llama.cpp OpenAI-compatible /v1/models catalog instead of the placeholder local-model
+  command: grep -q 'HARBOR_ML_INTERN_LLAMACPP_MODEL="auto"' profiles/default.env && grep -q 'ML_INTERN_MODEL=llamacpp/${HARBOR_ML_INTERN_LLAMACPP_MODEL}' services/compose.x.ml-intern.llamacpp.yml && grep -q 'v1/models' services/ml-intern/start.sh && grep -q 'llamacpp/auto' services/ml-intern/start.sh && ! grep -q 'HARBOR_ML_INTERN_LLAMACPP_MODEL="local-model"' profiles/default.env
+  tags: [spec, implemented]
+
 # app
 - label: the desktop app is built with Tauri 2.x, React 18, Vite, Tailwind CSS, and DaisyUI
   command: grep -q '"react"' app/package.json && grep -q '"@tauri-apps/cli"' app/package.json && grep -q '"tailwindcss"' app/package.json && grep -q '"daisyui"' app/package.json

@@ -1,0 +1,9 @@
+services:
+  ml-intern:
+    depends_on:
+      - ollama
+    environment:
+      - ML_INTERN_MODEL=ollama/${HARBOR_ML_INTERN_OLLAMA_MODEL}
+      - OLLAMA_BASE_URL=${HARBOR_OLLAMA_INTERNAL_URL}
+      - LOCAL_LLM_BASE_URL=${HARBOR_OLLAMA_INTERNAL_URL}
+      - LOCAL_LLM_API_KEY=ollama

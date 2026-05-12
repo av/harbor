@@ -1,0 +1,64 @@
+services:
+  ml-intern:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.ml-intern
+    build:
+      context: ${HARBOR_ML_INTERN_GIT_REF}
+      dockerfile: Dockerfile
+    env_file:
+      - ./.env
+      - ./services/ml-intern/override.env
+    depends_on:
+      ml-intern-init:
+        condition: service_healthy
+    environment:
+      - PORT=7860
+      - HF_TOKEN=${HARBOR_HF_TOKEN}
+      - HF_HOME=/home/user/.cache/huggingface
+      - OPENAI_API_KEY=${HARBOR_OPENAI_KEY}
+      - ANTHROPIC_API_KEY=${HARBOR_ANTHROPIC_KEY}
+      - GITHUB_TOKEN=${HARBOR_ML_INTERN_GITHUB_TOKEN}
+      - LOCAL_LLM_BASE_URL=${HARBOR_ML_INTERN_LOCAL_LLM_BASE_URL}
+      - LOCAL_LLM_API_KEY=${HARBOR_ML_INTERN_LOCAL_LLM_API_KEY}
+      - ML_INTERN_MODEL=${HARBOR_ML_INTERN_MODEL}
+      - ML_INTERN_SHARE_TRACES=${HARBOR_ML_INTERN_SHARE_TRACES}
+      - ML_INTERN_SESSION_DATASET_REPO=${HARBOR_ML_INTERN_SESSION_DATASET_REPO}
+      - ML_INTERN_YOLO_MODE=${HARBOR_ML_INTERN_YOLO_MODE}
+      - ML_INTERN_CONFIRM_CPU_JOBS=${HARBOR_ML_INTERN_CONFIRM_CPU_JOBS}
+      - ML_INTERN_AUTO_FILE_UPLOAD=${HARBOR_ML_INTERN_AUTO_FILE_UPLOAD}
+    ports:
+      - ${HARBOR_ML_INTERN_HOST_PORT}:7860
+    volumes:
+      - ./services/ml-intern/start.sh:/usr/local/bin/harbor-ml-intern-start.sh:ro
+      - ./services/ml-intern/config.json:/app/configs/main_agent_config.json:ro
+      - ./services/ml-intern/config.json:/app/configs/frontend_agent_config.json:ro
+      - ./services/ml-intern/config.json:/app/configs/cli_agent_config.json:ro
+      - ${HARBOR_ML_INTERN_WORKSPACE}/data:/app/session_logs
+      - ${HARBOR_ML_INTERN_WORKSPACE}/workspace:/workspace
+      - ${HARBOR_HF_CACHE:-./services/ml-intern/.hf-cache}:/home/user/.cache/huggingface
+    command: ["/bin/bash", "/usr/local/bin/harbor-ml-intern-start.sh"]
+    shm_size: "1g"
+    networks:
+      - harbor-network
+
+  ml-intern-init:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.ml-intern-init
+    image: alpine:3.20
+    env_file:
+      - ./.env
+      - ./services/ml-intern/override.env
+    environment:
+      TARGET_UID: ${HARBOR_USER_ID}
+      TARGET_GID: ${HARBOR_GROUP_ID}
+    entrypoint: ["/bin/sh", "/init.sh"]
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /run/harbor/ml-intern-init-done"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 2s
+    volumes:
+      - ./services/ml-intern/workspace-init.sh:/init.sh:ro
+      - ${HARBOR_ML_INTERN_WORKSPACE}/data:/workspace/data
+      - ${HARBOR_ML_INTERN_WORKSPACE}/workspace:/workspace/workspace
+    networks:
+      - harbor-network

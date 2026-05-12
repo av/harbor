@@ -1,0 +1,10 @@
+services:
+  ml-intern:
+    depends_on:
+      - llamacpp
+    environment:
+      - ML_INTERN_MODEL=llamacpp/${HARBOR_ML_INTERN_LLAMACPP_MODEL}
+      - LLAMACPP_BASE_URL=http://llamacpp:8080/v1
+      - LLAMACPP_API_KEY=sk-llamacpp
+      - LOCAL_LLM_BASE_URL=http://llamacpp:8080/v1
+      - LOCAL_LLM_API_KEY=sk-llamacpp

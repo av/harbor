@@ -1,0 +1,10 @@
+services:
+  ml-intern:
+    depends_on:
+      - vllm
+    environment:
+      - ML_INTERN_MODEL=vllm/${HARBOR_ML_INTERN_VLLM_MODEL}
+      - VLLM_BASE_URL=http://vllm:8000/v1
+      - VLLM_API_KEY=sk-vllm
+      - LOCAL_LLM_BASE_URL=http://vllm:8000/v1
+      - LOCAL_LLM_API_KEY=sk-vllm

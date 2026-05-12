@@ -1,0 +1,25 @@
+{
+  "model_name": "${ML_INTERN_MODEL:-ollama/qwen3.5:9b}",
+  "save_sessions": true,
+  "session_dataset_repo": "${ML_INTERN_SESSION_DATASET_REPO:-smolagents/ml-intern-sessions}",
+  "share_traces": "${ML_INTERN_SHARE_TRACES:-false}",
+  "personal_trace_repo_template": "{hf_user}/ml-intern-sessions",
+  "auto_save_interval": 1,
+  "heartbeat_interval_s": 60,
+  "yolo_mode": "${ML_INTERN_YOLO_MODE:-false}",
+  "max_iterations": 300,
+  "confirm_cpu_jobs": "${ML_INTERN_CONFIRM_CPU_JOBS:-true}",
+  "auto_file_upload": "${ML_INTERN_AUTO_FILE_UPLOAD:-true}",
+  "reasoning_effort": "max",
+  "messaging": {
+    "enabled": false,
+    "auto_event_types": ["approval_required", "error", "turn_complete"],
+    "destinations": {}
+  },
+  "mcpServers": {
+    "hf-mcp-server": {
+      "transport": "http",
+      "url": "https://huggingface.co/mcp?login"
+    }
+  }
+}
