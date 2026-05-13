@@ -152,3 +152,8 @@ lemonade/llama/
 
 # Test artifacts (per-run logs from `harbor dev test`; spec keeps these out of git).
 tests/artifacts/
+# Integration test artifacts
+integration/
+
+# Skill-creator runtime scripts
+.agents/skills/skill-creator/scripts/
