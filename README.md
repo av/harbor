@@ -34,13 +34,13 @@ Harbor is a CLI and companion app that lets you spin up a complete local LLM sta
 
 ## News
 
+- **v0.4.16** - ML Intern, facts, and mi services, with smarter ML Intern llama.cpp model selection and local backend integrations
 - **v0.4.15** - Lemonade and Tokscale services, TabbyAPI official image and model fixes, profile security hardening
 - **v0.4.14** - Bifrost AI gateway and SurfSense research workspace, Harbor CLI sidecar integrations, and Unsloth Studio portability fixes
 - **v0.4.13** - Unsloth Studio service with zero-click API key bootstrap and six cross-integrations, workspace-init sidecar pattern rolled out across 17 services for host-user-owned bind mounts
 - **v0.4.12** - DBHub and Beszel services with zero-click Open WebUI and host pre-provisioning, container-based test matrix and 3-pass linter
 - **v0.4.10** - Fixed SearXNG JSON format and workspace config, fixed CDI seed script skipping build variants
 - **v0.4.9** - Two new Boost modules (`analogical`, `deaf`), Open WebUI native function calling enabled by default, CLI validation fixes
-- **v0.4.8** - Solo CLI and ROS MCP Server services, MiniMax cloud provider, extensive documentation updates
 
 ## Documentation
 

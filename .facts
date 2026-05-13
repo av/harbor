@@ -237,3 +237,8 @@
 # shared
 - label: shared/ contains utility scripts used across service containers: entrypoints, config mergers, and CLI init
   command: test -f shared/harbor_cli_init.sh && test -f shared/json_config_merger.py && test -f shared/yaml_config_merger.py
+
+# release
+- label: release metadata advertises v0.4.16 consistently in seed, CLI, app manifests, and README News
+  command: grep -q 'const VERSION = "0.4.16";' .scripts/seed.ts && grep -q 'version="0.4.16"' harbor.sh && grep -q '"version": "0.4.16"' package.json && grep -q '"version": "0.4.16"' app/package.json && grep -q '"version": "0.4.16"' app/src-tauri/tauri.conf.json && grep -q '^version = "0.4.16"' app/src-tauri/Cargo.toml && grep -q '^- \*\*v0\.4\.16\*\* -' README.md
+  tags: [spec, implemented]
