@@ -1,0 +1,23 @@
+services:
+  facts:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.facts
+    image: ${HARBOR_FACTS_IMAGE}:${HARBOR_FACTS_VERSION}
+    build:
+      context: .
+      dockerfile_inline: |
+        ARG HARBOR_FACTS_BASE_IMAGE
+        ARG HARBOR_FACTS_BASE_VERSION
+        ARG HARBOR_FACTS_PACKAGE_VERSION
+        FROM ${HARBOR_FACTS_BASE_IMAGE}:${HARBOR_FACTS_BASE_VERSION}
+        RUN npm install -g @avcodes/facts@${HARBOR_FACTS_PACKAGE_VERSION}
+      args:
+        HARBOR_FACTS_BASE_IMAGE: ${HARBOR_FACTS_BASE_IMAGE}
+        HARBOR_FACTS_BASE_VERSION: ${HARBOR_FACTS_BASE_VERSION}
+        HARBOR_FACTS_PACKAGE_VERSION: ${HARBOR_FACTS_PACKAGE_VERSION}
+    env_file:
+      - ./.env
+      - ./services/facts/override.env
+    volumes:
+      - ${HARBOR_FACTS_WORKSPACE}:/root/.cache/facts
+    networks:
+      - harbor-network

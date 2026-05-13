@@ -1,0 +1,8 @@
+services:
+  mi:
+    depends_on:
+      - vllm
+    environment:
+      - OPENAI_BASE_URL=http://vllm:8000
+      - OPENAI_API_KEY=sk-vllm
+      - MODEL=${HARBOR_MI_VLLM_MODEL}

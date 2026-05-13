@@ -1,0 +1,18 @@
+services:
+  mi:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.mi
+    image: ${HARBOR_MI_IMAGE}:${HARBOR_MI_VERSION}
+    entrypoint: ["node", "/home/mi/app/index.mjs"]
+    env_file:
+      - ./.env
+      - ./services/mi/override.env
+    environment:
+      - MI_HOME=/home/mi/.mi
+      - OPENAI_BASE_URL=${HARBOR_MI_OPENAI_BASE_URL}
+      - OPENAI_API_KEY=${HARBOR_MI_OPENAI_API_KEY}
+      - MODEL=${HARBOR_MI_MODEL}
+      - REASONING_EFFORT=${HARBOR_MI_REASONING_EFFORT}
+    volumes:
+      - ${HARBOR_MI_WORKSPACE}:/home/mi/.mi
+    networks:
+      - harbor-network

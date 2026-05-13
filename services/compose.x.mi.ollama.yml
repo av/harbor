@@ -1,0 +1,9 @@
+services:
+  mi:
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      - OPENAI_BASE_URL=${HARBOR_OLLAMA_INTERNAL_URL}
+      - OPENAI_API_KEY=sk-ollama
+      - MODEL=${HARBOR_MI_OLLAMA_MODEL}

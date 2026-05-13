@@ -76,6 +76,8 @@ show_help() {
     echo "  aichat            - Run aichat CLI"
     echo "  interpreter|opint - Launch Open Interpreter CLI"
     echo "  fabric            - Run Fabric CLI"
+    echo "  facts             - Run facts CLI against the current directory"
+    echo "  mi                - Run mi agent CLI against the current directory"
     echo "  plandex           - Launch Plandex CLI"
     echo "  cmdh              - Run cmdh CLI"
     echo "  parllama          - Launch Parllama - TUI for chatting with Ollama models"
@@ -1642,7 +1644,7 @@ suggest_command() {
         up u start s down d restart r ps build shell logs l pull exec run
         stats attach cmd help --help -h hf defaults alias aliases a link ln
         unlink open o url qr list ls version --version -v smi top dive eject
-        ollama llamacpp tgi litellm vllm aphrodite openai opencode webui
+        ollama llamacpp tgi litellm vllm aphrodite openai opencode facts mi webui
         tabbyapi parllama oterm plandex pdx mistralrs interpreter opint
         cfd cloudflared cmdh fabric parler photoprism airllm txtai aider
         nanobot chatui comfyui aichat omnichain lmeval lm_eval sglang
@@ -1861,8 +1863,23 @@ env_manager() {
             return 1
         fi
         local query="$2"
+        local query_lc="${query,,}"
+        local normalized_query="${query_lc//[.-]/_}"
         local results
-        results=$(grep -i "^$prefix" "$env_file" | grep -i "$query")
+        results=$(grep -i "^$prefix" "$env_file" | while read -r line; do
+            key=${line%%=*}
+            value=${line#*=}
+            value=$(echo "$value" | sed -E 's/^"(.*)"$/\1/')
+            display_key="${key#$prefix}"
+            display_key="${display_key,,}"
+            display_key="${display_key/_/.}"
+            hyphen_key="${display_key//./-}"
+            normalized_key="${display_key//[.-]/_}"
+            search_blob="${line,,} ${value,,} ${display_key} ${hyphen_key} ${normalized_key}"
+            if [[ "$search_blob" == *"$query_lc"* || "$search_blob" == *"$normalized_query"* ]]; then
+                echo "$line"
+            fi
+        done)
         if [[ -z "$results" ]]; then
             $silent || echo "No results found for: $query"
             return 0
@@ -3693,6 +3710,49 @@ run_opencode_command() {
         ;;
     *)
         return 1
+        ;;
+    esac
+}
+
+run_facts_command() {
+    local tty_opt=""
+    if [ ! -t 0 ] || [ ! -t 1 ]; then
+        tty_opt="-T"
+    fi
+
+    $(compose_with_options --no-defaults "facts") run \
+        $tty_opt \
+        --rm \
+        -v "$original_dir:$original_dir" \
+        --workdir "$original_dir" \
+        --entrypoint facts \
+        facts "$@"
+}
+
+run_mi_command() {
+    local tty_opt=""
+    if [ ! -t 0 ] || [ ! -t 1 ]; then
+        tty_opt="-T"
+    fi
+
+    case "$1" in
+    -h | --help | help | -v | --version | version)
+        $(compose_with_options --no-defaults "mi") run \
+            $tty_opt \
+            --rm \
+            -v "$original_dir:$original_dir" \
+            --workdir "$original_dir" \
+            mi "$@"
+        ;;
+    *)
+        local services
+        services=$(get_active_services)
+        $(compose_with_options "$services" "mi") run \
+            $tty_opt \
+            --rm \
+            -v "$original_dir:$original_dir" \
+            --workdir "$original_dir" \
+            mi "$@"
         ;;
     esac
 }
@@ -5636,6 +5696,14 @@ main_entrypoint() {
     opencode)
         shift
         run_opencode_command "$@"
+        ;;
+    facts)
+        shift
+        run_facts_command "$@"
+        ;;
+    mi)
+        shift
+        run_mi_command "$@"
         ;;
     webui)
         shift

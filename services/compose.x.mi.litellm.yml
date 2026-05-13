@@ -1,0 +1,8 @@
+services:
+  mi:
+    depends_on:
+      - litellm
+    environment:
+      - OPENAI_BASE_URL=http://litellm:4000
+      - OPENAI_API_KEY=${HARBOR_LITELLM_MASTER_KEY}
+      - MODEL=${HARBOR_MI_LITELLM_MODEL}

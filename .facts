@@ -48,6 +48,39 @@
 - label: ml-intern's llama.cpp auto mode ranks advertised router models for text/code suitability and documents how users pin an exact llama.cpp model id
   command: grep -q 'score_llamacpp_model' services/ml-intern/start.sh && grep -q 'coder' services/ml-intern/start.sh && grep -q 'image' services/ml-intern/start.sh && grep -q 'ranked' docs/2.3.87-Satellite-ML-Intern.md && grep -q 'harbor config set ml-intern.llamacpp.model' docs/2.3.87-Satellite-ML-Intern.md
   tags: [spec, implemented]
+- label: ml-intern honors GITHUB_TOKEN from service override env when HARBOR_ML_INTERN_GITHUB_TOKEN is empty
+  command: grep -q 'resolve_github_token' services/ml-intern/start.sh && grep -q 'HARBOR_ML_INTERN_GITHUB_TOKEN' services/ml-intern/start.sh && ! grep -q 'GITHUB_TOKEN=\' services/compose.ml-intern.yml
+  tags: [spec, implemented]
+- label: ml-intern llama.cpp auto mode fails instead of selecting only unsuitable advertised models
+  command: grep -q 'suitable_models' services/ml-intern/start.sh && grep -q 'No suitable llama.cpp text/code model' services/ml-intern/start.sh
+  tags: [spec, implemented]
+- label: ml-intern startup patches upstream LLM health checks to return HTTP 503 when the backend is unhealthy
+  command: grep -q 'patch_llm_health_status' services/ml-intern/start.sh && grep -q 'status_code=503' services/ml-intern/start.sh
+  tags: [spec, implemented]
+- label: harbor config search matches hyphenated service handles such as ml-intern against normalized config keys
+  command: grep -q 'normalized_query' harbor.sh && grep -q 'search_blob' harbor.sh
+  tags: [spec, implemented]
+
+## facts
+- label: facts is integrated as a Harbor CLI satellite service with compose config, default env, metadata, docs, service directory, and a harbor facts wrapper
+  command: test -f services/compose.facts.yml && test -f services/facts/override.env && grep -q 'HARBOR_FACTS_' profiles/default.env && grep -q 'facts:' app/src/serviceMetadata.ts && test -f docs/2.3.88-Satellite-Facts.md && grep -q 'run_facts_command' harbor.sh
+  tags: [spec, facts-service, implemented]
+
+## mi
+- label: mi has Harbor cross-service compose integrations for Ollama, llama.cpp, vLLM, and LiteLLM backends
+  command: test -f services/compose.x.mi.ollama.yml && test -f services/compose.x.mi.llamacpp.yml && test -f services/compose.x.mi.vllm.yml && test -f services/compose.x.mi.litellm.yml
+  tags: [spec, mi-service, implemented]
+- label: mi is integrated as a Harbor CLI satellite service with compose config, default env, metadata, docs, service directory, and a harbor mi wrapper
+  command: test -f services/compose.mi.yml && test -f services/mi/override.env && grep -q 'HARBOR_MI_' profiles/default.env && grep -q 'mi:' app/src/serviceMetadata.ts && test -f docs/2.3.89-Satellite-mi.md && grep -q 'run_mi_command' harbor.sh
+  tags: [spec, mi-service, implemented]
+- label: mi uses the official ghcr.io/av/mi image instead of a Harbor inline npm build
+  command: grep -q 'HARBOR_MI_IMAGE="ghcr.io/av/mi"' profiles/default.env && ! grep -q 'HARBOR_MI_BASE_IMAGE' profiles/default.env && ! grep -q 'dockerfile_inline' services/compose.mi.yml && ! grep -q 'npm install -g @avcodes/mi' services/compose.mi.yml && grep -q 'official ghcr.io/av/mi image' docs/2.3.89-Satellite-mi.md
+  tags: [spec, mi-service, implemented]
+
+## docs
+- label: facts and mi service docs use the upstream project splash images instead of generated terminal screenshots
+  command: cmp -s docs/harbor-facts.png /home/everlier/code/facts/assets/readme/hero.png && cmp -s docs/harbor-mi.png /home/everlier/code/mi/assets/splash.png
+  tags: [spec, implemented]
 
 # app
 - label: the desktop app is built with Tauri 2.x, React 18, Vite, Tailwind CSS, and DaisyUI

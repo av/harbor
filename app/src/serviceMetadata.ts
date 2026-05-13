@@ -1025,4 +1025,20 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         wikiUrl: `${wikiUrl}/2.3.87-Satellite-ML-Intern`,
         tooltip: 'Hugging Face ML engineering agent that researches papers, trains models, and ships ML code with local or cloud LLM backends.',
     },
+    facts: {
+        name: 'facts',
+        tags: [HST.satellite, HST.cli, HST.tools],
+        projectUrl: 'https://github.com/av/facts',
+        logo: 'https://github.com/av.png?size=200',
+        wikiUrl: `${wikiUrl}/2.3.88-Satellite-Facts`,
+        tooltip: 'Fact-driven development CLI for project specs that agents can verify and implement.',
+    },
+    mi: {
+        name: 'mi',
+        tags: [HST.satellite, HST.cli, HST.tools],
+        projectUrl: 'https://github.com/av/mi',
+        logo: 'https://github.com/av.png?size=200',
+        wikiUrl: `${wikiUrl}/2.3.89-Satellite-mi`,
+        tooltip: 'Minimal agentic coding CLI that runs against OpenAI-compatible local or cloud model APIs.',
+    },
 };

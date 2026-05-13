@@ -1,0 +1,9 @@
+services:
+  mi:
+    depends_on:
+      llamacpp:
+        condition: service_healthy
+    environment:
+      - OPENAI_BASE_URL=http://llamacpp:8080
+      - OPENAI_API_KEY=sk-llamacpp
+      - MODEL=${HARBOR_MI_LLAMACPP_MODEL}

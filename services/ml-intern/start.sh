@@ -1,6 +1,61 @@
 #!/bin/bash
 set -euo pipefail
 
+resolve_github_token() {
+  if [ -z "${GITHUB_TOKEN:-}" ] && [ -n "${HARBOR_ML_INTERN_GITHUB_TOKEN:-}" ]; then
+    export GITHUB_TOKEN="$HARBOR_ML_INTERN_GITHUB_TOKEN"
+  fi
+}
+
+patch_llm_health_status() {
+  python - <<'PY'
+import os
+from pathlib import Path
+
+app_root = Path(os.environ.get("ML_INTERN_APP_ROOT", "/app"))
+route_path = app_root / "backend/routes/agent.py"
+if not route_path.exists():
+    print(f"ML Intern health route not found at {route_path}; skipping patch")
+    raise SystemExit(0)
+
+source = route_path.read_text(encoding="utf-8")
+patched = source
+
+patched = patched.replace(
+    "from fastapi.responses import StreamingResponse",
+    "from fastapi.responses import JSONResponse, StreamingResponse",
+)
+
+old = """        return LLMHealthResponse(
+            status=\"error\",
+            model=model,
+            error=str(e)[:500],
+            error_type=error_type,
+        )
+"""
+new = """        return JSONResponse(
+            status_code=503,
+            content=LLMHealthResponse(
+                status=\"error\",
+                model=model,
+                error=str(e)[:500],
+                error_type=error_type,
+            ).model_dump(),
+        )
+"""
+
+if old not in patched:
+    print("ML Intern health route pattern not found; skipping status-code patch")
+    raise SystemExit(0)
+
+patched = patched.replace(old, new, 1)
+
+if patched != source:
+    route_path.write_text(patched, encoding="utf-8")
+    print("Patched ML Intern LLM health endpoint to return status_code=503 on errors")
+PY
+}
+
 resolve_llamacpp_model() {
   local base="${LLAMACPP_BASE_URL:-${LOCAL_LLM_BASE_URL:-}}"
   local catalog_url
@@ -23,13 +78,8 @@ import urllib.error
 url = sys.argv[1]
 last_error = None
 
-def score_llamacpp_model(model_id: str, status: str) -> tuple[int, str]:
+def is_suitable_llamacpp_model(model_id: str) -> bool:
     normalized = model_id.lower()
-    score = 0
-
-    if status.lower() in {"loaded", "ready", "running"}:
-        score += 25
-
     unsuitable_terms = [
         "image",
         "vision",
@@ -44,8 +94,14 @@ def score_llamacpp_model(model_id: str, status: str) -> tuple[int, str]:
         "tts",
         "audio",
     ]
-    if any(term in normalized for term in unsuitable_terms):
-        score -= 1000
+    return not any(term in normalized for term in unsuitable_terms)
+
+def score_llamacpp_model(model_id: str, status: str) -> tuple[int, str]:
+    normalized = model_id.lower()
+    score = 0
+
+    if status.lower() in {"loaded", "ready", "running"}:
+        score += 25
 
     quality_hints = [
         ("coder", 300),
@@ -106,8 +162,17 @@ for _ in range(60):
 
         models = [model for model in payload.get("data") or [] if model.get("id")]
         if models:
+            suitable_models = [
+                model for model in models if is_suitable_llamacpp_model(model.get("id", ""))
+            ]
+            if not suitable_models:
+                raise SystemExit(
+                    f"No suitable llama.cpp text/code model returned by {url}; "
+                    f"advertised ids: {', '.join(model['id'] for model in models)}"
+                )
+
             ranked = sorted(
-                models,
+                suitable_models,
                 key=lambda model: score_llamacpp_model(
                     model.get("id", ""),
                     ((model.get("status") or {}).get("value") or ""),
@@ -132,11 +197,15 @@ raise SystemExit(f"Could not resolve llama.cpp model from {url}: {last_error}")
 PY
 }
 
+resolve_github_token
+
 if [ "${ML_INTERN_MODEL:-}" = "llamacpp/auto" ]; then
   resolved="$(resolve_llamacpp_model)"
   export ML_INTERN_MODEL="llamacpp/${resolved}"
   echo "Resolved ML_INTERN_MODEL=${ML_INTERN_MODEL}"
 fi
+
+patch_llm_health_status
 
 cd /app/backend
 exec bash start.sh
