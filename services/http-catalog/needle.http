@@ -1,0 +1,118 @@
+@host = http://localhost:{{HARBOR_NEEDLE_HOST_PORT}}
+@model = needle
+
+###
+
+GET {{host}}/health
+
+###
+
+GET {{host}}/v1/models
+
+###
+
+POST {{host}}/v1/chat/completions
+Content-Type: application/json
+Authorization: Bearer sk-needle
+
+{
+  "model": "{{model}}",
+  "messages": [
+    {
+      "role": "user",
+      "content": "What is the weather in San Francisco?"
+    }
+  ],
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "get_weather",
+        "description": "Get current weather for a city",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "location": {
+              "type": "string",
+              "description": "City name"
+            }
+          },
+          "required": ["location"]
+        }
+      }
+    }
+  ],
+  "max_tokens": 128
+}
+
+###
+
+POST {{host}}/v1/chat/completions
+Content-Type: application/json
+Authorization: Bearer sk-needle
+
+{
+  "model": "{{model}}",
+  "stream": true,
+  "messages": [
+    {
+      "role": "user",
+      "content": "What is the weather in San Francisco?"
+    }
+  ],
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "get_weather",
+        "description": "Get current weather for a city",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "location": {
+              "type": "string"
+            }
+          },
+          "required": ["location"]
+        }
+      }
+    }
+  ],
+  "max_tokens": 128
+}
+
+###
+
+POST {{host}}/v1/chat/completions
+Content-Type: application/json
+Authorization: Bearer sk-needle
+
+{
+  "model": "{{model}}",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Get the current stock price of AAPL"
+    }
+  ],
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "get_stock_price",
+        "description": "Get the current stock price for a ticker symbol",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "symbol": {
+              "type": "string",
+              "description": "Stock ticker symbol"
+            }
+          },
+          "required": ["symbol"]
+        }
+      }
+    }
+  ],
+  "max_tokens": 128
+}

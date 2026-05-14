@@ -1,0 +1,7 @@
+services:
+  litellm:
+    depends_on:
+      npcsh:
+        condition: service_healthy
+    volumes:
+      - ./services/litellm/litellm.npcsh.yaml:/app/litellm/npcsh.yaml

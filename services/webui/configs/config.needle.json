@@ -1,0 +1,11 @@
+{
+  "openai": {
+    "api_base_urls": [
+      "http://needle:7860/v1"
+    ],
+    "api_keys": [
+      "sk-needle"
+    ],
+    "enabled": true
+  }
+}

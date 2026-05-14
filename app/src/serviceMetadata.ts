@@ -1041,4 +1041,20 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         wikiUrl: `${wikiUrl}/2.3.89-Satellite-mi`,
         tooltip: 'Minimal agentic coding CLI that runs against OpenAI-compatible local or cloud model APIs.',
     },
+    npcsh: {
+        name: 'npcsh',
+        tags: [HST.satellite, HST.api, HST.cli, HST.tools],
+        projectUrl: 'https://github.com/NPC-Worldwide/npcsh',
+        logo: 'https://github.com/NPC-Worldwide.png?size=200',
+        wikiUrl: `${wikiUrl}/2.3.90-Satellite-npcsh`,
+        tooltip: 'Agentic shell and NPC team server with OpenAI-compatible endpoints, jinxes, and local backend integrations.',
+    },
+    needle: {
+        name: 'Needle',
+        tags: [HST.backend, HST.api, HST.tools],
+        projectUrl: 'https://github.com/cactus-compute/needle',
+        logo: 'https://github.com/cactus-compute.png?size=200',
+        wikiUrl: `${wikiUrl}/2.2.20-Backend-Needle`,
+        tooltip: 'Small function-calling model served through an OpenAI-compatible tool-calling API.',
+    },
 };

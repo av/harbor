@@ -1,0 +1,8 @@
+envVars:
+  MODELS:
+    - name: npcsh
+      id: sibiji
+      endpoints:
+        - type: openai
+          baseURL: http://npcsh:5337/v1
+          apiKey: sk-npcsh

@@ -82,6 +82,34 @@
   command: cmp -s docs/harbor-facts.png /home/everlier/code/facts/assets/readme/hero.png && cmp -s docs/harbor-mi.png /home/everlier/code/mi/assets/splash.png
   tags: [spec, implemented]
 
+## npcsh
+- label: npcsh is integrated as a Harbor satellite API/CLI service with compose config, default env, metadata, docs, service directory, and Ollama/llamacpp/vLLM cross-service files
+  command: test -f services/compose.npcsh.yml && test -f services/compose.x.npcsh.ollama.yml && test -f services/compose.x.npcsh.llamacpp.yml && test -f services/compose.x.npcsh.vllm.yml && test -f services/npcsh/override.env && test -f docs/2.3.90-Satellite-npcsh.md && rg -q "npcsh:" app/src/serviceMetadata.ts && rg -q "HARBOR_NPCSH_HOST_PORT" profiles/default.env
+  tags: [spec, npcsh-service, implemented]
+- label: npcsh defaults to qwen3.5:4b for Harbor's Ollama-backed chat model
+  command: rg -q 'HARBOR_NPCSH_MODEL="qwen3.5:4b"' profiles/default.env && rg -q 'HARBOR_NPCSH_OLLAMA_MODEL="qwen3.5:4b"' profiles/default.env
+  tags: [spec, npcsh-service, implemented]
+- label: npcsh is available to Harbor LLM frontends through cross-service compose integrations for Open WebUI, ChatUI, and LiteLLM
+  command: test -f services/compose.x.webui.npcsh.yml && test -f services/compose.x.chatui.npcsh.yml && test -f services/compose.x.litellm.npcsh.yml && test -f services/webui/configs/config.npcsh.json && test -f services/chatui/configs/chatui.npcsh.yml && test -f services/litellm/litellm.npcsh.yaml
+  tags: [spec, npcsh-service, implemented]
+- label: harbor npcsh launches the npcsh CLI/TUI in the npcsh service container
+  command: rg -q 'run_npcsh_command' harbor.sh && rg -q 'harbor npcsh' docs/3.-Harbor-CLI-Reference.md docs/2.3.90-Satellite-npcsh.md
+  tags: [spec, npcsh-service, implemented]
+
+## needle
+- label: needle is integrated as a Harbor backend API service with compose config, default env, metadata, docs, service directory, and an OpenAI-compatible tool-calling API adapter
+  command: test -f services/compose.needle.yml && test -f services/needle/Dockerfile && test -f services/needle/server.py && test -f services/needle/.gitignore && test -f docs/2.2.20-Backend-Needle.md && grep -q 'HARBOR_NEEDLE_HOST_PORT=34890' profiles/default.env && grep -q 'needle:' app/src/serviceMetadata.ts && grep -q 'OpenAI-compatible API focused on tool-call generation' docs/2.2.20-Backend-Needle.md
+  tags: [spec, needle-service, implemented]
+- label: needle exposes a /v1/models endpoint and a /v1/chat/completions endpoint that converts OpenAI tool definitions into Needle tool-call generation requests
+  command: grep -q '/v1/models' services/needle/server.py && grep -q '/v1/chat/completions' services/needle/server.py && grep -q 'def _needle_tools' services/needle/server.py && grep -q 'tool_calls' services/needle/server.py && grep -q 'generate(' services/needle/server.py
+  tags: [spec, needle-service, implemented]
+- label: needle is available to Open WebUI through a Harbor cross-service config that registers Needle as an OpenAI-compatible backend
+  command: test -f services/compose.x.webui.needle.yml && test -f services/webui/configs/config.needle.json && grep -q 'http://needle:7860/v1' services/webui/configs/config.needle.json && grep -q 'condition: service_healthy' services/compose.x.webui.needle.yml
+  tags: [spec, needle-service, implemented]
+- label: needle has an HTTP catalog file with runnable OpenAI-compatible model, non-streaming tool-call, and streaming tool-call requests
+  command: test -f services/http-catalog/needle.http && grep -q 'GET {{host}}/v1/models' services/http-catalog/needle.http && grep -q 'POST {{host}}/v1/chat/completions' services/http-catalog/needle.http && grep -q 'get_weather' services/http-catalog/needle.http && grep -q 'stream.: true\|"stream": true' services/http-catalog/needle.http && grep -q 'get_stock_price' services/http-catalog/needle.http
+  tags: [spec, needle-service, implemented]
+
 # app
 - label: the desktop app is built with Tauri 2.x, React 18, Vite, Tailwind CSS, and DaisyUI
   command: grep -q '"react"' app/package.json && grep -q '"@tauri-apps/cli"' app/package.json && grep -q '"tailwindcss"' app/package.json && grep -q '"daisyui"' app/package.json

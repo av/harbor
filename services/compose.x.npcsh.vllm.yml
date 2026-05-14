@@ -1,0 +1,15 @@
+services:
+  npcsh:
+    depends_on:
+      - vllm
+    environment:
+      - NPCSH_CHAT_MODEL=${HARBOR_NPCSH_VLLM_MODEL}
+      - NPCSH_CHAT_PROVIDER=openai-like
+      - NPCSH_VISION_MODEL=${HARBOR_NPCSH_VLLM_MODEL}
+      - NPCSH_VISION_PROVIDER=openai-like
+      - NPCSH_REASONING_MODEL=${HARBOR_NPCSH_VLLM_MODEL}
+      - NPCSH_REASONING_PROVIDER=openai-like
+      - NPCSH_API_URL=http://vllm:8000/v1
+      - OPENAI_BASE_URL=http://vllm:8000/v1
+      - OPENAI_API_BASE=http://vllm:8000/v1
+      - OPENAI_API_KEY=sk-vllm

@@ -1,0 +1,7 @@
+services:
+  chatui:
+    depends_on:
+      npcsh:
+        condition: service_healthy
+    volumes:
+      - ./services/chatui/configs/chatui.npcsh.yml:/app/configs/chatui.npcsh.yml

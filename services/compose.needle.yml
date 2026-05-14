@@ -1,0 +1,40 @@
+services:
+  needle:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.needle
+    image: ${HARBOR_NEEDLE_IMAGE}:${HARBOR_NEEDLE_VERSION}
+    build:
+      context: ./services/needle
+      dockerfile: Dockerfile
+      args:
+        HARBOR_NEEDLE_BASE_IMAGE: ${HARBOR_NEEDLE_BASE_IMAGE}
+        HARBOR_NEEDLE_BASE_VERSION: ${HARBOR_NEEDLE_BASE_VERSION}
+        HARBOR_NEEDLE_GIT_REF: ${HARBOR_NEEDLE_GIT_REF}
+    env_file:
+      - ./.env
+      - ./services/needle/override.env
+    environment:
+      - NEEDLE_HOST=0.0.0.0
+      - NEEDLE_PORT=7860
+      - NEEDLE_MODEL=${HARBOR_NEEDLE_MODEL}
+      - NEEDLE_MODEL_REPO=${HARBOR_NEEDLE_MODEL_REPO}
+      - NEEDLE_MODEL_FILE=${HARBOR_NEEDLE_MODEL_FILE}
+      - NEEDLE_CHECKPOINT_DIR=/data/checkpoints
+      - NEEDLE_MAX_GEN_LEN=${HARBOR_NEEDLE_MAX_GEN_LEN}
+      - NEEDLE_CONSTRAINED=${HARBOR_NEEDLE_CONSTRAINED}
+      - NEEDLE_FORCE_DOWNLOAD=${HARBOR_NEEDLE_FORCE_DOWNLOAD}
+      - JAX_PLATFORM_NAME=${HARBOR_NEEDLE_JAX_PLATFORM_NAME}
+      - HF_TOKEN=${HARBOR_HF_TOKEN}
+      - HUGGING_FACE_HUB_TOKEN=${HARBOR_HF_TOKEN}
+    ports:
+      - ${HARBOR_NEEDLE_HOST_PORT}:7860
+    volumes:
+      - ${HARBOR_HF_CACHE}:/root/.cache/huggingface
+      - ${HARBOR_NEEDLE_WORKSPACE}:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7860/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    networks:
+      - harbor-network

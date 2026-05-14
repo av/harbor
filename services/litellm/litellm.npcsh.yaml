@@ -1,0 +1,6 @@
+model_list:
+  - model_name: npcsh/sibiji
+    litellm_params:
+      model: openai/sibiji
+      api_base: http://npcsh:5337/v1
+      api_key: sk-npcsh

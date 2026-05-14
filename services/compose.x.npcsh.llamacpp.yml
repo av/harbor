@@ -1,0 +1,16 @@
+services:
+  npcsh:
+    depends_on:
+      llamacpp:
+        condition: service_healthy
+    environment:
+      - NPCSH_CHAT_MODEL=${HARBOR_NPCSH_LLAMACPP_MODEL}
+      - NPCSH_CHAT_PROVIDER=openai-like
+      - NPCSH_VISION_MODEL=${HARBOR_NPCSH_LLAMACPP_MODEL}
+      - NPCSH_VISION_PROVIDER=openai-like
+      - NPCSH_REASONING_MODEL=${HARBOR_NPCSH_LLAMACPP_MODEL}
+      - NPCSH_REASONING_PROVIDER=openai-like
+      - NPCSH_API_URL=http://llamacpp:8080/v1
+      - OPENAI_BASE_URL=http://llamacpp:8080/v1
+      - OPENAI_API_BASE=http://llamacpp:8080/v1
+      - OPENAI_API_KEY=sk-llamacpp

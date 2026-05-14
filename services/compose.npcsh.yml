@@ -1,0 +1,53 @@
+services:
+  npcsh:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.npcsh
+    image: ${HARBOR_NPCSH_IMAGE}:${HARBOR_NPCSH_VERSION}
+    build:
+      context: ./services/npcsh
+      dockerfile: Dockerfile
+      args:
+        HARBOR_NPCSH_BASE_IMAGE: ${HARBOR_NPCSH_BASE_IMAGE}
+        HARBOR_NPCSH_BASE_VERSION: ${HARBOR_NPCSH_BASE_VERSION}
+        HARBOR_NPCSH_PACKAGE_VERSION: ${HARBOR_NPCSH_PACKAGE_VERSION}
+    env_file:
+      - ./.env
+      - ./services/npcsh/override.env
+    environment:
+      - NPCSH_PORT=5337
+      - NPCSH_CORS=${HARBOR_NPCSH_CORS}
+      - NPCSH_CHAT_MODEL=${HARBOR_NPCSH_MODEL}
+      - NPCSH_CHAT_PROVIDER=${HARBOR_NPCSH_PROVIDER}
+      - NPCSH_VISION_MODEL=${HARBOR_NPCSH_VISION_MODEL}
+      - NPCSH_VISION_PROVIDER=${HARBOR_NPCSH_VISION_PROVIDER}
+      - NPCSH_EMBEDDING_MODEL=${HARBOR_NPCSH_EMBEDDING_MODEL}
+      - NPCSH_EMBEDDING_PROVIDER=${HARBOR_NPCSH_EMBEDDING_PROVIDER}
+      - NPCSH_REASONING_MODEL=${HARBOR_NPCSH_REASONING_MODEL}
+      - NPCSH_REASONING_PROVIDER=${HARBOR_NPCSH_REASONING_PROVIDER}
+      - NPCSH_DEFAULT_MODE=${HARBOR_NPCSH_DEFAULT_MODE}
+      - NPCSH_STREAM_OUTPUT=${HARBOR_NPCSH_STREAM_OUTPUT}
+      - NPCSH_BUILD_KG=${HARBOR_NPCSH_BUILD_KG}
+      - NPCSH_API_URL=${HARBOR_NPCSH_API_URL}
+      - NPCSH_DB_PATH=/data/npcsh_history.db
+      - NPCSH_VECTOR_DB_PATH=/data/npcsh_chroma.db
+      - NPCSH_INITIALIZED=1
+      - OPENAI_API_KEY=${HARBOR_OPENAI_KEY}
+      - ANTHROPIC_API_KEY=${HARBOR_ANTHROPIC_KEY}
+      - GEMINI_API_KEY=${HARBOR_GOOGLE_KEY}
+      - DEEPSEEK_API_KEY=${HARBOR_DEEPSEEK_API_KEY}
+    ports:
+      - ${HARBOR_NPCSH_HOST_PORT}:5337
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5337/api/health"]
+      interval: 5s
+      timeout: 10s
+      retries: 20
+      start_period: 10s
+    volumes:
+      - ./services/npcsh/start.sh:/usr/local/bin/harbor-npcsh-start.sh:ro
+      - ./services/npcsh/server.py:/opt/harbor/npcsh/server.py:ro
+      - ${HARBOR_NPCSH_WORKSPACE}/home:/root/.npcsh
+      - ${HARBOR_NPCSH_WORKSPACE}/data:/data
+      - ${HARBOR_NPCSH_WORKSPACE}/workspace:/workspace
+    command: ["/bin/bash", "/usr/local/bin/harbor-npcsh-start.sh"]
+    networks:
+      - harbor-network

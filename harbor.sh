@@ -3757,6 +3757,34 @@ run_mi_command() {
     esac
 }
 
+run_npcsh_command() {
+    local tty_opt=""
+    if [ ! -t 0 ] || [ ! -t 1 ]; then
+        tty_opt="-T"
+    fi
+
+    case "$1" in
+    -h | --help | help | -v | --version | version)
+        $(compose_with_options --no-defaults "npcsh") run \
+            $tty_opt \
+            --rm \
+            -v "$original_dir:$original_dir" \
+            --workdir "$original_dir" \
+            npcsh bash -lc 'export NPCSH_ENGINE="${NPCSH_ENGINE:-python}" NPCSH_INITIALIZED="${NPCSH_INITIALIZED:-1}"; exec npcsh "$@"' harbor-npcsh "$@"
+        ;;
+    *)
+        local services
+        services=$(get_active_services)
+        $(compose_with_options "$services" "npcsh") run \
+            $tty_opt \
+            --rm \
+            -v "$original_dir:$original_dir" \
+            --workdir "$original_dir" \
+            npcsh bash -lc 'export NPCSH_ENGINE="${NPCSH_ENGINE:-python}" NPCSH_INITIALIZED="${NPCSH_INITIALIZED:-1}"; exec npcsh "$@"' harbor-npcsh "$@"
+        ;;
+    esac
+}
+
 run_open_ai_command() {
     update_main_key() {
         local key=$(env_manager get openai.keys | cut -d";" -f1)
@@ -5704,6 +5732,10 @@ main_entrypoint() {
     mi)
         shift
         run_mi_command "$@"
+        ;;
+    npcsh)
+        shift
+        run_npcsh_command "$@"
         ;;
     webui)
         shift

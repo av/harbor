@@ -1,0 +1,7 @@
+services:
+  webui:
+    depends_on:
+      npcsh:
+        condition: service_healthy
+    volumes:
+      - ./services/webui/configs/config.npcsh.json:/app/configs/config.npcsh.json

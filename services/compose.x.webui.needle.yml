@@ -1,0 +1,7 @@
+services:
+  webui:
+    depends_on:
+      needle:
+        condition: service_healthy
+    volumes:
+      - ./services/webui/configs/config.needle.json:/app/configs/config.needle.json
