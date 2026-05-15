@@ -1,0 +1,4 @@
+services:
+  mi:
+    environment:
+      - MODEL=${HARBOR_HOW_OLLAMA_MODEL:-qwen3.5:4b}

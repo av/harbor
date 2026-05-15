@@ -165,7 +165,7 @@ show_help() {
     echo "  update [-l|--latest]  - Update Harbor. --latest for the dev version"
     echo "  info                  - Show system information for debug/issues"
     echo "  doctor                - Tiny troubleshooting script"
-    echo "  how                   - Ask questions about Harbor CLI, uses cmdh under the hood"
+    echo "  how                   - Ask questions about Harbor CLI, uses mi under the hood"
     echo "  smi                   - Show NVIDIA GPU information"
     echo "  top                   - Run nvtop to monitor GPU usage"
     echo "  size                  - Print the size of caches Harbor is aware of"
@@ -4126,34 +4126,54 @@ run_cmdh_command() {
         cmdh "$*"
 }
 
-run_harbor_cmdh_command() {
-    # Check if ollama is running
-    if ! is_service_running "ollama"; then
-        log_error "Please start ollama service to use 'harbor how'"
-        exit 1
-    fi
-
+run_harbor_how_command() {
     local services=$(get_active_services)
-    local cmdh_model=$(env_manager get cmdh.model)
-    local ollama_has_model=$(harbor ollama ls | grep -q "$cmdh_model" && echo "true" || echo "false")
 
-    log_debug "services: $services"
-    log_debug "cmdh_model: $cmdh_model"
-    log_debug "ollama_has_model: $ollama_has_model"
-
-    if [ "$ollama_has_model" == "false" ]; then
-        log_error "Please pull cmdh model to use 'harbor how': harbor ollama pull \$(harbor cmdh model)"
-        exit 1
+    local tty_opt=""
+    if [ ! -t 0 ] || [ ! -t 1 ]; then
+        tty_opt="-T"
     fi
 
-    # Mount the current directory and set it as the working directory
-    $(compose_with_options $services "cmdh" "harbor") run \
+    log_debug "Active services: $services"
+
+    local prompt_file
+    prompt_file=$(mktemp "${TMPDIR:-/tmp}/harbor-how.XXXXXX")
+    trap "rm -f '$prompt_file'" EXIT
+
+    local cli_help
+    cli_help=$(show_help 2>&1)
+
+    log_debug "Building system prompt"
+
+    cat > "$prompt_file" <<SYSPROMPT
+Harbor CLI assistant. Harbor is a containerized LLM toolkit on top of Docker Compose.
+
+One-shot answer — the user cannot reply. Complete but brief. No follow-ups, no filler. Suggest harbor commands when applicable — never run them.
+
+Search /harbor/docs/ and /harbor/harbor.sh with shell commands (grep, cat, ls) to find answers. These are read-only references, not services to operate.
+
+## CLI Reference
+$cli_help
+
+## Currently active services
+$services
+
+## Documentation
+Harbor docs are at /harbor/docs/ and the CLI source is at /harbor/harbor.sh.
+SYSPROMPT
+
+    log_debug "Starting mi agent"
+    log_info "Thinking..."
+
+    COMPOSE_PROGRESS=quiet \
+    $(compose_with_options "$services" "mi" "harbor") run \
+        $tty_opt \
         --rm \
-        -e "TERM=xterm-256color" \
+        --entrypoint /harbor/harbor-how.sh \
+        -v "$prompt_file:/harbor/how.prompt:ro" \
         -v "$original_dir:$original_dir" \
-        --name $default_container_prefix.harbor-how \
         --workdir "$original_dir" \
-        cmdh "$*"
+        mi -p "$*"
 }
 
 run_fabric_command() {
@@ -5943,7 +5963,7 @@ main_entrypoint() {
         ;;
     how)
         shift
-        run_harbor_cmdh_command "$@"
+        run_harbor_how_command "$@"
         ;;
     find)
         shift

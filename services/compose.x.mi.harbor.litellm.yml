@@ -1,0 +1,4 @@
+services:
+  mi:
+    environment:
+      - MODEL=${HARBOR_HOW_LITELLM_MODEL:-gpt-5.4}

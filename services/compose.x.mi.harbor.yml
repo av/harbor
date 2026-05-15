@@ -1,0 +1,8 @@
+services:
+  mi:
+    environment:
+      - MI_API_PARAMS={"temperature":0.25}
+    volumes:
+      - ./docs:/harbor/docs:ro
+      - ./harbor.sh:/harbor/harbor.sh:ro
+      - ./services/mi/harbor-how.sh:/harbor/harbor-how.sh:ro

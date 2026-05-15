@@ -1,0 +1,4 @@
+services:
+  mi:
+    environment:
+      - MODEL=${HARBOR_HOW_LLAMACPP_MODEL:-unsloth/Qwen3.5-4B-GGUF:Q4_K_M}
