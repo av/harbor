@@ -290,6 +290,6 @@
   command: test -f shared/harbor_cli_init.sh && test -f shared/json_config_merger.py && test -f shared/yaml_config_merger.py
 
 # release
-- label: release metadata advertises v0.4.17 consistently in seed, CLI, app manifests, and README News
-  command: grep -q 'const VERSION = "0.4.17";' .scripts/seed.ts && grep -q 'version="0.4.17"' harbor.sh && grep -q '"version": "0.4.17"' package.json && grep -q '"version": "0.4.17"' app/package.json && grep -q '"version": "0.4.17"' app/src-tauri/tauri.conf.json && grep -q '^version = "0.4.17"' app/src-tauri/Cargo.toml && grep -q '^- \*\*v0\.4\.17\*\* -' README.md
+- label: release metadata advertises v0.4.18 consistently in seed, CLI, app manifests, and README News
+  command: grep -q 'const VERSION = "0.4.18";' .scripts/seed.ts && grep -q 'version="0.4.18"' harbor.sh && grep -q '"version": "0.4.18"' package.json && grep -q '"version": "0.4.18"' app/package.json && grep -q '"version": "0.4.18"' app/src-tauri/tauri.conf.json && grep -q '^version = "0.4.18"' app/src-tauri/Cargo.toml && grep -q '^- \*\*v0\.4\.18\*\* -' README.md
   tags: [spec, implemented]
