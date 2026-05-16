@@ -1,0 +1,48 @@
+services:
+  open-design:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.open-design
+    image: ${HARBOR_OPEN_DESIGN_IMAGE}:${HARBOR_OPEN_DESIGN_VERSION}
+    user: root
+    env_file:
+      - ./.env
+      - ./services/open-design/override.env
+    environment:
+      NODE_ENV: production
+      NODE_OPTIONS: ${HARBOR_OPEN_DESIGN_NODE_OPTIONS}
+      OD_BIND_HOST: 0.0.0.0
+      OD_ALLOWED_ORIGINS: ${HARBOR_OPEN_DESIGN_ALLOWED_ORIGINS}
+      OD_PORT: 7456
+      OD_WEB_PORT: ${HARBOR_OPEN_DESIGN_HOST_PORT}
+      OD_DATA_DIR: /app/.od
+      HARBOR_OPEN_DESIGN_DEFAULT_API_PROTOCOL: ${HARBOR_OPEN_DESIGN_API_PROTOCOL}
+      HARBOR_OPEN_DESIGN_DEFAULT_BASE_URL: ${HARBOR_OPEN_DESIGN_BASE_URL}
+      HARBOR_OPEN_DESIGN_DEFAULT_API_KEY: ${HARBOR_OPEN_DESIGN_API_KEY}
+      HARBOR_OPEN_DESIGN_DEFAULT_MODEL: ${HARBOR_OPEN_DESIGN_MODEL}
+      HARBOR_OPEN_DESIGN_DEFAULT_PROVIDER_BASE_URL: ${HARBOR_OPEN_DESIGN_PROVIDER_BASE_URL}
+      HARBOR_OPEN_DESIGN_FORCE_DEFAULTS: ${HARBOR_OPEN_DESIGN_FORCE_DEFAULTS}
+    ports:
+      - ${HARBOR_OPEN_DESIGN_HOST_PORT}:7456
+    volumes:
+      - ${HARBOR_OPEN_DESIGN_WORKSPACE}/data:/app/.od
+      - ./services/open-design/start.sh:/usr/local/bin/harbor-open-design-start.sh:ro
+    entrypoint: ["/sbin/tini", "--", "/bin/sh", "/usr/local/bin/harbor-open-design-start.sh"]
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: ${HARBOR_OPEN_DESIGN_MEM_LIMIT}
+    pids_limit: 256
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:7456/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    networks:
+      - harbor-network

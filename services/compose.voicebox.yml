@@ -1,0 +1,59 @@
+services:
+  voicebox:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.voicebox
+    build:
+      context: ${HARBOR_VOICEBOX_GIT_REF}
+      dockerfile: Dockerfile
+    env_file:
+      - ./.env
+      - ./services/voicebox/override.env
+    depends_on:
+      voicebox-init:
+        condition: service_completed_successfully
+    environment:
+      LOG_LEVEL: ${HARBOR_VOICEBOX_LOG_LEVEL}
+      NUMBA_CACHE_DIR: /tmp/numba_cache
+      VOICEBOX_MODELS_DIR: ${HARBOR_VOICEBOX_MODELS_DIR}
+      VOICEBOX_CORS_ORIGINS: ${HARBOR_VOICEBOX_CORS_ORIGINS}
+      HARBOR_VOICEBOX_DEFAULT_MODEL_SIZE: ${HARBOR_VOICEBOX_DEFAULT_MODEL_SIZE}
+      HF_TOKEN: ${HARBOR_HF_TOKEN}
+      HOME: /app/data/home
+    entrypoint: ["/harbor-entrypoint.sh"]
+    command: ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "17493"]
+    ports:
+      - ${HARBOR_VOICEBOX_HOST_PORT}:17493
+    volumes:
+      - ./services/voicebox/harbor-entrypoint.sh:/harbor-entrypoint.sh:ro
+      - ${HARBOR_VOICEBOX_WORKSPACE}/data:/app/data
+      - ${HARBOR_VOICEBOX_WORKSPACE}/generations:/app/data/generations
+      - ${HARBOR_VOICEBOX_WORKSPACE}/huggingface:/app/models/huggingface
+    shm_size: ${HARBOR_VOICEBOX_SHM_SIZE}
+    deploy:
+      resources:
+        limits:
+          cpus: "${HARBOR_VOICEBOX_CPUS}"
+          memory: ${HARBOR_VOICEBOX_MEMORY}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:17493/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - harbor-network
+
+  voicebox-init:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.voicebox-init
+    image: alpine:3.20
+    env_file:
+      - ./.env
+      - ./services/voicebox/override.env
+    environment:
+      TARGET_UID: ${HARBOR_VOICEBOX_UID}
+      TARGET_GID: ${HARBOR_VOICEBOX_GID}
+    entrypoint: ["/bin/sh", "/init.sh"]
+    volumes:
+      - ./services/voicebox/workspace-init.sh:/init.sh:ro
+      - ${HARBOR_VOICEBOX_WORKSPACE}:/workspace
+    networks:
+      - harbor-network

@@ -110,6 +110,29 @@
   command: test -f services/http-catalog/needle.http && grep -q 'GET {{host}}/v1/models' services/http-catalog/needle.http && grep -q 'POST {{host}}/v1/chat/completions' services/http-catalog/needle.http && grep -q 'get_weather' services/http-catalog/needle.http && grep -q 'stream.: true\|"stream": true' services/http-catalog/needle.http && grep -q 'get_stock_price' services/http-catalog/needle.http
   tags: [spec, needle-service, implemented]
 
+## open-design
+- label: open-design is integrated as a Harbor satellite service with compose config, default env, metadata, docs, service directory, and UI screenshot
+  command: test -f services/compose.open-design.yml && test -f services/open-design/override.env && test -f services/open-design/.gitignore && rg -q "HARBOR_OPEN_DESIGN_HOST_PORT" profiles/default.env && rg -q "'open-design':" app/src/serviceMetadata.ts && test -f docs/2.3.91-Satellite-Open-Design.md && test -f docs/harbor-open-design.png
+  tags: [spec, open-design-service, implemented]
+- label: open-design's Ollama integration exposes Harbor Ollama through a loopback proxy and preconfigures the browser app for llama3.2:1b
+  command: test -f services/compose.x.open-design.ollama.yml && rg -q "network_mode: service:open-design" services/compose.x.open-design.ollama.yml && rg -q "127.0.0.1:11434" services/compose.x.open-design.ollama.yml && rg -q "HARBOR_OPEN_DESIGN_OLLAMA_MODEL=\"llama3.2:1b\"" profiles/default.env && rg -q "open-design ollama" docs/2.3.91-Satellite-Open-Design.md
+  tags: [spec, open-design-service, implemented]
+- label: open-design preserves upstream deployment hardening while using Harbor env names for image, port, data, allowed origins, memory, and Node heap settings
+  command: grep -q "no-new-privileges:true" services/compose.open-design.yml && grep -q "pids_limit: 256" services/compose.open-design.yml && grep -Fq 'mem_limit: ${HARBOR_OPEN_DESIGN_MEM_LIMIT}' services/compose.open-design.yml && grep -q "HARBOR_OPEN_DESIGN_ALLOWED_ORIGINS" profiles/default.env && grep -q "HARBOR_OPEN_DESIGN_NODE_OPTIONS" profiles/default.env
+  tags: [spec, open-design-service, implemented]
+- label: open-design has Harbor llama.cpp and vLLM cross-service integrations that preconfigure the app for each backend's OpenAI-compatible /v1 API, with llama.cpp auto model discovery
+  command: test -f services/compose.x.open-design.llamacpp.yml && test -f services/compose.x.open-design.vllm.yml && rg -q 'http://llamacpp:8080/v1' services/compose.x.open-design.llamacpp.yml && rg -q 'http://vllm:8000/v1' services/compose.x.open-design.vllm.yml && rg -q 'HARBOR_OPEN_DESIGN_LLAMACPP_MODEL="auto"' profiles/default.env && rg -q 'HARBOR_OPEN_DESIGN_VLLM_MODEL' profiles/default.env && rg -q '/models' services/open-design/start.sh && rg -q 'open-design llamacpp' docs/2.3.91-Satellite-Open-Design.md && rg -q 'open-design vllm' docs/2.3.91-Satellite-Open-Design.md
+  tags: [spec, open-design-service, implemented]
+
+## voicebox
+- voicebox is integrated as a Harbor frontend audio service with compose config, default env, metadata, docs, service directory, and UI screenshot @spec @voicebox-service @implemented
+- voicebox exposes Harbor-configurable resource limits and logging/model/CORS environment variables documented for users @spec @voicebox-service @implemented
+- voicebox persists generated audio, app data, and Hugging Face model cache in Harbor-managed directories @spec @voicebox-service @implemented
+- voicebox builds from the upstream Git repository because upstream Docker docs do not publish a prebuilt image yet @spec @voicebox-service @implemented
+- label: voicebox defaults the browser generation form to Qwen TTS 0.6B instead of the upstream 1.7B CPU-heavy default
+  command: grep -q HARBOR_VOICEBOX_DEFAULT_MODEL_SIZE services/compose.voicebox.yml && grep -q HARBOR_VOICEBOX_DEFAULT_MODEL_SIZE profiles/default.env && grep -q 'modelSize.*default_model_size' services/voicebox/harbor-entrypoint.sh && ! grep -q 'sed -i' services/voicebox/harbor-entrypoint.sh
+  tags: [spec, voicebox-service, implemented]
+
 # app
 - label: the desktop app is built with Tauri 2.x, React 18, Vite, Tailwind CSS, and DaisyUI
   command: grep -q '"react"' app/package.json && grep -q '"@tauri-apps/cli"' app/package.json && grep -q '"tailwindcss"' app/package.json && grep -q '"daisyui"' app/package.json

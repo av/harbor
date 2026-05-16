@@ -1,0 +1,26 @@
+services:
+  open-design:
+    depends_on:
+      - ollama
+    environment:
+      HARBOR_OPEN_DESIGN_DEFAULT_API_PROTOCOL: openai
+      HARBOR_OPEN_DESIGN_DEFAULT_BASE_URL: http://127.0.0.1:11434/v1
+      HARBOR_OPEN_DESIGN_DEFAULT_API_KEY: ollama
+      HARBOR_OPEN_DESIGN_DEFAULT_MODEL: ${HARBOR_OPEN_DESIGN_OLLAMA_MODEL}
+      HARBOR_OPEN_DESIGN_DEFAULT_PROVIDER_BASE_URL: http://127.0.0.1:11434/v1
+
+  open-design-ollama-proxy:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.open-design-ollama-proxy
+    build:
+      context: ./services/open-design
+      dockerfile_inline: |
+        FROM alpine:3.20
+        RUN apk add --no-cache socat
+    depends_on:
+      - open-design
+      - ollama
+    network_mode: service:open-design
+    command:
+      - socat
+      - TCP-LISTEN:11434,bind=127.0.0.1,fork,reuseaddr
+      - TCP:ollama:11434

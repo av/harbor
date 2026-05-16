@@ -1057,4 +1057,20 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         wikiUrl: `${wikiUrl}/2.2.20-Backend-Needle`,
         tooltip: 'Small function-calling model served through an OpenAI-compatible tool-calling API.',
     },
+    'open-design': {
+        name: 'Open Design',
+        tags: [HST.satellite, HST.tools],
+        projectUrl: 'https://github.com/nexu-io/open-design',
+        logo: 'https://github.com/nexu-io.png?size=200',
+        wikiUrl: `${wikiUrl}/2.3.91-Satellite-Open-Design`,
+        tooltip: 'Local-first design artifact workspace with BYOK model providers, design systems, decks, prototypes, and Harbor Ollama integration.',
+    },
+    voicebox: {
+        name: 'Voicebox',
+        tags: [HST.frontend, HST.api, HST.audio],
+        projectUrl: 'https://github.com/jamiepine/voicebox',
+        logo: 'https://www.google.com/s2/favicons?domain=voicebox.sh&sz=128',
+        wikiUrl: `${wikiUrl}/2.1.16-Frontend-Voicebox`,
+        tooltip: 'Local-first AI voice studio for voice cloning, preset voices, speech generation, dictation, transcription, and agent speech.',
+    },
 };

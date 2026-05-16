@@ -1,0 +1,10 @@
+services:
+  open-design:
+    depends_on:
+      - vllm
+    environment:
+      HARBOR_OPEN_DESIGN_DEFAULT_API_PROTOCOL: openai
+      HARBOR_OPEN_DESIGN_DEFAULT_BASE_URL: http://vllm:8000/v1
+      HARBOR_OPEN_DESIGN_DEFAULT_API_KEY: sk-vllm
+      HARBOR_OPEN_DESIGN_DEFAULT_MODEL: ${HARBOR_OPEN_DESIGN_VLLM_MODEL}
+      HARBOR_OPEN_DESIGN_DEFAULT_PROVIDER_BASE_URL: http://vllm:8000/v1
