@@ -93,6 +93,70 @@ assert_ok    "env ollama port reset" harbor env ollama OLLAMA_HOST 0.0.0.0
 #    once the service is up — that path is exercised in the smoke suite.
 assert_match "harbor cmd ollama"     'docker[ -]compose'            harbor cmd ollama
 
+# 7b. launch — OpenCode is both a host tool adapter name and a Harbor service.
+#     Users need an explicit service mode that does not require the host tool
+#     binary and still reuses the active Harbor compose selection.
+fake_bin="$(mktemp -d)"
+fake_docker_log="$(mktemp)"
+cat >"$fake_bin/docker" <<'EOF'
+#!/usr/bin/env bash
+case "$*" in
+  "compose ps --format {{.Service}}")
+    echo "ollama"
+    exit 0
+    ;;
+  "compose ps --services --filter status=running")
+    echo "ollama"
+    exit 0
+    ;;
+  "compose ps -a --services --filter status=running")
+    echo "ollama"
+    exit 0
+    ;;
+  "port harbor.ollama")
+    echo "11434/tcp -> 0.0.0.0:11434"
+    exit 0
+    ;;
+esac
+
+if [ "$1" = "compose" ]; then
+  printf '%s\n' "$*" >>"$HARBOR_FAKE_DOCKER_LOG"
+  exit 0
+fi
+
+exit 0
+EOF
+chmod +x "$fake_bin/docker"
+
+assert_match "launch help documents service mode" '--service opencode' harbor launch --help
+
+suite_log "launch --service requires a handle"
+if harbor launch --service >/tmp/cli-step.out 2>&1; then
+  cat /tmp/cli-step.out >&2
+  fail "launch --service without handle unexpectedly succeeded"
+fi
+if ! grep -Eq -- 'Usage: harbor launch \[--service\] <service\|tool>' /tmp/cli-step.out; then
+  cat /tmp/cli-step.out >&2
+  fail "launch --service without handle did not print usage"
+fi
+
+suite_log "launch opencode missing host tool suggests service mode"
+if HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false HARBOR_FAKE_DOCKER_LOG="$fake_docker_log" PATH="$fake_bin:/usr/bin:/bin" ./harbor.sh launch opencode --backend ollama --model test-model >/tmp/cli-step.out 2>&1; then
+  cat /tmp/cli-step.out >&2
+  fail "launch opencode missing host tool unexpectedly succeeded"
+fi
+if ! grep -Eq -- 'harbor launch --service opencode' /tmp/cli-step.out; then
+  cat /tmp/cli-step.out >&2
+  fail "launch opencode missing host tool did not suggest service mode"
+fi
+
+assert_ok "launch --service opencode" env HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false HARBOR_FAKE_DOCKER_LOG="$fake_docker_log" PATH="$fake_bin:$PATH" harbor launch --service opencode --help
+if ! grep -Eq -- 'run -T --rm opencode --help' "$fake_docker_log"; then
+  cat "$fake_docker_log" >&2
+  fail "launch --service opencode did not dispatch to docker compose run"
+fi
+rm -rf "$fake_bin" "$fake_docker_log"
+
 # 8. Doctor — runs without bringing services up. requirements.sh-derived
 #    checks (docker, compose v2 >= 2.23, git, curl) all pass against the
 #    row image we built.

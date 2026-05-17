@@ -29,6 +29,9 @@
 - label: harbor launch supports host tool adapters for codex, claude, and opencode that accept --backend, --model, --config, discover a running Harbor OpenAI-compatible backend, and keep unknown service fallback dispatch intact
   command: rg -q '^launch_host_tool_command\(\)' harbor.sh && rg -q '^launch_detect_backend\(\)' harbor.sh && rg -q 'OPENCODE_CONFIG_CONTENT' harbor.sh && rg -q 'ANTHROPIC_BASE_URL' harbor.sh && rg -q 'model_providers.harbor_launch.base_url' harbor.sh && rg -q 'harbor launch codex --backend ollama --model' docs/3.-Harbor-CLI-Reference.md
   tags: [spec, implemented]
+- label: harbor launch exposes an explicit --service mode so name-colliding handles like opencode can launch the Harbor service instead of the host tool adapter, and the CLI docs and tests cover that path
+  command: rg -q 'force_service_launch' harbor.sh && rg -q 'harbor launch --service opencode' docs/3.-Harbor-CLI-Reference.md && rg -q 'launch --service opencode' tests/suites/02-cli.sh
+  tags: [spec, implemented]
 
 # services
 - label: compose.yml is the base layer, defining only the harbor-network

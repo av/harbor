@@ -1150,6 +1150,9 @@ launch_require_tool() {
 
     if ! command -v "$tool" >/dev/null 2>&1; then
         log_error "Host tool '$tool' is not installed or is not on PATH."
+        if service_compose_exists "$tool"; then
+            log_info "'$tool' is also a Harbor service. To launch the service container instead, run: harbor launch --service $tool"
+        fi
         return 1
     fi
 }
@@ -1346,24 +1349,32 @@ launch_host_tool_command() {
 }
 
 run_launch_command() {
+    local force_service_launch=false
+
     case "$1" in
     "" | -h | --help | help)
-        echo "Usage: harbor launch <service> [args]"
+        echo "Usage: harbor launch [--service] <service|tool> [args]"
         echo
         echo "Launches a Harbor service CLI or host coding tool using the currently running Harbor services."
         echo "When an inference backend is already running, backend-specific compose"
         echo "overlays are included the same way they are for direct service CLI commands."
         echo "Host tool adapters discover a running backend and accept --backend, --model,"
         echo "--config, and -- to pass arguments to the launched tool."
+        echo "Use --service before the handle to bypass host tool adapters for name-colliding services."
         echo
         echo "Examples:"
         echo "  harbor launch codex --backend ollama --model qwen3.5:4b"
         echo "  harbor launch claude --model qwen3.5:4b -- -p \"explain this repo\""
         echo "  harbor launch opencode --config"
+        echo "  harbor launch --service opencode --help"
         echo "  harbor launch mi -p \"say hello\""
         echo "  harbor launch promptfoo eval"
         echo "  harbor launch llamacpp --help"
         return 0
+        ;;
+    --service)
+        force_service_launch=true
+        shift
         ;;
     --)
         shift
@@ -1371,10 +1382,24 @@ run_launch_command() {
     esac
 
     local service="$1"
+    if [ -z "$service" ]; then
+        log_error "Usage: harbor launch [--service] <service|tool> [args]"
+        return 1
+    fi
     shift
 
     if [ "$1" = "--" ]; then
         shift
+    fi
+
+    if $force_service_launch; then
+        if service_compose_exists "$service"; then
+            run_run "$service" "$@"
+        else
+            log_error "Service '$service' not found."
+            return 1
+        fi
+        return
     fi
 
     case "$service" in
