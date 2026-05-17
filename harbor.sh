@@ -976,16 +976,390 @@ run_run() {
     $(compose_with_options $services "$service") run $tty_opt --rm "$service" "$@"
 }
 
+launch_backend_is_supported() {
+    case "$1" in
+    ollama | llamacpp | ikllamacpp | vllm | tabbyapi | mistralrs | sglang | lmdeploy | aphrodite | ktransformers | unsloth-studio)
+        return 0
+        ;;
+    *)
+        return 1
+        ;;
+    esac
+}
+
+launch_backend_model_key() {
+    case "$1" in
+    ollama)
+        echo "ollama.default.models"
+        ;;
+    llamacpp)
+        echo "llamacpp.model"
+        ;;
+    ikllamacpp)
+        echo "ikllamacpp.model"
+        ;;
+    vllm)
+        echo "vllm.model"
+        ;;
+    tabbyapi)
+        echo "tabbyapi.model"
+        ;;
+    mistralrs)
+        echo "mistralrs.model"
+        ;;
+    sglang)
+        echo "sglang.model"
+        ;;
+    aphrodite)
+        echo "aphrodite.model"
+        ;;
+    ktransformers)
+        echo "ktransformers.model"
+        ;;
+    *)
+        return 1
+        ;;
+    esac
+}
+
+launch_url_with_v1() {
+    local url="${1%/}"
+
+    case "$url" in
+    */v1)
+        echo "$url"
+        ;;
+    *)
+        echo "$url/v1"
+        ;;
+    esac
+}
+
+launch_backend_url() {
+    local backend="$1"
+
+    if ! launch_backend_is_supported "$backend"; then
+        return 1
+    fi
+
+    get_url "$backend" 2>/dev/null
+}
+
+launch_backend_is_reachable() {
+    local backend="$1"
+    local url
+
+    if ! url=$(launch_backend_url "$backend"); then
+        return 1
+    fi
+
+    curl -fsS --max-time 2 "$(launch_url_with_v1 "$url")/models" >/dev/null 2>&1
+}
+
+launch_detect_backend() {
+    local explicit_backend="$1"
+    local backend
+
+    if [ -n "$explicit_backend" ]; then
+        if ! launch_backend_is_supported "$explicit_backend"; then
+            log_error "Unsupported launch backend '$explicit_backend'."
+            return 1
+        fi
+
+        if ! is_service_running "$explicit_backend"; then
+            log_error "Backend '$explicit_backend' is not running. Start it first with: harbor up $explicit_backend"
+            return 1
+        fi
+
+        echo "$explicit_backend"
+        return 0
+    fi
+
+    for backend in ollama llamacpp ikllamacpp vllm tabbyapi mistralrs sglang lmdeploy aphrodite ktransformers unsloth-studio; do
+        if is_service_running "$backend" && launch_backend_is_reachable "$backend"; then
+            echo "$backend"
+            return 0
+        fi
+    done
+
+    for backend in ollama llamacpp ikllamacpp vllm tabbyapi mistralrs sglang lmdeploy aphrodite ktransformers unsloth-studio; do
+        if is_service_running "$backend" && launch_backend_url "$backend" >/dev/null; then
+            echo "$backend"
+            return 0
+        fi
+    done
+
+    log_error "No running Harbor OpenAI-compatible backend found. Start one first, for example: harbor up ollama"
+    return 1
+}
+
+launch_backend_configured_model() {
+    local backend="$1"
+    local key
+    local value
+
+    if ! key=$(launch_backend_model_key "$backend"); then
+        return 1
+    fi
+
+    value=$(env_manager --silent get "$key" 2>/dev/null || true)
+    value=$(echo "$value" | tr ';, ' '\n' | awk 'NF { print; exit }')
+
+    if [ -n "$value" ] && [ "$value" != "auto" ]; then
+        echo "$value"
+        return 0
+    fi
+
+    return 1
+}
+
+launch_discover_model() {
+    local backend="$1"
+    local api_url="$2"
+    local model
+
+    if model=$(curl -fsS --max-time 3 "$api_url/models" 2>/dev/null | jq -r '.data[]?.id' 2>/dev/null | awk 'NF { print; exit }') && [ -n "$model" ] && [ "$model" != "null" ]; then
+        echo "$model"
+        return 0
+    fi
+
+    if model=$(launch_backend_configured_model "$backend"); then
+        echo "$model"
+        return 0
+    fi
+
+    return 1
+}
+
+launch_args_include_model() {
+    local arg
+
+    for arg in "$@"; do
+        case "$arg" in
+        -m | --model | --model=*)
+            return 0
+            ;;
+        esac
+    done
+
+    return 1
+}
+
+launch_require_tool() {
+    local tool="$1"
+
+    if ! command -v "$tool" >/dev/null 2>&1; then
+        log_error "Host tool '$tool' is not installed or is not on PATH."
+        return 1
+    fi
+}
+
+launch_opencode_config_content() {
+    local provider="$1"
+    local backend="$2"
+    local api_url="$3"
+    local api_key="$4"
+    local model="$5"
+
+    if ! command -v jq >/dev/null 2>&1; then
+        log_error "jq is required to generate OpenCode launch config."
+        return 1
+    fi
+
+    jq -cn \
+        --arg provider "$provider" \
+        --arg backend "$backend" \
+        --arg api_url "$api_url" \
+        --arg api_key "$api_key" \
+        --arg model "$model" \
+        '{
+            "$schema": "https://opencode.ai/config.json",
+            provider: {
+                ($provider): {
+                    npm: "@ai-sdk/openai-compatible",
+                    name: ("Harbor " + $backend),
+                    options: {
+                        baseURL: $api_url,
+                        apiKey: $api_key
+                    },
+                    models: {
+                        ($model): {
+                            name: $model,
+                            attachment: true,
+                            tool_call: true
+                        }
+                    }
+                }
+            }
+        }'
+}
+
+launch_print_host_config() {
+    local tool="$1"
+    local backend="$2"
+    local base_url="$3"
+    local api_url="$4"
+    local model="$5"
+    local api_key="$6"
+    local provider="harbor-$backend"
+
+    echo "tool=$tool"
+    echo "backend=$backend"
+    echo "model=$model"
+
+    case "$tool" in
+    claude)
+        echo "ANTHROPIC_AUTH_TOKEN=ollama"
+        echo "ANTHROPIC_API_KEY="
+        echo "ANTHROPIC_BASE_URL=$base_url"
+        ;;
+    codex)
+        echo "OPENAI_API_KEY=$api_key"
+        echo "codex -c model_providers.harbor_launch.name=\"Harbor $backend\" -c model_providers.harbor_launch.base_url=\"$api_url\" -c model_providers.harbor_launch.env_key=\"OPENAI_API_KEY\" -c model_provider=\"harbor_launch\" -m \"$model\""
+        ;;
+    opencode)
+        echo "OPENAI_API_KEY=$api_key"
+        echo "OPENCODE_CONFIG_CONTENT=$(launch_opencode_config_content "$provider" "$backend" "$api_url" "$api_key" "$model")"
+        echo "opencode -m \"$provider/$model\""
+        ;;
+    esac
+}
+
+launch_host_tool_command() {
+    local tool="$1"
+    shift
+
+    local backend=""
+    local model=""
+    local config_only=false
+    local tool_args=()
+    local backend_url
+    local api_url
+    local api_key="${OPENAI_API_KEY:-sk-harbor}"
+
+    while [ $# -gt 0 ]; do
+        case "$1" in
+        --backend)
+            if [ -z "$2" ]; then
+                log_error "Usage: harbor launch $tool --backend <service>"
+                return 1
+            fi
+            backend="$2"
+            shift 2
+            ;;
+        --backend=*)
+            backend="${1#--backend=}"
+            shift
+            ;;
+        --model | -m)
+            if [ -z "$2" ]; then
+                log_error "Usage: harbor launch $tool --model <model>"
+                return 1
+            fi
+            model="$2"
+            shift 2
+            ;;
+        --model=*)
+            model="${1#--model=}"
+            shift
+            ;;
+        --config)
+            config_only=true
+            shift
+            ;;
+        --)
+            shift
+            tool_args+=("$@")
+            break
+            ;;
+        *)
+            tool_args+=("$1")
+            shift
+            ;;
+        esac
+    done
+
+    if ! backend=$(launch_detect_backend "$backend"); then
+        return 1
+    fi
+
+    if ! backend_url=$(launch_backend_url "$backend"); then
+        log_error "Could not resolve a host URL for backend '$backend'."
+        return 1
+    fi
+
+    api_url=$(launch_url_with_v1 "$backend_url")
+
+    if [ -z "$model" ] && ! model=$(launch_discover_model "$backend" "$api_url"); then
+        log_error "Could not discover a model for backend '$backend'. Pass one explicitly with: harbor launch $tool --backend $backend --model <model>"
+        return 1
+    fi
+
+    if $config_only; then
+        launch_print_host_config "$tool" "$backend" "$backend_url" "$api_url" "$model" "$api_key"
+        return 0
+    fi
+
+    launch_require_tool "$tool" || return 1
+
+    case "$tool" in
+    claude)
+        if [ "$backend" != "ollama" ]; then
+            log_error "Claude Code launch currently requires Harbor's ollama backend because it uses Ollama's Anthropic-compatible API."
+            return 1
+        fi
+
+        if launch_args_include_model "${tool_args[@]}"; then
+            ANTHROPIC_AUTH_TOKEN=ollama ANTHROPIC_API_KEY="" ANTHROPIC_BASE_URL="$backend_url" claude "${tool_args[@]}"
+        else
+            ANTHROPIC_AUTH_TOKEN=ollama ANTHROPIC_API_KEY="" ANTHROPIC_BASE_URL="$backend_url" claude --model "$model" "${tool_args[@]}"
+        fi
+        ;;
+    codex)
+        local codex_args=(
+            -c "model_providers.harbor_launch.name=\"Harbor $backend\""
+            -c "model_providers.harbor_launch.base_url=\"$api_url\""
+            -c "model_providers.harbor_launch.env_key=\"OPENAI_API_KEY\""
+            -c "model_provider=\"harbor_launch\""
+        )
+
+        if ! launch_args_include_model "${tool_args[@]}"; then
+            codex_args+=(-m "$model")
+        fi
+
+        OPENAI_API_KEY="$api_key" codex "${codex_args[@]}" "${tool_args[@]}"
+        ;;
+    opencode)
+        local provider="harbor-$backend"
+        local config_content
+        local opencode_args=()
+
+        config_content=$(launch_opencode_config_content "$provider" "$backend" "$api_url" "$api_key" "$model")
+
+        if ! launch_args_include_model "${tool_args[@]}"; then
+            opencode_args+=(-m "$provider/$model")
+        fi
+
+        OPENAI_API_KEY="$api_key" OPENCODE_CONFIG_CONTENT="$config_content" opencode "${opencode_args[@]}" "${tool_args[@]}"
+        ;;
+    esac
+}
+
 run_launch_command() {
     case "$1" in
     "" | -h | --help | help)
         echo "Usage: harbor launch <service> [args]"
         echo
-        echo "Launches a Harbor service CLI using the currently running Harbor services."
+        echo "Launches a Harbor service CLI or host coding tool using the currently running Harbor services."
         echo "When an inference backend is already running, backend-specific compose"
         echo "overlays are included the same way they are for direct service CLI commands."
+        echo "Host tool adapters discover a running backend and accept --backend, --model,"
+        echo "--config, and -- to pass arguments to the launched tool."
         echo
         echo "Examples:"
+        echo "  harbor launch codex --backend ollama --model qwen3.5:4b"
+        echo "  harbor launch claude --model qwen3.5:4b -- -p \"explain this repo\""
+        echo "  harbor launch opencode --config"
         echo "  harbor launch mi -p \"say hello\""
         echo "  harbor launch promptfoo eval"
         echo "  harbor launch llamacpp --help"
@@ -1004,6 +1378,9 @@ run_launch_command() {
     fi
 
     case "$service" in
+    claude | codex | opencode)
+        launch_host_tool_command "$service" "$@"
+        ;;
     aider)
         run_aider_command "$@"
         ;;

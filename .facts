@@ -26,6 +26,9 @@
 - label: harbor launch <service> runs an existing Harbor service CLI command with the current active Harbor services included, preserving any arguments after the service name
   command: rg -q '^run_launch_command\(\)' harbor.sh && rg -q '^    launch\)' harbor.sh && rg -Fq 'run_launch_command "$@"' harbor.sh
   tags: [spec, implemented]
+- label: harbor launch supports host tool adapters for codex, claude, and opencode that accept --backend, --model, --config, discover a running Harbor OpenAI-compatible backend, and keep unknown service fallback dispatch intact
+  command: rg -q '^launch_host_tool_command\(\)' harbor.sh && rg -q '^launch_detect_backend\(\)' harbor.sh && rg -q 'OPENCODE_CONFIG_CONTENT' harbor.sh && rg -q 'ANTHROPIC_BASE_URL' harbor.sh && rg -q 'model_providers.harbor_launch.base_url' harbor.sh && rg -q 'harbor launch codex --backend ollama --model' docs/3.-Harbor-CLI-Reference.md
+  tags: [spec, implemented]
 
 # services
 - label: compose.yml is the base layer, defining only the harbor-network
