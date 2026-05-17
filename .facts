@@ -304,6 +304,10 @@
 - label: docs are auto-generated via 'harbor dev docs'
   command: test -f .scripts/docs.ts
 
+## integrations
+- core high-star Harbor services (ollama, webui, dify, vllm, comfyui, librechat, anythingllm, aider, etc.) have a high-level 'Integrations' section immediately below their 'Starting' heading in their docs/*.md files @implemented
+- the Integrations section for core services follows the llama.cpp sample style: high-level grouped descriptions of frontend auto-configuration, traefik exposure, GPU/Capability wiring, build support, host volume mounts (especially HF cache and service data dirs), and references to relevant HARBOR_* config variables; no exhaustive 'Configuration surface' variable list @implemented
+
 # ci
 - label: CI has 5 GitHub Actions workflows: app-release, bench-docker, boost-docker, lint, and test
   command: test $(find .github/workflows -name '*.yml' | wc -l) -ge 5
