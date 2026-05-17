@@ -36,6 +36,7 @@ show_help() {
     echo "  stats                   - Show resource usage statistics"
     echo "  attach <handle>         - Attach to a running service container"
     echo "  cmd <handle>            - Print the docker compose command"
+    echo "  launch <handle> [args]  - Launch a service CLI with currently running Harbor services"
     echo
     echo "Setup Management Commands:"
     echo "  webui     - Configure Open WebUI Service"
@@ -104,6 +105,7 @@ show_help() {
     echo
     echo "Harbor CLI Commands:"
     echo "  open <handle>                 - Open a service in the default browser"
+    echo "  launch <handle> [args]        - Launch a service CLI with currently running Harbor services"
     echo
     echo "  url <handle>                  - Get the URL for a service"
     echo "    url <handle>                         - Url on the local host"
@@ -974,6 +976,93 @@ run_run() {
     $(compose_with_options $services "$service") run $tty_opt --rm "$service" "$@"
 }
 
+run_launch_command() {
+    case "$1" in
+    "" | -h | --help | help)
+        echo "Usage: harbor launch <service> [args]"
+        echo
+        echo "Launches a Harbor service CLI using the currently running Harbor services."
+        echo "When an inference backend is already running, backend-specific compose"
+        echo "overlays are included the same way they are for direct service CLI commands."
+        echo
+        echo "Examples:"
+        echo "  harbor launch mi -p \"say hello\""
+        echo "  harbor launch promptfoo eval"
+        echo "  harbor launch llamacpp --help"
+        return 0
+        ;;
+    --)
+        shift
+        ;;
+    esac
+
+    local service="$1"
+    shift
+
+    if [ "$1" = "--" ]; then
+        shift
+    fi
+
+    case "$service" in
+    aider)
+        run_aider_command "$@"
+        ;;
+    aichat)
+        run_aichat_command "$@"
+        ;;
+    cmdh)
+        run_cmdh_command "$@"
+        ;;
+    fabric)
+        run_fabric_command "$@"
+        ;;
+    facts)
+        run_facts_command "$@"
+        ;;
+    gptme)
+        run_gptme_command "$@"
+        ;;
+    mi)
+        run_mi_command "$@"
+        ;;
+    nanobot)
+        run_nanobot_command "$@"
+        ;;
+    nexa)
+        run_nexa_command "$@"
+        ;;
+    npcsh)
+        run_npcsh_command "$@"
+        ;;
+    openhands | oh)
+        run_openhands_command "$@"
+        ;;
+    opint | interpreter)
+        run_opint_command "$@"
+        ;;
+    plandex | pdx)
+        run_plandex_command "$@"
+        ;;
+    promptfoo | pf)
+        run_promptfoo_command "$@"
+        ;;
+    repopack)
+        run_repopack_command "$@"
+        ;;
+    tokscale)
+        run_tokscale_cli "$@"
+        ;;
+    *)
+        if service_compose_exists "$service"; then
+            run_run "$service" "$@"
+        else
+            log_error "Service '$service' not found."
+            return 1
+        fi
+        ;;
+    esac
+}
+
 run_stats() {
     if [ ! -t 1 ]; then
         $(compose_with_options "*") stats --no-stream "$@"
@@ -1644,7 +1733,7 @@ suggest_command() {
     local known_commands=(
         up u start s down d restart r ps build shell logs l pull exec run
         stats attach cmd help --help -h hf defaults alias aliases a link ln
-        unlink open o url qr list ls version --version -v smi top dive eject
+        unlink launch open o url qr list ls version --version -v smi top dive eject
         ollama llamacpp tgi litellm vllm aphrodite openai opencode facts mi webui
         tabbyapi parllama oterm plandex pdx mistralrs interpreter opint
         cfd cloudflared cmdh fabric parler photoprism airllm txtai aider
@@ -5774,6 +5863,10 @@ main_entrypoint() {
     open | o)
         shift
         run_open "$@"
+        ;;
+    launch)
+        shift
+        run_launch_command "$@"
         ;;
     url)
         shift

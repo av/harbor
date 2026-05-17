@@ -22,6 +22,11 @@
 - label: dev scripts live in .scripts/ and must be run via 'harbor dev', not directly
   command: test -d .scripts && test $(find .scripts -name '*.ts' -o -name '*.sh' | wc -l) -ge 20
 
+## launch
+- label: harbor launch <service> runs an existing Harbor service CLI command with the current active Harbor services included, preserving any arguments after the service name
+  command: rg -q '^run_launch_command\(\)' harbor.sh && rg -q '^    launch\)' harbor.sh && rg -Fq 'run_launch_command "$@"' harbor.sh
+  tags: [spec, implemented]
+
 # services
 - label: compose.yml is the base layer, defining only the harbor-network
   command: grep -q 'harbor-network' compose.yml && ! grep -q 'services:' compose.yml
