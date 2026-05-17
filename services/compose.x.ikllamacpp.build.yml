@@ -1,0 +1,8 @@
+services:
+  ikllamacpp:
+    build:
+      context: https://github.com/ikawrakow/ik_llama.cpp.git#${HARBOR_IKLLAMACPP_BUILD_REF:-main}
+      dockerfile: docker/ik_llama-cpu.Containerfile
+      target: server
+      args:
+        BUILDKIT_CONTEXT_KEEP_GIT_DIR: 1

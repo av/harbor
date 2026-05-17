@@ -1,0 +1,26 @@
+services:
+  ikllamacpp:
+    image: ${HARBOR_IKLLAMACPP_IMAGE_CPU}
+    container_name: ${HARBOR_CONTAINER_PREFIX}.ikllamacpp
+    env_file:
+      - ./.env
+      - ./services/ikllamacpp/override.env
+    volumes:
+      - ${HARBOR_HF_CACHE:-./services/ikllamacpp/.hf-cache}:/root/.cache/huggingface
+      - ${HARBOR_LLAMACPP_CACHE}:/root/.cache/llama.cpp
+      - ./services/ikllamacpp/data:/app/data
+    ports:
+      - ${HARBOR_IKLLAMACPP_HOST_PORT}:8080
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '{ printf \"GET /health HTTP/1.0\\r\\n\\r\\n\" >&3; cat <&3; } 3<>/dev/tcp/127.0.0.1/8080 | grep -q ok || exit 1'"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    command: >
+      ${HARBOR_IKLLAMACPP_MODEL_SPECIFIER}
+      ${HARBOR_IKLLAMACPP_EXTRA_ARGS}
+      --port 8080
+      --host 0.0.0.0
+    networks:
+      - harbor-network

@@ -133,6 +133,29 @@
   command: grep -q HARBOR_VOICEBOX_DEFAULT_MODEL_SIZE services/compose.voicebox.yml && grep -q HARBOR_VOICEBOX_DEFAULT_MODEL_SIZE profiles/default.env && grep -q 'modelSize.*default_model_size' services/voicebox/harbor-entrypoint.sh && ! grep -q 'sed -i' services/voicebox/harbor-entrypoint.sh
   tags: [spec, voicebox-service, implemented]
 
+## ikllamacpp
+- label: ikllamacpp has a primary Docker Compose service at services/compose.ikllamacpp.yml using container name ${HARBOR_CONTAINER_PREFIX}.ikllamacpp, Harbor env files, harbor-network, and host port ${HARBOR_IKLLAMACPP_HOST_PORT}:8080
+  command: test -f services/compose.ikllamacpp.yml && rg -q "^  ikllamacpp:" services/compose.ikllamacpp.yml && rg -Fq 'container_name: ${HARBOR_CONTAINER_PREFIX}.ikllamacpp' services/compose.ikllamacpp.yml && rg -Fq "./services/ikllamacpp/override.env" services/compose.ikllamacpp.yml && rg -q "harbor-network" services/compose.ikllamacpp.yml && rg -Fq '${HARBOR_IKLLAMACPP_HOST_PORT}:8080' services/compose.ikllamacpp.yml
+  tags: [spec, implemented]
+- label: ikllamacpp defaults define the CPU, NVIDIA, and source build configuration required by its compose overlays
+  command: rg -q "^HARBOR_IKLLAMACPP_HOST_PORT=" profiles/default.env && rg -q "^HARBOR_IKLLAMACPP_IMAGE_CPU=" profiles/default.env && rg -q "^HARBOR_IKLLAMACPP_IMAGE_NVIDIA=" profiles/default.env && rg -q "^HARBOR_IKLLAMACPP_BUILD_REF=" profiles/default.env && rg -q "^HARBOR_IKLLAMACPP_EXTRA_ARGS=" profiles/default.env
+  tags: [spec, implemented]
+- label: ikllamacpp has NVIDIA, CDI, and source-build compose overlays following the llama.cpp service pattern
+  command: test -f services/compose.x.ikllamacpp.nvidia.yml && test -f services/compose.x.ikllamacpp.cdi.yml && test -f services/compose.x.ikllamacpp.build.yml && rg -q "HARBOR_IKLLAMACPP_IMAGE_NVIDIA" services/compose.x.ikllamacpp.nvidia.yml && rg -q "nvidia.com/gpu=all" services/compose.x.ikllamacpp.cdi.yml && rg -q "github.com/ikawrakow/ik_llama.cpp" services/compose.x.ikllamacpp.build.yml
+  tags: [spec, implemented]
+- label: ikllamacpp is documented and listed in the Harbor app metadata as a backend service
+  command: test -f docs/2.2.21-Backend\&colon-ik_llama.cpp.md && rg -q "Handle: `ikllamacpp`" docs/2.2.21-Backend\&colon-ik_llama.cpp.md && rg -q "ikllamacpp:" app/src/serviceMetadata.ts && rg -q "2.2.21-Backend-ik_llama.cpp" app/src/serviceMetadata.ts
+  tags: [spec, implemented]
+- label: ikllamacpp has a Harbor CLI helper for model, gguf, args, models, and build commands matching llamacpp
+  command: rg -q "run_ikllamacpp_command" harbor.sh && rg -q "harbor ikllamacpp model" harbor.sh && rg -q "ikllamacpp.extra.args" harbor.sh && rg -q "ikllamacpp.build.ref" harbor.sh
+  tags: [spec, implemented]
+- label: ikllamacpp is registered as an OpenAI-compatible Harbor backend for dynamic backend integrations
+  command: rg -q "ikllamacpp: \{ url: 'http://ikllamacpp:8080'" routines/backendIntegration.ts && rg -q "ikllamacpp: 'ikllamacpp.model'" routines/backendIntegration.ts
+  tags: [spec, implemented]
+- label: ikllamacpp has WebUI and Traefik cross-service integrations that point at its OpenAI-compatible endpoint
+  command: test -f services/compose.x.webui.ikllamacpp.yml && test -f services/webui/configs/config.ikllamacpp.json && test -f services/compose.x.traefik.ikllamacpp.yml && rg -q "http://ikllamacpp:8080/v1" services/webui/configs/config.ikllamacpp.json && rg -q "ikllamacpp\\.\\$\\{HARBOR_TRAEFIK_DOMAIN\\}" services/compose.x.traefik.ikllamacpp.yml
+  tags: [spec, implemented]
+
 # app
 - label: the desktop app is built with Tauri 2.x, React 18, Vite, Tailwind CSS, and DaisyUI
   command: grep -q '"react"' app/package.json && grep -q '"@tauri-apps/cli"' app/package.json && grep -q '"tailwindcss"' app/package.json && grep -q '"daisyui"' app/package.json

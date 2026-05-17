@@ -233,6 +233,14 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         wikiUrl: `${wikiUrl}/2.2.2-Backend:-llama.cpp`,
         tooltip: 'LLM inference in C/C++',
     },
+    ikllamacpp: {
+        name: 'ik_llama.cpp',
+        tags: [HST.backend],
+        projectUrl: 'https://github.com/ikawrakow/ik_llama.cpp',
+        logo: 'https://github.com/ikawrakow.png?size=200',
+        wikiUrl: `${wikiUrl}/2.2.21-Backend-ik_llama.cpp`,
+        tooltip: 'llama.cpp fork with additional quantization formats and CPU/CUDA performance improvements.',
+    },
     lmdeploy: {
         name: 'lmdeploy',
         tags: [HST.backend, HST.partial],

@@ -1,0 +1,10 @@
+services:
+  ikllamacpp:
+    image: ${HARBOR_IKLLAMACPP_IMAGE_NVIDIA}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

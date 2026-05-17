@@ -40,6 +40,7 @@ show_help() {
     echo "Setup Management Commands:"
     echo "  webui     - Configure Open WebUI Service"
     echo "  llamacpp  - Configure llamacpp service"
+    echo "  ikllamacpp - Configure ik_llama.cpp service"
     echo "  tgi       - Configure text-generation-inference service"
     echo "  litellm   - Configure LiteLLM service"
     echo "  langflow  - Configure Langflow UI Service"
@@ -3378,6 +3379,99 @@ run_llamacpp_command() {
     esac
 }
 
+run_ikllamacpp_command() {
+    update_model_spec() {
+        local spec=""
+        local current_model
+        local current_gguf
+        current_model=$(env_manager get ikllamacpp.model)
+        current_gguf=$(env_manager get ikllamacpp.gguf)
+
+        if [ -n "$current_model" ]; then
+            spec=$(hf_url_2_llama_spec "$current_model")
+        else
+            spec="-m $current_gguf"
+        fi
+
+        env_manager set ikllamacpp.model.specifier "$spec"
+    }
+
+    case "$1" in
+    models|ls)
+        shift
+        local base_url
+        base_url=$(harbor url ikllamacpp)
+        curl -s "${base_url}/v1/models" | jq -r '.data[].id'
+        ;;
+    model)
+        shift
+        env_manager_alias ikllamacpp.model --on-set update_model_spec "$@"
+        ;;
+    gguf)
+        shift
+        env_manager_alias ikllamacpp.gguf --on-set update_model_spec "$@"
+        ;;
+    args)
+        shift
+        env_manager_alias ikllamacpp.extra.args "$@"
+        ;;
+    build)
+        shift
+        case "$1" in
+        on)
+            local current_caps
+            current_caps=$(env_manager get capabilities.default)
+            if [[ ! ";${current_caps};" =~ ";build;" ]]; then
+                if [ -z "$current_caps" ]; then
+                    env_manager set capabilities.default "build"
+                else
+                    env_manager set capabilities.default "${current_caps};build"
+                fi
+            fi
+            log_info "Build from source enabled for ikllamacpp"
+            log_info "Run 'harbor build ikllamacpp' to build, then 'harbor up ikllamacpp'"
+            ;;
+        off)
+            local current_caps
+            local new_caps
+            current_caps=$(env_manager get capabilities.default)
+            new_caps=$(echo "$current_caps" | sed 's/;*build//g; s/^;//; s/;$//')
+            env_manager set capabilities.default "$new_caps"
+            log_info "Build from source disabled for ikllamacpp"
+            ;;
+        ref)
+            shift
+            env_manager_alias ikllamacpp.build.ref "$@"
+            ;;
+        *)
+            echo "Usage: harbor ikllamacpp build <command>"
+            echo
+            echo "Commands:"
+            echo "  on              - Enable ikllamacpp source builds"
+            echo "  off             - Disable source builds (use pre-built images)"
+            echo "  ref [git ref]   - Get or set git ref to build (branch/tag/commit)"
+            ;;
+        esac
+        ;;
+    -h | --help | help)
+        echo "Please note that this is not ik_llama.cpp CLI, but a Harbor CLI to manage ikllamacpp service."
+        echo "Access ik_llama.cpp own CLI by running 'harbor exec ikllamacpp' when it's running."
+        echo
+        echo "Usage: harbor ikllamacpp <command>"
+        echo
+        echo "Commands:"
+        echo "  harbor ikllamacpp models                     - List models served by ik_llama.cpp"
+        echo "  harbor ikllamacpp model [Hugging Face URL]   - Get or set the ikllamacpp model to run"
+        echo "  harbor ikllamacpp gguf [gguf path]           - Get or set the path to GGUF to run"
+        echo "  harbor ikllamacpp args [args]                - Get or set extra args to pass to the server"
+        echo "  harbor ikllamacpp build on|off|ref           - Manage building from source"
+        ;;
+    *)
+        return 1
+        ;;
+    esac
+}
+
 run_tgi_command() {
     update_model_spec() {
         local spec=""
@@ -5720,6 +5814,10 @@ main_entrypoint() {
     llamacpp)
         shift
         run_llamacpp_command "$@"
+        ;;
+    ikllamacpp)
+        shift
+        run_ikllamacpp_command "$@"
         ;;
     tgi)
         shift

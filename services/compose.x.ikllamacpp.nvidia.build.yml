@@ -1,0 +1,7 @@
+services:
+  ikllamacpp:
+    build:
+      dockerfile: docker/ik_llama-cuda.Containerfile
+      args:
+        BUILDKIT_CONTEXT_KEEP_GIT_DIR: 1
+        CUDA_DOCKER_ARCH: ${HARBOR_IKLLAMACPP_BUILD_CUDA_ARCH:-default}
