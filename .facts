@@ -59,6 +59,9 @@
 - label: harbor launch codex warns about known Responses API tool schema compatibility risk before invoking Codex against llama.cpp-family backends, and the CLI docs describe the mitigation
   command: rg -q 'launch_warn_codex_backend_compat' harbor.sh && rg -q 'Codex CLI.*Responses API tool' harbor.sh docs/3.-Harbor-CLI-Reference.md && rg -q 'launch codex warns about llama.cpp Responses API tool compatibility' tests/suites/05-launch-smoke.sh
   tags: [spec, launch-codex-compat, implemented]
+- label: harbor launch promptfoo uses non-interactive compose run flags when stdio is not a TTY and returns a non-zero status when promptfoo startup or CLI execution fails
+  command: rg -q "launch promptfoo propagates startup failure" tests/suites/02-cli.sh && rg -q "tty_opt" harbor.sh && rg -Fq "return \$status" harbor.sh
+  tags: [spec, promptfoo-launch, implemented]
 
 # services
 - label: compose.yml is the base layer, defining only the harbor-network
@@ -193,6 +196,11 @@
 - label: ikllamacpp has WebUI and Traefik cross-service integrations that point at its OpenAI-compatible endpoint
   command: test -f services/compose.x.webui.ikllamacpp.yml && test -f services/webui/configs/config.ikllamacpp.json && test -f services/compose.x.traefik.ikllamacpp.yml && rg -q "http://ikllamacpp:8080/v1" services/webui/configs/config.ikllamacpp.json && rg -q "ikllamacpp\\.\\$\\{HARBOR_TRAEFIK_DOMAIN\\}" services/compose.x.traefik.ikllamacpp.yml
   tags: [spec, implemented]
+
+## promptfoo
+- label: promptfoo runs as the Harbor host user so its bind-mounted workspace remains writable after promptfoo-init prepares it with HARBOR_USER_ID and HARBOR_GROUP_ID ownership
+  command: rg -q "user:.*HARBOR_USER_ID.*HARBOR_GROUP_ID" services/compose.promptfoo.yml && rg -q "host user" docs/2.3.28-Satellite\&colon-Promptfoo.md
+  tags: [spec, promptfoo-launch, implemented]
 
 # app
 - label: the desktop app is built with Tauri 2.x, React 18, Vite, Tailwind CSS, and DaisyUI

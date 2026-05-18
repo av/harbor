@@ -121,6 +121,12 @@ esac
 
 if [ "$1" = "compose" ]; then
   printf '%s\n' "$*" >>"$HARBOR_FAKE_DOCKER_LOG"
+  if [ "${HARBOR_FAKE_PROMPTFOO_UP_EXIT:-0}" != "0" ] && [[ "$*" == *" up -d --wait"* ]]; then
+    exit "$HARBOR_FAKE_PROMPTFOO_UP_EXIT"
+  fi
+  if [ "${HARBOR_FAKE_PROMPTFOO_RUN_EXIT:-0}" != "0" ] && [[ "$*" == *" run -T --rm"* ]] && [[ "$*" == *" --entrypoint promptfoo promptfoo --version"* ]]; then
+    exit "$HARBOR_FAKE_PROMPTFOO_RUN_EXIT"
+  fi
   exit 0
 fi
 
@@ -158,6 +164,32 @@ assert_ok "launch --service opencode" env HARBOR_LEGACY_CLI=true HARBOR_CAPABILI
 if ! grep -Eq -- 'run -T --rm opencode --help' "$fake_docker_log"; then
   cat "$fake_docker_log" >&2
   fail "launch --service opencode did not dispatch to docker compose run"
+fi
+
+suite_log "launch promptfoo propagates startup failure"
+: >"$fake_docker_log"
+if HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false HARBOR_FAKE_DOCKER_LOG="$fake_docker_log" HARBOR_FAKE_PROMPTFOO_UP_EXIT=42 PATH="$fake_bin:$PATH" ./harbor.sh launch promptfoo --version >/tmp/cli-step.out 2>&1; then
+  cat /tmp/cli-step.out >&2
+  fail "launch promptfoo startup failure unexpectedly succeeded"
+fi
+if grep -Eq -- 'run .*--entrypoint promptfoo promptfoo --version' "$fake_docker_log"; then
+  cat "$fake_docker_log" >&2
+  fail "launch promptfoo continued to CLI run after startup failure"
+fi
+
+suite_log "launch promptfoo uses noninteractive run flag and propagates CLI failure"
+: >"$fake_docker_log"
+if HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false HARBOR_FAKE_DOCKER_LOG="$fake_docker_log" HARBOR_FAKE_PROMPTFOO_RUN_EXIT=43 PATH="$fake_bin:$PATH" ./harbor.sh launch promptfoo --version >/tmp/cli-step.out 2>&1; then
+  cat /tmp/cli-step.out >&2
+  fail "launch promptfoo CLI failure unexpectedly succeeded"
+fi
+if ! grep -Eq -- 'run -T --rm .* --entrypoint promptfoo promptfoo --version' "$fake_docker_log"; then
+  cat "$fake_docker_log" >&2
+  fail "launch promptfoo did not use noninteractive compose run"
+fi
+if grep -Eq -- 'run .* -it ' "$fake_docker_log"; then
+  cat "$fake_docker_log" >&2
+  fail "launch promptfoo used interactive compose run without a TTY"
 fi
 rm -rf "$fake_bin" "$fake_docker_log"
 

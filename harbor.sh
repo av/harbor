@@ -6034,10 +6034,15 @@ run_promptfoo_command() {
     local services=$(get_active_services)
     log_debug "Active services: $services"
 
+    local tty_opt="-it"
+    if [ ! -t 0 ] || [ ! -t 1 ]; then
+        tty_opt="-T"
+    fi
+
     # Check if the specified service is running
     if ! echo "$services" | grep -q "promptfoo"; then
         log_debug "Promptfoo backend stopped, launching..."
-        run_up --no-defaults promptfoo
+        run_up --no-defaults promptfoo || return $?
     else
         log_debug "Promptfoo backend already running."
     fi
@@ -6054,16 +6059,18 @@ run_promptfoo_command() {
     trap 'echo; log_info "Promptfoo CLI terminated."; exit 130' TERM
 
     $(compose_with_options $services "promptfoo") run \
+        $tty_opt \
         --rm \
-        -it \
         --name $default_container_prefix.promptfoo-cli-$RANDOM \
         -e "TERM=xterm-256color" \
         -v "$original_dir:$original_dir" \
         --workdir "$original_dir" \
         --entrypoint promptfoo \
         promptfoo "$@"
+    local status=$?
 
     trap - INT TERM
+    return $status
 }
 
 run_webtop_command() {
