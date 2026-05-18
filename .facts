@@ -35,6 +35,9 @@
 - label: harbor launch reports actionable backend and model discovery failures, distinguishes explicit backend failures from auto-discovery failures, and skips /v1/models discovery when --model is provided
   command: rg -q 'launch codex reports no running backend' tests/suites/02-cli.sh && rg -q 'launch codex --model skips model discovery' tests/suites/02-cli.sh && rg -q 'launch_model_from_models_response' harbor.sh && rg -q 'Start a compatible backend' docs/3.-Harbor-CLI-Reference.md
   tags: [spec, implemented]
+- label: harbor launch host-tool smoke coverage runs codex, claude, and opencode through fake installed tools against fake running OpenAI-compatible Harbor backends, and verifies backend-specific /v1/models schema variants and launch env/arguments
+  command: bash tests/suites/05-launch-smoke.sh
+  tags: [spec, implemented]
 
 # services
 - label: compose.yml is the base layer, defining only the harbor-network

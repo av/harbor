@@ -1145,11 +1145,36 @@ launch_model_from_models_response() {
         return 4
     fi
 
-    if ! printf '%s' "$response" | jq -e '.data | arrays' >/dev/null 2>&1; then
+    if ! printf '%s' "$response" | jq -e '
+        (type == "object" and (
+            (has("data") and (.data | type == "array")) or
+            (has("models") and (.models | type == "array"))
+        )) or
+        type == "array"
+    ' >/dev/null 2>&1; then
         return 2
     fi
 
-    model=$(printf '%s' "$response" | jq -r '.data[]?.id // empty' 2>/dev/null | awk 'NF { print; exit }')
+    model=$(printf '%s' "$response" | jq -r '
+        def model_id:
+            if type == "string" then
+                .
+            elif type == "object" then
+                .id // .name // .model // .root // empty
+            else
+                empty
+            end;
+
+        if type == "object" and (.data | type == "array") then
+            .data[]? | model_id
+        elif type == "object" and (.models | type == "array") then
+            .models[]? | model_id
+        elif type == "array" then
+            .[]? | model_id
+        else
+            empty
+        end
+    ' 2>/dev/null | awk 'NF { print; exit }')
 
     if [ -n "$model" ] && [ "$model" != "null" ]; then
         echo "$model"
