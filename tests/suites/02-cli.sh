@@ -126,7 +126,11 @@ fi
 
 exit 0
 EOF
-chmod +x "$fake_bin/docker"
+cat >"$fake_bin/curl" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' '{"data":[{"id":"test-model"}]}'
+EOF
+chmod +x "$fake_bin/docker" "$fake_bin/curl"
 
 assert_match "launch help documents service mode" '--service opencode' harbor launch --help
 
@@ -156,6 +160,128 @@ if ! grep -Eq -- 'run -T --rm opencode --help' "$fake_docker_log"; then
   fail "launch --service opencode did not dispatch to docker compose run"
 fi
 rm -rf "$fake_bin" "$fake_docker_log"
+
+# 7c. launch host adapters — backend/model discovery failures should be
+#     actionable from a user's terminal, and --model must avoid parsing
+#     /v1/models while still checking that the selected backend is reachable.
+launch_fake_bin="$(mktemp -d)"
+launch_fake_curl_log="$(mktemp)"
+cat >"$launch_fake_bin/docker" <<'EOF'
+#!/usr/bin/env bash
+case "$*" in
+  "compose ps --format {{.Service}}")
+    printf '%s\n' ${HARBOR_FAKE_RUNNING_SERVICES:-}
+    exit 0
+    ;;
+  "compose ps --services --filter status=running")
+    printf '%s\n' ${HARBOR_FAKE_RUNNING_SERVICES:-}
+    exit 0
+    ;;
+  "compose ps -a --services --filter status=running")
+    printf '%s\n' ${HARBOR_FAKE_RUNNING_SERVICES:-}
+    exit 0
+    ;;
+  "port harbor.ollama")
+    echo "11434/tcp -> 0.0.0.0:11434"
+    exit 0
+    ;;
+  "port harbor.unsloth-studio")
+    echo "34851/tcp -> 0.0.0.0:34851"
+    exit 0
+    ;;
+esac
+
+if [ "$1" = "compose" ]; then
+  exit 0
+fi
+
+exit 0
+EOF
+cat >"$launch_fake_bin/curl" <<'EOF'
+#!/usr/bin/env bash
+if [ -n "${HARBOR_FAKE_CURL_LOG:-}" ]; then
+  printf '%s\n' "$*" >>"$HARBOR_FAKE_CURL_LOG"
+fi
+
+case "${HARBOR_FAKE_CURL_MODE:-models}" in
+  fail)
+    exit 7
+    ;;
+  empty)
+    printf '%s\n' '{"data":[]}'
+    ;;
+  invalid)
+    printf '%s\n' 'not-json'
+    ;;
+  *)
+    printf '%s\n' '{"data":[{"id":"fake-discovered"}]}'
+    ;;
+esac
+EOF
+chmod +x "$launch_fake_bin/docker" "$launch_fake_bin/curl"
+
+suite_log "launch codex reports no running backend"
+if HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false HARBOR_FAKE_RUNNING_SERVICES=webui PATH="$launch_fake_bin:/usr/bin:/bin" ./harbor.sh launch codex --config >/tmp/cli-step.out 2>&1; then
+  cat /tmp/cli-step.out >&2
+  fail "launch codex without running backend unexpectedly succeeded"
+fi
+if ! grep -Eq -- 'No running Harbor OpenAI-compatible backend found' /tmp/cli-step.out || ! grep -Eq -- 'Start a compatible backend with: harbor up ollama' /tmp/cli-step.out; then
+  cat /tmp/cli-step.out >&2
+  fail "launch codex without running backend did not print remediation"
+fi
+
+suite_log "launch codex reports explicit backend not running"
+if HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false HARBOR_FAKE_RUNNING_SERVICES=webui PATH="$launch_fake_bin:/usr/bin:/bin" ./harbor.sh launch codex --backend ollama --config >/tmp/cli-step.out 2>&1; then
+  cat /tmp/cli-step.out >&2
+  fail "launch codex with stopped explicit backend unexpectedly succeeded"
+fi
+if ! grep -Eq -- "Backend 'ollama' is not running" /tmp/cli-step.out || ! grep -Eq -- 'harbor up ollama' /tmp/cli-step.out; then
+  cat /tmp/cli-step.out >&2
+  fail "launch codex with stopped explicit backend did not print remediation"
+fi
+
+suite_log "launch codex reports explicit backend unreachable"
+if HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false HARBOR_FAKE_RUNNING_SERVICES=ollama HARBOR_FAKE_CURL_MODE=fail PATH="$launch_fake_bin:/usr/bin:/bin" ./harbor.sh launch codex --backend ollama --model test-model --config >/tmp/cli-step.out 2>&1; then
+  cat /tmp/cli-step.out >&2
+  fail "launch codex with unreachable explicit backend unexpectedly succeeded"
+fi
+if ! grep -Eq -- "Backend 'ollama' is running, but its OpenAI-compatible endpoint is not reachable" /tmp/cli-step.out; then
+  cat /tmp/cli-step.out >&2
+  fail "launch codex with unreachable explicit backend did not print reachability error"
+fi
+
+suite_log "launch codex reports empty /v1/models"
+if HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false HARBOR_FAKE_RUNNING_SERVICES=unsloth-studio HARBOR_FAKE_CURL_MODE=empty PATH="$launch_fake_bin:/usr/bin:/bin" ./harbor.sh launch codex --backend unsloth-studio --config >/tmp/cli-step.out 2>&1; then
+  cat /tmp/cli-step.out >&2
+  fail "launch codex with empty models unexpectedly succeeded"
+fi
+if ! grep -Eq -- "did not advertise any models" /tmp/cli-step.out || ! grep -Eq -- 'pass one explicitly with --model <model>' /tmp/cli-step.out; then
+  cat /tmp/cli-step.out >&2
+  fail "launch codex with empty models did not print remediation"
+fi
+
+suite_log "launch codex reports invalid /v1/models"
+if HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false HARBOR_FAKE_RUNNING_SERVICES=unsloth-studio HARBOR_FAKE_CURL_MODE=invalid PATH="$launch_fake_bin:/usr/bin:/bin" ./harbor.sh launch codex --backend unsloth-studio --config >/tmp/cli-step.out 2>&1; then
+  cat /tmp/cli-step.out >&2
+  fail "launch codex with invalid models unexpectedly succeeded"
+fi
+if ! grep -Eq -- "returned an invalid /v1/models response" /tmp/cli-step.out || ! grep -Eq -- 'pass a known model explicitly with --model <model>' /tmp/cli-step.out; then
+  cat /tmp/cli-step.out >&2
+  fail "launch codex with invalid models did not print remediation"
+fi
+
+suite_log "launch codex --model skips model discovery"
+: >"$launch_fake_curl_log"
+assert_ok "launch codex --model skips model discovery" env HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false HARBOR_FAKE_RUNNING_SERVICES=ollama HARBOR_FAKE_CURL_MODE=invalid HARBOR_FAKE_CURL_LOG="$launch_fake_curl_log" PATH="$launch_fake_bin:/usr/bin:/bin" ./harbor.sh launch codex --backend ollama --model explicit-model --config
+if ! grep -Eq -- '^model=explicit-model$' /tmp/cli-step.out; then
+  cat /tmp/cli-step.out >&2
+  fail "launch codex --model did not use the explicit model"
+fi
+if [ "$(wc -l <"$launch_fake_curl_log")" -ne 1 ]; then
+  cat "$launch_fake_curl_log" >&2
+  fail "launch codex --model called curl more than once"
+fi
+rm -rf "$launch_fake_bin" "$launch_fake_curl_log"
 
 # 8. Doctor — runs without bringing services up. requirements.sh-derived
 #    checks (docker, compose v2 >= 2.23, git, curl) all pass against the

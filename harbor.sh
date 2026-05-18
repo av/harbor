@@ -1056,18 +1056,38 @@ launch_backend_is_reachable() {
     curl -fsS --max-time 2 "$(launch_url_with_v1 "$url")/models" >/dev/null 2>&1
 }
 
+launch_supported_backends() {
+    echo "ollama llamacpp ikllamacpp vllm tabbyapi mistralrs sglang lmdeploy aphrodite ktransformers unsloth-studio"
+}
+
 launch_detect_backend() {
     local explicit_backend="$1"
     local backend
+    local url
+    local running_backends=()
 
     if [ -n "$explicit_backend" ]; then
         if ! launch_backend_is_supported "$explicit_backend"; then
             log_error "Unsupported launch backend '$explicit_backend'."
+            log_info "Supported launch backends: $(launch_supported_backends)"
             return 1
         fi
 
         if ! is_service_running "$explicit_backend"; then
-            log_error "Backend '$explicit_backend' is not running. Start it first with: harbor up $explicit_backend"
+            log_error "Backend '$explicit_backend' is not running."
+            log_info "Start it first with: harbor up $explicit_backend"
+            return 1
+        fi
+
+        if ! url=$(launch_backend_url "$explicit_backend"); then
+            log_error "Could not resolve a host URL for backend '$explicit_backend'."
+            log_info "Check the backend's published port with: harbor ps"
+            return 1
+        fi
+
+        if ! curl -fsS --max-time 2 "$(launch_url_with_v1 "$url")/models" >/dev/null 2>&1; then
+            log_error "Backend '$explicit_backend' is running, but its OpenAI-compatible endpoint is not reachable at $(launch_url_with_v1 "$url")/models."
+            log_info "Wait for the backend to finish loading, check its container health with: harbor ps, then retry."
             return 1
         fi
 
@@ -1075,21 +1095,25 @@ launch_detect_backend() {
         return 0
     fi
 
-    for backend in ollama llamacpp ikllamacpp vllm tabbyapi mistralrs sglang lmdeploy aphrodite ktransformers unsloth-studio; do
+    for backend in $(launch_supported_backends); do
         if is_service_running "$backend" && launch_backend_is_reachable "$backend"; then
             echo "$backend"
             return 0
         fi
-    done
 
-    for backend in ollama llamacpp ikllamacpp vllm tabbyapi mistralrs sglang lmdeploy aphrodite ktransformers unsloth-studio; do
-        if is_service_running "$backend" && launch_backend_url "$backend" >/dev/null; then
-            echo "$backend"
-            return 0
+        if is_service_running "$backend"; then
+            running_backends+=("$backend")
         fi
     done
 
-    log_error "No running Harbor OpenAI-compatible backend found. Start one first, for example: harbor up ollama"
+    if [ ${#running_backends[@]} -gt 0 ]; then
+        log_error "Running Harbor launch backend(s) are not reachable via /v1/models: ${running_backends[*]}"
+        log_info "Wait for them to finish loading, check container health with: harbor ps, then retry."
+        return 1
+    fi
+
+    log_error "No running Harbor OpenAI-compatible backend found."
+    log_info "Start a compatible backend with: harbor up ollama"
     return 1
 }
 
@@ -1113,21 +1137,69 @@ launch_backend_configured_model() {
     return 1
 }
 
+launch_model_from_models_response() {
+    local response="$1"
+    local model
+
+    if ! command -v jq >/dev/null 2>&1; then
+        return 4
+    fi
+
+    if ! printf '%s' "$response" | jq -e '.data | arrays' >/dev/null 2>&1; then
+        return 2
+    fi
+
+    model=$(printf '%s' "$response" | jq -r '.data[]?.id // empty' 2>/dev/null | awk 'NF { print; exit }')
+
+    if [ -n "$model" ] && [ "$model" != "null" ]; then
+        echo "$model"
+        return 0
+    fi
+
+    return 3
+}
+
 launch_discover_model() {
     local backend="$1"
     local api_url="$2"
+    local response
     local model
+    local parse_rc
 
-    if model=$(curl -fsS --max-time 3 "$api_url/models" 2>/dev/null | jq -r '.data[]?.id' 2>/dev/null | awk 'NF { print; exit }') && [ -n "$model" ] && [ "$model" != "null" ]; then
+    if ! response=$(curl -fsS --max-time 3 "$api_url/models" 2>/dev/null); then
+        log_error "Could not read models from backend '$backend' at $api_url/models."
+        log_info "Wait for the backend to finish loading, or pass a known model explicitly with --model <model>."
+        return 1
+    fi
+
+    model=$(launch_model_from_models_response "$response")
+    parse_rc=$?
+
+    if [ $parse_rc -eq 0 ]; then
         echo "$model"
         return 0
+    fi
+
+    if [ $parse_rc -eq 2 ]; then
+        log_error "Backend '$backend' returned an invalid /v1/models response at $api_url/models."
+        log_info "Check that the service exposes an OpenAI-compatible models endpoint, or pass a known model explicitly with --model <model>."
+        return 1
+    fi
+
+    if [ $parse_rc -eq 4 ]; then
+        log_error "jq is required to parse backend model discovery responses."
+        log_info "Install jq, or pass a known model explicitly with --model <model>."
+        return 1
     fi
 
     if model=$(launch_backend_configured_model "$backend"); then
+        log_info "Backend '$backend' did not advertise models at $api_url/models; using configured Harbor model '$model'."
         echo "$model"
         return 0
     fi
 
+    log_error "Backend '$backend' did not advertise any models at $api_url/models."
+    log_info "Pull or load a model for '$backend', or pass one explicitly with --model <model>."
     return 1
 }
 
