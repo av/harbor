@@ -1141,6 +1141,18 @@ launch_model_from_models_response() {
     local response="$1"
     local model
 
+    model=$(launch_models_from_models_response "$response" | awk 'NF { print; exit }')
+    if [ -n "$model" ] && [ "$model" != "null" ]; then
+        echo "$model"
+        return 0
+    fi
+
+    return 3
+}
+
+launch_models_from_models_response() {
+    local response="$1"
+
     if ! command -v jq >/dev/null 2>&1; then
         return 4
     fi
@@ -1155,7 +1167,7 @@ launch_model_from_models_response() {
         return 2
     fi
 
-    model=$(printf '%s' "$response" | jq -r '
+    printf '%s' "$response" | jq -r '
         def model_id:
             if type == "string" then
                 .
@@ -1174,20 +1186,20 @@ launch_model_from_models_response() {
         else
             empty
         end
-    ' 2>/dev/null | awk 'NF { print; exit }')
+    ' 2>/dev/null | awk 'NF && $0 != "null" && !seen[$0]++ { print }'
 
-    if [ -n "$model" ] && [ "$model" != "null" ]; then
-        echo "$model"
-        return 0
+    if [ "${PIPESTATUS[1]}" -ne 0 ]; then
+        return 2
     fi
 
-    return 3
+    return 0
 }
 
-launch_discover_model() {
+launch_discover_models() {
     local backend="$1"
     local api_url="$2"
     local response
+    local models
     local model
     local parse_rc
 
@@ -1197,11 +1209,11 @@ launch_discover_model() {
         return 1
     fi
 
-    model=$(launch_model_from_models_response "$response")
+    models=$(launch_models_from_models_response "$response")
     parse_rc=$?
 
-    if [ $parse_rc -eq 0 ]; then
-        echo "$model"
+    if [ $parse_rc -eq 0 ] && [ -n "$models" ]; then
+        printf '%s\n' "$models"
         return 0
     fi
 
@@ -1228,6 +1240,55 @@ launch_discover_model() {
     return 1
 }
 
+launch_discover_model() {
+    local backend="$1"
+    local api_url="$2"
+
+    launch_select_model "$backend" "$(launch_discover_models "$backend" "$api_url")"
+}
+
+launch_model_is_embedding() {
+    local model
+    model=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
+
+    case "$model" in
+    *embed* | *embedding* | *bge-* | *e5-* | *gte-* | *rerank*)
+        return 0
+        ;;
+    esac
+
+    return 1
+}
+
+launch_select_model() {
+    local backend="$1"
+    local models="$2"
+    local configured
+    local model
+
+    if configured=$(launch_backend_configured_model "$backend"); then
+        while IFS= read -r model; do
+            if [ "$model" = "$configured" ] && ! launch_model_is_embedding "$model"; then
+                echo "$model"
+                return 0
+            fi
+        done <<EOF
+$models
+EOF
+    fi
+
+    while IFS= read -r model; do
+        if [ -n "$model" ] && ! launch_model_is_embedding "$model"; then
+            echo "$model"
+            return 0
+        fi
+    done <<EOF
+$models
+EOF
+
+    printf '%s\n' "$models" | awk 'NF { print; exit }'
+}
+
 launch_args_include_model() {
     local arg
 
@@ -1240,6 +1301,36 @@ launch_args_include_model() {
     done
 
     return 1
+}
+
+launch_pi_args_include_session() {
+    local arg
+
+    for arg in "$@"; do
+        case "$arg" in
+        --session-dir | --session-dir=* | --session | --session=* | --continue | -c | --resume | -r | --fork | --fork=*)
+            return 0
+            ;;
+        esac
+    done
+
+    return 1
+}
+
+launch_pi_workspace_session_dir() {
+    local workspace="$1"
+    local slug
+
+    slug=$(printf '%s' "$workspace" | sed 's#[^A-Za-z0-9._-]#-#g; s#--*#-#g; s#^-##; s#-$##')
+    if [ -z "$slug" ]; then
+        slug="workspace"
+    fi
+
+    echo "${HARBOR_LAUNCH_PI_SESSION_ROOT:-$HOME/.pi/agent/sessions}/$slug"
+}
+
+launch_in_original_dir() {
+    (cd "$original_dir" && "$@")
 }
 
 launch_option_value_missing() {
@@ -1260,14 +1351,60 @@ launch_option_value_missing() {
 
 launch_require_tool() {
     local tool="$1"
+    local binary="$2"
 
-    if ! command -v "$tool" >/dev/null 2>&1; then
-        log_error "Host tool '$tool' is not installed or is not on PATH."
+    if ! command -v "$binary" >/dev/null 2>&1; then
+        log_error "Host tool '$binary' for launch target '$tool' is not installed or is not on PATH."
         if service_compose_exists "$tool"; then
             log_info "'$tool' is also a Harbor service. To launch the service container instead, run: harbor launch --service $tool"
         fi
         return 1
     fi
+}
+
+launch_tool_binary() {
+    case "$1" in
+    vscode)
+        echo "code"
+        ;;
+    *)
+        echo "$1"
+        ;;
+    esac
+}
+
+launch_json_merge_file() {
+    local path="$1"
+    local filter="$2"
+    shift 2
+    local dir
+    local tmp
+
+    if ! command -v jq >/dev/null 2>&1; then
+        log_error "jq is required to write launch config at $path."
+        return 1
+    fi
+
+    dir=$(dirname "$path")
+    mkdir -p "$dir" || return 1
+
+    tmp=$(mktemp "${dir}/harbor-launch.XXXXXX") || return 1
+
+    if [ -f "$path" ]; then
+        if ! jq "$filter" "$@" "$path" >"$tmp"; then
+            rm -f "$tmp"
+            log_error "Could not update JSON launch config at $path."
+            return 1
+        fi
+    else
+        if ! printf '{}\n' | jq "$filter" "$@" >"$tmp"; then
+            rm -f "$tmp"
+            log_error "Could not create JSON launch config at $path."
+            return 1
+        fi
+    fi
+
+    mv "$tmp" "$path"
 }
 
 launch_opencode_config_content() {
@@ -1276,6 +1413,7 @@ launch_opencode_config_content() {
     local api_url="$3"
     local api_key="$4"
     local model="$5"
+    local models="$6"
 
     if ! command -v jq >/dev/null 2>&1; then
         log_error "jq is required to generate OpenCode launch config."
@@ -1288,7 +1426,8 @@ launch_opencode_config_content() {
         --arg api_url "$api_url" \
         --arg api_key "$api_key" \
         --arg model "$model" \
-        '{
+        --arg models "$models" \
+        '((($models | split("\n") | map(select(length > 0))) as $ids | if ($ids | length) > 0 then $ids else [$model] end) as $model_ids | {
             "$schema": "https://opencode.ai/config.json",
             provider: {
                 ($provider): {
@@ -1298,13 +1437,11 @@ launch_opencode_config_content() {
                         baseURL: $api_url,
                         apiKey: $api_key
                     },
-                    models: {
-                        ($model): {
-                            name: $model,
-                            attachment: true,
-                            tool_call: true
-                        }
-                    }
+                    models: (reduce $model_ids[] as $id ({}; .[$id] = {
+                        name: $id,
+                        attachment: true,
+                        tool_call: true
+                    }))
                 }
             },
             agent: {
@@ -1326,7 +1463,125 @@ launch_opencode_config_content() {
                     }
                 }
             }
-        }'
+        })'
+}
+
+launch_droid_config_path() {
+    echo "${HARBOR_LAUNCH_DROID_CONFIG:-$HOME/.factory/config.json}"
+}
+
+launch_write_droid_config() {
+    local backend="$1"
+    local api_url="$2"
+    local api_key="$3"
+    local model="$4"
+    local models="$5"
+    local path
+
+    path=$(launch_droid_config_path)
+    launch_json_merge_file "$path" '
+        (($models | split("\n") | map(select(length > 0))) as $ids | if ($ids | length) > 0 then $ids else [$model] end) as $model_ids
+        | .custom_models = (
+            ((.custom_models // []) | map(select((.base_url != ($api_url + "/")) or ((.model as $m | $model_ids | index($m)) | not))))
+            + ($model_ids | map({
+                model_display_name: (. + " [Harbor " + $backend + "]"),
+                model: .,
+                base_url: ($api_url + "/"),
+                api_key: $api_key,
+                provider: "generic-chat-completion-api",
+                max_tokens: 64000
+            }))
+        )
+    ' \
+        --arg backend "$backend" \
+        --arg api_url "$api_url" \
+        --arg api_key "$api_key" \
+        --arg model "$model" \
+        --arg models "$models"
+}
+
+launch_pi_models_config_path() {
+    echo "${HARBOR_LAUNCH_PI_MODELS_CONFIG:-$HOME/.pi/agent/models.json}"
+}
+
+launch_pi_settings_config_path() {
+    echo "${HARBOR_LAUNCH_PI_SETTINGS_CONFIG:-$HOME/.pi/agent/settings.json}"
+}
+
+launch_write_pi_config() {
+    local provider="$1"
+    local api_url="$2"
+    local api_key="$3"
+    local model="$4"
+    local models="$5"
+    local models_path
+    local settings_path
+
+    models_path=$(launch_pi_models_config_path)
+    settings_path=$(launch_pi_settings_config_path)
+
+    launch_json_merge_file "$models_path" '
+        (($models | split("\n") | map(select(length > 0))) as $ids | if ($ids | length) > 0 then $ids else [$model] end) as $model_ids
+        |
+        .providers[$provider] = {
+            baseUrl: $api_url,
+            api: "openai-completions",
+            apiKey: $api_key,
+            models: ($model_ids | map({ id: . }))
+        }
+    ' \
+        --arg provider "$provider" \
+        --arg api_url "$api_url" \
+        --arg api_key "$api_key" \
+        --arg model "$model" \
+        --arg models "$models" || return 1
+
+    launch_json_merge_file "$settings_path" '
+        .defaultProvider = $provider
+        | .defaultModel = $model
+    ' \
+        --arg provider "$provider" \
+        --arg model "$model"
+}
+
+launch_openclaw_config_path() {
+    echo "${HARBOR_LAUNCH_OPENCLAW_CONFIG:-$HOME/.openclaw/openclaw.json}"
+}
+
+launch_write_openclaw_config() {
+    local provider="$1"
+    local api_url="$2"
+    local api_key="$3"
+    local model="$4"
+    local models="$5"
+    local path
+
+    path=$(launch_openclaw_config_path)
+    launch_json_merge_file "$path" '
+        (($models | split("\n") | map(select(length > 0))) as $ids | if ($ids | length) > 0 then $ids else [$model] end) as $model_ids
+        |
+        .agents.defaults.model.primary = ($provider + "/" + $model)
+        | .models.providers[$provider].baseUrl = $api_url
+        | .models.providers[$provider].apiKey = $api_key
+        | .models.providers[$provider].api = "openai-completions"
+        | .models.providers[$provider].models = (
+            ((.models.providers[$provider].models // []) | map(select((.id as $m | $model_ids | index($m)) | not)))
+            + ($model_ids | map({
+                id: .,
+                name: .,
+                reasoning: false,
+                input: ["text"],
+                cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+                contextWindow: 64000,
+                maxTokens: 64000
+            }))
+        )
+    ' \
+        --arg provider "$provider" \
+        --arg api_url "$api_url" \
+        --arg api_key "$api_key" \
+        --arg model "$model" \
+        --arg models "$models"
 }
 
 launch_print_host_config() {
@@ -1336,6 +1591,7 @@ launch_print_host_config() {
     local api_url="$4"
     local model="$5"
     local api_key="$6"
+    local models="$7"
     local provider="harbor-$backend"
 
     echo "tool=$tool"
@@ -1348,14 +1604,46 @@ launch_print_host_config() {
         echo "ANTHROPIC_API_KEY="
         echo "ANTHROPIC_BASE_URL=$base_url"
         ;;
+    copilot)
+        echo "COPILOT_PROVIDER_BASE_URL=$api_url"
+        echo "COPILOT_PROVIDER_API_KEY=$api_key"
+        echo "COPILOT_PROVIDER_WIRE_API=responses"
+        echo "COPILOT_MODEL=$model"
+        ;;
     codex)
         echo "OPENAI_API_KEY=$api_key"
         echo "codex -c model_providers.harbor_launch.name=\"Harbor $backend\" -c model_providers.harbor_launch.base_url=\"$api_url\" -c model_providers.harbor_launch.env_key=\"OPENAI_API_KEY\" -c model_provider=\"harbor_launch\" -m \"$model\""
         ;;
+    droid)
+        echo "DROID_CONFIG=$(launch_droid_config_path)"
+        launch_write_droid_config "$backend" "$api_url" "$api_key" "$model" "$models" >/dev/null || return 1
+        ;;
+    hermes)
+        echo "OPENAI_BASE_URL=$api_url"
+        echo "OPENAI_API_KEY=$api_key"
+        echo "HERMES_MODEL=$model"
+        ;;
+    openclaw)
+        echo "OPENCLAW_CONFIG=$(launch_openclaw_config_path)"
+        launch_write_openclaw_config "$provider" "$api_url" "$api_key" "$model" "$models" >/dev/null || return 1
+        ;;
     opencode)
         echo "OPENAI_API_KEY=$api_key"
-        echo "OPENCODE_CONFIG_CONTENT=$(launch_opencode_config_content "$provider" "$backend" "$api_url" "$api_key" "$model")"
+        echo "OPENCODE_CONFIG_CONTENT=$(launch_opencode_config_content "$provider" "$backend" "$api_url" "$api_key" "$model" "$models")"
         echo "opencode -m \"$provider/$model\""
+        ;;
+    pi)
+        echo "PI_MODELS_CONFIG=$(launch_pi_models_config_path)"
+        echo "PI_SETTINGS_CONFIG=$(launch_pi_settings_config_path)"
+        launch_write_pi_config "$provider" "$api_url" "$api_key" "$model" "$models" >/dev/null || return 1
+        ;;
+    pool)
+        echo "POOLSIDE_STANDALONE_BASE_URL=$api_url"
+        echo "POOLSIDE_API_KEY=$api_key"
+        echo "pool -m \"$model\""
+        ;;
+    vscode)
+        echo "code ."
         ;;
     esac
 }
@@ -1377,6 +1665,7 @@ launch_host_tool_command() {
 
     local backend=""
     local model=""
+    local models=""
     local config_only=false
     local tool_args=()
     local backend_url
@@ -1444,17 +1733,24 @@ launch_host_tool_command() {
 
     api_url=$(launch_url_with_v1 "$backend_url")
 
-    if [ -z "$model" ] && ! model=$(launch_discover_model "$backend" "$api_url"); then
-        log_error "Could not discover a model for backend '$backend'. Pass one explicitly with: harbor launch $tool --backend $backend --model <model>"
-        return 1
+    if [ -z "$model" ]; then
+        if ! models=$(launch_discover_models "$backend" "$api_url"); then
+            log_error "Could not discover a model for backend '$backend'. Pass one explicitly with: harbor launch $tool --backend $backend --model <model>"
+            return 1
+        fi
+        model=$(launch_select_model "$backend" "$models")
+    else
+        models="$model"
     fi
 
     if $config_only; then
-        launch_print_host_config "$tool" "$backend" "$backend_url" "$api_url" "$model" "$api_key"
+        launch_print_host_config "$tool" "$backend" "$backend_url" "$api_url" "$model" "$api_key" "$models"
         return 0
     fi
 
-    launch_require_tool "$tool" || return 1
+    local tool_binary
+    tool_binary=$(launch_tool_binary "$tool")
+    launch_require_tool "$tool" "$tool_binary" || return 1
 
     case "$tool" in
     claude)
@@ -1464,10 +1760,17 @@ launch_host_tool_command() {
         fi
 
         if launch_args_include_model "${tool_args[@]}"; then
-            ANTHROPIC_AUTH_TOKEN=ollama ANTHROPIC_API_KEY="" ANTHROPIC_BASE_URL="$backend_url" claude "${tool_args[@]}"
+            ANTHROPIC_AUTH_TOKEN=ollama ANTHROPIC_API_KEY="" ANTHROPIC_BASE_URL="$backend_url" launch_in_original_dir claude "${tool_args[@]}"
         else
-            ANTHROPIC_AUTH_TOKEN=ollama ANTHROPIC_API_KEY="" ANTHROPIC_BASE_URL="$backend_url" claude --model "$model" "${tool_args[@]}"
+            ANTHROPIC_AUTH_TOKEN=ollama ANTHROPIC_API_KEY="" ANTHROPIC_BASE_URL="$backend_url" launch_in_original_dir claude --model "$model" "${tool_args[@]}"
         fi
+        ;;
+    copilot)
+            COPILOT_PROVIDER_BASE_URL="$api_url" \
+            COPILOT_PROVIDER_API_KEY="$api_key" \
+            COPILOT_PROVIDER_WIRE_API=responses \
+            COPILOT_MODEL="$model" \
+            launch_in_original_dir copilot "${tool_args[@]}"
         ;;
     codex)
         local codex_args=(
@@ -1482,20 +1785,60 @@ launch_host_tool_command() {
         fi
 
         launch_warn_codex_backend_compat "$backend"
-        OPENAI_API_KEY="$api_key" codex "${codex_args[@]}" "${tool_args[@]}"
+        OPENAI_API_KEY="$api_key" launch_in_original_dir codex "${codex_args[@]}" "${tool_args[@]}"
+        ;;
+    droid)
+        launch_write_droid_config "$backend" "$api_url" "$api_key" "$model" "$models" || return 1
+        launch_in_original_dir droid "${tool_args[@]}"
+        ;;
+    hermes)
+        if [ "${#tool_args[@]}" -eq 0 ]; then
+            tool_args=(chat)
+        fi
+        OPENAI_BASE_URL="$api_url" OPENAI_API_KEY="$api_key" HERMES_MODEL="$model" launch_in_original_dir hermes "${tool_args[@]}"
+        ;;
+    openclaw)
+        local provider="harbor-$backend"
+        launch_write_openclaw_config "$provider" "$api_url" "$api_key" "$model" "$models" || return 1
+        if [ "${#tool_args[@]}" -eq 0 ]; then
+            tool_args=(tui)
+        fi
+        launch_in_original_dir openclaw "${tool_args[@]}"
         ;;
     opencode)
         local provider="harbor-$backend"
         local config_content
         local opencode_args=()
 
-        config_content=$(launch_opencode_config_content "$provider" "$backend" "$api_url" "$api_key" "$model")
+        config_content=$(launch_opencode_config_content "$provider" "$backend" "$api_url" "$api_key" "$model" "$models")
 
         if ! launch_args_include_model "${tool_args[@]}"; then
             opencode_args+=(-m "$provider/$model")
         fi
 
-        OPENAI_API_KEY="$api_key" OPENCODE_CONFIG_CONTENT="$config_content" opencode "${opencode_args[@]}" "${tool_args[@]}"
+        OPENAI_API_KEY="$api_key" OPENCODE_CONFIG_CONTENT="$config_content" launch_in_original_dir opencode "${opencode_args[@]}" "${tool_args[@]}"
+        ;;
+    pi)
+        local provider="harbor-$backend"
+        local pi_args=()
+        launch_write_pi_config "$provider" "$api_url" "$api_key" "$model" "$models" || return 1
+        if ! launch_pi_args_include_session "${tool_args[@]}"; then
+            pi_args+=(--session-dir "$(launch_pi_workspace_session_dir "$original_dir")")
+        fi
+        launch_in_original_dir pi "${pi_args[@]}" "${tool_args[@]}"
+        ;;
+    pool)
+        local pool_args=()
+        if ! launch_args_include_model "${tool_args[@]}"; then
+            pool_args+=(-m "$model")
+        fi
+        POOLSIDE_STANDALONE_BASE_URL="$api_url" POOLSIDE_API_KEY="$api_key" launch_in_original_dir pool "${pool_args[@]}" "${tool_args[@]}"
+        ;;
+    vscode)
+        if [ "${#tool_args[@]}" -eq 0 ]; then
+            tool_args=("$original_dir")
+        fi
+        launch_in_original_dir code "${tool_args[@]}"
         ;;
     esac
 }
@@ -1517,7 +1860,9 @@ run_launch_command() {
         echo "Examples:"
         echo "  harbor launch codex --backend ollama --model qwen3.5:4b"
         echo "  harbor launch claude --model qwen3.5:4b -- -p \"explain this repo\""
+        echo "  harbor launch copilot --backend ollama --model qwen3.5:4b -- -p \"explain this repo\""
         echo "  harbor launch opencode --config"
+        echo "  harbor launch openclaw --config"
         echo "  harbor launch --service opencode --help"
         echo "  harbor launch mi -p \"say hello\""
         echo "  harbor launch promptfoo eval"
@@ -1554,7 +1899,7 @@ run_launch_command() {
     fi
 
     case "$service" in
-    claude | codex | opencode)
+    claude | codex | copilot | droid | hermes | openclaw | opencode | pi | pool | vscode)
         launch_host_tool_command "$service" "$@"
         ;;
     aider)

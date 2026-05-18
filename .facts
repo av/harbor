@@ -65,6 +65,21 @@
 - label: harbor launch help avoids advertising generic service --help fallback examples that can execute --help as the container command
   command: help="$(./harbor.sh launch --help)" && printf '%s\n' "$help" | rg -q 'harbor launch --service opencode --help' && ! printf '%s\n' "$help" | rg -q 'harbor launch llamacpp --help' && rg -q 'launch help avoids broken generic service --help example' tests/suites/02-cli.sh
   tags: [spec, launch-help, implemented]
+- label: harbor launch supports Ollama launch target parity for host adapters codex, claude, opencode, copilot, droid, openclaw, pi, pool, hermes, and vscode, while preserving --service escape hatch for colliding Harbor services
+  command: rg -q 'claude | codex | copilot | droid | hermes | openclaw | opencode | pi | pool | vscode' harbor.sh && rg -q 'Supported host tools are aligned with Ollama' docs/3.-Harbor-CLI-Reference.md && bash tests/suites/05-launch-smoke.sh
+  tags: [spec, launch-parity, implemented]
+- label: harbor launch configures multi-model host tools with every model advertised by the selected backend, while still using a selected model for single-model CLI invocation
+  command: rg -q 'launch_discover_models' harbor.sh && rg -q 'mxbai-embed-large' tests/suites/05-launch-smoke.sh && rg -q 'root-second-model' tests/suites/05-launch-smoke.sh && bash tests/suites/05-launch-smoke.sh
+  tags: [spec, launch-model-list, implemented]
+- label: harbor launch auto-selects a non-embedding model as the default when a backend advertises both embedding and chat models, while still configuring every advertised model
+  command: rg -q 'launch_model_is_embedding' harbor.sh && rg -q 'COPILOT_MODEL=qwen-chat-model' tests/suites/05-launch-smoke.sh && rg -q 'model == "mxbai-embed-large"' tests/suites/05-launch-smoke.sh && bash tests/suites/05-launch-smoke.sh
+  tags: [spec, launch-model-list, implemented]
+- label: harbor launch pi preserves the caller workspace by defaulting Pi session storage to a directory derived from the invocation directory unless the user supplies Pi session flags
+  command: rg -q 'launch_pi_workspace_session_dir' harbor.sh && rg -q 'pi preserves a non-Harbor caller workspace' tests/suites/05-launch-smoke.sh && bash tests/suites/05-launch-smoke.sh
+  tags: [spec, launch-pi-workspace, implemented]
+- label: harbor launch host-tool adapters execute from the original invocation directory so launched tools see the caller workspace instead of Harbor home
+  command: rg -Fq 'launch_in_original_dir' harbor.sh && rg -Fq 'cwd=$PWD' tests/suites/05-launch-smoke.sh && rg -q 'Host-tool adapters execute from the directory where you invoked' docs/3.-Harbor-CLI-Reference.md && bash tests/suites/05-launch-smoke.sh
+  tags: [spec, launch-workspace, implemented]
 
 # services
 - label: compose.yml is the base layer, defining only the harbor-network
