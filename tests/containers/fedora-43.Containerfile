@@ -18,7 +18,7 @@ ENV container=docker
 # default, so dockerd speaks nftables and comes up cleanly.
 RUN dnf -y install \
         systemd \
-        ca-certificates curl git sudo \
+        ca-certificates curl git jq sudo \
         moby-engine docker-compose \
         fuse-overlayfs shadow-utils \
         iproute iptables-nft \

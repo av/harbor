@@ -22,7 +22,7 @@ RUN dnf -y install dnf-plugins-core ca-certificates \
     && dnf -y module enable nodejs:20 \
     && dnf -y install \
         systemd \
-        git sudo \
+        git jq sudo \
         docker-ce docker-ce-cli containerd.io \
         docker-compose-plugin docker-buildx-plugin \
         fuse-overlayfs shadow-utils \

@@ -3675,7 +3675,16 @@ record_history_entry() {
         # If we've exceeded max entries, remove oldest entries.
         # BSD wc left-pads the count — strip whitespace before integer compare.
         if [ "$(wc -l <"$file" | tr -d ' ')" -gt "$max_entries" ]; then
-            tail -n "$max_entries" "$file" >"$file.tmp" && mv "$file.tmp" "$file"
+            local history_dir
+            local temp_file
+            history_dir=$(dirname "$file")
+            temp_file=$(mktemp "$history_dir/harbor-history.XXXXXX") || return 0
+
+            if tail -n "$max_entries" "$file" >"$temp_file"; then
+                mv "$temp_file" "$file"
+            else
+                rm -f "$temp_file"
+            fi
         fi
     fi
 }

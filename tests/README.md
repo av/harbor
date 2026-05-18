@@ -6,6 +6,7 @@ supported distro row. Works on any host with docker (or podman as fallback).
 ```bash
 harbor dev test                                 # everything, parallel
 harbor dev test --suite smoke                   # one suite, every row
+harbor dev test --suite launch-smoke            # launch adapter smoke tests
 harbor dev test --distros ubuntu-2404           # every suite, one row
 harbor dev test --distros ubuntu-2404 --suite install,smoke
 harbor dev test --keep                          # leave containers running
@@ -38,9 +39,10 @@ tests/
   `harbor` is on `PATH` (install has run), takes no arguments, exits `0`
   on pass. Prints one `[<suite>] <step>` line per logical step. Cleans
   up its own state on exit via `trap`. Suites run in filename order, so
-  `01-install.sh` reliably precedes `02-smoke.sh`.
+  `01-install.sh` reliably precedes `02-cli.sh`, `03-smoke.sh`,
+  `04-integration.sh`, and `05-launch-smoke.sh`.
 - **Row** — a Containerfile under `containers/`. Each row image boots
-  systemd as PID 1, runs dockerd nested inside, and has curl + git +
+  systemd as PID 1, runs dockerd nested inside, and has curl + git + jq +
   httpYac pre-installed.
 - **Orchestrator** — `run.ts`. Probes the host, builds row images,
   launches privileged systemd containers, waits for the nested dockerd,

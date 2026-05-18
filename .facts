@@ -38,6 +38,9 @@
 - label: harbor launch host-tool smoke coverage runs codex, claude, and opencode through fake installed tools against fake running OpenAI-compatible Harbor backends, and verifies backend-specific /v1/models schema variants and launch env/arguments
   command: bash tests/suites/05-launch-smoke.sh
   tags: [spec, implemented]
+- label: harbor launch smoke coverage exercises parallel launch invocations without sharing a Harbor history temp file, and the test documentation includes the launch-smoke suite
+  command: bash tests/suites/05-launch-smoke.sh && rg -q 'harbor-history' harbor.sh && rg -q 'parallel launch history writes do not share' tests/suites/05-launch-smoke.sh && rg -q 'launch-smoke' tests/README.md
+  tags: [spec, implemented]
 
 # services
 - label: compose.yml is the base layer, defining only the harbor-network
@@ -304,10 +307,13 @@
 # testing
 - label: tests use a Deno-based orchestrator running sequential suites across parallel containerized distros
   command: test -f tests/run.ts && test $(find tests/suites -name '*.sh' | wc -l) -ge 4
-- label: test suites are sequential Bash scripts: install, cli, smoke, and integration
-  command: test -f tests/suites/01-install.sh && test -f tests/suites/02-cli.sh && test -f tests/suites/03-smoke.sh && test -f tests/suites/04-integration.sh
+- label: test suites are sequential Bash scripts: install, cli, smoke, integration, and launch-smoke
+  command: test -f tests/suites/01-install.sh && test -f tests/suites/02-cli.sh && test -f tests/suites/03-smoke.sh && test -f tests/suites/04-integration.sh && test -f tests/suites/05-launch-smoke.sh
 - label: test rows target 7+ Linux distros including Alpine, Arch, Debian, Fedora, Rocky, and Ubuntu
   command: test $(find tests/containers -name '*.Containerfile' ! -name 'base.*' | wc -l) -ge 6
+- label: test runner distro rows include jq so launch-smoke can exercise harbor launch model discovery in CI
+  command: rg -q '\bjq\b' tests/containers/alpine-3.Containerfile && rg -q '\bjq\b' tests/containers/archlinux.Containerfile && rg -q '\bjq\b' tests/containers/debian-12.Containerfile && rg -q '\bjq\b' tests/containers/fedora-43.Containerfile && rg -q '\bjq\b' tests/containers/rocky-9.Containerfile && rg -q '\bjq\b' tests/containers/ubuntu-2204.Containerfile && rg -q '\bjq\b' tests/containers/ubuntu-2404.Containerfile && rg -q 'jq' tests/README.md
+  tags: [spec, implemented]
 
 # lint
 - label: lint uses a custom 3-pass Deno orchestrator with 10 HARBOR-prefixed rules

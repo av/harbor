@@ -16,10 +16,13 @@ HARBOR_BIN="${HARBOR_BIN:-${HARBOR_TEST_REPO}/harbor.sh}"
 
 tmp_dir="$(mktemp -d -t harbor-launch-smoke.XXXXXX)"
 fake_bin="$tmp_dir/bin"
+harbor_home="$tmp_dir/harbor-home"
 tool_log="$tmp_dir/tool.log"
 opencode_config="$tmp_dir/opencode-config.json"
 step_out="$tmp_dir/step.out"
-mkdir -p "$fake_bin"
+parallel_out="$tmp_dir/parallel.out"
+mkdir -p "$fake_bin" "$harbor_home/profiles"
+cp "$HARBOR_TEST_REPO/profiles/default.env" "$harbor_home/profiles/default.env"
 
 cleanup() {
   rm -rf "$tmp_dir"
@@ -125,6 +128,7 @@ run_launch() {
   if ! env \
     HARBOR_LEGACY_CLI=true \
     HARBOR_CAPABILITIES_AUTODETECT=false \
+    HARBOR_HOME="$harbor_home" \
     HARBOR_FAKE_RUNNING_SERVICES="$running_services" \
     HARBOR_FAKE_MODELS_SCHEMA="$schema" \
     HARBOR_LAUNCH_TOOL_LOG="$tool_log" \
@@ -133,6 +137,58 @@ run_launch() {
     "$HARBOR_BIN" launch "$@" >"$step_out" 2>&1; then
     cat "$step_out" >&2
     fail "$name exited non-zero"
+  fi
+}
+
+run_parallel_history_smoke() {
+  suite_log "parallel launch history writes do not share temp files"
+  : >"$parallel_out"
+
+  if ! env \
+    HARBOR_LEGACY_CLI=true \
+    HARBOR_CAPABILITIES_AUTODETECT=false \
+    HARBOR_HOME="$harbor_home" \
+    PATH="$fake_bin:/usr/bin:/bin" \
+    "$HARBOR_BIN" config set history.size 1 >>"$parallel_out" 2>&1; then
+    cat "$parallel_out" >&2
+    fail "could not lower temporary history size"
+  fi
+
+  local pids=()
+  local failed=0
+  local i
+
+  for ((i = 1; i <= 40; i++)); do
+    env \
+      HARBOR_LEGACY_CLI=true \
+      HARBOR_CAPABILITIES_AUTODETECT=false \
+      HARBOR_HOME="$harbor_home" \
+      HARBOR_FAKE_RUNNING_SERVICES="ollama" \
+      HARBOR_FAKE_MODELS_SCHEMA="openai-mixed" \
+      PATH="$fake_bin:/usr/bin:/bin" \
+      "$HARBOR_BIN" launch codex --backend ollama --model "race-$i" --config >>"$parallel_out" 2>&1 &
+    pids+=("$!")
+  done
+
+  for pid in "${pids[@]}"; do
+    if ! wait "$pid"; then
+      failed=1
+    fi
+  done
+
+  if [ "$failed" -ne 0 ]; then
+    cat "$parallel_out" >&2
+    fail "parallel launch history smoke exited non-zero"
+  fi
+
+  if grep -Eq -- '\.history\.tmp|cannot stat .*history|No such file or directory.*history' "$parallel_out"; then
+    cat "$parallel_out" >&2
+    fail "parallel launch history smoke exposed a shared temp-file race"
+  fi
+
+  if find "$harbor_home" -maxdepth 1 -name 'harbor-history.*' | grep -q .; then
+    find "$harbor_home" -maxdepth 1 -name 'harbor-history.*' -print >&2
+    fail "parallel launch history smoke left history temp files behind"
   fi
 }
 
@@ -189,5 +245,7 @@ assert_log '^arg=harbor-llamacpp/root-array-model$'
 assert_log '^arg=run$'
 assert_json '.provider["harbor-llamacpp"].options.baseURL == "http://localhost:33821/v1"'
 assert_json '.provider["harbor-llamacpp"].models["root-array-model"].tool_call == true'
+
+run_parallel_history_smoke
 
 suite_log "OK"

@@ -16,7 +16,7 @@ ENV container=docker
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         systemd systemd-sysv \
-        ca-certificates curl git sudo \
+        ca-certificates curl git jq sudo \
         docker.io docker-compose-v2 docker-buildx \
         fuse-overlayfs uidmap \
         iproute2 iptables \
