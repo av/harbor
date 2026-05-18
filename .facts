@@ -50,6 +50,9 @@
 - label: harbor launch host-tool option parsing rejects --backend and --model when their value is omitted, when the next token is another option, or when an inline assignment is empty
   command: rg -q 'launch host options reject missing values' tests/suites/02-cli.sh && rg -q 'launch_option_value_missing' harbor.sh
   tags: [spec, implemented]
+- label: harbor dev launch-live-smoke fails a launched host-tool smoke when the tool output does not contain the expected sentinel response
+  command: rg -q 'HARBOR_LAUNCH_SMOKE_OK' .scripts/launch-live-smoke.ts && rg -q 'expected smoke response' .scripts/launch-live-smoke.ts
+  tags: [spec, implemented]
 
 # services
 - label: compose.yml is the base layer, defining only the harbor-network

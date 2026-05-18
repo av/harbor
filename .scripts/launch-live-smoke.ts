@@ -21,8 +21,9 @@ type Args = {
 };
 
 const DEFAULT_TOOLS: Tool[] = ["codex", "claude", "opencode"];
+const EXPECTED_RESPONSE = "HARBOR_LAUNCH_SMOKE_OK";
 const DEFAULT_PROMPT =
-  "Reply with exactly HARBOR_LAUNCH_SMOKE_OK and no other text.";
+  `Reply with exactly ${EXPECTED_RESPONSE} and no other text.`;
 
 function usage(): string {
   return `Usage: harbor dev launch-live-smoke [options]
@@ -208,20 +209,38 @@ function launchArgs(args: Args, tool: Tool): string[] {
   return cmd;
 }
 
+type RunResult = {
+  code: number;
+  stdout: string;
+  stderr: string;
+};
+
+function stripAnsi(value: string): string {
+  return value.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "");
+}
+
+function includesExpectedSmokeResponse(value: string): boolean {
+  return stripAnsi(value).split(/\r?\n/).some((line) =>
+    line.trim() === EXPECTED_RESPONSE
+  );
+}
+
 async function runWithTimeout(
   cmd: string[],
   timeoutSeconds: number,
-): Promise<number> {
+): Promise<RunResult> {
   const child = new Deno.Command(cmd[0], {
     args: cmd.slice(1),
     stdin: "null",
-    stdout: "inherit",
-    stderr: "inherit",
+    stdout: "piped",
+    stderr: "piped",
   }).spawn();
 
   let timedOut = false;
   let forceTimeout: number | null = null;
   const status = child.status;
+  const stdout = new Response(child.stdout).text();
+  const stderr = new Response(child.stderr).text();
   const timeout = setTimeout(() => {
     timedOut = true;
     try {
@@ -240,7 +259,11 @@ async function runWithTimeout(
 
   try {
     const { code } = await status;
-    return timedOut && code === 0 ? 124 : code;
+    return {
+      code: timedOut && code === 0 ? 124 : code,
+      stdout: await stdout,
+      stderr: await stderr,
+    };
   } finally {
     clearTimeout(timeout);
     if (forceTimeout !== null) clearTimeout(forceTimeout);
@@ -271,11 +294,30 @@ async function main() {
         cmd.map((part) => JSON.stringify(part)).join(" ")
       }`,
     );
-    const code = await runWithTimeout(cmd, args.timeoutSeconds);
+    const result = await runWithTimeout(cmd, args.timeoutSeconds);
+    if (result.stdout.length > 0) {
+      await Deno.stdout.write(new TextEncoder().encode(result.stdout));
+    }
+    if (result.stderr.length > 0) {
+      await Deno.stderr.write(new TextEncoder().encode(result.stderr));
+    }
     ran++;
-    if (code !== 0) {
+    if (result.code !== 0) {
       failed++;
-      console.error(`[launch-live-smoke] ${tool}: failed with exit ${code}`);
+      console.error(
+        `[launch-live-smoke] ${tool}: failed with exit ${result.code}`,
+      );
+      continue;
+    }
+
+    if (
+      !args.configOnly &&
+      !includesExpectedSmokeResponse(`${result.stdout}\n${result.stderr}`)
+    ) {
+      failed++;
+      console.error(
+        `[launch-live-smoke] ${tool}: failed: expected smoke response '${EXPECTED_RESPONSE}' was not found as an exact output line`,
+      );
     }
   }
 
