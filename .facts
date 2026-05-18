@@ -62,6 +62,9 @@
 - label: harbor launch promptfoo uses non-interactive compose run flags when stdio is not a TTY and returns a non-zero status when promptfoo startup or CLI execution fails
   command: rg -q "launch promptfoo propagates startup failure" tests/suites/02-cli.sh && rg -q "tty_opt" harbor.sh && rg -Fq "return \$status" harbor.sh
   tags: [spec, promptfoo-launch, implemented]
+- label: harbor launch help avoids advertising generic service --help fallback examples that can execute --help as the container command
+  command: help="$(./harbor.sh launch --help)" && printf '%s\n' "$help" | rg -q 'harbor launch --service opencode --help' && ! printf '%s\n' "$help" | rg -q 'harbor launch llamacpp --help' && rg -q 'launch help avoids broken generic service --help example' tests/suites/02-cli.sh
+  tags: [spec, launch-help, implemented]
 
 # services
 - label: compose.yml is the base layer, defining only the harbor-network

@@ -1521,7 +1521,6 @@ run_launch_command() {
         echo "  harbor launch --service opencode --help"
         echo "  harbor launch mi -p \"say hello\""
         echo "  harbor launch promptfoo eval"
-        echo "  harbor launch llamacpp --help"
         return 0
         ;;
     --service)

@@ -140,6 +140,12 @@ chmod +x "$fake_bin/docker" "$fake_bin/curl"
 
 assert_match "launch help documents service mode" '--service opencode' harbor launch --help
 
+suite_log "launch help avoids broken generic service --help example"
+if harbor launch --help >/tmp/cli-step.out 2>&1 && grep -Eq -- 'harbor launch llamacpp --help' /tmp/cli-step.out; then
+  cat /tmp/cli-step.out >&2
+  fail "launch help advertised a generic service --help example that treats --help as the container command"
+fi
+
 suite_log "launch --service requires a handle"
 if harbor launch --service >/tmp/cli-step.out 2>&1; then
   cat /tmp/cli-step.out >&2
