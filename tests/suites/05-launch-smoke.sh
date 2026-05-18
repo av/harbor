@@ -203,6 +203,15 @@ assert_log() {
   fi
 }
 
+assert_output() {
+  local pattern="$1"
+  if ! grep -Eq -- "$pattern" "$step_out"; then
+    echo "--- command output ---" >&2
+    cat "$step_out" >&2
+    fail "command output did not match /$pattern/"
+  fi
+}
+
 assert_json() {
   local filter="$1"
   if ! jq -e "$filter" "$opencode_config" >/dev/null; then
@@ -222,6 +231,15 @@ assert_log '^arg=-m$'
 assert_log '^arg=mixed-openai-model$'
 assert_log '^arg=--sandbox$'
 assert_log '^arg=workspace-write$'
+
+run_launch "launch codex warns about llama.cpp Responses API tool compatibility" \
+  "llamacpp" "root-array" \
+  codex --backend llamacpp --model root-array-model -- --sandbox read-only
+assert_log '^tool=codex$'
+assert_log '^arg=root-array-model$'
+assert_log '^arg=read-only$'
+assert_output 'Codex CLI uses the Responses API tool schema'
+assert_output "400 'type' of tool must be 'function'"
 
 run_launch "claude accepts Ollama-native models[] name schema and uses Anthropic env" \
   "ollama" "ollama-native" \

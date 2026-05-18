@@ -1360,6 +1360,17 @@ launch_print_host_config() {
     esac
 }
 
+launch_warn_codex_backend_compat() {
+    local backend="$1"
+
+    case "$backend" in
+    llamacpp | ikllamacpp)
+        log_info "Codex CLI uses the Responses API tool schema; llama.cpp-family backends may reject its tool payloads with: 400 'type' of tool must be 'function'."
+        log_info "If Codex fails here, use OpenCode with this backend for prompt smoke tests, or use Codex with a backend that accepts Codex's Responses API tool schema."
+        ;;
+    esac
+}
+
 launch_host_tool_command() {
     local tool="$1"
     shift
@@ -1470,6 +1481,7 @@ launch_host_tool_command() {
             codex_args+=(-m "$model")
         fi
 
+        launch_warn_codex_backend_compat "$backend"
         OPENAI_API_KEY="$api_key" codex "${codex_args[@]}" "${tool_args[@]}"
         ;;
     opencode)

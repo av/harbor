@@ -56,6 +56,9 @@
 - label: launch-live-smoke runs OpenCode through a Harbor-provided no-tool smoke agent so prompt-only checks are not mistaken for tool calls
   command: rg -q 'harbor-smoke' harbor.sh .scripts/launch-live-smoke.ts && rg -q '"skill": false|skill.*false' harbor.sh
   tags: [spec, launch-live-smoke, implemented]
+- label: harbor launch codex warns about known Responses API tool schema compatibility risk before invoking Codex against llama.cpp-family backends, and the CLI docs describe the mitigation
+  command: rg -q 'launch_warn_codex_backend_compat' harbor.sh && rg -q 'Codex CLI.*Responses API tool' harbor.sh docs/3.-Harbor-CLI-Reference.md && rg -q 'launch codex warns about llama.cpp Responses API tool compatibility' tests/suites/05-launch-smoke.sh
+  tags: [spec, launch-codex-compat, implemented]
 
 # services
 - label: compose.yml is the base layer, defining only the harbor-network
