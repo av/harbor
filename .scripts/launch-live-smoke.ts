@@ -203,7 +203,7 @@ function launchArgs(args: Args, tool: Tool): string[] {
       cmd.push("-p", "--output-format", "text", args.prompt);
       break;
     case "opencode":
-      cmd.push("run", args.prompt);
+      cmd.push("run", "--pure", "--agent", "harbor-smoke", args.prompt);
       break;
   }
   return cmd;

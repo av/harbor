@@ -53,6 +53,9 @@
 - label: harbor dev launch-live-smoke fails a launched host-tool smoke when the tool output does not contain the expected sentinel response
   command: rg -q 'HARBOR_LAUNCH_SMOKE_OK' .scripts/launch-live-smoke.ts && rg -q 'expected smoke response' .scripts/launch-live-smoke.ts
   tags: [spec, implemented]
+- label: launch-live-smoke runs OpenCode through a Harbor-provided no-tool smoke agent so prompt-only checks are not mistaken for tool calls
+  command: rg -q 'harbor-smoke' harbor.sh .scripts/launch-live-smoke.ts && rg -q '"skill": false|skill.*false' harbor.sh
+  tags: [spec, launch-live-smoke, implemented]
 
 # services
 - label: compose.yml is the base layer, defining only the harbor-network

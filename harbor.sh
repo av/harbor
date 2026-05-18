@@ -1306,6 +1306,25 @@ launch_opencode_config_content() {
                         }
                     }
                 }
+            },
+            agent: {
+                "harbor-smoke": {
+                    mode: "primary",
+                    tools: {
+                        invalid: false,
+                        question: false,
+                        bash: false,
+                        read: false,
+                        glob: false,
+                        grep: false,
+                        edit: false,
+                        write: false,
+                        task: false,
+                        webfetch: false,
+                        todowrite: false,
+                        skill: false
+                    }
+                }
             }
         }'
 }
