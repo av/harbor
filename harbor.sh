@@ -1740,7 +1740,7 @@ get_service_port() {
     fi
 
     # Get the port mapping for the service
-    if port=$(docker port "$target_name" | perl -nle 'print m{0.0.0.0:\K\d+}g' | head -n 1) && [ -n "$port" ]; then
+    if port=$(docker port "$target_name" | sed -n 's/.*:\([0-9][0-9]*\)$/\1/p' | head -n 1) && [ -n "$port" ]; then
         echo "$port"
     else
         log_error "No port mapping found for service '$1': $port"

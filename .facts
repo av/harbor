@@ -41,6 +41,12 @@
 - label: harbor launch smoke coverage exercises parallel launch invocations without sharing a Harbor history temp file, and the test documentation includes the launch-smoke suite
   command: bash tests/suites/05-launch-smoke.sh && rg -q 'harbor-history' harbor.sh && rg -q 'parallel launch history writes do not share' tests/suites/05-launch-smoke.sh && rg -q 'launch-smoke' tests/README.md
   tags: [spec, implemented]
+- label: harbor dev launch-live-smoke provides a documented live prompt smoke helper for installed codex, claude, and opencode host tools against a running Harbor backend
+  command: test -f .scripts/launch-live-smoke.ts && rg -q 'launch-live-smoke' docs/3.-Harbor-CLI-Reference.md && ./harbor.sh dev launch-live-smoke --help | rg -q 'codex,claude,opencode'
+  tags: [spec, implemented]
+- label: Harbor service port resolution parses docker port output without requiring perl so launch-smoke runs on Alpine
+  command: ! rg -q 'docker port .*perl' harbor.sh && rg -Fq "sed -n 's/.*:\([0-9][0-9]*\)$/\1/p'" harbor.sh
+  tags: [spec, implemented]
 
 # services
 - label: compose.yml is the base layer, defining only the harbor-network
