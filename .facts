@@ -47,6 +47,9 @@
 - label: Harbor service port resolution parses docker port output without requiring perl so launch-smoke runs on Alpine
   command: ! rg -q 'docker port .*perl' harbor.sh && rg -Fq "sed -n 's/.*:\([0-9][0-9]*\)$/\1/p'" harbor.sh
   tags: [spec, implemented]
+- label: harbor launch host-tool option parsing rejects --backend and --model when their value is omitted, when the next token is another option, or when an inline assignment is empty
+  command: rg -q 'launch host options reject missing values' tests/suites/02-cli.sh && rg -q 'launch_option_value_missing' harbor.sh
+  tags: [spec, implemented]
 
 # services
 - label: compose.yml is the base layer, defining only the harbor-network

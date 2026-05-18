@@ -220,6 +220,30 @@ esac
 EOF
 chmod +x "$launch_fake_bin/docker" "$launch_fake_bin/curl"
 
+assert_launch_missing_option() {
+  local name="$1"
+  local expected="$2"
+  shift 2
+
+  suite_log "$name"
+  if HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false HARBOR_FAKE_RUNNING_SERVICES=ollama PATH="$launch_fake_bin:/usr/bin:/bin" ./harbor.sh launch "$@" >/tmp/cli-step.out 2>&1; then
+    cat /tmp/cli-step.out >&2
+    fail "$name unexpectedly succeeded"
+  fi
+  if ! grep -Fq -- "$expected" /tmp/cli-step.out; then
+    cat /tmp/cli-step.out >&2
+    fail "$name did not print usage"
+  fi
+}
+
+suite_log "launch host options reject missing values"
+assert_launch_missing_option "launch codex --backend rejects omitted value" "Usage: harbor launch codex --backend <service>" codex --backend
+assert_launch_missing_option "launch codex --backend rejects option as value" "Usage: harbor launch codex --backend <service>" codex --backend --model explicit --config
+assert_launch_missing_option "launch codex --backend= rejects empty inline value" "Usage: harbor launch codex --backend <service>" codex --backend= --model explicit --config
+assert_launch_missing_option "launch codex --model rejects omitted value" "Usage: harbor launch codex --model <model>" codex --model
+assert_launch_missing_option "launch codex --model rejects option as value" "Usage: harbor launch codex --model <model>" codex --model --config
+assert_launch_missing_option "launch codex --model= rejects empty inline value" "Usage: harbor launch codex --model <model>" codex --model= --backend ollama --config
+
 suite_log "launch codex reports no running backend"
 if HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false HARBOR_FAKE_RUNNING_SERVICES=webui PATH="$launch_fake_bin:/usr/bin:/bin" ./harbor.sh launch codex --config >/tmp/cli-step.out 2>&1; then
   cat /tmp/cli-step.out >&2

@@ -1242,6 +1242,22 @@ launch_args_include_model() {
     return 1
 }
 
+launch_option_value_missing() {
+    local value="${1-}"
+
+    if [ -z "$value" ]; then
+        return 0
+    fi
+
+    case "$value" in
+    -*)
+        return 0
+        ;;
+    esac
+
+    return 1
+}
+
 launch_require_tool() {
     local tool="$1"
 
@@ -1340,7 +1356,7 @@ launch_host_tool_command() {
     while [ $# -gt 0 ]; do
         case "$1" in
         --backend)
-            if [ -z "$2" ]; then
+            if launch_option_value_missing "${2-}"; then
                 log_error "Usage: harbor launch $tool --backend <service>"
                 return 1
             fi
@@ -1349,10 +1365,14 @@ launch_host_tool_command() {
             ;;
         --backend=*)
             backend="${1#--backend=}"
+            if launch_option_value_missing "$backend"; then
+                log_error "Usage: harbor launch $tool --backend <service>"
+                return 1
+            fi
             shift
             ;;
         --model | -m)
-            if [ -z "$2" ]; then
+            if launch_option_value_missing "${2-}"; then
                 log_error "Usage: harbor launch $tool --model <model>"
                 return 1
             fi
@@ -1361,6 +1381,10 @@ launch_host_tool_command() {
             ;;
         --model=*)
             model="${1#--model=}"
+            if launch_option_value_missing "$model"; then
+                log_error "Usage: harbor launch $tool --model <model>"
+                return 1
+            fi
             shift
             ;;
         --config)
