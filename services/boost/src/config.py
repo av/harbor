@@ -814,6 +814,26 @@ R0_THOUGHTS = Config[int](
     description="The amount of thoughts to generate for the r0 module",
 )
 
+# ----------- RESPONSES COMPAT -----------------
+
+ENABLE_RESPONSES_API = Config[bool](
+    name="HARBOR_BOOST_RESPONSES_API",
+    type=bool,
+    default="true",
+    description="""
+When enabled, Boost exposes an OpenAI Responses API-compatible endpoint at
+`/v1/responses`. Incoming Responses API-format requests are converted to
+OpenAI Chat Completions format, routed through the normal Boost pipeline,
+and responses are converted back to Responses API format (including
+streaming SSE). This allows OpenAI SDK clients using the Responses API to
+use Boost as a drop-in backend.
+
+```bash
+harbor config set boost.responses_api true
+```
+""".strip(),
+)
+
 # ----------- ANTHROPIC COMPAT ----------------
 
 ENABLE_ANTHROPIC_COMPAT = Config[bool](

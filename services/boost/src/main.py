@@ -204,6 +204,14 @@ async def post_boost_chat_completion(
     return JSONResponse(content=content, status_code=200)
 
 
+# --- OpenAI Responses API Compatible ---------
+
+if config.ENABLE_RESPONSES_API.value:
+  from responses_compat import responses_compatible_routes
+  app.include_router(responses_compatible_routes)
+  logger.info("OpenAI Responses API enabled at /v1/responses")
+
+
 # --- Anthropic Compatible ------------------
 
 if config.ENABLE_ANTHROPIC_COMPAT.value:
