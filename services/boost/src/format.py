@@ -24,6 +24,25 @@ def format_artifact(artifact: str):
   return f"\n```html\n{artifact}\n```\n"
 
 
+def clean_text_preserve_newlines(text: str) -> str:
+  """
+  Clean text for display while preserving newlines.
+
+  Normalizes horizontal whitespace and collapses excessive blank lines
+  while keeping line breaks intact for proper formatting.
+  """
+  # Normalize horizontal whitespace only (preserve newlines)
+  text = re.sub(r'[^\S\n]+', ' ', text)
+
+  # Clean up trailing whitespace per line
+  text = re.sub(r' +$', '', text, flags=re.MULTILINE)
+
+  # Collapse excessive blank lines (more than 2) to just 2
+  text = re.sub(r'\n{3,}', '\n\n', text)
+
+  return text.strip()
+
+
 def remove_html_code_blocks(text_content):
   """
     Removes all HTML markdown code blocks (```html...```) from a string.
