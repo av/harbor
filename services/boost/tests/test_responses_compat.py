@@ -1423,3 +1423,704 @@ class TestResponsesRequestIdHeader:
         rid1 = resp1.headers.get("request-id")
         rid2 = resp2.headers.get("request-id")
         assert rid1 != rid2, "Each request must get a unique request-id"
+
+
+# ---------------------------------------------------------------------------
+# Edge case: Input conversion
+# ---------------------------------------------------------------------------
+
+
+class TestInputConversionEdgeCases:
+    """Edge cases for _convert_input_to_messages."""
+
+    def test_empty_array_input(self):
+        """Empty input array should produce no messages (besides instructions if any)."""
+        body = {"input": []}
+        msgs = responses_compat._convert_input_to_messages(body)
+        assert msgs == []
+
+    def test_empty_array_with_instructions(self):
+        """Empty input array with instructions should produce only the system message."""
+        body = {"input": [], "instructions": "be nice"}
+        msgs = responses_compat._convert_input_to_messages(body)
+        assert len(msgs) == 1
+        assert msgs[0] == {"role": "system", "content": "be nice"}
+
+    def test_whitespace_only_string_input(self):
+        """Whitespace-only string input should be passed through as a user message."""
+        body = {"input": "   "}
+        msgs = responses_compat._convert_input_to_messages(body)
+        assert len(msgs) == 1
+        assert msgs[0] == {"role": "user", "content": "   "}
+
+    def test_newline_only_string_input(self):
+        body = {"input": "\n\n"}
+        msgs = responses_compat._convert_input_to_messages(body)
+        assert len(msgs) == 1
+        assert msgs[0] == {"role": "user", "content": "\n\n"}
+
+    def test_message_content_as_string(self):
+        """Message item with content as a string (not array) should work."""
+        body = {"input": [
+            {"type": "message", "role": "user", "content": "hello"}
+        ]}
+        msgs = responses_compat._convert_input_to_messages(body)
+        assert msgs == [{"role": "user", "content": "hello"}]
+
+    def test_message_content_as_array_of_parts(self):
+        """Message item with content as array of content parts should work."""
+        body = {"input": [
+            {
+                "type": "message",
+                "role": "user",
+                "content": [
+                    {"type": "input_text", "text": "first"},
+                    {"type": "input_text", "text": "second"},
+                ],
+            }
+        ]}
+        msgs = responses_compat._convert_input_to_messages(body)
+        assert len(msgs) == 1
+        # Multiple text parts collapse to a single string
+        assert msgs[0]["content"] == "first\nsecond"
+
+    def test_mixed_interleaved_items(self):
+        """Messages, function_call_output, and strings interleaved correctly."""
+        body = {"input": [
+            {"type": "message", "role": "user", "content": "What is the weather?"},
+            {"type": "message", "role": "assistant", "content": "Let me check."},
+            {"type": "function_call_output", "call_id": "call_1", "output": "Sunny, 72F"},
+            {"type": "message", "role": "user", "content": "Thanks!"},
+        ]}
+        msgs = responses_compat._convert_input_to_messages(body)
+        assert len(msgs) == 4
+        assert msgs[0] == {"role": "user", "content": "What is the weather?"}
+        assert msgs[1] == {"role": "assistant", "content": "Let me check."}
+        assert msgs[2] == {"role": "tool", "tool_call_id": "call_1", "content": "Sunny, 72F"}
+        assert msgs[3] == {"role": "user", "content": "Thanks!"}
+
+    def test_function_call_output_string_output(self):
+        """function_call_output with output as a string should convert correctly."""
+        body = {"input": [
+            {"type": "function_call_output", "call_id": "call_42", "output": "result data"},
+        ]}
+        msgs = responses_compat._convert_input_to_messages(body)
+        assert msgs == [{"role": "tool", "tool_call_id": "call_42", "content": "result data"}]
+
+    def test_function_call_output_empty_output(self):
+        """function_call_output with empty/missing output should default to empty string."""
+        body = {"input": [
+            {"type": "function_call_output", "call_id": "call_99"},
+        ]}
+        msgs = responses_compat._convert_input_to_messages(body)
+        assert msgs == [{"role": "tool", "tool_call_id": "call_99", "content": ""}]
+
+    def test_function_call_output_missing_call_id(self):
+        """function_call_output with missing call_id should default to empty string."""
+        body = {"input": [
+            {"type": "function_call_output", "output": "some result"},
+        ]}
+        msgs = responses_compat._convert_input_to_messages(body)
+        assert msgs == [{"role": "tool", "tool_call_id": "", "content": "some result"}]
+
+    def test_non_dict_non_string_item(self):
+        """Non-dict, non-string items in the input array should be stringified."""
+        body = {"input": [42, True]}
+        msgs = responses_compat._convert_input_to_messages(body)
+        assert len(msgs) == 2
+        assert msgs[0] == {"role": "user", "content": "42"}
+        assert msgs[1] == {"role": "user", "content": "True"}
+
+    def test_unknown_item_type_silently_skipped(self):
+        """Items with unrecognized type should be silently skipped."""
+        body = {"input": [
+            {"type": "unknown_item_type", "data": "stuff"},
+            {"type": "message", "role": "user", "content": "hi"},
+        ]}
+        msgs = responses_compat._convert_input_to_messages(body)
+        assert len(msgs) == 1
+        assert msgs[0]["content"] == "hi"
+
+    def test_empty_content_parts_list(self):
+        """Message with empty content parts list should produce empty string content."""
+        body = {"input": [
+            {"type": "message", "role": "user", "content": []},
+        ]}
+        msgs = responses_compat._convert_input_to_messages(body)
+        assert len(msgs) == 1
+        # Empty parts list collapses to empty string
+        assert msgs[0]["content"] == ""
+
+    def test_non_list_non_string_input(self):
+        """Input as neither string, list, nor None should be stringified."""
+        body = {"input": 42}
+        msgs = responses_compat._convert_input_to_messages(body)
+        assert msgs == [{"role": "user", "content": "42"}]
+
+    def test_empty_instructions(self):
+        """Empty string instructions should not produce a system message."""
+        body = {"input": "hi", "instructions": ""}
+        msgs = responses_compat._convert_input_to_messages(body)
+        assert len(msgs) == 1
+        assert msgs[0]["role"] == "user"
+
+
+# ---------------------------------------------------------------------------
+# Edge case: Response conversion
+# ---------------------------------------------------------------------------
+
+
+class TestResponseConversionEdgeCases:
+    """Edge cases for response building."""
+
+    def test_empty_string_content(self):
+        """Backend returns empty string content -> should produce empty output_text."""
+        openai_result = {
+            "choices": [{"message": {"content": ""}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 5, "completion_tokens": 0, "total_tokens": 5},
+        }
+        output = responses_compat._build_output_items(openai_result)
+        assert len(output) == 1
+        assert output[0]["type"] == "message"
+        assert output[0]["content"][0]["text"] == ""
+
+    def test_none_content(self):
+        """Backend returns None content -> should produce empty output_text fallback."""
+        openai_result = {
+            "choices": [{"message": {"content": None}, "finish_reason": "stop"}],
+        }
+        output = responses_compat._build_output_items(openai_result)
+        assert len(output) == 1
+        assert output[0]["type"] == "message"
+        assert output[0]["content"][0]["text"] == ""
+
+    def test_multiple_tool_calls(self):
+        """Backend returns multiple tool calls -> each becomes a function_call item."""
+        openai_result = {
+            "choices": [{
+                "message": {
+                    "content": None,
+                    "tool_calls": [
+                        {"id": "call_a", "function": {"name": "fn_1", "arguments": '{"x":1}'}},
+                        {"id": "call_b", "function": {"name": "fn_2", "arguments": '{"y":2}'}},
+                        {"id": "call_c", "function": {"name": "fn_3", "arguments": '{"z":3}'}},
+                    ],
+                },
+                "finish_reason": "tool_calls",
+            }],
+        }
+        output = responses_compat._build_output_items(openai_result)
+        assert len(output) == 3
+        for i, item in enumerate(output):
+            assert item["type"] == "function_call"
+            assert item["status"] == "completed"
+        assert output[0]["name"] == "fn_1"
+        assert output[1]["name"] == "fn_2"
+        assert output[2]["name"] == "fn_3"
+        # id and call_id must match for each
+        for item in output:
+            assert item["id"] == item["call_id"]
+
+    def test_text_and_multiple_tool_calls_ordering(self):
+        """Text + multiple tool calls -> message first, then tool calls in order."""
+        openai_result = {
+            "choices": [{
+                "message": {
+                    "content": "I'll use multiple tools.",
+                    "tool_calls": [
+                        {"id": "call_1", "function": {"name": "search", "arguments": "{}"}},
+                        {"id": "call_2", "function": {"name": "fetch", "arguments": "{}"}},
+                    ],
+                },
+                "finish_reason": "tool_calls",
+            }],
+        }
+        output = responses_compat._build_output_items(openai_result)
+        assert len(output) == 3
+        assert output[0]["type"] == "message"
+        assert output[0]["content"][0]["text"] == "I'll use multiple tools."
+        assert output[1]["type"] == "function_call"
+        assert output[1]["name"] == "search"
+        assert output[2]["type"] == "function_call"
+        assert output[2]["name"] == "fetch"
+
+    def test_missing_usage_in_response(self):
+        """Response with missing usage should default to zeros."""
+        openai_result = {
+            "choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}],
+        }
+        resp = responses_compat._build_responses_response(openai_result, "gpt-4o", "resp_nu")
+        assert resp["usage"]["input_tokens"] == 0
+        assert resp["usage"]["output_tokens"] == 0
+        assert resp["usage"]["total_tokens"] == 0
+
+    def test_tool_call_without_id_gets_generated(self):
+        """Tool call without id should get a generated call_ id."""
+        openai_result = {
+            "choices": [{
+                "message": {
+                    "content": None,
+                    "tool_calls": [
+                        {"function": {"name": "fn", "arguments": "{}"}},
+                    ],
+                },
+                "finish_reason": "tool_calls",
+            }],
+        }
+        output = responses_compat._build_output_items(openai_result)
+        assert output[0]["id"].startswith("call_")
+        assert output[0]["id"] == output[0]["call_id"]
+
+
+# ---------------------------------------------------------------------------
+# Edge case: Streaming
+# ---------------------------------------------------------------------------
+
+
+class TestStreamingEdgeCases:
+    """Edge cases for the streaming converter."""
+
+    @pytest.mark.asyncio
+    async def test_empty_stream_no_content_chunks(self):
+        """Empty stream (only DONE) should still produce created + completed events."""
+        async def mock_stream():
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "model", "resp_empty2"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        event_types = [t for t, _ in parsed]
+        assert event_types[0] == "response.created"
+        assert event_types[1] == "response.in_progress"
+        assert event_types[-1] == "response.completed"
+        # No output_item events for empty stream
+        assert "response.output_item.added" not in event_types
+        assert "response.output_text.delta" not in event_types
+
+    @pytest.mark.asyncio
+    async def test_first_chunk_has_content_immediately(self):
+        """First chunk with content (no empty delta first) should handle correctly."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"Hello immediately"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "model", "resp_imm"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        event_types = [t for t, _ in parsed]
+
+        # Should have proper event sequence even with immediate content
+        assert event_types[0] == "response.created"
+        assert event_types[1] == "response.in_progress"
+        assert "response.output_item.added" in event_types
+        assert "response.content_part.added" in event_types
+        assert "response.output_text.delta" in event_types
+        assert "response.output_text.done" in event_types
+
+        # The delta should contain the full first-chunk content
+        deltas = [d for t, d in parsed if t == "response.output_text.delta"]
+        assert deltas[0]["delta"] == "Hello immediately"
+
+    @pytest.mark.asyncio
+    async def test_malformed_json_in_stream_skipped(self):
+        """Malformed JSON chunks should be skipped gracefully."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"good"},"index":0}]}\n\n'
+            yield 'data: {malformed json\n\n'
+            yield 'data: not even close\n\n'
+            yield 'data: {"choices":[{"delta":{"content":" text"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "model", "resp_mj"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        # Both good text chunks should make it through
+        deltas = [d for t, d in parsed if t == "response.output_text.delta"]
+        assert len(deltas) == 2
+        assert deltas[0]["delta"] == "good"
+        assert deltas[1]["delta"] == " text"
+
+        # Should still complete normally
+        event_types = [t for t, _ in parsed]
+        assert event_types[-1] == "response.completed"
+
+    @pytest.mark.asyncio
+    async def test_bytes_chunks_in_stream(self):
+        """Stream chunks as bytes (not str) should be handled."""
+        async def mock_stream():
+            yield b'data: {"choices":[{"delta":{"content":"from bytes"},"index":0}]}\n\n'
+            yield b'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}\n\n'
+            yield b'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "model", "resp_bytes"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        deltas = [d for t, d in parsed if t == "response.output_text.delta"]
+        assert len(deltas) == 1
+        assert deltas[0]["delta"] == "from bytes"
+        assert parsed[-1][0] == "response.completed"
+
+    @pytest.mark.asyncio
+    async def test_finish_reason_only_chunk(self):
+        """Chunk with only finish_reason and no content/tools should be handled."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"text"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "model", "resp_fr"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        completed = [d for t, d in parsed if t == "response.completed"]
+        assert len(completed) == 1
+        assert completed[0]["response"]["status"] == "completed"
+
+    @pytest.mark.asyncio
+    async def test_multiple_tool_calls_streaming(self):
+        """Multiple parallel tool calls should each produce their own output items."""
+        async def mock_stream():
+            # First tool call arrives
+            yield 'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_a","function":{"name":"search","arguments":""}}]},"index":0}]}\n\n'
+            # Second tool call arrives in same chunk batch
+            yield 'data: {"choices":[{"delta":{"tool_calls":[{"index":1,"id":"call_b","function":{"name":"fetch","arguments":""}}]},"index":0}]}\n\n'
+            # Args for first tool
+            yield 'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\\"q\\":\\"test\\"}"}}]},"index":0}]}\n\n'
+            # Args for second tool
+            yield 'data: {"choices":[{"delta":{"tool_calls":[{"index":1,"function":{"arguments":"{\\"url\\":\\"http://x\\"}"}}]},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"tool_calls"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "model", "resp_mtc"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        event_types = [t for t, _ in parsed]
+
+        # Two output_item.added (one per tool)
+        added = [d for t, d in parsed if t == "response.output_item.added"]
+        assert len(added) == 2
+        assert added[0]["item"]["name"] == "search"
+        assert added[1]["item"]["name"] == "fetch"
+
+        # Two function_call_arguments.done events
+        args_done = [d for t, d in parsed if t == "response.function_call_arguments.done"]
+        assert len(args_done) == 2
+        assert args_done[0]["arguments"] == '{"q":"test"}'
+        assert args_done[1]["arguments"] == '{"url":"http://x"}'
+
+        # Two output_item.done events
+        item_done = [d for t, d in parsed if t == "response.output_item.done"]
+        assert len(item_done) == 2
+
+    @pytest.mark.asyncio
+    async def test_text_then_multiple_tool_calls_streaming(self):
+        """Text followed by multiple tool calls in streaming."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"Let me help."},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","function":{"name":"fn1","arguments":"{}"}}]},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{"tool_calls":[{"index":1,"id":"call_2","function":{"name":"fn2","arguments":"{}"}}]},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"tool_calls"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "model", "resp_tmtc"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        event_types = [t for t, _ in parsed]
+
+        # Text item should be closed before tool calls
+        text_done_idx = event_types.index("response.output_text.done")
+        first_tool_added_idx = next(
+            i for i, (t, d) in enumerate(parsed)
+            if t == "response.output_item.added" and d["item"]["type"] == "function_call"
+        )
+        assert text_done_idx < first_tool_added_idx
+
+        # 3 output_item.added total (1 text + 2 tools)
+        assert event_types.count("response.output_item.added") == 3
+        # 3 output_item.done total
+        assert event_types.count("response.output_item.done") == 3
+
+    @pytest.mark.asyncio
+    async def test_mid_stream_error_without_prior_text(self):
+        """Mid-stream error without any prior text should still close properly."""
+        async def mock_stream():
+            raise RuntimeError("connection refused")
+            yield  # make it a generator
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "model", "resp_err_no_text"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        event_types = [t for t, _ in parsed]
+
+        assert event_types[0] == "response.created"
+        assert event_types[-1] == "response.completed"
+        # Should have error text in delta
+        error_deltas = [d for t, d in parsed if t == "response.output_text.delta"]
+        assert len(error_deltas) == 1
+        assert "connection refused" in error_deltas[0]["delta"]
+
+        # The completed event should have failed status
+        completed = [d for t, d in parsed if t == "response.completed"]
+        assert completed[0]["response"]["status"] == "failed"
+
+    @pytest.mark.asyncio
+    async def test_mid_stream_error_with_prior_text(self):
+        """Mid-stream error after some text should append error and close properly."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"partial"},"index":0}]}\n\n'
+            raise RuntimeError("timeout")
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "model", "resp_err_text"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        event_types = [t for t, _ in parsed]
+
+        # Should have the original text delta
+        deltas = [d for t, d in parsed if t == "response.output_text.delta"]
+        assert len(deltas) == 2  # original + error
+        assert deltas[0]["delta"] == "partial"
+        assert "timeout" in deltas[1]["delta"]
+
+        # Text done should contain both original + error text
+        text_done = [d for t, d in parsed if t == "response.output_text.done"]
+        assert len(text_done) == 1
+        assert "partial" in text_done[0]["text"]
+        assert "timeout" in text_done[0]["text"]
+
+        # Completed with failed status
+        completed = [d for t, d in parsed if t == "response.completed"]
+        assert completed[0]["response"]["status"] == "failed"
+
+    @pytest.mark.asyncio
+    async def test_empty_tool_calls_array_in_chunk(self):
+        """Chunk with empty tool_calls array should not produce any tool events."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"text","tool_calls":[]},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "model", "resp_etc"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        event_types = [t for t, _ in parsed]
+
+        # Should have text events but no tool events
+        assert "response.output_text.delta" in event_types
+        assert "response.function_call_arguments.delta" not in event_types
+        assert "response.function_call_arguments.done" not in event_types
+
+    @pytest.mark.asyncio
+    async def test_usage_only_in_separate_chunk(self):
+        """Usage arriving in a separate chunk (common pattern) should be captured."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"hi"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}\n\n'
+            # Usage in a separate chunk (OpenAI pattern with stream_options)
+            yield 'data: {"choices":[],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "model", "resp_usep"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        completed = [d for t, d in parsed if t == "response.completed"]
+        usage = completed[0]["response"]["usage"]
+        assert usage["input_tokens"] == 10
+        assert usage["output_tokens"] == 5
+
+
+# ---------------------------------------------------------------------------
+# Edge case: Integration - empty array input route test
+# ---------------------------------------------------------------------------
+
+
+class TestResponsesEdgeCaseIntegration:
+    """Integration tests for edge cases via TestClient."""
+
+    @pytest.fixture(autouse=True)
+    def setup_app(self, monkeypatch):
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
+        monkeypatch.setattr(responses_compat.config, "BOOST_AUTH", [])
+
+        app = FastAPI()
+        app.include_router(responses_compat.responses_compatible_routes)
+        self.client = TestClient(app)
+
+    def test_empty_model_string_returns_400(self):
+        """Empty string model should be rejected."""
+        resp = self.client.post("/v1/responses", json={"model": "", "input": "hi"})
+        assert resp.status_code == 400
+
+    def test_empty_array_input_accepted(self, monkeypatch):
+        """Empty array input should be accepted and processed."""
+        mock_result = {
+            "choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 0, "completion_tokens": 1, "total_tokens": 1},
+        }
+
+        async def mock_list_downstream():
+            return []
+
+        mock_llm = MagicMock()
+        mock_llm.workflow = None
+        mock_llm.boost_params = {}
+
+        async def mock_serve():
+            async def gen():
+                yield f'data: {json.dumps(mock_result)}\n\n'
+                yield 'data: [DONE]\n\n'
+            return gen()
+
+        async def mock_consume(stream):
+            return mock_result
+
+        mock_llm.serve = mock_serve
+        mock_llm.consume_stream = mock_consume
+
+        monkeypatch.setattr(responses_compat.mapper, "list_downstream", mock_list_downstream)
+        monkeypatch.setattr(responses_compat.mapper, "resolve_request_config", lambda body: {})
+        monkeypatch.setattr(responses_compat.mapper, "is_direct_task", lambda proxy: False)
+        monkeypatch.setattr(responses_compat.llm_mod, "LLM", lambda **kw: mock_llm)
+
+        resp = self.client.post("/v1/responses", json={
+            "model": "gpt-4o",
+            "input": [],
+        })
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["object"] == "response"
+
+    def test_whitespace_input_accepted(self, monkeypatch):
+        """Whitespace-only string input should be accepted."""
+        mock_result = {
+            "choices": [{"message": {"content": ""}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 1, "completion_tokens": 0, "total_tokens": 1},
+        }
+
+        async def mock_list_downstream():
+            return []
+
+        mock_llm = MagicMock()
+        mock_llm.workflow = None
+        mock_llm.boost_params = {}
+
+        async def mock_serve():
+            async def gen():
+                yield f'data: {json.dumps(mock_result)}\n\n'
+                yield 'data: [DONE]\n\n'
+            return gen()
+
+        async def mock_consume(stream):
+            return mock_result
+
+        mock_llm.serve = mock_serve
+        mock_llm.consume_stream = mock_consume
+
+        monkeypatch.setattr(responses_compat.mapper, "list_downstream", mock_list_downstream)
+        monkeypatch.setattr(responses_compat.mapper, "resolve_request_config", lambda body: {})
+        monkeypatch.setattr(responses_compat.mapper, "is_direct_task", lambda proxy: False)
+        monkeypatch.setattr(responses_compat.llm_mod, "LLM", lambda **kw: mock_llm)
+
+        resp = self.client.post("/v1/responses", json={
+            "model": "gpt-4o",
+            "input": "   ",
+        })
+        assert resp.status_code == 200
+
+    def test_extra_unknown_fields_accepted(self):
+        """Extra unknown fields in request body should not cause errors."""
+        # Should fail on missing model, not on unknown fields
+        resp = self.client.post("/v1/responses", json={
+            "input": "hi",
+            "store": True,
+            "metadata": {"session": "abc"},
+            "unknown_field": "value",
+        })
+        assert resp.status_code == 400
+        assert "model" in resp.json()["error"]["message"]
+
+    def test_http_exception_from_mapper(self, monkeypatch):
+        """HTTPException from mapper should be caught and returned properly."""
+        from fastapi import HTTPException
+
+        async def mock_list_downstream():
+            return []
+
+        monkeypatch.setattr(responses_compat.mapper, "list_downstream", mock_list_downstream)
+        monkeypatch.setattr(
+            responses_compat.mapper,
+            "resolve_request_config",
+            MagicMock(side_effect=HTTPException(status_code=404, detail="Model not found")),
+        )
+
+        resp = self.client.post("/v1/responses", json={
+            "model": "nonexistent",
+            "input": "hi",
+        })
+        assert resp.status_code == 404
+        assert "Model not found" in resp.json()["error"]["message"]
+
+    def test_generic_exception_returns_500(self, monkeypatch):
+        """Unexpected exceptions should return 500."""
+        async def mock_list_downstream():
+            return []
+
+        monkeypatch.setattr(responses_compat.mapper, "list_downstream", mock_list_downstream)
+        monkeypatch.setattr(
+            responses_compat.mapper,
+            "resolve_request_config",
+            MagicMock(side_effect=RuntimeError("unexpected crash")),
+        )
+
+        resp = self.client.post("/v1/responses", json={
+            "model": "gpt-4o",
+            "input": "hi",
+        })
+        assert resp.status_code == 500
+        assert resp.json()["error"]["type"] == "server_error"
