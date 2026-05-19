@@ -1,15 +1,15 @@
 import json
 import asyncio
 
-from fastapi import FastAPI, Request, HTTPException, Depends, Security, WebSocket, WebSocketDisconnect
-from fastapi.security.api_key import APIKeyHeader
+from fastapi import FastAPI, Request, HTTPException, Depends, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from middleware.request_id import RequestIDMiddleware
 from middleware.request_state import RequestStateMiddleware
 
-from config import MODEL_FILTER, SERVE_BASE_MODELS, BOOST_AUTH
+from config import MODEL_FILTER, SERVE_BASE_MODELS
+from auth import get_api_key
 from log import setup_logger
 
 import selection
@@ -21,7 +21,6 @@ from llm_registry import llm_registry
 
 logger = setup_logger(__name__)
 app = FastAPI()
-auth_header = APIKeyHeader(name="Authorization", auto_error=False)
 
 app.add_middleware(
   CORSMiddleware,
@@ -33,20 +32,6 @@ app.add_middleware(
 
 app.add_middleware(RequestIDMiddleware)
 app.add_middleware(RequestStateMiddleware)
-
-
-# ------------------------------
-async def get_api_key(api_key_header: str = Security(auth_header)):
-  if len(BOOST_AUTH) == 0:
-    return
-
-  if api_key_header is not None:
-    # Bearer/plain versions
-    value = api_key_header.replace("Bearer ", "").replace("bearer ", "")
-    if value in BOOST_AUTH:
-      return value
-
-  raise HTTPException(status_code=403, detail="Unauthorized")
 
 
 @app.get("/")
@@ -223,7 +208,7 @@ if config.ENABLE_ANTHROPIC_COMPAT.value:
 # ------------ Startup ----------------
 
 logger.info(f"Boosting: {config.BOOST_APIS}")
-if len(BOOST_AUTH) == 0:
+if len(config.BOOST_AUTH) == 0:
   logger.warn("No API keys specified - boost will accept all requests")
 
 if __name__ == "__main__":

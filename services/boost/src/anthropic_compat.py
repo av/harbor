@@ -1,6 +1,5 @@
-from fastapi import APIRouter, HTTPException, Request, Depends, Security
+from fastapi import APIRouter, HTTPException, Request, Depends
 from fastapi.responses import JSONResponse, StreamingResponse
-from fastapi.security.api_key import APIKeyHeader
 
 import json
 
@@ -11,14 +10,12 @@ import shortuuid
 import mapper
 import llm as llm_mod
 import config
+from auth import get_api_key
 
 REQUEST_ID_HEADER = "request-id"
 
 logger = log.setup_logger(__name__)
 anthropic_compatible_routes = APIRouter()
-
-auth_header = APIKeyHeader(name="Authorization", auto_error=False)
-x_api_key_header = APIKeyHeader(name="x-api-key", auto_error=False)
 
 ERROR_TYPE_MAP = {
   400: "invalid_request_error",
@@ -29,28 +26,6 @@ ERROR_TYPE_MAP = {
   500: "api_error",
   529: "overloaded_error",
 }
-
-
-async def get_api_key(
-  api_key_header: str = Security(auth_header),
-  x_api_key: str = Security(x_api_key_header),
-):
-  if len(config.BOOST_AUTH) == 0:
-    return
-
-  # Try Authorization header first (standard OpenAI-style)
-  candidate = None
-  if api_key_header is not None:
-    candidate = api_key_header.replace("Bearer ", "").replace("bearer ", "")
-
-  # Fall back to x-api-key header (standard Anthropic-style)
-  if not candidate and x_api_key is not None:
-    candidate = x_api_key
-
-  if candidate and candidate in config.BOOST_AUTH:
-    return candidate
-
-  raise HTTPException(status_code=403, detail="Unauthorized")
 
 
 def _anthropic_error(status_code, message, error_type=None):

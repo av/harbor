@@ -1,6 +1,5 @@
-from fastapi import APIRouter, HTTPException, Request, Depends, Security
+from fastapi import APIRouter, HTTPException, Request, Depends
 from fastapi.responses import JSONResponse, StreamingResponse
-from fastapi.security.api_key import APIKeyHeader
 
 import json
 import time
@@ -12,25 +11,12 @@ import log
 import mapper
 import llm as llm_mod
 import config
+from auth import get_api_key
 
 REQUEST_ID_HEADER = "request-id"
 
 logger = log.setup_logger(__name__)
 responses_compatible_routes = APIRouter()
-
-auth_header = APIKeyHeader(name="Authorization", auto_error=False)
-
-
-async def get_api_key(api_key_header: str = Security(auth_header)):
-  if len(config.BOOST_AUTH) == 0:
-    return
-
-  if api_key_header is not None:
-    value = api_key_header.replace("Bearer ", "").replace("bearer ", "")
-    if value in config.BOOST_AUTH:
-      return value
-
-  raise HTTPException(status_code=403, detail="Unauthorized")
 
 
 def _responses_error(status_code, message, error_type=None, error_code=None, request_id=None):
