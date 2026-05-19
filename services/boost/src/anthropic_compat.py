@@ -12,6 +12,8 @@ import mapper
 import llm as llm_mod
 import config
 
+REQUEST_ID_HEADER = "x-request-id"
+
 logger = log.setup_logger(__name__)
 anthropic_compatible_routes = APIRouter()
 
@@ -471,124 +473,151 @@ async def _anthropic_stream_converter(
     },
   )
 
-  async for raw_chunk in response_stream:
-    chunk_str = raw_chunk if isinstance(raw_chunk, str) else raw_chunk.decode("utf-8")
+  stream_error = None
 
-    for line in chunk_str.strip().split("\n"):
-      line = line.strip()
-      if not line or line == "data: [DONE]" or not line.startswith("data: "):
-        continue
+  try:
+    async for raw_chunk in response_stream:
+      chunk_str = raw_chunk if isinstance(raw_chunk, str) else raw_chunk.decode("utf-8")
 
-      try:
-        chunk = json.loads(line[6:])
-      except (json.JSONDecodeError, TypeError):
-        continue
+      for line in chunk_str.strip().split("\n"):
+        line = line.strip()
+        if not line or line == "data: [DONE]" or not line.startswith("data: "):
+          continue
 
-      text_content = _get_chunk_content(chunk)
-      tool_calls = _get_chunk_tool_calls(chunk)
-      chunk_usage = _get_chunk_usage(chunk)
-      fr = dotty.get(chunk, "choices.0.finish_reason")
+        try:
+          chunk = json.loads(line[6:])
+        except (json.JSONDecodeError, TypeError):
+          continue
 
-      if fr:
-        finish_reason = fr
+        text_content = _get_chunk_content(chunk)
+        tool_calls = _get_chunk_tool_calls(chunk)
+        chunk_usage = _get_chunk_usage(chunk)
+        fr = dotty.get(chunk, "choices.0.finish_reason")
 
-      input_tokens = chunk_usage.get("prompt_tokens", 0) or input_tokens
-      output_tokens = chunk_usage.get("completion_tokens", 0) or output_tokens
+        if fr:
+          finish_reason = fr
 
-      if text_content:
-        accumulated_text += text_content
-        if not text_block_open:
-          block_index += 1
-          yield _sse_event(
-            "content_block_start",
-            {
-              "type": "content_block_start",
-              "index": block_index,
-              "content_block": {"type": "text", "text": ""},
-            },
-          )
-          text_block_open = True
-        yield _sse_event(
-          "content_block_delta",
-          {
-            "type": "content_block_delta",
-            "index": block_index,
-            "delta": {"type": "text_delta", "text": text_content},
-          },
-        )
+        input_tokens = chunk_usage.get("prompt_tokens", 0) or input_tokens
+        output_tokens = chunk_usage.get("completion_tokens", 0) or output_tokens
 
-      if tool_calls:
-        for tc in tool_calls:
-          tc_index = tc.get("index", 0)
-          tool_state = tool_blocks.setdefault(
-            tc_index,
-            {
-              "arguments": "",
-              "emitted": False,
-            },
-          )
-
-          tc_id = tc.get("id")
-          tc_name = dotty.get(tc, "function.name")
-          tc_args = dotty.get(tc, "function.arguments", "")
-
-          if tc_id:
-            tool_state["id"] = tc_id
-          if tc_name:
-            tool_state["name"] = tc_name
-          if tc_args:
-            tool_state["arguments"] += tc_args
-
-          if not tool_state.get("emitted") and tool_state.get("id"):
-            if text_block_open:
-              yield _sse_event(
-                "content_block_stop",
-                {
-                  "type": "content_block_stop",
-                  "index": block_index,
-                },
-              )
-              text_block_open = False
+        if text_content:
+          accumulated_text += text_content
+          if not text_block_open:
             block_index += 1
-            tool_state["block_index"] = block_index
-            tool_state["emitted"] = True
-            has_visible_tool_use = True
             yield _sse_event(
               "content_block_start",
               {
                 "type": "content_block_start",
                 "index": block_index,
-                "content_block": {
-                  "type": "tool_use",
-                  "id": tool_state.get("id"),
-                  "name": tool_state.get("name", ""),
-                  "input": {},
-                },
+                "content_block": {"type": "text", "text": ""},
               },
             )
-            if tool_state.get("arguments"):
+            text_block_open = True
+          yield _sse_event(
+            "content_block_delta",
+            {
+              "type": "content_block_delta",
+              "index": block_index,
+              "delta": {"type": "text_delta", "text": text_content},
+            },
+          )
+
+        if tool_calls:
+          for tc in tool_calls:
+            tc_index = tc.get("index", 0)
+            tool_state = tool_blocks.setdefault(
+              tc_index,
+              {
+                "arguments": "",
+                "emitted": False,
+              },
+            )
+
+            tc_id = tc.get("id")
+            tc_name = dotty.get(tc, "function.name")
+            tc_args = dotty.get(tc, "function.arguments", "")
+
+            if tc_id:
+              tool_state["id"] = tc_id
+            if tc_name:
+              tool_state["name"] = tc_name
+            if tc_args:
+              tool_state["arguments"] += tc_args
+
+            if not tool_state.get("emitted") and tool_state.get("id"):
+              if text_block_open:
+                yield _sse_event(
+                  "content_block_stop",
+                  {
+                    "type": "content_block_stop",
+                    "index": block_index,
+                  },
+                )
+                text_block_open = False
+              block_index += 1
+              tool_state["block_index"] = block_index
+              tool_state["emitted"] = True
+              has_visible_tool_use = True
+              yield _sse_event(
+                "content_block_start",
+                {
+                  "type": "content_block_start",
+                  "index": block_index,
+                  "content_block": {
+                    "type": "tool_use",
+                    "id": tool_state.get("id"),
+                    "name": tool_state.get("name", ""),
+                    "input": {},
+                  },
+                },
+              )
+              if tool_state.get("arguments"):
+                yield _sse_event(
+                  "content_block_delta",
+                  {
+                    "type": "content_block_delta",
+                    "index": block_index,
+                    "delta": {
+                      "type": "input_json_delta",
+                      "partial_json": tool_state.get("arguments", ""),
+                    },
+                  },
+                )
+              continue
+
+            if tc_args and tool_state.get("emitted"):
               yield _sse_event(
                 "content_block_delta",
                 {
                   "type": "content_block_delta",
-                  "index": block_index,
-                  "delta": {
-                    "type": "input_json_delta",
-                    "partial_json": tool_state.get("arguments", ""),
-                  },
+                  "index": tool_state.get("block_index", block_index),
+                  "delta": {"type": "input_json_delta", "partial_json": tc_args},
                 },
               )
-            continue
+  except Exception as e:
+    logger.error(f"Error during stream conversion: {e}", exc_info=True)
+    stream_error = str(e)
 
-          if tc_args and tool_state.get("emitted"):
-            yield _sse_event(
-              "content_block_delta",
-              {
-                "type": "content_block_delta",
-                "index": tool_state.get("block_index", block_index),
-                "delta": {"type": "input_json_delta", "partial_json": tc_args},
-              },
-            )
+    # Emit an error as a text block so the client sees it
+    if not text_block_open:
+      block_index += 1
+      yield _sse_event(
+        "content_block_start",
+        {
+          "type": "content_block_start",
+          "index": block_index,
+          "content_block": {"type": "text", "text": ""},
+        },
+      )
+      text_block_open = True
+    yield _sse_event(
+      "content_block_delta",
+      {
+        "type": "content_block_delta",
+        "index": block_index,
+        "delta": {"type": "text_delta", "text": f"\n\n[Stream error: {stream_error}]"},
+      },
+    )
 
   # Flush any deferred tool blocks that were never emitted during streaming
   for tool_state in tool_blocks.values():
@@ -690,6 +719,8 @@ async def _anthropic_stream_converter(
 
 @anthropic_compatible_routes.post("/v1/messages")
 async def post_messages(request: Request, api_key: str = Depends(get_api_key)):
+  request_id = f"req_{shortuuid.random()}"
+
   try:
     _synthesize_authorization(request)
 
@@ -723,7 +754,11 @@ async def post_messages(request: Request, api_key: str = Depends(get_api_key)):
     ):
       result = await proxy.chat_completion()
       response = _build_anthropic_response(result, request_model, stop_sequences)
-      return JSONResponse(content=response, status_code=200)
+      return JSONResponse(
+        content=response,
+        status_code=200,
+        headers={REQUEST_ID_HEADER: request_id},
+      )
 
     completion = await proxy.serve()
 
@@ -734,15 +769,22 @@ async def post_messages(request: Request, api_key: str = Depends(get_api_key)):
       return StreamingResponse(
         _anthropic_stream_converter(completion, request_model, stop_sequences),
         media_type="text/event-stream",
+        headers={REQUEST_ID_HEADER: request_id},
       )
     else:
       result = await proxy.consume_stream(completion)
       response = _build_anthropic_response(result, request_model, stop_sequences)
-      return JSONResponse(content=response, status_code=200)
+      return JSONResponse(
+        content=response,
+        status_code=200,
+        headers={REQUEST_ID_HEADER: request_id},
+      )
 
   except HTTPException as e:
     error_type = ERROR_TYPE_MAP.get(e.status_code, "api_error")
     return _anthropic_error(e.status_code, e.detail, error_type)
+  except ValueError as e:
+    return _anthropic_error(400, str(e))
   except Exception as e:
     logger.error(f"Unexpected error in anthropic handler: {e}", exc_info=True)
     return _anthropic_error(500, "Internal server error")
@@ -750,6 +792,8 @@ async def post_messages(request: Request, api_key: str = Depends(get_api_key)):
 
 @anthropic_compatible_routes.post("/v1/messages/count_tokens")
 async def post_count_tokens(request: Request, api_key: str = Depends(get_api_key)):
+  request_id = f"req_{shortuuid.random()}"
+
   try:
     _synthesize_authorization(request)
 
@@ -784,11 +828,17 @@ async def post_count_tokens(request: Request, api_key: str = Depends(get_api_key
     usage = dotty.get(result, "usage", {})
     input_tokens = usage.get("prompt_tokens", 0)
 
-    return JSONResponse(content={"input_tokens": input_tokens}, status_code=200)
+    return JSONResponse(
+      content={"input_tokens": input_tokens},
+      status_code=200,
+      headers={REQUEST_ID_HEADER: request_id},
+    )
 
   except HTTPException as e:
     error_type = ERROR_TYPE_MAP.get(e.status_code, "api_error")
     return _anthropic_error(e.status_code, e.detail, error_type)
+  except ValueError as e:
+    return _anthropic_error(400, str(e))
   except Exception as e:
     logger.error(f"Unexpected error in count_tokens handler: {e}", exc_info=True)
     return _anthropic_error(500, "Internal server error")

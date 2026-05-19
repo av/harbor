@@ -1594,6 +1594,438 @@ class TestIntegrationCountTokens:
 
 
 # ---------------------------------------------------------------------------
+# Mapper error propagation
+# ---------------------------------------------------------------------------
+
+class TestMapperErrorPropagation:
+    """Test that mapper errors are returned as Anthropic-format errors."""
+
+    def setup_method(self):
+        import config as _cfg
+        _cfg.BOOST_AUTH = []
+
+    def test_unknown_model_returns_404_anthropic_error(self):
+        """When mapper.resolve_request_config raises HTTPException(404),
+        the response should be Anthropic-format not_found_error."""
+        from fastapi import HTTPException as FastAPIHTTPException
+
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+        ):
+            mock_mapper.list_downstream = AsyncMock()
+            mock_mapper.resolve_request_config = MagicMock(
+                side_effect=FastAPIHTTPException(
+                    status_code=404,
+                    detail="Unknown model: 'nonexistent-model'",
+                )
+            )
+
+            client = TestClient(_integration_app, raise_server_exceptions=False)
+            resp = client.post("/v1/messages", json={
+                **_ANTHRO_BODY,
+                "model": "nonexistent-model",
+            })
+
+        assert resp.status_code == 404
+        body = resp.json()
+        assert body["type"] == "error"
+        assert body["error"]["type"] == "not_found_error"
+        assert "nonexistent-model" in body["error"]["message"]
+
+    def test_unknown_model_in_count_tokens_returns_404(self):
+        """count_tokens endpoint should also return Anthropic-format 404."""
+        from fastapi import HTTPException as FastAPIHTTPException
+
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+        ):
+            mock_mapper.list_downstream = AsyncMock()
+            mock_mapper.resolve_request_config = MagicMock(
+                side_effect=FastAPIHTTPException(
+                    status_code=404,
+                    detail="Unknown model: 'bad-model'",
+                )
+            )
+
+            client = TestClient(_integration_app, raise_server_exceptions=False)
+            resp = client.post("/v1/messages/count_tokens", json={
+                "model": "bad-model",
+                "messages": [{"role": "user", "content": "hi"}],
+            })
+
+        assert resp.status_code == 404
+        body = resp.json()
+        assert body["type"] == "error"
+        assert body["error"]["type"] == "not_found_error"
+
+    def test_value_error_returns_400_anthropic_error(self):
+        """When mapper raises ValueError (no model specifier),
+        the response should be Anthropic-format invalid_request_error."""
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+        ):
+            mock_mapper.list_downstream = AsyncMock()
+            mock_mapper.resolve_request_config = MagicMock(
+                side_effect=ValueError("Unable to proxy request without a model specifier")
+            )
+
+            client = TestClient(_integration_app, raise_server_exceptions=False)
+            resp = client.post("/v1/messages", json=_ANTHRO_BODY)
+
+        assert resp.status_code == 400
+        body = resp.json()
+        assert body["type"] == "error"
+        assert body["error"]["type"] == "invalid_request_error"
+        assert "model" in body["error"]["message"].lower()
+
+    def test_value_error_in_count_tokens_returns_400(self):
+        """count_tokens endpoint should also return 400 for ValueError."""
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+        ):
+            mock_mapper.list_downstream = AsyncMock()
+            mock_mapper.resolve_request_config = MagicMock(
+                side_effect=ValueError("Unable to proxy request without a model specifier")
+            )
+
+            client = TestClient(_integration_app, raise_server_exceptions=False)
+            resp = client.post("/v1/messages/count_tokens", json={
+                "model": "test",
+                "messages": [{"role": "user", "content": "hi"}],
+            })
+
+        assert resp.status_code == 400
+        body = resp.json()
+        assert body["type"] == "error"
+        assert body["error"]["type"] == "invalid_request_error"
+
+    def test_generic_exception_returns_500(self):
+        """Unexpected exceptions should return Anthropic-format 500."""
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+        ):
+            mock_mapper.list_downstream = AsyncMock(
+                side_effect=RuntimeError("connection lost")
+            )
+
+            client = TestClient(_integration_app, raise_server_exceptions=False)
+            resp = client.post("/v1/messages", json=_ANTHRO_BODY)
+
+        assert resp.status_code == 500
+        body = resp.json()
+        assert body["type"] == "error"
+        assert body["error"]["type"] == "api_error"
+
+
+# ---------------------------------------------------------------------------
+# Response headers
+# ---------------------------------------------------------------------------
+
+class TestResponseHeaders:
+    """Test that responses include expected headers."""
+
+    def setup_method(self):
+        import config as _cfg
+        _cfg.BOOST_AUTH = []
+
+    def test_non_streaming_has_request_id(self):
+        """Non-streaming responses should include x-request-id header."""
+        fake_llm = _FakeLLM(
+            consume_result=_fake_openai_result(),
+            stream_chunks=[],
+        )
+
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+            patch.object(anthropic_compat, "llm_mod") as mock_llm_mod,
+        ):
+            mock_mapper.list_downstream = AsyncMock()
+            mock_mapper.resolve_request_config = MagicMock(return_value={})
+            mock_mapper.is_direct_task = MagicMock(return_value=False)
+            mock_llm_mod.LLM = MagicMock(return_value=fake_llm)
+
+            client = TestClient(_integration_app, raise_server_exceptions=False)
+            resp = client.post("/v1/messages", json=_ANTHRO_BODY)
+
+        assert resp.status_code == 200
+        assert "x-request-id" in resp.headers
+        assert resp.headers["x-request-id"].startswith("req_")
+
+    def test_streaming_has_request_id(self):
+        """Streaming responses should include x-request-id header."""
+        chunks = [
+            'data: {"choices": [{"delta": {"content": "Hi"}}]}\n\n',
+            'data: {"choices": [{"delta": {}, "finish_reason": "stop"}], '
+            '"usage": {"prompt_tokens": 5, "completion_tokens": 1}}\n\n',
+        ]
+        fake_llm = _FakeLLM(stream_chunks=chunks)
+
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+            patch.object(anthropic_compat, "llm_mod") as mock_llm_mod,
+        ):
+            mock_mapper.list_downstream = AsyncMock()
+            mock_mapper.resolve_request_config = MagicMock(return_value={})
+            mock_mapper.is_direct_task = MagicMock(return_value=False)
+            mock_llm_mod.LLM = MagicMock(return_value=fake_llm)
+
+            client = TestClient(_integration_app, raise_server_exceptions=False)
+            resp = client.post("/v1/messages", json={**_ANTHRO_BODY, "stream": True})
+
+        assert resp.status_code == 200
+        assert "x-request-id" in resp.headers
+        assert resp.headers["x-request-id"].startswith("req_")
+
+    def test_non_streaming_content_type_is_json(self):
+        """Non-streaming responses should have application/json content type."""
+        fake_llm = _FakeLLM(
+            consume_result=_fake_openai_result(),
+            stream_chunks=[],
+        )
+
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+            patch.object(anthropic_compat, "llm_mod") as mock_llm_mod,
+        ):
+            mock_mapper.list_downstream = AsyncMock()
+            mock_mapper.resolve_request_config = MagicMock(return_value={})
+            mock_mapper.is_direct_task = MagicMock(return_value=False)
+            mock_llm_mod.LLM = MagicMock(return_value=fake_llm)
+
+            client = TestClient(_integration_app, raise_server_exceptions=False)
+            resp = client.post("/v1/messages", json=_ANTHRO_BODY)
+
+        assert "application/json" in resp.headers.get("content-type", "")
+
+    def test_direct_task_has_request_id(self):
+        """Direct task responses should also include x-request-id."""
+        openai_result = _fake_openai_result(content="Title")
+        fake_llm = _FakeLLM(chat_completion_result=openai_result)
+        fake_llm.workflow = None
+        fake_llm.boost_params = {}
+
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+            patch.object(anthropic_compat, "llm_mod") as mock_llm_mod,
+        ):
+            mock_mapper.list_downstream = AsyncMock()
+            mock_mapper.resolve_request_config = MagicMock(return_value={})
+            mock_mapper.is_direct_task = MagicMock(return_value=True)
+            mock_llm_mod.LLM = MagicMock(return_value=fake_llm)
+
+            client = TestClient(_integration_app, raise_server_exceptions=False)
+            resp = client.post("/v1/messages", json=_ANTHRO_BODY)
+
+        assert resp.status_code == 200
+        assert "x-request-id" in resp.headers
+
+    def test_count_tokens_has_request_id(self):
+        """count_tokens responses should include x-request-id."""
+        openai_result = _fake_openai_result(prompt_tokens=20)
+        fake_llm = _FakeLLM(consume_result=openai_result, stream_chunks=[])
+
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+            patch.object(anthropic_compat, "llm_mod") as mock_llm_mod,
+        ):
+            mock_mapper.list_downstream = AsyncMock()
+            mock_mapper.resolve_request_config = MagicMock(return_value={})
+            mock_llm_mod.LLM = MagicMock(return_value=fake_llm)
+
+            client = TestClient(_integration_app, raise_server_exceptions=False)
+            resp = client.post("/v1/messages/count_tokens", json={
+                "model": "test",
+                "messages": [{"role": "user", "content": "hi"}],
+            })
+
+        assert resp.status_code == 200
+        assert "x-request-id" in resp.headers
+
+
+# ---------------------------------------------------------------------------
+# Stream edge cases
+# ---------------------------------------------------------------------------
+
+class TestStreamEdgeCases:
+    """Test edge cases in the streaming conversion."""
+
+    @pytest.mark.asyncio
+    async def test_empty_tool_calls_array_in_chunk(self):
+        """An empty tool_calls array in a chunk should not cause errors."""
+        async def response_stream():
+            yield 'data: {"choices": [{"delta": {"content": "Hello", "tool_calls": []}}]}\n\n'
+            yield 'data: {"choices": [{"delta": {}, "finish_reason": "stop"}], "usage": {"prompt_tokens": 5, "completion_tokens": 1}}\n\n'
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "test-model")
+        ]
+        joined = "".join(events)
+
+        assert "Hello" in joined
+        assert '"type": "message_stop"' in joined
+        # No tool_use blocks should appear
+        assert '"type": "tool_use"' not in joined
+
+    @pytest.mark.asyncio
+    async def test_malformed_json_chunks_skipped(self):
+        """Chunks with malformed JSON after 'data: ' should be silently skipped."""
+        async def response_stream():
+            yield 'data: not valid json at all\n\n'
+            yield 'data: {"choices": [{"delta": {"content": "OK"}}]}\n\n'
+            yield 'data: {truncated\n\n'
+            yield 'data: {"choices": [{"delta": {}, "finish_reason": "stop"}], "usage": {"prompt_tokens": 1, "completion_tokens": 1}}\n\n'
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "test-model")
+        ]
+        joined = "".join(events)
+
+        assert "OK" in joined
+        assert '"type": "message_stop"' in joined
+
+    @pytest.mark.asyncio
+    async def test_mid_stream_exception_emits_error_text(self):
+        """If the underlying response stream raises, the converter should
+        emit the error as a text block and still produce valid SSE envelope."""
+        async def response_stream():
+            yield 'data: {"choices": [{"delta": {"content": "partial"}}]}\n\n'
+            raise RuntimeError("backend connection reset")
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "test-model")
+        ]
+        joined = "".join(events)
+
+        # Should contain the partial content
+        assert "partial" in joined
+        # Should contain the error text
+        assert "Stream error" in joined
+        assert "backend connection reset" in joined
+        # Should still have valid envelope
+        assert '"type": "message_start"' in joined
+        assert '"type": "message_delta"' in joined
+        assert '"type": "message_stop"' in joined
+
+    @pytest.mark.asyncio
+    async def test_mid_stream_exception_without_prior_text_block(self):
+        """Error before any content should open a new text block for the error."""
+        async def response_stream():
+            # Must yield once to be an async generator, but raise before producing data
+            if False:
+                yield  # pragma: no cover
+            raise ConnectionError("refused")
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "test-model")
+        ]
+        joined = "".join(events)
+
+        assert '"type": "content_block_start"' in joined
+        assert "refused" in joined
+        assert '"type": "message_stop"' in joined
+
+    @pytest.mark.asyncio
+    async def test_chunk_with_only_finish_reason_no_content(self):
+        """A chunk with finish_reason but no content/tool_calls should be safe."""
+        async def response_stream():
+            yield 'data: {"choices": [{"delta": {"content": "Done"}}]}\n\n'
+            yield 'data: {"choices": [{"delta": {}, "finish_reason": "length"}], "usage": {"prompt_tokens": 5, "completion_tokens": 100}}\n\n'
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "test-model")
+        ]
+        joined = "".join(events)
+
+        assert '"stop_reason": "max_tokens"' in joined
+
+    @pytest.mark.asyncio
+    async def test_bytes_chunks_handled(self):
+        """The converter should handle both str and bytes chunks."""
+        async def response_stream():
+            yield b'data: {"choices": [{"delta": {"content": "bytes!"}}]}\n\n'
+            yield b'data: {"choices": [{"delta": {}, "finish_reason": "stop"}], "usage": {"prompt_tokens": 1, "completion_tokens": 1}}\n\n'
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "test-model")
+        ]
+        joined = "".join(events)
+
+        assert "bytes!" in joined
+        assert '"type": "message_stop"' in joined
+
+
+# ---------------------------------------------------------------------------
+# Request field acceptance
+# ---------------------------------------------------------------------------
+
+class TestRequestFieldAcceptance:
+    """Test that extra/optional Anthropic request fields don't cause errors."""
+
+    def setup_method(self):
+        import config as _cfg
+        _cfg.BOOST_AUTH = []
+
+    def test_metadata_field_accepted(self):
+        """The metadata field should be accepted without error even if unused."""
+        fake_llm = _FakeLLM(
+            consume_result=_fake_openai_result(),
+            stream_chunks=[],
+        )
+
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+            patch.object(anthropic_compat, "llm_mod") as mock_llm_mod,
+        ):
+            mock_mapper.list_downstream = AsyncMock()
+            mock_mapper.resolve_request_config = MagicMock(return_value={})
+            mock_mapper.is_direct_task = MagicMock(return_value=False)
+            mock_llm_mod.LLM = MagicMock(return_value=fake_llm)
+
+            client = TestClient(_integration_app, raise_server_exceptions=False)
+            resp = client.post("/v1/messages", json={
+                **_ANTHRO_BODY,
+                "metadata": {"user_id": "user-123"},
+            })
+
+        assert resp.status_code == 200
+
+    def test_extra_unknown_fields_accepted(self):
+        """Unknown fields should be silently ignored."""
+        fake_llm = _FakeLLM(
+            consume_result=_fake_openai_result(),
+            stream_chunks=[],
+        )
+
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+            patch.object(anthropic_compat, "llm_mod") as mock_llm_mod,
+        ):
+            mock_mapper.list_downstream = AsyncMock()
+            mock_mapper.resolve_request_config = MagicMock(return_value={})
+            mock_mapper.is_direct_task = MagicMock(return_value=False)
+            mock_llm_mod.LLM = MagicMock(return_value=fake_llm)
+
+            client = TestClient(_integration_app, raise_server_exceptions=False)
+            resp = client.post("/v1/messages", json={
+                **_ANTHRO_BODY,
+                "top_k": 40,
+                "metadata": {"user_id": "u1"},
+                "system": [
+                    {"type": "text", "text": "You are helpful."},
+                    {"type": "text", "text": "Be concise.", "cache_control": {"type": "ephemeral"}},
+                ],
+            })
+
+        assert resp.status_code == 200
+
+
+# ---------------------------------------------------------------------------
 # SSE parsing helper
 # ---------------------------------------------------------------------------
 
