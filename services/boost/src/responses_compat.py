@@ -13,6 +13,8 @@ import mapper
 import llm as llm_mod
 import config
 
+REQUEST_ID_HEADER = "request-id"
+
 logger = log.setup_logger(__name__)
 responses_compatible_routes = APIRouter()
 
@@ -31,7 +33,7 @@ async def get_api_key(api_key_header: str = Security(auth_header)):
   raise HTTPException(status_code=403, detail="Unauthorized")
 
 
-def _responses_error(status_code, message, error_type=None, error_code=None):
+def _responses_error(status_code, message, error_type=None, error_code=None, request_id=None):
   if error_type is None:
     error_type = {
       400: "invalid_request_error",
@@ -49,7 +51,10 @@ def _responses_error(status_code, message, error_type=None, error_code=None):
       "code": error_code,
     }
   }
-  return JSONResponse(status_code=status_code, content=body)
+  headers = {}
+  if request_id:
+    headers[REQUEST_ID_HEADER] = request_id
+  return JSONResponse(status_code=status_code, content=body, headers=headers)
 
 
 def _make_usage(input_tokens=0, output_tokens=0, total_tokens=None):
@@ -783,20 +788,22 @@ async def _responses_stream_converter(
 
 @responses_compatible_routes.post("/v1/responses")
 async def post_responses(request: Request, api_key: str = Depends(get_api_key)):
+  request_id = f"req_{shortuuid.random()}"
+
   try:
     body = await request.body()
     try:
       json_body = json.loads(body.decode("utf-8"))
     except json.JSONDecodeError:
-      return _responses_error(400, "Invalid JSON in request body")
+      return _responses_error(400, "Invalid JSON in request body", request_id=request_id)
 
     # Validate required fields
     if "model" not in json_body or not json_body["model"]:
-      return _responses_error(400, "model is required")
+      return _responses_error(400, "model is required", request_id=request_id)
 
     inp = json_body.get("input")
     if inp is None:
-      return _responses_error(400, "input is required")
+      return _responses_error(400, "input is required", request_id=request_id)
 
     request_model = json_body["model"]
     is_stream = json_body.get("stream", False)
@@ -819,27 +826,36 @@ async def post_responses(request: Request, api_key: str = Depends(get_api_key)):
     ):
       result = await proxy.chat_completion()
       response = _build_responses_response(result, request_model, response_id)
-      return JSONResponse(content=response, status_code=200)
+      return JSONResponse(
+        content=response,
+        status_code=200,
+        headers={REQUEST_ID_HEADER: request_id},
+      )
 
     completion = await proxy.serve()
 
     if completion is None:
-      return _responses_error(500, "No completion returned")
+      return _responses_error(500, "No completion returned", request_id=request_id)
 
     if is_stream:
       return StreamingResponse(
         _responses_stream_converter(completion, request_model, response_id),
         media_type="text/event-stream",
+        headers={REQUEST_ID_HEADER: request_id},
       )
     else:
       result = await proxy.consume_stream(completion)
       response = _build_responses_response(result, request_model, response_id)
-      return JSONResponse(content=response, status_code=200)
+      return JSONResponse(
+        content=response,
+        status_code=200,
+        headers={REQUEST_ID_HEADER: request_id},
+      )
 
   except HTTPException as e:
-    return _responses_error(e.status_code, e.detail)
+    return _responses_error(e.status_code, e.detail, request_id=request_id)
   except ValueError as e:
-    return _responses_error(400, str(e))
+    return _responses_error(400, str(e), request_id=request_id)
   except Exception as e:
     logger.error(f"Unexpected error in responses handler: {e}", exc_info=True)
-    return _responses_error(500, "Internal server error")
+    return _responses_error(500, "Internal server error", request_id=request_id)

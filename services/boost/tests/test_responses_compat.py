@@ -1273,3 +1273,170 @@ class TestResponsesRouteIntegration:
         )
 
         assert resp.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Request-ID header tests
+# ---------------------------------------------------------------------------
+
+
+class TestResponsesRequestIdHeader:
+    """Verify that the request-id header is present on all response paths."""
+
+    @pytest.fixture(autouse=True)
+    def setup_app(self, monkeypatch):
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
+        monkeypatch.setattr(responses_compat.config, "BOOST_AUTH", [])
+
+        app = FastAPI()
+        app.include_router(responses_compat.responses_compatible_routes)
+        self.client = TestClient(app)
+
+    def _assert_request_id(self, resp):
+        """Assert request-id header is present and has correct format."""
+        assert "request-id" in resp.headers, "Missing request-id header"
+        rid = resp.headers["request-id"]
+        assert rid.startswith("req_"), f"request-id should start with req_, got: {rid}"
+
+    def test_request_id_on_non_streaming_response(self, monkeypatch):
+        mock_result = {
+            "choices": [{"message": {"content": "hi"}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 5, "completion_tokens": 1, "total_tokens": 6},
+        }
+
+        async def mock_list_downstream():
+            return []
+
+        mock_llm = MagicMock()
+        mock_llm.workflow = None
+        mock_llm.boost_params = {}
+
+        async def mock_serve():
+            async def gen():
+                yield f'data: {json.dumps(mock_result)}\n\n'
+                yield 'data: [DONE]\n\n'
+            return gen()
+
+        async def mock_consume(stream):
+            return mock_result
+
+        mock_llm.serve = mock_serve
+        mock_llm.consume_stream = mock_consume
+
+        monkeypatch.setattr(responses_compat.mapper, "list_downstream", mock_list_downstream)
+        monkeypatch.setattr(responses_compat.mapper, "resolve_request_config", lambda body: {})
+        monkeypatch.setattr(responses_compat.mapper, "is_direct_task", lambda proxy: False)
+        monkeypatch.setattr(responses_compat.llm_mod, "LLM", lambda **kw: mock_llm)
+
+        resp = self.client.post("/v1/responses", json={
+            "model": "gpt-4o",
+            "input": "hello",
+        })
+
+        assert resp.status_code == 200
+        self._assert_request_id(resp)
+
+    def test_request_id_on_streaming_response(self, monkeypatch):
+        async def mock_list_downstream():
+            return []
+
+        mock_llm = MagicMock()
+        mock_llm.workflow = None
+        mock_llm.boost_params = {}
+
+        async def mock_serve():
+            async def gen():
+                yield 'data: {"choices":[{"delta":{"content":"hi"},"index":0}]}\n\n'
+                yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}\n\n'
+                yield 'data: [DONE]\n\n'
+            return gen()
+
+        mock_llm.serve = mock_serve
+
+        monkeypatch.setattr(responses_compat.mapper, "list_downstream", mock_list_downstream)
+        monkeypatch.setattr(responses_compat.mapper, "resolve_request_config", lambda body: {})
+        monkeypatch.setattr(responses_compat.mapper, "is_direct_task", lambda proxy: False)
+        monkeypatch.setattr(responses_compat.llm_mod, "LLM", lambda **kw: mock_llm)
+
+        resp = self.client.post("/v1/responses", json={
+            "model": "gpt-4o",
+            "input": "hello",
+            "stream": True,
+        })
+
+        assert resp.status_code == 200
+        self._assert_request_id(resp)
+
+    def test_request_id_on_direct_task_response(self, monkeypatch):
+        mock_result = {
+            "choices": [{"message": {"content": "title"}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+        }
+
+        async def mock_list_downstream():
+            return []
+
+        mock_llm = MagicMock()
+        mock_llm.workflow = None
+        mock_llm.boost_params = {}
+
+        async def mock_chat_completion():
+            return mock_result
+
+        mock_llm.chat_completion = mock_chat_completion
+
+        monkeypatch.setattr(responses_compat.mapper, "list_downstream", mock_list_downstream)
+        monkeypatch.setattr(responses_compat.mapper, "resolve_request_config", lambda body: {})
+        monkeypatch.setattr(responses_compat.mapper, "is_direct_task", lambda proxy: True)
+        monkeypatch.setattr(responses_compat.llm_mod, "LLM", lambda **kw: mock_llm)
+
+        resp = self.client.post("/v1/responses", json={
+            "model": "gpt-4o",
+            "input": "hello",
+        })
+
+        assert resp.status_code == 200
+        self._assert_request_id(resp)
+
+    def test_request_id_on_validation_error(self):
+        resp = self.client.post("/v1/responses", json={"input": "hi"})
+        assert resp.status_code == 400
+        self._assert_request_id(resp)
+
+    def test_request_id_on_invalid_json_error(self):
+        resp = self.client.post(
+            "/v1/responses",
+            content=b"not json",
+            headers={"content-type": "application/json"},
+        )
+        assert resp.status_code == 400
+        self._assert_request_id(resp)
+
+    def test_request_id_on_mapper_error(self, monkeypatch):
+        async def mock_list_downstream():
+            return []
+
+        monkeypatch.setattr(responses_compat.mapper, "list_downstream", mock_list_downstream)
+        monkeypatch.setattr(
+            responses_compat.mapper,
+            "resolve_request_config",
+            MagicMock(side_effect=ValueError("Unable to proxy")),
+        )
+
+        resp = self.client.post("/v1/responses", json={
+            "model": "unknown",
+            "input": "hi",
+        })
+
+        assert resp.status_code == 400
+        self._assert_request_id(resp)
+
+    def test_request_id_unique_per_request(self, monkeypatch):
+        """Each request should get a unique request-id."""
+        resp1 = self.client.post("/v1/responses", json={"input": "hi"})
+        resp2 = self.client.post("/v1/responses", json={"input": "hi"})
+        rid1 = resp1.headers.get("request-id")
+        rid2 = resp2.headers.get("request-id")
+        assert rid1 != rid2, "Each request must get a unique request-id"
