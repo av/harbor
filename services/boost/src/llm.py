@@ -610,6 +610,11 @@ class LLM(AsyncEventEmitter):
     content = ""
     tool_calls = []
     last_finish_reason = None
+    usage = {
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "total_tokens": 0,
+    }
 
     async for chunk_bytes in stream:
       chunk = self.parse_chunk(chunk_bytes)
@@ -619,6 +624,15 @@ class LLM(AsyncEventEmitter):
       chunk_tools = self.get_chunk_tool_calls(chunk)
       chunk_finish_reason = self.get_chunk_finish_reason(chunk)
 
+      # Accumulate usage from chunks (backends send usage in the
+      # final chunk when stream_options.include_usage is true)
+      chunk_usage = chunk.get("usage")
+      if chunk_usage:
+        for key in ("prompt_tokens", "completion_tokens", "total_tokens"):
+          val = chunk_usage.get(key, 0)
+          if val:
+            usage[key] = val
+
       content += chunk_content
       tool_calls.extend(chunk_tools)
       if chunk_finish_reason is not None:
@@ -626,6 +640,7 @@ class LLM(AsyncEventEmitter):
 
     if output_obj:
       output_obj["choices"][0]["message"]["content"] = content
+      output_obj["usage"] = usage
 
       if len(tool_calls) > 0:
         output_obj["choices"][0]["message"]["tool_calls"] = tool_calls
