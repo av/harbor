@@ -955,5 +955,663 @@ class TestHasCompleteToolCallArguments:
         assert anthropic_compat._has_complete_tool_call_arguments(None) is False
 
 
+# ===========================================================================
+# Integration tests — route handlers via FastAPI TestClient
+# ===========================================================================
+
+# Build a lightweight FastAPI app containing only the Anthropic-compat router.
+# The real ``mapper`` and ``llm`` modules are stubbed at the top of this file,
+# so we patch functions/classes directly on the ``anthropic_compat`` module.
+
+from fastapi import FastAPI
+from starlette.testclient import TestClient
+from unittest.mock import AsyncMock
+
+_integration_app = FastAPI()
+_integration_app.include_router(anthropic_compat.anthropic_compatible_routes)
+
+
+def _make_client(auth_key=None):
+    """Return a TestClient.  When *auth_key* is given, configure BOOST_AUTH
+    so the route enforces authentication."""
+    import config as _cfg
+    if auth_key:
+        _cfg.BOOST_AUTH = [auth_key]
+    else:
+        _cfg.BOOST_AUTH = []
+    return TestClient(_integration_app, raise_server_exceptions=False)
+
+
+# Canonical Anthropic request body used across integration tests.
+_ANTHRO_BODY = {
+    "model": "claude-test",
+    "max_tokens": 128,
+    "messages": [{"role": "user", "content": "Hello, world!"}],
+}
+
+
+def _fake_openai_result(content="Hi!", finish_reason="stop",
+                         prompt_tokens=10, completion_tokens=5,
+                         tool_calls=None):
+    """Build a minimal OpenAI-shaped chat completion result."""
+    msg = {"content": content, "tool_calls": tool_calls or []}
+    return {
+        "id": "chatcmpl-1",
+        "object": "chat.completion",
+        "created": 1700000000,
+        "model": "test-model",
+        "choices": [{"index": 0, "message": msg, "finish_reason": finish_reason}],
+        "usage": {
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": prompt_tokens + completion_tokens,
+        },
+    }
+
+
+class _FakeLLM:
+    """Minimal stand-in for llm.LLM used in integration tests."""
+
+    def __init__(self, stream_chunks=None, consume_result=None,
+                 chat_completion_result=None, **kwargs):
+        self._stream_chunks = stream_chunks or []
+        self._consume_result = consume_result
+        self._chat_completion_result = chat_completion_result
+        self.workflow = kwargs.get("workflow")
+        self.boost_params = kwargs.get("params", {})
+        self.module = kwargs.get("module")
+        self.model = kwargs.get("model", "test-model")
+        self.chat = type("Chat", (), {
+            "has_substring": lambda self, s: False,
+            "history": lambda self: [],
+        })()
+
+    async def serve(self):
+        async def _gen():
+            for chunk in self._stream_chunks:
+                yield chunk
+        return _gen()
+
+    async def consume_stream(self, stream):
+        # Drain the stream
+        async for _ in stream:
+            pass
+        return self._consume_result
+
+    async def chat_completion(self):
+        return self._chat_completion_result
+
+
+# ---------------------------------------------------------------------------
+# Auth integration
+# ---------------------------------------------------------------------------
+
+class TestIntegrationAuth:
+    """Test that the route enforces API key authentication."""
+
+    def test_missing_auth_returns_403(self):
+        client = _make_client(auth_key="sk-secret")
+        resp = client.post("/v1/messages", json=_ANTHRO_BODY)
+        assert resp.status_code == 403
+
+    def test_wrong_api_key_returns_403(self):
+        client = _make_client(auth_key="sk-secret")
+        resp = client.post(
+            "/v1/messages", json=_ANTHRO_BODY,
+            headers={"x-api-key": "sk-wrong"},
+        )
+        assert resp.status_code == 403
+
+    def test_correct_x_api_key_passes_auth(self):
+        fake_llm = _FakeLLM(
+            consume_result=_fake_openai_result(),
+            stream_chunks=[],
+        )
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+            patch.object(anthropic_compat, "llm_mod") as mock_llm_mod,
+        ):
+            mock_mapper.list_downstream = AsyncMock()
+            mock_mapper.resolve_request_config = MagicMock(return_value={})
+            mock_mapper.is_direct_task = MagicMock(return_value=False)
+            mock_llm_mod.LLM = MagicMock(return_value=fake_llm)
+
+            client = _make_client(auth_key="sk-secret")
+            resp = client.post(
+                "/v1/messages", json=_ANTHRO_BODY,
+                headers={"x-api-key": "sk-secret"},
+            )
+            assert resp.status_code == 200
+
+    def test_correct_bearer_passes_auth(self):
+        fake_llm = _FakeLLM(
+            consume_result=_fake_openai_result(),
+            stream_chunks=[],
+        )
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+            patch.object(anthropic_compat, "llm_mod") as mock_llm_mod,
+        ):
+            mock_mapper.list_downstream = AsyncMock()
+            mock_mapper.resolve_request_config = MagicMock(return_value={})
+            mock_mapper.is_direct_task = MagicMock(return_value=False)
+            mock_llm_mod.LLM = MagicMock(return_value=fake_llm)
+
+            client = _make_client(auth_key="sk-secret")
+            resp = client.post(
+                "/v1/messages", json=_ANTHRO_BODY,
+                headers={"Authorization": "Bearer sk-secret"},
+            )
+            assert resp.status_code == 200
+
+    def test_no_auth_configured_allows_all(self):
+        fake_llm = _FakeLLM(
+            consume_result=_fake_openai_result(),
+            stream_chunks=[],
+        )
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+            patch.object(anthropic_compat, "llm_mod") as mock_llm_mod,
+        ):
+            mock_mapper.list_downstream = AsyncMock()
+            mock_mapper.resolve_request_config = MagicMock(return_value={})
+            mock_mapper.is_direct_task = MagicMock(return_value=False)
+            mock_llm_mod.LLM = MagicMock(return_value=fake_llm)
+
+            client = _make_client(auth_key=None)
+            resp = client.post("/v1/messages", json=_ANTHRO_BODY)
+            assert resp.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Validation integration
+# ---------------------------------------------------------------------------
+
+class TestIntegrationValidation:
+    """Test that request validation errors are returned as Anthropic errors."""
+
+    def setup_method(self):
+        import config as _cfg
+        _cfg.BOOST_AUTH = []
+
+    def test_missing_model_returns_400(self):
+        client = TestClient(_integration_app, raise_server_exceptions=False)
+        resp = client.post("/v1/messages", json={
+            "max_tokens": 128,
+            "messages": [{"role": "user", "content": "hi"}],
+        })
+        assert resp.status_code == 400
+        body = resp.json()
+        assert body["type"] == "error"
+        assert body["error"]["type"] == "invalid_request_error"
+        assert "model" in body["error"]["message"]
+
+    def test_missing_max_tokens_returns_400(self):
+        client = TestClient(_integration_app, raise_server_exceptions=False)
+        resp = client.post("/v1/messages", json={
+            "model": "test",
+            "messages": [{"role": "user", "content": "hi"}],
+        })
+        assert resp.status_code == 400
+        body = resp.json()
+        assert "max_tokens" in body["error"]["message"]
+
+    def test_empty_messages_returns_400(self):
+        client = TestClient(_integration_app, raise_server_exceptions=False)
+        resp = client.post("/v1/messages", json={
+            "model": "test",
+            "max_tokens": 128,
+            "messages": [],
+        })
+        assert resp.status_code == 400
+
+    def test_system_role_in_messages_returns_400(self):
+        client = TestClient(_integration_app, raise_server_exceptions=False)
+        resp = client.post("/v1/messages", json={
+            "model": "test",
+            "max_tokens": 128,
+            "messages": [{"role": "system", "content": "you are helpful"}],
+        })
+        assert resp.status_code == 400
+        body = resp.json()
+        assert "system" in body["error"]["message"].lower()
+
+    def test_invalid_json_body_returns_400(self):
+        client = TestClient(_integration_app, raise_server_exceptions=False)
+        resp = client.post(
+            "/v1/messages",
+            content=b"not json at all",
+            headers={"content-type": "application/json"},
+        )
+        assert resp.status_code == 400
+        body = resp.json()
+        assert "JSON" in body["error"]["message"]
+
+
+# ---------------------------------------------------------------------------
+# Non-streaming POST /v1/messages
+# ---------------------------------------------------------------------------
+
+class TestIntegrationNonStreaming:
+    """Test the non-streaming path through post_messages."""
+
+    def setup_method(self):
+        import config as _cfg
+        _cfg.BOOST_AUTH = []
+
+    def test_basic_non_streaming_response_format(self):
+        openai_result = _fake_openai_result(
+            content="Hello from the backend!",
+            finish_reason="stop",
+            prompt_tokens=15,
+            completion_tokens=8,
+        )
+        fake_llm = _FakeLLM(consume_result=openai_result, stream_chunks=[])
+
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+            patch.object(anthropic_compat, "llm_mod") as mock_llm_mod,
+        ):
+            mock_mapper.list_downstream = AsyncMock()
+            mock_mapper.resolve_request_config = MagicMock(return_value={})
+            mock_mapper.is_direct_task = MagicMock(return_value=False)
+            mock_llm_mod.LLM = MagicMock(return_value=fake_llm)
+
+            client = TestClient(_integration_app, raise_server_exceptions=False)
+            resp = client.post("/v1/messages", json=_ANTHRO_BODY)
+
+        assert resp.status_code == 200
+        body = resp.json()
+
+        # Verify Anthropic response envelope
+        assert body["type"] == "message"
+        assert body["role"] == "assistant"
+        assert body["model"] == "claude-test"
+        assert body["id"].startswith("msg_")
+        assert body["stop_reason"] == "end_turn"
+        assert body["stop_sequence"] is None
+
+        # Verify content blocks
+        assert len(body["content"]) == 1
+        assert body["content"][0]["type"] == "text"
+        assert body["content"][0]["text"] == "Hello from the backend!"
+
+        # Verify usage
+        assert body["usage"]["input_tokens"] == 15
+        assert body["usage"]["output_tokens"] == 8
+
+    def test_non_streaming_with_tool_use(self):
+        openai_result = _fake_openai_result(
+            content=None,
+            finish_reason="tool_calls",
+            tool_calls=[{
+                "id": "toolu_abc",
+                "function": {
+                    "name": "get_weather",
+                    "arguments": '{"location": "NYC"}',
+                },
+            }],
+        )
+        fake_llm = _FakeLLM(consume_result=openai_result, stream_chunks=[])
+
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+            patch.object(anthropic_compat, "llm_mod") as mock_llm_mod,
+        ):
+            mock_mapper.list_downstream = AsyncMock()
+            mock_mapper.resolve_request_config = MagicMock(return_value={})
+            mock_mapper.is_direct_task = MagicMock(return_value=False)
+            mock_llm_mod.LLM = MagicMock(return_value=fake_llm)
+
+            client = TestClient(_integration_app, raise_server_exceptions=False)
+            resp = client.post("/v1/messages", json=_ANTHRO_BODY)
+
+        body = resp.json()
+        assert body["stop_reason"] == "tool_use"
+        tool_block = body["content"][0]
+        assert tool_block["type"] == "tool_use"
+        assert tool_block["id"] == "toolu_abc"
+        assert tool_block["name"] == "get_weather"
+        assert tool_block["input"] == {"location": "NYC"}
+
+    def test_non_streaming_none_completion_returns_500(self):
+        fake_llm = _FakeLLM(stream_chunks=[])
+        # Override serve to return None
+        fake_llm.serve = AsyncMock(return_value=None)
+
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+            patch.object(anthropic_compat, "llm_mod") as mock_llm_mod,
+        ):
+            mock_mapper.list_downstream = AsyncMock()
+            mock_mapper.resolve_request_config = MagicMock(return_value={})
+            mock_mapper.is_direct_task = MagicMock(return_value=False)
+            mock_llm_mod.LLM = MagicMock(return_value=fake_llm)
+
+            client = TestClient(_integration_app, raise_server_exceptions=False)
+            resp = client.post("/v1/messages", json=_ANTHRO_BODY)
+
+        assert resp.status_code == 500
+        body = resp.json()
+        assert body["type"] == "error"
+        assert "No completion" in body["error"]["message"]
+
+    def test_non_streaming_direct_task(self):
+        """When mapper.is_direct_task is True, LLM.chat_completion() is
+        used instead of serve()+consume_stream()."""
+        openai_result = _fake_openai_result(content="Title suggestion")
+        fake_llm = _FakeLLM(chat_completion_result=openai_result)
+        fake_llm.workflow = None
+        fake_llm.boost_params = {}
+
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+            patch.object(anthropic_compat, "llm_mod") as mock_llm_mod,
+        ):
+            mock_mapper.list_downstream = AsyncMock()
+            mock_mapper.resolve_request_config = MagicMock(return_value={})
+            mock_mapper.is_direct_task = MagicMock(return_value=True)
+            mock_llm_mod.LLM = MagicMock(return_value=fake_llm)
+
+            client = TestClient(_integration_app, raise_server_exceptions=False)
+            resp = client.post("/v1/messages", json=_ANTHRO_BODY)
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["content"][0]["text"] == "Title suggestion"
+
+    def test_mapper_resolve_receives_openai_body(self):
+        """Verify that the request body is converted to OpenAI format before
+        being passed to mapper.resolve_request_config."""
+        openai_result = _fake_openai_result()
+        fake_llm = _FakeLLM(consume_result=openai_result, stream_chunks=[])
+
+        captured_body = {}
+
+        def capture_config(body):
+            captured_body.update(body)
+            return {}
+
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+            patch.object(anthropic_compat, "llm_mod") as mock_llm_mod,
+        ):
+            mock_mapper.list_downstream = AsyncMock()
+            mock_mapper.resolve_request_config = MagicMock(side_effect=capture_config)
+            mock_mapper.is_direct_task = MagicMock(return_value=False)
+            mock_llm_mod.LLM = MagicMock(return_value=fake_llm)
+
+            client = TestClient(_integration_app, raise_server_exceptions=False)
+            client.post("/v1/messages", json={
+                **_ANTHRO_BODY,
+                "system": "You are helpful.",
+                "temperature": 0.7,
+            })
+
+        # The converted body should have OpenAI-format messages
+        assert captured_body["model"] == "claude-test"
+        assert captured_body["max_tokens"] == 128
+        assert captured_body["temperature"] == 0.7
+        assert captured_body["messages"][0] == {"role": "system", "content": "You are helpful."}
+        assert captured_body["messages"][1] == {"role": "user", "content": "Hello, world!"}
+
+
+# ---------------------------------------------------------------------------
+# Streaming POST /v1/messages
+# ---------------------------------------------------------------------------
+
+class TestIntegrationStreaming:
+    """Test the streaming SSE path through post_messages."""
+
+    def setup_method(self):
+        import config as _cfg
+        _cfg.BOOST_AUTH = []
+
+    def _stream_chunks(self):
+        """Return typical OpenAI-format SSE chunks as strings."""
+        return [
+            'data: {"choices": [{"delta": {"content": "Hello"}}]}\n\n',
+            'data: {"choices": [{"delta": {"content": " there"}}]}\n\n',
+            'data: {"choices": [{"delta": {}, "finish_reason": "stop"}], '
+            '"usage": {"prompt_tokens": 10, "completion_tokens": 3}}\n\n',
+            'data: [DONE]\n\n',
+        ]
+
+    def test_streaming_returns_event_stream(self):
+        fake_llm = _FakeLLM(stream_chunks=self._stream_chunks())
+
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+            patch.object(anthropic_compat, "llm_mod") as mock_llm_mod,
+        ):
+            mock_mapper.list_downstream = AsyncMock()
+            mock_mapper.resolve_request_config = MagicMock(return_value={})
+            mock_mapper.is_direct_task = MagicMock(return_value=False)
+            mock_llm_mod.LLM = MagicMock(return_value=fake_llm)
+
+            client = TestClient(_integration_app, raise_server_exceptions=False)
+            resp = client.post("/v1/messages", json={**_ANTHRO_BODY, "stream": True})
+
+        assert resp.status_code == 200
+        assert "text/event-stream" in resp.headers.get("content-type", "")
+
+    def test_streaming_event_sequence(self):
+        fake_llm = _FakeLLM(stream_chunks=self._stream_chunks())
+
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+            patch.object(anthropic_compat, "llm_mod") as mock_llm_mod,
+        ):
+            mock_mapper.list_downstream = AsyncMock()
+            mock_mapper.resolve_request_config = MagicMock(return_value={})
+            mock_mapper.is_direct_task = MagicMock(return_value=False)
+            mock_llm_mod.LLM = MagicMock(return_value=fake_llm)
+
+            client = TestClient(_integration_app, raise_server_exceptions=False)
+            resp = client.post("/v1/messages", json={**_ANTHRO_BODY, "stream": True})
+
+        raw = resp.text
+        events = _parse_sse_events(raw)
+        event_types = [e["type"] for e in events]
+
+        # Verify canonical Anthropic SSE event ordering
+        assert event_types[0] == "message_start"
+        assert "content_block_start" in event_types
+        assert "content_block_delta" in event_types
+        assert "content_block_stop" in event_types
+        assert "message_delta" in event_types
+        assert event_types[-1] == "message_stop"
+
+    def test_streaming_text_content(self):
+        fake_llm = _FakeLLM(stream_chunks=self._stream_chunks())
+
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+            patch.object(anthropic_compat, "llm_mod") as mock_llm_mod,
+        ):
+            mock_mapper.list_downstream = AsyncMock()
+            mock_mapper.resolve_request_config = MagicMock(return_value={})
+            mock_mapper.is_direct_task = MagicMock(return_value=False)
+            mock_llm_mod.LLM = MagicMock(return_value=fake_llm)
+
+            client = TestClient(_integration_app, raise_server_exceptions=False)
+            resp = client.post("/v1/messages", json={**_ANTHRO_BODY, "stream": True})
+
+        raw = resp.text
+        events = _parse_sse_events(raw)
+
+        # Collect all text_delta content
+        text_deltas = [
+            e["delta"]["text"]
+            for e in events
+            if e.get("type") == "content_block_delta"
+            and e.get("delta", {}).get("type") == "text_delta"
+        ]
+        assert "".join(text_deltas) == "Hello there"
+
+    def test_streaming_usage_in_message_delta(self):
+        fake_llm = _FakeLLM(stream_chunks=self._stream_chunks())
+
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+            patch.object(anthropic_compat, "llm_mod") as mock_llm_mod,
+        ):
+            mock_mapper.list_downstream = AsyncMock()
+            mock_mapper.resolve_request_config = MagicMock(return_value={})
+            mock_mapper.is_direct_task = MagicMock(return_value=False)
+            mock_llm_mod.LLM = MagicMock(return_value=fake_llm)
+
+            client = TestClient(_integration_app, raise_server_exceptions=False)
+            resp = client.post("/v1/messages", json={**_ANTHRO_BODY, "stream": True})
+
+        events = _parse_sse_events(resp.text)
+        message_delta = [e for e in events if e.get("type") == "message_delta"][0]
+        assert message_delta["usage"]["input_tokens"] == 10
+        assert message_delta["usage"]["output_tokens"] == 3
+        assert message_delta["delta"]["stop_reason"] == "end_turn"
+
+    def test_streaming_tool_use_events(self):
+        chunks = [
+            'data: {"choices": [{"delta": {"tool_calls": ['
+            '{"index": 0, "id": "toolu_xyz", "function": '
+            '{"name": "calculator", "arguments": ""}}]}}]}\n\n',
+            'data: {"choices": [{"delta": {"tool_calls": ['
+            '{"index": 0, "function": '
+            '{"arguments": "{\\"expr\\": \\"2+2\\"}"}}]}}]}\n\n',
+            'data: {"choices": [{"delta": {}, "finish_reason": "tool_calls"}], '
+            '"usage": {"prompt_tokens": 5, "completion_tokens": 10}}\n\n',
+        ]
+        fake_llm = _FakeLLM(stream_chunks=chunks)
+
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+            patch.object(anthropic_compat, "llm_mod") as mock_llm_mod,
+        ):
+            mock_mapper.list_downstream = AsyncMock()
+            mock_mapper.resolve_request_config = MagicMock(return_value={})
+            mock_mapper.is_direct_task = MagicMock(return_value=False)
+            mock_llm_mod.LLM = MagicMock(return_value=fake_llm)
+
+            client = TestClient(_integration_app, raise_server_exceptions=False)
+            resp = client.post("/v1/messages", json={**_ANTHRO_BODY, "stream": True})
+
+        events = _parse_sse_events(resp.text)
+        event_types = [e["type"] for e in events]
+
+        assert "content_block_start" in event_types
+        # Find the tool content_block_start
+        tool_start = [
+            e for e in events
+            if e.get("type") == "content_block_start"
+            and e.get("content_block", {}).get("type") == "tool_use"
+        ]
+        assert len(tool_start) == 1
+        assert tool_start[0]["content_block"]["id"] == "toolu_xyz"
+        assert tool_start[0]["content_block"]["name"] == "calculator"
+
+        # Verify message_delta has tool_use stop reason
+        message_delta = [e for e in events if e.get("type") == "message_delta"][0]
+        assert message_delta["delta"]["stop_reason"] == "tool_use"
+
+
+# ---------------------------------------------------------------------------
+# POST /v1/messages/count_tokens
+# ---------------------------------------------------------------------------
+
+class TestIntegrationCountTokens:
+    """Test the count_tokens endpoint."""
+
+    def setup_method(self):
+        import config as _cfg
+        _cfg.BOOST_AUTH = []
+
+    def test_count_tokens_returns_input_tokens(self):
+        openai_result = _fake_openai_result(prompt_tokens=42, completion_tokens=1)
+        fake_llm = _FakeLLM(consume_result=openai_result, stream_chunks=[])
+
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+            patch.object(anthropic_compat, "llm_mod") as mock_llm_mod,
+        ):
+            mock_mapper.list_downstream = AsyncMock()
+            mock_mapper.resolve_request_config = MagicMock(return_value={})
+            mock_llm_mod.LLM = MagicMock(return_value=fake_llm)
+
+            client = TestClient(_integration_app, raise_server_exceptions=False)
+            resp = client.post("/v1/messages/count_tokens", json={
+                "model": "claude-test",
+                "messages": [{"role": "user", "content": "Count me"}],
+            })
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body == {"input_tokens": 42}
+
+    def test_count_tokens_missing_model_returns_400(self):
+        client = TestClient(_integration_app, raise_server_exceptions=False)
+        resp = client.post("/v1/messages/count_tokens", json={
+            "messages": [{"role": "user", "content": "hi"}],
+        })
+        assert resp.status_code == 400
+        body = resp.json()
+        assert "model" in body["error"]["message"]
+
+    def test_count_tokens_empty_messages_returns_400(self):
+        client = TestClient(_integration_app, raise_server_exceptions=False)
+        resp = client.post("/v1/messages/count_tokens", json={
+            "model": "test",
+            "messages": [],
+        })
+        assert resp.status_code == 400
+
+    def test_count_tokens_auth_enforced(self):
+        client = _make_client(auth_key="sk-token")
+        resp = client.post("/v1/messages/count_tokens", json={
+            "model": "test",
+            "messages": [{"role": "user", "content": "hi"}],
+        })
+        assert resp.status_code == 403
+
+    def test_count_tokens_none_completion_returns_500(self):
+        fake_llm = _FakeLLM(stream_chunks=[])
+        fake_llm.serve = AsyncMock(return_value=None)
+
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+            patch.object(anthropic_compat, "llm_mod") as mock_llm_mod,
+        ):
+            mock_mapper.list_downstream = AsyncMock()
+            mock_mapper.resolve_request_config = MagicMock(return_value={})
+            mock_llm_mod.LLM = MagicMock(return_value=fake_llm)
+
+            client = TestClient(_integration_app, raise_server_exceptions=False)
+            resp = client.post("/v1/messages/count_tokens", json={
+                "model": "test",
+                "messages": [{"role": "user", "content": "hi"}],
+            })
+
+        assert resp.status_code == 500
+
+
+# ---------------------------------------------------------------------------
+# SSE parsing helper
+# ---------------------------------------------------------------------------
+
+def _parse_sse_events(raw_text):
+    """Parse raw SSE text into a list of data payloads (dicts)."""
+    events = []
+    for block in raw_text.strip().split("\n\n"):
+        data_line = None
+        for line in block.strip().split("\n"):
+            if line.startswith("data: "):
+                data_line = line[6:]
+        if data_line:
+            try:
+                events.append(json.loads(data_line))
+            except json.JSONDecodeError:
+                pass
+    return events
+
+
 if __name__ == "__main__":
     unittest.main()
