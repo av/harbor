@@ -30,8 +30,6 @@ harbor up searxng speaches
 
 Harbor is a CLI and companion app that lets you spin up a complete local LLM stack—backends like Ollama, llama.cpp, or vLLM, frontends like Open WebUI, plus supporting services like SearXNG for web search, Speaches for voice chat, and ComfyUI for image generation—all pre-wired to work together with a single `harbor up` command. No manual setup: just pick the services you want and Harbor handles the Docker Compose orchestration, configuration, and cross-service connectivity so you can focus on actually using your models.
 
-Pairs with: mi (~30-line agentic harness https://github.com/av/mi, YT https://www.youtube.com/watch?v=JdMBn7FXilg), skilled (skill-usage TUI https://github.com/av/skilled, YT https://www.youtube.com/watch?v=Lmq8A9R49ZI), facts (atomic specs https://github.com/av/facts). Used together in real jitera + personal stack.
-
 ![Screenshot of Harbor CLI and App together](https://github.com/av/harbor/wiki/harbor-app-3.png)
 
 ## News
