@@ -814,6 +814,26 @@ R0_THOUGHTS = Config[int](
     description="The amount of thoughts to generate for the r0 module",
 )
 
+# ----------- ANTHROPIC COMPAT ----------------
+
+ENABLE_ANTHROPIC_COMPAT = Config[bool](
+    name="HARBOR_BOOST_ANTHROPIC_COMPAT",
+    type=bool,
+    default="true",
+    description="""
+When enabled, Boost exposes an Anthropic-compatible Messages API at
+`/v1/messages` and `/v1/messages/count_tokens`. Incoming Anthropic-format
+requests are converted to OpenAI format, routed through the normal Boost
+pipeline, and responses are converted back to Anthropic format (including
+streaming SSE). This allows Anthropic SDK clients to use Boost as a drop-in
+backend.
+
+```bash
+harbor config set boost.anthropic_compat true
+```
+""".strip(),
+)
+
 if __name__ == "__main__":
     # Render documentation
     configs = [item for item in globals().values() if isinstance(item, Config)]

@@ -204,6 +204,14 @@ async def post_boost_chat_completion(
     return JSONResponse(content=content, status_code=200)
 
 
+# --- Anthropic Compatible ------------------
+
+if config.ENABLE_ANTHROPIC_COMPAT.value:
+  from anthropic_compat import anthropic_compatible_routes
+  app.include_router(anthropic_compatible_routes)
+  logger.info("Anthropic-compatible Messages API enabled at /v1/messages")
+
+
 # ------------ Startup ----------------
 
 logger.info(f"Boosting: {config.BOOST_APIS}")
