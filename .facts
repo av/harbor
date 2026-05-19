@@ -409,6 +409,29 @@
   command: rg -q 'except.*Exception' services/boost/src/anthropic_compat.py && rg -q 'test_mid_stream_exception' services/boost/tests/test_anthropic_compat.py
   tags: [spec, implemented]
 
+## responses api
+- label: Boost exposes POST /v1/responses endpoint for OpenAI Responses API compatibility
+  command: rg -q '/v1/responses' services/boost/src/responses_compat.py && rg -q 'responses_compatible_routes' services/boost/src/main.py
+  tags: [spec, implemented]
+- label: Boost Responses API converts string and array input formats to Chat Completions messages via _convert_input_to_messages
+  command: rg -q '_convert_input_to_messages' services/boost/src/responses_compat.py && rg -q 'test_string_input' services/boost/tests/test_responses_compat.py && rg -q 'test_message_item_user' services/boost/tests/test_responses_compat.py
+  tags: [spec, implemented]
+- label: Boost Responses API builds response objects with output items (message and function_call types) from Chat Completions results
+  command: rg -q '_build_output_items' services/boost/src/responses_compat.py && rg -q '_build_responses_response' services/boost/src/responses_compat.py && rg -q 'output_text' services/boost/src/responses_compat.py && rg -q 'function_call' services/boost/src/responses_compat.py
+  tags: [spec, implemented]
+- label: Boost Responses API streaming emits correct SSE event sequence with monotonically increasing sequence_number (response.created, response.in_progress, output_item.added, content_part.added, deltas, done events, response.completed)
+  command: rg -q 'response.created' services/boost/src/responses_compat.py && rg -q 'response.in_progress' services/boost/src/responses_compat.py && rg -q 'response.completed' services/boost/src/responses_compat.py && rg -q 'sequence_number' services/boost/src/responses_compat.py && rg -q 'test_sequence_numbers_monotonically_increase' services/boost/tests/test_responses_compat.py
+  tags: [spec, implemented]
+- label: HARBOR_BOOST_RESPONSES_API config controls whether Responses API endpoint is registered
+  command: rg -q 'ENABLE_RESPONSES_API' services/boost/src/config.py && rg -q 'HARBOR_BOOST_RESPONSES_API' profiles/default.env && rg -q 'ENABLE_RESPONSES_API' services/boost/src/main.py
+  tags: [spec, implemented]
+- label: Boost Responses API includes request-id response header on all response paths
+  command: rg -q 'request-id\|request_id' services/boost/src/responses_compat.py || rg -q 'resp_' services/boost/src/responses_compat.py
+  tags: [spec, implemented]
+- label: Boost Responses API usage objects include input_tokens_details and output_tokens_details sub-objects required by the OpenAI SDK
+  command: rg -q 'input_tokens_details' services/boost/src/responses_compat.py && rg -q 'output_tokens_details' services/boost/src/responses_compat.py && rg -q '_make_usage' services/boost/src/responses_compat.py && rg -q 'test_usage_has_token_details' services/boost/tests/test_responses_compat.py
+  tags: [spec, implemented]
+
 ## config
 - label: Boost upstream APIs are configured via semicolon-separated HARBOR_BOOST_OPENAI_URLS and HARBOR_BOOST_OPENAI_KEYS
   command: grep -q 'HARBOR_BOOST_OPENAI_URLS' services/boost/src/config.py && grep -q 'HARBOR_BOOST_OPENAI_KEYS' services/boost/src/config.py

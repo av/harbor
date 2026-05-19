@@ -431,6 +431,13 @@ async def _responses_stream_converter(
   })
   seq += 1
 
+  yield _sse_event("response.in_progress", {
+    "type": "response.in_progress",
+    "sequence_number": seq,
+    "response": skeleton,
+  })
+  seq += 1
+
   stream_error = None
 
   def _close_text_item():

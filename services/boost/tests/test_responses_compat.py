@@ -532,6 +532,7 @@ class TestResponsesStreamConverter:
         event_types = [e.split("\n")[0].replace("event: ", "") for e in events]
 
         assert "response.created" in event_types
+        assert "response.in_progress" in event_types
         assert "response.output_item.added" in event_types
         assert "response.content_part.added" in event_types
         assert "response.output_text.delta" in event_types
@@ -539,6 +540,58 @@ class TestResponsesStreamConverter:
         assert "response.content_part.done" in event_types
         assert "response.output_item.done" in event_types
         assert "response.completed" in event_types
+
+    @pytest.mark.asyncio
+    async def test_in_progress_event_after_created(self):
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"hi"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "gpt-4o", "resp_ip"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        event_types = [t for t, _ in parsed]
+
+        # response.in_progress must be present
+        assert "response.in_progress" in event_types
+
+        # It must come immediately after response.created
+        created_idx = event_types.index("response.created")
+        assert event_types[created_idx + 1] == "response.in_progress"
+
+        # It carries the same skeleton response with in_progress status
+        _, data = parsed[created_idx + 1]
+        assert data["type"] == "response.in_progress"
+        assert "sequence_number" in data
+        assert data["response"]["status"] == "in_progress"
+        assert data["response"]["id"] == "resp_ip"
+
+    @pytest.mark.asyncio
+    async def test_in_progress_event_validates_sdk(self):
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"x"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "gpt-4o", "resp_ipv"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        in_progress = [d for t, d in parsed if t == "response.in_progress"]
+        assert len(in_progress) == 1
+        try:
+            import openai.types.responses as r
+            r.ResponseInProgressEvent.model_validate(in_progress[0])
+        except ImportError:
+            pytest.skip("openai SDK not installed")
 
     @pytest.mark.asyncio
     async def test_all_events_have_sequence_number(self):
@@ -1115,6 +1168,7 @@ class TestResponsesRouteIntegration:
 
         text = resp.text
         assert "response.created" in text
+        assert "response.in_progress" in text
         assert "response.output_text.delta" in text
         assert "response.output_text.done" in text
         assert "response.completed" in text
