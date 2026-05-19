@@ -1,3 +1,8 @@
+- boost > workflows > Boost workflow files can be written as YAML when HARBOR_BOOST_WORKFLOWS_FILE points to a .yaml or .yml file, using the same workflow schema as JSON files @spec @implemented
+- boost > workflows > Boost YAML workflow files may use either a direct workflow mapping/list or a top-level workflows/agents mapping before the same workflow definitions @spec @implemented
+- label: cli > launch > harbor launch validates the selected host tool binary before starting backend, Boost, or tool-group services for non-config launches
+  command: rg -q 'started compose before validating the host binary' tests/suites/02-cli.sh && bash tests/suites/02-cli.sh
+  tags: [spec, launch-host-validate, implemented]
 # project
 - Harbor is a containerized LLM toolkit distributed as a Docker Compose project with a CLI and Tauri desktop app
 - label: the project is licensed under Apache 2.0
@@ -27,13 +32,13 @@
   command: rg -q '^run_launch_command\(\)' harbor.sh && rg -q '^    launch\)' harbor.sh && rg -Fq 'run_launch_command "$@"' harbor.sh
   tags: [spec, implemented]
 - label: harbor launch supports host tool adapters for codex, claude, and opencode that accept --backend, --model, --config, discover a running Harbor OpenAI-compatible backend, and keep unknown service fallback dispatch intact
-  command: rg -q '^launch_host_tool_command\(\)' harbor.sh && rg -q '^launch_detect_backend\(\)' harbor.sh && rg -q 'OPENCODE_CONFIG_CONTENT' harbor.sh && rg -q 'ANTHROPIC_BASE_URL' harbor.sh && rg -q 'model_providers.harbor_launch.base_url' harbor.sh && rg -q 'harbor launch codex --backend ollama --model' docs/3.-Harbor-CLI-Reference.md
+  command: rg -q '^launch_host_tool_command\(\)' harbor.sh && rg -q '^launch_detect_backend\(\)' harbor.sh && rg -q 'OPENCODE_CONFIG_CONTENT' harbor.sh && rg -q 'ANTHROPIC_BASE_URL' harbor.sh && rg -q 'model_providers.harbor_launch.base_url' harbor.sh && rg -q 'harbor launch --backend ollama --model .* codex' docs/3.-Harbor-CLI-Reference.md
   tags: [spec, implemented]
 - label: harbor launch exposes an explicit --service mode so name-colliding handles like opencode can launch the Harbor service instead of the host tool adapter, and the CLI docs and tests cover that path
   command: rg -q 'force_service_launch' harbor.sh && rg -q 'harbor launch --service opencode' docs/3.-Harbor-CLI-Reference.md && rg -q 'launch --service opencode' tests/suites/02-cli.sh
   tags: [spec, implemented]
-- label: harbor launch reports actionable backend and model discovery failures, distinguishes explicit backend failures from auto-discovery failures, and skips /v1/models discovery when --model is provided
-  command: rg -q 'launch codex reports no running backend' tests/suites/02-cli.sh && rg -q 'launch codex --model skips model discovery' tests/suites/02-cli.sh && rg -q 'launch_model_from_models_response' harbor.sh && rg -q 'Start a compatible backend' docs/3.-Harbor-CLI-Reference.md
+- label: harbor launch reports actionable model discovery failures, starts missing backends, and skips /v1/models discovery when --model is provided
+  command: rg -q 'launch codex starts llamacpp when no backend is running' tests/suites/02-cli.sh && rg -q 'launch codex starts explicit backend when missing' tests/suites/02-cli.sh && rg -q 'launch codex --model skips model discovery' tests/suites/02-cli.sh && rg -q 'launch_model_from_models_response' harbor.sh && rg -q 'starts.*llamacpp' docs/3.-Harbor-CLI-Reference.md
   tags: [spec, implemented]
 - label: harbor launch host-tool smoke coverage runs codex, claude, and opencode through fake installed tools against fake running OpenAI-compatible Harbor backends, and verifies backend-specific /v1/models schema variants and launch env/arguments
   command: bash tests/suites/05-launch-smoke.sh
@@ -42,7 +47,7 @@
   command: bash tests/suites/05-launch-smoke.sh && rg -q 'harbor-history' harbor.sh && rg -q 'parallel launch history writes do not share' tests/suites/05-launch-smoke.sh && rg -q 'launch-smoke' tests/README.md
   tags: [spec, implemented]
 - label: harbor dev launch-live-smoke provides a documented live prompt smoke helper for installed codex, claude, and opencode host tools against a running Harbor backend
-  command: test -f .scripts/launch-live-smoke.ts && rg -q 'launch-live-smoke' docs/3.-Harbor-CLI-Reference.md && ./harbor.sh dev launch-live-smoke --help | rg -q 'codex,claude,opencode'
+  command: test -f .scripts/launch-live-smoke.ts && rg -q 'launch-live-smoke' docs/3.-Harbor-CLI-Reference.md && ./harbor.sh dev launch-live-smoke --help | rg -q 'codex,claude,mi,opencode'
   tags: [spec, implemented]
 - label: Harbor service port resolution parses docker port output without requiring perl so launch-smoke runs on Alpine
   command: ! rg -q 'docker port .*perl' harbor.sh && rg -Fq "sed -n 's/.*:\([0-9][0-9]*\)$/\1/p'" harbor.sh
@@ -80,6 +85,39 @@
 - label: harbor launch host-tool adapters execute from the original invocation directory so launched tools see the caller workspace instead of Harbor home
   command: rg -Fq 'launch_in_original_dir' harbor.sh && rg -Fq 'cwd=$PWD' tests/suites/05-launch-smoke.sh && rg -q 'Host-tool adapters execute from the directory where you invoked' docs/3.-Harbor-CLI-Reference.md && bash tests/suites/05-launch-smoke.sh
   tags: [spec, launch-workspace, implemented]
+- label: harbor launch host-tool modifiers such as --web configure a boost-prefixed workflow model instead of the raw backend model
+  command: rg -q 'launch_tool_group_tools' harbor.sh && rg -q -- '--web' harbor.sh && rg -q 'boost-' harbor.sh
+  tags: [spec, implemented]
+- label: harbor launch tool modifiers start the boost service with the target backend so Boost proxies the selected raw backend
+  command: rg -q 'launch_prepare_boost_workflow' harbor.sh && rg -q 'compose_services=.*boost' harbor.sh && rg -q 'compose_with_options --no-defaults' harbor.sh
+  tags: [spec, implemented]
+- label: harbor launch --service mi preserves access to the containerized mi service while bare harbor launch mi targets the installed mi host CLI
+  command: rg -Fq 'claude | codex | copilot | droid | hermes | mi | openclaw' harbor.sh && rg -q 'run_launch.*mi uses host CLI' tests/suites/05-launch-smoke.sh
+  tags: [spec, implemented]
+- label: harbor launch supports mi as a host tool adapter that receives OPENAI_BASE_URL without a /v1 suffix, OPENAI_API_KEY, and MODEL from the selected Harbor backend
+  command: rg -Fq 'OPENAI_BASE_URL="$backend_url" OPENAI_API_KEY="$api_key" MODEL="$model" launch_in_original_dir mi' harbor.sh && rg -q 'mi uses host CLI with OpenAI base URL without v1 suffix' tests/suites/05-launch-smoke.sh
+  tags: [spec, implemented]
+- label: harbor launch starts llamacpp as the default backend when no OpenAI-compatible Harbor backend is running
+  command: rg -q 'No running Harbor OpenAI-compatible backend found; starting llamacpp' harbor.sh && rg -q 'starts llamacpp when no backend is running' tests/suites/05-launch-smoke.sh
+  tags: [spec, implemented]
+- label: harbor launch parses launch options before the host tool name and passes every argument after the tool name through to the tool unchanged
+  command: rg -q 'launch_options' harbor.sh && rg -Fq 'local tool_args=("$@")' harbor.sh && rg -q 'tool arguments after the host tool name' tests/suites/05-launch-smoke.sh
+  tags: [spec, implemented]
+- label: harbor launch starts the requested backend container when an explicit launch backend is not already running
+  command: rg -q 'launch_start_services.*explicit_backend' harbor.sh && rg -q 'explicit backend is started when missing' tests/suites/05-launch-smoke.sh
+  tags: [spec, implemented]
+- label: harbor launch --web starts SearXNG together with the generated Boost workflow
+  command: rg -q 'searxng' harbor.sh && rg -q 'web launch starts SearXNG' tests/suites/05-launch-smoke.sh
+  tags: [spec, implemented]
+- label: harbor launch tool modifiers leave an explicitly selected boost-prefixed workflow model unchanged instead of prefixing it a second time
+  command: rg -q 'launch_workflow_model_name' harbor.sh && rg -q 'already-prefixed boost workflow model' tests/suites/05-launch-smoke.sh
+  tags: [spec, implemented]
+- label: harbor launch --help lists the supported host tool adapters and Harbor service CLI handles
+  command: ./harbor.sh launch --help | rg -q 'Host tools:.*codex.*pi' && ./harbor.sh launch --help | rg -q 'Service CLI shortcuts:.*plandex.*promptfoo' && ./harbor.sh launch --help | rg -q 'Container services:.*mi.*opencode' && rg -q 'launch help lists supported launch targets' tests/suites/02-cli.sh
+  tags: [spec, implemented]
+- label: harbor launch exposes only --web as a Boost tool-group modifier and rejects removed tool groups such as --time, --notes, --files, and --scratch as unsupported launch targets or tool args
+  command: ./harbor.sh launch --help | rg -q -- '--web' && ! ./harbor.sh launch --help | rg -q -- '--time|--notes|--files|--scratch' && rg -q 'launch --time is not a launch option' tests/suites/02-cli.sh
+  tags: [spec, implemented]
 
 # services
 - label: compose.yml is the base layer, defining only the harbor-network
@@ -335,6 +373,9 @@
   command: grep -q 'WebSocket' services/boost/src/main.py && grep -q 'EventSourceResponse\|StreamingResponse' services/boost/src/main.py
 - label: Boost CORS is enabled for all origins
   command: grep -q 'allow_origins' services/boost/src/main.py
+- label: Boost streaming chat completions emit an OpenAI-compatible terminal chunk with a non-null finish_reason before data: [DONE] so strict clients such as Pi can finish streams correctly
+  command: rg -q 'finish_reason="stop"' services/boost/src/llm.py && rg -q 'test_emit_done_adds_terminal_chunk_before_done' services/boost/tests/test_streaming.py
+  tags: [spec, implemented]
 
 ## config
 - label: Boost upstream APIs are configured via semicolon-separated HARBOR_BOOST_OPENAI_URLS and HARBOR_BOOST_OPENAI_KEYS
@@ -347,6 +388,34 @@
   command: grep -q 'AsyncEventEmitter' services/boost/src/llm.py && grep -q 'stream_final_completion' services/boost/src/llm.py && grep -q 'emit_message' services/boost/src/llm.py && grep -q 'emit_status' services/boost/src/llm.py
 - label: Boost has a request-scoped tool registry allowing modules to define LLM-callable functions
   command: test -f services/boost/src/tools/registry.py && grep -q 'set_local_tool' services/boost/src/tools/registry.py
+
+## tools
+- label: Boost has a built-in tools module that registers request-scoped LLM-callable utility tools and then streams the final completion
+  command: test -f services/boost/src/modules/tools.py && rg -q "ID_PREFIX = 'tools'" services/boost/src/modules/tools.py && rg -q 'set_local_tool' services/boost/src/modules/tools.py && rg -q 'stream_final_completion' services/boost/src/modules/tools.py
+  tags: [spec, implemented]
+- label: Boost tools module exposes web_search and read_url tools backed by Tavily, SearXNG, Jina reader, and direct HTTP fallbacks with Harbor configuration keys documented
+  command: rg -q 'async def web_search' services/boost/src/modules/tools.py && rg -q 'async def read_url' services/boost/src/modules/tools.py && rg -q 'HARBOR_BOOST_TAVILY_API_KEY' services/boost/src/config.py profiles/default.env docs/5.2.2-Harbor-Boost-Configuration.md && rg -q 'HARBOR_BOOST_SEARXNG_URL' services/boost/src/config.py profiles/default.env docs/5.2.2-Harbor-Boost-Configuration.md && rg -q 'HARBOR_BOOST_JINA_READER_API_URL' services/boost/src/config.py profiles/default.env docs/5.2.2-Harbor-Boost-Configuration.md
+  tags: [spec, implemented]
+- label: Boost tools module exposes request-scoped scratch notes, scratch files, current_time, and finish utility tools
+  command: rg -q 'async def add_note' services/boost/src/modules/tools.py && rg -q 'async def read_notes' services/boost/src/modules/tools.py && rg -q 'async def write_file' services/boost/src/modules/tools.py && rg -q 'async def read_file' services/boost/src/modules/tools.py && rg -q 'async def current_time' services/boost/src/modules/tools.py && rg -q 'async def finish' services/boost/src/modules/tools.py
+  tags: [spec, implemented]
+
+## workflows
+- label: Boost supports configured named workflows whose model IDs are advertised as workflow prefixes over downstream models
+  command: test -f services/boost/src/workflows.py && rg -q 'HARBOR_BOOST_WORKFLOWS' services/boost/src/config.py profiles/default.env docs/5.2.2-Harbor-Boost-Configuration.md && rg -q 'workflow_models' services/boost/src/mapper.py && rg -q 'resolve_proxy_workflow' services/boost/src/mapper.py
+  tags: [spec, implemented]
+- label: Boost workflow execution runs ordered module configs, supports system prompt and final completion pseudo-modules, and passes per-module config to compatible apply functions
+  command: rg -q 'async def apply_workflow' services/boost/src/workflows.py && rg -q 'system' services/boost/src/workflows.py && rg -q 'stream_final_completion' services/boost/src/workflows.py && rg -q 'inspect.signature' services/boost/src/workflows.py
+  tags: [spec, implemented]
+- label: Boost tools module can be used as a workflow setup step without triggering the final completion immediately
+  command: rg -q 'cfg_final' services/boost/src/modules/tools.py && rg -q 'module_name == "tools".*final' services/boost/src/workflows.py
+  tags: [spec, implemented]
+- label: Boost accepts a per-request override so callers can run an ad hoc workflow on a base model without pre-registering it
+  command: rg -q 'runtime_workflow' services/boost/src/llm.py && rg -q '@boost_workflow' docs/5.2.3-Harbor-Boost-Modules.md
+  tags: [boost_workflow, spec, implemented]
+- label: Boost workflow model resolution supports workflow IDs containing dashes so launch-generated boost-... workflows are routable
+  command: rg -Fq '^[A-Za-z0-9_.-]+$' services/boost/src/workflows.py && rg -q 'model_id\.startswith\(prefix\)' services/boost/src/workflows.py
+  tags: [spec, implemented]
 
 # testing
 - label: tests use a Deno-based orchestrator running sequential suites across parallel containerized distros
