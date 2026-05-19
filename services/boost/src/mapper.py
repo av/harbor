@@ -8,6 +8,7 @@ from typing import Dict
 
 import config
 import mods
+import workflows
 import log
 
 logger = log.setup_logger(__name__)
@@ -66,18 +67,35 @@ def get_proxy_model(module, model: dict) -> Dict:
   }
 
 
+def workflow_models(models: list[dict]) -> list[dict]:
+  return workflows.workflow_models(models)
+
+
 def resolve_proxy_model(model_id: str) -> Dict:
-  parts = model_id.split("-")
-  if parts[0] in mods.registry:
-    return "-".join(parts[1:])
+  prefix, sep, rest = model_id.partition("-")
+  if sep and prefix in mods.registry:
+    return rest
+
+  workflow, base_model = workflows.split_workflow_model(model_id)
+  if workflow is not None:
+    return base_model
+
   return model_id
 
 
 def resolve_proxy_module(model_id: str) -> Dict:
-  parts = model_id.split("-")
-  if parts[0] in mods.registry:
-    return parts[0]
+  prefix, sep, _ = model_id.partition("-")
+  if sep and prefix in mods.registry:
+    return prefix
   return None
+
+
+def resolve_proxy_workflow(model_id: str) -> Dict:
+  if resolve_proxy_module(model_id):
+    return None
+
+  workflow, _ = workflows.split_workflow_model(model_id)
+  return workflow
 
 
 def resolve_request_config(body: Dict) -> Dict:
@@ -90,10 +108,11 @@ def resolve_request_config(body: Dict) -> Dict:
 
   proxy_model = resolve_proxy_model(model)
   proxy_module = resolve_proxy_module(model)
+  proxy_workflow = resolve_proxy_workflow(model)
   proxy_backend = MODEL_TO_BACKEND.get(proxy_model)
 
   logger.debug(
-    f"Resolved proxy model: {proxy_model}, proxy module: {proxy_module}, proxy backend: {proxy_backend}"
+    f"Resolved proxy model: {proxy_model}, proxy module: {proxy_module}, proxy workflow: {proxy_workflow}, proxy backend: {proxy_backend}"
   )
 
   if not proxy_backend:
@@ -116,6 +135,7 @@ def resolve_request_config(body: Dict) -> Dict:
     "params": params,
     "messages": messages,
     "module": proxy_module,
+    "workflow": proxy_workflow,
   }
 
   return proxy_config

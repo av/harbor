@@ -14,6 +14,7 @@ import chat as ch
 import log
 import format
 import mods
+import workflows
 import tools
 import tools.registry
 
@@ -31,10 +32,13 @@ class LLM(AsyncEventEmitter):
   params: dict
   boost_params: dict
   module: str
+  workflow: dict
 
   queue: asyncio.Queue
   is_streaming: bool
   is_final_stream: bool
+  out_chunks: int
+  has_finish_reason: bool
 
   cpl_id: int
 
@@ -53,11 +57,14 @@ class LLM(AsyncEventEmitter):
     self.messages = self.chat.history()
 
     self.module = kwargs.get('module')
+    self.workflow = kwargs.get('workflow')
 
     self.queue = asyncio.Queue()
     self.queues = []
     self.is_streaming = False
     self.is_final_stream = False
+    self.out_chunks = 0
+    self.has_finish_reason = False
 
     self.cpl_id = 0
 
@@ -157,7 +164,7 @@ class LLM(AsyncEventEmitter):
       }
     }
 
-  def chunk_from_delta(self, delta: dict):
+  def chunk_from_delta(self, delta: dict, finish_reason: str = None):
     now = int(time.time())
 
     return {
@@ -169,7 +176,7 @@ class LLM(AsyncEventEmitter):
       "choices": [{
         "index": 0,
         "delta": delta,
-        "finish_reason": None
+        "finish_reason": finish_reason
       }]
     }
 
@@ -193,6 +200,15 @@ class LLM(AsyncEventEmitter):
 
     return chunk
 
+  def get_chunk_finish_reason(self, chunk):
+    try:
+      choices = chunk.get("choices", [])
+      choice = choices[0] if choices and len(choices) > 0 else {}
+      return choice.get("finish_reason")
+    except (AttributeError, KeyError, IndexError):
+      logger.error(f"Unexpected chunk format: {chunk}")
+      return None
+
   def is_tool_call(self, chunk):
     choices = chunk.get("choices", [])
     choice = choices[0] if choices and len(choices) > 0 else {}
@@ -210,6 +226,23 @@ class LLM(AsyncEventEmitter):
     llm_registry.register(self)
 
     async def apply_mod():
+      runtime_workflow = self.workflow or self.boost_params.get('workflow')
+
+      if runtime_workflow is not None:
+        logger.debug(f"Applying workflow to '{self.model}'")
+        try:
+          self.chat.llm = self
+          await workflows.apply_workflow(runtime_workflow, self.chat, self)
+        except Exception as e:
+          logger.error(f"Failed to apply workflow: {e}")
+          for line in traceback.format_tb(e.__traceback__):
+            logger.error(line)
+          await self.emit_message(f"[Workflow error: {e}]")
+
+        logger.debug(f"Workflow application complete for '{self.model}'")
+        await self.emit_done()
+        return
+
       if self.module is None:
         logger.debug("No module specified")
         await self.stream_final_completion()
@@ -298,9 +331,14 @@ class LLM(AsyncEventEmitter):
         chunk["choices"] = [{}]
       chunk["choices"][0]["index"] = 0
 
+    if self.get_chunk_finish_reason(chunk) is not None:
+      self.has_finish_reason = True
+
     await self.emit_data(self.chunk_to_string(chunk))
 
   async def emit_data(self, data):
+    if data is not None:
+      self.out_chunks += 1
     await self.queue.put(data)
     await self.emit_to_listeners(data)
 
@@ -312,6 +350,14 @@ class LLM(AsyncEventEmitter):
     await self.emit_to_listeners(self.event_to_string(event, data))
 
   async def emit_done(self):
+    if self.out_chunks == 0:
+      await self.emit_message('')
+
+    if not self.has_finish_reason:
+      final_chunk = self.chunk_from_delta({}, finish_reason="stop")
+      await self.emit_chunk(final_chunk)
+      logger.debug("Emitted terminal chunk with finish_reason=stop")
+
     await self.emit_data('data: [DONE]')
     await self.emit_data(None)
     await self.remove_all_listeners()
@@ -322,6 +368,7 @@ class LLM(AsyncEventEmitter):
     return await self.stream_chat_completion(**kwargs)
 
   async def stream_chat_completion(self, **kwargs):
+    self.has_finish_reason = False
     request = await self.resolve_request(**kwargs)
 
     chat = request.get("chat", self.chat)
@@ -562,6 +609,7 @@ class LLM(AsyncEventEmitter):
     output_obj = None
     content = ""
     tool_calls = []
+    last_finish_reason = None
 
     async for chunk_bytes in stream:
       chunk = self.parse_chunk(chunk_bytes)
@@ -569,9 +617,12 @@ class LLM(AsyncEventEmitter):
         output_obj = self.output_from_chunk(chunk)
       chunk_content = self.get_chunk_content(chunk)
       chunk_tools = self.get_chunk_tool_calls(chunk)
+      chunk_finish_reason = self.get_chunk_finish_reason(chunk)
 
       content += chunk_content
       tool_calls.extend(chunk_tools)
+      if chunk_finish_reason is not None:
+        last_finish_reason = chunk_finish_reason
 
     if output_obj:
       output_obj["choices"][0]["message"]["content"] = content
@@ -579,6 +630,10 @@ class LLM(AsyncEventEmitter):
       if len(tool_calls) > 0:
         output_obj["choices"][0]["message"]["tool_calls"] = tool_calls
         output_obj["choices"][0]["finish_reason"] = "tool_calls"
+      elif last_finish_reason is not None:
+        output_obj["choices"][0]["finish_reason"] = last_finish_reason
+      else:
+        output_obj["choices"][0]["finish_reason"] = "stop"
 
     return output_obj
 

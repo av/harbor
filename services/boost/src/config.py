@@ -354,6 +354,78 @@ HARBOR_BOOST_MODULE_FOLDERS=/some/custom/path
 """.strip(),
 )
 
+# ---------------- WORKFLOWS ---------------
+
+WORKFLOWS = Config[str](
+    name="HARBOR_BOOST_WORKFLOWS",
+    type=str,
+    default="",
+    description="""
+JSON or shorthand workflow definitions served by Harbor Boost. For larger
+workflow sets, prefer `HARBOR_BOOST_WORKFLOWS_FILE`.
+
+JSON object form:
+```json
+{
+  "research": {
+    "name": "Research Agent",
+    "description": "Answers with live web tools",
+    "modules": [
+      {"module": "system", "config": {"prompt": "Use tools before answering."}},
+      {"module": "tools", "config": {"tools": ["web_search", "read_url"]}},
+      {"module": "final"}
+    ]
+  }
+}
+```
+
+JSON list form:
+```json
+[{"id": "research", "modules": ["tools", "final"]}]
+```
+
+Shorthand form:
+```bash
+HARBOR_BOOST_WORKFLOWS=research=tools,final;careful=tools,g1
+```
+
+Workflow IDs become model prefixes, for example `research-llama3.2`.
+IDs may contain letters, numbers, underscores, dots, and dashes.
+""".strip(),
+)
+
+WORKFLOWS_FILE = Config[str](
+    name="HARBOR_BOOST_WORKFLOWS_FILE",
+    type=str,
+    default="/boost/workflows.yaml",
+    description="""
+Optional YAML or JSON file containing workflow definitions. YAML files may use
+a direct mapping/list or a top-level `workflows:`/`agents:` mapping.
+
+Example:
+```yaml
+workflows:
+  research:
+    name: Research Agent
+    description: Answers with live web tools
+    modules:
+      - module: system
+        config:
+          prompt: Use tools before answering.
+      - module: tools
+        config:
+          tools:
+            - web_search
+            - read_url
+      - module: final
+```
+
+When the default path is used, Boost checks `/boost/workflows.yaml`,
+`/boost/workflows.yml`, and `/boost/workflows.json` in that order. Inline
+workflow definitions override file definitions with the same ID.
+""".strip(),
+)
+
 # ---------------- COMPLETION ---------------
 
 INTERMEDIATE_OUTPUT = Config[bool](
@@ -494,6 +566,79 @@ BOOST_PUBLIC_URL = Config[str](
     type=str,
     default="http://localhost:34131",
     description="URL which boost artifacts should use to access the boost API",
+)
+
+# ----------------- TOOLS -----------------
+
+TOOLS = Config[StrList](
+    name="HARBOR_BOOST_TOOLS",
+    type=StrList,
+    default="web_search;read_url;current_time;add_note;read_notes;write_file;read_file;list_files;delete_file;clear_files;finish",
+    description="""
+The request-scoped utility tools registered by the `tools` Boost module.
+Tool names are semicolon-separated. Unknown names are ignored with a warning.
+
+Example:
+```bash
+HARBOR_BOOST_TOOLS=web_search;read_url;current_time
+```
+""".strip(),
+)
+
+TOOLS_SEARCH_MAX_RESULTS = Config[int](
+    name="HARBOR_BOOST_TOOLS_SEARCH_MAX_RESULTS",
+    type=int,
+    default="5",
+    description="Maximum number of web search results returned by the `tools` module.",
+)
+
+TOOLS_READ_MAX_CHARS = Config[int](
+    name="HARBOR_BOOST_TOOLS_READ_MAX_CHARS",
+    type=int,
+    default="20000",
+    description="Maximum number of characters returned by the `read_url` tool.",
+)
+
+TOOLS_FILE_MAX_CHARS = Config[int](
+    name="HARBOR_BOOST_TOOLS_FILE_MAX_CHARS",
+    type=int,
+    default="100000",
+    description="Maximum file size, in characters, accepted by the scratch file tools.",
+)
+
+TAVILY_API_KEY = Config[str](
+    name="HARBOR_BOOST_TAVILY_API_KEY",
+    type=str,
+    default="",
+    description="Tavily API key used by the `web_search` tool. When set, Tavily is preferred over SearXNG.",
+)
+
+SEARXNG_URL = Config[str](
+    name="HARBOR_BOOST_SEARXNG_URL",
+    type=str,
+    default=os.getenv("HARBOR_SEARXNG_INTERNAL_URL", ""),
+    description="SearXNG base URL used by the `web_search` tool when Tavily is not configured.",
+)
+
+SEARXNG_QUERY_PARAMS = Config[str](
+    name="HARBOR_BOOST_SEARXNG_QUERY_PARAMS",
+    type=str,
+    default="",
+    description="Extra URL query parameters appended to SearXNG web search requests.",
+)
+
+JINA_READER_API_URL = Config[str](
+    name="HARBOR_BOOST_JINA_READER_API_URL",
+    type=str,
+    default="https://r.jina.ai",
+    description="Jina Reader API base URL used by the `read_url` tool before falling back to direct HTTP.",
+)
+
+JINA_READER_API_KEY = Config[str](
+    name="HARBOR_BOOST_JINA_READER_API_KEY",
+    type=str,
+    default="",
+    description="Optional Jina Reader API key used by the `read_url` tool.",
 )
 
 # ------------------ KLMBR ------------------

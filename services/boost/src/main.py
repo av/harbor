@@ -134,6 +134,8 @@ async def get_boost_models(api_key: str = Depends(get_api_key)):
       if mod is not None:
         candidates.append(mapper.get_proxy_model(mod, model))
 
+    candidates.extend(mapper.workflow_models([model]))
+
   for model in candidates:
     should_serve = True
 
@@ -179,7 +181,11 @@ async def post_boost_chat_completion(
 
   # WebUI will send a few additional workflows
   # that we simply want to delegate to the underlying model as is, without boosting
-  if mapper.is_direct_task(proxy):
+  if (
+    mapper.is_direct_task(proxy)
+    and proxy.workflow is None
+    and proxy.boost_params.get("workflow") is None
+  ):
     logger.debug("Detected direct task, skipping boost")
     return JSONResponse(content=await proxy.chat_completion(), status_code=200)
 
