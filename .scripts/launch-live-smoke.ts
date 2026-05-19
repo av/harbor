@@ -6,7 +6,7 @@
 // developer machine that already has Harbor, a compatible backend, and one or
 // more host coding CLIs installed.
 
-type Tool = "codex" | "claude" | "opencode";
+type Tool = "codex" | "claude" | "mi" | "opencode";
 
 type Args = {
   backend: string | null;
@@ -20,7 +20,7 @@ type Args = {
   help: boolean;
 };
 
-const DEFAULT_TOOLS: Tool[] = ["codex", "claude", "opencode"];
+const DEFAULT_TOOLS: Tool[] = ["codex", "claude", "mi", "opencode"];
 const EXPECTED_RESPONSE = "HARBOR_LAUNCH_SMOKE_OK";
 const DEFAULT_PROMPT =
   `Reply with exactly ${EXPECTED_RESPONSE} and no other text.`;
@@ -28,15 +28,15 @@ const DEFAULT_PROMPT =
 function usage(): string {
   return `Usage: harbor dev launch-live-smoke [options]
 
-Runs installed host coding tools through harbor launch against an already
-running Harbor backend. By default it checks codex,claude,opencode and skips
+Runs installed host coding tools through harbor launch against a Harbor
+backend. By default it checks codex,claude,mi,opencode and skips
 tools that are not installed.
 
 Options:
   --backend <service>      Harbor backend to use, such as ollama or llamacpp.
                            Default: let harbor launch auto-detect a running backend.
   --model <model>          Model to pass to harbor launch. Default: discover from /v1/models.
-  --tools <list>           Comma-separated tools: codex,claude,opencode.
+  --tools <list>           Comma-separated tools: codex,claude,mi,opencode.
   --tool <tool>            Select one tool. Can be repeated.
   --prompt <text>          Prompt used for live non-interactive smoke runs.
   --timeout <seconds>      Per-tool timeout. Default: 120.
@@ -53,7 +53,7 @@ Examples:
 }
 
 function parseTool(raw: string): Tool {
-  if (raw === "codex" || raw === "claude" || raw === "opencode") {
+  if (raw === "codex" || raw === "claude" || raw === "mi" || raw === "opencode") {
     return raw;
   }
   throw new Error(
@@ -177,16 +177,17 @@ async function commandExists(cmd: string): Promise<boolean> {
 }
 
 function launchArgs(args: Args, tool: Tool): string[] {
-  const cmd = [args.harborBin, "launch", tool];
+  const cmd = [args.harborBin, "launch"];
   if (args.backend) cmd.push("--backend", args.backend);
   if (args.model) cmd.push("--model", args.model);
 
   if (args.configOnly) {
     cmd.push("--config");
+    cmd.push(tool);
     return cmd;
   }
 
-  cmd.push("--");
+  cmd.push(tool);
   switch (tool) {
     case "codex":
       cmd.push(
@@ -201,6 +202,9 @@ function launchArgs(args: Args, tool: Tool): string[] {
       break;
     case "claude":
       cmd.push("-p", "--output-format", "text", args.prompt);
+      break;
+    case "mi":
+      cmd.push("-p", args.prompt);
       break;
     case "opencode":
       cmd.push("run", "--pure", "--agent", "harbor-smoke", args.prompt);
