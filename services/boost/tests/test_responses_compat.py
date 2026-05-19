@@ -1,29 +1,12 @@
 """Tests for Boost's OpenAI Responses API compatibility layer."""
 
 import json
-import os
-import sys
-import types
 import unittest
 from unittest.mock import patch, MagicMock, AsyncMock
 
 import pytest
 
-SRC_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src'))
-sys.path.insert(0, SRC_DIR)
-os.chdir(SRC_DIR)
-
-# Mock heavy modules that responses_compat imports but tests don't exercise.
-for mod_name in ("mapper", "llm"):
-    if mod_name not in sys.modules:
-        stub = types.ModuleType(mod_name)
-        if mod_name == "mapper":
-            stub.list_downstream = None
-            stub.resolve_request_config = None
-            stub.is_direct_task = None
-        if mod_name == "llm":
-            stub.LLM = None
-        sys.modules[mod_name] = stub
+# Module stubs for mapper/llm are registered in conftest.py
 
 import responses_compat
 

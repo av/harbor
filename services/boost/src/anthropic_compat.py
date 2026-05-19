@@ -11,8 +11,13 @@ import mapper
 import llm as llm_mod
 import config
 from auth import get_api_key
-
-REQUEST_ID_HEADER = "request-id"
+from compat_utils import (
+    REQUEST_ID_HEADER,
+    get_chunk_content as _get_chunk_content,
+    get_chunk_tool_calls as _get_chunk_tool_calls,
+    get_chunk_usage as _get_chunk_usage,
+    sse_event as _sse_event,
+)
 
 logger = log.setup_logger(__name__)
 anthropic_compatible_routes = APIRouter()
@@ -35,24 +40,6 @@ def _anthropic_error(status_code, message, error_type=None):
     status_code=status_code,
     content={"type": "error", "error": {"type": error_type, "message": message}},
   )
-
-
-# --- Chunk utilities (standalone, for use in stream converter) ---
-
-def _get_chunk_content(chunk):
-  return dotty.get(chunk, "choices.0.delta.content", "")
-
-
-def _get_chunk_tool_calls(chunk):
-  return dotty.get(chunk, "choices.0.delta.tool_calls", [])
-
-
-def _get_chunk_usage(chunk):
-  return dotty.get(chunk, "usage") or {
-    "prompt_tokens": 0,
-    "completion_tokens": 0,
-    "total_tokens": 0,
-  }
 
 
 # --- Auth ---
@@ -389,9 +376,6 @@ def _build_anthropic_response(openai_result, request_model, stop_sequences=None)
 
 
 # --- SSE helpers ---
-
-def _sse_event(event_type, data):
-  return f"event: {event_type}\ndata: {json.dumps(data, default=str)}\n\n"
 
 
 def _has_complete_tool_call_arguments(arguments):

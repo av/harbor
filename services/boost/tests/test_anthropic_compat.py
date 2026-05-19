@@ -1,23 +1,12 @@
 """Tests for Boost's Anthropic-compatible Messages API translation layer."""
 
 import json
-import os
-import sys
-import types
 import unittest
 from unittest.mock import patch, MagicMock
 
 import pytest
 
-SRC_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src'))
-sys.path.insert(0, SRC_DIR)
-os.chdir(SRC_DIR)
-
-# Mock heavy modules that anthropic_compat imports but tests don't exercise.
-# mapper requires asyncache/litellm which may not be installed in test envs.
-for mod_name in ("mapper", "llm"):
-    if mod_name not in sys.modules:
-        sys.modules[mod_name] = types.ModuleType(mod_name)
+# Module stubs for mapper/llm are registered in conftest.py
 
 import anthropic_compat
 
