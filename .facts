@@ -402,8 +402,8 @@
 - label: Boost Anthropic compat converts tool schemas between Anthropic and OpenAI formats
   command: rg -q '_convert_tools' services/boost/src/anthropic_compat.py && rg -q '_convert_tool_choice' services/boost/src/anthropic_compat.py && rg -q 'input_schema' services/boost/src/anthropic_compat.py
   tags: [spec, implemented]
-- label: Boost Anthropic compat includes x-request-id header in all response paths
-  command: rg -q 'x-request-id' services/boost/src/anthropic_compat.py && rg -q 'request_id' services/boost/src/anthropic_compat.py
+- label: Boost Anthropic compat includes request-id header in all response paths
+  command: rg -q 'request-id' services/boost/src/anthropic_compat.py && rg -q 'REQUEST_ID_HEADER' services/boost/src/anthropic_compat.py
   tags: [spec, implemented]
 - label: Boost Anthropic compat handles mid-stream errors gracefully with proper SSE envelope closure
   command: rg -q 'except.*Exception' services/boost/src/anthropic_compat.py && rg -q 'test_mid_stream_exception' services/boost/tests/test_anthropic_compat.py
