@@ -12,7 +12,7 @@ import mapper
 import llm as llm_mod
 import config
 
-REQUEST_ID_HEADER = "x-request-id"
+REQUEST_ID_HEADER = "request-id"
 
 logger = log.setup_logger(__name__)
 anthropic_compatible_routes = APIRouter()
@@ -468,7 +468,7 @@ async def _anthropic_stream_converter(
         "content": [],
         "stop_reason": None,
         "stop_sequence": None,
-        "usage": {"input_tokens": 0},
+        "usage": {"input_tokens": 0, "output_tokens": 0},
       },
     },
   )

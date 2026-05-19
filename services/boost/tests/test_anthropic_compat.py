@@ -1748,8 +1748,8 @@ class TestResponseHeaders:
             resp = client.post("/v1/messages", json=_ANTHRO_BODY)
 
         assert resp.status_code == 200
-        assert "x-request-id" in resp.headers
-        assert resp.headers["x-request-id"].startswith("req_")
+        assert "request-id" in resp.headers
+        assert resp.headers["request-id"].startswith("req_")
 
     def test_streaming_has_request_id(self):
         """Streaming responses should include x-request-id header."""
@@ -1773,8 +1773,8 @@ class TestResponseHeaders:
             resp = client.post("/v1/messages", json={**_ANTHRO_BODY, "stream": True})
 
         assert resp.status_code == 200
-        assert "x-request-id" in resp.headers
-        assert resp.headers["x-request-id"].startswith("req_")
+        assert "request-id" in resp.headers
+        assert resp.headers["request-id"].startswith("req_")
 
     def test_non_streaming_content_type_is_json(self):
         """Non-streaming responses should have application/json content type."""
@@ -1817,7 +1817,7 @@ class TestResponseHeaders:
             resp = client.post("/v1/messages", json=_ANTHRO_BODY)
 
         assert resp.status_code == 200
-        assert "x-request-id" in resp.headers
+        assert "request-id" in resp.headers
 
     def test_count_tokens_has_request_id(self):
         """count_tokens responses should include x-request-id."""
@@ -1839,7 +1839,7 @@ class TestResponseHeaders:
             })
 
         assert resp.status_code == 200
-        assert "x-request-id" in resp.headers
+        assert "request-id" in resp.headers
 
 
 # ---------------------------------------------------------------------------
@@ -2023,6 +2023,362 @@ class TestRequestFieldAcceptance:
             })
 
         assert resp.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# SDK compatibility — verify response shapes match Anthropic Python SDK models
+# ---------------------------------------------------------------------------
+
+class TestSdkCompatMessageStart:
+    """Verify message_start event has all fields the SDK's Message model requires."""
+
+    @pytest.mark.asyncio
+    async def test_message_start_contains_required_message_fields(self):
+        """The message object in message_start must include all required fields
+        from the SDK's Message model: id, type, role, model, content, stop_reason,
+        stop_sequence, usage."""
+        async def response_stream():
+            yield 'data: {"choices": [{"delta": {"content": "Hi"}}]}\n\n'
+            yield 'data: {"choices": [{"delta": {}, "finish_reason": "stop"}], "usage": {"prompt_tokens": 5, "completion_tokens": 1}}\n\n'
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "my-model")
+        ]
+        raw = "".join(events)
+        parsed = _parse_sse_events(raw)
+        msg_start = parsed[0]
+
+        assert msg_start["type"] == "message_start"
+        message = msg_start["message"]
+        assert "id" in message
+        assert message["type"] == "message"
+        assert message["role"] == "assistant"
+        assert message["model"] == "my-model"
+        assert message["content"] == []
+        assert message["stop_reason"] is None
+        assert message["stop_sequence"] is None
+        assert "usage" in message
+
+    @pytest.mark.asyncio
+    async def test_message_start_usage_has_output_tokens(self):
+        """The usage in message_start must include output_tokens (required by SDK Usage model)."""
+        async def response_stream():
+            yield 'data: {"choices": [{"delta": {"content": "X"}}]}\n\n'
+            yield 'data: {"choices": [{"delta": {}, "finish_reason": "stop"}], "usage": {"prompt_tokens": 5, "completion_tokens": 1}}\n\n'
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "test-model")
+        ]
+        raw = "".join(events)
+        parsed = _parse_sse_events(raw)
+        usage = parsed[0]["message"]["usage"]
+
+        assert "input_tokens" in usage
+        assert "output_tokens" in usage
+        assert usage["input_tokens"] == 0
+        assert usage["output_tokens"] == 0
+
+
+class TestSdkCompatMessageDelta:
+    """Verify message_delta event matches SDK's RawMessageDeltaEvent model."""
+
+    @pytest.mark.asyncio
+    async def test_message_delta_has_required_fields(self):
+        """message_delta must have type, delta (with stop_reason), and usage (with output_tokens)."""
+        async def response_stream():
+            yield 'data: {"choices": [{"delta": {"content": "Hi"}}]}\n\n'
+            yield 'data: {"choices": [{"delta": {}, "finish_reason": "stop"}], "usage": {"prompt_tokens": 10, "completion_tokens": 5}}\n\n'
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "test-model")
+        ]
+        raw = "".join(events)
+        parsed = _parse_sse_events(raw)
+        msg_delta = [e for e in parsed if e.get("type") == "message_delta"][0]
+
+        assert msg_delta["type"] == "message_delta"
+        assert "delta" in msg_delta
+        assert "stop_reason" in msg_delta["delta"]
+        assert "stop_sequence" in msg_delta["delta"]
+        assert "usage" in msg_delta
+        assert "output_tokens" in msg_delta["usage"]
+
+    @pytest.mark.asyncio
+    async def test_message_delta_usage_output_tokens_is_int(self):
+        """output_tokens in message_delta usage is required (not optional) in SDK."""
+        async def response_stream():
+            yield 'data: {"choices": [{"delta": {"content": "X"}}]}\n\n'
+            yield 'data: {"choices": [{"delta": {}, "finish_reason": "stop"}], "usage": {"prompt_tokens": 7, "completion_tokens": 3}}\n\n'
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "test-model")
+        ]
+        raw = "".join(events)
+        parsed = _parse_sse_events(raw)
+        msg_delta = [e for e in parsed if e.get("type") == "message_delta"][0]
+
+        assert isinstance(msg_delta["usage"]["output_tokens"], int)
+        assert msg_delta["usage"]["output_tokens"] == 3
+
+
+class TestSdkCompatMessageStop:
+    """Verify message_stop event matches SDK's RawMessageStopEvent."""
+
+    @pytest.mark.asyncio
+    async def test_message_stop_only_has_type(self):
+        """message_stop should have type: 'message_stop' and nothing else required."""
+        async def response_stream():
+            yield 'data: {"choices": [{"delta": {"content": "Hi"}}]}\n\n'
+            yield 'data: {"choices": [{"delta": {}, "finish_reason": "stop"}], "usage": {"prompt_tokens": 5, "completion_tokens": 1}}\n\n'
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "test-model")
+        ]
+        raw = "".join(events)
+        parsed = _parse_sse_events(raw)
+        msg_stop = [e for e in parsed if e.get("type") == "message_stop"][0]
+
+        assert msg_stop["type"] == "message_stop"
+
+
+class TestSdkCompatContentBlocks:
+    """Verify content block events match SDK's type discriminators."""
+
+    @pytest.mark.asyncio
+    async def test_text_block_start_has_type_text(self):
+        """content_block_start for text must have content_block.type == 'text'."""
+        async def response_stream():
+            yield 'data: {"choices": [{"delta": {"content": "Hello"}}]}\n\n'
+            yield 'data: {"choices": [{"delta": {}, "finish_reason": "stop"}], "usage": {"prompt_tokens": 5, "completion_tokens": 1}}\n\n'
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "test-model")
+        ]
+        raw = "".join(events)
+        parsed = _parse_sse_events(raw)
+        block_start = [e for e in parsed if e.get("type") == "content_block_start"][0]
+
+        assert block_start["content_block"]["type"] == "text"
+        assert "text" in block_start["content_block"]
+        assert "index" in block_start
+
+    @pytest.mark.asyncio
+    async def test_tool_use_block_start_has_required_fields(self):
+        """content_block_start for tool_use must have id, name, input, type."""
+        async def response_stream():
+            yield (
+                'data: {"choices": [{"delta": {"tool_calls": ['
+                '{"index": 0, "id": "toolu_abc", "function": '
+                '{"name": "search", "arguments": ""}}]}}]}\n\n'
+            )
+            yield 'data: {"choices": [{"delta": {}, "finish_reason": "tool_calls"}], "usage": {"prompt_tokens": 5, "completion_tokens": 1}}\n\n'
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "test-model")
+        ]
+        raw = "".join(events)
+        parsed = _parse_sse_events(raw)
+        block_start = [
+            e for e in parsed
+            if e.get("type") == "content_block_start"
+            and e.get("content_block", {}).get("type") == "tool_use"
+        ][0]
+
+        cb = block_start["content_block"]
+        assert cb["type"] == "tool_use"
+        assert "id" in cb
+        assert "name" in cb
+        assert "input" in cb
+        assert isinstance(cb["input"], dict)
+
+    @pytest.mark.asyncio
+    async def test_text_delta_has_type_text_delta(self):
+        """content_block_delta for text must have delta.type == 'text_delta'."""
+        async def response_stream():
+            yield 'data: {"choices": [{"delta": {"content": "Hello"}}]}\n\n'
+            yield 'data: {"choices": [{"delta": {}, "finish_reason": "stop"}], "usage": {"prompt_tokens": 5, "completion_tokens": 1}}\n\n'
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "test-model")
+        ]
+        raw = "".join(events)
+        parsed = _parse_sse_events(raw)
+        text_delta = [
+            e for e in parsed
+            if e.get("type") == "content_block_delta"
+            and e.get("delta", {}).get("type") == "text_delta"
+        ][0]
+
+        assert text_delta["delta"]["type"] == "text_delta"
+        assert "text" in text_delta["delta"]
+        assert "index" in text_delta
+
+    @pytest.mark.asyncio
+    async def test_input_json_delta_has_type_input_json_delta(self):
+        """content_block_delta for tool args must have delta.type == 'input_json_delta'."""
+        async def response_stream():
+            yield (
+                'data: {"choices": [{"delta": {"tool_calls": ['
+                '{"index": 0, "id": "toolu_1", "function": '
+                '{"name": "f", "arguments": ""}}]}}]}\n\n'
+            )
+            yield (
+                'data: {"choices": [{"delta": {"tool_calls": ['
+                '{"index": 0, "function": '
+                '{"arguments": "{\\"k\\": 1}"}}]}}]}\n\n'
+            )
+            yield 'data: {"choices": [{"delta": {}, "finish_reason": "tool_calls"}], "usage": {"prompt_tokens": 5, "completion_tokens": 1}}\n\n'
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "test-model")
+        ]
+        raw = "".join(events)
+        parsed = _parse_sse_events(raw)
+        json_delta = [
+            e for e in parsed
+            if e.get("type") == "content_block_delta"
+            and e.get("delta", {}).get("type") == "input_json_delta"
+        ][0]
+
+        assert json_delta["delta"]["type"] == "input_json_delta"
+        assert "partial_json" in json_delta["delta"]
+
+    @pytest.mark.asyncio
+    async def test_content_block_stop_has_index(self):
+        """content_block_stop must have index field."""
+        async def response_stream():
+            yield 'data: {"choices": [{"delta": {"content": "Hi"}}]}\n\n'
+            yield 'data: {"choices": [{"delta": {}, "finish_reason": "stop"}], "usage": {"prompt_tokens": 5, "completion_tokens": 1}}\n\n'
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "test-model")
+        ]
+        raw = "".join(events)
+        parsed = _parse_sse_events(raw)
+        block_stop = [e for e in parsed if e.get("type") == "content_block_stop"][0]
+
+        assert "index" in block_stop
+        assert isinstance(block_stop["index"], int)
+
+
+class TestSdkCompatNonStreaming:
+    """Verify non-streaming response matches SDK's Message model."""
+
+    def test_non_streaming_response_has_all_required_fields(self):
+        """Non-streaming response must have all required Message fields."""
+        openai_result = {
+            "choices": [{
+                "message": {"content": "Hello!", "tool_calls": []},
+                "finish_reason": "stop",
+            }],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 5},
+        }
+        response = anthropic_compat._build_anthropic_response(openai_result, "test-model")
+
+        # All required fields from SDK's Message model
+        assert response["id"].startswith("msg_")
+        assert response["type"] == "message"
+        assert response["role"] == "assistant"
+        assert response["model"] == "test-model"
+        assert isinstance(response["content"], list)
+        assert response["stop_reason"] in ("end_turn", "max_tokens", "stop_sequence", "tool_use")
+        assert "stop_sequence" in response
+        assert isinstance(response["usage"], dict)
+        assert "input_tokens" in response["usage"]
+        assert "output_tokens" in response["usage"]
+
+    def test_response_header_name_matches_sdk(self):
+        """The response header must be 'request-id' (not 'x-request-id')
+        because the SDK reads headers.get('request-id')."""
+        fake_llm = _FakeLLM(
+            consume_result=_fake_openai_result(),
+            stream_chunks=[],
+        )
+
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+            patch.object(anthropic_compat, "llm_mod") as mock_llm_mod,
+        ):
+            mock_mapper.list_downstream = AsyncMock()
+            mock_mapper.resolve_request_config = MagicMock(return_value={})
+            mock_mapper.is_direct_task = MagicMock(return_value=False)
+            mock_llm_mod.LLM = MagicMock(return_value=fake_llm)
+
+            import config as _cfg
+            _cfg.BOOST_AUTH = []
+
+            client = TestClient(_integration_app, raise_server_exceptions=False)
+            resp = client.post("/v1/messages", json=_ANTHRO_BODY)
+
+        assert resp.status_code == 200
+        # SDK reads "request-id", not "x-request-id"
+        assert "request-id" in resp.headers
+        assert resp.headers["request-id"].startswith("req_")
+
+
+class TestSdkCompatStreamEventSequence:
+    """Verify the full stream event sequence matches what the SDK expects."""
+
+    @pytest.mark.asyncio
+    async def test_stream_starts_with_message_start(self):
+        """SDK raises RuntimeError if first event is not message_start."""
+        async def response_stream():
+            yield 'data: {"choices": [{"delta": {"content": "Hi"}}]}\n\n'
+            yield 'data: {"choices": [{"delta": {}, "finish_reason": "stop"}], "usage": {"prompt_tokens": 1, "completion_tokens": 1}}\n\n'
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "test-model")
+        ]
+        raw = "".join(events)
+        parsed = _parse_sse_events(raw)
+
+        assert parsed[0]["type"] == "message_start"
+
+    @pytest.mark.asyncio
+    async def test_stream_ends_with_message_stop(self):
+        """The last event must be message_stop."""
+        async def response_stream():
+            yield 'data: {"choices": [{"delta": {"content": "Hi"}}]}\n\n'
+            yield 'data: {"choices": [{"delta": {}, "finish_reason": "stop"}], "usage": {"prompt_tokens": 1, "completion_tokens": 1}}\n\n'
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "test-model")
+        ]
+        raw = "".join(events)
+        parsed = _parse_sse_events(raw)
+
+        assert parsed[-1]["type"] == "message_stop"
+
+    @pytest.mark.asyncio
+    async def test_message_delta_precedes_message_stop(self):
+        """message_delta must come before message_stop."""
+        async def response_stream():
+            yield 'data: {"choices": [{"delta": {"content": "Hi"}}]}\n\n'
+            yield 'data: {"choices": [{"delta": {}, "finish_reason": "stop"}], "usage": {"prompt_tokens": 1, "completion_tokens": 1}}\n\n'
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "test-model")
+        ]
+        raw = "".join(events)
+        parsed = _parse_sse_events(raw)
+
+        types = [e["type"] for e in parsed]
+        delta_idx = types.index("message_delta")
+        stop_idx = types.index("message_stop")
+        assert delta_idx < stop_idx
 
 
 # ---------------------------------------------------------------------------
