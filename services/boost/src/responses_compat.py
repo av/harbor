@@ -52,6 +52,19 @@ def _responses_error(status_code, message, error_type=None, error_code=None):
   return JSONResponse(status_code=status_code, content=body)
 
 
+def _make_usage(input_tokens=0, output_tokens=0, total_tokens=None):
+  """Build a usage dict with the token detail sub-objects the SDK requires."""
+  if total_tokens is None:
+    total_tokens = input_tokens + output_tokens
+  return {
+    "input_tokens": input_tokens,
+    "output_tokens": output_tokens,
+    "total_tokens": total_tokens,
+    "input_tokens_details": {"cached_tokens": 0},
+    "output_tokens_details": {"reasoning_tokens": 0},
+  }
+
+
 # --- Request conversion (Responses -> Chat Completions) ---
 
 
@@ -263,10 +276,11 @@ def _build_output_items(openai_result):
 
   for tc in tool_calls:
     func = tc.get("function", {})
+    tc_id = tc.get("id", f"call_{shortuuid.random()}")
     output.append({
       "type": "function_call",
-      "id": tc.get("id", f"call_{shortuuid.random()}"),
-      "call_id": tc.get("id", f"call_{shortuuid.random()}"),
+      "id": tc_id,
+      "call_id": tc_id,
       "name": func.get("name", ""),
       "arguments": func.get("arguments", "{}"),
       "status": "completed",
@@ -312,11 +326,11 @@ def _build_responses_response(openai_result, request_model, response_id):
     "status": status,
     "model": request_model,
     "output": output,
-    "usage": {
-      "input_tokens": usage.get("prompt_tokens", 0),
-      "output_tokens": usage.get("completion_tokens", 0),
-      "total_tokens": usage.get("total_tokens", 0),
-    },
+    "usage": _make_usage(
+      input_tokens=usage.get("prompt_tokens", 0),
+      output_tokens=usage.get("completion_tokens", 0),
+      total_tokens=usage.get("total_tokens", 0),
+    ),
     "metadata": {},
     "temperature": None,
     "top_p": None,
@@ -372,14 +386,17 @@ async def _responses_stream_converter(
   - response.output_item.added
   - response.content_part.added
   - response.output_text.delta / response.function_call_arguments.delta
+  - response.output_text.done / response.function_call_arguments.done
   - response.content_part.done
   - response.output_item.done
   - response.completed
   """
   created_at = int(time.time())
+  seq = 0
   output_index = -1
   text_item_open = False
   text_content = ""
+  msg_id = None
   tool_blocks = {}
   input_tokens = 0
   output_tokens = 0
@@ -393,7 +410,7 @@ async def _responses_stream_converter(
     "status": "in_progress",
     "model": request_model,
     "output": [],
-    "usage": {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0},
+    "usage": _make_usage(),
     "metadata": {},
     "temperature": None,
     "top_p": None,
@@ -409,10 +426,65 @@ async def _responses_stream_converter(
 
   yield _sse_event("response.created", {
     "type": "response.created",
+    "sequence_number": seq,
     "response": skeleton,
   })
+  seq += 1
 
   stream_error = None
+
+  def _close_text_item():
+    """Yield events to close an open text message item. Returns list of SSE strings."""
+    nonlocal seq
+    events = []
+
+    # output_text.done
+    events.append(_sse_event("response.output_text.done", {
+      "type": "response.output_text.done",
+      "item_id": msg_id,
+      "output_index": output_index,
+      "content_index": 0,
+      "text": text_content,
+      "logprobs": [],
+      "sequence_number": seq,
+    }))
+    seq += 1
+
+    # content_part.done
+    events.append(_sse_event("response.content_part.done", {
+      "type": "response.content_part.done",
+      "item_id": msg_id,
+      "output_index": output_index,
+      "content_index": 0,
+      "part": {
+        "type": "output_text",
+        "text": text_content,
+        "annotations": [],
+      },
+      "sequence_number": seq,
+    }))
+    seq += 1
+
+    # output_item.done
+    events.append(_sse_event("response.output_item.done", {
+      "type": "response.output_item.done",
+      "output_index": output_index,
+      "item": {
+        "type": "message",
+        "id": msg_id,
+        "status": "completed",
+        "role": "assistant",
+        "content": [{
+          "type": "output_text",
+          "text": text_content,
+          "annotations": [],
+        }],
+      },
+      "sequence_number": seq,
+    }))
+    seq += 1
+
+    return events
 
   try:
     async for raw_chunk in response_stream:
@@ -456,7 +528,9 @@ async def _responses_stream_converter(
                 "role": "assistant",
                 "content": [],
               },
+              "sequence_number": seq,
             })
+            seq += 1
 
             # content_part.added
             yield _sse_event("response.content_part.added", {
@@ -469,7 +543,9 @@ async def _responses_stream_converter(
                 "text": "",
                 "annotations": [],
               },
+              "sequence_number": seq,
             })
+            seq += 1
 
             text_item_open = True
 
@@ -482,7 +558,10 @@ async def _responses_stream_converter(
             "output_index": output_index,
             "content_index": 0,
             "delta": chunk_text,
+            "logprobs": [],
+            "sequence_number": seq,
           })
+          seq += 1
 
         # --- Tool calls ---
         if chunk_tools:
@@ -507,32 +586,8 @@ async def _responses_stream_converter(
             if not tool_state.get("emitted") and tool_state.get("id"):
               # Close the text item first if open
               if text_item_open:
-                yield _sse_event("response.content_part.done", {
-                  "type": "response.content_part.done",
-                  "item_id": msg_id,
-                  "output_index": output_index,
-                  "content_index": 0,
-                  "part": {
-                    "type": "output_text",
-                    "text": text_content,
-                    "annotations": [],
-                  },
-                })
-                yield _sse_event("response.output_item.done", {
-                  "type": "response.output_item.done",
-                  "output_index": output_index,
-                  "item": {
-                    "type": "message",
-                    "id": msg_id,
-                    "status": "completed",
-                    "role": "assistant",
-                    "content": [{
-                      "type": "output_text",
-                      "text": text_content,
-                      "annotations": [],
-                    }],
-                  },
-                })
+                for evt in _close_text_item():
+                  yield evt
                 text_item_open = False
 
               output_index += 1
@@ -551,7 +606,9 @@ async def _responses_stream_converter(
                   "arguments": "",
                   "status": "in_progress",
                 },
+                "sequence_number": seq,
               })
+              seq += 1
 
               # Emit accumulated args so far
               if tool_state.get("arguments"):
@@ -560,7 +617,9 @@ async def _responses_stream_converter(
                   "item_id": call_id,
                   "output_index": output_index,
                   "delta": tool_state["arguments"],
+                  "sequence_number": seq,
                 })
+                seq += 1
               continue
 
             if tc_args and tool_state.get("emitted"):
@@ -569,7 +628,9 @@ async def _responses_stream_converter(
                 "item_id": tool_state.get("id"),
                 "output_index": tool_state.get("output_index", output_index),
                 "delta": tc_args,
+                "sequence_number": seq,
               })
+              seq += 1
 
   except Exception as e:
     logger.error(f"Error during responses stream conversion: {e}", exc_info=True)
@@ -589,14 +650,18 @@ async def _responses_stream_converter(
           "role": "assistant",
           "content": [],
         },
+        "sequence_number": seq,
       })
+      seq += 1
       yield _sse_event("response.content_part.added", {
         "type": "response.content_part.added",
         "item_id": msg_id,
         "output_index": output_index,
         "content_index": 0,
         "part": {"type": "output_text", "text": "", "annotations": []},
+        "sequence_number": seq,
       })
+      seq += 1
       text_item_open = True
       text_content = ""
 
@@ -608,36 +673,15 @@ async def _responses_stream_converter(
       "output_index": output_index,
       "content_index": 0,
       "delta": error_text,
+      "logprobs": [],
+      "sequence_number": seq,
     })
+    seq += 1
 
   # Close open text item
   if text_item_open:
-    yield _sse_event("response.content_part.done", {
-      "type": "response.content_part.done",
-      "item_id": msg_id,
-      "output_index": output_index,
-      "content_index": 0,
-      "part": {
-        "type": "output_text",
-        "text": text_content,
-        "annotations": [],
-      },
-    })
-    yield _sse_event("response.output_item.done", {
-      "type": "response.output_item.done",
-      "output_index": output_index,
-      "item": {
-        "type": "message",
-        "id": msg_id,
-        "status": "completed",
-        "role": "assistant",
-        "content": [{
-          "type": "output_text",
-          "text": text_content,
-          "annotations": [],
-        }],
-      },
-    })
+    for evt in _close_text_item():
+      yield evt
 
   # Close open tool call items
   for tool_state in tool_blocks.values():
@@ -659,18 +703,36 @@ async def _responses_stream_converter(
             "arguments": "",
             "status": "in_progress",
           },
+          "sequence_number": seq,
         })
+        seq += 1
         if tool_state.get("arguments"):
           yield _sse_event("response.function_call_arguments.delta", {
             "type": "response.function_call_arguments.delta",
             "item_id": call_id,
             "output_index": output_index,
             "delta": tool_state["arguments"],
+            "sequence_number": seq,
           })
+          seq += 1
         tool_state["emitted"] = True
 
     if tool_state.get("emitted"):
       call_id = tool_state.get("id")
+      tool_args = tool_state.get("arguments", "")
+
+      # function_call_arguments.done
+      yield _sse_event("response.function_call_arguments.done", {
+        "type": "response.function_call_arguments.done",
+        "item_id": call_id,
+        "output_index": tool_state.get("output_index", output_index),
+        "arguments": tool_args,
+        "name": tool_state.get("name", ""),
+        "sequence_number": seq,
+      })
+      seq += 1
+
+      # output_item.done
       yield _sse_event("response.output_item.done", {
         "type": "response.output_item.done",
         "output_index": tool_state.get("output_index", output_index),
@@ -679,10 +741,12 @@ async def _responses_stream_converter(
           "id": call_id,
           "call_id": call_id,
           "name": tool_state.get("name", ""),
-          "arguments": tool_state.get("arguments", ""),
+          "arguments": tool_args,
           "status": "completed",
         },
+        "sequence_number": seq,
       })
+      seq += 1
 
   # Final response.completed
   status = _map_status(finish_reason) if finish_reason else "completed"
@@ -693,16 +757,16 @@ async def _responses_stream_converter(
     **skeleton,
     "status": status,
     "output": [],  # SDK reads output from output_item.done events
-    "usage": {
-      "input_tokens": input_tokens,
-      "output_tokens": output_tokens,
-      "total_tokens": input_tokens + output_tokens,
-    },
+    "usage": _make_usage(
+      input_tokens=input_tokens,
+      output_tokens=output_tokens,
+    ),
     "incomplete_details": {"reason": "max_output_tokens"} if status == "incomplete" else None,
   }
 
   yield _sse_event("response.completed", {
     "type": "response.completed",
+    "sequence_number": seq,
     "response": final_response,
   })
 

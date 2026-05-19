@@ -344,6 +344,23 @@ class TestBuildOutputItems:
         assert output[0]["name"] == "get_weather"
         assert output[0]["arguments"] == '{"city":"NYC"}'
         assert output[0]["call_id"] == "call_abc"
+        assert output[0]["id"] == "call_abc"
+
+    def test_tool_call_id_and_call_id_match(self):
+        """id and call_id must always be the same value."""
+        openai_result = {
+            "choices": [{
+                "message": {
+                    "content": None,
+                    "tool_calls": [
+                        {"function": {"name": "fn", "arguments": "{}"}},
+                    ],
+                },
+                "finish_reason": "tool_calls",
+            }],
+        }
+        output = responses_compat._build_output_items(openai_result)
+        assert output[0]["id"] == output[0]["call_id"]
 
     def test_text_and_tool_calls(self):
         openai_result = {
@@ -410,6 +427,41 @@ class TestBuildResponsesResponse:
         assert resp["status"] == "incomplete"
         assert resp["incomplete_details"]["reason"] == "max_output_tokens"
 
+    def test_usage_has_token_details(self):
+        openai_result = {
+            "choices": [{"message": {"content": "hi"}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+        }
+        resp = responses_compat._build_responses_response(openai_result, "gpt-4o", "resp_td")
+        usage = resp["usage"]
+        assert "input_tokens_details" in usage
+        assert usage["input_tokens_details"]["cached_tokens"] == 0
+        assert "output_tokens_details" in usage
+        assert usage["output_tokens_details"]["reasoning_tokens"] == 0
+
+
+# ---------------------------------------------------------------------------
+# _make_usage
+# ---------------------------------------------------------------------------
+
+
+class TestMakeUsage:
+    def test_defaults(self):
+        u = responses_compat._make_usage()
+        assert u["input_tokens"] == 0
+        assert u["output_tokens"] == 0
+        assert u["total_tokens"] == 0
+        assert u["input_tokens_details"]["cached_tokens"] == 0
+        assert u["output_tokens_details"]["reasoning_tokens"] == 0
+
+    def test_custom_values(self):
+        u = responses_compat._make_usage(input_tokens=10, output_tokens=5)
+        assert u["total_tokens"] == 15
+
+    def test_explicit_total(self):
+        u = responses_compat._make_usage(input_tokens=10, output_tokens=5, total_tokens=20)
+        assert u["total_tokens"] == 20
+
 
 # ---------------------------------------------------------------------------
 # Error response
@@ -445,6 +497,23 @@ class TestResponsesError:
 # ---------------------------------------------------------------------------
 
 
+def _parse_sse_events(raw_events):
+    """Parse raw SSE strings into (event_type, data_dict) tuples."""
+    parsed = []
+    for raw in raw_events:
+        lines = raw.strip().split("\n")
+        event_type = None
+        data_str = None
+        for line in lines:
+            if line.startswith("event: "):
+                event_type = line[7:]
+            elif line.startswith("data: "):
+                data_str = line[6:]
+        if event_type and data_str:
+            parsed.append((event_type, json.loads(data_str)))
+    return parsed
+
+
 class TestResponsesStreamConverter:
     @pytest.mark.asyncio
     async def test_text_only_stream(self):
@@ -466,9 +535,90 @@ class TestResponsesStreamConverter:
         assert "response.output_item.added" in event_types
         assert "response.content_part.added" in event_types
         assert "response.output_text.delta" in event_types
+        assert "response.output_text.done" in event_types
         assert "response.content_part.done" in event_types
         assert "response.output_item.done" in event_types
         assert "response.completed" in event_types
+
+    @pytest.mark.asyncio
+    async def test_all_events_have_sequence_number(self):
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"hi"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "model", "resp_seq"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        for event_type, data in parsed:
+            if event_type in ("response.created", "response.completed"):
+                assert "sequence_number" in data, f"{event_type} missing sequence_number"
+            else:
+                assert "sequence_number" in data, f"{event_type} missing sequence_number"
+
+    @pytest.mark.asyncio
+    async def test_sequence_numbers_monotonically_increase(self):
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"A"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{"content":"B"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "model", "resp_mono"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        seq_nums = [d.get("sequence_number") for _, d in parsed]
+        for i in range(1, len(seq_nums)):
+            assert seq_nums[i] > seq_nums[i - 1], \
+                f"sequence_number not monotonically increasing: {seq_nums}"
+
+    @pytest.mark.asyncio
+    async def test_text_delta_has_logprobs(self):
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"hi"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "model", "resp_lp"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        deltas = [(t, d) for t, d in parsed if t == "response.output_text.delta"]
+        assert len(deltas) > 0
+        for _, data in deltas:
+            assert "logprobs" in data
+            assert data["logprobs"] == []
+
+    @pytest.mark.asyncio
+    async def test_text_done_event_emitted(self):
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"AB"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "model", "resp_td"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        done_events = [(t, d) for t, d in parsed if t == "response.output_text.done"]
+        assert len(done_events) == 1
+        _, data = done_events[0]
+        assert data["text"] == "AB"
+        assert data["logprobs"] == []
 
     @pytest.mark.asyncio
     async def test_text_deltas_accumulated(self):
@@ -508,6 +658,7 @@ class TestResponsesStreamConverter:
         event_types = [e.split("\n")[0].replace("event: ", "") for e in events]
         assert "response.output_item.added" in event_types
         assert "response.function_call_arguments.delta" in event_types
+        assert "response.function_call_arguments.done" in event_types
         assert "response.output_item.done" in event_types
 
         # Find the output_item.done for the tool
@@ -516,6 +667,27 @@ class TestResponsesStreamConverter:
         data = json.loads(tool_done[0].split("data: ", 1)[1])
         assert data["item"]["name"] == "fn"
         assert data["item"]["arguments"] == '{"k":"v"}'
+
+    @pytest.mark.asyncio
+    async def test_function_call_arguments_done_event(self):
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","function":{"name":"fn","arguments":"{\\"a\\":1}"}}]},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"tool_calls"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "model", "resp_fcd"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        done_events = [(t, d) for t, d in parsed if t == "response.function_call_arguments.done"]
+        assert len(done_events) == 1
+        _, data = done_events[0]
+        assert data["arguments"] == '{"a":1}'
+        assert data["name"] == "fn"
+        assert data["item_id"] == "call_1"
 
     @pytest.mark.asyncio
     async def test_text_then_tool_call(self):
@@ -536,6 +708,8 @@ class TestResponsesStreamConverter:
         # Should have text events, then close text, then tool events
         assert event_types.count("response.output_item.added") == 2
         assert event_types.count("response.output_item.done") == 2
+        # Text done before tool starts
+        assert "response.output_text.done" in event_types
 
     @pytest.mark.asyncio
     async def test_empty_stream(self):
@@ -568,8 +742,11 @@ class TestResponsesStreamConverter:
         completed = [e for e in events if "response.completed" in e]
         assert len(completed) == 1
         data = json.loads(completed[0].split("data: ", 1)[1])
-        assert data["response"]["usage"]["input_tokens"] == 10
-        assert data["response"]["usage"]["output_tokens"] == 3
+        usage = data["response"]["usage"]
+        assert usage["input_tokens"] == 10
+        assert usage["output_tokens"] == 3
+        assert "input_tokens_details" in usage
+        assert "output_tokens_details" in usage
 
     @pytest.mark.asyncio
     async def test_mid_stream_error(self):
@@ -604,11 +781,16 @@ class TestResponsesStreamConverter:
         created = events[0]
         data = json.loads(created.split("data: ", 1)[1])
         assert data["type"] == "response.created"
+        assert "sequence_number" in data
         assert data["response"]["id"] == "resp_skel"
         assert data["response"]["object"] == "response"
         assert data["response"]["model"] == "gpt-4o"
         assert data["response"]["status"] == "in_progress"
         assert data["response"]["output"] == []
+        # Usage must have token detail sub-objects
+        usage = data["response"]["usage"]
+        assert "input_tokens_details" in usage
+        assert "output_tokens_details" in usage
 
 
 # ---------------------------------------------------------------------------
@@ -638,6 +820,180 @@ class TestChunkUtilities:
         chunk = {}
         result = responses_compat._get_chunk_usage(chunk)
         assert result["prompt_tokens"] == 0
+
+
+# ---------------------------------------------------------------------------
+# SDK compatibility: validate events against OpenAI SDK models
+# ---------------------------------------------------------------------------
+
+
+class TestSDKCompatibility:
+    """Validate that emitted events can be parsed by the OpenAI Python SDK models."""
+
+    def _try_validate(self, model_cls, data):
+        """Attempt SDK model validation; skip if openai is not installed."""
+        try:
+            import openai.types.responses as r
+            cls = getattr(r, model_cls)
+            cls.model_validate(data)
+        except ImportError:
+            pytest.skip("openai SDK not installed")
+
+    @pytest.mark.asyncio
+    async def test_created_event_validates(self):
+        async def mock_stream():
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "gpt-4o", "resp_v1"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        created = [d for t, d in parsed if t == "response.created"]
+        assert len(created) == 1
+        self._try_validate("ResponseCreatedEvent", created[0])
+
+    @pytest.mark.asyncio
+    async def test_completed_event_validates(self):
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"ok"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "gpt-4o", "resp_v2"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        completed = [d for t, d in parsed if t == "response.completed"]
+        assert len(completed) == 1
+        self._try_validate("ResponseCompletedEvent", completed[0])
+
+    @pytest.mark.asyncio
+    async def test_text_delta_event_validates(self):
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"hi"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "gpt-4o", "resp_v3"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        deltas = [d for t, d in parsed if t == "response.output_text.delta"]
+        assert len(deltas) > 0
+        self._try_validate("ResponseTextDeltaEvent", deltas[0])
+
+    @pytest.mark.asyncio
+    async def test_text_done_event_validates(self):
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"hi"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "gpt-4o", "resp_v4"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        done = [d for t, d in parsed if t == "response.output_text.done"]
+        assert len(done) == 1
+        self._try_validate("ResponseTextDoneEvent", done[0])
+
+    @pytest.mark.asyncio
+    async def test_output_item_added_message_validates(self):
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"hi"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "gpt-4o", "resp_v5"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        added = [d for t, d in parsed if t == "response.output_item.added"]
+        assert len(added) > 0
+        self._try_validate("ResponseOutputItemAddedEvent", added[0])
+
+    @pytest.mark.asyncio
+    async def test_function_call_arguments_done_validates(self):
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","function":{"name":"fn","arguments":"{\\"a\\":1}"}}]},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"tool_calls"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "gpt-4o", "resp_v6"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        done = [d for t, d in parsed if t == "response.function_call_arguments.done"]
+        assert len(done) == 1
+        self._try_validate("ResponseFunctionCallArgumentsDoneEvent", done[0])
+
+    @pytest.mark.asyncio
+    async def test_content_part_added_validates(self):
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"hi"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "gpt-4o", "resp_v7"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        added = [d for t, d in parsed if t == "response.content_part.added"]
+        assert len(added) > 0
+        self._try_validate("ResponseContentPartAddedEvent", added[0])
+
+    @pytest.mark.asyncio
+    async def test_content_part_done_validates(self):
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"hi"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "gpt-4o", "resp_v8"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        done = [d for t, d in parsed if t == "response.content_part.done"]
+        assert len(done) > 0
+        self._try_validate("ResponseContentPartDoneEvent", done[0])
+
+    @pytest.mark.asyncio
+    async def test_non_streaming_response_validates(self):
+        """Non-streaming Response object validates against SDK model."""
+        openai_result = {
+            "choices": [{"message": {"content": "hello"}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 5, "completion_tokens": 2, "total_tokens": 7},
+        }
+        resp = responses_compat._build_responses_response(openai_result, "gpt-4o", "resp_ns")
+        try:
+            import openai.types.responses as r
+            r.Response.model_validate(resp)
+        except ImportError:
+            pytest.skip("openai SDK not installed")
 
 
 # ---------------------------------------------------------------------------
@@ -723,6 +1079,8 @@ class TestResponsesRouteIntegration:
         assert body["output"][0]["type"] == "message"
         assert body["output"][0]["content"][0]["text"] == "hi"
         assert body["usage"]["input_tokens"] == 5
+        assert "input_tokens_details" in body["usage"]
+        assert "output_tokens_details" in body["usage"]
 
     def test_streaming_response(self, monkeypatch):
         async def mock_list_downstream():
@@ -758,6 +1116,7 @@ class TestResponsesRouteIntegration:
         text = resp.text
         assert "response.created" in text
         assert "response.output_text.delta" in text
+        assert "response.output_text.done" in text
         assert "response.completed" in text
 
     def test_direct_task_passthrough(self, monkeypatch):
