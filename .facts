@@ -377,6 +377,38 @@
   command: rg -q 'finish_reason="stop"' services/boost/src/llm.py && rg -q 'test_emit_done_adds_terminal_chunk_before_done' services/boost/tests/test_streaming.py
   tags: [spec, implemented]
 
+## anthropic compat
+- label: Boost exposes POST /v1/messages endpoint for Anthropic Messages API compatibility
+  command: rg -q '/v1/messages' services/boost/src/anthropic_compat.py && rg -q 'anthropic_compatible_routes' services/boost/src/main.py
+  tags: [spec, implemented]
+- label: Boost exposes POST /v1/messages/count_tokens endpoint for Anthropic token counting
+  command: rg -q 'count_tokens' services/boost/src/anthropic_compat.py && rg -q 'input_tokens' services/boost/src/anthropic_compat.py
+  tags: [spec, implemented]
+- label: Boost Anthropic compat converts incoming Anthropic messages to OpenAI format internally via _convert_messages
+  command: rg -q '_convert_messages' services/boost/src/anthropic_compat.py && rg -q '_convert_user_message' services/boost/src/anthropic_compat.py && rg -q '_convert_assistant_message' services/boost/src/anthropic_compat.py
+  tags: [spec, implemented]
+- label: Boost Anthropic compat streaming converts OpenAI SSE chunks to Anthropic SSE events (message_start, content_block_start, content_block_delta, content_block_stop, message_delta, message_stop)
+  command: rg -q 'message_start' services/boost/src/anthropic_compat.py && rg -q 'content_block_start' services/boost/src/anthropic_compat.py && rg -q 'content_block_delta' services/boost/src/anthropic_compat.py && rg -q 'content_block_stop' services/boost/src/anthropic_compat.py && rg -q 'message_delta' services/boost/src/anthropic_compat.py && rg -q 'message_stop' services/boost/src/anthropic_compat.py
+  tags: [spec, implemented]
+- label: Boost Anthropic compat accepts x-api-key header for authentication alongside standard Authorization header
+  command: rg -q 'x-api-key' services/boost/src/anthropic_compat.py && rg -q '_synthesize_authorization' services/boost/src/anthropic_compat.py
+  tags: [spec, implemented]
+- label: HARBOR_BOOST_ANTHROPIC_COMPAT config controls whether Anthropic-compatible endpoints are registered
+  command: rg -q 'ENABLE_ANTHROPIC_COMPAT' services/boost/src/config.py && rg -q 'HARBOR_BOOST_ANTHROPIC_COMPAT' profiles/default.env && rg -q 'ENABLE_ANTHROPIC_COMPAT' services/boost/src/main.py
+  tags: [spec, implemented]
+- label: Boost Anthropic compat maps stop reasons between formats (length->max_tokens, tool_calls->tool_use, stop->end_turn)
+  command: rg -q '_map_stop_reason' services/boost/src/anthropic_compat.py && rg -q 'max_tokens' services/boost/src/anthropic_compat.py && rg -q 'end_turn' services/boost/src/anthropic_compat.py && rg -q 'tool_use' services/boost/src/anthropic_compat.py
+  tags: [spec, implemented]
+- label: Boost Anthropic compat converts tool schemas between Anthropic and OpenAI formats
+  command: rg -q '_convert_tools' services/boost/src/anthropic_compat.py && rg -q '_convert_tool_choice' services/boost/src/anthropic_compat.py && rg -q 'input_schema' services/boost/src/anthropic_compat.py
+  tags: [spec, implemented]
+- label: Boost Anthropic compat includes x-request-id header in all response paths
+  command: rg -q 'x-request-id' services/boost/src/anthropic_compat.py && rg -q 'request_id' services/boost/src/anthropic_compat.py
+  tags: [spec, implemented]
+- label: Boost Anthropic compat handles mid-stream errors gracefully with proper SSE envelope closure
+  command: rg -q 'except.*Exception' services/boost/src/anthropic_compat.py && rg -q 'test_mid_stream_exception' services/boost/tests/test_anthropic_compat.py
+  tags: [spec, implemented]
+
 ## config
 - label: Boost upstream APIs are configured via semicolon-separated HARBOR_BOOST_OPENAI_URLS and HARBOR_BOOST_OPENAI_KEYS
   command: grep -q 'HARBOR_BOOST_OPENAI_URLS' services/boost/src/config.py && grep -q 'HARBOR_BOOST_OPENAI_KEYS' services/boost/src/config.py
