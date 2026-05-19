@@ -19,6 +19,8 @@ tmp_dir="$(mktemp -d -t harbor-launch-smoke.XXXXXX)"
 fake_bin="$tmp_dir/bin"
 harbor_home="$tmp_dir/harbor-home"
 tool_log="$tmp_dir/tool.log"
+docker_log="$tmp_dir/docker.log"
+docker_state="$tmp_dir/docker-state"
 opencode_config="$tmp_dir/opencode-config.json"
 droid_config="$tmp_dir/factory/config.json"
 openclaw_config="$tmp_dir/openclaw/openclaw.json"
@@ -29,6 +31,7 @@ parallel_out="$tmp_dir/parallel.out"
 launch_workspace="$tmp_dir/launch-tests"
 mkdir -p "$fake_bin" "$harbor_home/profiles" "$launch_workspace"
 cp "$HARBOR_TEST_REPO/profiles/default.env" "$harbor_home/profiles/default.env"
+ln -s "$HARBOR_TEST_REPO/services" "$harbor_home/services"
 
 cleanup() {
   rm -rf "$tmp_dir"
@@ -37,8 +40,19 @@ trap cleanup EXIT
 
 cat >"$fake_bin/docker" <<'EOF'
 #!/usr/bin/env bash
-if [ "$1" = "compose" ] && [ "$2" = "ps" ]; then
+if [ -n "${HARBOR_FAKE_DOCKER_LOG:-}" ]; then
+  printf '%s\n' "$*" >>"$HARBOR_FAKE_DOCKER_LOG"
+fi
+
+running_services() {
   printf '%s\n' ${HARBOR_FAKE_RUNNING_SERVICES:-}
+  if [ -n "${HARBOR_FAKE_DOCKER_STATE:-}" ] && [ -f "$HARBOR_FAKE_DOCKER_STATE" ]; then
+    cat "$HARBOR_FAKE_DOCKER_STATE"
+  fi
+}
+
+if [ "$1" = "compose" ] && [ "$2" = "ps" ]; then
+  running_services
   exit 0
 fi
 
@@ -56,10 +70,31 @@ if [ "$1" = "port" ]; then
       echo "8000/tcp -> 0.0.0.0:33822"
       exit 0
       ;;
+    harbor.boost)
+      echo "8000/tcp -> 0.0.0.0:8004"
+      exit 0
+      ;;
   esac
 fi
 
 if [ "$1" = "compose" ]; then
+  if [ -n "${HARBOR_FAKE_DOCKER_STATE:-}" ] && [[ " $* " == *" up -d --wait "* ]]; then
+    seen_wait=false
+    for arg in "$@"; do
+      if $seen_wait; then
+        case "$arg" in
+          -*)
+            ;;
+          *)
+            printf '%s\n' "$arg" >>"$HARBOR_FAKE_DOCKER_STATE"
+            ;;
+        esac
+      fi
+      if [ "$arg" = "--wait" ]; then
+        seen_wait=true
+      fi
+    done
+  fi
   exit 0
 fi
 
@@ -150,6 +185,20 @@ cat >"$fake_bin/hermes" <<'EOF'
 } >>"$HARBOR_LAUNCH_TOOL_LOG"
 EOF
 
+cat >"$fake_bin/mi" <<'EOF'
+#!/usr/bin/env bash
+{
+  echo "tool=mi"
+  echo "cwd=$PWD"
+  echo "OPENAI_BASE_URL=${OPENAI_BASE_URL:-}"
+  echo "OPENAI_API_KEY=${OPENAI_API_KEY:-}"
+  echo "MODEL=${MODEL:-}"
+  for arg in "$@"; do
+    echo "arg=$arg"
+  done
+} >>"$HARBOR_LAUNCH_TOOL_LOG"
+EOF
+
 cat >"$fake_bin/openclaw" <<'EOF'
 #!/usr/bin/env bash
 {
@@ -209,7 +258,7 @@ cat >"$fake_bin/code" <<'EOF'
 } >>"$HARBOR_LAUNCH_TOOL_LOG"
 EOF
 
-chmod +x "$fake_bin/docker" "$fake_bin/curl" "$fake_bin/codex" "$fake_bin/copilot" "$fake_bin/claude" "$fake_bin/droid" "$fake_bin/hermes" "$fake_bin/openclaw" "$fake_bin/opencode" "$fake_bin/pi" "$fake_bin/pool" "$fake_bin/code"
+chmod +x "$fake_bin/docker" "$fake_bin/curl" "$fake_bin/codex" "$fake_bin/copilot" "$fake_bin/claude" "$fake_bin/droid" "$fake_bin/hermes" "$fake_bin/mi" "$fake_bin/openclaw" "$fake_bin/opencode" "$fake_bin/pi" "$fake_bin/pool" "$fake_bin/code"
 
 run_launch() {
   local name="$1"
@@ -219,6 +268,8 @@ run_launch() {
 
   suite_log "$name"
   : >"$tool_log"
+  : >"$docker_log"
+  : >"$docker_state"
   : >"$opencode_config"
   rm -f "$droid_config" "$openclaw_config" "$pi_models_config" "$pi_settings_config"
   if ! env \
@@ -226,6 +277,8 @@ run_launch() {
     HARBOR_CAPABILITIES_AUTODETECT=false \
     HARBOR_HOME="$harbor_home" \
     HARBOR_FAKE_RUNNING_SERVICES="$running_services" \
+    HARBOR_FAKE_DOCKER_LOG="$docker_log" \
+    HARBOR_FAKE_DOCKER_STATE="$docker_state" \
     HARBOR_FAKE_MODELS_SCHEMA="$schema" \
     HARBOR_LAUNCH_TOOL_LOG="$tool_log" \
     HARBOR_LAUNCH_OPENCODE_CONFIG="$opencode_config" \
@@ -237,6 +290,17 @@ run_launch() {
     "$HARBOR_BIN" launch "$@" >"$step_out" 2>&1; then
     cat "$step_out" >&2
     fail "$name exited non-zero"
+  fi
+}
+
+assert_docker_log() {
+  local pattern="$1"
+  if ! grep -Eq -- "$pattern" "$docker_log"; then
+    echo "--- docker log ---" >&2
+    cat "$docker_log" >&2
+    echo "--- command output ---" >&2
+    cat "$step_out" >&2
+    fail "docker log did not match /$pattern/"
   fi
 }
 
@@ -266,7 +330,7 @@ run_parallel_history_smoke() {
       HARBOR_FAKE_RUNNING_SERVICES="ollama" \
       HARBOR_FAKE_MODELS_SCHEMA="openai-mixed" \
       PATH="$fake_bin:/usr/bin:/bin" \
-      "$HARBOR_BIN" launch codex --backend ollama --model "race-$i" --config >>"$parallel_out" 2>&1 &
+      "$HARBOR_BIN" launch --backend ollama --model "race-$i" --config codex >>"$parallel_out" 2>&1 &
     pids+=("$!")
   done
 
@@ -333,7 +397,7 @@ assert_file_json() {
 
 run_launch "codex uses OpenAI data[] model id and passes Codex provider config" \
   "ollama" "openai-mixed" \
-  codex --backend ollama -- --sandbox workspace-write
+  --backend ollama codex --sandbox workspace-write
 assert_log '^tool=codex$'
 assert_log '^cwd='"$HARBOR_TEST_REPO"'$'
 assert_log '^OPENAI_API_KEY=sk-harbor$'
@@ -343,9 +407,60 @@ assert_log '^arg=qwen-chat-model$'
 assert_log '^arg=--sandbox$'
 assert_log '^arg=workspace-write$'
 
+run_launch "tool arguments after the host tool name are passed through unchanged" \
+  "ollama" "openai-mixed" \
+  --backend ollama codex --model tool-model --backend tool-backend --config
+assert_log '^tool=codex$'
+assert_log '^arg=--model$'
+assert_log '^arg=tool-model$'
+assert_log '^arg=--backend$'
+assert_log '^arg=tool-backend$'
+assert_log '^arg=--config$'
+
+run_launch "explicit backend is started when missing" \
+  "" "root-array" \
+  --backend llamacpp --model root-array-model opencode run
+assert_log '^tool=opencode$'
+assert_log '^arg=harbor-llamacpp/root-array-model$'
+assert_output "Backend 'llamacpp' is not running; starting it"
+assert_docker_log 'up -d --wait llamacpp$'
+
+run_launch "starts llamacpp when no backend is running" \
+  "" "root-array" \
+  --model root-array-model opencode run
+assert_log '^tool=opencode$'
+assert_log '^arg=harbor-llamacpp/root-array-model$'
+assert_output 'No running Harbor OpenAI-compatible backend found; starting llamacpp'
+assert_docker_log 'up -d --wait llamacpp$'
+
+run_launch "web launch starts SearXNG and routes through boost-web workflow model" \
+  "ollama boost" "openai-mixed" \
+  --web --backend ollama codex --sandbox workspace-write
+assert_log '^tool=codex$'
+assert_log '^arg=model_providers\.harbor_launch\.base_url="http://localhost:8004/v1"$'
+assert_log '^arg=-m$'
+assert_log '^arg=boost-web-qwen-chat-model$'
+assert_docker_log 'up -d --wait boost searxng$'
+assert_output "Starting Boost workflow 'boost-web' for backend 'ollama'"
+
+run_launch "already-prefixed boost workflow model is not prefixed again" \
+  "ollama boost" "openai-mixed" \
+  --web --backend ollama --model boost-web-qwen-chat-model codex
+assert_log '^tool=codex$'
+assert_log '^arg=-m$'
+assert_log '^arg=boost-web-qwen-chat-model$'
+
+run_launch "launch --web config prints boosted model and Boost API settings" \
+  "ollama boost" "openai-mixed" \
+  --web --backend ollama --config codex
+assert_output '^backend=boost$'
+assert_output '^model=boost-web-qwen-chat-model$'
+assert_output '^OPENAI_API_KEY=sk-boost$'
+assert_output 'base_url="http://localhost:8004/v1"'
+
 run_launch "launch codex warns about llama.cpp Responses API tool compatibility" \
   "llamacpp" "root-array" \
-  codex --backend llamacpp --model root-array-model -- --sandbox read-only
+  --backend llamacpp --model root-array-model codex --sandbox read-only
 assert_log '^tool=codex$'
 assert_log '^cwd='"$HARBOR_TEST_REPO"'$'
 assert_log '^arg=root-array-model$'
@@ -355,7 +470,7 @@ assert_output "400 'type' of tool must be 'function'"
 
 run_launch "claude accepts Ollama-native models[] name schema and uses Anthropic env" \
   "ollama" "ollama-native" \
-  claude --backend ollama -- -p "hello"
+  --backend ollama claude -p "hello"
 assert_log '^tool=claude$'
 assert_log '^cwd='"$HARBOR_TEST_REPO"'$'
 assert_log '^ANTHROPIC_AUTH_TOKEN=ollama$'
@@ -368,7 +483,7 @@ assert_log '^arg=hello$'
 
 run_launch "opencode accepts root-array model schema and writes inline provider config" \
   "llamacpp" "root-array" \
-  opencode --backend llamacpp run
+  --backend llamacpp opencode run
 assert_log '^tool=opencode$'
 assert_log '^cwd='"$HARBOR_TEST_REPO"'$'
 assert_log '^OPENAI_API_KEY=sk-harbor$'
@@ -379,9 +494,29 @@ assert_json '.provider["harbor-llamacpp"].options.baseURL == "http://localhost:3
 assert_json '.provider["harbor-llamacpp"].models["root-array-model"].tool_call == true'
 assert_json '.provider["harbor-llamacpp"].models["root-second-model"].tool_call == true'
 
+run_launch "mi uses host CLI with OpenAI base URL without v1 suffix" \
+  "ollama" "openai-mixed" \
+  --backend ollama mi -p hello
+assert_log '^tool=mi$'
+assert_log '^cwd='"$HARBOR_TEST_REPO"'$'
+assert_log '^OPENAI_BASE_URL=http://localhost:11434$'
+assert_log '^OPENAI_API_KEY=sk-harbor$'
+assert_log '^MODEL=qwen-chat-model$'
+assert_log '^arg=-p$'
+assert_log '^arg=hello$'
+
+run_launch "mi --web routes through Boost without v1 suffix" \
+  "ollama boost" "openai-mixed" \
+  --web --backend ollama mi -p hello
+assert_log '^tool=mi$'
+assert_log '^OPENAI_BASE_URL=http://localhost:8004$'
+assert_log '^OPENAI_API_KEY=sk-boost$'
+assert_log '^MODEL=boost-web-qwen-chat-model$'
+assert_docker_log 'up -d --wait boost searxng$'
+
 run_launch "copilot uses Ollama-compatible Responses API environment" \
   "ollama" "openai-mixed" \
-  copilot --backend ollama -- -p "hello"
+  --backend ollama copilot -p "hello"
 assert_log '^tool=copilot$'
 assert_log '^cwd='"$HARBOR_TEST_REPO"'$'
 assert_log '^COPILOT_PROVIDER_BASE_URL=http://localhost:11434/v1$'
@@ -393,7 +528,7 @@ assert_log '^arg=hello$'
 
 run_launch "droid writes Factory config and launches Droid CLI" \
   "ollama" "openai-mixed" \
-  droid --backend ollama
+  --backend ollama droid
 assert_log '^tool=droid$'
 assert_log '^cwd='"$HARBOR_TEST_REPO"'$'
 assert_file_json "$droid_config" '.custom_models[] | select(.model == "mixed-openai-model" and .base_url == "http://localhost:11434/v1/" and .provider == "generic-chat-completion-api")'
@@ -402,7 +537,7 @@ assert_file_json "$droid_config" '.custom_models[] | select(.model == "qwen-chat
 
 run_launch "openclaw writes OpenClaw provider config and defaults to TUI" \
   "llamacpp" "root-array" \
-  openclaw --backend llamacpp
+  --backend llamacpp openclaw
 assert_log '^tool=openclaw$'
 assert_log '^cwd='"$HARBOR_TEST_REPO"'$'
 assert_log '^arg=tui$'
@@ -413,7 +548,7 @@ assert_file_json "$openclaw_config" '.models.providers["harbor-llamacpp"].models
 
 run_launch "pi writes Pi model and settings config" \
   "ollama" "openai-mixed" \
-  pi --backend ollama
+  --backend ollama pi
 assert_log '^tool=pi$'
 assert_file_json "$pi_models_config" '.providers["harbor-ollama"].models[] | select(.id == "mixed-openai-model")'
 assert_file_json "$pi_models_config" '.providers["harbor-ollama"].models[] | select(.id == "mxbai-embed-large")'
@@ -425,7 +560,7 @@ assert_log '^arg=.*/\.pi/agent/sessions/'"$launch_repo_slug"'$'
 
 run_launch "pi preserves a non-Harbor caller workspace" \
   "ollama" "openai-mixed" \
-  pi --backend ollama --model qwen-chat-model -p "hello"
+  --backend ollama --model qwen-chat-model pi -p "hello"
 if ! env \
   HARBOR_LEGACY_CLI=true \
   HARBOR_CAPABILITIES_AUTODETECT=false \
@@ -436,7 +571,7 @@ if ! env \
   HARBOR_LAUNCH_PI_MODELS_CONFIG="$pi_models_config" \
   HARBOR_LAUNCH_PI_SETTINGS_CONFIG="$pi_settings_config" \
   PATH="$fake_bin:/usr/bin:/bin" \
-  bash -c 'cd "$1" && "$2" launch pi --backend ollama --model qwen-chat-model -p hello' bash "$launch_workspace" "$HARBOR_BIN" >"$step_out" 2>&1; then
+  bash -c 'cd "$1" && "$2" launch --backend ollama --model qwen-chat-model pi -p hello' bash "$launch_workspace" "$HARBOR_BIN" >"$step_out" 2>&1; then
   cat "$step_out" >&2
   fail "pi non-Harbor caller workspace launch exited non-zero"
 fi
@@ -446,7 +581,7 @@ assert_log '^arg=.*/\.pi/agent/sessions/'"$(printf '%s' "$launch_workspace" | se
 
 run_launch "pool uses Poolside environment and model argument" \
   "ollama" "openai-mixed" \
-  pool --backend ollama run
+  --backend ollama pool run
 assert_log '^tool=pool$'
 assert_log '^cwd='"$HARBOR_TEST_REPO"'$'
 assert_log '^POOLSIDE_STANDALONE_BASE_URL=http://localhost:11434/v1$'
@@ -457,7 +592,7 @@ assert_log '^arg=run$'
 
 run_launch "hermes uses OpenAI-compatible environment and defaults to chat" \
   "ollama" "openai-mixed" \
-  hermes --backend ollama
+  --backend ollama hermes
 assert_log '^tool=hermes$'
 assert_log '^cwd='"$HARBOR_TEST_REPO"'$'
 assert_log '^OPENAI_BASE_URL=http://localhost:11434/v1$'
@@ -467,7 +602,7 @@ assert_log '^arg=chat$'
 
 run_launch "vscode opens the current workspace through code" \
   "ollama" "openai-mixed" \
-  vscode --backend ollama --model mixed-openai-model
+  --backend ollama --model mixed-openai-model vscode
 assert_log '^tool=code$'
 assert_log '^cwd='"$HARBOR_TEST_REPO"'$'
 assert_log '^arg='"$HARBOR_TEST_REPO"'$'
