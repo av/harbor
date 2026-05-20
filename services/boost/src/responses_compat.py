@@ -115,6 +115,36 @@ def _convert_input_to_messages(body: dict):
       else:
         messages.append({"role": role, "content": str(content)})
 
+    elif item_type == "function_call":
+      # Previous response output items echoed back for multi-turn context.
+      # Convert to an assistant message with tool_calls so the backend
+      # sees the tool invocation the tool result corresponds to.
+      # Consecutive function_call items are merged into a single assistant
+      # message (the backend returned them together in one turn).
+      raw_id = item.get("call_id") or item.get("id") or ""
+      tc_entry = {
+        "id": _to_openai_tool_id(raw_id) if raw_id else "",
+        "type": "function",
+        "function": {
+          "name": item.get("name", ""),
+          "arguments": item.get("arguments", "{}"),
+        },
+      }
+
+      # Merge into the previous assistant message if it exists and has tool_calls
+      if (
+        messages
+        and messages[-1].get("role") == "assistant"
+        and "tool_calls" in messages[-1]
+      ):
+        messages[-1]["tool_calls"].append(tc_entry)
+      else:
+        messages.append({
+          "role": "assistant",
+          "content": None,
+          "tool_calls": [tc_entry],
+        })
+
     elif item_type == "function_call_output":
       raw_call_id = item.get("call_id", "")
       messages.append({
@@ -127,9 +157,10 @@ def _convert_input_to_messages(body: dict):
       # References to previous response items; skip in translation
       pass
 
-    elif item_type == "computer_call_output":
-      # OpenAI computer use outputs; not supported, silently skip
-      logger.debug("Skipping computer_call_output input item (not supported)")
+    elif item_type in ("reasoning", "computer_call_output"):
+      # reasoning: thinking from a previous response; no backend equivalent
+      # computer_call_output: OpenAI computer use; not supported
+      logger.debug("Skipping %s input item (not mapped to Chat Completions)", item_type)
 
     else:
       # Unknown item type; skip with a warning so callers can debug
