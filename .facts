@@ -513,6 +513,9 @@
 - label: Boost Anthropic compat validates max_tokens is a positive integer, rejecting non-numeric, negative, and zero values with a 400 error
   command: rg -q 'max_tokens must be a positive integer' services/boost/src/anthropic_compat.py && rg -q 'isinstance.*max_tokens' services/boost/src/anthropic_compat.py
   tags: [spec, implemented]
+- label: Boost Anthropic Messages and count_tokens reject non-object message entries with Anthropic-format 400 errors instead of 500
+  command: cd services/boost && pytest -q tests/test_endpoint_isolation.py -k 'non_object_message_entries'
+  tags: [spec, boost-compat-validation-400, implemented]
 
 ## responses api
 - label: Boost exposes POST /v1/responses endpoint for OpenAI Responses API compatibility
@@ -563,6 +566,9 @@
 - label: Boost Responses API maps finish_reason length to status incomplete with incomplete_details reason max_output_tokens
   command: grep -q 'incomplete_details' services/boost/src/responses_compat.py && grep -q 'max_output_tokens' services/boost/src/responses_compat.py && grep -q '_map_status' services/boost/src/responses_compat.py
   tags: [spec, implemented]
+- label: Boost Responses input_tokens rejects non-object bodies and missing model or input fields with OpenAI-format 400 errors instead of 500
+  command: cd services/boost && pytest -q tests/test_endpoint_isolation.py -k 'responses_input_tokens_validation'
+  tags: [spec, boost-compat-validation-400, implemented]
 
 ## shared
 - label: Boost compat layers share a common auth.py module with get_api_key supporting both Authorization and x-api-key headers

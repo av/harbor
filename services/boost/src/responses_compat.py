@@ -67,6 +67,19 @@ def _responses_error(status_code, message, error_type=None, error_code=None, req
   return JSONResponse(status_code=status_code, content=body, headers=headers)
 
 
+def _validate_responses_body(body, request_id=None):
+  if not isinstance(body, dict):
+    return _responses_error(400, "request body must be a JSON object", request_id=request_id)
+
+  if "model" not in body or not body["model"]:
+    return _responses_error(400, "model is required", request_id=request_id)
+
+  if body.get("input") is None:
+    return _responses_error(400, "input is required", request_id=request_id)
+
+  return None
+
+
 def _make_usage(input_tokens=0, output_tokens=0, total_tokens=None, reasoning_tokens=0):
   """Build a usage dict with the token detail sub-objects the SDK requires."""
   if total_tokens is None:
@@ -1434,13 +1447,9 @@ async def post_responses(request: Request, api_key: str = Depends(get_api_key)):
     except json.JSONDecodeError:
       return _responses_error(400, "Invalid JSON in request body", request_id=request_id)
 
-    # Validate required fields
-    if "model" not in json_body or not json_body["model"]:
-      return _responses_error(400, "model is required", request_id=request_id)
-
-    inp = json_body.get("input")
-    if inp is None:
-      return _responses_error(400, "input is required", request_id=request_id)
+    validation_error = _validate_responses_body(json_body, request_id=request_id)
+    if validation_error:
+      return validation_error
 
     request_model = json_body["model"]
     is_stream = json_body.get("stream", False)
@@ -1620,6 +1629,10 @@ async def count_response_input_tokens(request: Request, api_key: str = Depends(g
       json_body = json.loads(body.decode("utf-8"))
     except json.JSONDecodeError:
       return _responses_error(400, "Invalid JSON in request body", request_id=request_id)
+
+    validation_error = _validate_responses_body(json_body, request_id=request_id)
+    if validation_error:
+      return validation_error
 
     openai_body = _build_openai_body(json_body)
     openai_messages = openai_body.get("messages", [])

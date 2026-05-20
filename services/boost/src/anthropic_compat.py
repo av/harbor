@@ -126,6 +126,9 @@ def _synthesize_authorization(request: Request):
 # --- Request validation and conversion ---
 
 def _validate_request(body: dict, request_id=None, beta_flags=None):
+  if not isinstance(body, dict):
+    return _anthropic_error(400, "request body must be a JSON object", request_id=request_id, beta_flags=beta_flags)
+
   if "model" not in body or not body["model"]:
     return _anthropic_error(400, "model is required", request_id=request_id, beta_flags=beta_flags)
 
@@ -144,6 +147,13 @@ def _validate_request(body: dict, request_id=None, beta_flags=None):
     return _anthropic_error(400, "messages must be a non-empty array", request_id=request_id, beta_flags=beta_flags)
 
   for msg in messages:
+    if not isinstance(msg, dict):
+      return _anthropic_error(
+        400,
+        "messages entries must be objects",
+        request_id=request_id,
+        beta_flags=beta_flags,
+      )
     if msg.get("role") == "system":
       return _anthropic_error(
         400,
@@ -1142,12 +1152,18 @@ async def post_count_tokens(request: Request, api_key: str = Depends(get_api_key
     except json.JSONDecodeError:
       return _anthropic_error(400, "Invalid JSON in request body", request_id=request_id, beta_flags=beta_flags)
 
+    if not isinstance(json_body, dict):
+      return _anthropic_error(400, "request body must be a JSON object", request_id=request_id, beta_flags=beta_flags)
+
     if "model" not in json_body or not json_body["model"]:
       return _anthropic_error(400, "model is required", request_id=request_id, beta_flags=beta_flags)
 
     messages = json_body.get("messages")
     if not messages or not isinstance(messages, list) or len(messages) == 0:
       return _anthropic_error(400, "messages must be a non-empty array", request_id=request_id, beta_flags=beta_flags)
+
+    if any(not isinstance(msg, dict) for msg in messages):
+      return _anthropic_error(400, "messages entries must be objects", request_id=request_id, beta_flags=beta_flags)
 
     logger.info(
       "Anthropic count_tokens request: model=%s messages=%d",

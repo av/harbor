@@ -495,6 +495,41 @@ class TestEmptyBody:
         body = resp.json()
         assert "error" in body
 
+    def test_non_object_message_entries_rejected(self):
+        client = _make_client()
+        body = {
+            "model": "claude-test",
+            "max_tokens": 128,
+            "messages": ["not-a-message-object"],
+        }
+
+        for path in ("/v1/messages", "/v1/messages/count_tokens"):
+            resp = client.post(path, json=body)
+            assert resp.status_code == 400
+            payload = resp.json()
+            assert payload.get("type") == "error"
+            assert payload["error"]["type"] == "invalid_request_error"
+            assert "objects" in payload["error"]["message"]
+            assert "Internal server error" not in resp.text
+
+    def test_responses_input_tokens_validation(self):
+        client = _make_client()
+        invalid_bodies = [
+            [],
+            {"model": "gpt-4o"},
+            {"input": "hello"},
+        ]
+
+        for body in invalid_bodies:
+            resp = client.post("/v1/responses/input_tokens", json=body)
+            assert resp.status_code == 400
+            payload = resp.json()
+            assert "error" in payload
+            assert payload["error"]["type"] == "invalid_request_error"
+            assert "param" in payload["error"]
+            assert "code" in payload["error"]
+            assert "Internal server error" not in resp.text
+
 
 # ===========================================================================
 # 8. Content-Type mismatches
