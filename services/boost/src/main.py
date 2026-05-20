@@ -279,7 +279,7 @@ if config.ENABLE_ANTHROPIC_COMPAT.value:
 
 logger.info(f"Boosting: {config.BOOST_APIS}")
 if len(config.BOOST_AUTH) == 0:
-  logger.warn("No API keys specified - boost will accept all requests")
+  logger.warning("No API keys specified - boost will accept all requests")
 
 if __name__ == "__main__":
   import uvicorn
