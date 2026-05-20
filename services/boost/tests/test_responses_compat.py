@@ -6502,3 +6502,136 @@ class TestExtractBoostParams:
         body = {"model": "test-model", "input": "hi"}
         openai_body = responses_compat._build_openai_body(body)
         assert not any(k.startswith("@boost_") for k in openai_body)
+
+
+# ---------------------------------------------------------------------------
+# Security tests
+# ---------------------------------------------------------------------------
+
+
+class TestSecurityInfoLeakage:
+    """Verify that error messages do not leak internal details."""
+
+    @pytest.fixture(autouse=True)
+    def setup_app(self, monkeypatch):
+        from fastapi.testclient import TestClient
+        import config as _cfg
+        monkeypatch.setattr(_cfg, "BOOST_AUTH", [])
+        app = _make_responses_app()
+        self.client = TestClient(app)
+
+    def test_value_error_does_not_leak_raw_message(self, monkeypatch):
+        """ValueError from mapper should return generic error, not the raw message."""
+        async def mock_list_downstream():
+            return []
+        monkeypatch.setattr(responses_compat.mapper, "list_downstream", mock_list_downstream)
+        monkeypatch.setattr(
+            responses_compat.mapper,
+            "resolve_request_config",
+            MagicMock(side_effect=ValueError("Backend http://internal:8080/v1 connection refused")),
+        )
+
+        resp = self.client.post("/v1/responses", json={"model": "test", "input": "hi"})
+        assert resp.status_code == 400
+        body = resp.json()
+        assert "internal:8080" not in json.dumps(body)
+        assert "connection refused" not in body["error"]["message"].lower()
+        assert "could not resolve" in body["error"]["message"].lower()
+
+    def test_http_500_does_not_leak_detail(self, monkeypatch):
+        """HTTPException with 500 should not expose its detail to clients."""
+        async def mock_list_downstream():
+            raise HTTPException(status_code=500, detail="Database at db.internal:5432 is down")
+        monkeypatch.setattr(responses_compat.mapper, "list_downstream", mock_list_downstream)
+
+        resp = self.client.post("/v1/responses", json={"model": "test", "input": "hi"})
+        assert resp.status_code == 500
+        body = resp.json()
+        assert "db.internal" not in json.dumps(body)
+
+    def test_generic_exception_does_not_leak(self, monkeypatch):
+        """Unexpected exceptions should return generic 500."""
+        async def mock_list_downstream():
+            raise RuntimeError("segfault in /usr/lib/libcuda.so")
+        monkeypatch.setattr(responses_compat.mapper, "list_downstream", mock_list_downstream)
+
+        resp = self.client.post("/v1/responses", json={"model": "test", "input": "hi"})
+        assert resp.status_code == 500
+        body = resp.json()
+        assert "segfault" not in json.dumps(body)
+        assert "libcuda" not in json.dumps(body)
+
+    @pytest.mark.asyncio
+    async def test_mid_stream_error_does_not_leak_internals(self):
+        """Mid-stream errors must use generic text, not raw exception."""
+        async def response_stream():
+            yield 'data: {"choices": [{"delta": {"content": "ok"}}]}\n\n'
+            raise ConnectionError("Connection to http://secret-backend:9999/v1 refused")
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            response_stream(), "model", "resp_sec"
+        ):
+            events.append(event)
+        joined = "".join(events)
+        assert "secret-backend" not in joined
+        assert "9999" not in joined
+        assert "internal error" in joined.lower()
+
+
+class TestSecuritySSEInjection:
+    """Verify SSE events cannot be injected via crafted content."""
+
+    @pytest.mark.asyncio
+    async def test_content_with_sse_newlines_is_escaped(self):
+        """Content containing SSE-significant characters should be JSON-escaped
+        so each SSE event is a single data: line (no raw newlines splitting it)."""
+        malicious_content = 'Hello\n\nevent: malicious\ndata: {"injected": true}\n\n'
+        async def response_stream():
+            yield f'data: {{"choices": [{{"delta": {{"content": {json.dumps(malicious_content)}}}}}]}}\n\n'
+            yield 'data: {"choices": [{"delta": {}, "finish_reason": "stop"}]}\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            response_stream(), "model", "resp_sse"
+        ):
+            events.append(event)
+
+        # Each SSE event must have exactly one data: line (the JSON payload
+        # cannot contain raw newlines that would split the SSE frame).
+        for event in events:
+            lines = event.strip().split("\n")
+            data_lines = [l for l in lines if l.startswith("data: ")]
+            assert len(data_lines) == 1, f"SSE event has {len(data_lines)} data lines: {event}"
+        # The content should appear (JSON-escaped) in the text delta
+        joined = "".join(events)
+        assert "Hello" in joined
+
+
+class TestSecurityMetadataInjection:
+    """Verify metadata @boost_ params cannot overwrite standard body fields."""
+
+    def test_metadata_cannot_overwrite_model(self):
+        body = {
+            "model": "safe-model",
+            "input": "hi",
+            "metadata": {"@boost_workflow": "test"},
+        }
+        openai_body = responses_compat._build_openai_body(body)
+        assert openai_body["model"] == "safe-model"
+        assert openai_body["@boost_workflow"] == "test"
+
+    def test_metadata_non_boost_keys_ignored(self):
+        body = {
+            "model": "test",
+            "input": "hi",
+            "metadata": {
+                "user_id": "attacker",
+                "model": "evil-model",
+                "@boost_pad_size": 10,
+            },
+        }
+        openai_body = responses_compat._build_openai_body(body)
+        assert "user_id" not in openai_body
+        assert openai_body["model"] == "test"
+        assert openai_body["@boost_pad_size"] == 10

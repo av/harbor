@@ -7288,5 +7288,254 @@ class TestExtractBoostParams:
         assert not any(k.startswith("@boost_") for k in openai_body)
 
 
+# ---------------------------------------------------------------------------
+# Security tests
+# ---------------------------------------------------------------------------
+
+
+class TestSecurityInfoLeakage:
+    """Verify that error messages do not leak internal details."""
+
+    def test_value_error_does_not_leak_raw_message(self):
+        """ValueError from mapper should return generic error, not the raw message."""
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+        ):
+            mock_mapper.list_downstream = AsyncMock()
+            mock_mapper.resolve_request_config = MagicMock(
+                side_effect=ValueError("Backend http://internal:8080/v1 connection refused")
+            )
+
+            client = _make_client()
+            resp = client.post("/v1/messages", json=_ANTHRO_BODY)
+
+        assert resp.status_code == 400
+        body = resp.json()
+        # Must not contain the internal URL
+        assert "internal:8080" not in json.dumps(body)
+        assert "connection refused" not in body["error"]["message"].lower()
+        # Should contain generic message
+        assert "could not resolve" in body["error"]["message"].lower()
+
+    def test_http_500_does_not_leak_detail(self):
+        """HTTPException with 500 status should not expose its detail to clients."""
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+        ):
+            mock_mapper.list_downstream = AsyncMock(
+                side_effect=HTTPException(status_code=500, detail="Database at db.internal:5432 is down")
+            )
+
+            client = _make_client()
+            resp = client.post("/v1/messages", json=_ANTHRO_BODY)
+
+        assert resp.status_code == 500
+        body = resp.json()
+        assert "db.internal" not in json.dumps(body)
+        assert body["error"]["message"] == "Internal server error"
+
+    def test_http_404_preserves_detail(self):
+        """HTTPException with 4xx status can safely expose its detail."""
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+        ):
+            mock_mapper.list_downstream = AsyncMock()
+            mock_mapper.resolve_request_config = MagicMock(
+                side_effect=HTTPException(status_code=404, detail="Model 'bad-model' not found")
+            )
+
+            client = _make_client()
+            resp = client.post("/v1/messages", json=_ANTHRO_BODY)
+
+        assert resp.status_code == 404
+        body = resp.json()
+        assert "bad-model" in body["error"]["message"]
+
+    def test_generic_exception_does_not_leak(self):
+        """Unexpected exceptions should return generic 500, not stack traces."""
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+        ):
+            mock_mapper.list_downstream = AsyncMock(
+                side_effect=RuntimeError("segfault in /usr/lib/libcuda.so at 0xdeadbeef")
+            )
+
+            client = _make_client()
+            resp = client.post("/v1/messages", json=_ANTHRO_BODY)
+
+        assert resp.status_code == 500
+        body = resp.json()
+        assert "segfault" not in json.dumps(body)
+        assert "libcuda" not in json.dumps(body)
+        assert body["error"]["message"] == "Internal server error"
+
+    @pytest.mark.asyncio
+    async def test_mid_stream_error_does_not_leak_internals(self):
+        """Mid-stream errors must use generic text, not raw exception."""
+        async def response_stream():
+            yield 'data: {"choices": [{"delta": {"content": "ok"}}]}\n\n'
+            raise ConnectionError("Connection to http://secret-backend:9999/v1 refused")
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "test-model")
+        ]
+        joined = "".join(events)
+        assert "secret-backend" not in joined
+        assert "9999" not in joined
+        assert "internal error" in joined.lower()
+
+
+class TestSecuritySSEInjection:
+    """Verify SSE events cannot be injected via crafted content."""
+
+    @pytest.mark.asyncio
+    async def test_content_with_sse_newlines_is_escaped(self):
+        """Content containing SSE-significant characters should be JSON-escaped
+        so each SSE event has a single data: line (no raw newlines splitting it)."""
+        malicious_content = 'Hello\n\nevent: malicious\ndata: {"injected": true}\n\n'
+        async def response_stream():
+            yield f'data: {{"choices": [{{"delta": {{"content": {json.dumps(malicious_content)}}}}}]}}\n\n'
+            yield 'data: {"choices": [{"delta": {}, "finish_reason": "stop"}]}\n\n'
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "test-model")
+        ]
+        # Each SSE event must have exactly one data: line
+        for event in events:
+            lines = event.strip().split("\n")
+            data_lines = [l for l in lines if l.startswith("data: ")]
+            assert len(data_lines) == 1, f"SSE event has {len(data_lines)} data lines: {event}"
+        # Content should still be present (JSON-escaped)
+        joined = "".join(events)
+        assert "Hello" in joined
+
+    def test_model_name_in_response_is_not_interpreted(self):
+        """Model name with special chars should not break SSE when used in sse_event."""
+        from compat_utils import sse_event
+        result = anthropic_compat._build_anthropic_response(
+            {
+                "choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}],
+                "usage": {"prompt_tokens": 1, "completion_tokens": 1},
+            },
+            'model\n\nevent: hack\ndata: {"x":1}',
+        )
+        # When emitted as an SSE event, the JSON-encoded data must not contain
+        # raw newlines that could be interpreted as SSE boundaries.
+        sse_output = sse_event("message_start", {"type": "message_start", "message": result})
+        # SSE format: "event: ...\ndata: ...\n\n"
+        # The data line must be a single line (no raw newlines splitting it).
+        # This is the key security property: each SSE event has exactly one
+        # data: line, so injected newlines in fields cannot create fake events.
+        lines = sse_output.split("\n")
+        data_lines = [l for l in lines if l.startswith("data: ")]
+        assert len(data_lines) == 1
+
+
+class TestSecurityMetadataInjection:
+    """Verify metadata @boost_ params cannot overwrite standard body fields."""
+
+    def test_metadata_cannot_overwrite_model(self):
+        """@boost_ keys from metadata cannot overwrite the 'model' key."""
+        body = {
+            "model": "safe-model",
+            "max_tokens": 100,
+            "messages": [{"role": "user", "content": "hi"}],
+            "metadata": {"@boost_workflow": "test"},
+        }
+        openai_body = anthropic_compat._build_openai_body(body)
+        # model should be the original, not overwritten
+        assert openai_body["model"] == "safe-model"
+        # @boost_ params are present
+        assert openai_body["@boost_workflow"] == "test"
+
+    def test_metadata_non_boost_keys_ignored(self):
+        """Only @boost_ keys are extracted; other metadata keys stay out."""
+        body = {
+            "model": "test",
+            "max_tokens": 100,
+            "messages": [{"role": "user", "content": "hi"}],
+            "metadata": {
+                "user_id": "attacker",
+                "model": "evil-model",
+                "messages": "injected",
+                "@boost_pad_size": 10,
+            },
+        }
+        openai_body = anthropic_compat._build_openai_body(body)
+        # Non-@boost_ keys must not appear in body
+        assert "user_id" not in openai_body
+        assert openai_body["model"] == "test"
+        # Only @boost_ key forwarded
+        assert openai_body["@boost_pad_size"] == 10
+
+
+class TestSecurityAuthBypass:
+    """Verify auth cannot be bypassed with crafted headers."""
+
+    @pytest.mark.asyncio
+    async def test_bearer_case_insensitive(self):
+        """Auth should work regardless of Bearer prefix casing."""
+        from auth import get_api_key
+        import config as _cfg
+
+        _cfg.BOOST_AUTH = ["sk-test-key"]
+
+        # Standard casing
+        result = await get_api_key("Bearer sk-test-key", None)
+        assert result == "sk-test-key"
+
+        # Lowercase
+        result = await get_api_key("bearer sk-test-key", None)
+        assert result == "sk-test-key"
+
+        # Mixed case
+        result = await get_api_key("BEARER sk-test-key", None)
+        assert result == "sk-test-key"
+
+        _cfg.BOOST_AUTH = []
+
+    @pytest.mark.asyncio
+    async def test_auth_rejects_wrong_key(self):
+        """Auth must reject invalid keys even with correct prefix."""
+        from auth import get_api_key
+        import config as _cfg
+
+        _cfg.BOOST_AUTH = ["sk-correct"]
+
+        with pytest.raises(HTTPException) as exc_info:
+            await get_api_key("Bearer sk-wrong", None)
+        assert exc_info.value.status_code == 401
+
+        _cfg.BOOST_AUTH = []
+
+
+class TestSecurityTokenCounting:
+    """Verify token counting handles adversarial inputs safely."""
+
+    def test_huge_message_does_not_crash(self):
+        """Very large messages should be counted without exceptions."""
+        from token_counter import count_messages_tokens
+        # 1MB of text
+        huge_text = "A" * (1024 * 1024)
+        messages = [{"role": "user", "content": huge_text}]
+        result = count_messages_tokens(messages)
+        assert isinstance(result, int)
+        assert result > 0
+
+    def test_deeply_nested_tool_params(self):
+        """Deeply nested JSON schema in tools should not cause issues."""
+        from token_counter import count_messages_tokens
+        # Build deeply nested schema
+        schema = {"type": "object", "properties": {"a": {"type": "string"}}}
+        for _ in range(50):
+            schema = {"type": "object", "properties": {"nested": schema}}
+        tools = [{"function": {"name": "deep", "parameters": schema}}]
+        messages = [{"role": "user", "content": "test"}]
+        result = count_messages_tokens(messages, tools)
+        assert isinstance(result, int)
+
+
 if __name__ == "__main__":
     unittest.main()
