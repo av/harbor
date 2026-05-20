@@ -253,6 +253,7 @@ class LLM(AsyncEventEmitter):
 
       if mod is None:
         logger.error(f"Module '{self.module}' not found.")
+        await self.emit_done()
         return
 
       logger.debug(f"Applying '{self.module}' to '{self.model}'")
@@ -267,19 +268,40 @@ class LLM(AsyncEventEmitter):
       logger.debug(f"'{self.module}' application complete for '{self.model}'")
       await self.emit_done()
 
-    asyncio.create_task(apply_mod())
+    task = asyncio.create_task(apply_mod())
+    # Log unhandled exceptions from the background task so they are not
+    # silently swallowed.  Also ensure the consumer is unblocked by
+    # putting a None sentinel into the queue.
+    def _on_task_done(t):
+      exc = t.exception() if not t.cancelled() else None
+      if exc:
+        logger.error("apply_mod task failed: %s", exc, exc_info=exc)
+        # Unblock the consumer waiting on queue.get() — emit_done()
+        # is async and this is a sync callback, so use put_nowait.
+        try:
+          self.queue.put_nowait(None)
+        except Exception:
+          pass
+
+    task.add_done_callback(_on_task_done)
     return self.response_stream()
 
   async def generator(self):
     self.is_streaming = True
 
-    while self.is_streaming or not self.queue.empty():
-      chunk = await self.queue.get()
+    try:
+      while self.is_streaming or not self.queue.empty():
+        chunk = await self.queue.get()
 
-      if chunk is None:
-        break
+        if chunk is None:
+          break
 
-      yield chunk
+        yield chunk
+    finally:
+      # Mark streaming as done so the background task (apply_mod)
+      # knows the consumer is gone — prevents writing to a dead queue
+      # after a client disconnect triggers GeneratorExit.
+      self.is_streaming = False
 
   async def response_stream(self):
     async for chunk in self.generator():
