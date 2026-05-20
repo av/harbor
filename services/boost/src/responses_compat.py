@@ -342,6 +342,21 @@ def _convert_tool_choice(body: dict):
   return None
 
 
+def _extract_boost_params(body: dict):
+  """Extract ``@boost_``-prefixed params from Responses API ``metadata``.
+
+  Responses API requests carry an optional ``metadata`` dict.  Any key
+  inside it that starts with ``@boost_`` is forwarded into the OpenAI body
+  so it reaches ``LLM.split_params()`` and becomes available as a boost
+  param (e.g. ``@boost_workflow``, ``@boost_pad_size``).
+  """
+  metadata = body.get("metadata")
+  if not metadata or not isinstance(metadata, dict):
+    return {}
+
+  return {k: v for k, v in metadata.items() if k.startswith("@boost_")}
+
+
 def _build_openai_body(body: dict):
   """Build a Chat Completions request body from a Responses API request."""
   openai_body = {
@@ -419,6 +434,9 @@ def _build_openai_body(body: dict):
   # parallel_tool_calls: direct passthrough (OpenAI Chat Completions param)
   if "parallel_tool_calls" in body:
     openai_body["parallel_tool_calls"] = body["parallel_tool_calls"]
+
+  # Forward @boost_ params from metadata into the body for LLM.split_params()
+  openai_body.update(_extract_boost_params(body))
 
   return openai_body
 

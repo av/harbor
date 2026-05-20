@@ -10,6 +10,10 @@ from middleware.request_state import RequestStateMiddleware
 
 from config import MODEL_FILTER, SERVE_BASE_MODELS
 from auth import get_api_key
+from compat_utils import (
+    ANTHROPIC_VERSION,
+    ANTHROPIC_VERSION_HEADER,
+)
 from log import setup_logger
 
 import selection
@@ -72,6 +76,7 @@ async def _http_exception_handler(request: Request, exc: HTTPException):
         "type": "error",
         "error": {"type": error_type, "message": str(exc.detail)},
       },
+      headers={ANTHROPIC_VERSION_HEADER: ANTHROPIC_VERSION},
     )
 
   if path.startswith("/v1/responses"):
@@ -86,6 +91,18 @@ async def _http_exception_handler(request: Request, exc: HTTPException):
           "code": None,
         },
       },
+    )
+
+  # Anthropic SDK hitting /v1/models with bad auth — detect via headers
+  if _is_anthropic_client(request):
+    error_type = _ANTHROPIC_ERROR_TYPE_MAP.get(exc.status_code, "api_error")
+    return JSONResponse(
+      status_code=exc.status_code,
+      content={
+        "type": "error",
+        "error": {"type": error_type, "message": str(exc.detail)},
+      },
+      headers={ANTHROPIC_VERSION_HEADER: ANTHROPIC_VERSION},
     )
 
   # Default FastAPI behavior for other paths
@@ -219,11 +236,30 @@ async def _list_models():
   return final
 
 
+def _anthropic_model_headers():
+  """Standard headers for Anthropic-format model responses."""
+  return {ANTHROPIC_VERSION_HEADER: ANTHROPIC_VERSION}
+
+
 @app.get("/v1/models/{model_id:path}")
 async def get_boost_model_by_id(
   model_id: str, request: Request, api_key: str = Depends(get_api_key)
 ):
-  models = await _list_models()
+  try:
+    models = await _list_models()
+  except Exception as e:
+    logger.error(f"Failed to list models: {e}", exc_info=True)
+    if _is_anthropic_client(request):
+      return JSONResponse(
+        status_code=500,
+        content={
+          "type": "error",
+          "error": {"type": "api_error", "message": "Failed to list models"},
+        },
+        headers=_anthropic_model_headers(),
+      )
+    raise HTTPException(status_code=500, detail="Failed to list models")
+
   match = next((m for m in models if m.get("id") == model_id), None)
 
   if match is None:
@@ -237,18 +273,36 @@ async def get_boost_model_by_id(
             "message": f"Model not found: {model_id}",
           },
         },
+        headers=_anthropic_model_headers(),
       )
     raise HTTPException(status_code=404, detail=f"Model not found: {model_id}")
 
   if _is_anthropic_client(request):
-    return JSONResponse(content=_to_anthropic_model(match), status_code=200)
+    return JSONResponse(
+      content=_to_anthropic_model(match),
+      status_code=200,
+      headers=_anthropic_model_headers(),
+    )
 
   return JSONResponse(content=match, status_code=200)
 
 
 @app.get("/v1/models")
 async def get_boost_models(request: Request, api_key: str = Depends(get_api_key)):
-  final = await _list_models()
+  try:
+    final = await _list_models()
+  except Exception as e:
+    logger.error(f"Failed to list models: {e}", exc_info=True)
+    if _is_anthropic_client(request):
+      return JSONResponse(
+        status_code=500,
+        content={
+          "type": "error",
+          "error": {"type": "api_error", "message": "Failed to list models"},
+        },
+        headers=_anthropic_model_headers(),
+      )
+    raise HTTPException(status_code=500, detail="Failed to list models")
 
   if _is_anthropic_client(request):
     anthropic_data = [_to_anthropic_model(m) for m in final]
@@ -260,7 +314,9 @@ async def get_boost_models(request: Request, api_key: str = Depends(get_api_key)
         'has_more': False,
         'first_id': first_id,
         'last_id': last_id,
-      }, status_code=200
+      },
+      status_code=200,
+      headers=_anthropic_model_headers(),
     )
 
   return JSONResponse(

@@ -6430,3 +6430,72 @@ class TestMultiTurnConversations:
         assert openai_body["messages"][3]["role"] == "tool"
         assert openai_body["messages"][4] == {"role": "user", "content": "Tell me more"}
         assert len(openai_body["tools"]) == 1
+
+
+# ---------------------------------------------------------------------------
+# Boost params via metadata
+# ---------------------------------------------------------------------------
+
+class TestExtractBoostParams:
+    """Verify @boost_ params are extracted from Responses API metadata."""
+
+    def test_no_metadata(self):
+        body = {"model": "test", "input": "hi"}
+        assert responses_compat._extract_boost_params(body) == {}
+
+    def test_metadata_without_boost_keys(self):
+        body = {
+            "model": "test",
+            "input": "hi",
+            "metadata": {"user_id": "u123"},
+        }
+        assert responses_compat._extract_boost_params(body) == {}
+
+    def test_metadata_with_boost_workflow(self):
+        body = {
+            "model": "test",
+            "input": "hi",
+            "metadata": {"@boost_workflow": "research=tools,final"},
+        }
+        result = responses_compat._extract_boost_params(body)
+        assert result == {"@boost_workflow": "research=tools,final"}
+
+    def test_metadata_with_multiple_boost_keys(self):
+        body = {
+            "model": "test",
+            "input": "hi",
+            "metadata": {
+                "user_id": "u123",
+                "@boost_workflow": "my_wf",
+                "@boost_pad_size": "256",
+                "other_key": "ignored",
+            },
+        }
+        result = responses_compat._extract_boost_params(body)
+        assert result == {
+            "@boost_workflow": "my_wf",
+            "@boost_pad_size": "256",
+        }
+
+    def test_metadata_not_dict(self):
+        body = {"model": "test", "input": "hi", "metadata": "string"}
+        assert responses_compat._extract_boost_params(body) == {}
+
+    def test_boost_params_in_build_openai_body(self):
+        """Verify @boost_ keys from metadata appear in the final OpenAI body."""
+        body = {
+            "model": "test-model",
+            "input": "hi",
+            "metadata": {
+                "user_id": "u123",
+                "@boost_workflow": "research=tools,final",
+            },
+        }
+        openai_body = responses_compat._build_openai_body(body)
+        assert openai_body["@boost_workflow"] == "research=tools,final"
+        assert "user_id" not in openai_body
+
+    def test_boost_params_absent_when_no_metadata(self):
+        body = {"model": "test-model", "input": "hi"}
+        openai_body = responses_compat._build_openai_body(body)
+        assert not any(k.startswith("@boost_") for k in openai_body)

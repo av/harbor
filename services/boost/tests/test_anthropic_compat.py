@@ -7021,5 +7021,86 @@ class TestMultiTurnConversations:
         assert msgs[2]["content"] == "56088"
 
 
+# ---------------------------------------------------------------------------
+# Boost params via metadata
+# ---------------------------------------------------------------------------
+
+class TestExtractBoostParams:
+    """Verify @boost_ params are extracted from Anthropic metadata."""
+
+    def test_no_metadata(self):
+        body = {"model": "test", "messages": [{"role": "user", "content": "hi"}]}
+        assert anthropic_compat._extract_boost_params(body) == {}
+
+    def test_metadata_without_boost_keys(self):
+        body = {
+            "model": "test",
+            "messages": [{"role": "user", "content": "hi"}],
+            "metadata": {"user_id": "u123"},
+        }
+        assert anthropic_compat._extract_boost_params(body) == {}
+
+    def test_metadata_with_boost_workflow(self):
+        body = {
+            "model": "test",
+            "messages": [{"role": "user", "content": "hi"}],
+            "metadata": {"@boost_workflow": "research=tools,final"},
+        }
+        result = anthropic_compat._extract_boost_params(body)
+        assert result == {"@boost_workflow": "research=tools,final"}
+
+    def test_metadata_with_multiple_boost_keys(self):
+        body = {
+            "model": "test",
+            "messages": [{"role": "user", "content": "hi"}],
+            "metadata": {
+                "user_id": "u123",
+                "@boost_workflow": "my_wf",
+                "@boost_pad_size": "256",
+                "@boost_cea_rule": "73",
+                "other_key": "ignored",
+            },
+        }
+        result = anthropic_compat._extract_boost_params(body)
+        assert result == {
+            "@boost_workflow": "my_wf",
+            "@boost_pad_size": "256",
+            "@boost_cea_rule": "73",
+        }
+
+    def test_metadata_not_dict(self):
+        body = {
+            "model": "test",
+            "messages": [{"role": "user", "content": "hi"}],
+            "metadata": "not a dict",
+        }
+        assert anthropic_compat._extract_boost_params(body) == {}
+
+    def test_boost_params_in_build_openai_body(self):
+        """Verify @boost_ keys from metadata appear in the final OpenAI body."""
+        body = {
+            "model": "test-model",
+            "max_tokens": 100,
+            "messages": [{"role": "user", "content": "hi"}],
+            "metadata": {
+                "user_id": "u123",
+                "@boost_workflow": "research=tools,final",
+            },
+        }
+        openai_body = anthropic_compat._build_openai_body(body)
+        assert openai_body["@boost_workflow"] == "research=tools,final"
+        # Non-boost metadata keys should NOT appear
+        assert "user_id" not in openai_body
+
+    def test_boost_params_absent_when_no_metadata(self):
+        body = {
+            "model": "test-model",
+            "max_tokens": 100,
+            "messages": [{"role": "user", "content": "hi"}],
+        }
+        openai_body = anthropic_compat._build_openai_body(body)
+        assert not any(k.startswith("@boost_") for k in openai_body)
+
+
 if __name__ == "__main__":
     unittest.main()

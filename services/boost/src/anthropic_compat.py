@@ -374,6 +374,21 @@ def _convert_tool_choice(body: dict):
   return None
 
 
+def _extract_boost_params(body: dict):
+  """Extract ``@boost_``-prefixed params from Anthropic ``metadata``.
+
+  Anthropic requests carry an optional ``metadata`` dict.  Any key inside
+  it that starts with ``@boost_`` is forwarded into the OpenAI body so it
+  reaches ``LLM.split_params()`` and becomes available as a boost param
+  (e.g. ``@boost_workflow``, ``@boost_pad_size``).
+  """
+  metadata = body.get("metadata")
+  if not metadata or not isinstance(metadata, dict):
+    return {}
+
+  return {k: v for k, v in metadata.items() if k.startswith("@boost_")}
+
+
 def _build_openai_body(body: dict):
   openai_body = {
     "model": body["model"],
@@ -393,6 +408,9 @@ def _build_openai_body(body: dict):
   tc = body.get("tool_choice")
   if isinstance(tc, dict) and tc.get("disable_parallel_tool_use"):
     openai_body["parallel_tool_calls"] = False
+
+  # Forward @boost_ params from metadata into the body for LLM.split_params()
+  openai_body.update(_extract_boost_params(body))
 
   return openai_body
 
