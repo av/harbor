@@ -1022,19 +1022,20 @@ async def _responses_stream_converter(
             tc_index = tc.get("index", 0)
             tool_state = tool_blocks.setdefault(
               tc_index,
-              {"arguments": "", "emitted": False},
+              {"arg_parts": [], "emitted": False},
             )
 
             tc_id = tc.get("id")
-            tc_name = dotty.get(tc, "function.name")
-            tc_args = dotty.get(tc, "function.arguments", "")
+            tc_func = tc.get("function") or {}
+            tc_name = tc_func.get("name")
+            tc_args = tc_func.get("arguments") or ""
 
             if tc_id:
               tool_state["id"] = _to_openai_tool_id(tc_id)
             if tc_name:
               tool_state["name"] = tc_name
             if tc_args:
-              tool_state["arguments"] += tc_args
+              tool_state["arg_parts"].append(tc_args)
 
             if not tool_state.get("emitted") and tool_state.get("id"):
               # Close open items before emitting tool call
@@ -1068,12 +1069,12 @@ async def _responses_stream_converter(
               seq += 1
 
               # Emit accumulated args so far
-              if tool_state.get("arguments"):
+              if tool_state["arg_parts"]:
                 yield _sse_event("response.function_call_arguments.delta", {
                   "type": "response.function_call_arguments.delta",
                   "item_id": call_id,
                   "output_index": output_index,
-                  "delta": tool_state["arguments"],
+                  "delta": "".join(tool_state["arg_parts"]),
                   "sequence_number": seq,
                 })
                 seq += 1
@@ -1221,12 +1222,12 @@ async def _responses_stream_converter(
           "sequence_number": seq,
         })
         seq += 1
-        if tool_state.get("arguments"):
+        if tool_state["arg_parts"]:
           yield _sse_event("response.function_call_arguments.delta", {
             "type": "response.function_call_arguments.delta",
             "item_id": call_id,
             "output_index": output_index,
-            "delta": tool_state["arguments"],
+            "delta": "".join(tool_state["arg_parts"]),
             "sequence_number": seq,
           })
           seq += 1
@@ -1234,7 +1235,7 @@ async def _responses_stream_converter(
 
     if tool_state.get("emitted"):
       call_id = tool_state.get("id")
-      tool_args = tool_state.get("arguments", "")
+      tool_args = "".join(tool_state.get("arg_parts", []))
 
       # function_call_arguments.done
       yield _sse_event("response.function_call_arguments.done", {
