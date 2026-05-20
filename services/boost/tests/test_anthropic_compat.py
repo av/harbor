@@ -3523,6 +3523,68 @@ class TestConvertParamsExistingParams:
 
 
 # ---------------------------------------------------------------------------
+# max_tokens / max_completion_tokens handling
+# ---------------------------------------------------------------------------
+
+
+class TestMaxTokensHandling:
+    """Verify max_tokens mapping from Anthropic to OpenAI format."""
+
+    def test_max_tokens_maps_to_openai_max_tokens(self):
+        """Standard max_tokens should map to OpenAI max_tokens (widely supported)."""
+        body = {"max_tokens": 1024}
+        params = anthropic_compat._convert_params(body)
+        assert params["max_tokens"] == 1024
+        assert "max_completion_tokens" not in params
+
+    def test_max_tokens_in_full_body(self):
+        """max_tokens flows through _build_openai_body correctly."""
+        body = {
+            "model": "claude-3-opus",
+            "max_tokens": 2048,
+            "messages": [{"role": "user", "content": "hi"}],
+        }
+        openai_body = anthropic_compat._build_openai_body(body)
+        assert openai_body["max_tokens"] == 2048
+        assert "max_completion_tokens" not in openai_body
+
+    def test_thinking_uses_max_completion_tokens(self):
+        """When thinking is enabled, max_completion_tokens is used instead."""
+        body = {
+            "max_tokens": 1024,
+            "thinking": {"type": "enabled", "budget_tokens": 4096},
+        }
+        params = anthropic_compat._convert_params(body)
+        assert "max_tokens" not in params
+        assert params["max_completion_tokens"] == 5120  # 4096 + 1024
+
+    def test_thinking_max_completion_tokens_in_full_body(self):
+        """Thinking path flows through _build_openai_body correctly."""
+        body = {
+            "model": "claude-3-opus",
+            "max_tokens": 512,
+            "thinking": {"type": "enabled", "budget_tokens": 2048},
+            "messages": [{"role": "user", "content": "hi"}],
+        }
+        openai_body = anthropic_compat._build_openai_body(body)
+        assert "max_tokens" not in openai_body
+        assert openai_body["max_completion_tokens"] == 2560
+
+    def test_max_tokens_with_temperature_zero(self):
+        """max_tokens and temperature=0 together are correctly forwarded."""
+        body = {"max_tokens": 256, "temperature": 0}
+        params = anthropic_compat._convert_params(body)
+        assert params["max_tokens"] == 256
+        assert params["temperature"] == 0
+
+    def test_max_tokens_not_set_when_zero(self):
+        """max_tokens=0 is not a valid Anthropic value; should not be forwarded."""
+        body = {"max_tokens": 0}
+        params = anthropic_compat._convert_params(body)
+        assert "max_tokens" not in params
+
+
+# ---------------------------------------------------------------------------
 # Tool ID Normalization
 # ---------------------------------------------------------------------------
 

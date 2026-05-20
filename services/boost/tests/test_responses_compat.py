@@ -4910,3 +4910,52 @@ class TestOutputIndexTracking:
         assert len(error_deltas) == 1
         assert error_deltas[0]["output_index"] == 1
         assert error_deltas[0]["content_index"] == 0
+
+
+# ---------------------------------------------------------------------------
+# max_output_tokens and temperature edge cases
+# ---------------------------------------------------------------------------
+
+class TestResponsesParamEdgeCases:
+    """Verify max_output_tokens and temperature edge cases in _build_openai_body."""
+
+    def test_temperature_zero_is_forwarded(self):
+        """temperature=0 is valid and must not be dropped due to falsy check."""
+        body = {"model": "gpt-4o", "input": "hi", "temperature": 0}
+        result = responses_compat._build_openai_body(body)
+        assert "temperature" in result
+        assert result["temperature"] == 0
+
+    def test_temperature_zero_in_full_body(self):
+        """temperature=0 alongside other params."""
+        body = {"model": "gpt-4o", "input": "hi", "temperature": 0, "top_p": 1.0, "max_output_tokens": 100}
+        result = responses_compat._build_openai_body(body)
+        assert result["temperature"] == 0
+        assert result["top_p"] == 1.0
+        assert result["max_tokens"] == 100
+
+    def test_top_p_zero_is_forwarded(self):
+        """top_p=0 is valid and must not be dropped due to falsy check."""
+        body = {"model": "gpt-4o", "input": "hi", "top_p": 0}
+        result = responses_compat._build_openai_body(body)
+        assert "top_p" in result
+        assert result["top_p"] == 0
+
+    def test_max_output_tokens_maps_to_max_tokens(self):
+        """max_output_tokens should map to max_tokens for backend compatibility."""
+        body = {"model": "gpt-4o", "input": "hi", "max_output_tokens": 4096}
+        result = responses_compat._build_openai_body(body)
+        assert result["max_tokens"] == 4096
+        assert "max_output_tokens" not in result
+
+    def test_no_max_output_tokens_omits_max_tokens(self):
+        """When max_output_tokens is absent, max_tokens should not be set."""
+        body = {"model": "gpt-4o", "input": "hi"}
+        result = responses_compat._build_openai_body(body)
+        assert "max_tokens" not in result
+
+    def test_temperature_absent_is_not_included(self):
+        """When temperature is absent, it should not appear in output."""
+        body = {"model": "gpt-4o", "input": "hi"}
+        result = responses_compat._build_openai_body(body)
+        assert "temperature" not in result
