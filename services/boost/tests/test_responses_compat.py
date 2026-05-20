@@ -1314,7 +1314,7 @@ class TestResponsesStreamConverter:
             events.append(event)
 
         event_types = [e.split("\n")[0].replace("event: ", "") for e in events]
-        assert "response.completed" in event_types
+        assert "response.failed" in event_types
 
         # Should have error text in a delta
         error_deltas = [e for e in events if "Stream error" in e]
@@ -2445,15 +2445,15 @@ class TestStreamingEdgeCases:
         event_types = [t for t, _ in parsed]
 
         assert event_types[0] == "response.created"
-        assert event_types[-1] == "response.completed"
+        assert event_types[-1] == "response.failed"
         # Should have error text in delta
         error_deltas = [d for t, d in parsed if t == "response.output_text.delta"]
         assert len(error_deltas) == 1
         assert "connection refused" in error_deltas[0]["delta"]
 
-        # The completed event should have failed status
-        completed = [d for t, d in parsed if t == "response.completed"]
-        assert completed[0]["response"]["status"] == "failed"
+        # The failed event should have failed status
+        failed = [d for t, d in parsed if t == "response.failed"]
+        assert failed[0]["response"]["status"] == "failed"
 
     @pytest.mark.asyncio
     async def test_mid_stream_error_with_prior_text(self):
@@ -2483,9 +2483,9 @@ class TestStreamingEdgeCases:
         assert "partial" in text_done[0]["text"]
         assert "timeout" in text_done[0]["text"]
 
-        # Completed with failed status
-        completed = [d for t, d in parsed if t == "response.completed"]
-        assert completed[0]["response"]["status"] == "failed"
+        # Failed terminal event with failed status
+        failed = [d for t, d in parsed if t == "response.failed"]
+        assert failed[0]["response"]["status"] == "failed"
 
     @pytest.mark.asyncio
     async def test_empty_tool_calls_array_in_chunk(self):
@@ -3160,9 +3160,9 @@ class TestReasoningStreaming:
         assert len(error_deltas) == 1
         assert "connection lost" in error_deltas[0]["delta"]
 
-        # Completed with failed status
-        completed = [d for t, d in parsed if t == "response.completed"]
-        assert completed[0]["response"]["status"] == "failed"
+        # Failed terminal event with failed status
+        failed = [d for t, d in parsed if t == "response.failed"]
+        assert failed[0]["response"]["status"] == "failed"
 
 
 # ---------------------------------------------------------------------------
@@ -3411,11 +3411,11 @@ class TestTruncationParameter:
     """Verify truncation parameter is accepted and handled correctly."""
 
     def test_truncation_auto_accepted_in_build_body(self):
-        """truncation: {type: auto} should not cause an error."""
+        """truncation: 'auto' should not cause an error."""
         body = {
             "model": "gpt-4o",
             "input": "hi",
-            "truncation": {"type": "auto"},
+            "truncation": "auto",
         }
         result = responses_compat._build_openai_body(body)
         assert result["model"] == "gpt-4o"
@@ -3423,11 +3423,11 @@ class TestTruncationParameter:
         assert "truncation" not in result
 
     def test_truncation_disabled_accepted(self):
-        """truncation: {type: disabled} should be silently accepted."""
+        """truncation: 'disabled' should be silently accepted."""
         body = {
             "model": "gpt-4o",
             "input": "hi",
-            "truncation": {"type": "disabled"},
+            "truncation": "disabled",
         }
         result = responses_compat._build_openai_body(body)
         assert "truncation" not in result
@@ -3443,7 +3443,7 @@ class TestTruncationParameter:
         body = {
             "model": "gpt-4o",
             "input": "hi",
-            "truncation": {"type": "auto"},
+            "truncation": "auto",
         }
         with patch.object(responses_compat.logger, "warning") as mock_warn:
             responses_compat._build_openai_body(body)
@@ -3455,7 +3455,7 @@ class TestTruncationParameter:
         body = {
             "model": "gpt-4o",
             "input": "hi",
-            "truncation": {"type": "disabled"},
+            "truncation": "disabled",
         }
         with patch.object(responses_compat.logger, "warning") as mock_warn:
             responses_compat._build_openai_body(body)
@@ -3478,7 +3478,7 @@ class TestTruncationParameter:
             "choices": [{"index": 0, "message": {"role": "assistant", "content": "hi"}, "finish_reason": "stop"}],
             "usage": {"prompt_tokens": 5, "completion_tokens": 1, "total_tokens": 6},
         }
-        request_body = {"truncation": {"type": "auto"}}
+        request_body = {"truncation": "auto"}
         resp = responses_compat._build_responses_response(
             openai_result, "gpt-4o", "resp_test", request_body=request_body
         )
@@ -3684,7 +3684,7 @@ class TestStoreMetadataTruncationIntegration:
         resp = self.client.post("/v1/responses", json={
             "model": "gpt-4o",
             "input": "hi",
-            "truncation": {"type": "auto"},
+            "truncation": "auto",
         })
         assert resp.status_code == 200
         body = resp.json()
@@ -3737,7 +3737,7 @@ class TestStoreMetadataTruncationIntegration:
             "input": "hi",
             "store": True,
             "metadata": {"env": "test"},
-            "truncation": {"type": "auto"},
+            "truncation": "auto",
         })
         assert resp.status_code == 200
         body = resp.json()
@@ -3796,7 +3796,7 @@ class TestStoreMetadataTruncationIntegration:
         resp = self.client.post("/v1/responses", json={
             "model": "gpt-4o",
             "input": "hi",
-            "truncation": {"type": "auto"},
+            "truncation": "auto",
             "stream": True,
         })
         assert resp.status_code == 200
@@ -5276,9 +5276,9 @@ class TestStreamConverterDeepEdgeCaseAudit:
             events.append(event)
 
         parsed = _parse_sse_events(events)
-        completed = [d for t, d in parsed if t == "response.completed"]
-        assert completed[0]["response"]["status"] == "incomplete"
-        assert completed[0]["response"]["incomplete_details"] == {"reason": "max_output_tokens"}
+        incomplete = [d for t, d in parsed if t == "response.incomplete"]
+        assert incomplete[0]["response"]["status"] == "incomplete"
+        assert incomplete[0]["response"]["incomplete_details"] == {"reason": "max_output_tokens"}
 
     # (e) Reasoning content interleaved with text — transitions correct?
     @pytest.mark.asyncio
@@ -5698,3 +5698,327 @@ class TestStreamConverterDeepEdgeCaseAudit:
 def _json_escape(s):
     """Escape a string for embedding in a JSON string value."""
     return s.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+
+
+# ---------------------------------------------------------------------------
+# JSON Schema / Structured Output (text.format)
+# ---------------------------------------------------------------------------
+
+
+class TestTextFormatConversion:
+    """Verify text.format is converted to response_format in Chat Completions."""
+
+    def test_json_schema_format(self):
+        body = {
+            "model": "gpt-4o",
+            "input": "hi",
+            "text": {
+                "format": {
+                    "type": "json_schema",
+                    "name": "my_schema",
+                    "schema": {"type": "object", "properties": {"x": {"type": "integer"}}},
+                    "strict": True,
+                }
+            },
+        }
+        result = responses_compat._build_openai_body(body)
+        assert result["response_format"]["type"] == "json_schema"
+        assert result["response_format"]["json_schema"]["name"] == "my_schema"
+        assert result["response_format"]["json_schema"]["strict"] is True
+        assert "properties" in result["response_format"]["json_schema"]["schema"]
+
+    def test_json_object_format(self):
+        body = {
+            "model": "gpt-4o",
+            "input": "hi",
+            "text": {"format": {"type": "json_object"}},
+        }
+        result = responses_compat._build_openai_body(body)
+        assert result["response_format"] == {"type": "json_object"}
+
+    def test_text_format_default(self):
+        body = {
+            "model": "gpt-4o",
+            "input": "hi",
+            "text": {"format": {"type": "text"}},
+        }
+        result = responses_compat._build_openai_body(body)
+        assert "response_format" not in result
+
+    def test_no_text_config(self):
+        body = {"model": "gpt-4o", "input": "hi"}
+        result = responses_compat._build_openai_body(body)
+        assert "response_format" not in result
+
+    def test_json_schema_with_description(self):
+        body = {
+            "model": "gpt-4o",
+            "input": "hi",
+            "text": {
+                "format": {
+                    "type": "json_schema",
+                    "name": "test",
+                    "description": "A test schema",
+                    "schema": {"type": "object"},
+                }
+            },
+        }
+        result = responses_compat._build_openai_body(body)
+        assert result["response_format"]["json_schema"]["description"] == "A test schema"
+
+
+# ---------------------------------------------------------------------------
+# Refusal handling
+# ---------------------------------------------------------------------------
+
+
+class TestRefusalHandling:
+    """Verify refusal content is properly handled in both streaming and non-streaming."""
+
+    def test_refusal_in_non_streaming_response(self):
+        openai_result = {
+            "choices": [{
+                "index": 0,
+                "message": {"role": "assistant", "content": None, "refusal": "I cannot help with that."},
+                "finish_reason": "stop",
+            }],
+            "usage": {"prompt_tokens": 5, "completion_tokens": 3, "total_tokens": 8},
+        }
+        resp = responses_compat._build_responses_response(
+            openai_result, "gpt-4o", "resp_ref"
+        )
+        output = resp["output"]
+        assert len(output) == 1
+        assert output[0]["type"] == "message"
+        assert output[0]["content"][0]["type"] == "refusal"
+        assert output[0]["content"][0]["refusal"] == "I cannot help with that."
+
+    def test_refusal_takes_precedence_over_content(self):
+        """When both refusal and content exist, refusal wins."""
+        openai_result = {
+            "choices": [{
+                "index": 0,
+                "message": {"role": "assistant", "content": "hello", "refusal": "No."},
+                "finish_reason": "stop",
+            }],
+            "usage": {"prompt_tokens": 5, "completion_tokens": 1, "total_tokens": 6},
+        }
+        items = responses_compat._build_output_items(openai_result)
+        # Should have refusal, not text
+        msg_items = [i for i in items if i["type"] == "message"]
+        assert msg_items[0]["content"][0]["type"] == "refusal"
+
+    @pytest.mark.asyncio
+    async def test_refusal_streaming(self):
+        """Streaming refusal should emit refusal.delta and refusal.done events."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"refusal":"I cannot"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{"refusal":" do that"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "gpt-4o", "resp_ref_stream"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        event_types = [t for t, _ in parsed]
+
+        assert "response.refusal.delta" in event_types
+        assert "response.refusal.done" in event_types
+
+        refusal_deltas = [d for t, d in parsed if t == "response.refusal.delta"]
+        assert len(refusal_deltas) == 2
+        assert refusal_deltas[0]["delta"] == "I cannot"
+        assert refusal_deltas[1]["delta"] == " do that"
+
+        refusal_done = [d for t, d in parsed if t == "response.refusal.done"]
+        assert len(refusal_done) == 1
+        assert refusal_done[0]["refusal"] == "I cannot do that"
+
+
+# ---------------------------------------------------------------------------
+# Terminal event correctness
+# ---------------------------------------------------------------------------
+
+
+class TestTerminalEvents:
+    """Verify the correct terminal event type is emitted."""
+
+    @pytest.mark.asyncio
+    async def test_completed_terminal_event(self):
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"ok"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "model", "resp_comp"
+        ):
+            events.append(event)
+        parsed = _parse_sse_events(events)
+        assert parsed[-1][0] == "response.completed"
+
+    @pytest.mark.asyncio
+    async def test_incomplete_terminal_event(self):
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"trunca"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"length"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "model", "resp_inc"
+        ):
+            events.append(event)
+        parsed = _parse_sse_events(events)
+        assert parsed[-1][0] == "response.incomplete"
+        assert parsed[-1][1]["response"]["status"] == "incomplete"
+        assert parsed[-1][1]["response"]["incomplete_details"]["reason"] == "max_output_tokens"
+
+    @pytest.mark.asyncio
+    async def test_failed_terminal_event(self):
+        async def mock_stream():
+            raise RuntimeError("oops")
+            yield
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "model", "resp_fail"
+        ):
+            events.append(event)
+        parsed = _parse_sse_events(events)
+        assert parsed[-1][0] == "response.failed"
+        assert parsed[-1][1]["response"]["status"] == "failed"
+
+    @pytest.mark.asyncio
+    async def test_content_filter_is_incomplete(self):
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"hi"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"content_filter"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "model", "resp_cf"
+        ):
+            events.append(event)
+        parsed = _parse_sse_events(events)
+        assert parsed[-1][0] == "response.incomplete"
+        assert parsed[-1][1]["response"]["incomplete_details"]["reason"] == "content_filter"
+
+    def test_content_filter_non_streaming(self):
+        openai_result = {
+            "choices": [{"message": {"content": "partial"}, "finish_reason": "content_filter"}],
+            "usage": {"prompt_tokens": 5, "completion_tokens": 3, "total_tokens": 8},
+        }
+        resp = responses_compat._build_responses_response(
+            openai_result, "gpt-4o", "resp_cf_ns"
+        )
+        assert resp["status"] == "incomplete"
+        assert resp["incomplete_details"]["reason"] == "content_filter"
+
+
+# ---------------------------------------------------------------------------
+# User param passthrough
+# ---------------------------------------------------------------------------
+
+
+class TestUserParamPassthrough:
+    def test_user_passed_to_openai_body(self):
+        body = {"model": "gpt-4o", "input": "hi", "user": "usr_abc123"}
+        result = responses_compat._build_openai_body(body)
+        assert result["user"] == "usr_abc123"
+
+    def test_user_absent(self):
+        body = {"model": "gpt-4o", "input": "hi"}
+        result = responses_compat._build_openai_body(body)
+        assert "user" not in result
+
+
+# ---------------------------------------------------------------------------
+# Instructions echo in response
+# ---------------------------------------------------------------------------
+
+
+class TestInstructionsEcho:
+    def test_instructions_echoed_in_non_streaming(self):
+        openai_result = {
+            "choices": [{"message": {"content": "hi"}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 5, "completion_tokens": 1, "total_tokens": 6},
+        }
+        resp = responses_compat._build_responses_response(
+            openai_result, "gpt-4o", "resp_test",
+            request_body={"instructions": "Be helpful."}
+        )
+        assert resp["instructions"] == "Be helpful."
+
+    def test_instructions_none_by_default(self):
+        openai_result = {
+            "choices": [{"message": {"content": "hi"}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 5, "completion_tokens": 1, "total_tokens": 6},
+        }
+        resp = responses_compat._build_responses_response(
+            openai_result, "gpt-4o", "resp_test"
+        )
+        assert resp["instructions"] is None
+
+    @pytest.mark.asyncio
+    async def test_instructions_in_streaming_skeleton(self):
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"hi"},"index":0}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "gpt-4o", "resp_inst",
+            request_body={"instructions": "You are a bot."}
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        created = [d for t, d in parsed if t == "response.created"]
+        assert created[0]["response"]["instructions"] == "You are a bot."
+
+    @pytest.mark.asyncio
+    async def test_instructions_none_in_streaming_without_body(self):
+        async def mock_stream():
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "gpt-4o", "resp_inst2"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        created = [d for t, d in parsed if t == "response.created"]
+        assert created[0]["response"]["instructions"] is None
+
+
+# ---------------------------------------------------------------------------
+# previous_response_id logging
+# ---------------------------------------------------------------------------
+
+
+class TestPreviousResponseId:
+    def test_previous_response_id_logs_debug(self):
+        body = {
+            "model": "gpt-4o",
+            "input": "hi",
+            "previous_response_id": "resp_abc123",
+        }
+        with patch.object(responses_compat.logger, "debug") as mock_debug:
+            responses_compat._build_openai_body(body)
+            calls = [str(c) for c in mock_debug.call_args_list]
+            assert any("previous_response_id" in c for c in calls)
+
+    def test_no_previous_response_id_no_debug(self):
+        body = {"model": "gpt-4o", "input": "hi"}
+        with patch.object(responses_compat.logger, "debug") as mock_debug:
+            responses_compat._build_openai_body(body)
+            calls = [str(c) for c in mock_debug.call_args_list]
+            assert not any("previous_response_id" in c for c in calls)

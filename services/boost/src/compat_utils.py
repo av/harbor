@@ -67,6 +67,10 @@ def get_chunk_reasoning(chunk):
   return dotty.get(chunk, "choices.0.delta.reasoning", "")
 
 
+def get_chunk_refusal(chunk):
+  return dotty.get(chunk, "choices.0.delta.refusal", "")
+
+
 def get_chunk_tool_calls(chunk):
   return dotty.get(chunk, "choices.0.delta.tool_calls", [])
 

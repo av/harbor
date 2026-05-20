@@ -15,6 +15,7 @@ from compat_utils import (
     OPENAI_REQUEST_ID_HEADER,
     get_chunk_content as _get_chunk_content,
     get_chunk_reasoning as _get_chunk_reasoning,
+    get_chunk_refusal as _get_chunk_refusal,
     get_chunk_tool_calls as _get_chunk_tool_calls,
     get_chunk_usage as _get_chunk_usage,
     sse_event as _sse_event,
@@ -325,6 +326,10 @@ def _build_openai_body(body: dict):
   if "max_output_tokens" in body:
     openai_body["max_tokens"] = body["max_output_tokens"]
 
+  # user passthrough (used for abuse detection / prompt caching)
+  if body.get("user"):
+    openai_body["user"] = body["user"]
+
   # Reasoning/thinking support: map reasoning.effort to reasoning_effort
   reasoning = body.get("reasoning")
   if reasoning and isinstance(reasoning, dict):
@@ -332,16 +337,41 @@ def _build_openai_body(body: dict):
     if effort:
       openai_body["reasoning_effort"] = effort
 
+  # text.format -> response_format conversion (structured outputs)
+  text_config = body.get("text")
+  if text_config and isinstance(text_config, dict):
+    fmt = text_config.get("format")
+    if fmt and isinstance(fmt, dict):
+      fmt_type = fmt.get("type")
+      if fmt_type == "json_schema":
+        rf = {"type": "json_schema", "json_schema": {}}
+        if fmt.get("name"):
+          rf["json_schema"]["name"] = fmt["name"]
+        if fmt.get("description"):
+          rf["json_schema"]["description"] = fmt["description"]
+        if fmt.get("schema"):
+          rf["json_schema"]["schema"] = fmt["schema"]
+        if fmt.get("strict") is not None:
+          rf["json_schema"]["strict"] = fmt["strict"]
+        openai_body["response_format"] = rf
+      elif fmt_type == "json_object":
+        openai_body["response_format"] = {"type": "json_object"}
+
   # Truncation: accept without error. Backends handle their own context windows,
   # so we cannot guarantee truncation behavior — log a warning when requested.
   truncation = body.get("truncation")
-  if truncation and isinstance(truncation, dict):
-    trunc_type = truncation.get("type")
-    if trunc_type == "auto":
-      logger.warning(
-        "truncation type 'auto' requested but Harbor Boost cannot guarantee "
-        "truncation — backends manage their own context windows"
-      )
+  if truncation == "auto":
+    logger.warning(
+      "truncation 'auto' requested but Harbor Boost cannot guarantee "
+      "truncation — backends manage their own context windows"
+    )
+
+  # previous_response_id: Harbor Boost does not persist responses
+  if body.get("previous_response_id"):
+    logger.debug(
+      "previous_response_id requested but Harbor Boost does not persist "
+      "responses; the referenced response will not be loaded"
+    )
 
   if body.get("stream", False):
     openai_body["stream"] = True
@@ -390,9 +420,23 @@ def _build_output_items(openai_result):
     })
 
   content = dotty.get(openai_result, "choices.0.message.content")
+  refusal = dotty.get(openai_result, "choices.0.message.refusal")
   tool_calls = dotty.get(openai_result, "choices.0.message.tool_calls", [])
 
-  if content:
+  if refusal:
+    output.append({
+      "type": "message",
+      "id": f"msg_{shortuuid.random()}",
+      "status": "completed",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "refusal",
+          "refusal": str(refusal),
+        }
+      ],
+    })
+  elif content:
     output.append({
       "type": "message",
       "id": f"msg_{shortuuid.random()}",
@@ -443,7 +487,18 @@ def _map_status(finish_reason):
   """Map Chat Completions finish_reason to Responses API status."""
   if finish_reason == "length":
     return "incomplete"
+  if finish_reason == "content_filter":
+    return "incomplete"
   return "completed"
+
+
+def _incomplete_reason(finish_reason):
+  """Return the incomplete_details reason for a given finish_reason, or None."""
+  if finish_reason == "length":
+    return "max_output_tokens"
+  if finish_reason == "content_filter":
+    return "content_filter"
+  return None
 
 
 def _build_responses_response(openai_result, request_model, response_id, request_body=None):
@@ -463,17 +518,22 @@ def _build_responses_response(openai_result, request_model, response_id, request
   if request_body and isinstance(request_body.get("metadata"), dict):
     metadata = request_body["metadata"]
 
-  # Determine truncation value from request
+  # Determine truncation value from request (SDK sends as string, not dict)
   truncation = "disabled"
   if request_body:
     trunc = request_body.get("truncation")
-    if trunc and isinstance(trunc, dict) and trunc.get("type") == "auto":
+    if trunc == "auto":
       truncation = "auto"
 
   # Reflect the parallel_tool_calls value from the request (default: True)
   parallel_tool_calls = True
   if request_body and "parallel_tool_calls" in request_body:
     parallel_tool_calls = bool(request_body["parallel_tool_calls"])
+
+  # Echo back instructions from request
+  instructions = None
+  if request_body:
+    instructions = request_body.get("instructions")
 
   return {
     "id": response_id,
@@ -482,6 +542,7 @@ def _build_responses_response(openai_result, request_model, response_id, request
     "status": status,
     "model": request_model,
     "output": output,
+    "instructions": instructions,
     "usage": _make_usage(
       input_tokens=usage.get("prompt_tokens", 0),
       output_tokens=usage.get("completion_tokens", 0),
@@ -501,7 +562,7 @@ def _build_responses_response(openai_result, request_model, response_id, request
     },
     "parallel_tool_calls": parallel_tool_calls,
     "error": None,
-    "incomplete_details": {"reason": "max_output_tokens"} if status == "incomplete" else None,
+    "incomplete_details": {"reason": _incomplete_reason(finish_reason)} if status == "incomplete" else None,
   }
 
 
@@ -542,17 +603,24 @@ async def _responses_stream_converter(
   if request_body and isinstance(request_body.get("metadata"), dict):
     metadata = request_body["metadata"]
 
-  # Determine truncation value from request
+  # Determine truncation value from request (SDK sends as string, not dict)
   truncation = "disabled"
-  if request_body:
-    trunc = request_body.get("truncation")
-    if trunc and isinstance(trunc, dict) and trunc.get("type") == "auto":
-      truncation = "auto"
+  if request_body and request_body.get("truncation") == "auto":
+    truncation = "auto"
 
   # Reflect the parallel_tool_calls value from the request (default: True)
   parallel_tool_calls = True
   if request_body and "parallel_tool_calls" in request_body:
     parallel_tool_calls = bool(request_body["parallel_tool_calls"])
+
+  # Echo back instructions from request
+  instructions = None
+  if request_body:
+    instructions = request_body.get("instructions")
+
+  # Refusal tracking
+  refusal_open = False
+  refusal_content = ""
 
   # Skeleton response for the created event
   skeleton = {
@@ -562,6 +630,7 @@ async def _responses_stream_converter(
     "status": "in_progress",
     "model": request_model,
     "output": [],
+    "instructions": instructions,
     "usage": _make_usage(),
     "store": False,
     "metadata": metadata,
@@ -710,6 +779,7 @@ async def _responses_stream_converter(
 
         chunk_reasoning = _get_chunk_reasoning(chunk)
         chunk_text = _get_chunk_content(chunk)
+        chunk_refusal = _get_chunk_refusal(chunk)
         chunk_tools = _get_chunk_tool_calls(chunk)
         chunk_usage = _get_chunk_usage(chunk)
         fr = dotty.get(chunk, "choices.0.finish_reason")
@@ -821,6 +891,65 @@ async def _responses_stream_converter(
             "content_index": 0,
             "delta": chunk_text,
             "logprobs": [],
+            "sequence_number": seq,
+          })
+          seq += 1
+
+        # --- Refusal content ---
+        if chunk_refusal:
+          # Close reasoning item before opening refusal
+          if reasoning_item_open:
+            for evt in _close_reasoning_item():
+              yield evt
+            reasoning_item_open = False
+          if not refusal_open:
+            if not text_item_open:
+              output_index += 1
+              msg_id = f"msg_{shortuuid.random()}"
+
+              yield _sse_event("response.output_item.added", {
+                "type": "response.output_item.added",
+                "output_index": output_index,
+                "item": {
+                  "type": "message",
+                  "id": msg_id,
+                  "status": "in_progress",
+                  "role": "assistant",
+                  "content": [],
+                },
+                "sequence_number": seq,
+              })
+              seq += 1
+            else:
+              # Close existing text content part before adding refusal
+              for evt in _close_text_item():
+                yield evt
+              text_item_open = False
+
+            # content_part.added for refusal
+            refusal_content_index = 1 if text_content else 0
+            yield _sse_event("response.content_part.added", {
+              "type": "response.content_part.added",
+              "item_id": msg_id,
+              "output_index": output_index,
+              "content_index": refusal_content_index,
+              "part": {
+                "type": "refusal",
+                "refusal": "",
+              },
+              "sequence_number": seq,
+            })
+            seq += 1
+            refusal_open = True
+
+          refusal_content += chunk_refusal
+
+          yield _sse_event("response.refusal.delta", {
+            "type": "response.refusal.delta",
+            "item_id": msg_id,
+            "output_index": output_index,
+            "content_index": 1 if text_content else 0,
+            "delta": chunk_refusal,
             "sequence_number": seq,
           })
           seq += 1
@@ -960,6 +1089,49 @@ async def _responses_stream_converter(
     for evt in _close_text_item():
       yield evt
 
+  # Close open refusal
+  if refusal_open:
+    refusal_ci = 1 if text_content else 0
+    yield _sse_event("response.refusal.done", {
+      "type": "response.refusal.done",
+      "item_id": msg_id,
+      "output_index": output_index,
+      "content_index": refusal_ci,
+      "refusal": refusal_content,
+      "sequence_number": seq,
+    })
+    seq += 1
+
+    yield _sse_event("response.content_part.done", {
+      "type": "response.content_part.done",
+      "item_id": msg_id,
+      "output_index": output_index,
+      "content_index": refusal_ci,
+      "part": {
+        "type": "refusal",
+        "refusal": refusal_content,
+      },
+      "sequence_number": seq,
+    })
+    seq += 1
+
+    yield _sse_event("response.output_item.done", {
+      "type": "response.output_item.done",
+      "output_index": output_index,
+      "item": {
+        "type": "message",
+        "id": msg_id,
+        "status": "completed",
+        "role": "assistant",
+        "content": [{
+          "type": "refusal",
+          "refusal": refusal_content,
+        }],
+      },
+      "sequence_number": seq,
+    })
+    seq += 1
+
   # Close open tool call items
   for tool_state in tool_blocks.values():
     if not tool_state.get("emitted"):
@@ -1025,7 +1197,7 @@ async def _responses_stream_converter(
       })
       seq += 1
 
-  # Final response.completed
+  # Final terminal event: response.completed, response.incomplete, or response.failed
   status = _map_status(finish_reason) if finish_reason else "completed"
   if stream_error:
     status = "failed"
@@ -1038,11 +1210,18 @@ async def _responses_stream_converter(
       input_tokens=input_tokens,
       output_tokens=output_tokens,
     ),
-    "incomplete_details": {"reason": "max_output_tokens"} if status == "incomplete" else None,
+    "incomplete_details": {"reason": _incomplete_reason(finish_reason)} if status == "incomplete" else None,
   }
 
-  yield _sse_event("response.completed", {
-    "type": "response.completed",
+  if status == "incomplete":
+    terminal_event = "response.incomplete"
+  elif status == "failed":
+    terminal_event = "response.failed"
+  else:
+    terminal_event = "response.completed"
+
+  yield _sse_event(terminal_event, {
+    "type": terminal_event,
     "sequence_number": seq,
     "response": final_response,
   })
