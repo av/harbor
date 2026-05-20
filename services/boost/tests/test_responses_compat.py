@@ -1782,6 +1782,72 @@ class TestResponsesRouteIntegration:
 
         assert resp.status_code == 200
 
+    def test_post_responses_completion_none_returns_500(self, monkeypatch):
+        """Force await proxy.serve() returning None to hit the explicit 500 error path (line 1520)."""
+        async def mock_list_downstream():
+            return []
+
+        mock_llm = MagicMock()
+        mock_llm.workflow = None
+        mock_llm.boost_params = {}
+
+        async def mock_serve():
+            return None  # triggers the if completion is None: _responses_error(500, ...)
+
+        mock_llm.serve = mock_serve
+        mock_llm.consume_stream = AsyncMock(return_value={})
+
+        monkeypatch.setattr(responses_compat.mapper, "list_downstream", mock_list_downstream)
+        monkeypatch.setattr(responses_compat.mapper, "resolve_request_config", lambda body: {})
+        monkeypatch.setattr(responses_compat.mapper, "is_direct_task", lambda proxy: False)
+        monkeypatch.setattr(responses_compat.llm_mod, "LLM", lambda **kw: mock_llm)
+
+        resp = self.client.post("/v1/responses", json={"model": "gpt-4o", "input": "hello"})
+        assert resp.status_code == 500
+        assert "No completion returned" in resp.json()["error"]["message"]
+
+    def test_post_responses_backend_error_non429_non5xx_hits_else_branch(self, monkeypatch):
+        """Raise BackendError(400) to exercise the else: detail="Backend request failed" (line ~1559)."""
+        from llm import BackendError
+
+        async def mock_list_downstream():
+            return []
+
+        def raise_be(**kw):
+            # 400 is neither 429 nor >=500, hits else
+            raise BackendError(400, "bad request from backend", {})
+
+        monkeypatch.setattr(responses_compat.mapper, "list_downstream", mock_list_downstream)
+        monkeypatch.setattr(responses_compat.mapper, "resolve_request_config", lambda body: {})
+        monkeypatch.setattr(responses_compat.mapper, "is_direct_task", lambda proxy: False)
+        monkeypatch.setattr(responses_compat.llm_mod, "LLM", raise_be)
+
+        resp = self.client.post("/v1/responses", json={"model": "gpt-4o", "input": "hi"})
+        assert resp.status_code == 400
+        assert "Backend request failed" in resp.json()["error"]["message"]
+
+    def test_post_responses_http_exception_5xx_sanitizes_and_logs(self, monkeypatch):
+        """Trigger HTTPException >=500 inside post_responses try to hit sanitize + logger.error (line 1569)."""
+        from fastapi import HTTPException
+
+        async def mock_list_downstream():
+            return []
+
+        def raise_5xx(**kw):
+            raise HTTPException(503, "deep internal failure")
+
+        monkeypatch.setattr(responses_compat.mapper, "list_downstream", mock_list_downstream)
+        monkeypatch.setattr(responses_compat.mapper, "resolve_request_config", lambda body: {})
+        monkeypatch.setattr(responses_compat.mapper, "is_direct_task", lambda proxy: False)
+        monkeypatch.setattr(responses_compat.llm_mod, "LLM", raise_5xx)
+
+        resp = self.client.post("/v1/responses", json={"model": "gpt-4o", "input": "hi"})
+        assert resp.status_code == 503
+        body = resp.json()
+        # Sanitized for >=500 per handler
+        assert "Internal server error" in body["error"]["message"]
+        assert "deep internal" not in body["error"]["message"]
+
 
 # ---------------------------------------------------------------------------
 # Request-ID header tests
@@ -4113,6 +4179,22 @@ class TestResponseStubEndpoints:
         assert "param" in body["error"]
         assert body["error"]["param"] is None
 
+    def test_cancel_response_with_valid_json_body_executes_reject_success_path(self):
+        """POST valid JSON body (not empty, not invalid) to /cancel so _reject_invalid_json_body
+        takes the successful parse path and executes its final "return None" (line 93);
+        still returns the stub 404 as expected.
+        """
+        resp = self.client.post(
+            "/v1/responses/resp_abc123/cancel",
+            json={"reason": "no longer needed"},
+            headers={"content-type": "application/json"},
+        )
+        assert resp.status_code == 404
+        body = resp.json()
+        assert "cannot be cancelled" in body["error"]["message"]
+        assert "close the streaming connection" in body["error"]["message"]
+        assert resp.headers.get("x-request-id", "").startswith("req_")
+
 
 # ---------------------------------------------------------------------------
 # Input token counting: POST /v1/responses/input_tokens
@@ -4275,6 +4357,56 @@ class TestCountResponseInputTokens:
         assert resp_no_tools.status_code == 200
         assert resp_with_ws.status_code == 200
         assert resp_with_ws.json()["input_tokens"] > resp_no_tools.json()["input_tokens"]
+
+    def test_input_tokens_missing_model_returns_400(self):
+        """Hit _validate_responses_body failure return in count_response_input_tokens handler."""
+        resp = self.client.post("/v1/responses/input_tokens", json={"input": "hi"})
+        assert resp.status_code == 400
+        assert "model is required" in resp.json()["error"]["message"]
+
+    def test_input_tokens_missing_input_returns_400(self):
+        """Hit the other validation failure (input required) in input_tokens POST."""
+        resp = self.client.post("/v1/responses/input_tokens", json={"model": "gpt-4o"})
+        assert resp.status_code == 400
+        assert "input is required" in resp.json()["error"]["message"]
+
+    def test_input_tokens_value_error_handled_as_400(self, monkeypatch):
+        """Force ValueError from count/build to exercise the ValueError except branch (1685-87)."""
+        def raise_value(*a, **k):
+            raise ValueError("simulated validation fail in token count")
+        monkeypatch.setattr(responses_compat, "count_messages_tokens", raise_value)
+        resp = self.client.post("/v1/responses/input_tokens", json={
+            "model": "gpt-4o",
+            "input": "hello",
+        })
+        assert resp.status_code == 400
+        assert "could not process input for token counting" in resp.json()["error"]["message"]
+
+    def test_input_tokens_unexpected_exception_handled_as_500(self, monkeypatch):
+        """Force generic Exception to hit the final except (1688-90) returning 500."""
+        def raise_exc(*a, **k):
+            raise RuntimeError("unexpected in input_tokens")
+        monkeypatch.setattr(responses_compat, "count_messages_tokens", raise_exc)
+        resp = self.client.post("/v1/responses/input_tokens", json={
+            "model": "gpt-4o",
+            "input": "hello",
+        })
+        assert resp.status_code == 500
+        assert "Internal server error" in resp.json()["error"]["message"]
+
+    def test_input_tokens_http_exception_handled(self, monkeypatch):
+        """Raise HTTPException inside try of input_tokens to cover its except HTTPExc branch (1679-84)."""
+        from fastapi import HTTPException
+        def raise_http(*a, **k):
+            raise HTTPException(422, "bad param for tokens")
+        monkeypatch.setattr(responses_compat, "_build_openai_body", raise_http)
+        resp = self.client.post("/v1/responses/input_tokens", json={
+            "model": "gpt-4o",
+            "input": "hi",
+        })
+        assert resp.status_code == 422
+        body = resp.json()
+        assert "bad param" in body["error"]["message"] or body["error"]["message"]
 
 
 # ---------------------------------------------------------------------------
