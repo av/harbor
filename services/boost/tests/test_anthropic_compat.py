@@ -2342,6 +2342,475 @@ class TestSdkCompatStreamEventSequence:
 
 
 # ---------------------------------------------------------------------------
+# Extended Thinking: _convert_params with thinking
+# ---------------------------------------------------------------------------
+
+class TestConvertParamsThinking:
+    def test_thinking_enabled_sets_max_completion_tokens(self):
+        body = {
+            "max_tokens": 1024,
+            "thinking": {"type": "enabled", "budget_tokens": 10000},
+        }
+        params = anthropic_compat._convert_params(body)
+        assert params["max_completion_tokens"] == 11024
+        assert "max_tokens" not in params
+
+    def test_thinking_enabled_with_stream(self):
+        body = {
+            "max_tokens": 512,
+            "thinking": {"type": "enabled", "budget_tokens": 5000},
+            "stream": True,
+        }
+        params = anthropic_compat._convert_params(body)
+        assert params["max_completion_tokens"] == 5512
+        assert params["stream"] is True
+        assert "max_tokens" not in params
+
+    def test_thinking_disabled_uses_max_tokens(self):
+        """When thinking is not enabled, max_tokens is passed normally."""
+        body = {"max_tokens": 1024}
+        params = anthropic_compat._convert_params(body)
+        assert params["max_tokens"] == 1024
+        assert "max_completion_tokens" not in params
+
+    def test_thinking_wrong_type_uses_max_tokens(self):
+        """Invalid thinking type is ignored."""
+        body = {
+            "max_tokens": 1024,
+            "thinking": {"type": "disabled"},
+        }
+        params = anthropic_compat._convert_params(body)
+        assert params["max_tokens"] == 1024
+        assert "max_completion_tokens" not in params
+
+    def test_thinking_non_dict_ignored(self):
+        body = {
+            "max_tokens": 1024,
+            "thinking": "invalid",
+        }
+        params = anthropic_compat._convert_params(body)
+        assert params["max_tokens"] == 1024
+
+    def test_thinking_zero_budget(self):
+        body = {
+            "max_tokens": 1024,
+            "thinking": {"type": "enabled", "budget_tokens": 0},
+        }
+        params = anthropic_compat._convert_params(body)
+        assert params["max_completion_tokens"] == 1024
+
+
+# ---------------------------------------------------------------------------
+# Extended Thinking: _build_content_blocks with reasoning
+# ---------------------------------------------------------------------------
+
+class TestBuildContentBlocksThinking:
+    def test_reasoning_content_produces_thinking_block(self):
+        result = _fake_openai_result(content="The answer is 42.")
+        result["choices"][0]["message"]["reasoning_content"] = "Let me think step by step..."
+        blocks = anthropic_compat._build_content_blocks(result)
+        assert len(blocks) == 2
+        assert blocks[0]["type"] == "thinking"
+        assert blocks[0]["thinking"] == "Let me think step by step..."
+        assert blocks[1]["type"] == "text"
+        assert blocks[1]["text"] == "The answer is 42."
+
+    def test_reasoning_field_also_works(self):
+        """Some backends use 'reasoning' instead of 'reasoning_content'."""
+        result = _fake_openai_result(content="Result.")
+        result["choices"][0]["message"]["reasoning"] = "Analysis..."
+        blocks = anthropic_compat._build_content_blocks(result)
+        assert blocks[0]["type"] == "thinking"
+        assert blocks[0]["thinking"] == "Analysis..."
+        assert blocks[1]["type"] == "text"
+
+    def test_reasoning_content_preferred_over_reasoning(self):
+        """reasoning_content takes precedence over reasoning."""
+        result = _fake_openai_result(content="Result.")
+        result["choices"][0]["message"]["reasoning_content"] = "Primary"
+        result["choices"][0]["message"]["reasoning"] = "Fallback"
+        blocks = anthropic_compat._build_content_blocks(result)
+        assert blocks[0]["thinking"] == "Primary"
+
+    def test_no_reasoning_no_thinking_block(self):
+        result = _fake_openai_result(content="Just text.")
+        blocks = anthropic_compat._build_content_blocks(result)
+        assert len(blocks) == 1
+        assert blocks[0]["type"] == "text"
+
+    def test_reasoning_with_tool_calls(self):
+        """Thinking block should appear before text and tool_use blocks."""
+        result = _fake_openai_result(
+            content="Let me search.",
+            tool_calls=[{
+                "id": "toolu_1",
+                "function": {"name": "search", "arguments": '{"q": "test"}'},
+            }],
+        )
+        result["choices"][0]["message"]["reasoning_content"] = "I need to search."
+        blocks = anthropic_compat._build_content_blocks(result)
+        assert len(blocks) == 3
+        assert blocks[0]["type"] == "thinking"
+        assert blocks[1]["type"] == "text"
+        assert blocks[2]["type"] == "tool_use"
+
+    def test_reasoning_only_no_text(self):
+        """If there's reasoning but no text content, only thinking block is produced."""
+        result = _fake_openai_result(content=None)
+        result["choices"][0]["message"]["reasoning_content"] = "Thought about it."
+        blocks = anthropic_compat._build_content_blocks(result)
+        assert len(blocks) == 1
+        assert blocks[0]["type"] == "thinking"
+        assert blocks[0]["thinking"] == "Thought about it."
+
+    def test_empty_reasoning_no_thinking_block(self):
+        """Empty string reasoning should not produce a thinking block."""
+        result = _fake_openai_result(content="Answer.")
+        result["choices"][0]["message"]["reasoning_content"] = ""
+        blocks = anthropic_compat._build_content_blocks(result)
+        assert len(blocks) == 1
+        assert blocks[0]["type"] == "text"
+
+
+# ---------------------------------------------------------------------------
+# Extended Thinking: streaming with reasoning content
+# ---------------------------------------------------------------------------
+
+class TestStreamingThinking:
+    @pytest.mark.asyncio
+    async def test_reasoning_then_text_stream(self):
+        """Reasoning content should produce thinking blocks before text blocks."""
+        async def response_stream():
+            yield 'data: {"choices": [{"delta": {"reasoning_content": "Let me think"}}]}\n\n'
+            yield 'data: {"choices": [{"delta": {"reasoning_content": " about this."}}]}\n\n'
+            yield 'data: {"choices": [{"delta": {"content": "The answer"}}]}\n\n'
+            yield 'data: {"choices": [{"delta": {"content": " is 42."}}]}\n\n'
+            yield 'data: {"choices": [{"delta": {}, "finish_reason": "stop"}], "usage": {"prompt_tokens": 5, "completion_tokens": 10}}\n\n'
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "test-model")
+        ]
+        joined = "".join(events)
+        parsed = _parse_sse_events(joined)
+
+        # Should have message_start
+        types = [e.get("type") for e in parsed]
+        assert "message_start" in types
+
+        # Find thinking block events
+        thinking_starts = [e for e in parsed if e.get("type") == "content_block_start" and e.get("content_block", {}).get("type") == "thinking"]
+        assert len(thinking_starts) == 1
+        assert thinking_starts[0]["index"] == 0
+
+        # Find thinking deltas
+        thinking_deltas = [e for e in parsed if e.get("type") == "content_block_delta" and e.get("delta", {}).get("type") == "thinking_delta"]
+        assert len(thinking_deltas) == 2
+        assert thinking_deltas[0]["delta"]["thinking"] == "Let me think"
+        assert thinking_deltas[1]["delta"]["thinking"] == " about this."
+
+        # Find text block events
+        text_starts = [e for e in parsed if e.get("type") == "content_block_start" and e.get("content_block", {}).get("type") == "text"]
+        assert len(text_starts) == 1
+        assert text_starts[0]["index"] == 1  # after thinking block
+
+        # Find text deltas
+        text_deltas = [e for e in parsed if e.get("type") == "content_block_delta" and e.get("delta", {}).get("type") == "text_delta"]
+        assert len(text_deltas) == 2
+        assert text_deltas[0]["delta"]["text"] == "The answer"
+        assert text_deltas[1]["delta"]["text"] == " is 42."
+
+        # Thinking block should be stopped before text starts
+        stops = [e for e in parsed if e.get("type") == "content_block_stop"]
+        # At least 2 stops: thinking block and text block
+        assert len(stops) >= 2
+
+    @pytest.mark.asyncio
+    async def test_reasoning_only_stream(self):
+        """Stream with only reasoning content and no text."""
+        async def response_stream():
+            yield 'data: {"choices": [{"delta": {"reasoning_content": "Thinking..."}}]}\n\n'
+            yield 'data: {"choices": [{"delta": {}, "finish_reason": "stop"}], "usage": {"prompt_tokens": 5, "completion_tokens": 3}}\n\n'
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "test-model")
+        ]
+        joined = "".join(events)
+        parsed = _parse_sse_events(joined)
+
+        thinking_starts = [e for e in parsed if e.get("type") == "content_block_start" and e.get("content_block", {}).get("type") == "thinking"]
+        assert len(thinking_starts) == 1
+
+        thinking_deltas = [e for e in parsed if e.get("type") == "content_block_delta" and e.get("delta", {}).get("type") == "thinking_delta"]
+        assert len(thinking_deltas) == 1
+        assert thinking_deltas[0]["delta"]["thinking"] == "Thinking..."
+
+        # Thinking block should be closed
+        stops = [e for e in parsed if e.get("type") == "content_block_stop"]
+        assert len(stops) >= 1
+
+        # Should still have message_delta and message_stop
+        assert '"type": "message_delta"' in joined
+        assert '"type": "message_stop"' in joined
+
+    @pytest.mark.asyncio
+    async def test_reasoning_via_reasoning_field(self):
+        """Some backends use delta.reasoning instead of delta.reasoning_content."""
+        async def response_stream():
+            yield 'data: {"choices": [{"delta": {"reasoning": "Alt field."}}]}\n\n'
+            yield 'data: {"choices": [{"delta": {"content": "Done."}}]}\n\n'
+            yield 'data: {"choices": [{"delta": {}, "finish_reason": "stop"}]}\n\n'
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "test-model")
+        ]
+        joined = "".join(events)
+
+        assert '"type": "thinking"' in joined
+        assert '"type": "thinking_delta"' in joined
+        assert "Alt field." in joined
+
+    @pytest.mark.asyncio
+    async def test_reasoning_then_tool_calls(self):
+        """Reasoning followed by tool calls should close thinking before tools."""
+        async def response_stream():
+            yield 'data: {"choices": [{"delta": {"reasoning_content": "I should search."}}]}\n\n'
+            yield (
+                'data: {"choices": [{"delta": {"tool_calls": ['
+                '{"index": 0, "id": "toolu_1", "function": '
+                '{"name": "search", "arguments": "{\\"q\\": \\"test\\"}"}}]}}]}\n\n'
+            )
+            yield (
+                'data: {"choices": [{"delta": {}, "finish_reason": "tool_calls"}], '
+                '"usage": {"prompt_tokens": 5, "completion_tokens": 10}}\n\n'
+            )
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "test-model")
+        ]
+        joined = "".join(events)
+        parsed = _parse_sse_events(joined)
+
+        # Thinking block should exist
+        thinking_starts = [e for e in parsed if e.get("type") == "content_block_start" and e.get("content_block", {}).get("type") == "thinking"]
+        assert len(thinking_starts) == 1
+
+        # Tool use block should exist
+        tool_starts = [e for e in parsed if e.get("type") == "content_block_start" and e.get("content_block", {}).get("type") == "tool_use"]
+        assert len(tool_starts) == 1
+
+        # Thinking block index should be before tool block index
+        assert thinking_starts[0]["index"] < tool_starts[0]["index"]
+
+        assert '"stop_reason": "tool_use"' in joined
+
+    @pytest.mark.asyncio
+    async def test_no_reasoning_stream_unchanged(self):
+        """Streams without reasoning should work exactly as before."""
+        async def response_stream():
+            yield 'data: {"choices": [{"delta": {"content": "Hi"}}]}\n\n'
+            yield 'data: {"choices": [{"delta": {}, "finish_reason": "stop"}]}\n\n'
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "test-model")
+        ]
+        joined = "".join(events)
+
+        assert '"type": "thinking"' not in joined
+        assert '"type": "thinking_delta"' not in joined
+        assert '"type": "text"' in joined
+        assert "Hi" in joined
+
+    @pytest.mark.asyncio
+    async def test_thinking_block_indices_are_sequential(self):
+        """Block indices should be sequential: thinking=0, text=1."""
+        async def response_stream():
+            yield 'data: {"choices": [{"delta": {"reasoning_content": "Think."}}]}\n\n'
+            yield 'data: {"choices": [{"delta": {"content": "Answer."}}]}\n\n'
+            yield 'data: {"choices": [{"delta": {}, "finish_reason": "stop"}]}\n\n'
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "test-model")
+        ]
+        parsed = _parse_sse_events("".join(events))
+
+        block_starts = [e for e in parsed if e.get("type") == "content_block_start"]
+        assert block_starts[0]["index"] == 0
+        assert block_starts[0]["content_block"]["type"] == "thinking"
+        assert block_starts[1]["index"] == 1
+        assert block_starts[1]["content_block"]["type"] == "text"
+
+
+# ---------------------------------------------------------------------------
+# Extended Thinking: integration tests
+# ---------------------------------------------------------------------------
+
+class TestIntegrationThinking:
+    def test_non_streaming_with_reasoning(self):
+        """Non-streaming response with reasoning_content produces thinking block."""
+        openai_result = _fake_openai_result(content="The answer is 42.")
+        openai_result["choices"][0]["message"]["reasoning_content"] = "Let me analyze..."
+        fake_llm = _FakeLLM(consume_result=openai_result, stream_chunks=[])
+
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+            patch.object(anthropic_compat, "llm_mod") as mock_llm_mod,
+        ):
+            mock_mapper.list_downstream = AsyncMock()
+            mock_mapper.resolve_request_config = MagicMock(return_value={})
+            mock_mapper.is_direct_task = MagicMock(return_value=False)
+            mock_llm_mod.LLM = MagicMock(return_value=fake_llm)
+
+            client = TestClient(_integration_app, raise_server_exceptions=False)
+            resp = client.post("/v1/messages", json=_ANTHRO_BODY)
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["content"][0]["type"] == "thinking"
+        assert body["content"][0]["thinking"] == "Let me analyze..."
+        assert body["content"][1]["type"] == "text"
+        assert body["content"][1]["text"] == "The answer is 42."
+
+    def test_non_streaming_without_reasoning(self):
+        """Non-streaming response without reasoning has no thinking block."""
+        openai_result = _fake_openai_result(content="Plain answer.")
+        fake_llm = _FakeLLM(consume_result=openai_result, stream_chunks=[])
+
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+            patch.object(anthropic_compat, "llm_mod") as mock_llm_mod,
+        ):
+            mock_mapper.list_downstream = AsyncMock()
+            mock_mapper.resolve_request_config = MagicMock(return_value={})
+            mock_mapper.is_direct_task = MagicMock(return_value=False)
+            mock_llm_mod.LLM = MagicMock(return_value=fake_llm)
+
+            client = TestClient(_integration_app, raise_server_exceptions=False)
+            resp = client.post("/v1/messages", json=_ANTHRO_BODY)
+
+        body = resp.json()
+        assert len(body["content"]) == 1
+        assert body["content"][0]["type"] == "text"
+
+    def test_streaming_with_reasoning(self):
+        """Streaming response with reasoning_content produces thinking events."""
+        chunks = [
+            'data: {"choices": [{"delta": {"reasoning_content": "Reasoning..."}}]}\n\n',
+            'data: {"choices": [{"delta": {"content": "Answer."}}]}\n\n',
+            'data: {"choices": [{"delta": {}, "finish_reason": "stop"}], '
+            '"usage": {"prompt_tokens": 5, "completion_tokens": 3}}\n\n',
+        ]
+        fake_llm = _FakeLLM(stream_chunks=chunks)
+
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+            patch.object(anthropic_compat, "llm_mod") as mock_llm_mod,
+        ):
+            mock_mapper.list_downstream = AsyncMock()
+            mock_mapper.resolve_request_config = MagicMock(return_value={})
+            mock_mapper.is_direct_task = MagicMock(return_value=False)
+            mock_llm_mod.LLM = MagicMock(return_value=fake_llm)
+
+            client = TestClient(_integration_app, raise_server_exceptions=False)
+            resp = client.post("/v1/messages", json={**_ANTHRO_BODY, "stream": True})
+
+        assert resp.status_code == 200
+        text = resp.text
+        assert '"type": "thinking"' in text
+        assert '"type": "thinking_delta"' in text
+        assert "Reasoning..." in text
+        assert "Answer." in text
+
+    def test_thinking_param_forwarded(self):
+        """The thinking parameter should cause max_completion_tokens in the OpenAI body."""
+        fake_llm = _FakeLLM(
+            consume_result=_fake_openai_result(content="Done."),
+            stream_chunks=[],
+        )
+
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+            patch.object(anthropic_compat, "llm_mod") as mock_llm_mod,
+        ):
+            mock_mapper.list_downstream = AsyncMock()
+            mock_mapper.resolve_request_config = MagicMock(return_value={})
+            mock_mapper.is_direct_task = MagicMock(return_value=False)
+            mock_llm_mod.LLM = MagicMock(return_value=fake_llm)
+
+            body_with_thinking = {
+                **_ANTHRO_BODY,
+                "thinking": {"type": "enabled", "budget_tokens": 8000},
+            }
+            client = TestClient(_integration_app, raise_server_exceptions=False)
+            resp = client.post("/v1/messages", json=body_with_thinking)
+
+        assert resp.status_code == 200
+        # Verify the OpenAI body was built with max_completion_tokens
+        call_args = mock_mapper.resolve_request_config.call_args[0][0]
+        assert call_args.get("max_completion_tokens") == 8128  # 8000 + 128
+        assert "max_tokens" not in call_args
+
+    def test_direct_task_with_reasoning(self):
+        """Direct task with reasoning_content produces thinking block."""
+        openai_result = _fake_openai_result(content="Title")
+        openai_result["choices"][0]["message"]["reasoning_content"] = "Considering..."
+        fake_llm = _FakeLLM(chat_completion_result=openai_result)
+        fake_llm.workflow = None
+        fake_llm.boost_params = {}
+
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+            patch.object(anthropic_compat, "llm_mod") as mock_llm_mod,
+        ):
+            mock_mapper.list_downstream = AsyncMock()
+            mock_mapper.resolve_request_config = MagicMock(return_value={})
+            mock_mapper.is_direct_task = MagicMock(return_value=True)
+            mock_llm_mod.LLM = MagicMock(return_value=fake_llm)
+
+            client = TestClient(_integration_app, raise_server_exceptions=False)
+            resp = client.post("/v1/messages", json=_ANTHRO_BODY)
+
+        body = resp.json()
+        assert body["content"][0]["type"] == "thinking"
+        assert body["content"][1]["type"] == "text"
+
+
+# ---------------------------------------------------------------------------
+# Extended Thinking: compat_utils.get_chunk_reasoning
+# ---------------------------------------------------------------------------
+
+class TestGetChunkReasoning:
+    def test_reasoning_content_field(self):
+        from compat_utils import get_chunk_reasoning
+        chunk = {"choices": [{"delta": {"reasoning_content": "thinking..."}}]}
+        assert get_chunk_reasoning(chunk) == "thinking..."
+
+    def test_reasoning_field(self):
+        from compat_utils import get_chunk_reasoning
+        chunk = {"choices": [{"delta": {"reasoning": "alt thinking..."}}]}
+        assert get_chunk_reasoning(chunk) == "alt thinking..."
+
+    def test_reasoning_content_preferred(self):
+        from compat_utils import get_chunk_reasoning
+        chunk = {"choices": [{"delta": {"reasoning_content": "primary", "reasoning": "fallback"}}]}
+        assert get_chunk_reasoning(chunk) == "primary"
+
+    def test_no_reasoning(self):
+        from compat_utils import get_chunk_reasoning
+        chunk = {"choices": [{"delta": {"content": "just text"}}]}
+        assert get_chunk_reasoning(chunk) == ""
+
+    def test_empty_chunk(self):
+        from compat_utils import get_chunk_reasoning
+        assert get_chunk_reasoning({}) == ""
+
+
+# ---------------------------------------------------------------------------
 # SSE parsing helper
 # ---------------------------------------------------------------------------
 

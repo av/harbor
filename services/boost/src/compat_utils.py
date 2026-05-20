@@ -15,6 +15,19 @@ def get_chunk_content(chunk):
   return dotty.get(chunk, "choices.0.delta.content", "")
 
 
+def get_chunk_reasoning(chunk):
+  """Extract reasoning/thinking content from a streaming chunk.
+
+  OpenAI-compatible backends may return reasoning content via:
+  - choices[0].delta.reasoning_content (OpenAI o1/o3, OpenRouter)
+  - choices[0].delta.reasoning (some backends)
+  """
+  val = dotty.get(chunk, "choices.0.delta.reasoning_content", "")
+  if val:
+    return val
+  return dotty.get(chunk, "choices.0.delta.reasoning", "")
+
+
 def get_chunk_tool_calls(chunk):
   return dotty.get(chunk, "choices.0.delta.tool_calls", [])
 

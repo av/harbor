@@ -13,6 +13,7 @@ from auth import get_api_key
 from compat_utils import (
     REQUEST_ID_HEADER,
     get_chunk_content as _get_chunk_content,
+    get_chunk_reasoning as _get_chunk_reasoning,
     get_chunk_tool_calls as _get_chunk_tool_calls,
     get_chunk_usage as _get_chunk_usage,
     sse_event as _sse_event,
@@ -206,8 +207,16 @@ def _convert_assistant_message(content):
 def _convert_params(body: dict):
   params = {}
 
-  if "max_tokens" in body:
-    params["max_tokens"] = body["max_tokens"]
+  max_tokens = body.get("max_tokens", 0)
+  thinking = body.get("thinking")
+
+  if thinking and isinstance(thinking, dict) and thinking.get("type") == "enabled":
+    budget_tokens = thinking.get("budget_tokens", 0)
+    # Map to max_completion_tokens which covers both reasoning + output
+    params["max_completion_tokens"] = budget_tokens + max_tokens
+  elif max_tokens:
+    params["max_tokens"] = max_tokens
+
   if "temperature" in body:
     params["temperature"] = body["temperature"]
   if "top_p" in body:
@@ -308,6 +317,17 @@ def _parse_tool_call_arguments(arguments):
 def _build_content_blocks(openai_result):
   blocks = []
 
+  # Check for reasoning/thinking content — emitted before text
+  message = dotty.get(openai_result, "choices.0.message", {})
+  reasoning = message.get("reasoning_content") or message.get("reasoning") or ""
+  if reasoning:
+    blocks.append(
+      {
+        "type": "thinking",
+        "thinking": str(reasoning),
+      }
+    )
+
   content = dotty.get(openai_result, "choices.0.message.content")
   if content:
     blocks.append(
@@ -383,6 +403,7 @@ async def _anthropic_stream_converter(
   """
   msg_id = f"msg_{shortuuid.random()}"
   block_index = -1
+  thinking_block_open = False
   text_block_open = False
   tool_blocks = {}
   input_tokens = 0
@@ -425,6 +446,7 @@ async def _anthropic_stream_converter(
           continue
 
         text_content = _get_chunk_content(chunk)
+        reasoning_content = _get_chunk_reasoning(chunk)
         tool_calls = _get_chunk_tool_calls(chunk)
         chunk_usage = _get_chunk_usage(chunk)
         fr = dotty.get(chunk, "choices.0.finish_reason")
@@ -435,8 +457,40 @@ async def _anthropic_stream_converter(
         input_tokens = chunk_usage.get("prompt_tokens", 0) or input_tokens
         output_tokens = chunk_usage.get("completion_tokens", 0) or output_tokens
 
+        # Reasoning/thinking content — emitted as thinking blocks before text
+        if reasoning_content:
+          if not thinking_block_open:
+            block_index += 1
+            yield _sse_event(
+              "content_block_start",
+              {
+                "type": "content_block_start",
+                "index": block_index,
+                "content_block": {"type": "thinking", "thinking": ""},
+              },
+            )
+            thinking_block_open = True
+          yield _sse_event(
+            "content_block_delta",
+            {
+              "type": "content_block_delta",
+              "index": block_index,
+              "delta": {"type": "thinking_delta", "thinking": reasoning_content},
+            },
+          )
+
         if text_content:
           accumulated_text += text_content
+          # Close thinking block before opening text block
+          if thinking_block_open:
+            yield _sse_event(
+              "content_block_stop",
+              {
+                "type": "content_block_stop",
+                "index": block_index,
+              },
+            )
+            thinking_block_open = False
           if not text_block_open:
             block_index += 1
             yield _sse_event(
@@ -480,6 +534,15 @@ async def _anthropic_stream_converter(
               tool_state["arguments"] += tc_args
 
             if not tool_state.get("emitted") and tool_state.get("id"):
+              if thinking_block_open:
+                yield _sse_event(
+                  "content_block_stop",
+                  {
+                    "type": "content_block_stop",
+                    "index": block_index,
+                  },
+                )
+                thinking_block_open = False
               if text_block_open:
                 yield _sse_event(
                   "content_block_stop",
@@ -533,6 +596,17 @@ async def _anthropic_stream_converter(
     logger.error(f"Error during stream conversion: {e}", exc_info=True)
     stream_error = str(e)
 
+    # Close thinking block before emitting error text
+    if thinking_block_open:
+      yield _sse_event(
+        "content_block_stop",
+        {
+          "type": "content_block_stop",
+          "index": block_index,
+        },
+      )
+      thinking_block_open = False
+
     # Emit an error as a text block so the client sees it
     if not text_block_open:
       block_index += 1
@@ -553,6 +627,17 @@ async def _anthropic_stream_converter(
         "delta": {"type": "text_delta", "text": f"\n\n[Stream error: {stream_error}]"},
       },
     )
+
+  # Close thinking block if still open
+  if thinking_block_open:
+    yield _sse_event(
+      "content_block_stop",
+      {
+        "type": "content_block_stop",
+        "index": block_index,
+      },
+    )
+    thinking_block_open = False
 
   # Flush any deferred tool blocks that were never emitted during streaming
   for tool_state in tool_blocks.values():
