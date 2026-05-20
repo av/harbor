@@ -33,8 +33,29 @@
 - label: boost > shared > Boost compat layers log request lifecycle at INFO level (model, stream mode, message count) and auth events, while avoiding sensitive data in log output
   command: test -f services/boost/tests/test_logging.py && grep -q 'logger' services/boost/src/anthropic_compat.py && grep -q 'logger' services/boost/src/responses_compat.py && grep -q 'logger' services/boost/src/auth.py
   tags: [spec, implemented]
-- label: boost > shared > Boost format.clean_text_preserve_newlines applies urllib percent decoding to handle percent-encoded content from backends
-  command: grep -q 'unquote' services/boost/src/format.py && grep -q 'from urllib.parse import unquote' services/boost/src/format.py
+- label: boost > shared > Boost format.clean_text_preserve_newlines does NOT apply urllib percent decoding, preserving URLs in LLM output intact
+  command: ! grep -q 'unquote' services/boost/src/format.py && ! grep -q 'urllib' services/boost/src/format.py
+  tags: [spec, implemented]
+- label: boost > responses api > Boost Responses API extracts annotations from backend Chat Completions responses (url_citation, file_citation, file_path from OpenAI format and Perplexity-style flat citation URLs) and includes them in output text content parts
+  command: grep -q 'extract_annotations' services/boost/src/compat_utils.py && grep -q 'extract_annotations' services/boost/src/responses_compat.py && grep -q 'url_citation' services/boost/src/compat_utils.py && grep -q 'file_citation' services/boost/src/compat_utils.py && grep -q 'file_path' services/boost/src/compat_utils.py
+  tags: [spec, implemented]
+- label: boost > responses api > Boost Responses API accumulates streaming annotations via get_chunk_annotations and Perplexity-style chunk citations into output text annotation lists
+  command: grep -q 'get_chunk_annotations' services/boost/src/compat_utils.py && grep -q 'get_chunk_annotations' services/boost/src/responses_compat.py && grep -q 'chunk_citations' services/boost/src/responses_compat.py
+  tags: [spec, implemented]
+- label: boost > shared > Boost LLM raises BackendError on non-200 upstream responses, carrying status_code, body, and rate-limit headers extracted via BackendError.from_httpx()
+  command: grep -q 'class BackendError' services/boost/src/llm.py && grep -q 'from_httpx' services/boost/src/llm.py && grep -q 'raise_for_status' services/boost/src/llm.py && grep -q 'RATE_LIMIT_HEADERS' services/boost/src/llm.py
+  tags: [spec, implemented]
+- label: boost > shared > Boost compat layers catch BackendError and forward rate-limit headers (retry-after, x-ratelimit-*) from the backend to the client, mapping 429 to rate_limit_error
+  command: grep -q 'BackendError' services/boost/src/anthropic_compat.py && grep -q 'BackendError' services/boost/src/responses_compat.py && grep -q 'RATE_LIMIT_FORWARD_HEADERS' services/boost/src/compat_utils.py && grep -q 'RATE_LIMIT_FORWARD_HEADERS' services/boost/src/anthropic_compat.py && grep -q 'RATE_LIMIT_FORWARD_HEADERS' services/boost/src/responses_compat.py
+  tags: [spec, implemented]
+- label: boost > anthropic compat > Boost Anthropic batch API stubs return informative error messages guiding callers to POST /v1/messages, with beta flag echo in response headers
+  command: grep -q 'Harbor Boost does not process' services/boost/src/anthropic_compat.py && grep -q 'messages/batches' services/boost/src/anthropic_compat.py
+  tags: [spec, implemented]
+- label: boost > responses api > Boost Responses API GET, DELETE, and cancel stubs return operation-specific informative messages with response IDs
+  command: grep -q 'cannot be cancelled' services/boost/src/responses_compat.py && grep -q 'not found' services/boost/src/responses_compat.py && grep -q 'response_id' services/boost/src/responses_compat.py
+  tags: [spec, implemented]
+- label: boost > shared > Boost streaming converters use direct dict access (_get_delta, _get_finish_reason) from compat_utils instead of dotty.get in the hot path, avoiding per-chunk parse_path overhead
+  command: grep -q '_get_delta' services/boost/src/compat_utils.py && grep -q '_get_finish_reason' services/boost/src/compat_utils.py && grep -q 'from compat_utils import' services/boost/src/anthropic_compat.py && grep -q 'from compat_utils import' services/boost/src/responses_compat.py
   tags: [spec, implemented]
 # project
 - Harbor is a containerized LLM toolkit distributed as a Docker Compose project with a CLI and Tauri desktop app
