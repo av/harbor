@@ -8519,3 +8519,237 @@ class TestLargeContentBlocks:
         assert len(user_msgs) == 120
 
 
+# ---------------------------------------------------------------------------
+# Estimated input tokens in streaming response.created
+# ---------------------------------------------------------------------------
+
+
+class TestStreamingEstimatedInputTokens:
+    """Verify that pre-computed input_tokens are emitted in response.created
+    when estimated_input_tokens is passed to _responses_stream_converter."""
+
+    @pytest.mark.asyncio
+    async def test_response_created_uses_estimated_input_tokens(self):
+        """When estimated_input_tokens is provided, response.created carries it."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"hi"}}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "m", "resp_est", estimated_input_tokens=42
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        created = [d for t, d in parsed if t == "response.created"]
+        assert len(created) == 1
+        usage = created[0]["response"]["usage"]
+        assert usage["input_tokens"] == 42
+
+    @pytest.mark.asyncio
+    async def test_response_created_defaults_to_zero_without_estimate(self):
+        """Without estimated_input_tokens, response.created defaults to 0."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"hi"}}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "m", "resp_def"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        created = [d for t, d in parsed if t == "response.created"]
+        usage = created[0]["response"]["usage"]
+        assert usage["input_tokens"] == 0
+
+    @pytest.mark.asyncio
+    async def test_backend_usage_overrides_estimate_in_completed(self):
+        """When backend provides prompt_tokens, response.completed uses it."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"x"}}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":99,"completion_tokens":5}}\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "m", "resp_override", estimated_input_tokens=42
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        created = [d for t, d in parsed if t == "response.created"]
+        completed = [d for t, d in parsed if t == "response.completed"]
+        # response.created carries the estimate
+        assert created[0]["response"]["usage"]["input_tokens"] == 42
+        # response.completed carries the backend's actual value
+        assert completed[0]["response"]["usage"]["input_tokens"] == 99
+
+    @pytest.mark.asyncio
+    async def test_estimate_preserved_when_backend_sends_no_usage(self):
+        """When backend sends no usage, response.completed uses the estimate."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"hi"}}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "m", "resp_nobackend", estimated_input_tokens=50
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        completed = [d for t, d in parsed if t == "response.completed"]
+        assert completed[0]["response"]["usage"]["input_tokens"] == 50
+
+    @pytest.mark.asyncio
+    async def test_estimate_preserved_when_backend_sends_zero_prompt_tokens(self):
+        """When backend sends prompt_tokens: 0, the estimate is kept."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"ok"}}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":0,"completion_tokens":2}}\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "m", "resp_zero", estimated_input_tokens=30
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        completed = [d for t, d in parsed if t == "response.completed"]
+        # prompt_tokens: 0 doesn't overwrite the estimate
+        assert completed[0]["response"]["usage"]["input_tokens"] == 30
+
+    @pytest.mark.asyncio
+    async def test_in_progress_event_also_carries_estimate(self):
+        """response.in_progress event should carry the same estimate as created."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"hi"}}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "m", "resp_inprog", estimated_input_tokens=25
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        in_progress = [d for t, d in parsed if t == "response.in_progress"]
+        assert len(in_progress) == 1
+        # in_progress uses the same skeleton as created
+        assert in_progress[0]["response"]["usage"]["input_tokens"] == 25
+
+    @pytest.mark.asyncio
+    async def test_input_tokens_details_present_with_estimate(self):
+        """input_tokens_details is present with cached_tokens: 0 when estimate is used."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"hi"}}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "m", "resp_details", estimated_input_tokens=10
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        created = [d for t, d in parsed if t == "response.created"]
+        usage = created[0]["response"]["usage"]
+        assert "input_tokens_details" in usage
+        assert usage["input_tokens_details"]["cached_tokens"] == 0
+
+
+class TestStreamingEstimatedInputTokensIntegration:
+    """Integration tests verifying estimated input_tokens through the full
+    Responses route handler using FakeLLM and TestClient."""
+
+    @pytest.fixture(autouse=True)
+    def setup_app(self, monkeypatch):
+        from fastapi.testclient import TestClient
+        import config as _cfg
+        monkeypatch.setattr(_cfg, "BOOST_AUTH", [])
+        app = _make_responses_app()
+        self.client = TestClient(app)
+
+    def test_streaming_response_created_has_nonzero_input_tokens(self, monkeypatch):
+        """Full handler: streaming response.created carries a token estimate > 0."""
+        from helpers import FakeLLM, setup_mock_llm
+
+        fake = FakeLLM(
+            stream_chunks=[
+                'data: {"choices":[{"delta":{"content":"hello"}}]}\n\n',
+                'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":15,"completion_tokens":3}}\n\n',
+                'data: [DONE]\n\n',
+            ]
+        )
+        setup_mock_llm(monkeypatch, fake)
+
+        resp = self.client.post("/v1/responses", json={
+            "model": "gpt-4o",
+            "input": "Hello, world!",
+            "stream": True,
+        })
+        assert resp.status_code == 200
+
+        events = resp.text.strip().split("\n\n")
+        parsed = _parse_sse_events(events)
+        created = [d for t, d in parsed if t == "response.created"]
+        assert len(created) == 1
+        # The estimate should be > 0 since the request has input
+        assert created[0]["response"]["usage"]["input_tokens"] > 0
+
+    def test_streaming_completed_uses_backend_value(self, monkeypatch):
+        """Full handler: response.completed uses backend prompt_tokens."""
+        from helpers import FakeLLM, setup_mock_llm
+
+        fake = FakeLLM(
+            stream_chunks=[
+                'data: {"choices":[{"delta":{"content":"hi"}}]}\n\n',
+                'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":77,"completion_tokens":2}}\n\n',
+                'data: [DONE]\n\n',
+            ]
+        )
+        setup_mock_llm(monkeypatch, fake)
+
+        resp = self.client.post("/v1/responses", json={
+            "model": "gpt-4o",
+            "input": "Hello!",
+            "stream": True,
+        })
+        assert resp.status_code == 200
+
+        events = resp.text.strip().split("\n\n")
+        parsed = _parse_sse_events(events)
+        completed = [d for t, d in parsed if t == "response.completed"]
+        assert len(completed) == 1
+        # Backend provides 77 prompt_tokens — should take precedence
+        assert completed[0]["response"]["usage"]["input_tokens"] == 77
+
+    def test_nonstreaming_response_still_uses_backend_usage(self, monkeypatch):
+        """Non-streaming responses use backend usage (not estimates)."""
+        from helpers import FakeLLM, setup_mock_llm, openai_result
+
+        fake = FakeLLM(
+            stream_chunks=[
+                'data: {"choices":[{"delta":{"content":"hello"}}]}\n\n',
+                'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n',
+                'data: [DONE]\n\n',
+            ],
+            consume_result=openai_result(
+                content="hello",
+                prompt_tokens=25,
+                completion_tokens=3,
+            ),
+        )
+        setup_mock_llm(monkeypatch, fake)
+
+        resp = self.client.post("/v1/responses", json={
+            "model": "gpt-4o",
+            "input": "Hello!",
+        })
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["usage"]["input_tokens"] == 25
+
+

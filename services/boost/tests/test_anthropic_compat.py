@@ -8673,5 +8673,218 @@ class TestSystemListDiverseMixedTypes:
         assert "cache_control" not in str(system_msg)
 
 
+# ---------------------------------------------------------------------------
+# Estimated input tokens in streaming message_start
+# ---------------------------------------------------------------------------
+
+
+class TestStreamingEstimatedInputTokens:
+    """Verify that pre-computed input_tokens are emitted in message_start
+    when estimated_input_tokens is passed to _anthropic_stream_converter."""
+
+    @pytest.mark.asyncio
+    async def test_message_start_uses_estimated_input_tokens(self):
+        """When estimated_input_tokens is provided, message_start carries it."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"hi"}}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n'
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(
+                mock_stream(), "m", estimated_input_tokens=42
+            )
+        ]
+        parsed = _parse_sse_events("".join(events))
+        msg_start = [e for e in parsed if e["type"] == "message_start"][0]
+        assert msg_start["message"]["usage"]["input_tokens"] == 42
+
+    @pytest.mark.asyncio
+    async def test_message_start_defaults_to_zero_without_estimate(self):
+        """Without estimated_input_tokens, message_start defaults to 0."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"hi"}}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n'
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(mock_stream(), "m")
+        ]
+        parsed = _parse_sse_events("".join(events))
+        msg_start = [e for e in parsed if e["type"] == "message_start"][0]
+        assert msg_start["message"]["usage"]["input_tokens"] == 0
+
+    @pytest.mark.asyncio
+    async def test_backend_usage_overrides_estimate_in_message_delta(self):
+        """When the backend provides prompt_tokens in a streaming chunk,
+        the message_delta should use the backend's value, not the estimate."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"x"}}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":99,"completion_tokens":5}}\n\n'
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(
+                mock_stream(), "m", estimated_input_tokens=42
+            )
+        ]
+        parsed = _parse_sse_events("".join(events))
+        msg_start = [e for e in parsed if e["type"] == "message_start"][0]
+        msg_delta = [e for e in parsed if e["type"] == "message_delta"][0]
+        # message_start carries the estimate
+        assert msg_start["message"]["usage"]["input_tokens"] == 42
+        # message_delta carries the backend's actual value
+        assert msg_delta["usage"]["input_tokens"] == 99
+
+    @pytest.mark.asyncio
+    async def test_estimate_preserved_when_backend_sends_no_usage(self):
+        """When the backend sends no usage, message_delta uses the estimate."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"hi"}}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n'
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(
+                mock_stream(), "m", estimated_input_tokens=50
+            )
+        ]
+        parsed = _parse_sse_events("".join(events))
+        msg_delta = [e for e in parsed if e["type"] == "message_delta"][0]
+        # No backend usage, so the estimate survives to message_delta
+        assert msg_delta["usage"]["input_tokens"] == 50
+
+    @pytest.mark.asyncio
+    async def test_estimate_preserved_when_backend_sends_zero_prompt_tokens(self):
+        """When the backend sends prompt_tokens: 0, the estimate is kept."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"ok"}}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":0,"completion_tokens":2}}\n\n'
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(
+                mock_stream(), "m", estimated_input_tokens=30
+            )
+        ]
+        parsed = _parse_sse_events("".join(events))
+        msg_delta = [e for e in parsed if e["type"] == "message_delta"][0]
+        # prompt_tokens: 0 doesn't overwrite the estimate (0 or input_tokens)
+        assert msg_delta["usage"]["input_tokens"] == 30
+
+    @pytest.mark.asyncio
+    async def test_message_start_has_zero_output_tokens_regardless(self):
+        """output_tokens in message_start is always 0 (nothing generated yet)."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"hi"}}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n'
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(
+                mock_stream(), "m", estimated_input_tokens=42
+            )
+        ]
+        parsed = _parse_sse_events("".join(events))
+        msg_start = [e for e in parsed if e["type"] == "message_start"][0]
+        assert msg_start["message"]["usage"]["output_tokens"] == 0
+
+    @pytest.mark.asyncio
+    async def test_cache_fields_present_in_message_start_with_estimate(self):
+        """cache_creation_input_tokens and cache_read_input_tokens are still
+        present and zero in message_start when estimate is provided."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"hi"}}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n'
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(
+                mock_stream(), "m", estimated_input_tokens=10
+            )
+        ]
+        parsed = _parse_sse_events("".join(events))
+        msg_start = [e for e in parsed if e["type"] == "message_start"][0]
+        usage = msg_start["message"]["usage"]
+        assert usage["cache_creation_input_tokens"] == 0
+        assert usage["cache_read_input_tokens"] == 0
+
+
+class TestStreamingEstimatedInputTokensIntegration:
+    """Integration tests verifying estimated input_tokens through the full
+    route handler using FakeLLM and TestClient."""
+
+    def test_streaming_message_start_has_nonzero_input_tokens(self, monkeypatch):
+        """Full handler: streaming message_start carries a token estimate > 0."""
+        fake = _FakeLLM(
+            stream_chunks=[
+                'data: {"choices":[{"delta":{"content":"hello"}}]}\n\n',
+                'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":15,"completion_tokens":3}}\n\n',
+                'data: [DONE]\n\n',
+            ]
+        )
+        from helpers import setup_mock_llm
+        setup_mock_llm(monkeypatch, fake)
+
+        client = _make_client()
+        resp = client.post("/v1/messages", json={
+            **_ANTHRO_BODY,
+            "stream": True,
+        })
+        assert resp.status_code == 200
+
+        parsed = _parse_sse_events(resp.text)
+        msg_start = [e for e in parsed if e["type"] == "message_start"][0]
+        # The estimate should be > 0 since the request has messages
+        assert msg_start["message"]["usage"]["input_tokens"] > 0
+
+    def test_streaming_message_delta_uses_backend_value(self, monkeypatch):
+        """Full handler: message_delta uses backend prompt_tokens when available."""
+        fake = _FakeLLM(
+            stream_chunks=[
+                'data: {"choices":[{"delta":{"content":"hi"}}]}\n\n',
+                'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":77,"completion_tokens":2}}\n\n',
+                'data: [DONE]\n\n',
+            ]
+        )
+        from helpers import setup_mock_llm
+        setup_mock_llm(monkeypatch, fake)
+
+        client = _make_client()
+        resp = client.post("/v1/messages", json={
+            **_ANTHRO_BODY,
+            "stream": True,
+        })
+        assert resp.status_code == 200
+
+        parsed = _parse_sse_events(resp.text)
+        msg_delta = [e for e in parsed if e["type"] == "message_delta"][0]
+        # Backend provides 77 prompt_tokens — should take precedence
+        assert msg_delta["usage"]["input_tokens"] == 77
+
+    def test_nonstreaming_response_still_uses_backend_usage(self, monkeypatch):
+        """Non-streaming responses use backend usage (not estimates)."""
+        fake = _FakeLLM(
+            stream_chunks=[
+                'data: {"choices":[{"delta":{"content":"hello"}}]}\n\n',
+                'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":25,"completion_tokens":3}}\n\n',
+                'data: [DONE]\n\n',
+            ],
+            consume_result=_fake_openai_result(
+                content="hello",
+                prompt_tokens=25,
+                completion_tokens=3,
+            ),
+        )
+        from helpers import setup_mock_llm
+        setup_mock_llm(monkeypatch, fake)
+
+        client = _make_client()
+        resp = client.post("/v1/messages", json=_ANTHRO_BODY)
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["usage"]["input_tokens"] == 25
+
+
 if __name__ == "__main__":
     unittest.main()

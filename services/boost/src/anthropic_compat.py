@@ -611,7 +611,8 @@ def _build_anthropic_response(openai_result, request_model, stop_sequences=None)
 # --- Streaming conversion ---
 
 async def _anthropic_stream_converter(
-  response_stream, request_model, stop_sequences=None
+  response_stream, request_model, stop_sequences=None,
+  estimated_input_tokens=0,
 ):
   """Convert Harbor Boost's OpenAI-format SSE stream to Anthropic SSE events.
 
@@ -624,7 +625,7 @@ async def _anthropic_stream_converter(
   thinking_block_open = False
   text_block_open = False
   tool_blocks = {}
-  input_tokens = 0
+  input_tokens = estimated_input_tokens
   output_tokens = 0
   finish_reason = None
   accumulated_text_parts = []
@@ -647,7 +648,7 @@ async def _anthropic_stream_converter(
         "content": [],
         "stop_reason": None,
         "stop_sequence": None,
-        "usage": {"input_tokens": 0, "output_tokens": 0, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0},
+        "usage": {"input_tokens": input_tokens, "output_tokens": 0, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0},
       },
     },
   )
@@ -1067,8 +1068,17 @@ async def post_messages(request: Request, api_key: str = Depends(get_api_key)):
 
     if is_stream:
       logger.debug("Starting Anthropic streaming response: model=%s", request_model)
+      # Pre-compute input token estimate so message_start carries a
+      # meaningful input_tokens count (like the real Anthropic API).
+      est_input = count_messages_tokens(
+        openai_body.get("messages", []),
+        openai_body.get("tools") or None,
+      )
       return StreamingResponse(
-        _anthropic_stream_converter(completion, request_model, stop_sequences),
+        _anthropic_stream_converter(
+          completion, request_model, stop_sequences,
+          estimated_input_tokens=est_input,
+        ),
         media_type="text/event-stream",
         headers={**SSE_HEADERS, **_anthropic_headers(request_id, beta_flags)},
       )

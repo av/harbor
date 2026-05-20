@@ -692,7 +692,8 @@ def _build_responses_response(openai_result, request_model, response_id, request
 
 
 async def _responses_stream_converter(
-  response_stream, request_model, response_id, request_body=None
+  response_stream, request_model, response_id, request_body=None,
+  estimated_input_tokens=0,
 ):
   """Convert Harbor Boost's OpenAI-format SSE stream to Responses API SSE events.
 
@@ -717,7 +718,7 @@ async def _responses_stream_converter(
   text_annotations = []
   msg_id = None
   tool_blocks = {}
-  input_tokens = 0
+  input_tokens = estimated_input_tokens
   output_tokens = 0
   finish_reason = None
 
@@ -766,7 +767,7 @@ async def _responses_stream_converter(
     "model": request_model,
     "output": [],
     "instructions": instructions,
-    "usage": _make_usage(),
+    "usage": _make_usage(input_tokens=input_tokens),
     "store": False,
     "metadata": metadata,
     "temperature": None,
@@ -1489,8 +1490,18 @@ async def post_responses(request: Request, api_key: str = Depends(get_api_key)):
 
     if is_stream:
       logger.debug("Starting Responses streaming response: model=%s", request_model)
+      # Pre-compute input token estimate so response.created carries a
+      # meaningful input_tokens count from the very first event.
+      est_input = count_messages_tokens(
+        openai_body.get("messages", []),
+        openai_body.get("tools") or None,
+      )
       return StreamingResponse(
-        _responses_stream_converter(completion, request_model, response_id, request_body=json_body),
+        _responses_stream_converter(
+          completion, request_model, response_id,
+          request_body=json_body,
+          estimated_input_tokens=est_input,
+        ),
         media_type="text/event-stream",
         headers={**SSE_HEADERS, OPENAI_REQUEST_ID_HEADER: request_id},
       )
