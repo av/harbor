@@ -1089,3 +1089,24 @@ async def post_responses(request: Request, api_key: str = Depends(get_api_key)):
   except Exception as e:
     logger.error(f"Unexpected error in responses handler: {e}", exc_info=True)
     return _responses_error(500, "Internal server error", request_id=request_id)
+
+
+_NOT_FOUND_MESSAGE = (
+  "Response not found. Harbor Boost does not persist responses "
+  "(store is always false)."
+)
+
+
+@responses_compatible_routes.get("/v1/responses/{response_id}")
+async def get_response(response_id: str, api_key: str = Depends(get_api_key)):
+  return _responses_error(404, _NOT_FOUND_MESSAGE, error_code="not_found")
+
+
+@responses_compatible_routes.delete("/v1/responses/{response_id}")
+async def delete_response(response_id: str, api_key: str = Depends(get_api_key)):
+  return _responses_error(404, _NOT_FOUND_MESSAGE, error_code="not_found")
+
+
+@responses_compatible_routes.post("/v1/responses/{response_id}/cancel")
+async def cancel_response(response_id: str, api_key: str = Depends(get_api_key)):
+  return _responses_error(404, _NOT_FOUND_MESSAGE, error_code="not_found")

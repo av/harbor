@@ -3848,3 +3848,67 @@ class TestOutputTextProperty:
         in_progress = [d for t, d in parsed_events if t == "response.in_progress"]
         assert created[0]["response"]["text"] == {"format": {"type": "text"}}
         assert in_progress[0]["response"]["text"] == {"format": {"type": "text"}}
+
+
+# ---------------------------------------------------------------------------
+# Stub endpoints: GET, DELETE, POST cancel
+# ---------------------------------------------------------------------------
+
+
+class TestResponseStubEndpoints:
+    """Tests for GET /v1/responses/{id}, DELETE /v1/responses/{id},
+    and POST /v1/responses/{id}/cancel — all return 404."""
+
+    @pytest.fixture(autouse=True)
+    def setup_app(self, monkeypatch):
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
+        import config as _cfg
+        monkeypatch.setattr(_cfg, "BOOST_AUTH", [])
+
+        app = FastAPI()
+        app.include_router(responses_compat.responses_compatible_routes)
+        self.client = TestClient(app)
+
+    def _assert_not_found(self, resp):
+        assert resp.status_code == 404
+        body = resp.json()
+        assert body["error"]["type"] == "not_found_error"
+        assert body["error"]["code"] == "not_found"
+        assert "not persist" in body["error"]["message"]
+
+    def test_get_response_returns_404(self):
+        resp = self.client.get("/v1/responses/resp_abc123")
+        self._assert_not_found(resp)
+
+    def test_get_response_any_id(self):
+        resp = self.client.get("/v1/responses/resp_xyz")
+        self._assert_not_found(resp)
+
+    def test_delete_response_returns_404(self):
+        resp = self.client.delete("/v1/responses/resp_abc123")
+        self._assert_not_found(resp)
+
+    def test_delete_response_any_id(self):
+        resp = self.client.delete("/v1/responses/resp_999")
+        self._assert_not_found(resp)
+
+    def test_cancel_response_returns_404(self):
+        resp = self.client.post("/v1/responses/resp_abc123/cancel")
+        self._assert_not_found(resp)
+
+    def test_cancel_response_any_id(self):
+        resp = self.client.post("/v1/responses/resp_other/cancel")
+        self._assert_not_found(resp)
+
+    def test_error_format_matches_responses_api(self):
+        """Error body must have the standard Responses API error structure."""
+        resp = self.client.get("/v1/responses/resp_test")
+        body = resp.json()
+        assert "error" in body
+        assert "message" in body["error"]
+        assert "type" in body["error"]
+        assert "code" in body["error"]
+        assert "param" in body["error"]
+        assert body["error"]["param"] is None
