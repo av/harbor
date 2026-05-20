@@ -80,6 +80,19 @@ def _validate_responses_body(body, request_id=None):
   return None
 
 
+async def _reject_invalid_json_body(request: Request, request_id=None):
+  body = await request.body()
+  if not body.strip():
+    return None
+
+  try:
+    json.loads(body.decode("utf-8"))
+  except (json.JSONDecodeError, UnicodeDecodeError):
+    return _responses_error(400, "Invalid JSON in request body", request_id=request_id)
+
+  return None
+
+
 def _make_usage(input_tokens=0, output_tokens=0, total_tokens=None, reasoning_tokens=0):
   """Build a usage dict with the token detail sub-objects the SDK requires."""
   if total_tokens is None:
@@ -1609,8 +1622,12 @@ async def delete_response(response_id: str, api_key: str = Depends(get_api_key))
 
 
 @responses_compatible_routes.post("/v1/responses/{response_id}/cancel")
-async def cancel_response(response_id: str, api_key: str = Depends(get_api_key)):
+async def cancel_response(response_id: str, request: Request, api_key: str = Depends(get_api_key)):
   request_id = f"req_{shortuuid.random()}"
+  invalid_json_error = await _reject_invalid_json_body(request, request_id=request_id)
+  if invalid_json_error:
+    return invalid_json_error
+
   return _responses_error(
     404, _RESPONSE_CANCEL_NOT_FOUND.format(response_id=response_id),
     error_code="not_found", request_id=request_id,

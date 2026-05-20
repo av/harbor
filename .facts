@@ -587,6 +587,9 @@
 - label: Boost Responses API streaming response.failed events include a non-null response.error object with an SDK-compatible code and sanitized message
   command: python -m pytest services/boost/tests/test_responses_pydantic_validation.py::TestFailedStreamValidation::test_failed_event_populates_error_object -q
   tags: [spec, boost-responses-stream-error-schema, implemented]
+- label: Boost Responses cancel stub rejects invalid JSON request bodies with an OpenAI-format 400 before returning the non-persistence 404
+  command: cd services/boost && python -m pytest tests/test_responses_compat.py::TestResponseStubEndpoints::test_cancel_response_rejects_invalid_json -q
+  tags: [spec, boost-responses-cancel-invalid-json, implemented]
 
 ## shared
 - label: Boost compat layers share a common auth.py module with get_api_key supporting both Authorization and x-api-key headers

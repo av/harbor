@@ -4012,6 +4012,18 @@ class TestResponseStubEndpoints:
         body = resp.json()
         assert "resp_other" in body["error"]["message"]
 
+    def test_cancel_response_rejects_invalid_json(self):
+        resp = self.client.post(
+            "/v1/responses/resp_abc123/cancel",
+            content="{bad",
+            headers={"content-type": "application/json"},
+        )
+        assert resp.status_code == 400
+        body = resp.json()
+        assert body["error"]["type"] == "invalid_request_error"
+        assert body["error"]["message"] == "Invalid JSON in request body"
+        assert resp.headers["x-request-id"].startswith("req_")
+
     def test_error_format_matches_responses_api(self):
         """Error body must have the standard Responses API error structure."""
         resp = self.client.get("/v1/responses/resp_test")
@@ -8751,5 +8763,4 @@ class TestStreamingEstimatedInputTokensIntegration:
         assert resp.status_code == 200
         body = resp.json()
         assert body["usage"]["input_tokens"] == 25
-
 
