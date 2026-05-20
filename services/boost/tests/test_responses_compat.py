@@ -7858,6 +7858,83 @@ class TestResponseEchoFields:
         assert "reasoning" not in resp
 
 
+class TestCompletedAt:
+    """Verify completed_at is set when status is completed."""
+
+    def test_completed_at_set_on_completed(self):
+        from helpers import openai_result
+        result = openai_result(content="Hi", finish_reason="stop")
+        resp = responses_compat._build_responses_response(
+            result, "gpt-4o", "resp_test"
+        )
+        assert resp["status"] == "completed"
+        assert "completed_at" in resp
+        assert isinstance(resp["completed_at"], int)
+        assert resp["completed_at"] >= resp["created_at"]
+
+    def test_completed_at_absent_on_incomplete(self):
+        from helpers import openai_result
+        result = openai_result(content="Hi", finish_reason="length")
+        resp = responses_compat._build_responses_response(
+            result, "gpt-4o", "resp_test"
+        )
+        assert resp["status"] == "incomplete"
+        assert "completed_at" not in resp
+
+    @pytest.mark.asyncio
+    async def test_streaming_completed_at(self):
+        from helpers import sse_chunk, parse_responses_sse_events
+
+        chunks = [
+            sse_chunk({"choices": [{"delta": {"content": "Hi"}}]}),
+            sse_chunk({"choices": [{"delta": {}, "finish_reason": "stop"}],
+                       "usage": {"prompt_tokens": 5, "completion_tokens": 2, "total_tokens": 7}}),
+            "data: [DONE]\n\n",
+        ]
+
+        async def gen():
+            for c in chunks:
+                yield c
+
+        events = []
+        async for evt in responses_compat._responses_stream_converter(
+            gen(), "gpt-4o", "resp_test"
+        ):
+            events.append(evt)
+
+        parsed = parse_responses_sse_events(events)
+        completed = [d for t, d in parsed if t == "response.completed"]
+        assert len(completed) == 1
+        assert "completed_at" in completed[0]["response"]
+        assert isinstance(completed[0]["response"]["completed_at"], int)
+
+    @pytest.mark.asyncio
+    async def test_streaming_incomplete_no_completed_at(self):
+        from helpers import sse_chunk, parse_responses_sse_events
+
+        chunks = [
+            sse_chunk({"choices": [{"delta": {"content": "Hi"}}]}),
+            sse_chunk({"choices": [{"delta": {}, "finish_reason": "length"}],
+                       "usage": {"prompt_tokens": 5, "completion_tokens": 2, "total_tokens": 7}}),
+            "data: [DONE]\n\n",
+        ]
+
+        async def gen():
+            for c in chunks:
+                yield c
+
+        events = []
+        async for evt in responses_compat._responses_stream_converter(
+            gen(), "gpt-4o", "resp_test"
+        ):
+            events.append(evt)
+
+        parsed = parse_responses_sse_events(events)
+        incomplete = [d for t, d in parsed if t == "response.incomplete"]
+        assert len(incomplete) == 1
+        assert "completed_at" not in incomplete[0]["response"]
+
+
 class TestStreamingReasoningStatus:
     """Verify streaming reasoning items include status field."""
 

@@ -617,10 +617,11 @@ def _build_responses_response(openai_result, request_model, response_id, request
   if request_body and request_body.get("reasoning"):
     reasoning_config = request_body["reasoning"]
 
+  now = int(time.time())
   response = {
     "id": response_id,
     "object": "response",
-    "created_at": int(time.time()),
+    "created_at": now,
     "status": status,
     "model": request_model,
     "output": output,
@@ -646,6 +647,10 @@ def _build_responses_response(openai_result, request_model, response_id, request
     "error": None,
     "incomplete_details": {"reason": _incomplete_reason(finish_reason)} if status == "incomplete" else None,
   }
+
+  # completed_at is set only when status is completed
+  if status == "completed":
+    response["completed_at"] = now
 
   if user is not None:
     response["user"] = user
@@ -1347,6 +1352,9 @@ async def _responses_stream_converter(
     ),
     "incomplete_details": {"reason": _incomplete_reason(finish_reason)} if status == "incomplete" else None,
   }
+
+  if status == "completed":
+    final_response["completed_at"] = int(time.time())
 
   if status == "incomplete":
     terminal_event = "response.incomplete"
