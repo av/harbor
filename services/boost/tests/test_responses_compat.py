@@ -2129,3 +2129,649 @@ class TestResponsesEdgeCaseIntegration:
         })
         assert resp.status_code == 500
         assert resp.json()["error"]["type"] == "server_error"
+
+
+# ---------------------------------------------------------------------------
+# Reasoning support: _build_openai_body
+# ---------------------------------------------------------------------------
+
+
+class TestReasoningParamConversion:
+    """Test that reasoning parameter is mapped to reasoning_effort."""
+
+    def test_reasoning_effort_mapped(self):
+        body = {"model": "o3", "input": "hi", "reasoning": {"effort": "high"}}
+        result = responses_compat._build_openai_body(body)
+        assert result["reasoning_effort"] == "high"
+
+    def test_reasoning_effort_low(self):
+        body = {"model": "o3", "input": "hi", "reasoning": {"effort": "low"}}
+        result = responses_compat._build_openai_body(body)
+        assert result["reasoning_effort"] == "low"
+
+    def test_reasoning_effort_medium(self):
+        body = {"model": "o3", "input": "hi", "reasoning": {"effort": "medium"}}
+        result = responses_compat._build_openai_body(body)
+        assert result["reasoning_effort"] == "medium"
+
+    def test_no_reasoning_param(self):
+        body = {"model": "gpt-4o", "input": "hi"}
+        result = responses_compat._build_openai_body(body)
+        assert "reasoning_effort" not in result
+
+    def test_reasoning_without_effort(self):
+        body = {"model": "o3", "input": "hi", "reasoning": {}}
+        result = responses_compat._build_openai_body(body)
+        assert "reasoning_effort" not in result
+
+    def test_reasoning_none(self):
+        body = {"model": "o3", "input": "hi", "reasoning": None}
+        result = responses_compat._build_openai_body(body)
+        assert "reasoning_effort" not in result
+
+    def test_reasoning_non_dict(self):
+        body = {"model": "o3", "input": "hi", "reasoning": "high"}
+        result = responses_compat._build_openai_body(body)
+        assert "reasoning_effort" not in result
+
+    def test_reasoning_with_other_params(self):
+        body = {
+            "model": "o3",
+            "input": "hi",
+            "reasoning": {"effort": "high"},
+            "temperature": 0.5,
+            "max_output_tokens": 1000,
+        }
+        result = responses_compat._build_openai_body(body)
+        assert result["reasoning_effort"] == "high"
+        assert result["temperature"] == 0.5
+        assert result["max_tokens"] == 1000
+
+
+# ---------------------------------------------------------------------------
+# Reasoning support: _build_output_items
+# ---------------------------------------------------------------------------
+
+
+class TestReasoningOutputItems:
+    """Test reasoning output items in non-streaming responses."""
+
+    def test_reasoning_content_produces_reasoning_item(self):
+        openai_result = {
+            "choices": [{
+                "message": {
+                    "reasoning_content": "Let me think about this...",
+                    "content": "The answer is 4.",
+                },
+                "finish_reason": "stop",
+            }],
+        }
+        output = responses_compat._build_output_items(openai_result)
+        assert len(output) == 2
+        assert output[0]["type"] == "reasoning"
+        assert output[0]["id"].startswith("rs_")
+        assert len(output[0]["summary"]) == 1
+        assert output[0]["summary"][0]["type"] == "summary_text"
+        assert output[0]["summary"][0]["text"] == "Let me think about this..."
+        assert output[1]["type"] == "message"
+        assert output[1]["content"][0]["text"] == "The answer is 4."
+
+    def test_reasoning_field_also_works(self):
+        """Some backends use 'reasoning' instead of 'reasoning_content'."""
+        openai_result = {
+            "choices": [{
+                "message": {
+                    "reasoning": "Thinking hard...",
+                    "content": "42",
+                },
+                "finish_reason": "stop",
+            }],
+        }
+        output = responses_compat._build_output_items(openai_result)
+        assert len(output) == 2
+        assert output[0]["type"] == "reasoning"
+        assert output[0]["summary"][0]["text"] == "Thinking hard..."
+
+    def test_no_reasoning_no_reasoning_item(self):
+        openai_result = {
+            "choices": [{"message": {"content": "hello"}, "finish_reason": "stop"}],
+        }
+        output = responses_compat._build_output_items(openai_result)
+        assert len(output) == 1
+        assert output[0]["type"] == "message"
+
+    def test_reasoning_before_message_ordering(self):
+        openai_result = {
+            "choices": [{
+                "message": {
+                    "reasoning_content": "Step 1...",
+                    "content": "Result",
+                },
+                "finish_reason": "stop",
+            }],
+        }
+        output = responses_compat._build_output_items(openai_result)
+        types = [item["type"] for item in output]
+        assert types == ["reasoning", "message"]
+
+    def test_reasoning_with_tool_calls(self):
+        openai_result = {
+            "choices": [{
+                "message": {
+                    "reasoning_content": "I should search for this",
+                    "content": None,
+                    "tool_calls": [
+                        {"id": "call_1", "function": {"name": "search", "arguments": '{"q":"test"}'}},
+                    ],
+                },
+                "finish_reason": "tool_calls",
+            }],
+        }
+        output = responses_compat._build_output_items(openai_result)
+        types = [item["type"] for item in output]
+        assert types == ["reasoning", "function_call"]
+
+    def test_reasoning_empty_string_ignored(self):
+        openai_result = {
+            "choices": [{
+                "message": {
+                    "reasoning_content": "",
+                    "content": "hello",
+                },
+                "finish_reason": "stop",
+            }],
+        }
+        output = responses_compat._build_output_items(openai_result)
+        assert len(output) == 1
+        assert output[0]["type"] == "message"
+
+
+# ---------------------------------------------------------------------------
+# Reasoning support: _build_responses_response with reasoning_tokens
+# ---------------------------------------------------------------------------
+
+
+class TestReasoningTokensInUsage:
+    """Test that reasoning tokens from the backend are propagated."""
+
+    def test_reasoning_tokens_from_completion_details(self):
+        openai_result = {
+            "choices": [{"message": {"content": "4"}, "finish_reason": "stop"}],
+            "usage": {
+                "prompt_tokens": 10,
+                "completion_tokens": 50,
+                "total_tokens": 60,
+                "completion_tokens_details": {"reasoning_tokens": 40},
+            },
+        }
+        resp = responses_compat._build_responses_response(openai_result, "o3", "resp_rt")
+        assert resp["usage"]["output_tokens_details"]["reasoning_tokens"] == 40
+
+    def test_no_completion_details_defaults_to_zero(self):
+        openai_result = {
+            "choices": [{"message": {"content": "hi"}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 5, "completion_tokens": 2, "total_tokens": 7},
+        }
+        resp = responses_compat._build_responses_response(openai_result, "gpt-4o", "resp_nrt")
+        assert resp["usage"]["output_tokens_details"]["reasoning_tokens"] == 0
+
+
+class TestMakeUsageReasoning:
+    def test_reasoning_tokens_param(self):
+        u = responses_compat._make_usage(reasoning_tokens=25)
+        assert u["output_tokens_details"]["reasoning_tokens"] == 25
+
+    def test_reasoning_tokens_default_zero(self):
+        u = responses_compat._make_usage()
+        assert u["output_tokens_details"]["reasoning_tokens"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Reasoning support: Streaming
+# ---------------------------------------------------------------------------
+
+
+class TestReasoningStreaming:
+    """Test reasoning events in streaming responses."""
+
+    @pytest.mark.asyncio
+    async def test_reasoning_then_text_stream(self):
+        """Reasoning chunks followed by text chunks should produce correct event sequence."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"reasoning_content":"Let me think"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{"reasoning_content":"...carefully."},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{"content":"The answer is 4."},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "o3", "resp_reason"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        event_types = [t for t, _ in parsed]
+
+        # Should have reasoning events before text events
+        assert "response.output_item.added" in event_types
+        assert "response.reasoning_summary_part.added" in event_types
+        assert "response.reasoning_summary_text.delta" in event_types
+        assert "response.reasoning_summary_text.done" in event_types
+        assert "response.reasoning_summary_part.done" in event_types
+        assert "response.output_text.delta" in event_types
+
+        # Reasoning events should come before text events
+        first_reasoning_delta = next(
+            i for i, (t, _) in enumerate(parsed) if t == "response.reasoning_summary_text.delta"
+        )
+        first_text_delta = next(
+            i for i, (t, _) in enumerate(parsed) if t == "response.output_text.delta"
+        )
+        assert first_reasoning_delta < first_text_delta
+
+    @pytest.mark.asyncio
+    async def test_reasoning_item_has_correct_structure(self):
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"reasoning_content":"Thinking..."},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{"content":"4"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "o3", "resp_rs"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+
+        # Check output_item.added for reasoning
+        reasoning_added = [d for t, d in parsed
+                          if t == "response.output_item.added" and d["item"]["type"] == "reasoning"]
+        assert len(reasoning_added) == 1
+        assert reasoning_added[0]["item"]["id"].startswith("rs_")
+        assert reasoning_added[0]["item"]["summary"] == []
+
+        # Check reasoning_summary_part.added
+        part_added = [d for t, d in parsed if t == "response.reasoning_summary_part.added"]
+        assert len(part_added) == 1
+        assert part_added[0]["summary_index"] == 0
+        assert part_added[0]["part"]["type"] == "summary_text"
+        assert part_added[0]["part"]["text"] == ""
+
+    @pytest.mark.asyncio
+    async def test_reasoning_deltas_accumulated(self):
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"reasoning_content":"A"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{"reasoning_content":"B"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{"reasoning_content":"C"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{"content":"Result"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "o3", "resp_racc"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+
+        # 3 reasoning deltas
+        reasoning_deltas = [d for t, d in parsed if t == "response.reasoning_summary_text.delta"]
+        assert len(reasoning_deltas) == 3
+        assert reasoning_deltas[0]["delta"] == "A"
+        assert reasoning_deltas[1]["delta"] == "B"
+        assert reasoning_deltas[2]["delta"] == "C"
+
+        # Done event should have accumulated text
+        reasoning_done = [d for t, d in parsed if t == "response.reasoning_summary_text.done"]
+        assert len(reasoning_done) == 1
+        assert reasoning_done[0]["text"] == "ABC"
+
+        # Part done should also have accumulated text
+        part_done = [d for t, d in parsed if t == "response.reasoning_summary_part.done"]
+        assert len(part_done) == 1
+        assert part_done[0]["part"]["text"] == "ABC"
+
+    @pytest.mark.asyncio
+    async def test_reasoning_output_item_done(self):
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"reasoning_content":"Think"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{"content":"Done"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "o3", "resp_roid"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+
+        # output_item.done for reasoning should come before text item opens
+        reasoning_item_done = [
+            d for t, d in parsed
+            if t == "response.output_item.done" and d["item"]["type"] == "reasoning"
+        ]
+        assert len(reasoning_item_done) == 1
+        item = reasoning_item_done[0]["item"]
+        assert item["id"].startswith("rs_")
+        assert len(item["summary"]) == 1
+        assert item["summary"][0]["type"] == "summary_text"
+        assert item["summary"][0]["text"] == "Think"
+
+    @pytest.mark.asyncio
+    async def test_reasoning_only_no_text(self):
+        """Stream with only reasoning content and no text should still close properly."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"reasoning_content":"Just thinking..."},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "o3", "resp_ro"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        event_types = [t for t, _ in parsed]
+
+        assert "response.reasoning_summary_text.delta" in event_types
+        assert "response.reasoning_summary_text.done" in event_types
+        assert "response.reasoning_summary_part.done" in event_types
+        assert event_types[-1] == "response.completed"
+
+        # No text events
+        assert "response.output_text.delta" not in event_types
+
+    @pytest.mark.asyncio
+    async def test_reasoning_with_tool_calls_stream(self):
+        """Reasoning followed by tool calls in streaming."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"reasoning_content":"I need to search"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","function":{"name":"search","arguments":"{\\"q\\":\\"test\\"}"}}]},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"tool_calls"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "o3", "resp_rtc"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        event_types = [t for t, _ in parsed]
+
+        # Reasoning should be closed before tool call opens
+        reasoning_done_idx = event_types.index("response.reasoning_summary_text.done")
+        tool_added_idx = next(
+            i for i, (t, d) in enumerate(parsed)
+            if t == "response.output_item.added" and d["item"]["type"] == "function_call"
+        )
+        assert reasoning_done_idx < tool_added_idx
+
+    @pytest.mark.asyncio
+    async def test_reasoning_uses_reasoning_field(self):
+        """Some backends use 'reasoning' instead of 'reasoning_content'."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"reasoning":"Alt field"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{"content":"Done"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "o3", "resp_altf"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        reasoning_deltas = [d for t, d in parsed if t == "response.reasoning_summary_text.delta"]
+        assert len(reasoning_deltas) == 1
+        assert reasoning_deltas[0]["delta"] == "Alt field"
+
+    @pytest.mark.asyncio
+    async def test_reasoning_sequence_numbers_monotonic(self):
+        """All events including reasoning should have monotonically increasing sequence numbers."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"reasoning_content":"Think"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{"content":"Answer"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "o3", "resp_seqr"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        seq_nums = [d.get("sequence_number") for _, d in parsed]
+        for i in range(1, len(seq_nums)):
+            assert seq_nums[i] > seq_nums[i - 1], \
+                f"sequence_number not monotonically increasing: {seq_nums}"
+
+    @pytest.mark.asyncio
+    async def test_reasoning_output_indices(self):
+        """Reasoning and text items should have different output indices."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"reasoning_content":"Think"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{"content":"Answer"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "o3", "resp_oidx"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+
+        # Find output indices for reasoning and text items
+        reasoning_added = [d for t, d in parsed
+                          if t == "response.output_item.added" and d["item"]["type"] == "reasoning"]
+        text_added = [d for t, d in parsed
+                     if t == "response.output_item.added" and d["item"]["type"] == "message"]
+
+        assert len(reasoning_added) == 1
+        assert len(text_added) == 1
+        assert reasoning_added[0]["output_index"] < text_added[0]["output_index"]
+
+    @pytest.mark.asyncio
+    async def test_mid_stream_error_after_reasoning(self):
+        """Error after reasoning should close reasoning and emit error text."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"reasoning_content":"Thinking..."},"index":0}]}\n\n'
+            raise RuntimeError("connection lost")
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "o3", "resp_rerr"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        event_types = [t for t, _ in parsed]
+
+        # Reasoning should be closed
+        assert "response.reasoning_summary_text.done" in event_types
+        assert "response.reasoning_summary_part.done" in event_types
+
+        # Error text should appear
+        error_deltas = [d for t, d in parsed if t == "response.output_text.delta"]
+        assert len(error_deltas) == 1
+        assert "connection lost" in error_deltas[0]["delta"]
+
+        # Completed with failed status
+        completed = [d for t, d in parsed if t == "response.completed"]
+        assert completed[0]["response"]["status"] == "failed"
+
+
+# ---------------------------------------------------------------------------
+# Reasoning support: Integration tests
+# ---------------------------------------------------------------------------
+
+
+class TestReasoningIntegration:
+    """Integration tests for reasoning support via TestClient."""
+
+    @pytest.fixture(autouse=True)
+    def setup_app(self, monkeypatch):
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
+        import config as _cfg
+        monkeypatch.setattr(_cfg, "BOOST_AUTH", [])
+
+        app = FastAPI()
+        app.include_router(responses_compat.responses_compatible_routes)
+        self.client = TestClient(app)
+
+    def test_reasoning_param_passed_through(self, monkeypatch):
+        """reasoning.effort should be mapped to reasoning_effort in the downstream request."""
+        captured_body = {}
+
+        async def mock_list_downstream():
+            return []
+
+        def mock_resolve(body):
+            captured_body.update(body)
+            return {}
+
+        mock_result = {
+            "choices": [{"message": {"content": "4"}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 5, "completion_tokens": 1, "total_tokens": 6},
+        }
+
+        mock_llm = MagicMock()
+        mock_llm.workflow = None
+        mock_llm.boost_params = {}
+
+        async def mock_serve():
+            async def gen():
+                yield f'data: {json.dumps(mock_result)}\n\n'
+                yield 'data: [DONE]\n\n'
+            return gen()
+
+        async def mock_consume(stream):
+            return mock_result
+
+        mock_llm.serve = mock_serve
+        mock_llm.consume_stream = mock_consume
+
+        monkeypatch.setattr(responses_compat.mapper, "list_downstream", mock_list_downstream)
+        monkeypatch.setattr(responses_compat.mapper, "resolve_request_config", mock_resolve)
+        monkeypatch.setattr(responses_compat.mapper, "is_direct_task", lambda proxy: False)
+        monkeypatch.setattr(responses_compat.llm_mod, "LLM", lambda **kw: mock_llm)
+
+        resp = self.client.post("/v1/responses", json={
+            "model": "o3",
+            "input": "What is 2+2?",
+            "reasoning": {"effort": "high"},
+        })
+
+        assert resp.status_code == 200
+        assert captured_body.get("reasoning_effort") == "high"
+
+    def test_non_streaming_reasoning_response(self, monkeypatch):
+        """Non-streaming response with reasoning_content should include reasoning output item."""
+        mock_result = {
+            "choices": [{
+                "message": {
+                    "reasoning_content": "Let me think step by step...",
+                    "content": "The answer is 4.",
+                },
+                "finish_reason": "stop",
+            }],
+            "usage": {
+                "prompt_tokens": 10,
+                "completion_tokens": 50,
+                "total_tokens": 60,
+                "completion_tokens_details": {"reasoning_tokens": 40},
+            },
+        }
+
+        async def mock_list_downstream():
+            return []
+
+        mock_llm = MagicMock()
+        mock_llm.workflow = None
+        mock_llm.boost_params = {}
+
+        async def mock_serve():
+            async def gen():
+                yield f'data: {json.dumps(mock_result)}\n\n'
+                yield 'data: [DONE]\n\n'
+            return gen()
+
+        async def mock_consume(stream):
+            return mock_result
+
+        mock_llm.serve = mock_serve
+        mock_llm.consume_stream = mock_consume
+
+        monkeypatch.setattr(responses_compat.mapper, "list_downstream", mock_list_downstream)
+        monkeypatch.setattr(responses_compat.mapper, "resolve_request_config", lambda body: {})
+        monkeypatch.setattr(responses_compat.mapper, "is_direct_task", lambda proxy: False)
+        monkeypatch.setattr(responses_compat.llm_mod, "LLM", lambda **kw: mock_llm)
+
+        resp = self.client.post("/v1/responses", json={
+            "model": "o3",
+            "input": "What is 2+2?",
+            "reasoning": {"effort": "high"},
+        })
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["object"] == "response"
+        assert len(body["output"]) == 2
+        assert body["output"][0]["type"] == "reasoning"
+        assert body["output"][0]["summary"][0]["text"] == "Let me think step by step..."
+        assert body["output"][1]["type"] == "message"
+        assert body["output"][1]["content"][0]["text"] == "The answer is 4."
+        assert body["usage"]["output_tokens_details"]["reasoning_tokens"] == 40
+
+    def test_streaming_reasoning_response(self, monkeypatch):
+        """Streaming response with reasoning chunks should emit reasoning events."""
+        async def mock_list_downstream():
+            return []
+
+        mock_llm = MagicMock()
+        mock_llm.workflow = None
+        mock_llm.boost_params = {}
+
+        async def mock_serve():
+            async def gen():
+                yield 'data: {"choices":[{"delta":{"reasoning_content":"Thinking..."},"index":0}]}\n\n'
+                yield 'data: {"choices":[{"delta":{"content":"4"},"index":0}]}\n\n'
+                yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}\n\n'
+                yield 'data: [DONE]\n\n'
+            return gen()
+
+        mock_llm.serve = mock_serve
+
+        monkeypatch.setattr(responses_compat.mapper, "list_downstream", mock_list_downstream)
+        monkeypatch.setattr(responses_compat.mapper, "resolve_request_config", lambda body: {})
+        monkeypatch.setattr(responses_compat.mapper, "is_direct_task", lambda proxy: False)
+        monkeypatch.setattr(responses_compat.llm_mod, "LLM", lambda **kw: mock_llm)
+
+        resp = self.client.post("/v1/responses", json={
+            "model": "o3",
+            "input": "What is 2+2?",
+            "reasoning": {"effort": "high"},
+            "stream": True,
+        })
+
+        assert resp.status_code == 200
+        text = resp.text
+        assert "response.reasoning_summary_part.added" in text
+        assert "response.reasoning_summary_text.delta" in text
+        assert "response.reasoning_summary_text.done" in text
+        assert "response.reasoning_summary_part.done" in text
+        assert "response.output_text.delta" in text
+        assert "response.completed" in text

@@ -14,6 +14,7 @@ from auth import get_api_key
 from compat_utils import (
     REQUEST_ID_HEADER,
     get_chunk_content as _get_chunk_content,
+    get_chunk_reasoning as _get_chunk_reasoning,
     get_chunk_tool_calls as _get_chunk_tool_calls,
     get_chunk_usage as _get_chunk_usage,
     sse_event as _sse_event,
@@ -47,7 +48,7 @@ def _responses_error(status_code, message, error_type=None, error_code=None, req
   return JSONResponse(status_code=status_code, content=body, headers=headers)
 
 
-def _make_usage(input_tokens=0, output_tokens=0, total_tokens=None):
+def _make_usage(input_tokens=0, output_tokens=0, total_tokens=None, reasoning_tokens=0):
   """Build a usage dict with the token detail sub-objects the SDK requires."""
   if total_tokens is None:
     total_tokens = input_tokens + output_tokens
@@ -56,7 +57,7 @@ def _make_usage(input_tokens=0, output_tokens=0, total_tokens=None):
     "output_tokens": output_tokens,
     "total_tokens": total_tokens,
     "input_tokens_details": {"cached_tokens": 0},
-    "output_tokens_details": {"reasoning_tokens": 0},
+    "output_tokens_details": {"reasoning_tokens": reasoning_tokens},
   }
 
 
@@ -229,6 +230,13 @@ def _build_openai_body(body: dict):
   if "max_output_tokens" in body:
     openai_body["max_tokens"] = body["max_output_tokens"]
 
+  # Reasoning/thinking support: map reasoning.effort to reasoning_effort
+  reasoning = body.get("reasoning")
+  if reasoning and isinstance(reasoning, dict):
+    effort = reasoning.get("effort")
+    if effort:
+      openai_body["reasoning_effort"] = effort
+
   if body.get("stream", False):
     openai_body["stream"] = True
     openai_body["stream_options"] = {"include_usage": True}
@@ -250,6 +258,21 @@ def _build_openai_body(body: dict):
 def _build_output_items(openai_result):
   """Convert Chat Completions result to Responses API output items."""
   output = []
+
+  # Reasoning/thinking content — emitted as a reasoning output item before the message
+  message = dotty.get(openai_result, "choices.0.message", {})
+  reasoning = message.get("reasoning_content") or message.get("reasoning") or ""
+  if reasoning:
+    output.append({
+      "type": "reasoning",
+      "id": f"rs_{shortuuid.random()}",
+      "summary": [
+        {
+          "type": "summary_text",
+          "text": str(reasoning),
+        }
+      ],
+    })
 
   content = dotty.get(openai_result, "choices.0.message.content")
   tool_calls = dotty.get(openai_result, "choices.0.message.tool_calls", [])
@@ -314,6 +337,11 @@ def _build_responses_response(openai_result, request_model, response_id):
   output = _build_output_items(openai_result)
   status = _map_status(finish_reason)
 
+  # Extract reasoning tokens from completion_tokens_details if available
+  reasoning_tokens = dotty.get(
+    openai_result, "usage.completion_tokens_details.reasoning_tokens", 0
+  ) or 0
+
   return {
     "id": response_id,
     "object": "response",
@@ -325,6 +353,7 @@ def _build_responses_response(openai_result, request_model, response_id):
       input_tokens=usage.get("prompt_tokens", 0),
       output_tokens=usage.get("completion_tokens", 0),
       total_tokens=usage.get("total_tokens", 0),
+      reasoning_tokens=reasoning_tokens,
     ),
     "metadata": {},
     "temperature": None,
@@ -363,6 +392,9 @@ async def _responses_stream_converter(
   created_at = int(time.time())
   seq = 0
   output_index = -1
+  reasoning_item_open = False
+  reasoning_content = ""
+  reasoning_id = None
   text_item_open = False
   text_content = ""
   msg_id = None
@@ -408,6 +440,54 @@ async def _responses_stream_converter(
   seq += 1
 
   stream_error = None
+
+  def _close_reasoning_item():
+    """Yield events to close an open reasoning output item. Returns list of SSE strings."""
+    nonlocal seq
+    events = []
+
+    # reasoning_summary_text.done
+    events.append(_sse_event("response.reasoning_summary_text.done", {
+      "type": "response.reasoning_summary_text.done",
+      "item_id": reasoning_id,
+      "output_index": output_index,
+      "summary_index": 0,
+      "text": reasoning_content,
+      "sequence_number": seq,
+    }))
+    seq += 1
+
+    # reasoning_summary_part.done
+    events.append(_sse_event("response.reasoning_summary_part.done", {
+      "type": "response.reasoning_summary_part.done",
+      "item_id": reasoning_id,
+      "output_index": output_index,
+      "summary_index": 0,
+      "part": {
+        "type": "summary_text",
+        "text": reasoning_content,
+      },
+      "sequence_number": seq,
+    }))
+    seq += 1
+
+    # output_item.done
+    events.append(_sse_event("response.output_item.done", {
+      "type": "response.output_item.done",
+      "output_index": output_index,
+      "item": {
+        "type": "reasoning",
+        "id": reasoning_id,
+        "summary": [{
+          "type": "summary_text",
+          "text": reasoning_content,
+        }],
+      },
+      "sequence_number": seq,
+    }))
+    seq += 1
+
+    return events
 
   def _close_text_item():
     """Yield events to close an open text message item. Returns list of SSE strings."""
@@ -476,6 +556,7 @@ async def _responses_stream_converter(
         except (json.JSONDecodeError, TypeError):
           continue
 
+        chunk_reasoning = _get_chunk_reasoning(chunk)
         chunk_text = _get_chunk_content(chunk)
         chunk_tools = _get_chunk_tool_calls(chunk)
         chunk_usage = _get_chunk_usage(chunk)
@@ -487,8 +568,61 @@ async def _responses_stream_converter(
         input_tokens = chunk_usage.get("prompt_tokens", 0) or input_tokens
         output_tokens = chunk_usage.get("completion_tokens", 0) or output_tokens
 
+        # --- Reasoning content (before text) ---
+        if chunk_reasoning:
+          if not reasoning_item_open:
+            output_index += 1
+            reasoning_id = f"rs_{shortuuid.random()}"
+
+            # output_item.added for reasoning
+            yield _sse_event("response.output_item.added", {
+              "type": "response.output_item.added",
+              "output_index": output_index,
+              "item": {
+                "type": "reasoning",
+                "id": reasoning_id,
+                "summary": [],
+              },
+              "sequence_number": seq,
+            })
+            seq += 1
+
+            # reasoning_summary_part.added
+            yield _sse_event("response.reasoning_summary_part.added", {
+              "type": "response.reasoning_summary_part.added",
+              "item_id": reasoning_id,
+              "output_index": output_index,
+              "summary_index": 0,
+              "part": {
+                "type": "summary_text",
+                "text": "",
+              },
+              "sequence_number": seq,
+            })
+            seq += 1
+
+            reasoning_item_open = True
+
+          reasoning_content += chunk_reasoning
+
+          # reasoning_summary_text.delta
+          yield _sse_event("response.reasoning_summary_text.delta", {
+            "type": "response.reasoning_summary_text.delta",
+            "item_id": reasoning_id,
+            "output_index": output_index,
+            "summary_index": 0,
+            "delta": chunk_reasoning,
+            "sequence_number": seq,
+          })
+          seq += 1
+
         # --- Text content ---
         if chunk_text:
+          # Close reasoning item before opening text item
+          if reasoning_item_open:
+            for evt in _close_reasoning_item():
+              yield evt
+            reasoning_item_open = False
           if not text_item_open:
             output_index += 1
             msg_id = f"msg_{shortuuid.random()}"
@@ -560,7 +694,11 @@ async def _responses_stream_converter(
               tool_state["arguments"] += tc_args
 
             if not tool_state.get("emitted") and tool_state.get("id"):
-              # Close the text item first if open
+              # Close open items before emitting tool call
+              if reasoning_item_open:
+                for evt in _close_reasoning_item():
+                  yield evt
+                reasoning_item_open = False
               if text_item_open:
                 for evt in _close_text_item():
                   yield evt
@@ -612,6 +750,12 @@ async def _responses_stream_converter(
     logger.error(f"Error during responses stream conversion: {e}", exc_info=True)
     stream_error = str(e)
 
+    # Close reasoning item before emitting error
+    if reasoning_item_open:
+      for evt in _close_reasoning_item():
+        yield evt
+      reasoning_item_open = False
+
     # Emit error as text in a message item
     if not text_item_open:
       output_index += 1
@@ -653,6 +797,11 @@ async def _responses_stream_converter(
       "sequence_number": seq,
     })
     seq += 1
+
+  # Close open reasoning item
+  if reasoning_item_open:
+    for evt in _close_reasoning_item():
+      yield evt
 
   # Close open text item
   if text_item_open:
