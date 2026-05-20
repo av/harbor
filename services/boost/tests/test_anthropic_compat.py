@@ -8510,5 +8510,168 @@ class TestConvertToolsNonDictItems:
         assert result == []
 
 
+# ---------------------------------------------------------------------------
+# Large message: 100+ content blocks
+# ---------------------------------------------------------------------------
+
+
+class TestLargeContentBlocks:
+    """Verify that user messages with 100+ content blocks convert correctly."""
+
+    def test_100_text_blocks_convert(self):
+        """A user message with 100 text blocks should produce a single user message
+        with a list of 100 content parts."""
+        blocks = [{"type": "text", "text": f"block {i}"} for i in range(100)]
+        body = {
+            "model": "test-model",
+            "max_tokens": 128,
+            "messages": [{"role": "user", "content": blocks}],
+        }
+        msgs = anthropic_compat._convert_messages(body)
+        assert len(msgs) == 1
+        assert msgs[0]["role"] == "user"
+        # With 100 text-only parts, they are emitted as individual content parts
+        content = msgs[0]["content"]
+        assert isinstance(content, list)
+        assert len(content) == 100
+
+    def test_150_mixed_blocks_convert(self):
+        """150 blocks mixing text, image, and tool_result should convert
+        without error and produce the correct number of messages."""
+        blocks = []
+        for i in range(50):
+            blocks.append({"type": "text", "text": f"text {i}"})
+        for i in range(50):
+            blocks.append({
+                "type": "image",
+                "source": {"type": "base64", "media_type": "image/png", "data": "AAAA"},
+            })
+        for i in range(50):
+            blocks.append({
+                "type": "tool_result",
+                "tool_use_id": f"toolu_{i:04d}",
+                "content": f"result {i}",
+            })
+        body = {
+            "model": "test-model",
+            "max_tokens": 128,
+            "messages": [{"role": "user", "content": blocks}],
+        }
+        msgs = anthropic_compat._convert_messages(body)
+        # tool_results become separate tool messages, text+image become user content
+        tool_msgs = [m for m in msgs if m["role"] == "tool"]
+        user_msgs = [m for m in msgs if m["role"] == "user"]
+        assert len(tool_msgs) == 50
+        assert len(user_msgs) == 1
+        # The user message should contain both text and image parts
+        user_content = user_msgs[0]["content"]
+        assert isinstance(user_content, list)
+        assert len(user_content) == 100  # 50 text + 50 image
+
+    def test_100_assistant_tool_use_blocks(self):
+        """An assistant message with 100 tool_use blocks should convert to a
+        single assistant message with 100 tool_calls."""
+        blocks = [
+            {
+                "type": "tool_use",
+                "id": f"toolu_{i:04d}",
+                "name": f"tool_{i}",
+                "input": {"query": f"q{i}"},
+            }
+            for i in range(100)
+        ]
+        body = {
+            "model": "test-model",
+            "max_tokens": 128,
+            "messages": [
+                {"role": "user", "content": "go"},
+                {"role": "assistant", "content": blocks},
+            ],
+        }
+        msgs = anthropic_compat._convert_messages(body)
+        assistant_msgs = [m for m in msgs if m["role"] == "assistant"]
+        assert len(assistant_msgs) == 1
+        assert len(assistant_msgs[0]["tool_calls"]) == 100
+
+    def test_build_openai_body_with_many_blocks(self):
+        """_build_openai_body should handle a request with 100+ content blocks
+        without errors."""
+        blocks = [{"type": "text", "text": f"block {i}"} for i in range(120)]
+        body = {
+            "model": "test-model",
+            "max_tokens": 256,
+            "messages": [{"role": "user", "content": blocks}],
+        }
+        openai_body = anthropic_compat._build_openai_body(body)
+        assert openai_body["model"] == "test-model"
+        # Should have converted all blocks into messages
+        user_msgs = [m for m in openai_body["messages"] if m["role"] == "user"]
+        assert len(user_msgs) == 1
+        assert isinstance(user_msgs[0]["content"], list)
+        assert len(user_msgs[0]["content"]) == 120
+
+
+# ---------------------------------------------------------------------------
+# System list blocks: diverse mixed types
+# ---------------------------------------------------------------------------
+
+
+class TestSystemListDiverseMixedTypes:
+    """Verify system array blocks with many non-text types are all silently
+    dropped, keeping only text blocks."""
+
+    def test_system_list_with_tool_use_document_and_unknown_types(self):
+        """Non-text blocks of various types (tool_use, document, unknown) in
+        the system array are silently dropped, keeping only text."""
+        body = {
+            "system": [
+                {"type": "text", "text": "System instruction."},
+                {"type": "tool_use", "id": "toolu_1234", "name": "search", "input": {}},
+                {"type": "document", "source": {"type": "base64", "data": "AAAA"}},
+                {"type": "text", "text": "Second instruction."},
+                {"type": "completely_unknown_type", "data": "something"},
+                {"type": "tool_result", "tool_use_id": "toolu_1234", "content": "result"},
+            ],
+            "messages": [{"role": "user", "content": "hi"}],
+        }
+        msgs = anthropic_compat._convert_messages(body)
+        assert len(msgs) == 2  # system + user
+        assert msgs[0]["role"] == "system"
+        assert msgs[0]["content"] == "System instruction.\nSecond instruction."
+
+    def test_system_list_with_only_unknown_types(self):
+        """System array with only unknown block types produces no system message."""
+        body = {
+            "system": [
+                {"type": "tool_use", "id": "toolu_1", "name": "f", "input": {}},
+                {"type": "document", "source": {"type": "base64", "data": "AAAA"}},
+                {"type": "custom_thing", "value": 42},
+            ],
+            "messages": [{"role": "user", "content": "hi"}],
+        }
+        msgs = anthropic_compat._convert_messages(body)
+        assert len(msgs) == 1
+        assert msgs[0]["role"] == "user"
+
+    def test_system_list_with_cache_control_and_diverse_types(self):
+        """Text blocks with cache_control alongside diverse non-text types;
+        cache_control is stripped, non-text blocks are dropped."""
+        body = {
+            "system": [
+                {"type": "text", "text": "Cached instruction.", "cache_control": {"type": "ephemeral"}},
+                {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "BBBB"}},
+                {"type": "tool_use", "id": "toolu_x", "name": "analyze", "input": {"q": "test"}},
+                {"type": "text", "text": "Not cached.", "cache_control": {"type": "ephemeral"}},
+                {"type": "redacted_thinking", "data": "secret"},
+            ],
+            "messages": [{"role": "user", "content": "hi"}],
+        }
+        msgs = anthropic_compat._convert_messages(body)
+        assert len(msgs) == 2
+        system_msg = msgs[0]
+        assert system_msg["content"] == "Cached instruction.\nNot cached."
+        assert "cache_control" not in str(system_msg)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -8419,3 +8419,103 @@ class TestConvertToolsNonDictItems:
         assert result == []
 
 
+# ---------------------------------------------------------------------------
+# Large message: 100+ content blocks / input items
+# ---------------------------------------------------------------------------
+
+
+class TestLargeContentBlocks:
+    """Verify that inputs with 100+ items or content parts convert correctly."""
+
+    def test_100_message_input_items(self):
+        """100 message input items should produce 100 messages."""
+        items = [
+            {"type": "message", "role": "user", "content": f"msg {i}"}
+            for i in range(100)
+        ]
+        body = {"input": items}
+        msgs = responses_compat._convert_input_to_messages(body)
+        assert len(msgs) == 100
+        assert all(m["role"] == "user" for m in msgs)
+
+    def test_150_mixed_input_items(self):
+        """150 input items mixing messages, function_call, and function_call_output
+        should convert without error."""
+        items = []
+        # 50 user messages
+        for i in range(50):
+            items.append({"type": "message", "role": "user", "content": f"user {i}"})
+        # 50 function_call items (will be merged into assistant messages)
+        for i in range(50):
+            items.append({
+                "type": "function_call",
+                "call_id": f"call_{i:04d}",
+                "name": f"tool_{i}",
+                "arguments": json.dumps({"q": f"query_{i}"}),
+            })
+        # 50 function_call_output items
+        for i in range(50):
+            items.append({
+                "type": "function_call_output",
+                "call_id": f"call_{i:04d}",
+                "output": f"result {i}",
+            })
+        body = {"input": items}
+        msgs = responses_compat._convert_input_to_messages(body)
+        user_msgs = [m for m in msgs if m["role"] == "user"]
+        tool_msgs = [m for m in msgs if m["role"] == "tool"]
+        assistant_msgs = [m for m in msgs if m["role"] == "assistant"]
+        assert len(user_msgs) == 50
+        assert len(tool_msgs) == 50
+        # function_call items may be merged into fewer assistant messages
+        assert len(assistant_msgs) >= 1
+        # Total tool_calls across all assistant messages should be 50
+        total_tool_calls = sum(len(m.get("tool_calls", [])) for m in assistant_msgs)
+        assert total_tool_calls == 50
+
+    def test_100_content_parts_in_single_message(self):
+        """A single message with 100 content parts should convert correctly."""
+        parts = [{"type": "input_text", "text": f"part {i}"} for i in range(100)]
+        body = {
+            "input": [
+                {"type": "message", "role": "user", "content": parts},
+            ],
+        }
+        msgs = responses_compat._convert_input_to_messages(body)
+        assert len(msgs) == 1
+        # 100 input_text parts should collapse to a single string (all text)
+        assert isinstance(msgs[0]["content"], str)
+        assert "part 0" in msgs[0]["content"]
+        assert "part 99" in msgs[0]["content"]
+
+    def test_100_mixed_content_parts(self):
+        """100 mixed content parts (text + image) should produce a list."""
+        parts = []
+        for i in range(50):
+            parts.append({"type": "input_text", "text": f"text {i}"})
+        for i in range(50):
+            parts.append({"type": "input_image", "image_url": f"https://example.com/img{i}.png"})
+        body = {
+            "input": [
+                {"type": "message", "role": "user", "content": parts},
+            ],
+        }
+        msgs = responses_compat._convert_input_to_messages(body)
+        assert len(msgs) == 1
+        content = msgs[0]["content"]
+        assert isinstance(content, list)
+        assert len(content) == 100
+
+    def test_build_openai_body_with_many_items(self):
+        """_build_openai_body should handle 120 input items without errors."""
+        items = [
+            {"type": "message", "role": "user", "content": f"msg {i}"}
+            for i in range(120)
+        ]
+        body = {"model": "gpt-4o", "input": items}
+        openai_body = responses_compat._build_openai_body(body)
+        assert openai_body["model"] == "gpt-4o"
+        user_msgs = [m for m in openai_body["messages"] if m["role"] == "user"]
+        assert len(user_msgs) == 120
+
+
