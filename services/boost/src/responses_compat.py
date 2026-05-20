@@ -355,6 +355,10 @@ def _build_openai_body(body: dict):
   if tool_choice is not None:
     openai_body["tool_choice"] = tool_choice
 
+  # parallel_tool_calls: direct passthrough (OpenAI Chat Completions param)
+  if "parallel_tool_calls" in body:
+    openai_body["parallel_tool_calls"] = body["parallel_tool_calls"]
+
   return openai_body
 
 
@@ -466,6 +470,11 @@ def _build_responses_response(openai_result, request_model, response_id, request
     if trunc and isinstance(trunc, dict) and trunc.get("type") == "auto":
       truncation = "auto"
 
+  # Reflect the parallel_tool_calls value from the request (default: True)
+  parallel_tool_calls = True
+  if request_body and "parallel_tool_calls" in request_body:
+    parallel_tool_calls = bool(request_body["parallel_tool_calls"])
+
   return {
     "id": response_id,
     "object": "response",
@@ -490,7 +499,7 @@ def _build_responses_response(openai_result, request_model, response_id, request
     "text": {
       "format": {"type": "text"},
     },
-    "parallel_tool_calls": True,
+    "parallel_tool_calls": parallel_tool_calls,
     "error": None,
     "incomplete_details": {"reason": "max_output_tokens"} if status == "incomplete" else None,
   }
@@ -540,6 +549,11 @@ async def _responses_stream_converter(
     if trunc and isinstance(trunc, dict) and trunc.get("type") == "auto":
       truncation = "auto"
 
+  # Reflect the parallel_tool_calls value from the request (default: True)
+  parallel_tool_calls = True
+  if request_body and "parallel_tool_calls" in request_body:
+    parallel_tool_calls = bool(request_body["parallel_tool_calls"])
+
   # Skeleton response for the created event
   skeleton = {
     "id": response_id,
@@ -558,7 +572,7 @@ async def _responses_stream_converter(
     "tool_choice": "auto",
     "tools": [],
     "text": {"format": {"type": "text"}},
-    "parallel_tool_calls": True,
+    "parallel_tool_calls": parallel_tool_calls,
     "error": None,
     "incomplete_details": None,
   }

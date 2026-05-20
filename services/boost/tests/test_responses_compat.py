@@ -4305,3 +4305,165 @@ class TestUnknownInputItemTypes:
             }
             responses_compat._convert_input_to_messages(body)
             mock_logger.warning.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# parallel_tool_calls support
+# ---------------------------------------------------------------------------
+
+
+class TestParallelToolCallsPassthrough:
+    """parallel_tool_calls should be passed through to the Chat Completions
+    body and reflected in the Responses API response objects."""
+
+    def test_parallel_tool_calls_true_passthrough(self):
+        body = {"model": "gpt-4o", "input": "hi", "parallel_tool_calls": True}
+        result = responses_compat._build_openai_body(body)
+        assert result["parallel_tool_calls"] is True
+
+    def test_parallel_tool_calls_false_passthrough(self):
+        body = {"model": "gpt-4o", "input": "hi", "parallel_tool_calls": False}
+        result = responses_compat._build_openai_body(body)
+        assert result["parallel_tool_calls"] is False
+
+    def test_parallel_tool_calls_absent_not_in_body(self):
+        body = {"model": "gpt-4o", "input": "hi"}
+        result = responses_compat._build_openai_body(body)
+        assert "parallel_tool_calls" not in result
+
+    def test_response_reflects_parallel_tool_calls_true(self):
+        openai_result = {
+            "choices": [{"message": {"content": "hi"}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+        }
+        resp = responses_compat._build_responses_response(
+            openai_result, "gpt-4o", "resp_1",
+            request_body={"parallel_tool_calls": True},
+        )
+        assert resp["parallel_tool_calls"] is True
+
+    def test_response_reflects_parallel_tool_calls_false(self):
+        openai_result = {
+            "choices": [{"message": {"content": "hi"}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+        }
+        resp = responses_compat._build_responses_response(
+            openai_result, "gpt-4o", "resp_2",
+            request_body={"parallel_tool_calls": False},
+        )
+        assert resp["parallel_tool_calls"] is False
+
+    def test_response_defaults_to_true_when_absent(self):
+        openai_result = {
+            "choices": [{"message": {"content": "hi"}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+        }
+        resp = responses_compat._build_responses_response(
+            openai_result, "gpt-4o", "resp_3",
+            request_body={"model": "gpt-4o"},
+        )
+        assert resp["parallel_tool_calls"] is True
+
+    def test_response_defaults_to_true_when_no_request_body(self):
+        openai_result = {
+            "choices": [{"message": {"content": "hi"}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+        }
+        resp = responses_compat._build_responses_response(
+            openai_result, "gpt-4o", "resp_4",
+        )
+        assert resp["parallel_tool_calls"] is True
+
+
+class TestParallelToolCallsStreaming:
+    """parallel_tool_calls should be reflected in the streaming skeleton."""
+
+    @pytest.mark.asyncio
+    async def test_streaming_skeleton_reflects_false(self):
+        async def empty_stream():
+            yield 'data: {"choices":[{"delta":{"content":"hi"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for evt in responses_compat._responses_stream_converter(
+            empty_stream(), "gpt-4o", "resp_s1",
+            request_body={"parallel_tool_calls": False},
+        ):
+            events.append(evt)
+
+        # Parse the response.created event to check the skeleton
+        created_event = None
+        for evt in events:
+            for line in evt.strip().split("\n"):
+                if line.startswith("data: "):
+                    try:
+                        data = json.loads(line[6:])
+                        if data.get("type") == "response.created":
+                            created_event = data
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+        assert created_event is not None
+        assert created_event["response"]["parallel_tool_calls"] is False
+
+    @pytest.mark.asyncio
+    async def test_streaming_skeleton_defaults_to_true(self):
+        async def empty_stream():
+            yield 'data: {"choices":[{"delta":{"content":"ok"},"index":0}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for evt in responses_compat._responses_stream_converter(
+            empty_stream(), "gpt-4o", "resp_s2",
+            request_body={},
+        ):
+            events.append(evt)
+
+        created_event = None
+        for evt in events:
+            for line in evt.strip().split("\n"):
+                if line.startswith("data: "):
+                    try:
+                        data = json.loads(line[6:])
+                        if data.get("type") == "response.created":
+                            created_event = data
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+        assert created_event is not None
+        assert created_event["response"]["parallel_tool_calls"] is True
+
+
+class TestToolChoiceNonePreventsTools:
+    """tool_choice='none' should pass through correctly to prevent tool calls."""
+
+    def test_tool_choice_none_string(self):
+        result = responses_compat._convert_tool_choice({"tool_choice": "none"})
+        assert result == "none"
+
+    def test_tool_choice_none_in_openai_body(self):
+        body = {
+            "model": "gpt-4o",
+            "input": "hi",
+            "tools": [
+                {"type": "function", "name": "fn", "description": "d", "parameters": {}},
+            ],
+            "tool_choice": "none",
+        }
+        result = responses_compat._build_openai_body(body)
+        assert result["tool_choice"] == "none"
+        # Tools are still included (backend respects tool_choice to suppress calls)
+        assert "tools" in result
+
+    def test_tool_choice_none_with_parallel_false(self):
+        body = {
+            "model": "gpt-4o",
+            "input": "hi",
+            "tools": [
+                {"type": "function", "name": "fn", "description": "d", "parameters": {}},
+            ],
+            "tool_choice": "none",
+            "parallel_tool_calls": False,
+        }
+        result = responses_compat._build_openai_body(body)
+        assert result["tool_choice"] == "none"
+        assert result["parallel_tool_calls"] is False
