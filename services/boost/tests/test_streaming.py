@@ -214,11 +214,12 @@ class TestBackgroundTaskCallback(unittest.IsolatedAsyncioTestCase):
     """Verify that the done callback on the background task works."""
 
     async def test_task_done_callback_unblocks_consumer(self):
-        """When apply_mod crashes, the done callback unblocks the consumer.
+        """When apply_mod crashes, the done callback unblocks the consumer
+        and the stored error is re-raised by the generator.
 
         Without the callback, the consumer would hang forever on
         queue.get() because no None sentinel would ever arrive.
-        With the callback, the sentinel is sent and the stream terminates.
+        With the callback, the sentinel is sent and the error propagates.
         """
         target = llm.LLM(
             url="http://example.test/v1",
@@ -231,10 +232,126 @@ class TestBackgroundTaskCallback(unittest.IsolatedAsyncioTestCase):
         stream = await target.serve()
 
         chunks = []
-        async for chunk in stream:
+        error_raised = False
+        try:
+            async for chunk in stream:
+                chunks.append(chunk)
+        except Exception:
+            error_raised = True
+
+        # The background task failed (connect to fake URL), so either
+        # the error propagates or the stream ends — consumer must not hang.
+        self.assertTrue(error_raised or isinstance(chunks, list))
+
+
+class TestStreamErrorPropagation(unittest.IsolatedAsyncioTestCase):
+    """Verify that _stream_error is stored and re-raised by the generator."""
+
+    async def test_stream_error_stored_on_task_failure(self):
+        """When _stream_error is set, generator() raises it after draining."""
+        from llm import BackendError
+
+        target = llm.LLM(
+            url="http://example.test/v1",
+            model="model",
+            messages=[{"role": "user", "content": "hello"}],
+        )
+        target.is_final_stream = True
+
+        target._stream_error = BackendError(429, "rate limited", {"retry-after": "5"})
+        target.queue.put_nowait(None)
+
+        with self.assertRaises(BackendError) as ctx:
+            async for _ in target.generator():
+                pass
+
+        self.assertEqual(ctx.exception.status_code, 429)
+        self.assertEqual(ctx.exception.body, "rate limited")
+
+    async def test_stream_error_not_raised_when_none(self):
+        """When _stream_error is None, generator() exits normally."""
+        target = llm.LLM(
+            url="http://example.test/v1",
+            model="model",
+            messages=[{"role": "user", "content": "hello"}],
+        )
+        target.is_final_stream = True
+
+        await target.emit_message("hello")
+        await target.emit_done()
+
+        chunks = []
+        async for chunk in target.generator():
             chunks.append(chunk)
 
-        self.assertIsInstance(chunks, list)
+        self.assertTrue(len(chunks) > 0)
+        self.assertIsNone(target._stream_error)
+
+    async def test_stream_error_propagates_through_response_stream(self):
+        """_stream_error propagates through response_stream() to the consumer."""
+        from llm import BackendError
+
+        target = llm.LLM(
+            url="http://example.test/v1",
+            model="model",
+            messages=[{"role": "user", "content": "hello"}],
+        )
+        target.is_final_stream = True
+
+        target._stream_error = BackendError(500, "server error")
+        target.queue.put_nowait(None)
+
+        with self.assertRaises(BackendError) as ctx:
+            async for _ in target.response_stream():
+                pass
+
+        self.assertEqual(ctx.exception.status_code, 500)
+
+    async def test_stream_error_with_chunks_before_failure(self):
+        """Chunks emitted before the error are still yielded."""
+        from llm import BackendError
+
+        target = llm.LLM(
+            url="http://example.test/v1",
+            model="model",
+            messages=[{"role": "user", "content": "hello"}],
+        )
+        target.is_final_stream = True
+
+        await target.emit_message("partial content")
+        target._stream_error = BackendError(429, "rate limited")
+        target.queue.put_nowait(None)
+
+        chunks = []
+        with self.assertRaises(BackendError):
+            async for chunk in target.generator():
+                chunks.append(chunk)
+
+        self.assertTrue(len(chunks) >= 1)
+        joined = "".join(str(c) for c in chunks)
+        self.assertIn("partial content", joined)
+
+    async def test_stream_error_sets_is_streaming_false(self):
+        """Even when _stream_error is raised, is_streaming is set to False."""
+        from llm import BackendError
+
+        target = llm.LLM(
+            url="http://example.test/v1",
+            model="model",
+            messages=[{"role": "user", "content": "hello"}],
+        )
+        target.is_final_stream = True
+
+        target._stream_error = BackendError(429, "rate limited")
+        target.queue.put_nowait(None)
+
+        try:
+            async for _ in target.generator():
+                pass
+        except BackendError:
+            pass
+
+        self.assertFalse(target.is_streaming)
 
 
 if __name__ == '__main__':

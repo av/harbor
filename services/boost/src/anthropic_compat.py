@@ -737,13 +737,19 @@ async def _anthropic_stream_converter(
                   "delta": {"type": "input_json_delta", "partial_json": tc_args},
                 },
               )
+  except BackendError as e:
+    logger.warning("Anthropic streaming backend error %d: %s", e.status_code, e.body[:256])
+    if e.status_code == 429:
+      stream_error = "Rate limit exceeded"
+    elif e.status_code >= 500:
+      stream_error = "Backend server error"
+    else:
+      stream_error = "Backend request failed"
   except Exception as e:
     logger.error("Anthropic stream conversion error: %s", e, exc_info=True)
-    # Use a generic message to avoid leaking internal details (backend URLs,
-    # connection errors, stack traces) to the client via the SSE stream.
     stream_error = "An internal error occurred during streaming"
 
-    # Close thinking block before emitting error text
+  if stream_error:
     if thinking_block_open:
       yield _sse_event(
         "content_block_stop",
@@ -754,7 +760,6 @@ async def _anthropic_stream_converter(
       )
       thinking_block_open = False
 
-    # Emit an error as a text block so the client sees it
     if not text_block_open:
       block_index += 1
       yield _sse_event(

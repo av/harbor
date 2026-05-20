@@ -106,6 +106,7 @@ class LLM(AsyncEventEmitter):
     self.is_final_stream = False
     self.out_chunks = 0
     self.has_finish_reason = False
+    self._stream_error = None
 
     self.cpl_id = 0
 
@@ -317,6 +318,7 @@ class LLM(AsyncEventEmitter):
       exc = t.exception() if not t.cancelled() else None
       if exc:
         logger.error("apply_mod task failed: %s", exc, exc_info=exc)
+        self._stream_error = exc
         # Unblock the consumer waiting on queue.get() — emit_done()
         # is async and this is a sync callback, so use put_nowait.
         try:
@@ -338,6 +340,9 @@ class LLM(AsyncEventEmitter):
           break
 
         yield chunk
+
+      if self._stream_error is not None:
+        raise self._stream_error
     finally:
       # Mark streaming as done so the background task (apply_mod)
       # knows the consumer is gone — prevents writing to a dead queue

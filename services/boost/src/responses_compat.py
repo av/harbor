@@ -1092,19 +1092,24 @@ async def _responses_stream_converter(
               })
               seq += 1
 
+  except BackendError as e:
+    logger.warning("Responses streaming backend error %d: %s", e.status_code, e.body[:256])
+    if e.status_code == 429:
+      stream_error = "Rate limit exceeded"
+    elif e.status_code >= 500:
+      stream_error = "Backend server error"
+    else:
+      stream_error = "Backend request failed"
   except Exception as e:
     logger.error("Responses stream conversion error: %s", e, exc_info=True)
-    # Use a generic message to avoid leaking internal details (backend URLs,
-    # connection errors, stack traces) to the client via the SSE stream.
     stream_error = "An internal error occurred during streaming"
 
-    # Close reasoning item before emitting error
+  if stream_error:
     if reasoning_item_open:
       for evt in _close_reasoning_item():
         yield evt
       reasoning_item_open = False
 
-    # Emit error as text in a message item
     if not text_item_open:
       output_index += 1
       msg_id = f"msg_{shortuuid.random()}"
