@@ -682,6 +682,8 @@ class LLM(AsyncEventEmitter):
   async def consume_stream(self, stream: AsyncGenerator[bytes, None]):
     output_obj = None
     content = ""
+    reasoning_content = ""
+    refusal = ""
     tool_calls = []
     last_finish_reason = None
     annotations = []
@@ -691,6 +693,7 @@ class LLM(AsyncEventEmitter):
       "completion_tokens": 0,
       "total_tokens": 0,
     }
+    completion_tokens_details = {}
 
     async for chunk_bytes in stream:
       chunk = self.parse_chunk(chunk_bytes)
@@ -700,6 +703,22 @@ class LLM(AsyncEventEmitter):
       chunk_tools = self.get_chunk_tool_calls(chunk)
       chunk_finish_reason = self.get_chunk_finish_reason(chunk)
 
+      # Accumulate reasoning/thinking content from streaming chunks.
+      # Backends may send this via delta.reasoning_content (OpenAI o1/o3,
+      # OpenRouter) or delta.reasoning (some backends).
+      delta = {}
+      choices = chunk.get("choices")
+      if choices and isinstance(choices, list) and choices:
+        delta = choices[0].get("delta") or {}
+      chunk_reasoning = delta.get("reasoning_content") or delta.get("reasoning") or ""
+      if chunk_reasoning:
+        reasoning_content += chunk_reasoning
+
+      # Accumulate refusal content from streaming chunks
+      chunk_refusal = delta.get("refusal") or ""
+      if chunk_refusal:
+        refusal += chunk_refusal
+
       # Accumulate usage from chunks (backends send usage in the
       # final chunk when stream_options.include_usage is true)
       chunk_usage = chunk.get("usage")
@@ -708,6 +727,10 @@ class LLM(AsyncEventEmitter):
           val = chunk_usage.get(key, 0)
           if val:
             usage[key] = val
+        # Preserve completion_tokens_details (contains reasoning_tokens)
+        ctd = chunk_usage.get("completion_tokens_details")
+        if ctd and isinstance(ctd, dict):
+          completion_tokens_details = ctd
 
       # Accumulate annotations from chunks (some backends like
       # Perplexity send citations in the final streaming chunk)
@@ -731,6 +754,15 @@ class LLM(AsyncEventEmitter):
     if output_obj:
       output_obj["choices"][0]["message"]["content"] = content
       output_obj["usage"] = usage
+
+      if completion_tokens_details:
+        output_obj["usage"]["completion_tokens_details"] = completion_tokens_details
+
+      if reasoning_content:
+        output_obj["choices"][0]["message"]["reasoning_content"] = reasoning_content
+
+      if refusal:
+        output_obj["choices"][0]["message"]["refusal"] = refusal
 
       if annotations:
         output_obj["choices"][0]["message"]["annotations"] = annotations

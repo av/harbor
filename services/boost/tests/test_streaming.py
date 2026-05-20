@@ -354,5 +354,108 @@ class TestStreamErrorPropagation(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(target.is_streaming)
 
 
+class TestConsumeStreamAccumulation(unittest.IsolatedAsyncioTestCase):
+    """Verify consume_stream accumulates reasoning_content, refusal,
+    and completion_tokens_details from streaming chunks."""
+
+    def _make_llm(self):
+        return llm.LLM(
+            url="http://example.test/v1",
+            model="model",
+            messages=[{"role": "user", "content": "hello"}],
+        )
+
+    def _chunk(self, delta, finish_reason=None, usage=None):
+        """Build a stringified SSE chunk."""
+        choice = {"index": 0, "delta": delta}
+        if finish_reason:
+            choice["finish_reason"] = finish_reason
+        obj = {
+            "id": "cmp-1",
+            "object": "chat.completion.chunk",
+            "created": 1,
+            "model": "m",
+            "choices": [choice],
+        }
+        if usage:
+            obj["usage"] = usage
+        return f"data: {json.dumps(obj)}\n\n"
+
+    async def _stream_from_chunks(self, target, raw_chunks):
+        """Feed raw SSE strings through serve-like async generator."""
+        async def gen():
+            for c in raw_chunks:
+                yield c
+        return await target.consume_stream(gen())
+
+    async def test_accumulates_reasoning_content(self):
+        target = self._make_llm()
+        chunks = [
+            self._chunk({"reasoning_content": "Step 1"}),
+            self._chunk({"reasoning_content": " Step 2"}),
+            self._chunk({"content": "Answer"}, finish_reason="stop"),
+            "data: [DONE]\n\n",
+        ]
+        result = await self._stream_from_chunks(target, chunks)
+        self.assertEqual(result["choices"][0]["message"]["reasoning_content"], "Step 1 Step 2")
+        self.assertEqual(result["choices"][0]["message"]["content"], "Answer")
+
+    async def test_accumulates_reasoning_field(self):
+        """Some backends use 'reasoning' instead of 'reasoning_content'."""
+        target = self._make_llm()
+        chunks = [
+            self._chunk({"reasoning": "Think"}),
+            self._chunk({"content": "Done"}, finish_reason="stop"),
+            "data: [DONE]\n\n",
+        ]
+        result = await self._stream_from_chunks(target, chunks)
+        self.assertEqual(result["choices"][0]["message"]["reasoning_content"], "Think")
+
+    async def test_accumulates_refusal(self):
+        target = self._make_llm()
+        chunks = [
+            self._chunk({"refusal": "I cannot"}),
+            self._chunk({"refusal": " help with that"}, finish_reason="stop"),
+            "data: [DONE]\n\n",
+        ]
+        result = await self._stream_from_chunks(target, chunks)
+        self.assertEqual(result["choices"][0]["message"]["refusal"], "I cannot help with that")
+
+    async def test_preserves_completion_tokens_details(self):
+        target = self._make_llm()
+        usage = {
+            "prompt_tokens": 10,
+            "completion_tokens": 5,
+            "total_tokens": 15,
+            "completion_tokens_details": {"reasoning_tokens": 3},
+        }
+        chunks = [
+            self._chunk({"content": "Hi"}, finish_reason="stop", usage=usage),
+            "data: [DONE]\n\n",
+        ]
+        result = await self._stream_from_chunks(target, chunks)
+        self.assertEqual(result["usage"]["completion_tokens_details"], {"reasoning_tokens": 3})
+
+    async def test_no_reasoning_when_absent(self):
+        target = self._make_llm()
+        chunks = [
+            self._chunk({"content": "Normal"}, finish_reason="stop"),
+            "data: [DONE]\n\n",
+        ]
+        result = await self._stream_from_chunks(target, chunks)
+        self.assertNotIn("reasoning_content", result["choices"][0]["message"])
+        self.assertNotIn("refusal", result["choices"][0]["message"])
+
+    async def test_no_completion_tokens_details_when_absent(self):
+        target = self._make_llm()
+        usage = {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
+        chunks = [
+            self._chunk({"content": "Hi"}, finish_reason="stop", usage=usage),
+            "data: [DONE]\n\n",
+        ]
+        result = await self._stream_from_chunks(target, chunks)
+        self.assertNotIn("completion_tokens_details", result["usage"])
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -413,6 +413,7 @@ def _convert_tools(body: dict):
       },
     }
     for tool in tools
+    if isinstance(tool, dict)
   ]
 
 

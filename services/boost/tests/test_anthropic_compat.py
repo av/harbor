@@ -8423,5 +8423,34 @@ class TestOpenAIPassthroughParams:
         assert openai_body["seed"] == 0
 
 
+# ---------------------------------------------------------------------------
+# _convert_tools: non-dict tool items
+# ---------------------------------------------------------------------------
+
+class TestConvertToolsNonDictItems:
+    """Verify that _convert_tools skips non-dict items without crashing."""
+
+    def test_skips_none_items(self):
+        body = {"tools": [None, {"name": "calc", "description": "d", "input_schema": {}}]}
+        result = anthropic_compat._convert_tools(body)
+        assert len(result) == 1
+        assert result[0]["function"]["name"] == "calc"
+
+    def test_skips_string_items(self):
+        body = {"tools": ["not-a-tool", {"name": "calc", "description": "d", "input_schema": {}}]}
+        result = anthropic_compat._convert_tools(body)
+        assert len(result) == 1
+
+    def test_skips_int_items(self):
+        body = {"tools": [42]}
+        result = anthropic_compat._convert_tools(body)
+        assert result == []
+
+    def test_all_non_dict_returns_empty(self):
+        body = {"tools": [None, "bad", 123, True]}
+        result = anthropic_compat._convert_tools(body)
+        assert result == []
+
+
 if __name__ == "__main__":
     unittest.main()

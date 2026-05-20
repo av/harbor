@@ -310,6 +310,8 @@ def _convert_tools(body: dict):
   openai_tools = []
   has_web_search = False
   for tool in tools:
+    if not isinstance(tool, dict):
+      continue
     tool_type = tool.get("type")
     if tool_type == "function":
       openai_tools.append({
