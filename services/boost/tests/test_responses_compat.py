@@ -7143,6 +7143,7 @@ class TestAnnotationsStreaming:
         """When error occurs before any text, the error text item has no annotations."""
         async def mock_stream():
             raise RuntimeError("boom")
+            yield  # noqa: unreachable — makes this an async generator
 
         events = []
         async for event in responses_compat._responses_stream_converter(

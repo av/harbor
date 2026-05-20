@@ -127,6 +127,13 @@ def _validate_request(body: dict, request_id=None, beta_flags=None):
   if "max_tokens" not in body:
     return _anthropic_error(400, "max_tokens is required", request_id=request_id, beta_flags=beta_flags)
 
+  max_tokens = body.get("max_tokens")
+  if not isinstance(max_tokens, (int, float)) or max_tokens < 1:
+    return _anthropic_error(
+      400, "max_tokens must be a positive integer",
+      request_id=request_id, beta_flags=beta_flags,
+    )
+
   messages = body.get("messages")
   if not messages or not isinstance(messages, list) or len(messages) == 0:
     return _anthropic_error(400, "messages must be a non-empty array", request_id=request_id, beta_flags=beta_flags)
@@ -336,14 +343,14 @@ def _convert_assistant_message(content):
 def _convert_params(body: dict):
   params = {}
 
-  max_tokens = body.get("max_tokens", 0)
+  max_tokens = body.get("max_tokens") or 0
   thinking = body.get("thinking")
 
   if thinking and isinstance(thinking, dict) and thinking.get("type") == "enabled":
     budget_tokens = thinking.get("budget_tokens", 0)
     # Map to max_completion_tokens which covers both reasoning + output
     params["max_completion_tokens"] = budget_tokens + max_tokens
-  elif max_tokens:
+  elif max_tokens > 0:
     params["max_tokens"] = max_tokens
 
   if "temperature" in body:
