@@ -134,15 +134,20 @@ def sse_chunk(data: dict) -> str:
 def parse_anthropic_sse_events(raw_text):
     """Parse raw SSE text into a list of Anthropic data payloads (dicts).
 
-    Skips non-data events such as ``event: ping`` whose payload has no
-    ``type`` field.
+    Skips ``event: ping`` keepalive frames so callers can assert message
+    event ordering only.
     """
     events = []
     for block in raw_text.strip().split("\n\n"):
+        event_type = None
         data_line = None
         for line in block.strip().split("\n"):
+            if line.startswith("event: "):
+                event_type = line[7:]
             if line.startswith("data: "):
                 data_line = line[6:]
+        if event_type == "ping":
+            continue
         if data_line:
             try:
                 parsed = json.loads(data_line)

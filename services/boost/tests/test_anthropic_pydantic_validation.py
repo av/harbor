@@ -69,7 +69,7 @@ EVENT_MODEL_MAP = {
     "content_block_stop": sdk.RawContentBlockStopEvent,
     "message_delta": sdk.RawMessageDeltaEvent,
     "message_stop": sdk.RawMessageStopEvent,
-    # ping events have no SDK model -- they are SSE signals
+    # ping events have no SDK model in the pinned SDK; validate manually.
 }
 
 
@@ -77,10 +77,11 @@ def _validate_event(event_type, data):
     """Validate a single SSE event dict against the corresponding Pydantic model.
 
     Returns the validated model instance, or raises on failure.
-    Skips ping events (no Pydantic model).
+    Ping events are validated manually because the pinned SDK has no model.
     """
     if event_type == "ping":
-        return None
+        assert data == {"type": "ping"}
+        return data
     if event_type == "error":
         return sdk.ErrorResponse.model_validate(data)
     model_cls = EVENT_MODEL_MAP.get(event_type)
@@ -93,7 +94,7 @@ def _validate_all_events(events):
     """Validate every event in a list of (event_type, data) pairs.
 
     Returns a list of (event_type, validated_model) pairs.
-    Ping events are skipped.
+    Ping events are checked manually.
     """
     validated = []
     for event_type, data in events:

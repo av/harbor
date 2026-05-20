@@ -5640,8 +5640,24 @@ class TestStreamingPingEvent:
         assert events[0].startswith("retry:")
         assert "message_start" in events[1]
         assert "event: ping" in events[2]
-        assert '"data": {}' not in events[2]  # data should be {} (the object)
-        assert "data: {}" in events[2]
+        assert 'data: {"type": "ping"}' in events[2]
+
+    @pytest.mark.asyncio
+    async def test_ping_payload_includes_type(self):
+        async def response_stream():
+            yield 'data: {"choices": [{"delta": {"content": "Hi"}}]}\n\n'
+            yield 'data: {"choices": [{"delta": {}, "finish_reason": "stop"}]}\n\n'
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "claude-test")
+        ]
+
+        data_line = [
+            line for line in events[2].splitlines()
+            if line.startswith("data: ")
+        ][0]
+        assert json.loads(data_line[6:]) == {"type": "ping"}
 
     @pytest.mark.asyncio
     async def test_ping_is_valid_sse(self):
