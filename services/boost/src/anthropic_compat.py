@@ -15,6 +15,7 @@ from compat_utils import (
     ANTHROPIC_VERSION,
     ANTHROPIC_VERSION_HEADER,
     REQUEST_ID_HEADER,
+    _get_finish_reason,
     extract_boost_params as _extract_boost_params,
     get_chunk_content as _get_chunk_content,
     get_chunk_reasoning as _get_chunk_reasoning,
@@ -557,7 +558,7 @@ async def _anthropic_stream_converter(
   input_tokens = 0
   output_tokens = 0
   finish_reason = None
-  accumulated_text = ""
+  accumulated_text_parts = []
   has_visible_tool_use = False
 
   yield _sse_event(
@@ -590,7 +591,7 @@ async def _anthropic_stream_converter(
         reasoning_content = _get_chunk_reasoning(chunk)
         tool_calls = _get_chunk_tool_calls(chunk)
         chunk_usage = _get_chunk_usage(chunk)
-        fr = dotty.get(chunk, "choices.0.finish_reason")
+        fr = _get_finish_reason(chunk)
 
         if fr:
           finish_reason = fr
@@ -621,7 +622,7 @@ async def _anthropic_stream_converter(
           )
 
         if text_content:
-          accumulated_text += text_content
+          accumulated_text_parts.append(text_content)
           # Close thinking block before opening text block
           if thinking_block_open:
             yield _sse_event(
@@ -658,21 +659,22 @@ async def _anthropic_stream_converter(
             tool_state = tool_blocks.setdefault(
               tc_index,
               {
-                "arguments": "",
+                "arg_parts": [],
                 "emitted": False,
               },
             )
 
             tc_id = tc.get("id")
-            tc_name = dotty.get(tc, "function.name")
-            tc_args = dotty.get(tc, "function.arguments", "")
+            tc_func = tc.get("function") or {}
+            tc_name = tc_func.get("name")
+            tc_args = tc_func.get("arguments") or ""
 
             if tc_id:
               tool_state["id"] = _to_anthropic_tool_id(tc_id)
             if tc_name:
               tool_state["name"] = tc_name
             if tc_args:
-              tool_state["arguments"] += tc_args
+              tool_state["arg_parts"].append(tc_args)
 
             if not tool_state.get("emitted") and tool_state.get("id"):
               if thinking_block_open:
@@ -710,7 +712,7 @@ async def _anthropic_stream_converter(
                   },
                 },
               )
-              if tool_state.get("arguments"):
+              if tool_state["arg_parts"]:
                 yield _sse_event(
                   "content_block_delta",
                   {
@@ -718,7 +720,7 @@ async def _anthropic_stream_converter(
                     "index": block_index,
                     "delta": {
                       "type": "input_json_delta",
-                      "partial_json": tool_state.get("arguments", ""),
+                      "partial_json": "".join(tool_state["arg_parts"]),
                     },
                   },
                 )
@@ -817,7 +819,7 @@ async def _anthropic_stream_converter(
         },
       },
     )
-    if tool_state.get("arguments"):
+    if tool_state["arg_parts"]:
       yield _sse_event(
         "content_block_delta",
         {
@@ -825,7 +827,7 @@ async def _anthropic_stream_converter(
           "index": block_index,
           "delta": {
             "type": "input_json_delta",
-            "partial_json": tool_state.get("arguments", ""),
+            "partial_json": "".join(tool_state["arg_parts"]),
           },
         },
       )
@@ -857,7 +859,7 @@ async def _anthropic_stream_converter(
     effective_finish_reason = "stop"
 
   stop_reason, stop_sequence = _map_stop_reason(
-    effective_finish_reason, stop_sequences, accumulated_text
+    effective_finish_reason, stop_sequences, "".join(accumulated_text_parts)
   )
 
   yield _sse_event(
@@ -1029,35 +1031,70 @@ async def post_count_tokens(request: Request, api_key: str = Depends(get_api_key
 
 
 # --- Message Batches stubs ---
+#
+# The Anthropic Message Batches API allows clients to submit and manage
+# asynchronous batch jobs.  Harbor Boost processes requests synchronously
+# (streaming or non-streaming) so it does not implement the Batches API.
+# These stubs return informative errors guiding callers toward the
+# supported Messages API.
 
-_BATCHES_NOT_SUPPORTED = "Message batches are not supported by Harbor Boost"
+_BATCHES_NOT_SUPPORTED = (
+  "The Message Batches API is not supported by Harbor Boost. "
+  "Use the streaming or non-streaming Messages API (POST /v1/messages) instead."
+)
+
+_BATCH_NOT_FOUND = (
+  "The Message Batches API is not supported by Harbor Boost. "
+  "Batch {batch_id} does not exist because Harbor Boost does not process "
+  "batch requests. Use POST /v1/messages for real-time inference instead."
+)
 
 
 @anthropic_compatible_routes.post("/v1/messages/batches")
 async def create_message_batch(request: Request, api_key: str = Depends(get_api_key)):
   request_id = f"req_{shortuuid.random()}"
-  return _anthropic_error(501, _BATCHES_NOT_SUPPORTED, "not_supported_error", request_id=request_id)
+  beta_flags = _parse_beta_flags(request)
+  return _anthropic_error(
+    501, _BATCHES_NOT_SUPPORTED, "not_supported_error",
+    request_id=request_id, beta_flags=beta_flags,
+  )
 
 
 @anthropic_compatible_routes.get("/v1/messages/batches")
 async def list_message_batches(request: Request, api_key: str = Depends(get_api_key)):
   request_id = f"req_{shortuuid.random()}"
-  return _anthropic_error(501, _BATCHES_NOT_SUPPORTED, "not_supported_error", request_id=request_id)
+  beta_flags = _parse_beta_flags(request)
+  return _anthropic_error(
+    501, _BATCHES_NOT_SUPPORTED, "not_supported_error",
+    request_id=request_id, beta_flags=beta_flags,
+  )
 
 
 @anthropic_compatible_routes.get("/v1/messages/batches/{batch_id}")
 async def get_message_batch(batch_id: str, request: Request, api_key: str = Depends(get_api_key)):
   request_id = f"req_{shortuuid.random()}"
-  return _anthropic_error(404, f"Batch {batch_id} not found", request_id=request_id)
+  beta_flags = _parse_beta_flags(request)
+  return _anthropic_error(
+    404, _BATCH_NOT_FOUND.format(batch_id=batch_id),
+    request_id=request_id, beta_flags=beta_flags,
+  )
 
 
 @anthropic_compatible_routes.get("/v1/messages/batches/{batch_id}/results")
 async def get_message_batch_results(batch_id: str, request: Request, api_key: str = Depends(get_api_key)):
   request_id = f"req_{shortuuid.random()}"
-  return _anthropic_error(404, f"Batch {batch_id} not found", request_id=request_id)
+  beta_flags = _parse_beta_flags(request)
+  return _anthropic_error(
+    404, _BATCH_NOT_FOUND.format(batch_id=batch_id),
+    request_id=request_id, beta_flags=beta_flags,
+  )
 
 
 @anthropic_compatible_routes.post("/v1/messages/batches/{batch_id}/cancel")
 async def cancel_message_batch(batch_id: str, request: Request, api_key: str = Depends(get_api_key)):
   request_id = f"req_{shortuuid.random()}"
-  return _anthropic_error(404, f"Batch {batch_id} not found", request_id=request_id)
+  beta_flags = _parse_beta_flags(request)
+  return _anthropic_error(
+    404, _BATCH_NOT_FOUND.format(batch_id=batch_id),
+    request_id=request_id, beta_flags=beta_flags,
+  )

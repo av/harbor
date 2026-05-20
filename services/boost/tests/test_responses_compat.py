@@ -3966,7 +3966,8 @@ class TestOutputTextProperty:
 
 class TestResponseStubEndpoints:
     """Tests for GET /v1/responses/{id}, DELETE /v1/responses/{id},
-    and POST /v1/responses/{id}/cancel — all return 404."""
+    and POST /v1/responses/{id}/cancel — all return 404 with
+    informative messages explaining why the operation cannot succeed."""
 
     @pytest.fixture(autouse=True)
     def setup_app(self, monkeypatch):
@@ -3983,31 +3984,68 @@ class TestResponseStubEndpoints:
         body = resp.json()
         assert body["error"]["type"] == "not_found_error"
         assert body["error"]["code"] == "not_found"
-        assert "not persist" in body["error"]["message"]
 
     def test_get_response_returns_404(self):
         resp = self.client.get("/v1/responses/resp_abc123")
         self._assert_not_found(resp)
 
+    def test_get_response_includes_response_id_in_message(self):
+        resp = self.client.get("/v1/responses/resp_abc123")
+        body = resp.json()
+        assert "resp_abc123" in body["error"]["message"]
+
+    def test_get_response_explains_no_persistence(self):
+        resp = self.client.get("/v1/responses/resp_abc123")
+        body = resp.json()
+        assert "not persist" in body["error"]["message"] or "store" in body["error"]["message"]
+
     def test_get_response_any_id(self):
         resp = self.client.get("/v1/responses/resp_xyz")
         self._assert_not_found(resp)
+        body = resp.json()
+        assert "resp_xyz" in body["error"]["message"]
 
     def test_delete_response_returns_404(self):
         resp = self.client.delete("/v1/responses/resp_abc123")
         self._assert_not_found(resp)
 
+    def test_delete_response_includes_id_in_message(self):
+        resp = self.client.delete("/v1/responses/resp_abc123")
+        body = resp.json()
+        assert "resp_abc123" in body["error"]["message"]
+
+    def test_delete_response_explains_nothing_to_delete(self):
+        resp = self.client.delete("/v1/responses/resp_abc123")
+        body = resp.json()
+        assert "nothing to delete" in body["error"]["message"] or "cannot be deleted" in body["error"]["message"].lower()
+
     def test_delete_response_any_id(self):
         resp = self.client.delete("/v1/responses/resp_999")
         self._assert_not_found(resp)
+        body = resp.json()
+        assert "resp_999" in body["error"]["message"]
 
     def test_cancel_response_returns_404(self):
         resp = self.client.post("/v1/responses/resp_abc123/cancel")
         self._assert_not_found(resp)
 
+    def test_cancel_response_includes_id_in_message(self):
+        resp = self.client.post("/v1/responses/resp_abc123/cancel")
+        body = resp.json()
+        assert "resp_abc123" in body["error"]["message"]
+
+    def test_cancel_response_suggests_closing_connection(self):
+        """Cancel stub should guide users on how to actually cancel."""
+        resp = self.client.post("/v1/responses/resp_abc123/cancel")
+        body = resp.json()
+        msg = body["error"]["message"].lower()
+        assert "cancel" in msg or "close" in msg or "connection" in msg
+
     def test_cancel_response_any_id(self):
         resp = self.client.post("/v1/responses/resp_other/cancel")
         self._assert_not_found(resp)
+        body = resp.json()
+        assert "resp_other" in body["error"]["message"]
 
     def test_error_format_matches_responses_api(self):
         """Error body must have the standard Responses API error structure."""
@@ -4019,6 +4057,17 @@ class TestResponseStubEndpoints:
         assert "code" in body["error"]
         assert "param" in body["error"]
         assert body["error"]["param"] is None
+
+    def test_each_stub_has_distinct_message(self):
+        """GET, DELETE, and cancel should have different error messages
+        appropriate to their operation."""
+        get_msg = self.client.get("/v1/responses/resp_x").json()["error"]["message"]
+        del_msg = self.client.delete("/v1/responses/resp_x").json()["error"]["message"]
+        cancel_msg = self.client.post("/v1/responses/resp_x/cancel").json()["error"]["message"]
+        # All three should be different (they explain different operations)
+        assert get_msg != del_msg
+        assert get_msg != cancel_msg
+        assert del_msg != cancel_msg
 
     def test_get_response_has_request_id(self):
         resp = self.client.get("/v1/responses/resp_abc123")
@@ -4034,6 +4083,21 @@ class TestResponseStubEndpoints:
         resp = self.client.post("/v1/responses/resp_abc123/cancel")
         assert "x-request-id" in resp.headers
         assert resp.headers["x-request-id"].startswith("req_")
+
+    def test_stub_error_body_structure(self):
+        """All stub endpoints return the standard OpenAI error envelope."""
+        for method, path in [
+            ("get", "/v1/responses/resp_x"),
+            ("delete", "/v1/responses/resp_x"),
+            ("post", "/v1/responses/resp_x/cancel"),
+        ]:
+            resp = getattr(self.client, method)(path)
+            body = resp.json()
+            assert "error" in body, f"Missing error key on {method.upper()} {path}"
+            assert "message" in body["error"]
+            assert "type" in body["error"]
+            assert "code" in body["error"]
+            assert "param" in body["error"]
 
 
 # ---------------------------------------------------------------------------

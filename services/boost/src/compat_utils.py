@@ -7,8 +7,6 @@ used by both anthropic_compat.py and responses_compat.py.
 import json
 import re
 
-import dotty
-
 REQUEST_ID_HEADER = "request-id"
 OPENAI_REQUEST_ID_HEADER = "x-request-id"
 ANTHROPIC_VERSION_HEADER = "anthropic-version"
@@ -50,8 +48,30 @@ def to_openai_tool_id(raw_id: str) -> str:
     return f"call_{core}"
 
 
+def _get_delta(chunk: dict) -> dict:
+  """Extract choices[0].delta from a streaming chunk via direct dict access.
+
+  Returns an empty dict when the path doesn't exist, avoiding the overhead
+  of dotty.get (parse_path + is_int + traversal) on every chunk field.
+  """
+  choices = chunk.get("choices")
+  if not choices:
+    return {}
+  first = choices[0] if isinstance(choices, list) and choices else {}
+  return first.get("delta") or {}
+
+
+def _get_finish_reason(chunk: dict):
+  """Extract choices[0].finish_reason via direct dict access."""
+  choices = chunk.get("choices")
+  if not choices:
+    return None
+  first = choices[0] if isinstance(choices, list) and choices else {}
+  return first.get("finish_reason")
+
+
 def get_chunk_content(chunk: dict) -> str:
-  return dotty.get(chunk, "choices.0.delta.content", "")
+  return _get_delta(chunk).get("content") or ""
 
 
 def get_chunk_reasoning(chunk: dict) -> str:
@@ -61,26 +81,32 @@ def get_chunk_reasoning(chunk: dict) -> str:
   - choices[0].delta.reasoning_content (OpenAI o1/o3, OpenRouter)
   - choices[0].delta.reasoning (some backends)
   """
-  val = dotty.get(chunk, "choices.0.delta.reasoning_content", "")
+  delta = _get_delta(chunk)
+  val = delta.get("reasoning_content") or ""
   if val:
     return val
-  return dotty.get(chunk, "choices.0.delta.reasoning", "")
+  return delta.get("reasoning") or ""
 
 
 def get_chunk_refusal(chunk: dict) -> str:
-  return dotty.get(chunk, "choices.0.delta.refusal", "")
+  return _get_delta(chunk).get("refusal") or ""
 
 
 def get_chunk_tool_calls(chunk: dict) -> list:
-  return dotty.get(chunk, "choices.0.delta.tool_calls", [])
+  return _get_delta(chunk).get("tool_calls") or []
 
 
 def get_chunk_usage(chunk: dict) -> dict:
-  return dotty.get(chunk, "usage") or {
+  return chunk.get("usage") or {
     "prompt_tokens": 0,
     "completion_tokens": 0,
     "total_tokens": 0,
   }
+
+
+def get_chunk_annotations(chunk: dict) -> list:
+  """Extract choices[0].delta.annotations via direct dict access."""
+  return _get_delta(chunk).get("annotations") or []
 
 
 def extract_annotations(message: dict) -> list:

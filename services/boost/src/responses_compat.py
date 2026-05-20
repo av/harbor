@@ -13,8 +13,10 @@ import llm as llm_mod
 from auth import get_api_key
 from compat_utils import (
     OPENAI_REQUEST_ID_HEADER,
+    _get_finish_reason,
     extract_annotations as _extract_annotations,
     extract_boost_params as _extract_boost_params,
+    get_chunk_annotations as _get_chunk_annotations,
     get_chunk_content as _get_chunk_content,
     get_chunk_reasoning as _get_chunk_reasoning,
     get_chunk_refusal as _get_chunk_refusal,
@@ -629,10 +631,10 @@ async def _responses_stream_converter(
   seq = 0
   output_index = -1
   reasoning_item_open = False
-  reasoning_content = ""
+  reasoning_parts = []
   reasoning_id = None
   text_item_open = False
-  text_content = ""
+  text_parts = []
   text_annotations = []
   msg_id = None
   tool_blocks = {}
@@ -662,7 +664,7 @@ async def _responses_stream_converter(
 
   # Refusal tracking
   refusal_open = False
-  refusal_content = ""
+  refusal_parts = []
 
   # Skeleton response for the created event
   skeleton = {
@@ -708,6 +710,7 @@ async def _responses_stream_converter(
     """Yield events to close an open reasoning output item. Returns list of SSE strings."""
     nonlocal seq
     events = []
+    full_reasoning = "".join(reasoning_parts)
 
     # reasoning_summary_text.done
     events.append(_sse_event("response.reasoning_summary_text.done", {
@@ -715,7 +718,7 @@ async def _responses_stream_converter(
       "item_id": reasoning_id,
       "output_index": output_index,
       "summary_index": 0,
-      "text": reasoning_content,
+      "text": full_reasoning,
       "sequence_number": seq,
     }))
     seq += 1
@@ -728,7 +731,7 @@ async def _responses_stream_converter(
       "summary_index": 0,
       "part": {
         "type": "summary_text",
-        "text": reasoning_content,
+        "text": full_reasoning,
       },
       "sequence_number": seq,
     }))
@@ -743,7 +746,7 @@ async def _responses_stream_converter(
         "id": reasoning_id,
         "summary": [{
           "type": "summary_text",
-          "text": reasoning_content,
+          "text": full_reasoning,
         }],
       },
       "sequence_number": seq,
@@ -756,6 +759,7 @@ async def _responses_stream_converter(
     """Yield events to close an open text message item. Returns list of SSE strings."""
     nonlocal seq
     events = []
+    full_text = "".join(text_parts)
 
     # Emit annotation.added events for any accumulated annotations
     for ann_idx, ann in enumerate(text_annotations):
@@ -776,7 +780,7 @@ async def _responses_stream_converter(
       "item_id": msg_id,
       "output_index": output_index,
       "content_index": 0,
-      "text": text_content,
+      "text": full_text,
       "logprobs": [],
       "sequence_number": seq,
     }))
@@ -790,7 +794,7 @@ async def _responses_stream_converter(
       "content_index": 0,
       "part": {
         "type": "output_text",
-        "text": text_content,
+        "text": full_text,
         "annotations": text_annotations,
       },
       "sequence_number": seq,
@@ -808,7 +812,7 @@ async def _responses_stream_converter(
         "role": "assistant",
         "content": [{
           "type": "output_text",
-          "text": text_content,
+          "text": full_text,
           "annotations": text_annotations,
         }],
       },
@@ -825,7 +829,7 @@ async def _responses_stream_converter(
         chunk_refusal = _get_chunk_refusal(chunk)
         chunk_tools = _get_chunk_tool_calls(chunk)
         chunk_usage = _get_chunk_usage(chunk)
-        fr = dotty.get(chunk, "choices.0.finish_reason")
+        fr = _get_finish_reason(chunk)
 
         if fr:
           finish_reason = fr
@@ -836,8 +840,8 @@ async def _responses_stream_converter(
         # Accumulate annotations from chunks.  Some backends send
         # citations as a top-level array (Perplexity) or on the
         # choice delta (future OpenAI streaming annotations).
-        chunk_anns = dotty.get(chunk, "choices.0.delta.annotations")
-        if chunk_anns and isinstance(chunk_anns, list):
+        chunk_anns = _get_chunk_annotations(chunk)
+        if chunk_anns:
           for ann in chunk_anns:
             if isinstance(ann, dict):
               converted = _extract_annotations({"annotations": [ann]})
@@ -883,7 +887,7 @@ async def _responses_stream_converter(
 
             reasoning_item_open = True
 
-          reasoning_content += chunk_reasoning
+          reasoning_parts.append(chunk_reasoning)
 
           # reasoning_summary_text.delta
           yield _sse_event("response.reasoning_summary_text.delta", {
@@ -939,7 +943,7 @@ async def _responses_stream_converter(
 
             text_item_open = True
 
-          text_content += chunk_text
+          text_parts.append(chunk_text)
 
           # output_text.delta
           yield _sse_event("response.output_text.delta", {
@@ -985,7 +989,7 @@ async def _responses_stream_converter(
               text_item_open = False
 
             # content_part.added for refusal
-            refusal_content_index = 1 if text_content else 0
+            refusal_content_index = 1 if text_parts else 0
             yield _sse_event("response.content_part.added", {
               "type": "response.content_part.added",
               "item_id": msg_id,
@@ -1000,13 +1004,13 @@ async def _responses_stream_converter(
             seq += 1
             refusal_open = True
 
-          refusal_content += chunk_refusal
+          refusal_parts.append(chunk_refusal)
 
           yield _sse_event("response.refusal.delta", {
             "type": "response.refusal.delta",
             "item_id": msg_id,
             "output_index": output_index,
-            "content_index": 1 if text_content else 0,
+            "content_index": 1 if text_parts else 0,
             "delta": chunk_refusal,
             "sequence_number": seq,
           })
@@ -1124,11 +1128,11 @@ async def _responses_stream_converter(
       })
       seq += 1
       text_item_open = True
-      text_content = ""
+      text_parts = []
       text_annotations = []
 
     error_text = f"\n\n[Stream error: {stream_error}]"
-    text_content += error_text
+    text_parts.append(error_text)
     yield _sse_event("response.output_text.delta", {
       "type": "response.output_text.delta",
       "item_id": msg_id,
@@ -1152,13 +1156,14 @@ async def _responses_stream_converter(
 
   # Close open refusal
   if refusal_open:
-    refusal_ci = 1 if text_content else 0
+    refusal_ci = 1 if text_parts else 0
+    full_refusal = "".join(refusal_parts)
     yield _sse_event("response.refusal.done", {
       "type": "response.refusal.done",
       "item_id": msg_id,
       "output_index": output_index,
       "content_index": refusal_ci,
-      "refusal": refusal_content,
+      "refusal": full_refusal,
       "sequence_number": seq,
     })
     seq += 1
@@ -1170,7 +1175,7 @@ async def _responses_stream_converter(
       "content_index": refusal_ci,
       "part": {
         "type": "refusal",
-        "refusal": refusal_content,
+        "refusal": full_refusal,
       },
       "sequence_number": seq,
     })
@@ -1186,7 +1191,7 @@ async def _responses_stream_converter(
         "role": "assistant",
         "content": [{
           "type": "refusal",
-          "refusal": refusal_content,
+          "refusal": full_refusal,
         }],
       },
       "sequence_number": seq,
@@ -1390,25 +1395,52 @@ async def post_responses(request: Request, api_key: str = Depends(get_api_key)):
     return _responses_error(500, "Internal server error", request_id=request_id)
 
 
-_NOT_FOUND_MESSAGE = (
-  "Response not found. Harbor Boost does not persist responses "
-  "(store is always false)."
+# --- Stub endpoints ---
+#
+# Harbor Boost does not persist responses (store is always false), so
+# retrieval, deletion, and cancellation endpoints return informative
+# errors explaining why the operation cannot succeed.
+
+_RESPONSE_NOT_FOUND = (
+  "Response {response_id} not found. Harbor Boost does not persist "
+  "responses (store is always false). To get results, consume them "
+  "directly from the POST /v1/responses response or stream."
+)
+
+_RESPONSE_CANCEL_NOT_FOUND = (
+  "Response {response_id} cannot be cancelled. Harbor Boost does not "
+  "persist or track in-flight responses. Cancel the HTTP request "
+  "or close the streaming connection instead."
+)
+
+_RESPONSE_DELETE_NOT_FOUND = (
+  "Response {response_id} cannot be deleted. Harbor Boost does not "
+  "persist responses (store is always false), so there is nothing to delete."
 )
 
 
 @responses_compatible_routes.get("/v1/responses/{response_id}")
 async def get_response(response_id: str, api_key: str = Depends(get_api_key)):
   request_id = f"req_{shortuuid.random()}"
-  return _responses_error(404, _NOT_FOUND_MESSAGE, error_code="not_found", request_id=request_id)
+  return _responses_error(
+    404, _RESPONSE_NOT_FOUND.format(response_id=response_id),
+    error_code="not_found", request_id=request_id,
+  )
 
 
 @responses_compatible_routes.delete("/v1/responses/{response_id}")
 async def delete_response(response_id: str, api_key: str = Depends(get_api_key)):
   request_id = f"req_{shortuuid.random()}"
-  return _responses_error(404, _NOT_FOUND_MESSAGE, error_code="not_found", request_id=request_id)
+  return _responses_error(
+    404, _RESPONSE_DELETE_NOT_FOUND.format(response_id=response_id),
+    error_code="not_found", request_id=request_id,
+  )
 
 
 @responses_compatible_routes.post("/v1/responses/{response_id}/cancel")
 async def cancel_response(response_id: str, api_key: str = Depends(get_api_key)):
   request_id = f"req_{shortuuid.random()}"
-  return _responses_error(404, _NOT_FOUND_MESSAGE, error_code="not_found", request_id=request_id)
+  return _responses_error(
+    404, _RESPONSE_CANCEL_NOT_FOUND.format(response_id=response_id),
+    error_code="not_found", request_id=request_id,
+  )

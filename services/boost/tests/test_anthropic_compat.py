@@ -5524,7 +5524,8 @@ class TestStopSequenceHandling:
 # ===========================================================================
 
 class TestMessageBatchesStubs:
-    """All batch endpoints return proper Anthropic-format errors."""
+    """All batch endpoints return proper Anthropic-format errors with
+    informative messages guiding callers to the Messages API."""
 
     def test_create_batch_returns_501(self):
         client = _make_client()
@@ -5535,6 +5536,12 @@ class TestMessageBatchesStubs:
         assert body["error"]["type"] == "not_supported_error"
         assert "not supported" in body["error"]["message"]
 
+    def test_create_batch_message_guides_to_messages_api(self):
+        client = _make_client()
+        resp = client.post("/v1/messages/batches", json={"requests": []})
+        body = resp.json()
+        assert "POST /v1/messages" in body["error"]["message"]
+
     def test_list_batches_returns_501(self):
         client = _make_client()
         resp = client.get("/v1/messages/batches")
@@ -5542,6 +5549,12 @@ class TestMessageBatchesStubs:
         body = resp.json()
         assert body["type"] == "error"
         assert body["error"]["type"] == "not_supported_error"
+
+    def test_list_batches_message_guides_to_messages_api(self):
+        client = _make_client()
+        resp = client.get("/v1/messages/batches")
+        body = resp.json()
+        assert "POST /v1/messages" in body["error"]["message"]
 
     def test_get_batch_returns_404(self):
         client = _make_client()
@@ -5551,6 +5564,14 @@ class TestMessageBatchesStubs:
         assert body["type"] == "error"
         assert body["error"]["type"] == "not_found_error"
         assert "batch_abc123" in body["error"]["message"]
+
+    def test_get_batch_message_explains_not_supported(self):
+        """The 404 for individual batches also explains that batches are unsupported."""
+        client = _make_client()
+        resp = client.get("/v1/messages/batches/batch_abc123")
+        body = resp.json()
+        assert "not supported" in body["error"]["message"]
+        assert "POST /v1/messages" in body["error"]["message"]
 
     def test_get_batch_results_returns_404(self):
         client = _make_client()
@@ -5569,6 +5590,14 @@ class TestMessageBatchesStubs:
         assert body["type"] == "error"
         assert body["error"]["type"] == "not_found_error"
         assert "batch_abc123" in body["error"]["message"]
+
+    def test_cancel_batch_message_explains_not_supported(self):
+        """The cancel endpoint also explains batches are unsupported."""
+        client = _make_client()
+        resp = client.post("/v1/messages/batches/batch_xyz/cancel")
+        body = resp.json()
+        assert "not supported" in body["error"]["message"]
+        assert "batch_xyz" in body["error"]["message"]
 
     def test_batch_endpoints_include_request_id_header(self):
         client = _make_client()
@@ -5589,9 +5618,22 @@ class TestMessageBatchesStubs:
             ("post", "/v1/messages/batches"),
             ("get", "/v1/messages/batches"),
             ("get", "/v1/messages/batches/batch_x"),
+            ("get", "/v1/messages/batches/batch_x/results"),
+            ("post", "/v1/messages/batches/batch_x/cancel"),
         ]:
             resp = getattr(client, method)(path)
             assert resp.headers.get("anthropic-version") == "2023-06-01"
+
+    def test_batch_endpoints_echo_beta_flags(self):
+        """Recognized beta flags are echoed even on batch stub endpoints."""
+        client = _make_client()
+        resp = client.post(
+            "/v1/messages/batches",
+            json={},
+            headers={"anthropic-beta": "prompt-caching-2024-07-31"},
+        )
+        assert resp.status_code == 501
+        assert "prompt-caching-2024-07-31" in resp.headers.get("anthropic-beta", "")
 
     def test_batch_endpoints_require_auth(self):
         client = _make_client(auth_key="secret-key")
@@ -5609,6 +5651,22 @@ class TestMessageBatchesStubs:
             headers={"Authorization": "Bearer secret-key"},
         )
         assert resp.status_code == 501
+
+    def test_batch_stub_error_body_structure(self):
+        """All batch stubs return the standard Anthropic error envelope."""
+        client = _make_client()
+        for method, path in [
+            ("post", "/v1/messages/batches"),
+            ("get", "/v1/messages/batches"),
+            ("get", "/v1/messages/batches/batch_x"),
+            ("get", "/v1/messages/batches/batch_x/results"),
+            ("post", "/v1/messages/batches/batch_x/cancel"),
+        ]:
+            resp = getattr(client, method)(path)
+            body = resp.json()
+            assert body["type"] == "error", f"Wrong envelope on {method.upper()} {path}"
+            assert "type" in body["error"]
+            assert "message" in body["error"]
 
 
 # ---------------------------------------------------------------------------
