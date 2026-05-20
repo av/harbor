@@ -12,6 +12,24 @@ OPENAI_REQUEST_ID_HEADER = "x-request-id"
 ANTHROPIC_VERSION_HEADER = "anthropic-version"
 ANTHROPIC_VERSION = "2023-06-01"
 
+# Standard SSE headers that prevent proxy/CDN buffering and maintain
+# the TCP connection for long-lived streaming responses.
+SSE_HEADERS = {
+    "Cache-Control": "no-cache",
+    "Connection": "keep-alive",
+    "X-Accel-Buffering": "no",
+}
+
+# SSE retry interval (milliseconds).  Sent as the first line of the
+# stream so clients know how long to wait before reconnecting after
+# an unexpected disconnect.
+SSE_RETRY_MS = 3000
+
+# Interval (seconds) between keep-alive comments for long-running
+# SSE streams.  Proxies and load balancers often close idle
+# connections after 30-60s; sending a comment every 15s prevents that.
+SSE_KEEPALIVE_INTERVAL = 15
+
 # Rate limit and retry headers that SDK clients inspect.
 # Both Anthropic and OpenAI SDKs use these for automatic retry decisions.
 RATE_LIMIT_FORWARD_HEADERS = frozenset({
@@ -190,6 +208,41 @@ def extract_annotations(message: dict) -> list:
 
 def sse_event(event_type: str, data: dict) -> str:
   return f"event: {event_type}\ndata: {json.dumps(data, default=str)}\n\n"
+
+
+def sse_retry_line() -> str:
+  """Return an SSE ``retry:`` field that tells clients how long to wait
+  (in milliseconds) before reconnecting after an unexpected disconnect.
+
+  This is emitted as a standalone SSE field.  SSE clients that interpret
+  it will update their reconnection interval.  Some SDK parsers (like
+  the OpenAI Python SDK) may produce a ``ServerSentEvent`` with
+  ``event=None`` and ``data=''`` when they encounter this field, so it
+  should be paired with a real event in the same block when targeting
+  SDKs that don't gracefully handle data-less SSE messages.
+  """
+  return f"retry: {SSE_RETRY_MS}\n\n"
+
+
+def sse_event_with_retry(event_type: str, data: dict) -> str:
+  """Emit an SSE event with a ``retry:`` field in the same block.
+
+  By including ``retry:`` in the same block as a real event, the SSE
+  parser associates it with the event's data, avoiding a separate
+  data-less ``ServerSentEvent`` that some SDKs (e.g. OpenAI Python)
+  cannot handle.
+  """
+  return f"retry: {SSE_RETRY_MS}\nevent: {event_type}\ndata: {json.dumps(data, default=str)}\n\n"
+
+
+def sse_keepalive_comment() -> str:
+  """Return an SSE comment that serves as a keep-alive signal.
+
+  Per the SSE spec, lines starting with ``:`` are comments and must be
+  ignored by clients.  Proxies and load balancers, however, see them as
+  activity on the connection and keep it open.
+  """
+  return ": keep-alive\n\n"
 
 
 def extract_boost_params(body: dict) -> dict:

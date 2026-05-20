@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Request, Depends
 from fastapi.responses import JSONResponse, StreamingResponse
 
 import json
+import time as _time
 
 import dotty
 import format
@@ -17,6 +18,8 @@ from compat_utils import (
     ANTHROPIC_VERSION_HEADER,
     RATE_LIMIT_FORWARD_HEADERS,
     REQUEST_ID_HEADER,
+    SSE_HEADERS,
+    SSE_KEEPALIVE_INTERVAL,
     _get_finish_reason,
     extract_boost_params as _extract_boost_params,
     get_chunk_content as _get_chunk_content,
@@ -25,6 +28,8 @@ from compat_utils import (
     get_chunk_usage as _get_chunk_usage,
     parse_sse_chunks as _parse_sse_chunks,
     sse_event as _sse_event,
+    sse_keepalive_comment as _sse_keepalive,
+    sse_retry_line as _sse_retry,
     to_anthropic_tool_id as _to_anthropic_tool_id,
     to_openai_tool_id as _to_openai_tool_id,
 )
@@ -599,6 +604,11 @@ async def _anthropic_stream_converter(
   finish_reason = None
   accumulated_text_parts = []
   has_visible_tool_use = False
+  last_event_time = _time.monotonic()
+
+  # SSE retry interval — tells the client how long to wait before
+  # reconnecting after an unexpected disconnect.
+  yield _sse_retry()
 
   yield _sse_event(
     "message_start",
@@ -626,6 +636,16 @@ async def _anthropic_stream_converter(
 
   try:
     async for chunk in _parse_sse_chunks(response_stream):
+        now = _time.monotonic()
+
+        # Send a keep-alive comment if too much time has passed since
+        # the last event.  Proxies and load balancers often close idle
+        # connections after 30-60s; this prevents premature disconnects
+        # during long-running inference (reasoning, tool use, etc.).
+        if now - last_event_time >= SSE_KEEPALIVE_INTERVAL:
+          yield _sse_keepalive()
+          last_event_time = now
+
         text_content = _get_chunk_content(chunk)
         reasoning_content = _get_chunk_reasoning(chunk)
         tool_calls = _get_chunk_tool_calls(chunk)
@@ -659,6 +679,7 @@ async def _anthropic_stream_converter(
               "delta": {"type": "thinking_delta", "thinking": reasoning_content},
             },
           )
+          last_event_time = _time.monotonic()
 
         if text_content:
           accumulated_text_parts.append(text_content)
@@ -699,6 +720,7 @@ async def _anthropic_stream_converter(
               "delta": {"type": "text_delta", "text": text_content},
             },
           )
+          last_event_time = _time.monotonic()
 
         if tool_calls:
           for tc in tool_calls:
@@ -790,6 +812,7 @@ async def _anthropic_stream_converter(
                   "delta": {"type": "input_json_delta", "partial_json": tc_args},
                 },
               )
+          last_event_time = _time.monotonic()
   except BackendError as e:
     logger.warning("Anthropic streaming backend error %d: %s", e.status_code, e.body[:256])
     if e.status_code == 429:
@@ -1022,7 +1045,7 @@ async def post_messages(request: Request, api_key: str = Depends(get_api_key)):
       return StreamingResponse(
         _anthropic_stream_converter(completion, request_model, stop_sequences),
         media_type="text/event-stream",
-        headers=_anthropic_headers(request_id, beta_flags),
+        headers={**SSE_HEADERS, **_anthropic_headers(request_id, beta_flags)},
       )
     else:
       result = await proxy.consume_stream(completion)

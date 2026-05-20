@@ -15,6 +15,8 @@ from auth import get_api_key
 from compat_utils import (
     OPENAI_REQUEST_ID_HEADER,
     RATE_LIMIT_FORWARD_HEADERS,
+    SSE_HEADERS,
+    SSE_KEEPALIVE_INTERVAL,
     _get_finish_reason,
     extract_annotations as _extract_annotations,
     extract_boost_params as _extract_boost_params,
@@ -26,6 +28,8 @@ from compat_utils import (
     get_chunk_usage as _get_chunk_usage,
     parse_sse_chunks as _parse_sse_chunks,
     sse_event as _sse_event,
+    sse_event_with_retry as _sse_event_with_retry,
+    sse_keepalive_comment as _sse_keepalive,
     to_openai_tool_id as _to_openai_tool_id,
 )
 
@@ -727,6 +731,8 @@ async def _responses_stream_converter(
   refusal_open = False
   refusal_parts = []
 
+  last_event_time = time.monotonic()
+
   # Skeleton response for the created event
   skeleton = {
     "id": response_id,
@@ -756,7 +762,13 @@ async def _responses_stream_converter(
   if reasoning_config is not None:
     skeleton["reasoning"] = reasoning_config
 
-  yield _sse_event("response.created", {
+  # Include the SSE retry interval in the first event block so the
+  # client knows how long to wait before reconnecting after an
+  # unexpected disconnect.  Using sse_event_with_retry avoids emitting
+  # a standalone retry field that some SDKs (e.g. OpenAI Python)
+  # cannot parse (they produce a data-less ServerSentEvent and crash
+  # on json()).
+  yield _sse_event_with_retry("response.created", {
     "type": "response.created",
     "sequence_number": seq,
     "response": skeleton,
@@ -891,6 +903,15 @@ async def _responses_stream_converter(
 
   try:
     async for chunk in _parse_sse_chunks(response_stream):
+        now = time.monotonic()
+
+        # Send a keep-alive comment if too much time has passed since
+        # the last event.  Prevents proxy/LB idle-timeout disconnects
+        # during long-running inference (reasoning, tool use, etc.).
+        if now - last_event_time >= SSE_KEEPALIVE_INTERVAL:
+          yield _sse_keepalive()
+          last_event_time = now
+
         chunk_reasoning = _get_chunk_reasoning(chunk)
         chunk_text = _get_chunk_content(chunk)
         chunk_refusal = _get_chunk_refusal(chunk)
@@ -967,6 +988,7 @@ async def _responses_stream_converter(
             "sequence_number": seq,
           })
           seq += 1
+          last_event_time = time.monotonic()
 
         # --- Text content ---
         if chunk_text:
@@ -1024,6 +1046,7 @@ async def _responses_stream_converter(
             "sequence_number": seq,
           })
           seq += 1
+          last_event_time = time.monotonic()
 
         # --- Refusal content ---
         if chunk_refusal:
@@ -1083,6 +1106,7 @@ async def _responses_stream_converter(
             "sequence_number": seq,
           })
           seq += 1
+          last_event_time = time.monotonic()
 
         # --- Tool calls ---
         if chunk_tools:
@@ -1157,6 +1181,7 @@ async def _responses_stream_converter(
                 "sequence_number": seq,
               })
               seq += 1
+          last_event_time = time.monotonic()
 
   except BackendError as e:
     logger.warning("Responses streaming backend error %d: %s", e.status_code, e.body[:256])
@@ -1443,7 +1468,7 @@ async def post_responses(request: Request, api_key: str = Depends(get_api_key)):
       return StreamingResponse(
         _responses_stream_converter(completion, request_model, response_id, request_body=json_body),
         media_type="text/event-stream",
-        headers={OPENAI_REQUEST_ID_HEADER: request_id},
+        headers={**SSE_HEADERS, OPENAI_REQUEST_ID_HEADER: request_id},
       )
     else:
       result = await proxy.consume_stream(completion)

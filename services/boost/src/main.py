@@ -13,6 +13,7 @@ from auth import get_api_key
 from compat_utils import (
     ANTHROPIC_VERSION,
     ANTHROPIC_VERSION_HEADER,
+    SSE_HEADERS,
 )
 from log import setup_logger
 
@@ -379,7 +380,7 @@ async def post_boost_chat_completion(
       )
 
     if stream:
-      return StreamingResponse(completion, media_type="text/event-stream")
+      return StreamingResponse(completion, media_type="text/event-stream", headers=SSE_HEADERS)
     else:
       content = await proxy.consume_stream(completion)
       return JSONResponse(content=content, status_code=200)

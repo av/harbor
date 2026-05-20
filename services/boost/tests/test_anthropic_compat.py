@@ -5577,12 +5577,13 @@ class TestStreamingPingEvent:
             anthropic_compat._anthropic_stream_converter(response_stream(), "claude-test")
         ]
 
-        # First event is message_start, second should be ping
-        assert len(events) >= 2
-        assert "message_start" in events[0]
-        assert "event: ping" in events[1]
-        assert '"data": {}' not in events[1]  # data should be {} (the object)
-        assert "data: {}" in events[1]
+        # First event is the SSE retry field, then message_start, then ping
+        assert len(events) >= 3
+        assert events[0].startswith("retry:")
+        assert "message_start" in events[1]
+        assert "event: ping" in events[2]
+        assert '"data": {}' not in events[2]  # data should be {} (the object)
+        assert "data: {}" in events[2]
 
     @pytest.mark.asyncio
     async def test_ping_is_valid_sse(self):
@@ -5595,7 +5596,8 @@ class TestStreamingPingEvent:
             anthropic_compat._anthropic_stream_converter(response_stream(), "m")
         ]
 
-        ping_event = events[1]
+        # events[0] is retry field, events[1] is message_start, events[2] is ping
+        ping_event = events[2]
         # Should be a well-formed SSE event with event type and data
         assert ping_event.startswith("event: ping\n")
         assert ping_event.endswith("\n\n")
@@ -5611,7 +5613,7 @@ class TestStreamingPingEvent:
             anthropic_compat._anthropic_stream_converter(response_stream(), "m")
         ]
 
-        # Verify ordering: message_start, ping, content_block_start, ...
+        # Verify ordering: retry, message_start, ping, content_block_start, ...
         event_types = []
         for e in events:
             if "event: " in e:
@@ -7344,8 +7346,11 @@ class TestSecuritySSEInjection:
             event async for event in
             anthropic_compat._anthropic_stream_converter(response_stream(), "test-model")
         ]
-        # Each SSE event must have exactly one data: line
+        # Each SSE *event* (containing an event: line) must have exactly one
+        # data: line.  Skip non-event entries like "retry:" and ": keep-alive".
         for event in events:
+            if "event: " not in event:
+                continue
             lines = event.strip().split("\n")
             data_lines = [l for l in lines if l.startswith("data: ")]
             assert len(data_lines) == 1, f"SSE event has {len(data_lines)} data lines: {event}"

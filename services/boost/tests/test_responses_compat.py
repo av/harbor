@@ -1015,7 +1015,7 @@ class TestResponsesStreamConverter:
         ):
             events.append(event)
 
-        event_types = [e.split("\n")[0].replace("event: ", "") for e in events]
+        event_types = [l.replace("event: ", "") for e in events for l in e.strip().split("\n") if l.startswith("event: ")]
 
         assert "response.created" in event_types
         assert "response.in_progress" in event_types
@@ -1194,7 +1194,7 @@ class TestResponsesStreamConverter:
         ):
             events.append(event)
 
-        event_types = [e.split("\n")[0].replace("event: ", "") for e in events]
+        event_types = [l.replace("event: ", "") for e in events for l in e.strip().split("\n") if l.startswith("event: ")]
         assert "response.output_item.added" in event_types
         assert "response.function_call_arguments.delta" in event_types
         assert "response.function_call_arguments.done" in event_types
@@ -1242,7 +1242,7 @@ class TestResponsesStreamConverter:
         ):
             events.append(event)
 
-        event_types = [e.split("\n")[0].replace("event: ", "") for e in events]
+        event_types = [l.replace("event: ", "") for e in events for l in e.strip().split("\n") if l.startswith("event: ")]
 
         # Should have text events, then close text, then tool events
         assert event_types.count("response.output_item.added") == 2
@@ -1261,7 +1261,7 @@ class TestResponsesStreamConverter:
         ):
             events.append(event)
 
-        event_types = [e.split("\n")[0].replace("event: ", "") for e in events]
+        event_types = [l.replace("event: ", "") for e in events for l in e.strip().split("\n") if l.startswith("event: ")]
         assert event_types[0] == "response.created"
         assert event_types[-1] == "response.completed"
 
@@ -1299,7 +1299,7 @@ class TestResponsesStreamConverter:
         ):
             events.append(event)
 
-        event_types = [e.split("\n")[0].replace("event: ", "") for e in events]
+        event_types = [l.replace("event: ", "") for e in events for l in e.strip().split("\n") if l.startswith("event: ")]
         assert "response.failed" in event_types
 
         # Should have error text in a delta
@@ -1317,7 +1317,9 @@ class TestResponsesStreamConverter:
         ):
             events.append(event)
 
-        created = events[0]
+        # Skip non-event entries (keep-alive comments, etc.)
+        sse_events = [e for e in events if "event: " in e]
+        created = sse_events[0]
         data = json.loads(created.split("data: ", 1)[1])
         assert data["type"] == "response.created"
         assert "sequence_number" in data
@@ -6624,9 +6626,13 @@ class TestSecuritySSEInjection:
         ):
             events.append(event)
 
-        # Each SSE event must have exactly one data: line (the JSON payload
-        # cannot contain raw newlines that would split the SSE frame).
+        # Each SSE *event* (containing an event: line) must have exactly one
+        # data: line (the JSON payload cannot contain raw newlines that would
+        # split the SSE frame).  Non-event entries like ": keep-alive" are
+        # skipped.
         for event in events:
+            if "event: " not in event:
+                continue
             lines = event.strip().split("\n")
             data_lines = [l for l in lines if l.startswith("data: ")]
             assert len(data_lines) == 1, f"SSE event has {len(data_lines)} data lines: {event}"
