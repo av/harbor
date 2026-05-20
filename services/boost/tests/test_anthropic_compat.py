@@ -2810,6 +2810,349 @@ class TestStreamingThinking:
 
 
 # ---------------------------------------------------------------------------
+# Content block index tracking (all scenarios)
+# ---------------------------------------------------------------------------
+
+class TestContentBlockIndexTracking:
+    """Verify the ``index`` field on content_block_start, content_block_delta,
+    and content_block_stop events is correct in every combination of block types."""
+
+    @pytest.mark.asyncio
+    async def test_text_only_all_indices_zero(self):
+        """Text-only stream: every content_block event uses index 0."""
+        async def response_stream():
+            yield 'data: {"choices": [{"delta": {"content": "Hello"}}]}\n\n'
+            yield 'data: {"choices": [{"delta": {"content": " world"}}]}\n\n'
+            yield 'data: {"choices": [{"delta": {}, "finish_reason": "stop"}]}\n\n'
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "m")
+        ]
+        parsed = _parse_sse_events("".join(events))
+
+        block_starts = [e for e in parsed if e["type"] == "content_block_start"]
+        assert len(block_starts) == 1
+        assert block_starts[0]["index"] == 0
+        assert block_starts[0]["content_block"]["type"] == "text"
+
+        block_deltas = [e for e in parsed if e["type"] == "content_block_delta"]
+        assert len(block_deltas) == 2
+        assert all(d["index"] == 0 for d in block_deltas)
+
+        block_stops = [e for e in parsed if e["type"] == "content_block_stop"]
+        assert len(block_stops) == 1
+        assert block_stops[0]["index"] == 0
+
+    @pytest.mark.asyncio
+    async def test_thinking_then_text_indices(self):
+        """Thinking + text: thinking at index 0, text at index 1."""
+        async def response_stream():
+            yield 'data: {"choices": [{"delta": {"reasoning_content": "Let me think"}}]}\n\n'
+            yield 'data: {"choices": [{"delta": {"content": "Answer."}}]}\n\n'
+            yield 'data: {"choices": [{"delta": {}, "finish_reason": "stop"}]}\n\n'
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "m")
+        ]
+        parsed = _parse_sse_events("".join(events))
+
+        block_starts = [e for e in parsed if e["type"] == "content_block_start"]
+        assert len(block_starts) == 2
+        assert block_starts[0]["index"] == 0
+        assert block_starts[0]["content_block"]["type"] == "thinking"
+        assert block_starts[1]["index"] == 1
+        assert block_starts[1]["content_block"]["type"] == "text"
+
+        thinking_deltas = [e for e in parsed if e["type"] == "content_block_delta" and e["delta"]["type"] == "thinking_delta"]
+        assert all(d["index"] == 0 for d in thinking_deltas)
+
+        text_deltas = [e for e in parsed if e["type"] == "content_block_delta" and e["delta"]["type"] == "text_delta"]
+        assert all(d["index"] == 1 for d in text_deltas)
+
+        block_stops = [e for e in parsed if e["type"] == "content_block_stop"]
+        stop_indices = [s["index"] for s in block_stops]
+        assert 0 in stop_indices
+        assert 1 in stop_indices
+
+    @pytest.mark.asyncio
+    async def test_text_then_two_tool_calls_indices(self):
+        """Text + 2 tool calls: text at 0, tools at 1 and 2."""
+        async def response_stream():
+            yield 'data: {"choices": [{"delta": {"content": "I will help."}}]}\n\n'
+            yield (
+                'data: {"choices": [{"delta": {"tool_calls": ['
+                '{"index": 0, "id": "toolu_a", "function": '
+                '{"name": "search", "arguments": "{\\"q\\": \\"x\\"}"}}]}}]}\n\n'
+            )
+            yield (
+                'data: {"choices": [{"delta": {"tool_calls": ['
+                '{"index": 1, "id": "toolu_b", "function": '
+                '{"name": "calc", "arguments": "{\\"n\\": 1}"}}]}}]}\n\n'
+            )
+            yield (
+                'data: {"choices": [{"delta": {}, "finish_reason": "tool_calls"}], '
+                '"usage": {"prompt_tokens": 5, "completion_tokens": 10}}\n\n'
+            )
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "m")
+        ]
+        parsed = _parse_sse_events("".join(events))
+
+        block_starts = [e for e in parsed if e["type"] == "content_block_start"]
+        assert len(block_starts) == 3
+
+        # text at index 0
+        assert block_starts[0]["index"] == 0
+        assert block_starts[0]["content_block"]["type"] == "text"
+
+        # first tool at index 1
+        assert block_starts[1]["index"] == 1
+        assert block_starts[1]["content_block"]["type"] == "tool_use"
+        assert block_starts[1]["content_block"]["name"] == "search"
+
+        # second tool at index 2
+        assert block_starts[2]["index"] == 2
+        assert block_starts[2]["content_block"]["type"] == "tool_use"
+        assert block_starts[2]["content_block"]["name"] == "calc"
+
+        # text deltas at index 0
+        text_deltas = [e for e in parsed if e["type"] == "content_block_delta" and e["delta"]["type"] == "text_delta"]
+        assert all(d["index"] == 0 for d in text_deltas)
+
+        # tool deltas at their respective indices
+        tool_deltas = [e for e in parsed if e["type"] == "content_block_delta" and e["delta"]["type"] == "input_json_delta"]
+        assert len(tool_deltas) == 2
+        assert tool_deltas[0]["index"] == 1
+        assert tool_deltas[1]["index"] == 2
+
+        # content_block_stop for each
+        block_stops = [e for e in parsed if e["type"] == "content_block_stop"]
+        stop_indices = sorted([s["index"] for s in block_stops])
+        assert stop_indices == [0, 1, 2]
+
+    @pytest.mark.asyncio
+    async def test_thinking_text_tool_indices(self):
+        """Thinking + text + tool: thinking 0, text 1, tool 2."""
+        async def response_stream():
+            yield 'data: {"choices": [{"delta": {"reasoning_content": "Reasoning..."}}]}\n\n'
+            yield 'data: {"choices": [{"delta": {"content": "Here is the result."}}]}\n\n'
+            yield (
+                'data: {"choices": [{"delta": {"tool_calls": ['
+                '{"index": 0, "id": "toolu_c", "function": '
+                '{"name": "run", "arguments": "{\\"cmd\\": \\"ls\\"}"}}]}}]}\n\n'
+            )
+            yield (
+                'data: {"choices": [{"delta": {}, "finish_reason": "tool_calls"}], '
+                '"usage": {"prompt_tokens": 10, "completion_tokens": 20}}\n\n'
+            )
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "m")
+        ]
+        parsed = _parse_sse_events("".join(events))
+
+        block_starts = [e for e in parsed if e["type"] == "content_block_start"]
+        assert len(block_starts) == 3
+
+        # thinking at index 0
+        assert block_starts[0]["index"] == 0
+        assert block_starts[0]["content_block"]["type"] == "thinking"
+
+        # text at index 1
+        assert block_starts[1]["index"] == 1
+        assert block_starts[1]["content_block"]["type"] == "text"
+
+        # tool at index 2
+        assert block_starts[2]["index"] == 2
+        assert block_starts[2]["content_block"]["type"] == "tool_use"
+        assert block_starts[2]["content_block"]["name"] == "run"
+
+        # Verify deltas reference correct indices
+        thinking_deltas = [e for e in parsed if e["type"] == "content_block_delta" and e["delta"]["type"] == "thinking_delta"]
+        assert all(d["index"] == 0 for d in thinking_deltas)
+
+        text_deltas = [e for e in parsed if e["type"] == "content_block_delta" and e["delta"]["type"] == "text_delta"]
+        assert all(d["index"] == 1 for d in text_deltas)
+
+        tool_deltas = [e for e in parsed if e["type"] == "content_block_delta" and e["delta"]["type"] == "input_json_delta"]
+        assert all(d["index"] == 2 for d in tool_deltas)
+
+        # All three blocks stopped
+        block_stops = [e for e in parsed if e["type"] == "content_block_stop"]
+        stop_indices = sorted([s["index"] for s in block_stops])
+        assert stop_indices == [0, 1, 2]
+
+    @pytest.mark.asyncio
+    async def test_tool_only_indices(self):
+        """Tool-only stream (no text): tool at index 0."""
+        async def response_stream():
+            yield (
+                'data: {"choices": [{"delta": {"tool_calls": ['
+                '{"index": 0, "id": "toolu_d", "function": '
+                '{"name": "get", "arguments": ""}}]}}]}\n\n'
+            )
+            yield (
+                'data: {"choices": [{"delta": {"tool_calls": ['
+                '{"index": 0, "function": '
+                '{"arguments": "{\\"key\\": \\"val\\"}"}}]}}]}\n\n'
+            )
+            yield (
+                'data: {"choices": [{"delta": {}, "finish_reason": "tool_calls"}]}\n\n'
+            )
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "m")
+        ]
+        parsed = _parse_sse_events("".join(events))
+
+        block_starts = [e for e in parsed if e["type"] == "content_block_start"]
+        assert len(block_starts) == 1
+        assert block_starts[0]["index"] == 0
+        assert block_starts[0]["content_block"]["type"] == "tool_use"
+
+        block_deltas = [e for e in parsed if e["type"] == "content_block_delta"]
+        # First delta is the initial args (empty string buffered, then emitted with start),
+        # second delta is the follow-up args
+        for d in block_deltas:
+            assert d["index"] == 0
+
+        block_stops = [e for e in parsed if e["type"] == "content_block_stop"]
+        assert len(block_stops) == 1
+        assert block_stops[0]["index"] == 0
+
+    @pytest.mark.asyncio
+    async def test_three_tool_calls_indices(self):
+        """Three parallel tool calls: indices 0, 1, 2."""
+        async def response_stream():
+            yield (
+                'data: {"choices": [{"delta": {"tool_calls": ['
+                '{"index": 0, "id": "toolu_1", "function": {"name": "a", "arguments": "{}"}}, '
+                '{"index": 1, "id": "toolu_2", "function": {"name": "b", "arguments": "{}"}}, '
+                '{"index": 2, "id": "toolu_3", "function": {"name": "c", "arguments": "{}"}}]}}]}\n\n'
+            )
+            yield 'data: {"choices": [{"delta": {}, "finish_reason": "tool_calls"}]}\n\n'
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "m")
+        ]
+        parsed = _parse_sse_events("".join(events))
+
+        block_starts = [e for e in parsed if e["type"] == "content_block_start"]
+        assert len(block_starts) == 3
+        assert block_starts[0]["index"] == 0
+        assert block_starts[1]["index"] == 1
+        assert block_starts[2]["index"] == 2
+
+        block_stops = [e for e in parsed if e["type"] == "content_block_stop"]
+        stop_indices = sorted([s["index"] for s in block_stops])
+        assert stop_indices == [0, 1, 2]
+
+    @pytest.mark.asyncio
+    async def test_interleaved_tool_argument_deltas_use_correct_index(self):
+        """When two tool calls receive interleaved argument chunks,
+        each delta references the correct block index."""
+        async def response_stream():
+            # First tool announced
+            yield (
+                'data: {"choices": [{"delta": {"tool_calls": ['
+                '{"index": 0, "id": "toolu_x", "function": {"name": "foo", "arguments": ""}}]}}]}\n\n'
+            )
+            # Second tool announced
+            yield (
+                'data: {"choices": [{"delta": {"tool_calls": ['
+                '{"index": 1, "id": "toolu_y", "function": {"name": "bar", "arguments": ""}}]}}]}\n\n'
+            )
+            # Args for first tool
+            yield (
+                'data: {"choices": [{"delta": {"tool_calls": ['
+                '{"index": 0, "function": {"arguments": "{\\"a\\":"}}]}}]}\n\n'
+            )
+            # Args for second tool
+            yield (
+                'data: {"choices": [{"delta": {"tool_calls": ['
+                '{"index": 1, "function": {"arguments": "{\\"b\\":"}}]}}]}\n\n'
+            )
+            # More args for first tool
+            yield (
+                'data: {"choices": [{"delta": {"tool_calls": ['
+                '{"index": 0, "function": {"arguments": " 1}"}}]}}]}\n\n'
+            )
+            # More args for second tool
+            yield (
+                'data: {"choices": [{"delta": {"tool_calls": ['
+                '{"index": 1, "function": {"arguments": " 2}"}}]}}]}\n\n'
+            )
+            yield 'data: {"choices": [{"delta": {}, "finish_reason": "tool_calls"}]}\n\n'
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "m")
+        ]
+        parsed = _parse_sse_events("".join(events))
+
+        block_starts = [e for e in parsed if e["type"] == "content_block_start"]
+        assert len(block_starts) == 2
+        # Tool blocks at indices 0 and 1
+        assert block_starts[0]["index"] == 0
+        assert block_starts[0]["content_block"]["name"] == "foo"
+        assert block_starts[1]["index"] == 1
+        assert block_starts[1]["content_block"]["name"] == "bar"
+
+        # Verify each delta references the correct block index
+        tool_deltas = [e for e in parsed if e["type"] == "content_block_delta" and e["delta"]["type"] == "input_json_delta"]
+        # We expect 4 deltas: 2 for foo (index 0) and 2 for bar (index 1)
+        foo_deltas = [d for d in tool_deltas if d["index"] == 0]
+        bar_deltas = [d for d in tool_deltas if d["index"] == 1]
+        assert len(foo_deltas) == 2
+        assert len(bar_deltas) == 2
+
+    @pytest.mark.asyncio
+    async def test_thinking_then_two_tools_indices(self):
+        """Thinking + 2 tool calls (no text): thinking 0, tools 1 and 2."""
+        async def response_stream():
+            yield 'data: {"choices": [{"delta": {"reasoning_content": "Planning..."}}]}\n\n'
+            yield (
+                'data: {"choices": [{"delta": {"tool_calls": ['
+                '{"index": 0, "id": "toolu_p", "function": {"name": "fetch", "arguments": "{\\"url\\": \\"x\\"}"}}, '
+                '{"index": 1, "id": "toolu_q", "function": {"name": "parse", "arguments": "{\\"fmt\\": \\"json\\"}"}}]}}]}\n\n'
+            )
+            yield 'data: {"choices": [{"delta": {}, "finish_reason": "tool_calls"}]}\n\n'
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "m")
+        ]
+        parsed = _parse_sse_events("".join(events))
+
+        block_starts = [e for e in parsed if e["type"] == "content_block_start"]
+        assert len(block_starts) == 3
+
+        # thinking at 0
+        assert block_starts[0]["index"] == 0
+        assert block_starts[0]["content_block"]["type"] == "thinking"
+
+        # tools at 1 and 2
+        assert block_starts[1]["index"] == 1
+        assert block_starts[1]["content_block"]["type"] == "tool_use"
+        assert block_starts[1]["content_block"]["name"] == "fetch"
+        assert block_starts[2]["index"] == 2
+        assert block_starts[2]["content_block"]["type"] == "tool_use"
+        assert block_starts[2]["content_block"]["name"] == "parse"
+
+        # stops at 0, 1, 2
+        block_stops = [e for e in parsed if e["type"] == "content_block_stop"]
+        stop_indices = sorted([s["index"] for s in block_stops])
+        assert stop_indices == [0, 1, 2]
+
+
+# ---------------------------------------------------------------------------
 # Extended Thinking: integration tests
 # ---------------------------------------------------------------------------
 
