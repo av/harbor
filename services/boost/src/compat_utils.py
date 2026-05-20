@@ -50,11 +50,11 @@ def to_openai_tool_id(raw_id: str) -> str:
     return f"call_{core}"
 
 
-def get_chunk_content(chunk):
+def get_chunk_content(chunk: dict) -> str:
   return dotty.get(chunk, "choices.0.delta.content", "")
 
 
-def get_chunk_reasoning(chunk):
+def get_chunk_reasoning(chunk: dict) -> str:
   """Extract reasoning/thinking content from a streaming chunk.
 
   OpenAI-compatible backends may return reasoning content via:
@@ -67,15 +67,15 @@ def get_chunk_reasoning(chunk):
   return dotty.get(chunk, "choices.0.delta.reasoning", "")
 
 
-def get_chunk_refusal(chunk):
+def get_chunk_refusal(chunk: dict) -> str:
   return dotty.get(chunk, "choices.0.delta.refusal", "")
 
 
-def get_chunk_tool_calls(chunk):
+def get_chunk_tool_calls(chunk: dict) -> list:
   return dotty.get(chunk, "choices.0.delta.tool_calls", [])
 
 
-def get_chunk_usage(chunk):
+def get_chunk_usage(chunk: dict) -> dict:
   return dotty.get(chunk, "usage") or {
     "prompt_tokens": 0,
     "completion_tokens": 0,
@@ -83,7 +83,7 @@ def get_chunk_usage(chunk):
   }
 
 
-def extract_annotations(message: dict, text: str = "") -> list:
+def extract_annotations(message: dict) -> list:
   """Extract annotations from a Chat Completions message and convert to
   Responses API ``url_citation`` format.
 
@@ -149,7 +149,7 @@ def extract_annotations(message: dict, text: str = "") -> list:
   return annotations
 
 
-def sse_event(event_type, data):
+def sse_event(event_type: str, data: dict) -> str:
   return f"event: {event_type}\ndata: {json.dumps(data, default=str)}\n\n"
 
 

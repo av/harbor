@@ -462,7 +462,7 @@ def _build_output_items(openai_result):
 
   # Extract annotations from the Chat Completions message (OpenAI web-search
   # url_citations, Perplexity citations, etc.)
-  annotations = _extract_annotations(message, str(content or ""))
+  annotations = _extract_annotations(message)
 
   if refusal:
     output.append({
