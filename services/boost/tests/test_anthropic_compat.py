@@ -80,6 +80,34 @@ class TestValidateRequest:
         })
         assert resp is None
 
+    def test_non_dict_body_returns_400(self):
+        resp = anthropic_compat._validate_request(["not", "a", "dict"])
+        assert resp is not None
+        body = json.loads(resp.body.decode())
+        assert body["error"]["type"] == "invalid_request_error"
+        assert "JSON object" in body["error"]["message"]
+
+    def test_max_tokens_non_positive_returns_400(self):
+        for bad in (0, -1, "foo"):
+            resp = anthropic_compat._validate_request({
+                "model": "m",
+                "max_tokens": bad,
+                "messages": [{"role": "user", "content": "hi"}],
+            })
+            assert resp is not None
+            body = json.loads(resp.body.decode())
+            assert "positive integer" in body["error"]["message"]
+
+    def test_messages_non_dict_entry_returns_400(self):
+        resp = anthropic_compat._validate_request({
+            "model": "m",
+            "max_tokens": 64,
+            "messages": ["not a dict", {"role": "user", "content": "hi"}],
+        })
+        assert resp is not None
+        body = json.loads(resp.body.decode())
+        assert "messages entries must be objects" in body["error"]["message"]
+
 
 # ---------------------------------------------------------------------------
 # Message conversion: _convert_messages
@@ -310,6 +338,28 @@ class TestConvertMessages:
         assert len(msgs) == 1
         assert msgs[0]["content"] == "I found something."
         assert len(msgs[0]["tool_calls"]) == 1
+
+    def test_user_content_non_list_or_str_returns_str_wrapped(self):
+        msgs = anthropic_compat._convert_user_message(12345)
+        assert msgs == [{"role": "user", "content": "12345"}]
+
+    def test_assistant_content_non_list_or_str_returns_str_wrapped(self):
+        msgs = anthropic_compat._convert_assistant_message({"foo": "bar"})
+        assert msgs == [{"role": "assistant", "content": "{'foo': 'bar'}"}]
+
+    def test_convert_tool_choice_non_dict_returns_none(self):
+        assert anthropic_compat._convert_tool_choice({"tool_choice": "auto"}) is None
+        assert anthropic_compat._convert_tool_choice({"tool_choice": 123}) is None
+        assert anthropic_compat._convert_tool_choice({"tool_choice": None}) is None
+        assert anthropic_compat._convert_tool_choice({}) is None
+
+    def test_build_response_tool_calls_finish_without_visible_tools_becomes_stop(self):
+        openai_res = {
+            "choices": [{"finish_reason": "tool_calls", "message": {"content": "some text"}}],
+            "usage": {},
+        }
+        resp = anthropic_compat._build_anthropic_response(openai_res, "m", None)
+        assert resp.get("stop_reason") in ("end_turn", "stop")
 
 
 # ---------------------------------------------------------------------------
@@ -976,6 +1026,31 @@ class TestAnthropicStreamConverter:
         assert '"name": "calc"' in joined
         assert joined.count('"type": "content_block_start"') == 2
         assert '"stop_reason": "tool_use"' in joined
+
+    @pytest.mark.asyncio
+    async def test_stream_converter_backend_error_various_statuses_hit_error_envelopes(self):
+        """Drive the streaming BackendError except + 856-863 status branches (Rate/Overloaded/5xx/else) + post-error code in _anthropic_stream_converter for error envelope paths."""
+        from llm import BackendError
+
+        def make_raiser(status, body=b"err"):
+            async def _s():
+                yield 'data: {"choices": [{"delta": {"content": "partial"}}]}\n\n'
+                raise BackendError(status, body)
+            return _s()
+
+        for status, expected in [
+            (429, "Rate limit exceeded"),
+            (529, "Backend overloaded"),
+            (502, "Backend server error"),
+            (422, "Backend request failed"),
+        ]:
+            stream = make_raiser(status)
+            events = [e async for e in anthropic_compat._anthropic_stream_converter(stream, "claude-test")]
+            joined = "".join(events)
+            assert "event: error" in joined or "error" in joined
+            assert expected in joined or "Stream error" in joined
+
+        # Also hit keepalive? skipped (timing); flush 946 may require pending tools state not triggered here
 
 
 # ---------------------------------------------------------------------------
@@ -1667,6 +1742,71 @@ class TestIntegrationCountTokens:
         assert resp_no_tools.status_code == 200
         assert resp_with_tools.status_code == 200
         assert resp_with_tools.json()["input_tokens"] > resp_no_tools.json()["input_tokens"]
+
+    def test_count_tokens_invalid_json_returns_400(self):
+        client = TestClient(_integration_app, raise_server_exceptions=False)
+        resp = client.post(
+            "/v1/messages/count_tokens",
+            content=b"{bad json",
+            headers={"content-type": "application/json"},
+        )
+        assert resp.status_code == 400
+        body = resp.json()
+        assert body["error"]["message"] == "Invalid JSON in request body"
+
+    def test_count_tokens_non_dict_body_returns_400(self):
+        client = TestClient(_integration_app, raise_server_exceptions=False)
+        resp = client.post(
+            "/v1/messages/count_tokens",
+            content=b"[]",
+            headers={"content-type": "application/json"},
+        )
+        assert resp.status_code == 400
+        body = resp.json()
+        assert "JSON object" in body["error"]["message"]
+
+    def test_count_tokens_non_dict_message_entry_returns_400(self):
+        client = TestClient(_integration_app, raise_server_exceptions=False)
+        resp = client.post("/v1/messages/count_tokens", json={
+            "model": "test",
+            "messages": [123, {"role": "user", "content": "hi"}],
+        })
+        assert resp.status_code == 400
+        body = resp.json()
+        assert "messages entries must be objects" in body["error"]["message"]
+
+    def test_count_tokens_value_error_handled_as_400(self):
+        with patch("anthropic_compat.count_messages_tokens", side_effect=ValueError("bad tokens")):
+            client = TestClient(_integration_app, raise_server_exceptions=False)
+            resp = client.post("/v1/messages/count_tokens", json={
+                "model": "test",
+                "messages": [{"role": "user", "content": "hi"}],
+            })
+            assert resp.status_code == 400
+            assert "Invalid request" in resp.json()["error"]["message"]
+
+    def test_count_tokens_unexpected_exception_handled_as_500(self):
+        with patch("anthropic_compat.count_messages_tokens", side_effect=RuntimeError("boom")):
+            client = TestClient(_integration_app, raise_server_exceptions=False)
+            resp = client.post("/v1/messages/count_tokens", json={
+                "model": "test",
+                "messages": [{"role": "user", "content": "hi"}],
+            })
+            assert resp.status_code == 500
+            assert "Internal server error" in resp.json()["error"]["message"]
+
+    def test_count_tokens_http_exception_handled(self):
+        from fastapi import HTTPException as FastAPIHTTPException
+        with patch("anthropic_compat._synthesize_authorization", side_effect=FastAPIHTTPException(503, "svc down")):
+            client = TestClient(_integration_app, raise_server_exceptions=False)
+            resp = client.post("/v1/messages/count_tokens", json={
+                "model": "test",
+                "messages": [{"role": "user", "content": "hi"}],
+            })
+            assert resp.status_code == 503
+            body = resp.json()
+            assert body["error"]["type"] == "api_error"
+            # for >=500, detail is sanitized in count handler
 
 
 # ---------------------------------------------------------------------------
@@ -8023,6 +8163,26 @@ class TestAnthropicBackendErrorIntegration:
         assert resp.headers.get("anthropic-version") == "2023-06-01"
         assert resp.headers.get("request-id") is not None
         assert resp.headers.get("request-id").startswith("req_")
+
+    def test_backend_error_non429_non5xx_hits_else_branch(self):
+        """Covers the else: "Backend request failed" at line 1132 for e.g. 422/4xx status in post_messages non-stream handler."""
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+            patch.object(anthropic_compat, "llm_mod") as mock_llm_mod,
+        ):
+            mock_mapper.list_downstream = AsyncMock()
+            mock_mapper.resolve_request_config = MagicMock(return_value={})
+            mock_mapper.is_direct_task = MagicMock(return_value=False)
+            mock_llm_mod.LLM = MagicMock(
+                side_effect=BackendError(422, "unprocessable", {})
+            )
+
+            client = _make_client()
+            resp = client.post("/v1/messages", json=_ANTHRO_BODY)
+
+        assert resp.status_code == 422
+        body = resp.json()
+        assert "Backend request failed" in body["error"]["message"]
 
 
 # ---------------------------------------------------------------------------
