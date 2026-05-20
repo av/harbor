@@ -12,6 +12,7 @@ import mapper
 import llm as llm_mod
 from llm import BackendError
 from auth import get_api_key
+from token_counter import count_messages_tokens
 from compat_utils import (
     OPENAI_REQUEST_ID_HEADER,
     RATE_LIMIT_FORWARD_HEADERS,
@@ -1585,3 +1586,55 @@ async def cancel_response(response_id: str, api_key: str = Depends(get_api_key))
     404, _RESPONSE_CANCEL_NOT_FOUND.format(response_id=response_id),
     error_code="not_found", request_id=request_id,
   )
+
+
+@responses_compatible_routes.get("/v1/responses/{response_id}/input_items")
+async def list_response_input_items(response_id: str, api_key: str = Depends(get_api_key)):
+  request_id = f"req_{shortuuid.random()}"
+  return _responses_error(
+    404,
+    f"Response {response_id} not found. Harbor Boost does not persist "
+    "responses (store is always false), so input items cannot be listed.",
+    error_code="not_found", request_id=request_id,
+  )
+
+
+@responses_compatible_routes.post("/v1/responses/input_tokens")
+async def count_response_input_tokens(request: Request, api_key: str = Depends(get_api_key)):
+  request_id = f"req_{shortuuid.random()}"
+
+  try:
+    body = await request.body()
+    try:
+      json_body = json.loads(body.decode("utf-8"))
+    except json.JSONDecodeError:
+      return _responses_error(400, "Invalid JSON in request body", request_id=request_id)
+
+    openai_body = _build_openai_body(json_body)
+    openai_messages = openai_body.get("messages", [])
+    tools = _convert_tools(json_body) or None
+
+    input_tokens = count_messages_tokens(openai_messages, tools)
+    logger.info("Responses count_input_tokens: tokens=%d", input_tokens)
+
+    return JSONResponse(
+      content={
+        "input_tokens": input_tokens,
+        "object": "response.input_tokens",
+      },
+      status_code=200,
+      headers={OPENAI_REQUEST_ID_HEADER: request_id},
+    )
+
+  except HTTPException as e:
+    error_type = ERROR_TYPE_MAP.get(e.status_code, "server_error")
+    detail = str(e.detail) if e.status_code < 500 else "Internal server error"
+    if e.status_code >= 500:
+      logger.error("Responses count_input_tokens HTTPException %d: %s", e.status_code, e.detail)
+    return _responses_error(e.status_code, detail, error_type, request_id=request_id)
+  except ValueError as e:
+    logger.warning("Responses count_input_tokens validation error: %s", e)
+    return _responses_error(400, "Invalid request: could not process input for token counting", request_id=request_id)
+  except Exception as e:
+    logger.error("Responses count_input_tokens unexpected error: %s", e, exc_info=True)
+    return _responses_error(500, "Internal server error", request_id=request_id)

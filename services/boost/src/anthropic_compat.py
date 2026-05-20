@@ -1239,3 +1239,13 @@ async def cancel_message_batch(batch_id: str, request: Request, api_key: str = D
     404, _BATCH_NOT_FOUND.format(batch_id=batch_id),
     request_id=request_id, beta_flags=beta_flags,
   )
+
+
+@anthropic_compatible_routes.delete("/v1/messages/batches/{batch_id}")
+async def delete_message_batch(batch_id: str, request: Request, api_key: str = Depends(get_api_key)):
+  request_id = f"req_{shortuuid.random()}"
+  beta_flags = _parse_beta_flags(request)
+  return _anthropic_error(
+    404, _BATCH_NOT_FOUND.format(batch_id=batch_id),
+    request_id=request_id, beta_flags=beta_flags,
+  )
