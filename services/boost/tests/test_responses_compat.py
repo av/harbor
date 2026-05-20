@@ -675,8 +675,49 @@ class TestResponsesError:
         assert body["error"]["type"] == "invalid_request_error"
         assert body["error"]["message"] == "bad request"
 
+    def test_401(self):
+        resp = responses_compat._responses_error(401, "unauthorized")
+        body = json.loads(resp.body.decode())
+        assert resp.status_code == 401
+        assert body["error"]["type"] == "authentication_error"
+
+    def test_403(self):
+        resp = responses_compat._responses_error(403, "forbidden")
+        body = json.loads(resp.body.decode())
+        assert resp.status_code == 403
+        assert body["error"]["type"] == "permission_error"
+
+    def test_404(self):
+        resp = responses_compat._responses_error(404, "not found")
+        body = json.loads(resp.body.decode())
+        assert resp.status_code == 404
+        assert body["error"]["type"] == "not_found_error"
+
+    def test_409(self):
+        resp = responses_compat._responses_error(409, "conflict")
+        body = json.loads(resp.body.decode())
+        assert resp.status_code == 409
+        assert body["error"]["type"] == "conflict_error"
+
+    def test_422(self):
+        resp = responses_compat._responses_error(422, "unprocessable")
+        body = json.loads(resp.body.decode())
+        assert resp.status_code == 422
+        assert body["error"]["type"] == "invalid_request_error"
+
+    def test_429(self):
+        resp = responses_compat._responses_error(429, "rate limited")
+        body = json.loads(resp.body.decode())
+        assert resp.status_code == 429
+        assert body["error"]["type"] == "rate_limit_error"
+
     def test_500(self):
         resp = responses_compat._responses_error(500, "oops")
+        body = json.loads(resp.body.decode())
+        assert body["error"]["type"] == "server_error"
+
+    def test_unknown_status_defaults_to_server_error(self):
+        resp = responses_compat._responses_error(503, "unavailable")
         body = json.loads(resp.body.decode())
         assert body["error"]["type"] == "server_error"
 
@@ -689,6 +730,39 @@ class TestResponsesError:
         resp = responses_compat._responses_error(400, "msg", error_code="model_not_found")
         body = json.loads(resp.body.decode())
         assert body["error"]["code"] == "model_not_found"
+
+    def test_error_format_has_all_required_fields(self):
+        """Every error must include message, type, param, and code."""
+        resp = responses_compat._responses_error(400, "test")
+        body = json.loads(resp.body.decode())
+        error = body["error"]
+        assert "message" in error
+        assert "type" in error
+        assert "param" in error
+        assert "code" in error
+
+    def test_param_is_always_null(self):
+        resp = responses_compat._responses_error(400, "test")
+        body = json.loads(resp.body.decode())
+        assert body["error"]["param"] is None
+
+    def test_code_defaults_to_null(self):
+        resp = responses_compat._responses_error(400, "test")
+        body = json.loads(resp.body.decode())
+        assert body["error"]["code"] is None
+
+    def test_request_id_header_present_when_provided(self):
+        resp = responses_compat._responses_error(400, "test", request_id="req_abc123")
+        assert resp.headers.get("x-request-id") == "req_abc123"
+
+    def test_request_id_header_absent_when_not_provided(self):
+        resp = responses_compat._responses_error(400, "test")
+        assert "x-request-id" not in resp.headers
+
+    def test_error_type_map_completeness(self):
+        """ERROR_TYPE_MAP covers all status codes the OpenAI SDK maps to exceptions."""
+        expected_codes = {400, 401, 403, 404, 409, 422, 429, 500}
+        assert set(responses_compat.ERROR_TYPE_MAP.keys()) == expected_codes
 
 
 # ---------------------------------------------------------------------------
@@ -1725,10 +1799,10 @@ class TestResponsesRequestIdHeader:
         self.client = TestClient(app)
 
     def _assert_request_id(self, resp):
-        """Assert request-id header is present and has correct format."""
-        assert "request-id" in resp.headers, "Missing request-id header"
-        rid = resp.headers["request-id"]
-        assert rid.startswith("req_"), f"request-id should start with req_, got: {rid}"
+        """Assert x-request-id header is present and has correct format."""
+        assert "x-request-id" in resp.headers, "Missing x-request-id header"
+        rid = resp.headers["x-request-id"]
+        assert rid.startswith("req_"), f"x-request-id should start with req_, got: {rid}"
 
     def test_request_id_on_non_streaming_response(self, monkeypatch):
         mock_result = {
@@ -1864,12 +1938,12 @@ class TestResponsesRequestIdHeader:
         self._assert_request_id(resp)
 
     def test_request_id_unique_per_request(self, monkeypatch):
-        """Each request should get a unique request-id."""
+        """Each request should get a unique x-request-id."""
         resp1 = self.client.post("/v1/responses", json={"input": "hi"})
         resp2 = self.client.post("/v1/responses", json={"input": "hi"})
-        rid1 = resp1.headers.get("request-id")
-        rid2 = resp2.headers.get("request-id")
-        assert rid1 != rid2, "Each request must get a unique request-id"
+        rid1 = resp1.headers.get("x-request-id")
+        rid2 = resp2.headers.get("x-request-id")
+        assert rid1 != rid2, "Each request must get a unique x-request-id"
 
 
 # ---------------------------------------------------------------------------
@@ -3912,3 +3986,18 @@ class TestResponseStubEndpoints:
         assert "code" in body["error"]
         assert "param" in body["error"]
         assert body["error"]["param"] is None
+
+    def test_get_response_has_request_id(self):
+        resp = self.client.get("/v1/responses/resp_abc123")
+        assert "x-request-id" in resp.headers
+        assert resp.headers["x-request-id"].startswith("req_")
+
+    def test_delete_response_has_request_id(self):
+        resp = self.client.delete("/v1/responses/resp_abc123")
+        assert "x-request-id" in resp.headers
+        assert resp.headers["x-request-id"].startswith("req_")
+
+    def test_cancel_response_has_request_id(self):
+        resp = self.client.post("/v1/responses/resp_abc123/cancel")
+        assert "x-request-id" in resp.headers
+        assert resp.headers["x-request-id"].startswith("req_")

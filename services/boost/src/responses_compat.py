@@ -12,7 +12,7 @@ import mapper
 import llm as llm_mod
 from auth import get_api_key
 from compat_utils import (
-    REQUEST_ID_HEADER,
+    OPENAI_REQUEST_ID_HEADER,
     get_chunk_content as _get_chunk_content,
     get_chunk_reasoning as _get_chunk_reasoning,
     get_chunk_tool_calls as _get_chunk_tool_calls,
@@ -25,16 +25,21 @@ logger = log.setup_logger(__name__)
 responses_compatible_routes = APIRouter()
 
 
+ERROR_TYPE_MAP = {
+  400: "invalid_request_error",
+  401: "authentication_error",
+  403: "permission_error",
+  404: "not_found_error",
+  409: "conflict_error",
+  422: "invalid_request_error",
+  429: "rate_limit_error",
+  500: "server_error",
+}
+
+
 def _responses_error(status_code, message, error_type=None, error_code=None, request_id=None):
   if error_type is None:
-    error_type = {
-      400: "invalid_request_error",
-      401: "authentication_error",
-      403: "permission_error",
-      404: "not_found_error",
-      429: "rate_limit_error",
-      500: "server_error",
-    }.get(status_code, "server_error")
+    error_type = ERROR_TYPE_MAP.get(status_code, "server_error")
   body = {
     "error": {
       "message": message,
@@ -45,7 +50,7 @@ def _responses_error(status_code, message, error_type=None, error_code=None, req
   }
   headers = {}
   if request_id:
-    headers[REQUEST_ID_HEADER] = request_id
+    headers[OPENAI_REQUEST_ID_HEADER] = request_id
   return JSONResponse(status_code=status_code, content=body, headers=headers)
 
 
@@ -1059,7 +1064,7 @@ async def post_responses(request: Request, api_key: str = Depends(get_api_key)):
       return JSONResponse(
         content=response,
         status_code=200,
-        headers={REQUEST_ID_HEADER: request_id},
+        headers={OPENAI_REQUEST_ID_HEADER: request_id},
       )
 
     completion = await proxy.serve()
@@ -1071,7 +1076,7 @@ async def post_responses(request: Request, api_key: str = Depends(get_api_key)):
       return StreamingResponse(
         _responses_stream_converter(completion, request_model, response_id, request_body=json_body),
         media_type="text/event-stream",
-        headers={REQUEST_ID_HEADER: request_id},
+        headers={OPENAI_REQUEST_ID_HEADER: request_id},
       )
     else:
       result = await proxy.consume_stream(completion)
@@ -1079,7 +1084,7 @@ async def post_responses(request: Request, api_key: str = Depends(get_api_key)):
       return JSONResponse(
         content=response,
         status_code=200,
-        headers={REQUEST_ID_HEADER: request_id},
+        headers={OPENAI_REQUEST_ID_HEADER: request_id},
       )
 
   except HTTPException as e:
@@ -1099,14 +1104,17 @@ _NOT_FOUND_MESSAGE = (
 
 @responses_compatible_routes.get("/v1/responses/{response_id}")
 async def get_response(response_id: str, api_key: str = Depends(get_api_key)):
-  return _responses_error(404, _NOT_FOUND_MESSAGE, error_code="not_found")
+  request_id = f"req_{shortuuid.random()}"
+  return _responses_error(404, _NOT_FOUND_MESSAGE, error_code="not_found", request_id=request_id)
 
 
 @responses_compatible_routes.delete("/v1/responses/{response_id}")
 async def delete_response(response_id: str, api_key: str = Depends(get_api_key)):
-  return _responses_error(404, _NOT_FOUND_MESSAGE, error_code="not_found")
+  request_id = f"req_{shortuuid.random()}"
+  return _responses_error(404, _NOT_FOUND_MESSAGE, error_code="not_found", request_id=request_id)
 
 
 @responses_compatible_routes.post("/v1/responses/{response_id}/cancel")
 async def cancel_response(response_id: str, api_key: str = Depends(get_api_key)):
-  return _responses_error(404, _NOT_FOUND_MESSAGE, error_code="not_found")
+  request_id = f"req_{shortuuid.random()}"
+  return _responses_error(404, _NOT_FOUND_MESSAGE, error_code="not_found", request_id=request_id)

@@ -10,6 +10,7 @@ import re
 import dotty
 
 REQUEST_ID_HEADER = "request-id"
+OPENAI_REQUEST_ID_HEADER = "x-request-id"
 ANTHROPIC_VERSION_HEADER = "anthropic-version"
 ANTHROPIC_VERSION = "2023-06-01"
 
