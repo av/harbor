@@ -1237,6 +1237,15 @@ _BATCH_NOT_FOUND = (
 async def create_message_batch(request: Request, api_key: str = Depends(get_api_key)):
   request_id = f"req_{shortuuid.random()}"
   beta_flags = _parse_beta_flags(request)
+  body = await request.body()
+  if body.strip():
+    try:
+      json.loads(body.decode("utf-8"))
+    except json.JSONDecodeError:
+      return _anthropic_error(
+        400, "Invalid JSON in request body",
+        request_id=request_id, beta_flags=beta_flags,
+      )
   return _anthropic_error(
     501, _BATCHES_NOT_SUPPORTED, "not_supported_error",
     request_id=request_id, beta_flags=beta_flags,

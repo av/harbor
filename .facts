@@ -528,6 +528,9 @@
 - label: Boost Anthropic streaming ping SSE events include a typed payload data object with type ping
   command: python -m pytest services/boost/tests/test_anthropic_compat.py::TestStreamingPingEvent::test_ping_payload_includes_type -q
   tags: [spec, boost-anthropic-ping-payload, implemented]
+- label: Boost Anthropic message batch create rejects invalid JSON with an Anthropic-format 400 error before returning the unsupported-batches stub error
+  command: cd services/boost && PYTHONPATH=tests:src .venv/bin/python -m pytest tests/test_anthropic_compat.py::TestMessageBatchesStubs::test_create_batch_rejects_invalid_json -q
+  tags: [spec, boost-anthropic-batch-invalid-json, implemented]
 
 ## responses api
 - label: Boost exposes POST /v1/responses endpoint for OpenAI Responses API compatibility

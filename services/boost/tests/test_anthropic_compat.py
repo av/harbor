@@ -5432,6 +5432,21 @@ class TestMessageBatchesStubs:
         body = resp.json()
         assert "POST /v1/messages" in body["error"]["message"]
 
+    def test_create_batch_rejects_invalid_json(self):
+        client = _make_client()
+        resp = client.post(
+            "/v1/messages/batches",
+            content="{bad",
+            headers={"content-type": "application/json"},
+        )
+        assert resp.status_code == 400
+        body = resp.json()
+        assert body["type"] == "error"
+        assert body["error"]["type"] == "invalid_request_error"
+        assert body["error"]["message"] == "Invalid JSON in request body"
+        assert resp.headers["request-id"].startswith("req_")
+        assert resp.headers.get("anthropic-version") == "2023-06-01"
+
     def test_list_batches_returns_501(self):
         client = _make_client()
         resp = client.get("/v1/messages/batches")
