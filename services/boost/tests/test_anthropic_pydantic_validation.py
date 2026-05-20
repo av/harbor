@@ -81,6 +81,8 @@ def _validate_event(event_type, data):
     """
     if event_type == "ping":
         return None
+    if event_type == "error":
+        return sdk.ErrorResponse.model_validate(data)
     model_cls = EVENT_MODEL_MAP.get(event_type)
     if model_cls is None:
         pytest.fail(f"Unknown event type: {event_type}")
@@ -1038,6 +1040,35 @@ class TestMidStreamErrorValidation:
         types = [t for t, _ in validated]
 
         assert "message_start" in types
+        assert "message_delta" in types
+        assert "message_stop" in types
+
+    @pytest.mark.asyncio
+    async def test_backend_error_emits_structured_error_event(self):
+        """BackendError streams include Anthropic's structured error SSE frame."""
+        from llm import BackendError
+
+        async def _backend_error_stream():
+            yield sse_chunk({"choices": [{"delta": {"content": "partial"}, "index": 0}]})
+            raise BackendError(429, "raw upstream rate limit")
+
+        raw_output = []
+        async for sse_str in anthropic_compat._anthropic_stream_converter(
+            _backend_error_stream(), "test-model"
+        ):
+            raw_output.append(sse_str)
+
+        full_text = "".join(raw_output)
+        events = _parse_sse_events(full_text)
+        validated = _validate_all_events(events)
+        error_events = [m for t, m in validated if t == "error"]
+        types = [t for t, _ in validated]
+
+        assert error_events
+        assert error_events[0].type == "error"
+        assert error_events[0].error.type == "rate_limit_error"
+        assert error_events[0].error.message == "Rate limit exceeded"
+        assert "raw upstream rate limit" not in full_text
         assert "message_delta" in types
         assert "message_stop" in types
 

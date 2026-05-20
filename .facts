@@ -516,6 +516,9 @@
 - label: Boost Anthropic Messages and count_tokens reject non-object message entries with Anthropic-format 400 errors instead of 500
   command: cd services/boost && pytest -q tests/test_endpoint_isolation.py -k 'non_object_message_entries'
   tags: [spec, boost-compat-validation-400, implemented]
+- label: Boost Anthropic streaming emits a structured error SSE event with an Anthropic error envelope when backend streaming fails, while still closing any open message envelope
+  command: python -m pytest services/boost/tests/test_anthropic_pydantic_validation.py::TestMidStreamErrorValidation::test_backend_error_emits_structured_error_event -q
+  tags: [spec, boost-anthropic-stream-error-event, implemented]
 
 ## responses api
 - label: Boost exposes POST /v1/responses endpoint for OpenAI Responses API compatibility

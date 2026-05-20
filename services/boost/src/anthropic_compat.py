@@ -669,6 +669,7 @@ async def _anthropic_stream_converter(
   yield _sse_event("ping", {})
 
   stream_error = None
+  stream_error_type = None
 
   try:
     async for chunk in _parse_sse_chunks(response_stream):
@@ -851,8 +852,11 @@ async def _anthropic_stream_converter(
           last_event_time = _time.monotonic()
   except BackendError as e:
     logger.warning("Anthropic streaming backend error %d: %s", e.status_code, e.body[:256])
+    stream_error_type = ERROR_TYPE_MAP.get(e.status_code, "api_error")
     if e.status_code == 429:
       stream_error = "Rate limit exceeded"
+    elif e.status_code == 529:
+      stream_error = "Backend overloaded"
     elif e.status_code >= 500:
       stream_error = "Backend server error"
     else:
@@ -860,6 +864,7 @@ async def _anthropic_stream_converter(
   except Exception as e:
     logger.error("Anthropic stream conversion error: %s", e, exc_info=True)
     stream_error = "An internal error occurred during streaming"
+    stream_error_type = "api_error"
 
   if stream_error:
     if thinking_block_open:
@@ -879,6 +884,17 @@ async def _anthropic_stream_converter(
         },
       )
       thinking_block_open = False
+
+    yield _sse_event(
+      "error",
+      {
+        "type": "error",
+        "error": {
+          "type": stream_error_type or "api_error",
+          "message": stream_error,
+        },
+      },
+    )
 
     if not text_block_open:
       block_index += 1
