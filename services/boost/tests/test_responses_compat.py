@@ -4467,3 +4467,446 @@ class TestToolChoiceNonePreventsTools:
         result = responses_compat._build_openai_body(body)
         assert result["tool_choice"] == "none"
         assert result["parallel_tool_calls"] is False
+
+
+# ---------------------------------------------------------------------------
+# Output index / content_index tracking
+# ---------------------------------------------------------------------------
+
+
+class TestOutputIndexTracking:
+    """Verify output_index and content_index are tracked correctly across all
+    streaming scenarios.
+
+    Scenarios:
+      a. Text only: output_index 0, content_index 0
+      b. Reasoning + text: reasoning at 0, message at 1, content_index 0
+      c. Text + 2 tool calls: message at 0, tools at 1 and 2
+      d. Reasoning + text + tool: reasoning 0, message 1, tool 2
+    """
+
+    @pytest.mark.asyncio
+    async def test_text_only_indices(self):
+        """Text only: output_index 0, content_index 0 on all events."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"Hello"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{"content":" world"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "gpt-4o", "resp_idx_text"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+
+        # output_item.added for message
+        msg_added = [d for t, d in parsed
+                     if t == "response.output_item.added" and d["item"]["type"] == "message"]
+        assert len(msg_added) == 1
+        assert msg_added[0]["output_index"] == 0
+
+        # content_part.added
+        part_added = [d for t, d in parsed if t == "response.content_part.added"]
+        assert len(part_added) == 1
+        assert part_added[0]["output_index"] == 0
+        assert part_added[0]["content_index"] == 0
+
+        # output_text.delta events
+        text_deltas = [d for t, d in parsed if t == "response.output_text.delta"]
+        for delta in text_deltas:
+            assert delta["output_index"] == 0
+            assert delta["content_index"] == 0
+
+        # output_text.done
+        text_done = [d for t, d in parsed if t == "response.output_text.done"]
+        assert len(text_done) == 1
+        assert text_done[0]["output_index"] == 0
+        assert text_done[0]["content_index"] == 0
+
+        # content_part.done
+        cp_done = [d for t, d in parsed if t == "response.content_part.done"]
+        assert len(cp_done) == 1
+        assert cp_done[0]["output_index"] == 0
+        assert cp_done[0]["content_index"] == 0
+
+        # output_item.done for message
+        msg_done = [d for t, d in parsed
+                    if t == "response.output_item.done" and d["item"]["type"] == "message"]
+        assert len(msg_done) == 1
+        assert msg_done[0]["output_index"] == 0
+
+    @pytest.mark.asyncio
+    async def test_reasoning_then_text_indices(self):
+        """Reasoning at output_index 0, message at output_index 1, content_index 0."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"reasoning_content":"Think"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{"reasoning_content":"..."},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{"content":"The answer."},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "o3", "resp_idx_rt"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+
+        # Reasoning output_item.added at index 0
+        reasoning_added = [d for t, d in parsed
+                           if t == "response.output_item.added" and d["item"]["type"] == "reasoning"]
+        assert len(reasoning_added) == 1
+        assert reasoning_added[0]["output_index"] == 0
+
+        # Reasoning summary_part.added at output_index 0
+        rsp_added = [d for t, d in parsed if t == "response.reasoning_summary_part.added"]
+        assert len(rsp_added) == 1
+        assert rsp_added[0]["output_index"] == 0
+        assert rsp_added[0]["summary_index"] == 0
+
+        # Reasoning deltas at output_index 0
+        reasoning_deltas = [d for t, d in parsed if t == "response.reasoning_summary_text.delta"]
+        for rd in reasoning_deltas:
+            assert rd["output_index"] == 0
+            assert rd["summary_index"] == 0
+
+        # Reasoning done events at output_index 0
+        reasoning_text_done = [d for t, d in parsed if t == "response.reasoning_summary_text.done"]
+        assert len(reasoning_text_done) == 1
+        assert reasoning_text_done[0]["output_index"] == 0
+
+        reasoning_part_done = [d for t, d in parsed if t == "response.reasoning_summary_part.done"]
+        assert len(reasoning_part_done) == 1
+        assert reasoning_part_done[0]["output_index"] == 0
+
+        reasoning_item_done = [d for t, d in parsed
+                               if t == "response.output_item.done" and d["item"]["type"] == "reasoning"]
+        assert len(reasoning_item_done) == 1
+        assert reasoning_item_done[0]["output_index"] == 0
+
+        # Text output_item.added at index 1
+        msg_added = [d for t, d in parsed
+                     if t == "response.output_item.added" and d["item"]["type"] == "message"]
+        assert len(msg_added) == 1
+        assert msg_added[0]["output_index"] == 1
+
+        # content_part.added at output_index 1, content_index 0
+        part_added = [d for t, d in parsed if t == "response.content_part.added"]
+        assert len(part_added) == 1
+        assert part_added[0]["output_index"] == 1
+        assert part_added[0]["content_index"] == 0
+
+        # Text deltas at output_index 1, content_index 0
+        text_deltas = [d for t, d in parsed if t == "response.output_text.delta"]
+        for td in text_deltas:
+            assert td["output_index"] == 1
+            assert td["content_index"] == 0
+
+        # Text done at output_index 1
+        text_done = [d for t, d in parsed if t == "response.output_text.done"]
+        assert len(text_done) == 1
+        assert text_done[0]["output_index"] == 1
+        assert text_done[0]["content_index"] == 0
+
+        # Message output_item.done at index 1
+        msg_done = [d for t, d in parsed
+                    if t == "response.output_item.done" and d["item"]["type"] == "message"]
+        assert len(msg_done) == 1
+        assert msg_done[0]["output_index"] == 1
+
+    @pytest.mark.asyncio
+    async def test_text_then_two_tool_calls_indices(self):
+        """Text at output_index 0, first tool at 1, second tool at 2."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"Let me search."},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_A","function":{"name":"search","arguments":"{\\"q\\":"}}]},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\\"foo\\"}"}}]},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{"tool_calls":[{"index":1,"id":"call_B","function":{"name":"lookup","arguments":"{\\"id\\":1}"}}]},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"tool_calls"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "gpt-4o", "resp_idx_tt"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+
+        # Message at output_index 0
+        msg_added = [d for t, d in parsed
+                     if t == "response.output_item.added" and d["item"]["type"] == "message"]
+        assert len(msg_added) == 1
+        assert msg_added[0]["output_index"] == 0
+
+        # Text content at output_index 0, content_index 0
+        text_deltas = [d for t, d in parsed if t == "response.output_text.delta"]
+        for td in text_deltas:
+            assert td["output_index"] == 0
+            assert td["content_index"] == 0
+
+        # Tool calls added
+        tool_added = [d for t, d in parsed
+                      if t == "response.output_item.added" and d["item"]["type"] == "function_call"]
+        assert len(tool_added) == 2
+        assert tool_added[0]["output_index"] == 1
+        assert tool_added[1]["output_index"] == 2
+
+        # Tool call argument deltas reference correct output_index
+        arg_deltas = [d for t, d in parsed if t == "response.function_call_arguments.delta"]
+        # First tool's deltas at output_index 1
+        tool_a_deltas = [d for d in arg_deltas if d["item_id"] == "call_A"]
+        for d in tool_a_deltas:
+            assert d["output_index"] == 1
+        # Second tool's deltas at output_index 2
+        tool_b_deltas = [d for d in arg_deltas if d["item_id"] == "call_B"]
+        for d in tool_b_deltas:
+            assert d["output_index"] == 2
+
+        # function_call_arguments.done events
+        args_done = [d for t, d in parsed if t == "response.function_call_arguments.done"]
+        assert len(args_done) == 2
+        args_done_by_id = {d["item_id"]: d for d in args_done}
+        assert args_done_by_id["call_A"]["output_index"] == 1
+        assert args_done_by_id["call_B"]["output_index"] == 2
+        assert args_done_by_id["call_A"]["arguments"] == '{"q":"foo"}'
+        assert args_done_by_id["call_B"]["arguments"] == '{"id":1}'
+
+        # output_item.done for tools
+        tool_done = [d for t, d in parsed
+                     if t == "response.output_item.done" and d["item"]["type"] == "function_call"]
+        assert len(tool_done) == 2
+        assert tool_done[0]["output_index"] == 1
+        assert tool_done[1]["output_index"] == 2
+
+    @pytest.mark.asyncio
+    async def test_reasoning_text_tool_indices(self):
+        """Reasoning at 0, message at 1, tool at 2."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"reasoning_content":"I should search"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{"content":"Searching now."},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_Z","function":{"name":"search","arguments":"{\\"q\\":\\"test\\"}"}}]},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"tool_calls"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "o3", "resp_idx_rtt"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+
+        # Reasoning at output_index 0
+        reasoning_added = [d for t, d in parsed
+                           if t == "response.output_item.added" and d["item"]["type"] == "reasoning"]
+        assert len(reasoning_added) == 1
+        assert reasoning_added[0]["output_index"] == 0
+
+        # Message at output_index 1
+        msg_added = [d for t, d in parsed
+                     if t == "response.output_item.added" and d["item"]["type"] == "message"]
+        assert len(msg_added) == 1
+        assert msg_added[0]["output_index"] == 1
+
+        # Text at output_index 1, content_index 0
+        text_deltas = [d for t, d in parsed if t == "response.output_text.delta"]
+        for td in text_deltas:
+            assert td["output_index"] == 1
+            assert td["content_index"] == 0
+
+        # Tool at output_index 2
+        tool_added = [d for t, d in parsed
+                      if t == "response.output_item.added" and d["item"]["type"] == "function_call"]
+        assert len(tool_added) == 1
+        assert tool_added[0]["output_index"] == 2
+
+        # Tool argument delta at output_index 2
+        arg_deltas = [d for t, d in parsed if t == "response.function_call_arguments.delta"]
+        for d in arg_deltas:
+            assert d["output_index"] == 2
+
+        # Tool done at output_index 2
+        tool_done = [d for t, d in parsed
+                     if t == "response.output_item.done" and d["item"]["type"] == "function_call"]
+        assert len(tool_done) == 1
+        assert tool_done[0]["output_index"] == 2
+
+        # function_call_arguments.done at output_index 2
+        args_done = [d for t, d in parsed if t == "response.function_call_arguments.done"]
+        assert len(args_done) == 1
+        assert args_done[0]["output_index"] == 2
+
+    @pytest.mark.asyncio
+    async def test_tool_only_no_text_indices(self):
+        """Tool call with no preceding text: tool at output_index 0."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_X","function":{"name":"fn","arguments":"{\\"a\\":1}"}}]},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"tool_calls"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "gpt-4o", "resp_idx_to"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+
+        tool_added = [d for t, d in parsed
+                      if t == "response.output_item.added" and d["item"]["type"] == "function_call"]
+        assert len(tool_added) == 1
+        assert tool_added[0]["output_index"] == 0
+
+        # No message items
+        msg_added = [d for t, d in parsed
+                     if t == "response.output_item.added" and d["item"]["type"] == "message"]
+        assert len(msg_added) == 0
+
+    @pytest.mark.asyncio
+    async def test_reasoning_then_tool_no_text_indices(self):
+        """Reasoning at 0, tool at 1, no text message item."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"reasoning_content":"Need to call fn"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_Y","function":{"name":"fn","arguments":"{}"}}]},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"tool_calls"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "o3", "resp_idx_rto"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+
+        reasoning_added = [d for t, d in parsed
+                           if t == "response.output_item.added" and d["item"]["type"] == "reasoning"]
+        assert len(reasoning_added) == 1
+        assert reasoning_added[0]["output_index"] == 0
+
+        tool_added = [d for t, d in parsed
+                      if t == "response.output_item.added" and d["item"]["type"] == "function_call"]
+        assert len(tool_added) == 1
+        assert tool_added[0]["output_index"] == 1
+
+        # No text message item
+        msg_added = [d for t, d in parsed
+                     if t == "response.output_item.added" and d["item"]["type"] == "message"]
+        assert len(msg_added) == 0
+
+    @pytest.mark.asyncio
+    async def test_three_parallel_tool_calls_indices(self):
+        """Three parallel tool calls: indices 0, 1, 2."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","function":{"name":"fn1","arguments":"{}"}},{"index":1,"id":"call_2","function":{"name":"fn2","arguments":"{}"}},{"index":2,"id":"call_3","function":{"name":"fn3","arguments":"{}"}}]},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"tool_calls"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "gpt-4o", "resp_idx_3t"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+
+        tool_added = [d for t, d in parsed
+                      if t == "response.output_item.added" and d["item"]["type"] == "function_call"]
+        assert len(tool_added) == 3
+        assert tool_added[0]["output_index"] == 0
+        assert tool_added[1]["output_index"] == 1
+        assert tool_added[2]["output_index"] == 2
+
+        tool_done = [d for t, d in parsed
+                     if t == "response.output_item.done" and d["item"]["type"] == "function_call"]
+        assert len(tool_done) == 3
+        assert tool_done[0]["output_index"] == 0
+        assert tool_done[1]["output_index"] == 1
+        assert tool_done[2]["output_index"] == 2
+
+    @pytest.mark.asyncio
+    async def test_non_streaming_output_item_order(self):
+        """Non-streaming: verify output items are in correct order."""
+        # Reasoning + text + tool call in non-streaming result
+        result = {
+            "choices": [{
+                "message": {
+                    "content": "Answer",
+                    "reasoning_content": "Thinking...",
+                    "tool_calls": [
+                        {"id": "call_1", "function": {"name": "fn", "arguments": "{}"}},
+                    ],
+                },
+                "finish_reason": "tool_calls",
+            }],
+            "usage": {"prompt_tokens": 5, "completion_tokens": 10, "total_tokens": 15},
+        }
+        items = responses_compat._build_output_items(result)
+
+        # Order: reasoning, message, function_call
+        assert len(items) == 3
+        assert items[0]["type"] == "reasoning"
+        assert items[1]["type"] == "message"
+        assert items[2]["type"] == "function_call"
+
+    @pytest.mark.asyncio
+    async def test_content_index_always_zero_multiple_text_deltas(self):
+        """Multiple text deltas all reference content_index 0 (single content part)."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"A"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{"content":"B"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{"content":"C"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{"content":"D"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "gpt-4o", "resp_idx_ci"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+
+        text_deltas = [d for t, d in parsed if t == "response.output_text.delta"]
+        assert len(text_deltas) == 4
+        for td in text_deltas:
+            assert td["content_index"] == 0
+
+    @pytest.mark.asyncio
+    async def test_error_path_indices_after_reasoning(self):
+        """Error after reasoning: reasoning at 0, error message at 1."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"reasoning_content":"Hmm"},"index":0}]}\n\n'
+            raise RuntimeError("backend crash")
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "o3", "resp_idx_err"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+
+        # Reasoning at output_index 0
+        reasoning_added = [d for t, d in parsed
+                           if t == "response.output_item.added" and d["item"]["type"] == "reasoning"]
+        assert len(reasoning_added) == 1
+        assert reasoning_added[0]["output_index"] == 0
+
+        # Error message at output_index 1
+        msg_added = [d for t, d in parsed
+                     if t == "response.output_item.added" and d["item"]["type"] == "message"]
+        assert len(msg_added) == 1
+        assert msg_added[0]["output_index"] == 1
+
+        # Error text delta at output_index 1, content_index 0
+        error_deltas = [d for t, d in parsed if t == "response.output_text.delta"]
+        assert len(error_deltas) == 1
+        assert error_deltas[0]["output_index"] == 1
+        assert error_deltas[0]["content_index"] == 0
