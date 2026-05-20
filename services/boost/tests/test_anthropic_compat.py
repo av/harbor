@@ -543,7 +543,7 @@ class TestBuildAnthropicResponse:
         assert response["content"] == [{"type": "text", "text": "Hello there!"}]
         assert response["stop_reason"] == "end_turn"
         assert response["stop_sequence"] is None
-        assert response["usage"] == {"input_tokens": 10, "output_tokens": 5}
+        assert response["usage"] == {"input_tokens": 10, "output_tokens": 5, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0}
 
     def test_tool_use_response(self):
         openai_result = {
@@ -3400,6 +3400,98 @@ def _parse_sse_events(raw_text):
             except json.JSONDecodeError:
                 pass
     return events
+
+
+class TestCacheUsageFields:
+    """Verify cache_creation_input_tokens and cache_read_input_tokens are present in all usage objects."""
+
+    def test_non_streaming_response_has_cache_fields(self):
+        openai_result = {
+            "choices": [
+                {
+                    "message": {"content": "Hello", "role": "assistant"},
+                    "finish_reason": "stop",
+                }
+            ],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 5},
+        }
+        response = anthropic_compat._build_anthropic_response(openai_result, "claude-test")
+        assert response["usage"]["cache_creation_input_tokens"] == 0
+        assert response["usage"]["cache_read_input_tokens"] == 0
+
+    def test_non_streaming_response_cache_fields_are_zero(self):
+        """Cache fields should always be 0 since the compat layer does not support prompt caching."""
+        openai_result = {
+            "choices": [
+                {
+                    "message": {"content": "Hi", "role": "assistant"},
+                    "finish_reason": "stop",
+                }
+            ],
+            "usage": {"prompt_tokens": 100, "completion_tokens": 50},
+        }
+        response = anthropic_compat._build_anthropic_response(openai_result, "test-model")
+        usage = response["usage"]
+        assert usage["input_tokens"] == 100
+        assert usage["output_tokens"] == 50
+        assert usage["cache_creation_input_tokens"] == 0
+        assert usage["cache_read_input_tokens"] == 0
+
+    @pytest.mark.asyncio
+    async def test_stream_message_start_has_cache_fields(self):
+        async def response_stream():
+            yield 'data: {"choices": [{"delta": {"content": "X"}}]}\n\n'
+            yield 'data: {"choices": [{"delta": {}, "finish_reason": "stop"}], "usage": {"prompt_tokens": 5, "completion_tokens": 1}}\n\n'
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "test-model")
+        ]
+        raw = "".join(events)
+        parsed = _parse_sse_events(raw)
+        msg_start = parsed[0]
+        assert msg_start["type"] == "message_start"
+        usage = msg_start["message"]["usage"]
+        assert usage["cache_creation_input_tokens"] == 0
+        assert usage["cache_read_input_tokens"] == 0
+
+    @pytest.mark.asyncio
+    async def test_stream_message_delta_has_cache_fields(self):
+        async def response_stream():
+            yield 'data: {"choices": [{"delta": {"content": "X"}}]}\n\n'
+            yield 'data: {"choices": [{"delta": {}, "finish_reason": "stop"}], "usage": {"prompt_tokens": 42, "completion_tokens": 7}}\n\n'
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "test-model")
+        ]
+        raw = "".join(events)
+        parsed = _parse_sse_events(raw)
+        msg_delta = [e for e in parsed if e.get("type") == "message_delta"][0]
+        usage = msg_delta["usage"]
+        assert usage["cache_creation_input_tokens"] == 0
+        assert usage["cache_read_input_tokens"] == 0
+
+    def test_non_streaming_integration_has_cache_fields(self):
+        """Verify cache fields propagate through the full non-streaming integration path."""
+        consume_result = _fake_openai_result(content="Response text", prompt_tokens=20, completion_tokens=10)
+        fake_llm = _FakeLLM(consume_result=consume_result)
+
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+            patch.object(anthropic_compat, "llm_mod") as mock_llm_mod,
+        ):
+            mock_mapper.list_downstream = AsyncMock()
+            mock_mapper.resolve_request_config = MagicMock(return_value={})
+            mock_mapper.is_direct_task = MagicMock(return_value=False)
+            mock_llm_mod.LLM = MagicMock(return_value=fake_llm)
+
+            client = TestClient(_integration_app, raise_server_exceptions=False)
+            resp = client.post("/v1/messages", json=_ANTHRO_BODY)
+
+        body = resp.json()
+        assert body["usage"]["cache_creation_input_tokens"] == 0
+        assert body["usage"]["cache_read_input_tokens"] == 0
 
 
 if __name__ == "__main__":

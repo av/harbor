@@ -48,6 +48,26 @@ def _anthropic_error(status_code, message, error_type=None, request_id=None):
   )
 
 
+# --- Beta flags ---
+
+def _parse_beta_flags(request: Request):
+  """Parse the anthropic-beta request header and log recognized flags.
+
+  The Anthropic SDK sends a comma-separated list of beta feature flags
+  (e.g. ``"max-tokens-3-5-sonnet-2024-07-15,prompt-caching-2024-07-31"``).
+  The compat layer accepts these without error for SDK compatibility.
+  No flags change behavior — they are logged for observability only.
+  """
+  raw = request.headers.get("anthropic-beta")
+  if not raw:
+    return []
+
+  flags = [f.strip() for f in raw.split(",") if f.strip()]
+  if flags:
+    logger.debug("anthropic-beta flags: %s", ", ".join(flags))
+  return flags
+
+
 # --- Auth ---
 
 def _synthesize_authorization(request: Request):
@@ -404,6 +424,8 @@ def _build_anthropic_response(openai_result, request_model, stop_sequences=None)
     "usage": {
       "input_tokens": usage.get("prompt_tokens", 0),
       "output_tokens": usage.get("completion_tokens", 0),
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0,
     },
   }
 
@@ -444,7 +466,7 @@ async def _anthropic_stream_converter(
         "content": [],
         "stop_reason": None,
         "stop_sequence": None,
-        "usage": {"input_tokens": 0, "output_tokens": 0},
+        "usage": {"input_tokens": 0, "output_tokens": 0, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0},
       },
     },
   )
@@ -748,6 +770,8 @@ async def _anthropic_stream_converter(
       "usage": {
         "input_tokens": input_tokens,
         "output_tokens": output_tokens,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
       },
     },
   )
@@ -763,6 +787,7 @@ async def post_messages(request: Request, api_key: str = Depends(get_api_key)):
 
   try:
     _synthesize_authorization(request)
+    _parse_beta_flags(request)
 
     body = await request.body()
     try:
@@ -836,6 +861,7 @@ async def post_count_tokens(request: Request, api_key: str = Depends(get_api_key
 
   try:
     _synthesize_authorization(request)
+    _parse_beta_flags(request)
 
     body = await request.body()
     try:
