@@ -7655,3 +7655,331 @@ class TestResponsesBackendErrorIntegration:
         assert resp.headers.get("x-request-id").startswith("req_")
 
 
+# ---------------------------------------------------------------------------
+# SDK Compatibility Final Audit
+# ---------------------------------------------------------------------------
+
+
+class TestReasoningSummaryParam:
+    """Verify reasoning.summary and deprecated generate_summary are forwarded."""
+
+    def test_reasoning_summary_forwarded(self):
+        body = {
+            "model": "o3",
+            "input": "hello",
+            "reasoning": {"effort": "high", "summary": "concise"},
+        }
+        openai_body = responses_compat._build_openai_body(body)
+        assert openai_body.get("reasoning_effort") == "high"
+        assert openai_body.get("reasoning_summary") == "concise"
+
+    def test_reasoning_generate_summary_forwarded(self):
+        body = {
+            "model": "o3",
+            "input": "hello",
+            "reasoning": {"effort": "medium", "generate_summary": "detailed"},
+        }
+        openai_body = responses_compat._build_openai_body(body)
+        assert openai_body.get("reasoning_summary") == "detailed"
+
+    def test_summary_preferred_over_generate_summary(self):
+        body = {
+            "model": "o3",
+            "input": "hello",
+            "reasoning": {"summary": "concise", "generate_summary": "detailed"},
+        }
+        openai_body = responses_compat._build_openai_body(body)
+        assert openai_body.get("reasoning_summary") == "concise"
+
+    def test_no_summary_when_absent(self):
+        body = {
+            "model": "o3",
+            "input": "hello",
+            "reasoning": {"effort": "low"},
+        }
+        openai_body = responses_compat._build_openai_body(body)
+        assert "reasoning_summary" not in openai_body
+
+    def test_no_reasoning_at_all(self):
+        body = {"model": "gpt-4o", "input": "hello"}
+        openai_body = responses_compat._build_openai_body(body)
+        assert "reasoning_effort" not in openai_body
+        assert "reasoning_summary" not in openai_body
+
+
+class TestIncludeAndServiceTier:
+    """Verify include and service_tier params are accepted without error."""
+
+    def test_include_accepted(self):
+        body = {
+            "model": "gpt-4o",
+            "input": "hello",
+            "include": ["message.output_text.logprobs", "reasoning.encrypted_content"],
+        }
+        # Should not raise
+        openai_body = responses_compat._build_openai_body(body)
+        assert "include" not in openai_body  # Not forwarded to backend
+
+    def test_service_tier_accepted(self):
+        body = {
+            "model": "gpt-4o",
+            "input": "hello",
+            "service_tier": "flex",
+        }
+        openai_body = responses_compat._build_openai_body(body)
+        assert "service_tier" not in openai_body  # Not forwarded to backend
+
+
+class TestExtendedToolTypes:
+    """Verify additional tool types are handled gracefully."""
+
+    def test_mcp_tool_skipped_with_warning(self):
+        body = {
+            "model": "gpt-4o",
+            "input": "hello",
+            "tools": [{"type": "mcp", "server_label": "test", "server_url": "http://test"}],
+        }
+        tools = responses_compat._convert_tools(body)
+        assert tools == []
+
+    def test_image_generation_tool_skipped(self):
+        body = {
+            "model": "gpt-4o",
+            "input": "hello",
+            "tools": [{"type": "image_generation"}],
+        }
+        tools = responses_compat._convert_tools(body)
+        assert tools == []
+
+    def test_computer_tool_skipped(self):
+        body = {
+            "model": "gpt-4o",
+            "input": "hello",
+            "tools": [{"type": "computer_use_preview"}],
+        }
+        tools = responses_compat._convert_tools(body)
+        assert tools == []
+
+    def test_local_shell_tool_skipped(self):
+        body = {
+            "model": "gpt-4o",
+            "input": "hello",
+            "tools": [{"type": "local_shell"}],
+        }
+        tools = responses_compat._convert_tools(body)
+        assert tools == []
+
+    def test_apply_patch_tool_skipped(self):
+        body = {
+            "model": "gpt-4o",
+            "input": "hello",
+            "tools": [{"type": "apply_patch"}],
+        }
+        tools = responses_compat._convert_tools(body)
+        assert tools == []
+
+    def test_custom_tool_skipped(self):
+        body = {
+            "model": "gpt-4o",
+            "input": "hello",
+            "tools": [{"type": "custom", "name": "my_tool"}],
+        }
+        tools = responses_compat._convert_tools(body)
+        assert tools == []
+
+    def test_function_tool_still_works_alongside_unsupported(self):
+        body = {
+            "model": "gpt-4o",
+            "input": "hello",
+            "tools": [
+                {"type": "mcp", "server_label": "test"},
+                {"type": "function", "name": "get_weather", "parameters": {}},
+                {"type": "image_generation"},
+            ],
+        }
+        tools = responses_compat._convert_tools(body)
+        assert len(tools) == 1
+        assert tools[0]["function"]["name"] == "get_weather"
+
+
+class TestReasoningItemStatus:
+    """Verify reasoning output items include the status field."""
+
+    def test_non_streaming_reasoning_has_status(self):
+        from helpers import openai_result
+        result = openai_result(content="Answer", reasoning_content="Let me think")
+        items = responses_compat._build_output_items(result)
+        reasoning_items = [i for i in items if i["type"] == "reasoning"]
+        assert len(reasoning_items) == 1
+        assert reasoning_items[0]["status"] == "completed"
+
+
+class TestResponseEchoFields:
+    """Verify user, reasoning config are echoed in response objects."""
+
+    def test_user_echoed_in_response(self):
+        from helpers import openai_result
+        result = openai_result(content="Hi")
+        request_body = {"model": "gpt-4o", "input": "hello", "user": "user-123"}
+        resp = responses_compat._build_responses_response(
+            result, "gpt-4o", "resp_test", request_body=request_body
+        )
+        assert resp.get("user") == "user-123"
+
+    def test_no_user_when_absent(self):
+        from helpers import openai_result
+        result = openai_result(content="Hi")
+        request_body = {"model": "gpt-4o", "input": "hello"}
+        resp = responses_compat._build_responses_response(
+            result, "gpt-4o", "resp_test", request_body=request_body
+        )
+        assert "user" not in resp
+
+    def test_reasoning_config_echoed(self):
+        from helpers import openai_result
+        result = openai_result(content="Hi")
+        reasoning_conf = {"effort": "high", "summary": "concise"}
+        request_body = {
+            "model": "o3", "input": "hello",
+            "reasoning": reasoning_conf,
+        }
+        resp = responses_compat._build_responses_response(
+            result, "o3", "resp_test", request_body=request_body
+        )
+        assert resp.get("reasoning") == reasoning_conf
+
+    def test_no_reasoning_when_absent(self):
+        from helpers import openai_result
+        result = openai_result(content="Hi")
+        request_body = {"model": "gpt-4o", "input": "hello"}
+        resp = responses_compat._build_responses_response(
+            result, "gpt-4o", "resp_test", request_body=request_body
+        )
+        assert "reasoning" not in resp
+
+
+class TestStreamingReasoningStatus:
+    """Verify streaming reasoning items include status field."""
+
+    @pytest.mark.asyncio
+    async def test_reasoning_added_has_in_progress_status(self):
+        from helpers import sse_chunk, parse_responses_sse_events
+
+        chunks = [
+            sse_chunk({"choices": [{"delta": {"reasoning_content": "Think"}}]}),
+            sse_chunk({"choices": [{"delta": {"content": "Answer"}}]}),
+            sse_chunk({"choices": [{"delta": {}, "finish_reason": "stop"}],
+                       "usage": {"prompt_tokens": 5, "completion_tokens": 3, "total_tokens": 8}}),
+            "data: [DONE]\n\n",
+        ]
+
+        async def gen():
+            for c in chunks:
+                yield c
+
+        events = []
+        async for evt in responses_compat._responses_stream_converter(
+            gen(), "o3", "resp_test"
+        ):
+            events.append(evt)
+
+        parsed = parse_responses_sse_events(events)
+        added_events = [(t, d) for t, d in parsed if t == "response.output_item.added"]
+        # First added event should be reasoning with in_progress
+        reasoning_added = [d for t, d in added_events if d["item"]["type"] == "reasoning"]
+        assert len(reasoning_added) == 1
+        assert reasoning_added[0]["item"]["status"] == "in_progress"
+
+    @pytest.mark.asyncio
+    async def test_reasoning_done_has_completed_status(self):
+        from helpers import sse_chunk, parse_responses_sse_events
+
+        chunks = [
+            sse_chunk({"choices": [{"delta": {"reasoning_content": "Think"}}]}),
+            sse_chunk({"choices": [{"delta": {"content": "Answer"}}]}),
+            sse_chunk({"choices": [{"delta": {}, "finish_reason": "stop"}],
+                       "usage": {"prompt_tokens": 5, "completion_tokens": 3, "total_tokens": 8}}),
+            "data: [DONE]\n\n",
+        ]
+
+        async def gen():
+            for c in chunks:
+                yield c
+
+        events = []
+        async for evt in responses_compat._responses_stream_converter(
+            gen(), "o3", "resp_test"
+        ):
+            events.append(evt)
+
+        parsed = parse_responses_sse_events(events)
+        done_events = [(t, d) for t, d in parsed if t == "response.output_item.done"]
+        reasoning_done = [d for t, d in done_events if d["item"]["type"] == "reasoning"]
+        assert len(reasoning_done) == 1
+        assert reasoning_done[0]["item"]["status"] == "completed"
+
+
+class TestStreamingSkeletonEchoFields:
+    """Verify user and reasoning are echoed in streaming skeleton."""
+
+    @pytest.mark.asyncio
+    async def test_user_in_streaming_skeleton(self):
+        from helpers import sse_chunk, parse_responses_sse_events
+
+        chunks = [
+            sse_chunk({"choices": [{"delta": {"content": "Hi"}}]}),
+            sse_chunk({"choices": [{"delta": {}, "finish_reason": "stop"}],
+                       "usage": {"prompt_tokens": 5, "completion_tokens": 2, "total_tokens": 7}}),
+            "data: [DONE]\n\n",
+        ]
+
+        async def gen():
+            for c in chunks:
+                yield c
+
+        request_body = {"model": "gpt-4o", "input": "hello", "user": "user-xyz"}
+        events = []
+        async for evt in responses_compat._responses_stream_converter(
+            gen(), "gpt-4o", "resp_test", request_body=request_body
+        ):
+            events.append(evt)
+
+        parsed = parse_responses_sse_events(events)
+        created = [d for t, d in parsed if t == "response.created"]
+        assert len(created) == 1
+        assert created[0]["response"].get("user") == "user-xyz"
+
+    @pytest.mark.asyncio
+    async def test_reasoning_config_in_streaming_skeleton(self):
+        from helpers import sse_chunk, parse_responses_sse_events
+
+        chunks = [
+            sse_chunk({"choices": [{"delta": {"content": "Hi"}}]}),
+            sse_chunk({"choices": [{"delta": {}, "finish_reason": "stop"}],
+                       "usage": {"prompt_tokens": 5, "completion_tokens": 2, "total_tokens": 7}}),
+            "data: [DONE]\n\n",
+        ]
+
+        async def gen():
+            for c in chunks:
+                yield c
+
+        reasoning_conf = {"effort": "high", "summary": "concise"}
+        request_body = {"model": "o3", "input": "hello", "reasoning": reasoning_conf}
+        events = []
+        async for evt in responses_compat._responses_stream_converter(
+            gen(), "o3", "resp_test", request_body=request_body
+        ):
+            events.append(evt)
+
+        parsed = parse_responses_sse_events(events)
+        created = [d for t, d in parsed if t == "response.created"]
+        assert len(created) == 1
+        assert created[0]["response"].get("reasoning") == reasoning_conf
+
+        # Also check completed event
+        completed = [d for t, d in parsed if t == "response.completed"]
+        assert len(completed) == 1
+        assert completed[0]["response"].get("reasoning") == reasoning_conf
+
+

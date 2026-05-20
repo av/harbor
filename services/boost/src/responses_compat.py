@@ -274,7 +274,17 @@ _WEB_SEARCH_TOOL_DEF = {
 }
 
 # Built-in tool types that have no Harbor equivalent
-_UNSUPPORTED_BUILTIN_TOOLS = {"file_search", "code_interpreter"}
+_UNSUPPORTED_BUILTIN_TOOLS = {
+  "file_search", "code_interpreter",
+  "computer_use_preview", "computer",
+  "image_generation",
+  "local_shell", "function_shell",
+  "apply_patch",
+  "mcp",
+  "custom",
+  "namespace",
+  "tool_search",
+}
 
 # Built-in tool types that map to Harbor's web_search
 _WEB_SEARCH_TYPES = {"web_search_preview", "web_search"}
@@ -368,12 +378,18 @@ def _build_openai_body(body: dict):
   if body.get("user"):
     openai_body["user"] = body["user"]
 
-  # Reasoning/thinking support: map reasoning.effort to reasoning_effort
+  # Reasoning/thinking support: map reasoning config to Chat Completions params
   reasoning = body.get("reasoning")
   if reasoning and isinstance(reasoning, dict):
     effort = reasoning.get("effort")
     if effort:
       openai_body["reasoning_effort"] = effort
+    # reasoning.summary (or deprecated generate_summary) controls whether
+    # the backend produces reasoning summaries.  Pass through so backends
+    # that understand this parameter can act on it.
+    summary = reasoning.get("summary") or reasoning.get("generate_summary")
+    if summary:
+      openai_body["reasoning_summary"] = summary
 
   # text.format -> response_format conversion (structured outputs)
   text_config = body.get("text")
@@ -410,6 +426,16 @@ def _build_openai_body(body: dict):
       "previous_response_id requested but Harbor Boost does not persist "
       "responses; the referenced response will not be loaded"
     )
+
+  # include: accept without error (used for logprobs, file search results, etc.)
+  # Harbor Boost does not support include-based enrichment, but accepting the
+  # parameter prevents SDK clients from getting 400 errors.
+  if body.get("include"):
+    logger.debug("include parameter accepted but not acted on: %s", body["include"])
+
+  # service_tier: accept for SDK compatibility
+  if body.get("service_tier"):
+    logger.debug("service_tier '%s' accepted but not acted on", body["service_tier"])
 
   if body.get("stream", False):
     openai_body["stream"] = True
@@ -452,6 +478,7 @@ def _build_output_items(openai_result):
     output.append({
       "type": "reasoning",
       "id": f"rs_{shortuuid.random()}",
+      "status": "completed",
       "summary": [
         {
           "type": "summary_text",
@@ -580,7 +607,17 @@ def _build_responses_response(openai_result, request_model, response_id, request
   if request_body:
     instructions = request_body.get("instructions")
 
-  return {
+  # Echo back user from request
+  user = None
+  if request_body:
+    user = request_body.get("user")
+
+  # Echo back reasoning config from request
+  reasoning_config = None
+  if request_body and request_body.get("reasoning"):
+    reasoning_config = request_body["reasoning"]
+
+  response = {
     "id": response_id,
     "object": "response",
     "created_at": int(time.time()),
@@ -609,6 +646,13 @@ def _build_responses_response(openai_result, request_model, response_id, request
     "error": None,
     "incomplete_details": {"reason": _incomplete_reason(finish_reason)} if status == "incomplete" else None,
   }
+
+  if user is not None:
+    response["user"] = user
+  if reasoning_config is not None:
+    response["reasoning"] = reasoning_config
+
+  return response
 
 
 # --- Streaming conversion ---
@@ -664,6 +708,16 @@ async def _responses_stream_converter(
   if request_body:
     instructions = request_body.get("instructions")
 
+  # Echo back user from request
+  user = None
+  if request_body:
+    user = request_body.get("user")
+
+  # Echo back reasoning config from request
+  reasoning_config = None
+  if request_body and request_body.get("reasoning"):
+    reasoning_config = request_body["reasoning"]
+
   # Refusal tracking
   refusal_open = False
   refusal_parts = []
@@ -691,6 +745,11 @@ async def _responses_stream_converter(
     "error": None,
     "incomplete_details": None,
   }
+
+  if user is not None:
+    skeleton["user"] = user
+  if reasoning_config is not None:
+    skeleton["reasoning"] = reasoning_config
 
   yield _sse_event("response.created", {
     "type": "response.created",
@@ -746,6 +805,7 @@ async def _responses_stream_converter(
       "item": {
         "type": "reasoning",
         "id": reasoning_id,
+        "status": "completed",
         "summary": [{
           "type": "summary_text",
           "text": full_reasoning,
@@ -867,6 +927,7 @@ async def _responses_stream_converter(
               "item": {
                 "type": "reasoning",
                 "id": reasoning_id,
+                "status": "in_progress",
                 "summary": [],
               },
               "sequence_number": seq,
