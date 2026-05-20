@@ -201,14 +201,70 @@ class TestConvertTools:
         assert result[0]["function"]["name"] == "get_weather"
         assert result[0]["function"]["parameters"]["type"] == "object"
 
-    def test_non_function_tools_skipped(self):
+    def test_web_search_preview_mapped_to_function(self):
         body = {"tools": [
+            {"type": "web_search_preview"},
+            {"type": "function", "name": "fn1", "description": "", "parameters": {}},
+        ]}
+        result = responses_compat._convert_tools(body)
+        assert len(result) == 2
+        ws = result[0]
+        assert ws["type"] == "function"
+        assert ws["function"]["name"] == "web_search"
+        assert "query" in ws["function"]["parameters"]["properties"]
+        assert result[1]["function"]["name"] == "fn1"
+
+    def test_web_search_type_mapped_to_function(self):
+        body = {"tools": [{"type": "web_search"}]}
+        result = responses_compat._convert_tools(body)
+        assert len(result) == 1
+        assert result[0]["type"] == "function"
+        assert result[0]["function"]["name"] == "web_search"
+
+    def test_web_search_deduplicated(self):
+        body = {"tools": [
+            {"type": "web_search_preview"},
             {"type": "web_search"},
+        ]}
+        result = responses_compat._convert_tools(body)
+        assert len(result) == 1
+        assert result[0]["function"]["name"] == "web_search"
+
+    def test_file_search_skipped_with_warning(self):
+        body = {"tools": [
+            {"type": "file_search"},
             {"type": "function", "name": "fn1", "description": "", "parameters": {}},
         ]}
         result = responses_compat._convert_tools(body)
         assert len(result) == 1
         assert result[0]["function"]["name"] == "fn1"
+
+    def test_code_interpreter_skipped_with_warning(self):
+        body = {"tools": [{"type": "code_interpreter"}]}
+        result = responses_compat._convert_tools(body)
+        assert len(result) == 0
+
+    def test_unsupported_builtin_tools_logged(self):
+        import logging
+        body = {"tools": [
+            {"type": "file_search"},
+            {"type": "code_interpreter"},
+        ]}
+        with unittest.mock.patch.object(responses_compat.logger, "warning") as mock_warn:
+            responses_compat._convert_tools(body)
+            assert mock_warn.call_count == 2
+            call_args = [c[0][1] for c in mock_warn.call_args_list]
+            assert "file_search" in call_args
+            assert "code_interpreter" in call_args
+
+    def test_web_search_tool_has_correct_schema(self):
+        body = {"tools": [{"type": "web_search_preview"}]}
+        result = responses_compat._convert_tools(body)
+        ws = result[0]
+        assert ws["function"]["parameters"]["type"] == "object"
+        assert ws["function"]["parameters"]["required"] == ["query"]
+        assert ws["function"]["parameters"]["properties"]["query"]["type"] == "string"
+        assert ws["function"]["description"]  # non-empty
 
     def test_no_tools(self):
         assert responses_compat._convert_tools({}) == []
@@ -240,6 +296,38 @@ class TestConvertToolChoice:
             "tool_choice": {"type": "function", "name": "get_weather"},
         })
         assert result == {"type": "function", "function": {"name": "get_weather"}}
+
+    def test_web_search_preview_choice_maps_to_function(self):
+        result = responses_compat._convert_tool_choice({
+            "tool_choice": {"type": "web_search_preview"},
+        })
+        assert result == {"type": "function", "function": {"name": "web_search"}}
+
+    def test_web_search_choice_maps_to_function(self):
+        result = responses_compat._convert_tool_choice({
+            "tool_choice": {"type": "web_search"},
+        })
+        assert result == {"type": "function", "function": {"name": "web_search"}}
+
+    def test_file_search_choice_falls_back_to_auto(self):
+        result = responses_compat._convert_tool_choice({
+            "tool_choice": {"type": "file_search"},
+        })
+        assert result == "auto"
+
+    def test_code_interpreter_choice_falls_back_to_auto(self):
+        result = responses_compat._convert_tool_choice({
+            "tool_choice": {"type": "code_interpreter"},
+        })
+        assert result == "auto"
+
+    def test_unsupported_tool_choice_logged(self):
+        with unittest.mock.patch.object(responses_compat.logger, "warning") as mock_warn:
+            responses_compat._convert_tool_choice({
+                "tool_choice": {"type": "file_search"},
+            })
+            mock_warn.assert_called_once()
+            assert "file_search" in mock_warn.call_args[0][1]
 
 
 # ---------------------------------------------------------------------------
@@ -286,6 +374,41 @@ class TestBuildOpenAIBody:
         body = {"model": "gpt-4o", "input": "hi", "tool_choice": "auto"}
         result = responses_compat._build_openai_body(body)
         assert result["tool_choice"] == "auto"
+
+    def test_web_search_preview_tool_included_in_body(self):
+        body = {
+            "model": "gpt-4o",
+            "input": "hi",
+            "tools": [{"type": "web_search_preview"}],
+        }
+        result = responses_compat._build_openai_body(body)
+        assert len(result["tools"]) == 1
+        assert result["tools"][0]["function"]["name"] == "web_search"
+
+    def test_web_search_preview_with_function_tools(self):
+        body = {
+            "model": "gpt-4o",
+            "input": "hi",
+            "tools": [
+                {"type": "web_search_preview"},
+                {"type": "function", "name": "fn", "description": "d", "parameters": {}},
+            ],
+        }
+        result = responses_compat._build_openai_body(body)
+        assert len(result["tools"]) == 2
+        names = [t["function"]["name"] for t in result["tools"]]
+        assert "web_search" in names
+        assert "fn" in names
+
+    def test_web_search_tool_choice_in_body(self):
+        body = {
+            "model": "gpt-4o",
+            "input": "hi",
+            "tools": [{"type": "web_search_preview"}],
+            "tool_choice": {"type": "web_search_preview"},
+        }
+        result = responses_compat._build_openai_body(body)
+        assert result["tool_choice"] == {"type": "function", "function": {"name": "web_search"}}
 
 
 # ---------------------------------------------------------------------------

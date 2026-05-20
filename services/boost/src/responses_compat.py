@@ -177,13 +177,49 @@ def _convert_content_parts(content_parts):
   return openai_parts
 
 
+_WEB_SEARCH_TOOL_DEF = {
+  "type": "function",
+  "function": {
+    "name": "web_search",
+    "description": (
+      "Search the live web and return a short ranked result set. "
+      "Use absolute dates for time-sensitive searches."
+    ),
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "Search query.",
+        },
+      },
+      "required": ["query"],
+    },
+  },
+}
+
+# Built-in tool types that have no Harbor equivalent
+_UNSUPPORTED_BUILTIN_TOOLS = {"file_search", "code_interpreter"}
+
+# Built-in tool types that map to Harbor's web_search
+_WEB_SEARCH_TYPES = {"web_search_preview", "web_search"}
+
+
 def _convert_tools(body: dict):
-  """Convert Responses API tools to Chat Completions tools format."""
+  """Convert Responses API tools to Chat Completions tools format.
+
+  Function tools pass through directly. OpenAI built-in ``web_search``
+  and ``web_search_preview`` tools are mapped to Harbor Boost's own
+  ``web_search`` function tool (from the tools module).
+  ``file_search`` and ``code_interpreter`` have no Harbor equivalent
+  and are logged as warnings.
+  """
   tools = body.get("tools")
   if not tools:
     return []
 
   openai_tools = []
+  has_web_search = False
   for tool in tools:
     tool_type = tool.get("type")
     if tool_type == "function":
@@ -195,13 +231,28 @@ def _convert_tools(body: dict):
           "parameters": tool.get("parameters", {}),
         },
       })
-    # web_search, file_search, code_interpreter are OpenAI-hosted
-    # tools that we can't replicate; skip them silently
+    elif tool_type in _WEB_SEARCH_TYPES:
+      if not has_web_search:
+        openai_tools.append(_WEB_SEARCH_TOOL_DEF)
+        has_web_search = True
+    elif tool_type in _UNSUPPORTED_BUILTIN_TOOLS:
+      logger.warning(
+        "Responses API built-in tool '%s' has no Harbor equivalent and will be skipped",
+        tool_type,
+      )
   return openai_tools
 
 
 def _convert_tool_choice(body: dict):
-  """Convert Responses API tool_choice to Chat Completions tool_choice."""
+  """Convert Responses API tool_choice to Chat Completions tool_choice.
+
+  Handles string values (``auto``, ``none``, ``required``) and dict
+  values. Dict ``type: function`` maps to Chat Completions forced
+  function. Dict ``type: web_search_preview`` or ``type: web_search``
+  maps to forcing Harbor's ``web_search`` function tool.
+  Unsupported built-in types (``file_search``, ``code_interpreter``)
+  fall back to ``auto``.
+  """
   tc = body.get("tool_choice")
   if tc is None:
     return None
@@ -212,6 +263,14 @@ def _convert_tool_choice(body: dict):
     tc_type = tc.get("type")
     if tc_type == "function":
       return {"type": "function", "function": {"name": tc.get("name", "")}}
+    if tc_type in _WEB_SEARCH_TYPES:
+      return {"type": "function", "function": {"name": "web_search"}}
+    if tc_type in _UNSUPPORTED_BUILTIN_TOOLS:
+      logger.warning(
+        "tool_choice type '%s' has no Harbor equivalent; falling back to 'auto'",
+        tc_type,
+      )
+      return "auto"
   return None
 
 
