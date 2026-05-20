@@ -415,9 +415,11 @@ def _map_stop_reason(finish_reason, stop_sequences=None, content_text=None):
         if stripped.endswith(seq):
           return "stop_sequence", seq
 
-    # No content or no match — the model ended naturally despite stop_sequences
-    # being configured.  Report end_turn, not stop_sequence.
-    return "end_turn", None
+    # No content or no match — OpenAI backends strip stop sequences from
+    # output, so endswith checks fail even when a stop sequence caused the
+    # stop.  Default to the first configured stop sequence since the caller
+    # explicitly requested them and finish_reason is "stop".
+    return "stop_sequence", stop_sequences[0]
 
   return "end_turn", None
 

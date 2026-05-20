@@ -777,9 +777,11 @@ class TestMapStopReason:
             stop_sequences=["\n\nHuman:"],
             content_text="Hello world",
         )
-        # No sequence matched the content — model ended naturally
-        assert reason == "end_turn"
-        assert seq is None
+        # OpenAI backends strip stop sequences from output, so even when
+        # the stop was caused by a sequence the text won't end with it.
+        # Default to the first configured stop sequence.
+        assert reason == "stop_sequence"
+        assert seq == "\n\nHuman:"
 
     def test_stop_with_sequences_but_no_content(self):
         reason, seq = anthropic_compat._map_stop_reason(
@@ -787,9 +789,9 @@ class TestMapStopReason:
             stop_sequences=["\n\nHuman:"],
             content_text=None,
         )
-        # No content to check — treat as natural end
-        assert reason == "end_turn"
-        assert seq is None
+        # No content to check — default to the first stop sequence
+        assert reason == "stop_sequence"
+        assert seq == "\n\nHuman:"
 
     def test_unknown_reason_defaults_to_end_turn(self):
         reason, seq = anthropic_compat._map_stop_reason("unknown_reason")
@@ -5169,9 +5171,9 @@ class TestStopSequenceHandling:
             stop_sequences=["\n\nHuman:"],
             content_text="",
         )
-        # Empty string can't end with any stop sequence
-        assert reason == "end_turn"
-        assert seq is None
+        # Empty string can't match — defaults to first stop sequence
+        assert reason == "stop_sequence"
+        assert seq == "\n\nHuman:"
 
     def test_stop_reason_content_with_trailing_whitespace(self):
         # rstrip() is applied before checking
@@ -5232,8 +5234,8 @@ class TestStopSequenceHandling:
         assert body["stop_reason"] == "stop_sequence"
         assert body["stop_sequence"] == "\n\nHuman:"
 
-    def test_non_streaming_no_match_is_end_turn(self):
-        """Non-streaming response with stop_sequences but no match returns end_turn."""
+    def test_non_streaming_no_match_defaults_to_first_sequence(self):
+        """Non-streaming response with stop_sequences but no match defaults to first sequence."""
         import config as _cfg
         _cfg.BOOST_AUTH = []
 
@@ -5260,8 +5262,8 @@ class TestStopSequenceHandling:
 
         assert resp.status_code == 200
         body = resp.json()
-        assert body["stop_reason"] == "end_turn"
-        assert body["stop_sequence"] is None
+        assert body["stop_reason"] == "stop_sequence"
+        assert body["stop_sequence"] == "\n\nHuman:"
 
     @pytest.mark.asyncio
     async def test_streaming_stop_sequence_in_message_delta(self):
@@ -5292,8 +5294,8 @@ class TestStopSequenceHandling:
             pytest.fail("No message_delta event found")
 
     @pytest.mark.asyncio
-    async def test_streaming_no_match_is_end_turn(self):
-        """Streaming message_delta returns end_turn when stop_sequences don't match."""
+    async def test_streaming_no_match_defaults_to_first_sequence(self):
+        """Streaming message_delta defaults to first stop_sequence when none match."""
         async def response_stream():
             yield 'data: {"choices": [{"delta": {"content": "Hello world"}}]}\n\n'
             yield (
@@ -5312,8 +5314,8 @@ class TestStopSequenceHandling:
             if '"type": "message_delta"' in event:
                 data_line = [l for l in event.strip().split("\n") if l.startswith("data: ")][0]
                 payload = json.loads(data_line[6:])
-                assert payload["delta"]["stop_reason"] == "end_turn"
-                assert payload["delta"]["stop_sequence"] is None
+                assert payload["delta"]["stop_reason"] == "stop_sequence"
+                assert payload["delta"]["stop_sequence"] == "\n\nHuman:"
                 break
         else:
             pytest.fail("No message_delta event found")
@@ -6301,6 +6303,136 @@ def _parse_sse_events_responses(raw_events):
         if event_type and data_str:
             parsed.append((event_type, json.loads(data_str)))
     return parsed
+
+
+# ---------------------------------------------------------------------------
+# Fix: _map_stop_reason defaults to stop_sequence when sequences configured
+# ---------------------------------------------------------------------------
+
+class TestMapStopReasonDefaultToStopSequence:
+    """When stop_sequences are configured and finish_reason is 'stop', the
+    fallback should be stop_sequence (first configured) because OpenAI
+    backends strip stop sequences from output text."""
+
+    def test_non_matching_content_defaults_to_first_sequence(self):
+        reason, seq = anthropic_compat._map_stop_reason(
+            "stop",
+            stop_sequences=["<END>", "STOP"],
+            content_text="Hello world",
+        )
+        assert reason == "stop_sequence"
+        assert seq == "<END>"
+
+    def test_no_content_defaults_to_first_sequence(self):
+        reason, seq = anthropic_compat._map_stop_reason(
+            "stop",
+            stop_sequences=["<END>"],
+            content_text=None,
+        )
+        assert reason == "stop_sequence"
+        assert seq == "<END>"
+
+    def test_empty_content_defaults_to_first_sequence(self):
+        reason, seq = anthropic_compat._map_stop_reason(
+            "stop",
+            stop_sequences=["STOP"],
+            content_text="",
+        )
+        assert reason == "stop_sequence"
+        assert seq == "STOP"
+
+    def test_matching_content_still_returns_matched_sequence(self):
+        """When the text does end with a stop sequence, that one is returned."""
+        reason, seq = anthropic_compat._map_stop_reason(
+            "stop",
+            stop_sequences=["<END>", "STOP"],
+            content_text="Hello worldSTOP",
+        )
+        assert reason == "stop_sequence"
+        assert seq == "STOP"
+
+    def test_length_finish_reason_ignores_stop_sequences(self):
+        """finish_reason 'length' always maps to max_tokens regardless."""
+        reason, seq = anthropic_compat._map_stop_reason(
+            "length",
+            stop_sequences=["<END>"],
+            content_text="Hello world",
+        )
+        assert reason == "max_tokens"
+        assert seq is None
+
+    def test_tool_calls_finish_reason_ignores_stop_sequences(self):
+        """finish_reason 'tool_calls' always maps to tool_use."""
+        reason, seq = anthropic_compat._map_stop_reason(
+            "tool_calls",
+            stop_sequences=["<END>"],
+            content_text="Hello world",
+        )
+        assert reason == "tool_use"
+        assert seq is None
+
+    def test_no_sequences_configured_returns_end_turn(self):
+        """Without stop_sequences, 'stop' still maps to end_turn."""
+        reason, seq = anthropic_compat._map_stop_reason(
+            "stop",
+            stop_sequences=None,
+            content_text="Hello world",
+        )
+        assert reason == "end_turn"
+        assert seq is None
+
+    def test_empty_sequences_list_returns_end_turn(self):
+        """Empty stop_sequences list still maps to end_turn."""
+        reason, seq = anthropic_compat._map_stop_reason(
+            "stop",
+            stop_sequences=[],
+            content_text="Hello world",
+        )
+        assert reason == "end_turn"
+        assert seq is None
+
+
+# ---------------------------------------------------------------------------
+# Fix: clean_text_preserve_newlines percent decoding
+# ---------------------------------------------------------------------------
+
+class TestCleanTextPercentDecoding:
+    """clean_text_preserve_newlines should URL-decode percent-encoded text."""
+
+    def test_decodes_percent_encoded_colon(self):
+        import format
+        result = format.clean_text_preserve_newlines("hello%3Aworld")
+        assert result == "hello:world"
+
+    def test_decodes_percent_encoded_space(self):
+        import format
+        result = format.clean_text_preserve_newlines("hello%20world")
+        assert result == "hello world"
+
+    def test_decodes_multiple_percent_sequences(self):
+        import format
+        result = format.clean_text_preserve_newlines("key%3Dvalue%26other%3D2")
+        assert result == "key=value&other=2"
+
+    def test_preserves_already_decoded_text(self):
+        import format
+        result = format.clean_text_preserve_newlines("hello world")
+        assert result == "hello world"
+
+    def test_preserves_newlines_after_decoding(self):
+        import format
+        result = format.clean_text_preserve_newlines("line1%3A%20foo\nline2%3A%20bar")
+        assert result == "line1: foo\nline2: bar"
+
+    def test_decodes_percent_encoded_slash(self):
+        import format
+        result = format.clean_text_preserve_newlines("path%2Fto%2Ffile")
+        assert result == "path/to/file"
+
+    def test_handles_mixed_encoded_and_plain(self):
+        import format
+        result = format.clean_text_preserve_newlines("Hello%2C world%21 How are you%3F")
+        assert result == "Hello, world! How are you?"
 
 
 if __name__ == "__main__":

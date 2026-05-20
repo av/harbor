@@ -1,4 +1,5 @@
 import re
+from urllib.parse import unquote
 from config import STATUS_STYLE
 
 status_formatters = {
@@ -39,6 +40,10 @@ def clean_text_preserve_newlines(text: str) -> str:
 
   # Collapse excessive blank lines (more than 2) to just 2
   text = re.sub(r'\n{3,}', '\n\n', text)
+
+  # Decode percent-encoded characters (e.g. %3A -> :, %20 -> space).
+  # Some backends return percent-encoded content.
+  text = unquote(text)
 
   return text.strip()
 
