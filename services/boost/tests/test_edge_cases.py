@@ -1372,5 +1372,150 @@ class TestEventsHandlers:
         llm_registry._registry.clear()
 
 
+from unittest.mock import MagicMock
+from fastapi import HTTPException, Request
+import asyncio
+import uuid
+import shutil
+from pathlib import Path
+
+
+class TestExceptionHandlerRootHealthAndRequestIdMiddleware:
+    """Coverage for main.py exception_handler (5xx logger+envelopes for anthropic/responses/anthropic-client, _is_anthropic_client branches), root(), health(), and request_id middleware rmtree (iter 6, using full app via make_client; avoids touching prior events code in this file)."""
+
+    def test_root_returns_200_and_expected_payload(self):
+        """Exercises root() at lines ~136-143."""
+        client = make_client()
+        resp = client.get("/")
+        assert resp.status_code == 200
+        assert resp.json() == {"status": "ok", "message": "Harbor Boost is running"}
+
+    def test_health_returns_200_and_simple_ok(self):
+        """Exercises health() at lines ~146-148."""
+        client = make_client()
+        resp = client.get("/health")
+        assert resp.status_code == 200
+        assert resp.json() == {"status": "ok"}
+
+    def test_http_exception_handler_5xx_sanitizes_detail_logs_and_defaults(self):
+        """Hits 5xx branch (line 79 logger.error), safe_detail, default JSONResponse envelope."""
+        from main import _http_exception_handler
+        mock_req = MagicMock(spec=Request)
+        mock_req.url.path = "/any/other"
+        mock_req.headers = {}  # ensure _is_anthropic_client returns False (MagicMock.get would be truthy otherwise)
+        exc = HTTPException(status_code=500, detail="leaky secret /tmp/passwd stacktrace")
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            resp = loop.run_until_complete(_http_exception_handler(mock_req, exc))
+        finally:
+            loop.close()
+        assert resp.status_code == 500
+        body = json.loads(resp.body.decode("utf-8"))
+        assert body == {"detail": "Internal server error"}
+        # 5xx detail never leaked to client
+
+    def test_http_exception_handler_v1_messages_path_uses_anthropic_error_envelope(self):
+        """Path startswith /v1/messages -> anthropic shaped error + headers."""
+        from main import _http_exception_handler
+        from compat_utils import ANTHROPIC_VERSION_HEADER, REQUEST_ID_HEADER
+        mock_req = MagicMock(spec=Request)
+        mock_req.url.path = "/v1/messages/threads/123"
+        mock_req.headers = {}
+        exc = HTTPException(status_code=429, detail="rate limited")
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            resp = loop.run_until_complete(_http_exception_handler(mock_req, exc))
+        finally:
+            loop.close()
+        assert resp.status_code == 429
+        body = json.loads(resp.body.decode("utf-8"))
+        assert body["type"] == "error"
+        assert body["error"]["type"] == "rate_limit_error"
+        assert ANTHROPIC_VERSION_HEADER in resp.headers
+        assert REQUEST_ID_HEADER in resp.headers
+
+    def test_http_exception_handler_v1_responses_path_uses_openai_error_envelope(self):
+        """Path startswith /v1/responses -> openai shaped error with param/code."""
+        from main import _http_exception_handler
+        from compat_utils import OPENAI_REQUEST_ID_HEADER
+        mock_req = MagicMock(spec=Request)
+        mock_req.url.path = "/v1/responses/resp_abc"
+        mock_req.headers = {}
+        exc = HTTPException(status_code=404, detail="not here")
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            resp = loop.run_until_complete(_http_exception_handler(mock_req, exc))
+        finally:
+            loop.close()
+        assert resp.status_code == 404
+        body = json.loads(resp.body.decode("utf-8"))
+        err = body["error"]
+        assert err["type"] == "not_found_error"
+        assert err["param"] is None
+        assert err["code"] is None
+        assert OPENAI_REQUEST_ID_HEADER in resp.headers
+
+    def test_http_exception_handler_is_anthropic_client_via_anthropic_version_header(self):
+        """_is_anthropic_client true via anthropic-version -> anthropic envelope on non-special path like /v1/models."""
+        from main import _http_exception_handler
+        from compat_utils import ANTHROPIC_VERSION_HEADER, REQUEST_ID_HEADER
+        mock_req = MagicMock(spec=Request)
+        mock_req.url.path = "/v1/models"
+        mock_req.headers = {"anthropic-version": "2023-06-01"}
+        exc = HTTPException(status_code=401, detail="sdk auth fail")
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            resp = loop.run_until_complete(_http_exception_handler(mock_req, exc))
+        finally:
+            loop.close()
+        assert resp.status_code == 401
+        body = json.loads(resp.body.decode("utf-8"))
+        assert body["type"] == "error"
+        assert body["error"]["type"] == "authentication_error"
+        assert ANTHROPIC_VERSION_HEADER in resp.headers
+
+    def test_http_exception_handler_is_anthropic_client_via_x_api_key_without_authorization(self):
+        """_is_anthropic_client true via x-api-key sans authorization -> anthropic envelope (covers second if branch)."""
+        from main import _http_exception_handler
+        from compat_utils import ANTHROPIC_VERSION_HEADER
+        mock_req = MagicMock(spec=Request)
+        mock_req.url.path = "/v1/models/klmbr-foo"
+        mock_req.headers = {"x-api-key": "sk-ant-test123", "authorization": None}
+        exc = HTTPException(status_code=403, detail="perm")
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            resp = loop.run_until_complete(_http_exception_handler(mock_req, exc))
+        finally:
+            loop.close()
+        assert resp.status_code == 403
+        body = json.loads(resp.body.decode("utf-8"))
+        assert body["type"] == "error"
+        assert "permission_error" in body["error"]["type"]
+        assert ANTHROPIC_VERSION_HEADER in resp.headers
+
+    def test_request_id_middleware_cleans_scratch_dir_on_if_branch(self):
+        """Forces the rmtree at middleware/request_id.py:26 by pre-creating scratch_dir for the X-Request-ID."""
+        rid = "itest" + uuid.uuid4().hex[:8]
+        scratch = Path("/tmp/harbor-boost-tools") / rid
+        try:
+            scratch.mkdir(parents=True, exist_ok=True)
+            (scratch / "dummy_artifact.bin").write_text("data to be cleaned")
+            assert scratch.is_dir()
+            client = make_client()
+            resp = client.get("/health", headers={"X-Request-ID": rid})
+            assert resp.status_code == 200
+            assert "X-Request-ID" in resp.headers
+            assert resp.headers["X-Request-ID"] == rid
+            assert not scratch.is_dir(), "rmtree should have removed the scratch dir"
+        finally:
+            if scratch.exists():
+                shutil.rmtree(scratch, ignore_errors=True)
+
+
 if __name__ == "__main__":
     unittest.main()
