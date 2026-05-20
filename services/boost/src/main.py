@@ -68,13 +68,18 @@ _OPENAI_ERROR_TYPE_MAP = {
 async def _http_exception_handler(request: Request, exc: HTTPException):
   path = request.url.path
 
+  # Sanitize 5xx error details to avoid leaking internal information
+  safe_detail = str(exc.detail) if exc.status_code < 500 else "Internal server error"
+  if exc.status_code >= 500:
+    logger.error(f"HTTPException {exc.status_code} at {path}: {exc.detail}")
+
   if path.startswith("/v1/messages"):
     error_type = _ANTHROPIC_ERROR_TYPE_MAP.get(exc.status_code, "api_error")
     return JSONResponse(
       status_code=exc.status_code,
       content={
         "type": "error",
-        "error": {"type": error_type, "message": str(exc.detail)},
+        "error": {"type": error_type, "message": safe_detail},
       },
       headers={ANTHROPIC_VERSION_HEADER: ANTHROPIC_VERSION},
     )
@@ -85,7 +90,7 @@ async def _http_exception_handler(request: Request, exc: HTTPException):
       status_code=exc.status_code,
       content={
         "error": {
-          "message": str(exc.detail),
+          "message": safe_detail,
           "type": error_type,
           "param": None,
           "code": None,
@@ -100,7 +105,7 @@ async def _http_exception_handler(request: Request, exc: HTTPException):
       status_code=exc.status_code,
       content={
         "type": "error",
-        "error": {"type": error_type, "message": str(exc.detail)},
+        "error": {"type": error_type, "message": safe_detail},
       },
       headers={ANTHROPIC_VERSION_HEADER: ANTHROPIC_VERSION},
     )
@@ -108,7 +113,7 @@ async def _http_exception_handler(request: Request, exc: HTTPException):
   # Default FastAPI behavior for other paths
   return JSONResponse(
     status_code=exc.status_code,
-    content={"detail": exc.detail},
+    content={"detail": safe_detail},
   )
 
 

@@ -1078,7 +1078,9 @@ async def _responses_stream_converter(
 
   except Exception as e:
     logger.error(f"Error during responses stream conversion: {e}", exc_info=True)
-    stream_error = str(e)
+    # Use a generic message to avoid leaking internal details (backend URLs,
+    # connection errors, stack traces) to the client via the SSE stream.
+    stream_error = "An internal error occurred during streaming"
 
     # Close reasoning item before emitting error
     if reasoning_item_open:
@@ -1353,9 +1355,17 @@ async def post_responses(request: Request, api_key: str = Depends(get_api_key)):
       )
 
   except HTTPException as e:
-    return _responses_error(e.status_code, e.detail, request_id=request_id)
+    # Sanitize 5xx error details to avoid leaking internal information
+    detail = str(e.detail) if e.status_code < 500 else "Internal server error"
+    if e.status_code >= 500:
+      logger.error(f"HTTPException {e.status_code} in responses handler: {e.detail}")
+    return _responses_error(e.status_code, detail, request_id=request_id)
   except ValueError as e:
-    return _responses_error(400, str(e), request_id=request_id)
+    # Log the full error but only surface a safe message to the client.
+    # ValueError from mapper (e.g. missing model specifier) may contain
+    # internal details we don't want to leak.
+    logger.warning(f"Request validation error: {e}")
+    return _responses_error(400, "Invalid request: could not resolve model or parameters", request_id=request_id)
   except Exception as e:
     logger.error(f"Unexpected error in responses handler: {e}", exc_info=True)
     return _responses_error(500, "Internal server error", request_id=request_id)

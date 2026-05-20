@@ -38,33 +38,46 @@ ERROR_TYPE_MAP = {
 }
 
 
-def _anthropic_headers(request_id=None):
+def _anthropic_headers(request_id=None, beta_flags=None):
   """Build standard Anthropic response headers."""
   headers = {ANTHROPIC_VERSION_HEADER: ANTHROPIC_VERSION}
   if request_id:
     headers[REQUEST_ID_HEADER] = request_id
+  if beta_flags:
+    headers["anthropic-beta"] = ",".join(beta_flags)
   return headers
 
 
-def _anthropic_error(status_code, message, error_type=None, request_id=None):
+def _anthropic_error(status_code, message, error_type=None, request_id=None, beta_flags=None):
   if error_type is None:
     error_type = ERROR_TYPE_MAP.get(status_code, "api_error")
   return JSONResponse(
     status_code=status_code,
     content={"type": "error", "error": {"type": error_type, "message": message}},
-    headers=_anthropic_headers(request_id),
+    headers=_anthropic_headers(request_id, beta_flags),
   )
 
 
 # --- Beta flags ---
 
-def _parse_beta_flags(request: Request):
-  """Parse the anthropic-beta request header and log recognized flags.
+# Beta features the compat layer recognises.  The layer does not change
+# behaviour based on these (prompt caching is a no-op, extended output
+# limits are passthrough) but they are echoed back in the ``anthropic-beta``
+# response header so the SDK knows they were accepted.
+RECOGNIZED_BETA_FLAGS = frozenset({
+  "prompt-caching-2024-07-31",
+  "max-tokens-3-5-sonnet-2024-07-15",
+  "output-128k-2025-02-19",
+  "extended-thinking-2025-01-24",
+})
 
-  The Anthropic SDK sends a comma-separated list of beta feature flags
-  (e.g. ``"max-tokens-3-5-sonnet-2024-07-15,prompt-caching-2024-07-31"``).
-  The compat layer accepts these without error for SDK compatibility.
-  No flags change behavior — they are logged for observability only.
+
+def _parse_beta_flags(request: Request):
+  """Parse the anthropic-beta request header.
+
+  Returns the list of *recognized* flags that the compat layer will
+  echo back in the response.  Unrecognized flags are accepted without
+  error (the Anthropic API does the same) and logged for observability.
   """
   raw = request.headers.get("anthropic-beta")
   if not raw:
@@ -73,7 +86,13 @@ def _parse_beta_flags(request: Request):
   flags = [f.strip() for f in raw.split(",") if f.strip()]
   if flags:
     logger.debug("anthropic-beta flags: %s", ", ".join(flags))
-  return flags
+
+  recognized = [f for f in flags if f in RECOGNIZED_BETA_FLAGS]
+  unrecognized = [f for f in flags if f not in RECOGNIZED_BETA_FLAGS]
+  if unrecognized:
+    logger.debug("unrecognized beta flags (ignored): %s", ", ".join(unrecognized))
+
+  return recognized
 
 
 # --- Auth ---
@@ -96,16 +115,16 @@ def _synthesize_authorization(request: Request):
 
 # --- Request validation and conversion ---
 
-def _validate_request(body: dict, request_id=None):
+def _validate_request(body: dict, request_id=None, beta_flags=None):
   if "model" not in body or not body["model"]:
-    return _anthropic_error(400, "model is required", request_id=request_id)
+    return _anthropic_error(400, "model is required", request_id=request_id, beta_flags=beta_flags)
 
   if "max_tokens" not in body:
-    return _anthropic_error(400, "max_tokens is required", request_id=request_id)
+    return _anthropic_error(400, "max_tokens is required", request_id=request_id, beta_flags=beta_flags)
 
   messages = body.get("messages")
   if not messages or not isinstance(messages, list) or len(messages) == 0:
-    return _anthropic_error(400, "messages must be a non-empty array", request_id=request_id)
+    return _anthropic_error(400, "messages must be a non-empty array", request_id=request_id, beta_flags=beta_flags)
 
   for msg in messages:
     if msg.get("role") == "system":
@@ -113,6 +132,7 @@ def _validate_request(body: dict, request_id=None):
         400,
         'messages containing role "system" are not allowed; use top-level system parameter',
         request_id=request_id,
+        beta_flags=beta_flags,
       )
 
   return None
@@ -740,7 +760,9 @@ async def _anthropic_stream_converter(
               )
   except Exception as e:
     logger.error(f"Error during stream conversion: {e}", exc_info=True)
-    stream_error = str(e)
+    # Use a generic message to avoid leaking internal details (backend URLs,
+    # connection errors, stack traces) to the client via the SSE stream.
+    stream_error = "An internal error occurred during streaming"
 
     # Close thinking block before emitting error text
     if thinking_block_open:
@@ -888,18 +910,19 @@ async def _anthropic_stream_converter(
 @anthropic_compatible_routes.post("/v1/messages")
 async def post_messages(request: Request, api_key: str = Depends(get_api_key)):
   request_id = f"req_{shortuuid.random()}"
+  beta_flags = []
 
   try:
     _synthesize_authorization(request)
-    _parse_beta_flags(request)
+    beta_flags = _parse_beta_flags(request)
 
     body = await request.body()
     try:
       json_body = json.loads(body.decode("utf-8"))
     except json.JSONDecodeError:
-      return _anthropic_error(400, "Invalid JSON in request body", request_id=request_id)
+      return _anthropic_error(400, "Invalid JSON in request body", request_id=request_id, beta_flags=beta_flags)
 
-    validation_error = _validate_request(json_body, request_id=request_id)
+    validation_error = _validate_request(json_body, request_id=request_id, beta_flags=beta_flags)
     if validation_error:
       return validation_error
 
@@ -926,19 +949,19 @@ async def post_messages(request: Request, api_key: str = Depends(get_api_key)):
       return JSONResponse(
         content=response,
         status_code=200,
-        headers=_anthropic_headers(request_id),
+        headers=_anthropic_headers(request_id, beta_flags),
       )
 
     completion = await proxy.serve()
 
     if completion is None:
-      return _anthropic_error(500, "No completion returned", request_id=request_id)
+      return _anthropic_error(500, "No completion returned", request_id=request_id, beta_flags=beta_flags)
 
     if is_stream:
       return StreamingResponse(
         _anthropic_stream_converter(completion, request_model, stop_sequences),
         media_type="text/event-stream",
-        headers=_anthropic_headers(request_id),
+        headers=_anthropic_headers(request_id, beta_flags),
       )
     else:
       result = await proxy.consume_stream(completion)
@@ -946,39 +969,48 @@ async def post_messages(request: Request, api_key: str = Depends(get_api_key)):
       return JSONResponse(
         content=response,
         status_code=200,
-        headers=_anthropic_headers(request_id),
+        headers=_anthropic_headers(request_id, beta_flags),
       )
 
   except HTTPException as e:
     error_type = ERROR_TYPE_MAP.get(e.status_code, "api_error")
-    return _anthropic_error(e.status_code, e.detail, error_type, request_id=request_id)
+    # Sanitize 5xx error details to avoid leaking internal information
+    detail = str(e.detail) if e.status_code < 500 else "Internal server error"
+    if e.status_code >= 500:
+      logger.error(f"HTTPException {e.status_code} in anthropic handler: {e.detail}")
+    return _anthropic_error(e.status_code, detail, error_type, request_id=request_id, beta_flags=beta_flags)
   except ValueError as e:
-    return _anthropic_error(400, str(e), request_id=request_id)
+    # Log the full error but only surface a safe message to the client.
+    # ValueError from mapper (e.g. missing model specifier) may contain
+    # internal details we don't want to leak.
+    logger.warning(f"Request validation error: {e}")
+    return _anthropic_error(400, "Invalid request: could not resolve model or parameters", request_id=request_id, beta_flags=beta_flags)
   except Exception as e:
     logger.error(f"Unexpected error in anthropic handler: {e}", exc_info=True)
-    return _anthropic_error(500, "Internal server error", request_id=request_id)
+    return _anthropic_error(500, "Internal server error", request_id=request_id, beta_flags=beta_flags)
 
 
 @anthropic_compatible_routes.post("/v1/messages/count_tokens")
 async def post_count_tokens(request: Request, api_key: str = Depends(get_api_key)):
   request_id = f"req_{shortuuid.random()}"
+  beta_flags = []
 
   try:
     _synthesize_authorization(request)
-    _parse_beta_flags(request)
+    beta_flags = _parse_beta_flags(request)
 
     body = await request.body()
     try:
       json_body = json.loads(body.decode("utf-8"))
     except json.JSONDecodeError:
-      return _anthropic_error(400, "Invalid JSON in request body", request_id=request_id)
+      return _anthropic_error(400, "Invalid JSON in request body", request_id=request_id, beta_flags=beta_flags)
 
     if "model" not in json_body or not json_body["model"]:
-      return _anthropic_error(400, "model is required", request_id=request_id)
+      return _anthropic_error(400, "model is required", request_id=request_id, beta_flags=beta_flags)
 
     messages = json_body.get("messages")
     if not messages or not isinstance(messages, list) or len(messages) == 0:
-      return _anthropic_error(400, "messages must be a non-empty array", request_id=request_id)
+      return _anthropic_error(400, "messages must be a non-empty array", request_id=request_id, beta_flags=beta_flags)
 
     # Convert to OpenAI format for token counting
     openai_messages = _convert_messages(json_body)
@@ -989,17 +1021,21 @@ async def post_count_tokens(request: Request, api_key: str = Depends(get_api_key
     return JSONResponse(
       content={"input_tokens": input_tokens},
       status_code=200,
-      headers=_anthropic_headers(request_id),
+      headers=_anthropic_headers(request_id, beta_flags),
     )
 
   except HTTPException as e:
     error_type = ERROR_TYPE_MAP.get(e.status_code, "api_error")
-    return _anthropic_error(e.status_code, e.detail, error_type, request_id=request_id)
+    detail = str(e.detail) if e.status_code < 500 else "Internal server error"
+    if e.status_code >= 500:
+      logger.error(f"HTTPException {e.status_code} in count_tokens handler: {e.detail}")
+    return _anthropic_error(e.status_code, detail, error_type, request_id=request_id, beta_flags=beta_flags)
   except ValueError as e:
-    return _anthropic_error(400, str(e), request_id=request_id)
+    logger.warning(f"Request validation error in count_tokens: {e}")
+    return _anthropic_error(400, "Invalid request: could not resolve model or parameters", request_id=request_id, beta_flags=beta_flags)
   except Exception as e:
     logger.error(f"Unexpected error in count_tokens handler: {e}", exc_info=True)
-    return _anthropic_error(500, "Internal server error", request_id=request_id)
+    return _anthropic_error(500, "Internal server error", request_id=request_id, beta_flags=beta_flags)
 
 
 # --- Message Batches stubs ---

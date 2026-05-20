@@ -2035,9 +2035,11 @@ class TestStreamEdgeCases:
 
         # Should contain the partial content
         assert "partial" in joined
-        # Should contain the error text
+        # Should contain a generic error message (not the raw exception to avoid leaking internals)
         assert "Stream error" in joined
-        assert "backend connection reset" in joined
+        assert "internal error" in joined.lower()
+        # The raw exception text must NOT be exposed to the client
+        assert "backend connection reset" not in joined
         # Should still have valid envelope
         assert '"type": "message_start"' in joined
         assert '"type": "message_delta"' in joined
@@ -2059,7 +2061,9 @@ class TestStreamEdgeCases:
         joined = "".join(events)
 
         assert '"type": "content_block_start"' in joined
-        assert "refused" in joined
+        # Generic error text, not raw exception message
+        assert "internal error" in joined.lower()
+        assert "refused" not in joined
         assert '"type": "message_stop"' in joined
 
     @pytest.mark.asyncio
@@ -4516,29 +4520,55 @@ class TestParseBetaFlags:
         flags = anthropic_compat._parse_beta_flags(request)
         assert flags == []
 
-    def test_parses_single_flag(self):
+    def test_parses_single_recognized_flag(self):
         request = make_request({"anthropic-beta": "prompt-caching-2024-07-31"})
         flags = anthropic_compat._parse_beta_flags(request)
         assert flags == ["prompt-caching-2024-07-31"]
 
-    def test_parses_multiple_comma_separated_flags(self):
+    def test_parses_multiple_recognized_flags(self):
         request = make_request({
             "anthropic-beta": "max-tokens-3-5-sonnet-2024-07-15,prompt-caching-2024-07-31"
         })
         flags = anthropic_compat._parse_beta_flags(request)
         assert flags == ["max-tokens-3-5-sonnet-2024-07-15", "prompt-caching-2024-07-31"]
 
-    def test_strips_whitespace_around_flags(self):
+    def test_all_four_recognized_flags(self):
+        all_flags = ",".join([
+            "prompt-caching-2024-07-31",
+            "max-tokens-3-5-sonnet-2024-07-15",
+            "output-128k-2025-02-19",
+            "extended-thinking-2025-01-24",
+        ])
+        request = make_request({"anthropic-beta": all_flags})
+        flags = anthropic_compat._parse_beta_flags(request)
+        assert len(flags) == 4
+        assert set(flags) == set(anthropic_compat.RECOGNIZED_BETA_FLAGS)
+
+    def test_filters_unrecognized_flags(self):
         request = make_request({
-            "anthropic-beta": " flag-a , flag-b , flag-c "
+            "anthropic-beta": "prompt-caching-2024-07-31,unknown-feature-2025-99-99"
         })
         flags = anthropic_compat._parse_beta_flags(request)
-        assert flags == ["flag-a", "flag-b", "flag-c"]
+        assert flags == ["prompt-caching-2024-07-31"]
+
+    def test_all_unrecognized_returns_empty(self):
+        request = make_request({
+            "anthropic-beta": "future-feature-a,future-feature-b"
+        })
+        flags = anthropic_compat._parse_beta_flags(request)
+        assert flags == []
+
+    def test_strips_whitespace_around_flags(self):
+        request = make_request({
+            "anthropic-beta": " prompt-caching-2024-07-31 , output-128k-2025-02-19 "
+        })
+        flags = anthropic_compat._parse_beta_flags(request)
+        assert flags == ["prompt-caching-2024-07-31", "output-128k-2025-02-19"]
 
     def test_ignores_empty_segments(self):
-        request = make_request({"anthropic-beta": "flag-a,,flag-b,"})
+        request = make_request({"anthropic-beta": "prompt-caching-2024-07-31,,output-128k-2025-02-19,"})
         flags = anthropic_compat._parse_beta_flags(request)
-        assert flags == ["flag-a", "flag-b"]
+        assert flags == ["prompt-caching-2024-07-31", "output-128k-2025-02-19"]
 
     def test_empty_string_returns_empty_list(self):
         request = make_request({"anthropic-beta": ""})
@@ -4546,10 +4576,42 @@ class TestParseBetaFlags:
         assert flags == []
 
 
-class TestBetaFlagsIntegration:
-    """Verify that requests with anthropic-beta header are accepted."""
+class TestAnthropicHeaders:
+    """Verify _anthropic_headers builds correct response headers."""
 
-    def test_messages_accepts_beta_header(self):
+    def test_basic_headers(self):
+        headers = anthropic_compat._anthropic_headers(request_id="req_123")
+        assert headers["anthropic-version"] == "2023-06-01"
+        assert headers["request-id"] == "req_123"
+        assert "anthropic-beta" not in headers
+
+    def test_no_beta_header_when_empty(self):
+        headers = anthropic_compat._anthropic_headers(request_id="req_1", beta_flags=[])
+        assert "anthropic-beta" not in headers
+
+    def test_single_beta_flag_header(self):
+        headers = anthropic_compat._anthropic_headers(
+            request_id="req_1",
+            beta_flags=["prompt-caching-2024-07-31"],
+        )
+        assert headers["anthropic-beta"] == "prompt-caching-2024-07-31"
+
+    def test_multiple_beta_flags_header(self):
+        headers = anthropic_compat._anthropic_headers(
+            request_id="req_1",
+            beta_flags=["prompt-caching-2024-07-31", "output-128k-2025-02-19"],
+        )
+        assert headers["anthropic-beta"] == "prompt-caching-2024-07-31,output-128k-2025-02-19"
+
+    def test_no_beta_header_when_none(self):
+        headers = anthropic_compat._anthropic_headers(request_id="req_1", beta_flags=None)
+        assert "anthropic-beta" not in headers
+
+
+class TestBetaFlagsIntegration:
+    """Verify that beta header is accepted and echoed back in responses."""
+
+    def test_messages_echoes_recognized_beta_flags(self):
         fake_llm = _FakeLLM(
             consume_result=_fake_openai_result(),
             stream_chunks=[],
@@ -4572,8 +4634,60 @@ class TestBetaFlagsIntegration:
                 },
             )
             assert resp.status_code == 200
+            beta_resp = resp.headers.get("anthropic-beta")
+            assert beta_resp is not None
+            echoed = set(beta_resp.split(","))
+            assert "max-tokens-3-5-sonnet-2024-07-15" in echoed
+            assert "prompt-caching-2024-07-31" in echoed
 
-    def test_count_tokens_accepts_beta_header(self):
+    def test_messages_does_not_echo_unrecognized_flags(self):
+        fake_llm = _FakeLLM(
+            consume_result=_fake_openai_result(),
+            stream_chunks=[],
+        )
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+            patch.object(anthropic_compat, "llm_mod") as mock_llm_mod,
+        ):
+            mock_mapper.list_downstream = AsyncMock()
+            mock_mapper.resolve_request_config = MagicMock(return_value={})
+            mock_mapper.is_direct_task = MagicMock(return_value=False)
+            mock_llm_mod.LLM = MagicMock(return_value=fake_llm)
+
+            client = _make_client()
+            resp = client.post(
+                "/v1/messages", json=_ANTHRO_BODY,
+                headers={
+                    "authorization": "Bearer test-key",
+                    "anthropic-beta": "unknown-future-feature-2099-01-01",
+                },
+            )
+            assert resp.status_code == 200
+            assert resp.headers.get("anthropic-beta") is None
+
+    def test_messages_no_beta_header_when_not_sent(self):
+        fake_llm = _FakeLLM(
+            consume_result=_fake_openai_result(),
+            stream_chunks=[],
+        )
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+            patch.object(anthropic_compat, "llm_mod") as mock_llm_mod,
+        ):
+            mock_mapper.list_downstream = AsyncMock()
+            mock_mapper.resolve_request_config = MagicMock(return_value={})
+            mock_mapper.is_direct_task = MagicMock(return_value=False)
+            mock_llm_mod.LLM = MagicMock(return_value=fake_llm)
+
+            client = _make_client()
+            resp = client.post(
+                "/v1/messages", json=_ANTHRO_BODY,
+                headers={"authorization": "Bearer test-key"},
+            )
+            assert resp.status_code == 200
+            assert resp.headers.get("anthropic-beta") is None
+
+    def test_count_tokens_echoes_beta_flags(self):
         client = _make_client()
         resp = client.post(
             "/v1/messages/count_tokens", json=_ANTHRO_BODY,
@@ -4583,6 +4697,78 @@ class TestBetaFlagsIntegration:
             },
         )
         assert resp.status_code == 200
+        assert resp.headers.get("anthropic-beta") == "prompt-caching-2024-07-31"
+
+    def test_streaming_echoes_beta_flags(self):
+        fake_llm = _FakeLLM(
+            stream_chunks=['data: {"choices": [{"delta": {"content": "Hi"}}]}\n\n',
+                           'data: {"choices": [{"delta": {}, "finish_reason": "stop"}]}\n\n'],
+        )
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+            patch.object(anthropic_compat, "llm_mod") as mock_llm_mod,
+        ):
+            mock_mapper.list_downstream = AsyncMock()
+            mock_mapper.resolve_request_config = MagicMock(return_value={})
+            mock_mapper.is_direct_task = MagicMock(return_value=False)
+            mock_llm_mod.LLM = MagicMock(return_value=fake_llm)
+
+            client = _make_client()
+            stream_body = {**_ANTHRO_BODY, "stream": True}
+            resp = client.post(
+                "/v1/messages", json=stream_body,
+                headers={
+                    "authorization": "Bearer test-key",
+                    "anthropic-beta": "extended-thinking-2025-01-24,output-128k-2025-02-19",
+                },
+            )
+            assert resp.status_code == 200
+            beta_resp = resp.headers.get("anthropic-beta")
+            assert beta_resp is not None
+            echoed = set(beta_resp.split(","))
+            assert "extended-thinking-2025-01-24" in echoed
+            assert "output-128k-2025-02-19" in echoed
+
+    def test_beta_flags_echoed_on_error_responses(self):
+        """Even error responses should echo recognized beta flags."""
+        client = _make_client()
+        # Missing max_tokens triggers validation error
+        bad_body = {"model": "test", "messages": [{"role": "user", "content": "hi"}]}
+        resp = client.post(
+            "/v1/messages", json=bad_body,
+            headers={
+                "authorization": "Bearer test-key",
+                "anthropic-beta": "prompt-caching-2024-07-31",
+            },
+        )
+        assert resp.status_code == 400
+        assert resp.headers.get("anthropic-beta") == "prompt-caching-2024-07-31"
+
+    def test_mixed_recognized_and_unrecognized_flags(self):
+        """Only recognized flags are echoed; unrecognized are silently dropped."""
+        fake_llm = _FakeLLM(
+            consume_result=_fake_openai_result(),
+            stream_chunks=[],
+        )
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+            patch.object(anthropic_compat, "llm_mod") as mock_llm_mod,
+        ):
+            mock_mapper.list_downstream = AsyncMock()
+            mock_mapper.resolve_request_config = MagicMock(return_value={})
+            mock_mapper.is_direct_task = MagicMock(return_value=False)
+            mock_llm_mod.LLM = MagicMock(return_value=fake_llm)
+
+            client = _make_client()
+            resp = client.post(
+                "/v1/messages", json=_ANTHRO_BODY,
+                headers={
+                    "authorization": "Bearer test-key",
+                    "anthropic-beta": "prompt-caching-2024-07-31,unknown-flag-2099",
+                },
+            )
+            assert resp.status_code == 200
+            assert resp.headers.get("anthropic-beta") == "prompt-caching-2024-07-31"
 
 
 # ---------------------------------------------------------------------------

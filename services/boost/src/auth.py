@@ -17,7 +17,11 @@ async def get_api_key(
   # Try Authorization header first (standard OpenAI-style)
   candidate = None
   if api_key_header is not None:
-    candidate = api_key_header.replace("Bearer ", "").replace("bearer ", "")
+    # Case-insensitive stripping of the "Bearer " scheme prefix
+    raw = api_key_header
+    if raw[:7].lower() == "bearer ":
+      raw = raw[7:]
+    candidate = raw
 
   # Fall back to x-api-key header (standard Anthropic-style)
   if not candidate and x_api_key is not None:

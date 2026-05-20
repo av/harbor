@@ -2446,10 +2446,11 @@ class TestStreamingEdgeCases:
 
         assert event_types[0] == "response.created"
         assert event_types[-1] == "response.failed"
-        # Should have error text in delta
+        # Should have generic error text in delta (not raw exception to avoid leaking internals)
         error_deltas = [d for t, d in parsed if t == "response.output_text.delta"]
         assert len(error_deltas) == 1
-        assert "connection refused" in error_deltas[0]["delta"]
+        assert "internal error" in error_deltas[0]["delta"].lower()
+        assert "connection refused" not in error_deltas[0]["delta"]
 
         # The failed event should have failed status
         failed = [d for t, d in parsed if t == "response.failed"]
@@ -2475,13 +2476,15 @@ class TestStreamingEdgeCases:
         deltas = [d for t, d in parsed if t == "response.output_text.delta"]
         assert len(deltas) == 2  # original + error
         assert deltas[0]["delta"] == "partial"
-        assert "timeout" in deltas[1]["delta"]
+        # Generic error message, not raw exception
+        assert "internal error" in deltas[1]["delta"].lower()
+        assert "timeout" not in deltas[1]["delta"]
 
         # Text done should contain both original + error text
         text_done = [d for t, d in parsed if t == "response.output_text.done"]
         assert len(text_done) == 1
         assert "partial" in text_done[0]["text"]
-        assert "timeout" in text_done[0]["text"]
+        assert "internal error" in text_done[0]["text"].lower()
 
         # Failed terminal event with failed status
         failed = [d for t, d in parsed if t == "response.failed"]
@@ -3158,7 +3161,7 @@ class TestReasoningStreaming:
         # Error text should appear
         error_deltas = [d for t, d in parsed if t == "response.output_text.delta"]
         assert len(error_deltas) == 1
-        assert "connection lost" in error_deltas[0]["delta"]
+        assert "error" in error_deltas[0]["delta"].lower()
 
         # Failed terminal event with failed status
         failed = [d for t, d in parsed if t == "response.failed"]
