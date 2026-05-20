@@ -1,5 +1,6 @@
 import json
 import asyncio
+import shortuuid
 
 from fastapi import FastAPI, Request, HTTPException, Depends, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -13,6 +14,8 @@ from auth import get_api_key
 from compat_utils import (
     ANTHROPIC_VERSION,
     ANTHROPIC_VERSION_HEADER,
+    OPENAI_REQUEST_ID_HEADER,
+    REQUEST_ID_HEADER,
     SSE_HEADERS,
 )
 from log import setup_logger
@@ -77,17 +80,22 @@ async def _http_exception_handler(request: Request, exc: HTTPException):
 
   if path.startswith("/v1/messages"):
     error_type = _ANTHROPIC_ERROR_TYPE_MAP.get(exc.status_code, "api_error")
+    request_id = f"req_{shortuuid.random()}"
     return JSONResponse(
       status_code=exc.status_code,
       content={
         "type": "error",
         "error": {"type": error_type, "message": safe_detail},
       },
-      headers={ANTHROPIC_VERSION_HEADER: ANTHROPIC_VERSION},
+      headers={
+        ANTHROPIC_VERSION_HEADER: ANTHROPIC_VERSION,
+        REQUEST_ID_HEADER: request_id,
+      },
     )
 
   if path.startswith("/v1/responses"):
     error_type = _OPENAI_ERROR_TYPE_MAP.get(exc.status_code, "server_error")
+    request_id = f"req_{shortuuid.random()}"
     return JSONResponse(
       status_code=exc.status_code,
       content={
@@ -98,18 +106,23 @@ async def _http_exception_handler(request: Request, exc: HTTPException):
           "code": None,
         },
       },
+      headers={OPENAI_REQUEST_ID_HEADER: request_id},
     )
 
   # Anthropic SDK hitting /v1/models with bad auth — detect via headers
   if _is_anthropic_client(request):
     error_type = _ANTHROPIC_ERROR_TYPE_MAP.get(exc.status_code, "api_error")
+    request_id = f"req_{shortuuid.random()}"
     return JSONResponse(
       status_code=exc.status_code,
       content={
         "type": "error",
         "error": {"type": error_type, "message": safe_detail},
       },
-      headers={ANTHROPIC_VERSION_HEADER: ANTHROPIC_VERSION},
+      headers={
+        ANTHROPIC_VERSION_HEADER: ANTHROPIC_VERSION,
+        REQUEST_ID_HEADER: request_id,
+      },
     )
 
   # Default FastAPI behavior for other paths

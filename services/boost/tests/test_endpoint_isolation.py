@@ -965,6 +965,50 @@ class TestHeadersIsolation:
         assert "anthropic-version" in resp.headers
 
 
+class TestFullAppSdkRequestIdHeaders:
+    """Verify middleware preserves SDK-specific request ID headers."""
+
+    def test_responses_stub_request_ids_are_not_overwritten(self):
+        client = _make_client(app=_build_full_app(), auth_key="real-key")
+
+        for method, path in [
+            ("get", "/v1/responses/resp_x"),
+            ("delete", "/v1/responses/resp_x"),
+            ("post", "/v1/responses/resp_x/cancel"),
+            ("get", "/v1/responses/resp_x/input_items"),
+        ]:
+            resp = getattr(client, method)(
+                path,
+                headers={"authorization": "Bearer real-key"},
+            )
+
+            assert resp.status_code == 404
+            assert resp.headers["x-request-id"].startswith("req_")
+
+    def test_responses_auth_errors_use_openai_request_id(self):
+        client = _make_client(app=_build_full_app(), auth_key="real-key")
+
+        resp = client.get(
+            "/v1/responses/resp_x",
+            headers={"authorization": "Bearer wrong-key"},
+        )
+
+        assert resp.status_code == 401
+        assert resp.headers["x-request-id"].startswith("req_")
+
+    def test_anthropic_auth_errors_use_anthropic_request_id(self):
+        client = _make_client(app=_build_full_app(), auth_key="real-key")
+
+        resp = client.post(
+            "/v1/messages/batches",
+            headers={"x-api-key": "wrong-key"},
+        )
+
+        assert resp.status_code == 401
+        assert resp.headers["request-id"].startswith("req_")
+        assert resp.headers.get("anthropic-version") == "2023-06-01"
+
+
 # ===========================================================================
 # 15. Edge cases for endpoint matching
 # ===========================================================================

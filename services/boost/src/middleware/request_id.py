@@ -18,7 +18,8 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
     request_id = request.headers.get("X-Request-ID", default_request_id)
     request_id_var.set(request_id)
     response = await call_next(request)
-    response.headers["X-Request-ID"] = request_id
+    if "X-Request-ID" not in response.headers:
+      response.headers["X-Request-ID"] = request_id
 
     scratch_dir = SCRATCH_ROOT / request_id
     if scratch_dir.is_dir():

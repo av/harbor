@@ -439,6 +439,9 @@
 - label: Boost /v1/chat/completions endpoint remains fully functional after compat layer additions, verified by dedicated regression test suite covering streaming, non-streaming, auth, validation, and BackendError handling
   command: test -f services/boost/tests/test_chat_completions.py && rg -q 'v1/chat/completions' services/boost/tests/test_chat_completions.py
   tags: [spec, implemented]
+- label: Boost full-app Responses and Anthropic compatibility routes preserve SDK request ID headers on stub and auth-error responses
+  command: python -m pytest services/boost/tests/test_endpoint_isolation.py::TestFullAppSdkRequestIdHeaders -q
+  tags: [spec, boost-full-app-sdk-request-ids, implemented]
 
 ## anthropic compat
 - label: Boost exposes POST /v1/messages endpoint for Anthropic Messages API compatibility
