@@ -304,6 +304,17 @@ def _build_openai_body(body: dict):
     if effort:
       openai_body["reasoning_effort"] = effort
 
+  # Truncation: accept without error. Backends handle their own context windows,
+  # so we cannot guarantee truncation behavior — log a warning when requested.
+  truncation = body.get("truncation")
+  if truncation and isinstance(truncation, dict):
+    trunc_type = truncation.get("type")
+    if trunc_type == "auto":
+      logger.warning(
+        "truncation type 'auto' requested but Harbor Boost cannot guarantee "
+        "truncation — backends manage their own context windows"
+      )
+
   if body.get("stream", False):
     openai_body["stream"] = True
     openai_body["stream_options"] = {"include_usage": True}
@@ -398,7 +409,7 @@ def _map_status(finish_reason):
   return "completed"
 
 
-def _build_responses_response(openai_result, request_model, response_id):
+def _build_responses_response(openai_result, request_model, response_id, request_body=None):
   """Build a full Responses API response object."""
   finish_reason = dotty.get(openai_result, "choices.0.finish_reason", "stop")
   usage = dotty.get(openai_result, "usage", {})
@@ -409,6 +420,18 @@ def _build_responses_response(openai_result, request_model, response_id):
   reasoning_tokens = dotty.get(
     openai_result, "usage.completion_tokens_details.reasoning_tokens", 0
   ) or 0
+
+  # Passthrough metadata from request if provided
+  metadata = {}
+  if request_body and isinstance(request_body.get("metadata"), dict):
+    metadata = request_body["metadata"]
+
+  # Determine truncation value from request
+  truncation = "disabled"
+  if request_body:
+    trunc = request_body.get("truncation")
+    if trunc and isinstance(trunc, dict) and trunc.get("type") == "auto":
+      truncation = "auto"
 
   return {
     "id": response_id,
@@ -423,11 +446,12 @@ def _build_responses_response(openai_result, request_model, response_id):
       total_tokens=usage.get("total_tokens", 0),
       reasoning_tokens=reasoning_tokens,
     ),
-    "metadata": {},
+    "store": False,
+    "metadata": metadata,
     "temperature": None,
     "top_p": None,
     "max_output_tokens": None,
-    "truncation": "disabled",
+    "truncation": truncation,
     "tool_choice": "auto",
     "tools": [],
     "text": {
@@ -443,7 +467,7 @@ def _build_responses_response(openai_result, request_model, response_id):
 
 
 async def _responses_stream_converter(
-  response_stream, request_model, response_id
+  response_stream, request_model, response_id, request_body=None
 ):
   """Convert Harbor Boost's OpenAI-format SSE stream to Responses API SSE events.
 
@@ -471,6 +495,18 @@ async def _responses_stream_converter(
   output_tokens = 0
   finish_reason = None
 
+  # Passthrough metadata from request if provided
+  metadata = {}
+  if request_body and isinstance(request_body.get("metadata"), dict):
+    metadata = request_body["metadata"]
+
+  # Determine truncation value from request
+  truncation = "disabled"
+  if request_body:
+    trunc = request_body.get("truncation")
+    if trunc and isinstance(trunc, dict) and trunc.get("type") == "auto":
+      truncation = "auto"
+
   # Skeleton response for the created event
   skeleton = {
     "id": response_id,
@@ -480,11 +516,12 @@ async def _responses_stream_converter(
     "model": request_model,
     "output": [],
     "usage": _make_usage(),
-    "metadata": {},
+    "store": False,
+    "metadata": metadata,
     "temperature": None,
     "top_p": None,
     "max_output_tokens": None,
-    "truncation": "disabled",
+    "truncation": truncation,
     "tool_choice": "auto",
     "tools": [],
     "text": {"format": {"type": "text"}},
@@ -990,6 +1027,13 @@ async def post_responses(request: Request, api_key: str = Depends(get_api_key)):
     is_stream = json_body.get("stream", False)
     response_id = f"resp_{shortuuid.random()}"
 
+    # Log if client requests persistence (Harbor Boost does not persist responses)
+    if json_body.get("store") is True:
+      logger.debug(
+        "store=true requested but Harbor Boost does not persist responses; "
+        "response will have store=false"
+      )
+
     openai_body = _build_openai_body(json_body)
 
     # Refresh downstream models for routing
@@ -1006,7 +1050,7 @@ async def post_responses(request: Request, api_key: str = Depends(get_api_key)):
       and proxy.boost_params.get("workflow") is None
     ):
       result = await proxy.chat_completion()
-      response = _build_responses_response(result, request_model, response_id)
+      response = _build_responses_response(result, request_model, response_id, request_body=json_body)
       return JSONResponse(
         content=response,
         status_code=200,
@@ -1020,13 +1064,13 @@ async def post_responses(request: Request, api_key: str = Depends(get_api_key)):
 
     if is_stream:
       return StreamingResponse(
-        _responses_stream_converter(completion, request_model, response_id),
+        _responses_stream_converter(completion, request_model, response_id, request_body=json_body),
         media_type="text/event-stream",
         headers={REQUEST_ID_HEADER: request_id},
       )
     else:
       result = await proxy.consume_stream(completion)
-      response = _build_responses_response(result, request_model, response_id)
+      response = _build_responses_response(result, request_model, response_id, request_body=json_body)
       return JSONResponse(
         content=response,
         status_code=200,

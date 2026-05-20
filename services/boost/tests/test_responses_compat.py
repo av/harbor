@@ -3293,3 +3293,413 @@ class TestInstructionsEdgeCases:
         assert len(msgs) == 2
         assert msgs[0] == {"role": "system", "content": "be helpful"}
         assert msgs[1] == {"role": "user", "content": ""}
+
+
+# ---------------------------------------------------------------------------
+# Truncation parameter handling
+# ---------------------------------------------------------------------------
+
+class TestTruncationParameter:
+    """Verify truncation parameter is accepted and handled correctly."""
+
+    def test_truncation_auto_accepted_in_build_body(self):
+        """truncation: {type: auto} should not cause an error."""
+        body = {
+            "model": "gpt-4o",
+            "input": "hi",
+            "truncation": {"type": "auto"},
+        }
+        result = responses_compat._build_openai_body(body)
+        assert result["model"] == "gpt-4o"
+        # truncation should NOT appear in the OpenAI body
+        assert "truncation" not in result
+
+    def test_truncation_disabled_accepted(self):
+        """truncation: {type: disabled} should be silently accepted."""
+        body = {
+            "model": "gpt-4o",
+            "input": "hi",
+            "truncation": {"type": "disabled"},
+        }
+        result = responses_compat._build_openai_body(body)
+        assert "truncation" not in result
+
+    def test_no_truncation_accepted(self):
+        """Absent truncation should not cause any issues."""
+        body = {"model": "gpt-4o", "input": "hi"}
+        result = responses_compat._build_openai_body(body)
+        assert "truncation" not in result
+
+    def test_truncation_auto_logs_warning(self):
+        """truncation auto should log a warning."""
+        body = {
+            "model": "gpt-4o",
+            "input": "hi",
+            "truncation": {"type": "auto"},
+        }
+        with patch.object(responses_compat.logger, "warning") as mock_warn:
+            responses_compat._build_openai_body(body)
+            mock_warn.assert_called_once()
+            assert "truncation" in mock_warn.call_args[0][0].lower()
+
+    def test_truncation_disabled_no_warning(self):
+        """truncation disabled should NOT log a warning."""
+        body = {
+            "model": "gpt-4o",
+            "input": "hi",
+            "truncation": {"type": "disabled"},
+        }
+        with patch.object(responses_compat.logger, "warning") as mock_warn:
+            responses_compat._build_openai_body(body)
+            mock_warn.assert_not_called()
+
+    def test_truncation_none_no_warning(self):
+        """truncation: null should NOT log a warning."""
+        body = {
+            "model": "gpt-4o",
+            "input": "hi",
+            "truncation": None,
+        }
+        with patch.object(responses_compat.logger, "warning") as mock_warn:
+            responses_compat._build_openai_body(body)
+            mock_warn.assert_not_called()
+
+    def test_truncation_auto_reflected_in_response(self):
+        """Response should reflect truncation=auto when requested."""
+        openai_result = {
+            "choices": [{"index": 0, "message": {"role": "assistant", "content": "hi"}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 5, "completion_tokens": 1, "total_tokens": 6},
+        }
+        request_body = {"truncation": {"type": "auto"}}
+        resp = responses_compat._build_responses_response(
+            openai_result, "gpt-4o", "resp_test", request_body=request_body
+        )
+        assert resp["truncation"] == "auto"
+
+    def test_truncation_disabled_in_response_by_default(self):
+        """Response should show truncation=disabled when not requested."""
+        openai_result = {
+            "choices": [{"index": 0, "message": {"role": "assistant", "content": "hi"}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 5, "completion_tokens": 1, "total_tokens": 6},
+        }
+        resp = responses_compat._build_responses_response(
+            openai_result, "gpt-4o", "resp_test"
+        )
+        assert resp["truncation"] == "disabled"
+
+
+# ---------------------------------------------------------------------------
+# Store and metadata parameter handling
+# ---------------------------------------------------------------------------
+
+class TestStoreAndMetadataParameters:
+    """Verify store and metadata parameters are accepted and handled correctly."""
+
+    def test_store_false_in_response_by_default(self):
+        """Response should always have store=false."""
+        openai_result = {
+            "choices": [{"index": 0, "message": {"role": "assistant", "content": "hi"}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 5, "completion_tokens": 1, "total_tokens": 6},
+        }
+        resp = responses_compat._build_responses_response(
+            openai_result, "gpt-4o", "resp_test"
+        )
+        assert resp["store"] is False
+
+    def test_store_false_even_when_requested_true(self):
+        """Response should have store=false even if request says store=true."""
+        openai_result = {
+            "choices": [{"index": 0, "message": {"role": "assistant", "content": "hi"}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 5, "completion_tokens": 1, "total_tokens": 6},
+        }
+        request_body = {"store": True}
+        resp = responses_compat._build_responses_response(
+            openai_result, "gpt-4o", "resp_test", request_body=request_body
+        )
+        assert resp["store"] is False
+
+    def test_metadata_empty_by_default(self):
+        """Response metadata should be empty dict when not provided in request."""
+        openai_result = {
+            "choices": [{"index": 0, "message": {"role": "assistant", "content": "hi"}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 5, "completion_tokens": 1, "total_tokens": 6},
+        }
+        resp = responses_compat._build_responses_response(
+            openai_result, "gpt-4o", "resp_test"
+        )
+        assert resp["metadata"] == {}
+
+    def test_metadata_passthrough_from_request(self):
+        """Response should include metadata from request."""
+        openai_result = {
+            "choices": [{"index": 0, "message": {"role": "assistant", "content": "hi"}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 5, "completion_tokens": 1, "total_tokens": 6},
+        }
+        request_body = {"metadata": {"user_id": "u123", "session": "abc"}}
+        resp = responses_compat._build_responses_response(
+            openai_result, "gpt-4o", "resp_test", request_body=request_body
+        )
+        assert resp["metadata"] == {"user_id": "u123", "session": "abc"}
+
+    def test_metadata_null_treated_as_empty(self):
+        """Null metadata in request should produce empty dict in response."""
+        openai_result = {
+            "choices": [{"index": 0, "message": {"role": "assistant", "content": "hi"}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 5, "completion_tokens": 1, "total_tokens": 6},
+        }
+        request_body = {"metadata": None}
+        resp = responses_compat._build_responses_response(
+            openai_result, "gpt-4o", "resp_test", request_body=request_body
+        )
+        assert resp["metadata"] == {}
+
+    def test_metadata_non_dict_treated_as_empty(self):
+        """Non-dict metadata in request should produce empty dict in response."""
+        openai_result = {
+            "choices": [{"index": 0, "message": {"role": "assistant", "content": "hi"}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 5, "completion_tokens": 1, "total_tokens": 6},
+        }
+        request_body = {"metadata": "not a dict"}
+        resp = responses_compat._build_responses_response(
+            openai_result, "gpt-4o", "resp_test", request_body=request_body
+        )
+        assert resp["metadata"] == {}
+
+    def test_store_true_logs_debug(self):
+        """store=true should produce a debug log."""
+        with patch.object(responses_compat.logger, "debug") as mock_debug:
+            # We need to test via the route handler, so use integration
+            pass  # Tested in integration class below
+
+
+# ---------------------------------------------------------------------------
+# Store/metadata/truncation integration tests
+# ---------------------------------------------------------------------------
+
+class TestStoreMetadataTruncationIntegration:
+    """Integration tests for store, metadata, and truncation through the route handler."""
+
+    @pytest.fixture(autouse=True)
+    def setup_app(self, monkeypatch):
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
+        import config as _cfg
+        monkeypatch.setattr(_cfg, "BOOST_AUTH", [])
+
+        app = FastAPI()
+        app.include_router(responses_compat.responses_compatible_routes)
+        self.client = TestClient(app)
+
+    def _mock_llm(self, monkeypatch, result=None):
+        """Set up mocked LLM that returns a simple result."""
+        if result is None:
+            result = {
+                "id": "chatcmpl-1",
+                "choices": [{"index": 0, "message": {"role": "assistant", "content": "ok"}, "finish_reason": "stop"}],
+                "usage": {"prompt_tokens": 3, "completion_tokens": 1, "total_tokens": 4},
+            }
+
+        async def mock_list_downstream():
+            return []
+
+        mock_llm = MagicMock()
+        mock_llm.workflow = None
+        mock_llm.boost_params = {}
+
+        async def mock_serve():
+            async def gen():
+                yield f'data: {json.dumps(result)}\n\n'
+                yield 'data: [DONE]\n\n'
+            return gen()
+
+        async def mock_consume(stream):
+            return result
+
+        mock_llm.serve = mock_serve
+        mock_llm.consume_stream = mock_consume
+
+        monkeypatch.setattr(responses_compat.mapper, "list_downstream", mock_list_downstream)
+        monkeypatch.setattr(responses_compat.mapper, "resolve_request_config", lambda body: {})
+        monkeypatch.setattr(responses_compat.mapper, "is_direct_task", lambda proxy: False)
+        monkeypatch.setattr(responses_compat.llm_mod, "LLM", lambda **kw: mock_llm)
+        return mock_llm
+
+    def test_store_true_accepted_non_streaming(self, monkeypatch):
+        """Request with store=true should succeed and return store=false."""
+        self._mock_llm(monkeypatch)
+        resp = self.client.post("/v1/responses", json={
+            "model": "gpt-4o",
+            "input": "hi",
+            "store": True,
+        })
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["store"] is False
+
+    def test_store_false_accepted_non_streaming(self, monkeypatch):
+        """Request with store=false should succeed and return store=false."""
+        self._mock_llm(monkeypatch)
+        resp = self.client.post("/v1/responses", json={
+            "model": "gpt-4o",
+            "input": "hi",
+            "store": False,
+        })
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["store"] is False
+
+    def test_metadata_passthrough_non_streaming(self, monkeypatch):
+        """metadata from request should appear in response."""
+        self._mock_llm(monkeypatch)
+        resp = self.client.post("/v1/responses", json={
+            "model": "gpt-4o",
+            "input": "hi",
+            "metadata": {"tag": "test", "priority": "high"},
+        })
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["metadata"] == {"tag": "test", "priority": "high"}
+
+    def test_metadata_absent_returns_empty_dict(self, monkeypatch):
+        """No metadata in request should produce empty dict in response."""
+        self._mock_llm(monkeypatch)
+        resp = self.client.post("/v1/responses", json={
+            "model": "gpt-4o",
+            "input": "hi",
+        })
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["metadata"] == {}
+
+    def test_truncation_auto_accepted_non_streaming(self, monkeypatch):
+        """truncation auto should be accepted and reflected in response."""
+        self._mock_llm(monkeypatch)
+        resp = self.client.post("/v1/responses", json={
+            "model": "gpt-4o",
+            "input": "hi",
+            "truncation": {"type": "auto"},
+        })
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["truncation"] == "auto"
+
+    def test_truncation_disabled_in_response(self, monkeypatch):
+        """Default truncation should be disabled."""
+        self._mock_llm(monkeypatch)
+        resp = self.client.post("/v1/responses", json={
+            "model": "gpt-4o",
+            "input": "hi",
+        })
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["truncation"] == "disabled"
+
+    def test_store_true_logs_debug(self, monkeypatch):
+        """store=true should trigger a debug log message."""
+        self._mock_llm(monkeypatch)
+        with patch.object(responses_compat.logger, "debug") as mock_debug:
+            resp = self.client.post("/v1/responses", json={
+                "model": "gpt-4o",
+                "input": "hi",
+                "store": True,
+            })
+            assert resp.status_code == 200
+            # Verify debug was called with store-related message
+            calls = [str(c) for c in mock_debug.call_args_list]
+            assert any("store" in c.lower() for c in calls)
+
+    def test_store_false_no_debug_log(self, monkeypatch):
+        """store=false should NOT trigger the store debug log."""
+        self._mock_llm(monkeypatch)
+        with patch.object(responses_compat.logger, "debug") as mock_debug:
+            resp = self.client.post("/v1/responses", json={
+                "model": "gpt-4o",
+                "input": "hi",
+                "store": False,
+            })
+            assert resp.status_code == 200
+            store_calls = [c for c in mock_debug.call_args_list
+                          if "store" in str(c).lower()]
+            assert len(store_calls) == 0
+
+    def test_all_three_params_together_non_streaming(self, monkeypatch):
+        """store, metadata, and truncation together should all work."""
+        self._mock_llm(monkeypatch)
+        resp = self.client.post("/v1/responses", json={
+            "model": "gpt-4o",
+            "input": "hi",
+            "store": True,
+            "metadata": {"env": "test"},
+            "truncation": {"type": "auto"},
+        })
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["store"] is False
+        assert body["metadata"] == {"env": "test"}
+        assert body["truncation"] == "auto"
+
+    def test_metadata_in_streaming_response(self, monkeypatch):
+        """metadata should appear in streaming skeleton/completed events."""
+        self._mock_llm(monkeypatch)
+        resp = self.client.post("/v1/responses", json={
+            "model": "gpt-4o",
+            "input": "hi",
+            "metadata": {"session_id": "s42"},
+            "stream": True,
+        })
+        assert resp.status_code == 200
+        text = resp.text
+        # Check created event has metadata
+        events = [line for line in text.split("\n") if line.startswith("data: ")]
+        found_metadata = False
+        for event_line in events:
+            try:
+                data = json.loads(event_line[6:])
+                if data.get("type") == "response.created":
+                    assert data["response"]["metadata"] == {"session_id": "s42"}
+                    assert data["response"]["store"] is False
+                    found_metadata = True
+            except (json.JSONDecodeError, KeyError):
+                continue
+        assert found_metadata, "response.created event should contain metadata"
+
+    def test_store_false_in_streaming_completed(self, monkeypatch):
+        """store should be false in the streaming completed response."""
+        self._mock_llm(monkeypatch)
+        resp = self.client.post("/v1/responses", json={
+            "model": "gpt-4o",
+            "input": "hi",
+            "store": True,
+            "stream": True,
+        })
+        assert resp.status_code == 200
+        text = resp.text
+        events = [line for line in text.split("\n") if line.startswith("data: ")]
+        for event_line in events:
+            try:
+                data = json.loads(event_line[6:])
+                if data.get("type") == "response.completed":
+                    assert data["response"]["store"] is False
+            except (json.JSONDecodeError, KeyError):
+                continue
+
+    def test_truncation_auto_in_streaming_skeleton(self, monkeypatch):
+        """truncation=auto should appear in the streaming skeleton."""
+        self._mock_llm(monkeypatch)
+        resp = self.client.post("/v1/responses", json={
+            "model": "gpt-4o",
+            "input": "hi",
+            "truncation": {"type": "auto"},
+            "stream": True,
+        })
+        assert resp.status_code == 200
+        text = resp.text
+        events = [line for line in text.split("\n") if line.startswith("data: ")]
+        for event_line in events:
+            try:
+                data = json.loads(event_line[6:])
+                if data.get("type") == "response.created":
+                    assert data["response"]["truncation"] == "auto"
+            except (json.JSONDecodeError, KeyError):
+                continue
