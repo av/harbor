@@ -442,6 +442,9 @@
 - label: Boost full-app Responses and Anthropic compatibility routes preserve SDK request ID headers on stub and auth-error responses
   command: python -m pytest services/boost/tests/test_endpoint_isolation.py::TestFullAppSdkRequestIdHeaders -q
   tags: [spec, boost-full-app-sdk-request-ids, implemented]
+- label: Boost /v1/models returns SDK-specific request ID headers on list, lookup, and not-found responses for both OpenAI and Anthropic clients
+  command: python -m pytest services/boost/tests/test_models.py::TestModelRequestIdHeaders -q
+  tags: [spec, boost-models-sdk-request-ids, implemented]
 
 ## anthropic compat
 - label: Boost exposes POST /v1/messages endpoint for Anthropic Messages API compatibility

@@ -11,7 +11,12 @@ from starlette.testclient import TestClient
 from fastapi import Request
 
 import main
-from compat_utils import ANTHROPIC_VERSION_HEADER, ANTHROPIC_VERSION
+from compat_utils import (
+    ANTHROPIC_VERSION_HEADER,
+    ANTHROPIC_VERSION,
+    OPENAI_REQUEST_ID_HEADER,
+    REQUEST_ID_HEADER,
+)
 
 from helpers import make_request as _make_request
 
@@ -383,6 +388,52 @@ class TestAnthropicModelHeaders:
 
         assert resp.status_code == 200
         assert resp.headers.get(ANTHROPIC_VERSION_HEADER) is None
+
+
+class TestModelRequestIdHeaders:
+    """Model responses include the request ID header expected by the caller's SDK."""
+
+    @patch.object(main.mapper, "list_downstream", new_callable=AsyncMock)
+    @patch.object(main.mapper, "workflow_models", return_value=[])
+    def test_openai_list_retrieve_and_not_found_use_x_request_id(self, _wf, mock_downstream):
+        mock_downstream.return_value = SAMPLE_MODELS
+        main.config.BOOST_MODS.__value__ = []
+        main.config.SERVE_BASE_MODELS.__value__ = True
+        main.config.MODEL_FILTER.__value__ = []
+
+        client = _make_client()
+
+        for path, expected_status in [
+            ("/v1/models", 200),
+            ("/v1/models/model-a", 200),
+            ("/v1/models/nonexistent", 404),
+        ]:
+            resp = client.get(path, headers={"authorization": "Bearer sk-test"})
+
+            assert resp.status_code == expected_status
+            assert resp.headers[OPENAI_REQUEST_ID_HEADER].startswith("req_")
+            assert REQUEST_ID_HEADER not in resp.headers
+
+    @patch.object(main.mapper, "list_downstream", new_callable=AsyncMock)
+    @patch.object(main.mapper, "workflow_models", return_value=[])
+    def test_anthropic_list_retrieve_and_not_found_use_request_id(self, _wf, mock_downstream):
+        mock_downstream.return_value = SAMPLE_MODELS
+        main.config.BOOST_MODS.__value__ = []
+        main.config.SERVE_BASE_MODELS.__value__ = True
+        main.config.MODEL_FILTER.__value__ = []
+
+        client = _make_client()
+
+        for path, expected_status in [
+            ("/v1/models", 200),
+            ("/v1/models/model-a", 200),
+            ("/v1/models/nonexistent", 404),
+        ]:
+            resp = client.get(path, headers={"anthropic-version": "2024-01-01"})
+
+            assert resp.status_code == expected_status
+            assert resp.headers[REQUEST_ID_HEADER].startswith("req_")
+            assert resp.headers.get(ANTHROPIC_VERSION_HEADER) == ANTHROPIC_VERSION
 
 
 # ---------------------------------------------------------------------------

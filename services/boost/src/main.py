@@ -256,15 +256,23 @@ async def _list_models():
   return final
 
 
-def _anthropic_model_headers():
+def _anthropic_model_headers(request_id=None):
   """Standard headers for Anthropic-format model responses."""
-  return {ANTHROPIC_VERSION_HEADER: ANTHROPIC_VERSION}
+  headers = {ANTHROPIC_VERSION_HEADER: ANTHROPIC_VERSION}
+  if request_id:
+    headers[REQUEST_ID_HEADER] = request_id
+  return headers
+
+
+def _openai_model_headers(request_id):
+  return {OPENAI_REQUEST_ID_HEADER: request_id}
 
 
 @app.get("/v1/models/{model_id:path}")
 async def get_boost_model_by_id(
   model_id: str, request: Request, api_key: str = Depends(get_api_key)
 ):
+  request_id = f"req_{shortuuid.random()}"
   try:
     models = await _list_models()
   except Exception as e:
@@ -276,9 +284,13 @@ async def get_boost_model_by_id(
           "type": "error",
           "error": {"type": "api_error", "message": "Failed to list models"},
         },
-        headers=_anthropic_model_headers(),
+        headers=_anthropic_model_headers(request_id),
       )
-    raise HTTPException(status_code=500, detail="Failed to list models")
+    return JSONResponse(
+      status_code=500,
+      content={"detail": "Failed to list models"},
+      headers=_openai_model_headers(request_id),
+    )
 
   match = next((m for m in models if m.get("id") == model_id), None)
 
@@ -293,22 +305,31 @@ async def get_boost_model_by_id(
             "message": f"Model not found: {model_id}",
           },
         },
-        headers=_anthropic_model_headers(),
+        headers=_anthropic_model_headers(request_id),
       )
-    raise HTTPException(status_code=404, detail=f"Model not found: {model_id}")
+    return JSONResponse(
+      status_code=404,
+      content={"detail": f"Model not found: {model_id}"},
+      headers=_openai_model_headers(request_id),
+    )
 
   if _is_anthropic_client(request):
     return JSONResponse(
       content=_to_anthropic_model(match),
       status_code=200,
-      headers=_anthropic_model_headers(),
+      headers=_anthropic_model_headers(request_id),
     )
 
-  return JSONResponse(content=match, status_code=200)
+  return JSONResponse(
+    content=match,
+    status_code=200,
+    headers=_openai_model_headers(request_id),
+  )
 
 
 @app.get("/v1/models")
 async def get_boost_models(request: Request, api_key: str = Depends(get_api_key)):
+  request_id = f"req_{shortuuid.random()}"
   try:
     final = await _list_models()
   except Exception as e:
@@ -320,9 +341,13 @@ async def get_boost_models(request: Request, api_key: str = Depends(get_api_key)
           "type": "error",
           "error": {"type": "api_error", "message": "Failed to list models"},
         },
-        headers=_anthropic_model_headers(),
+        headers=_anthropic_model_headers(request_id),
       )
-    raise HTTPException(status_code=500, detail="Failed to list models")
+    return JSONResponse(
+      status_code=500,
+      content={"detail": "Failed to list models"},
+      headers=_openai_model_headers(request_id),
+    )
 
   if _is_anthropic_client(request):
     anthropic_data = [_to_anthropic_model(m) for m in final]
@@ -336,14 +361,16 @@ async def get_boost_models(request: Request, api_key: str = Depends(get_api_key)
         'last_id': last_id,
       },
       status_code=200,
-      headers=_anthropic_model_headers(),
+      headers=_anthropic_model_headers(request_id),
     )
 
   return JSONResponse(
     content={
       'object': 'list',
       'data': final,
-    }, status_code=200
+    },
+    status_code=200,
+    headers=_openai_model_headers(request_id),
   )
 
 
