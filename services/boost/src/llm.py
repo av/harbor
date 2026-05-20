@@ -746,7 +746,8 @@ class LLM(AsyncEventEmitter):
       if chunk_citations and isinstance(chunk_citations, list):
         citations = chunk_citations  # last-wins (Perplexity sends once)
 
-      content += chunk_content
+      if chunk_content:
+        content += chunk_content
       tool_calls.extend(chunk_tools)
       if chunk_finish_reason is not None:
         last_finish_reason = chunk_finish_reason
