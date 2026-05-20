@@ -17,6 +17,16 @@ import anthropic_compat
 import responses_compat
 import auth
 
+from helpers import (
+    FakeLLM as _FakeLLM,
+    make_request,
+    openai_result as _fake_openai_result,
+    make_anthropic_app as _make_anthropic_app,
+    make_responses_app as _make_responses_app,
+    ANTHROPIC_BODY as _ANTHRO_BODY,
+    RESPONSES_BODY as _RESPONSES_BODY,
+)
+
 
 @pytest.fixture(autouse=True)
 def _enable_log_propagation():
@@ -36,131 +46,6 @@ def _enable_log_propagation():
     yield
     for name, val in originals.items():
         logging.getLogger(name).propagate = val
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def make_request(headers=None):
-    """Build a fake Starlette Request with the given headers."""
-    from fastapi import Request
-
-    raw_headers = [(b"content-type", b"application/json")]
-    for key, value in (headers or {}).items():
-        raw_headers.append((key.lower().encode(), value.encode()))
-
-    return Request(
-        scope={
-            "type": "http",
-            "query_string": b"",
-            "headers": raw_headers,
-        }
-    )
-
-
-def _fake_openai_result(content="Hi!", finish_reason="stop",
-                         prompt_tokens=10, completion_tokens=5):
-    msg = {"content": content, "tool_calls": []}
-    return {
-        "id": "chatcmpl-1",
-        "object": "chat.completion",
-        "created": 1700000000,
-        "model": "test-model",
-        "choices": [{"index": 0, "message": msg, "finish_reason": finish_reason}],
-        "usage": {
-            "prompt_tokens": prompt_tokens,
-            "completion_tokens": completion_tokens,
-            "total_tokens": prompt_tokens + completion_tokens,
-        },
-    }
-
-
-class _FakeLLM:
-    def __init__(self, consume_result=None, chat_completion_result=None,
-                 stream_chunks=None, serve_error=None, **kwargs):
-        self._consume_result = consume_result
-        self._chat_completion_result = chat_completion_result
-        self._stream_chunks = stream_chunks or []
-        self._serve_error = serve_error
-        self.workflow = kwargs.get("workflow")
-        self.boost_params = kwargs.get("params", {})
-        self.module = kwargs.get("module")
-        self.model = kwargs.get("model", "test-model")
-        self.chat = type("Chat", (), {
-            "has_substring": lambda self, s: False,
-            "history": lambda self: [],
-        })()
-
-    async def serve(self):
-        if self._serve_error:
-            raise self._serve_error
-        async def _gen():
-            for chunk in self._stream_chunks:
-                yield chunk
-        return _gen()
-
-    async def consume_stream(self, stream):
-        async for _ in stream:
-            pass
-        return self._consume_result
-
-    async def chat_completion(self):
-        return self._chat_completion_result
-
-
-def _make_anthropic_app():
-    from fastapi import FastAPI, HTTPException, Request
-    from fastapi.responses import JSONResponse
-    app = FastAPI()
-    app.include_router(anthropic_compat.anthropic_compatible_routes)
-
-    @app.exception_handler(HTTPException)
-    async def _handler(request: Request, exc: HTTPException):
-        error_type = anthropic_compat.ERROR_TYPE_MAP.get(exc.status_code, "api_error")
-        return JSONResponse(
-            status_code=exc.status_code,
-            content={
-                "type": "error",
-                "error": {"type": error_type, "message": str(exc.detail)},
-            },
-        )
-    return app
-
-
-def _make_responses_app():
-    from fastapi import FastAPI, HTTPException, Request
-    from fastapi.responses import JSONResponse
-    app = FastAPI()
-    app.include_router(responses_compat.responses_compatible_routes)
-
-    @app.exception_handler(HTTPException)
-    async def _handler(request: Request, exc: HTTPException):
-        error_type = responses_compat.ERROR_TYPE_MAP.get(exc.status_code, "server_error")
-        return JSONResponse(
-            status_code=exc.status_code,
-            content={
-                "error": {
-                    "message": str(exc.detail),
-                    "type": error_type,
-                    "param": None,
-                    "code": None,
-                },
-            },
-        )
-    return app
-
-
-_ANTHRO_BODY = {
-    "model": "claude-test",
-    "max_tokens": 128,
-    "messages": [{"role": "user", "content": "Hello, world!"}],
-}
-
-_RESPONSES_BODY = {
-    "model": "gpt-4o",
-    "input": "Hello, world!",
-}
 
 
 # ---------------------------------------------------------------------------

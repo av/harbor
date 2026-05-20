@@ -17,99 +17,23 @@ import json
 from unittest.mock import MagicMock, AsyncMock, patch
 
 import pytest
-from starlette.testclient import TestClient
 
 import llm as llm_mod
 from llm import BackendError
 import main
-import config as _cfg
+
+from helpers import (
+    FakeLLM as _FakeLLM,
+    openai_result as _openai_result,
+    streaming_chunks as _streaming_chunks,
+    make_client as _make_client,
+    setup_mock_llm as _setup_mocks,
+)
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-class _FakeLLM:
-    """Minimal stand-in for llm.LLM."""
-
-    def __init__(self, stream_chunks=None, consume_result=None,
-                 chat_completion_result=None, serve_error=None, **kwargs):
-        self._stream_chunks = stream_chunks or []
-        self._consume_result = consume_result
-        self._chat_completion_result = chat_completion_result
-        self._serve_error = serve_error
-        self.workflow = kwargs.get("workflow")
-        self.boost_params = kwargs.get("params", {})
-        self.module = kwargs.get("module")
-        self.model = kwargs.get("model", "test-model")
-        self.chat = type("Chat", (), {
-            "has_substring": lambda self, s: False,
-            "history": lambda self: [],
-        })()
-
-    async def serve(self):
-        if self._serve_error:
-            raise self._serve_error
-
-        async def _gen():
-            for chunk in self._stream_chunks:
-                yield chunk
-        return _gen()
-
-    async def consume_stream(self, stream):
-        async for _ in stream:
-            pass
-        return self._consume_result
-
-    async def chat_completion(self):
-        if self._chat_completion_result is None:
-            raise BackendError(500, "no result configured")
-        return self._chat_completion_result
-
-
-def _openai_result(content="Hello!", finish_reason="stop",
-                   prompt_tokens=10, completion_tokens=5):
-    return {
-        "id": "chatcmpl-1",
-        "object": "chat.completion",
-        "created": 1700000000,
-        "model": "test-model",
-        "choices": [{
-            "index": 0,
-            "message": {"role": "assistant", "content": content},
-            "finish_reason": finish_reason,
-        }],
-        "usage": {
-            "prompt_tokens": prompt_tokens,
-            "completion_tokens": completion_tokens,
-            "total_tokens": prompt_tokens + completion_tokens,
-        },
-    }
-
-
-def _streaming_chunks(content="Hello!", finish_reason="stop",
-                      prompt_tokens=10, completion_tokens=5):
-    """Build stringified SSE chunks as LLM.serve() yields them."""
-    chunks = []
-    for char in content:
-        chunks.append(
-            f'data: {json.dumps({"choices": [{"delta": {"content": char}, "index": 0}]})}\n\n'
-        )
-    # Final chunk with finish_reason and usage
-    chunks.append(
-        f'data: {json.dumps({"choices": [{"delta": {}, "finish_reason": finish_reason, "index": 0}], "usage": {"prompt_tokens": prompt_tokens, "completion_tokens": completion_tokens, "total_tokens": prompt_tokens + completion_tokens}})}\n\n'
-    )
-    chunks.append("data: [DONE]\n\n")
-    return chunks
-
-
-def _make_client(auth_key=None):
-    if auth_key:
-        _cfg.BOOST_AUTH = [auth_key]
-    else:
-        _cfg.BOOST_AUTH = []
-    return TestClient(main.app, raise_server_exceptions=False)
-
 
 def _chat_body(model="test-model", stream=False, **extra):
     body = {
@@ -119,21 +43,6 @@ def _chat_body(model="test-model", stream=False, **extra):
         **extra,
     }
     return body
-
-
-def _setup_mocks(monkeypatch, llm_instance, is_direct=False):
-    """Patch mapper and llm modules globally."""
-    monkeypatch.setattr("mapper.list_downstream", AsyncMock(return_value=[]))
-    monkeypatch.setattr("mapper.resolve_request_config", MagicMock(return_value={
-        "url": "http://fake:8080",
-        "headers": {"Authorization": "Bearer sk-test"},
-        "model": "test-model",
-        "module": None,
-        "workflow": None,
-        "params": {},
-    }))
-    monkeypatch.setattr("mapper.is_direct_task", MagicMock(return_value=is_direct))
-    monkeypatch.setattr(llm_mod, "LLM", lambda **kwargs: llm_instance)
 
 
 # ===========================================================================

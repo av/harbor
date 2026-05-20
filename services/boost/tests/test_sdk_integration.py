@@ -23,76 +23,12 @@ import openai
 import anthropic_compat
 import responses_compat
 
-
-# ---------------------------------------------------------------------------
-# Shared helpers
-# ---------------------------------------------------------------------------
-
-
-def _build_app():
-    """Build a FastAPI app with both compat routers and the global error handler."""
-    from fastapi import FastAPI, HTTPException, Request
-    from fastapi.responses import JSONResponse
-    from main import app
-    return app
-
-
-class _FakeLLM:
-    """Minimal stand-in for llm.LLM that returns configurable responses."""
-
-    def __init__(self, stream_chunks=None, consume_result=None,
-                 chat_completion_result=None, **kwargs):
-        self._stream_chunks = stream_chunks or []
-        self._consume_result = consume_result
-        self._chat_completion_result = chat_completion_result
-        self.workflow = kwargs.get("workflow")
-        self.boost_params = kwargs.get("params", {})
-        self.module = kwargs.get("module")
-        self.model = kwargs.get("model", "test-model")
-        self.chat = type("Chat", (), {
-            "has_substring": lambda self, s: False,
-            "history": lambda self: [],
-        })()
-
-    async def serve(self):
-        async def _gen():
-            for chunk in self._stream_chunks:
-                yield chunk
-        return _gen()
-
-    async def consume_stream(self, stream):
-        async for _ in stream:
-            pass
-        return self._consume_result
-
-    async def chat_completion(self):
-        return self._chat_completion_result
-
-
-def _sse_chunk(data: dict) -> str:
-    """Format a dict as an SSE data line."""
-    return f"data: {json.dumps(data)}\n\n"
-
-
-def _openai_result(content="Hello!", finish_reason="stop",
-                   prompt_tokens=10, completion_tokens=5,
-                   tool_calls=None, reasoning_content=None):
-    """Build a minimal OpenAI-shaped chat completion result."""
-    msg = {"content": content, "tool_calls": tool_calls or []}
-    if reasoning_content:
-        msg["reasoning_content"] = reasoning_content
-    return {
-        "id": "chatcmpl-1",
-        "object": "chat.completion",
-        "created": 1700000000,
-        "model": "test-model",
-        "choices": [{"index": 0, "message": msg, "finish_reason": finish_reason}],
-        "usage": {
-            "prompt_tokens": prompt_tokens,
-            "completion_tokens": completion_tokens,
-            "total_tokens": prompt_tokens + completion_tokens,
-        },
-    }
+from helpers import (
+    FakeLLM as _FakeLLM,
+    openai_result as _openai_result,
+    sse_chunk as _sse_chunk,
+    make_full_app as _build_app,
+)
 
 
 def _streaming_chunks(content="Hello!", finish_reason="stop",

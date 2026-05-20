@@ -997,21 +997,7 @@ class TestResponsesToolIdRoundTrip:
 # ---------------------------------------------------------------------------
 
 
-def _parse_sse_events(raw_events):
-    """Parse raw SSE strings into (event_type, data_dict) tuples."""
-    parsed = []
-    for raw in raw_events:
-        lines = raw.strip().split("\n")
-        event_type = None
-        data_str = None
-        for line in lines:
-            if line.startswith("event: "):
-                event_type = line[7:]
-            elif line.startswith("data: "):
-                data_str = line[6:]
-        if event_type and data_str:
-            parsed.append((event_type, json.loads(data_str)))
-    return parsed
+from helpers import parse_responses_sse_events as _parse_sse_events
 
 
 class TestResponsesStreamConverter:
@@ -1554,30 +1540,7 @@ class TestSDKCompatibility:
 # ---------------------------------------------------------------------------
 
 
-def _make_responses_app():
-    """Build a test FastAPI app with the responses router and error handler."""
-    from fastapi import FastAPI, HTTPException, Request
-    from fastapi.responses import JSONResponse
-
-    app = FastAPI()
-    app.include_router(responses_compat.responses_compatible_routes)
-
-    @app.exception_handler(HTTPException)
-    async def _handler(request: Request, exc: HTTPException):
-        error_type = responses_compat.ERROR_TYPE_MAP.get(exc.status_code, "server_error")
-        return JSONResponse(
-            status_code=exc.status_code,
-            content={
-                "error": {
-                    "message": str(exc.detail),
-                    "type": error_type,
-                    "param": None,
-                    "code": None,
-                },
-            },
-        )
-
-    return app
+from helpers import make_responses_app as _make_responses_app
 
 
 class TestResponsesRouteIntegration:
@@ -7689,3 +7652,5 @@ class TestResponsesBackendErrorIntegration:
 
         assert resp.headers.get("x-request-id") is not None
         assert resp.headers.get("x-request-id").startswith("req_")
+
+

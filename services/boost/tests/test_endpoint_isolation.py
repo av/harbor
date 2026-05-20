@@ -31,114 +31,17 @@ import anthropic_compat
 import responses_compat
 import main
 
-
-# ---------------------------------------------------------------------------
-# Shared app and helpers
-# ---------------------------------------------------------------------------
-
-def _build_full_app():
-    """Build the real app from main.py — it already has all routers, CORS,
-    middleware, and exception handlers configured."""
-    return main.app
-
-
-def _make_client(auth_key=None):
-    """Return a TestClient against the full app."""
-    import config as _cfg
-    if auth_key:
-        _cfg.BOOST_AUTH = [auth_key]
-    else:
-        _cfg.BOOST_AUTH = []
-    return TestClient(_build_full_app(), raise_server_exceptions=False)
-
-
-# Canonical request bodies
-_ANTHROPIC_BODY = {
-    "model": "claude-test",
-    "max_tokens": 128,
-    "messages": [{"role": "user", "content": "Hello, world!"}],
-}
-
-_RESPONSES_BODY = {
-    "model": "gpt-4o",
-    "input": "Hello, world!",
-}
-
-_CHAT_COMPLETIONS_BODY = {
-    "model": "gpt-4o",
-    "messages": [{"role": "user", "content": "Hello"}],
-}
-
-
-class _FakeLLM:
-    """Minimal stand-in for llm.LLM."""
-
-    def __init__(self, stream_chunks=None, consume_result=None,
-                 chat_completion_result=None, **kwargs):
-        self._stream_chunks = stream_chunks or []
-        self._consume_result = consume_result
-        self._chat_completion_result = chat_completion_result
-        self.workflow = kwargs.get("workflow")
-        self.boost_params = kwargs.get("params", {})
-        self.module = kwargs.get("module")
-        self.model = kwargs.get("model", "test-model")
-        self.chat = type("Chat", (), {
-            "has_substring": lambda self, s: False,
-            "history": lambda self: [],
-        })()
-
-    async def serve(self):
-        async def _gen():
-            for chunk in self._stream_chunks:
-                yield chunk
-        return _gen()
-
-    async def consume_stream(self, stream):
-        async for _ in stream:
-            pass
-        return self._consume_result
-
-    async def chat_completion(self):
-        return self._chat_completion_result
-
-
-def _openai_result(content="Hello!", finish_reason="stop",
-                   prompt_tokens=10, completion_tokens=5):
-    msg = {"content": content, "tool_calls": []}
-    return {
-        "id": "chatcmpl-1",
-        "object": "chat.completion",
-        "created": 1700000000,
-        "model": "test-model",
-        "choices": [{"index": 0, "message": msg, "finish_reason": finish_reason}],
-        "usage": {
-            "prompt_tokens": prompt_tokens,
-            "completion_tokens": completion_tokens,
-            "total_tokens": prompt_tokens + completion_tokens,
-        },
-    }
-
-
-def _streaming_chunks(content="Hello!", finish_reason="stop",
-                      prompt_tokens=10, completion_tokens=5):
-    chunks = []
-    for char in content:
-        chunks.append(f'data: {json.dumps({"choices": [{"delta": {"content": char}, "index": 0}]})}\n\n')
-    chunks.append(f'data: {json.dumps({"choices": [{"delta": {}, "finish_reason": finish_reason, "index": 0}], "usage": {"prompt_tokens": prompt_tokens, "completion_tokens": completion_tokens, "total_tokens": prompt_tokens + completion_tokens}})}\n\n')
-    chunks.append("data: [DONE]\n\n")
-    return chunks
-
-
-def _setup_mock_llm(monkeypatch, llm_instance):
-    """Patch mapper and llm modules to return the given FakeLLM."""
-    import llm as llm_mod
-    monkeypatch.setattr("mapper.list_downstream", AsyncMock(return_value=[]))
-    monkeypatch.setattr("mapper.resolve_request_config", MagicMock(return_value={
-        "url": "http://fake:8080", "api_key": "sk-test",
-        "model": "test-model", "module": None, "workflow": None, "params": {},
-    }))
-    monkeypatch.setattr("mapper.is_direct_task", MagicMock(return_value=False))
-    monkeypatch.setattr(llm_mod, "LLM", lambda **kwargs: llm_instance)
+from helpers import (
+    FakeLLM as _FakeLLM,
+    openai_result as _openai_result,
+    streaming_chunks as _streaming_chunks,
+    make_client as _make_client,
+    make_full_app as _build_full_app,
+    setup_mock_llm as _setup_mock_llm,
+    ANTHROPIC_BODY as _ANTHROPIC_BODY,
+    RESPONSES_BODY as _RESPONSES_BODY,
+    CHAT_COMPLETIONS_BODY as _CHAT_COMPLETIONS_BODY,
+)
 
 
 # ===========================================================================

@@ -13,22 +13,7 @@ from fastapi import Request
 import main
 from compat_utils import ANTHROPIC_VERSION_HEADER, ANTHROPIC_VERSION
 
-
-# ---------------------------------------------------------------------------
-# Unit tests: _is_anthropic_client
-# ---------------------------------------------------------------------------
-
-def _make_request(headers=None):
-    raw_headers = []
-    for key, value in (headers or {}).items():
-        raw_headers.append((key.lower().encode(), value.encode()))
-    return Request(
-        scope={
-            "type": "http",
-            "query_string": b"",
-            "headers": raw_headers,
-        }
-    )
+from helpers import make_request as _make_request
 
 
 class TestIsAnthropicClient:
@@ -109,9 +94,8 @@ SAMPLE_MODELS = [
 
 
 def _make_client():
-    import config as _cfg
-    _cfg.BOOST_AUTH = []
-    return TestClient(main.app, raise_server_exceptions=False)
+    from helpers import make_client
+    return make_client()
 
 
 class TestModelsListOpenAI:

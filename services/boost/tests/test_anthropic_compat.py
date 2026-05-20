@@ -10,23 +10,7 @@ import pytest
 
 import anthropic_compat
 
-
-def make_request(headers=None):
-    """Build a fake Starlette Request with the given headers."""
-    from fastapi import Request
-
-    raw_headers = [(b"content-type", b"application/json")]
-
-    for key, value in (headers or {}).items():
-        raw_headers.append((key.lower().encode(), value.encode()))
-
-    return Request(
-        scope={
-            "type": "http",
-            "query_string": b"",
-            "headers": raw_headers,
-        }
-    )
+from helpers import make_request
 
 
 # ---------------------------------------------------------------------------
@@ -1088,97 +1072,25 @@ class TestChunkUtilities:
 # The real ``mapper`` and ``llm`` modules are stubbed at the top of this file,
 # so we patch functions/classes directly on the ``anthropic_compat`` module.
 
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi import HTTPException
 from starlette.testclient import TestClient
 from unittest.mock import AsyncMock
 
-_integration_app = FastAPI()
-_integration_app.include_router(anthropic_compat.anthropic_compatible_routes)
+from helpers import (
+    FakeLLM as _FakeLLM,
+    openai_result as _fake_openai_result,
+    make_anthropic_app,
+    make_client,
+    ANTHROPIC_BODY as _ANTHRO_BODY,
+)
 
-
-@_integration_app.exception_handler(HTTPException)
-async def _test_http_exception_handler(request: Request, exc: HTTPException):
-  """Mirror the global handler from main.py for test fidelity."""
-  error_type = anthropic_compat.ERROR_TYPE_MAP.get(exc.status_code, "api_error")
-  return JSONResponse(
-    status_code=exc.status_code,
-    content={
-      "type": "error",
-      "error": {"type": error_type, "message": str(exc.detail)},
-    },
-  )
+_integration_app = make_anthropic_app()
 
 
 def _make_client(auth_key=None):
     """Return a TestClient.  When *auth_key* is given, configure BOOST_AUTH
     so the route enforces authentication."""
-    import config as _cfg
-    if auth_key:
-        _cfg.BOOST_AUTH = [auth_key]
-    else:
-        _cfg.BOOST_AUTH = []
-    return TestClient(_integration_app, raise_server_exceptions=False)
-
-
-# Canonical Anthropic request body used across integration tests.
-_ANTHRO_BODY = {
-    "model": "claude-test",
-    "max_tokens": 128,
-    "messages": [{"role": "user", "content": "Hello, world!"}],
-}
-
-
-def _fake_openai_result(content="Hi!", finish_reason="stop",
-                         prompt_tokens=10, completion_tokens=5,
-                         tool_calls=None):
-    """Build a minimal OpenAI-shaped chat completion result."""
-    msg = {"content": content, "tool_calls": tool_calls or []}
-    return {
-        "id": "chatcmpl-1",
-        "object": "chat.completion",
-        "created": 1700000000,
-        "model": "test-model",
-        "choices": [{"index": 0, "message": msg, "finish_reason": finish_reason}],
-        "usage": {
-            "prompt_tokens": prompt_tokens,
-            "completion_tokens": completion_tokens,
-            "total_tokens": prompt_tokens + completion_tokens,
-        },
-    }
-
-
-class _FakeLLM:
-    """Minimal stand-in for llm.LLM used in integration tests."""
-
-    def __init__(self, stream_chunks=None, consume_result=None,
-                 chat_completion_result=None, **kwargs):
-        self._stream_chunks = stream_chunks or []
-        self._consume_result = consume_result
-        self._chat_completion_result = chat_completion_result
-        self.workflow = kwargs.get("workflow")
-        self.boost_params = kwargs.get("params", {})
-        self.module = kwargs.get("module")
-        self.model = kwargs.get("model", "test-model")
-        self.chat = type("Chat", (), {
-            "has_substring": lambda self, s: False,
-            "history": lambda self: [],
-        })()
-
-    async def serve(self):
-        async def _gen():
-            for chunk in self._stream_chunks:
-                yield chunk
-        return _gen()
-
-    async def consume_stream(self, stream):
-        # Drain the stream
-        async for _ in stream:
-            pass
-        return self._consume_result
-
-    async def chat_completion(self):
-        return self._chat_completion_result
+    return make_client(app=_integration_app, auth_key=auth_key)
 
 
 # ---------------------------------------------------------------------------
@@ -4393,29 +4305,7 @@ class TestAnthropicToolIdNormalizationInStreaming:
 # SSE parsing helper
 # ---------------------------------------------------------------------------
 
-def _parse_sse_events(raw_text):
-    """Parse raw SSE text into a list of data payloads (dicts).
-
-    Skips non-data events such as ``event: ping`` whose payload has no
-    ``type`` field — these are connection keep-alive signals, not
-    Anthropic protocol events.
-    """
-    events = []
-    for block in raw_text.strip().split("\n\n"):
-        data_line = None
-        for line in block.strip().split("\n"):
-            if line.startswith("data: "):
-                data_line = line[6:]
-        if data_line:
-            try:
-                parsed = json.loads(data_line)
-            except json.JSONDecodeError:
-                continue
-            # Skip ping and other non-protocol events (no "type" key)
-            if isinstance(parsed, dict) and "type" not in parsed:
-                continue
-            events.append(parsed)
-    return events
+from helpers import parse_anthropic_sse_events as _parse_sse_events
 
 
 class TestCacheUsageFields:
@@ -6517,21 +6407,7 @@ class TestResponsesStreamingUsageTracking:
         assert usage["output_tokens_details"]["reasoning_tokens"] == 0
 
 
-def _parse_sse_events_responses(raw_events):
-    """Parse Responses API SSE strings into (event_type, data_dict) tuples."""
-    parsed = []
-    for raw in raw_events:
-        lines = raw.strip().split("\n")
-        event_type = None
-        data_str = None
-        for line in lines:
-            if line.startswith("event: "):
-                event_type = line[7:]
-            elif line.startswith("data: "):
-                data_str = line[6:]
-        if event_type and data_str:
-            parsed.append((event_type, json.loads(data_str)))
-    return parsed
+from helpers import parse_responses_sse_events as _parse_sse_events_responses
 
 
 # ---------------------------------------------------------------------------
