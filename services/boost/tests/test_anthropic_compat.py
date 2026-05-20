@@ -4606,5 +4606,430 @@ class TestErrorTypeMapping:
         assert resp.headers.get("request-id") == "req_123"
 
 
+# ---------------------------------------------------------------------------
+# tool_result content handling edge cases
+# ---------------------------------------------------------------------------
+
+class TestToolResultContentHandling:
+    """Verify tool_result content blocks handle string, array, images, and is_error."""
+
+    def test_tool_result_string_content(self):
+        """Simple string content is passed through directly."""
+        msgs = anthropic_compat._convert_user_message([
+            {
+                "type": "tool_result",
+                "tool_use_id": "toolu_abc",
+                "content": "simple result",
+            },
+        ])
+        assert len(msgs) == 1
+        assert msgs[0]["role"] == "tool"
+        assert msgs[0]["content"] == "simple result"
+
+    def test_tool_result_empty_string_content(self):
+        """Empty string content is allowed."""
+        msgs = anthropic_compat._convert_user_message([
+            {
+                "type": "tool_result",
+                "tool_use_id": "toolu_abc",
+                "content": "",
+            },
+        ])
+        assert msgs[0]["content"] == ""
+
+    def test_tool_result_no_content_field(self):
+        """Missing content field defaults to empty string."""
+        msgs = anthropic_compat._convert_user_message([
+            {
+                "type": "tool_result",
+                "tool_use_id": "toolu_abc",
+            },
+        ])
+        assert msgs[0]["content"] == ""
+
+    def test_tool_result_array_of_text_blocks(self):
+        """Array with multiple text blocks is joined with newlines."""
+        msgs = anthropic_compat._convert_user_message([
+            {
+                "type": "tool_result",
+                "tool_use_id": "toolu_abc",
+                "content": [
+                    {"type": "text", "text": "line 1"},
+                    {"type": "text", "text": "line 2"},
+                ],
+            },
+        ])
+        assert msgs[0]["content"] == "line 1\nline 2"
+
+    def test_tool_result_array_single_text_block(self):
+        """Array with one text block extracts the text."""
+        msgs = anthropic_compat._convert_user_message([
+            {
+                "type": "tool_result",
+                "tool_use_id": "toolu_abc",
+                "content": [
+                    {"type": "text", "text": "only line"},
+                ],
+            },
+        ])
+        assert msgs[0]["content"] == "only line"
+
+    def test_tool_result_array_with_base64_image(self):
+        """Image blocks in tool_result content produce a follow-up user message."""
+        msgs = anthropic_compat._convert_user_message([
+            {
+                "type": "tool_result",
+                "tool_use_id": "toolu_abc",
+                "content": [
+                    {"type": "text", "text": "Screenshot captured"},
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "image/png",
+                            "data": "iVBORw0KGgo=",
+                        },
+                    },
+                ],
+            },
+        ])
+        # First message: tool result with text
+        assert msgs[0]["role"] == "tool"
+        assert msgs[0]["content"] == "Screenshot captured"
+        # Second message: user message with the image
+        assert len(msgs) == 2
+        assert msgs[1]["role"] == "user"
+        assert isinstance(msgs[1]["content"], list)
+        assert msgs[1]["content"][0]["type"] == "image_url"
+        assert msgs[1]["content"][0]["image_url"]["url"] == "data:image/png;base64,iVBORw0KGgo="
+
+    def test_tool_result_array_with_url_image(self):
+        """URL-based images in tool_result content are also extracted."""
+        msgs = anthropic_compat._convert_user_message([
+            {
+                "type": "tool_result",
+                "tool_use_id": "toolu_abc",
+                "content": [
+                    {"type": "text", "text": "Here is the chart"},
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "url",
+                            "url": "https://example.com/chart.png",
+                        },
+                    },
+                ],
+            },
+        ])
+        assert msgs[0]["content"] == "Here is the chart"
+        assert msgs[1]["role"] == "user"
+        assert msgs[1]["content"][0]["image_url"]["url"] == "https://example.com/chart.png"
+
+    def test_tool_result_array_with_multiple_images(self):
+        """Multiple images in tool_result produce one user message with all images."""
+        msgs = anthropic_compat._convert_user_message([
+            {
+                "type": "tool_result",
+                "tool_use_id": "toolu_abc",
+                "content": [
+                    {"type": "text", "text": "Screenshots"},
+                    {
+                        "type": "image",
+                        "source": {"type": "base64", "media_type": "image/png", "data": "AAA"},
+                    },
+                    {
+                        "type": "image",
+                        "source": {"type": "base64", "media_type": "image/jpeg", "data": "BBB"},
+                    },
+                ],
+            },
+        ])
+        assert len(msgs) == 2
+        assert msgs[1]["role"] == "user"
+        assert len(msgs[1]["content"]) == 2
+        assert msgs[1]["content"][0]["image_url"]["url"] == "data:image/png;base64,AAA"
+        assert msgs[1]["content"][1]["image_url"]["url"] == "data:image/jpeg;base64,BBB"
+
+    def test_tool_result_array_image_only_no_text(self):
+        """Image-only tool_result (no text) still works."""
+        msgs = anthropic_compat._convert_user_message([
+            {
+                "type": "tool_result",
+                "tool_use_id": "toolu_abc",
+                "content": [
+                    {
+                        "type": "image",
+                        "source": {"type": "base64", "media_type": "image/png", "data": "IMGDATA"},
+                    },
+                ],
+            },
+        ])
+        # Tool message has empty content (no text blocks)
+        assert msgs[0]["role"] == "tool"
+        assert msgs[0]["content"] == ""
+        # Image is in follow-up user message
+        assert msgs[1]["role"] == "user"
+        assert msgs[1]["content"][0]["image_url"]["url"] == "data:image/png;base64,IMGDATA"
+
+    def test_tool_result_array_image_default_media_type(self):
+        """Image block without media_type defaults to image/png."""
+        msgs = anthropic_compat._convert_user_message([
+            {
+                "type": "tool_result",
+                "tool_use_id": "toolu_abc",
+                "content": [
+                    {
+                        "type": "image",
+                        "source": {"data": "XYZ"},
+                    },
+                ],
+            },
+        ])
+        assert msgs[1]["content"][0]["image_url"]["url"] == "data:image/png;base64,XYZ"
+
+    def test_tool_result_array_skips_non_dict_items(self):
+        """Non-dict items in tool_result content array are silently skipped."""
+        msgs = anthropic_compat._convert_user_message([
+            {
+                "type": "tool_result",
+                "tool_use_id": "toolu_abc",
+                "content": [
+                    "just a string, not a dict",
+                    {"type": "text", "text": "valid text"},
+                ],
+            },
+        ])
+        assert msgs[0]["content"] == "valid text"
+
+
+class TestToolResultIsError:
+    """Verify is_error flag handling on tool_result blocks."""
+
+    def test_is_error_true_with_content(self):
+        """is_error: true prefixes content with 'Error: '."""
+        msgs = anthropic_compat._convert_user_message([
+            {
+                "type": "tool_result",
+                "tool_use_id": "toolu_abc",
+                "is_error": True,
+                "content": "file not found",
+            },
+        ])
+        assert msgs[0]["content"] == "Error: file not found"
+
+    def test_is_error_true_with_array_content(self):
+        """is_error: true works with array content too."""
+        msgs = anthropic_compat._convert_user_message([
+            {
+                "type": "tool_result",
+                "tool_use_id": "toolu_abc",
+                "is_error": True,
+                "content": [
+                    {"type": "text", "text": "connection refused"},
+                ],
+            },
+        ])
+        assert msgs[0]["content"] == "Error: connection refused"
+
+    def test_is_error_true_with_empty_content(self):
+        """is_error: true with empty/missing content uses generic error message."""
+        msgs = anthropic_compat._convert_user_message([
+            {
+                "type": "tool_result",
+                "tool_use_id": "toolu_abc",
+                "is_error": True,
+                "content": "",
+            },
+        ])
+        assert msgs[0]["content"] == "Error: tool execution failed"
+
+    def test_is_error_true_no_content_field(self):
+        """is_error: true with no content field uses generic error message."""
+        msgs = anthropic_compat._convert_user_message([
+            {
+                "type": "tool_result",
+                "tool_use_id": "toolu_abc",
+                "is_error": True,
+            },
+        ])
+        assert msgs[0]["content"] == "Error: tool execution failed"
+
+    def test_is_error_false_does_not_prefix(self):
+        """is_error: false (or absent) does not prefix content."""
+        msgs = anthropic_compat._convert_user_message([
+            {
+                "type": "tool_result",
+                "tool_use_id": "toolu_abc",
+                "is_error": False,
+                "content": "some result",
+            },
+        ])
+        assert msgs[0]["content"] == "some result"
+
+    def test_is_error_absent_does_not_prefix(self):
+        """is_error absent does not prefix content."""
+        msgs = anthropic_compat._convert_user_message([
+            {
+                "type": "tool_result",
+                "tool_use_id": "toolu_abc",
+                "content": "success result",
+            },
+        ])
+        assert msgs[0]["content"] == "success result"
+
+    def test_is_error_true_with_image_content(self):
+        """is_error: true with image content still extracts images and prefixes text."""
+        msgs = anthropic_compat._convert_user_message([
+            {
+                "type": "tool_result",
+                "tool_use_id": "toolu_abc",
+                "is_error": True,
+                "content": [
+                    {"type": "text", "text": "screenshot of error page"},
+                    {
+                        "type": "image",
+                        "source": {"type": "base64", "media_type": "image/png", "data": "ERR"},
+                    },
+                ],
+            },
+        ])
+        assert msgs[0]["content"] == "Error: screenshot of error page"
+        assert msgs[1]["role"] == "user"
+        assert msgs[1]["content"][0]["image_url"]["url"] == "data:image/png;base64,ERR"
+
+    def test_is_error_true_with_multiline_content(self):
+        """is_error: true with multiline text content."""
+        msgs = anthropic_compat._convert_user_message([
+            {
+                "type": "tool_result",
+                "tool_use_id": "toolu_abc",
+                "is_error": True,
+                "content": [
+                    {"type": "text", "text": "Error code: 404"},
+                    {"type": "text", "text": "Page not found"},
+                ],
+            },
+        ])
+        assert msgs[0]["content"] == "Error: Error code: 404\nPage not found"
+
+
+class TestToolResultInConvertMessages:
+    """Integration tests for tool_result through the full _convert_messages path."""
+
+    def test_tool_result_with_image_in_full_conversation(self):
+        """tool_result with image in a multi-turn conversation."""
+        body = {
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "text", "text": "Let me take a screenshot."},
+                        {
+                            "type": "tool_use",
+                            "id": "toolu_123",
+                            "name": "screenshot",
+                            "input": {},
+                        },
+                    ],
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": "toolu_123",
+                            "content": [
+                                {"type": "text", "text": "Screenshot taken"},
+                                {
+                                    "type": "image",
+                                    "source": {
+                                        "type": "base64",
+                                        "media_type": "image/png",
+                                        "data": "SCREENSHOT_DATA",
+                                    },
+                                },
+                            ],
+                        },
+                    ],
+                },
+            ],
+        }
+        msgs = anthropic_compat._convert_messages(body)
+        # assistant message
+        assert msgs[0]["role"] == "assistant"
+        # tool result
+        assert msgs[1]["role"] == "tool"
+        assert msgs[1]["content"] == "Screenshot taken"
+        # follow-up user message with image
+        assert msgs[2]["role"] == "user"
+        assert msgs[2]["content"][0]["type"] == "image_url"
+
+    def test_tool_result_is_error_in_full_conversation(self):
+        """is_error tool_result in a multi-turn conversation."""
+        body = {
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "tool_use",
+                            "id": "toolu_456",
+                            "name": "read_file",
+                            "input": {"path": "/nonexistent"},
+                        },
+                    ],
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": "toolu_456",
+                            "is_error": True,
+                            "content": "No such file or directory",
+                        },
+                    ],
+                },
+            ],
+        }
+        msgs = anthropic_compat._convert_messages(body)
+        assert msgs[0]["role"] == "assistant"
+        assert msgs[1]["role"] == "tool"
+        assert msgs[1]["content"] == "Error: No such file or directory"
+
+    def test_mixed_tool_results_and_text(self):
+        """Tool results mixed with text in the same user message."""
+        body = {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": "toolu_1",
+                            "content": "result 1",
+                        },
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": "toolu_2",
+                            "is_error": True,
+                            "content": "failed",
+                        },
+                        {"type": "text", "text": "Please analyze these results"},
+                    ],
+                },
+            ],
+        }
+        msgs = anthropic_compat._convert_messages(body)
+        # tool_results come first
+        assert msgs[0]["role"] == "tool"
+        assert msgs[0]["content"] == "result 1"
+        assert msgs[1]["role"] == "tool"
+        assert msgs[1]["content"] == "Error: failed"
+        # then the user text
+        assert msgs[2]["role"] == "user"
+        assert msgs[2]["content"] == "Please analyze these results"
+
+
 if __name__ == "__main__":
     unittest.main()

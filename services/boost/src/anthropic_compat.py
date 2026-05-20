@@ -212,21 +212,49 @@ def _convert_user_message(content):
           openai_parts.append({"type": "text", "text": f"[Document: {media_type}]"})
     elif block_type == "tool_result":
       tool_content = block.get("content", "")
+      is_error = block.get("is_error", False)
+      image_parts = []
       if isinstance(tool_content, list):
-        text_parts = [
-          b.get("text", "")
-          for b in tool_content
-          if isinstance(b, dict) and b.get("type") == "text"
-        ]
+        text_parts = []
+        for b in tool_content:
+          if not isinstance(b, dict):
+            continue
+          b_type = b.get("type")
+          if b_type == "text":
+            text_parts.append(b.get("text", ""))
+          elif b_type == "image":
+            # Extract image blocks for a follow-up user message —
+            # OpenAI tool messages only support string content.
+            source = b.get("source", {})
+            src_type = source.get("type", "base64")
+            if src_type == "url":
+              image_parts.append(
+                {"type": "image_url", "image_url": {"url": source.get("url", "")}}
+              )
+            else:
+              media_type = source.get("media_type", "image/png")
+              data = source.get("data", "")
+              image_parts.append(
+                {"type": "image_url", "image_url": {"url": f"data:{media_type};base64,{data}"}}
+              )
         tool_content = "\n".join(text_parts)
+      content_str = str(tool_content)
+      if is_error and content_str:
+        content_str = f"Error: {content_str}"
+      elif is_error:
+        content_str = "Error: tool execution failed"
       raw_tool_use_id = block.get("tool_use_id", "")
       tool_results.append(
         {
           "role": "tool",
           "tool_call_id": _to_openai_tool_id(raw_tool_use_id) if raw_tool_use_id else "",
-          "content": str(tool_content),
+          "content": content_str,
         }
       )
+      if image_parts:
+        # Append images from tool_result as a user message so
+        # vision-capable backends can see them.
+        tool_results.append({"role": "user", "content": image_parts})
 
   messages = list(tool_results)
   if openai_parts:
