@@ -599,6 +599,233 @@ class TestResponsesError:
 
 
 # ---------------------------------------------------------------------------
+# Tool ID Normalization (Responses API)
+# ---------------------------------------------------------------------------
+
+
+class TestResponsesToolIdNormalization:
+    """Verify tool IDs are normalized to call_ prefix in Responses API output."""
+
+    def test_build_output_items_normalizes_toolu_prefix(self):
+        """Backend returns toolu_-prefixed IDs; should become call_ in Responses output."""
+        openai_result = {
+            "choices": [{
+                "message": {
+                    "content": None,
+                    "tool_calls": [{
+                        "id": "toolu_abc123",
+                        "function": {"name": "search", "arguments": '{"q": "test"}'},
+                    }],
+                },
+                "finish_reason": "tool_calls",
+            }],
+        }
+        output = responses_compat._build_output_items(openai_result)
+        tc = [o for o in output if o["type"] == "function_call"][0]
+        assert tc["id"] == "call_abc123"
+        assert tc["call_id"] == "call_abc123"
+
+    def test_build_output_items_preserves_call_prefix(self):
+        """Backend returns call_-prefixed IDs; should remain unchanged."""
+        openai_result = {
+            "choices": [{
+                "message": {
+                    "content": None,
+                    "tool_calls": [{
+                        "id": "call_xyz789",
+                        "function": {"name": "fetch", "arguments": '{}'},
+                    }],
+                },
+                "finish_reason": "tool_calls",
+            }],
+        }
+        output = responses_compat._build_output_items(openai_result)
+        tc = [o for o in output if o["type"] == "function_call"][0]
+        assert tc["id"] == "call_xyz789"
+        assert tc["call_id"] == "call_xyz789"
+
+    def test_build_output_items_normalizes_chatcmpl_prefix(self):
+        """Backend returns chatcmpl-prefixed IDs; should become call_."""
+        openai_result = {
+            "choices": [{
+                "message": {
+                    "content": None,
+                    "tool_calls": [{
+                        "id": "chatcmpl-abc",
+                        "function": {"name": "fn", "arguments": '{}'},
+                    }],
+                },
+                "finish_reason": "tool_calls",
+            }],
+        }
+        output = responses_compat._build_output_items(openai_result)
+        tc = [o for o in output if o["type"] == "function_call"][0]
+        assert tc["id"] == "call_abc"
+        assert tc["call_id"] == "call_abc"
+
+    def test_build_output_items_missing_id_generates_call(self):
+        """Tool call with no id should generate a call_-prefixed ID."""
+        openai_result = {
+            "choices": [{
+                "message": {
+                    "content": None,
+                    "tool_calls": [{
+                        "function": {"name": "fn", "arguments": '{}'},
+                    }],
+                },
+                "finish_reason": "tool_calls",
+            }],
+        }
+        output = responses_compat._build_output_items(openai_result)
+        tc = [o for o in output if o["type"] == "function_call"][0]
+        assert tc["id"].startswith("call_")
+        assert tc["call_id"].startswith("call_")
+        assert tc["id"] == tc["call_id"]
+
+    def test_build_responses_response_tool_ids_normalized(self):
+        """Full response builder should normalize tool IDs to call_ prefix."""
+        openai_result = {
+            "choices": [{
+                "message": {
+                    "content": "Let me search",
+                    "tool_calls": [{
+                        "id": "toolu_resp123",
+                        "function": {"name": "search", "arguments": '{"q": "hello"}'},
+                    }],
+                },
+                "finish_reason": "tool_calls",
+            }],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+        }
+        response = responses_compat._build_responses_response(openai_result, "gpt-4o", "resp_test")
+        tc_items = [o for o in response["output"] if o["type"] == "function_call"]
+        assert len(tc_items) == 1
+        assert tc_items[0]["id"] == "call_resp123"
+        assert tc_items[0]["call_id"] == "call_resp123"
+
+
+class TestResponsesToolIdNormalizationInStreaming:
+    """Verify tool IDs are normalized to call_ in Responses streaming responses."""
+
+    @pytest.mark.asyncio
+    async def test_stream_normalizes_toolu_prefix_to_call(self):
+        """Streaming tool call with toolu_ prefix should emit call_ in output_item.added."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"toolu_stream1","function":{"name":"search","arguments":""}}]},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\\"q\\":\\"test\\"}"}}]},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":5,"completion_tokens":10,"total_tokens":15}}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "gpt-4o", "resp_test"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        added = [d for t, d in parsed if t == "response.output_item.added"
+                 and d.get("item", {}).get("type") == "function_call"]
+        assert len(added) == 1
+        assert added[0]["item"]["id"] == "call_stream1"
+        assert added[0]["item"]["call_id"] == "call_stream1"
+
+        # Also check done event
+        done = [d for t, d in parsed if t == "response.output_item.done"
+                and d.get("item", {}).get("type") == "function_call"]
+        assert len(done) == 1
+        assert done[0]["item"]["id"] == "call_stream1"
+        assert done[0]["item"]["call_id"] == "call_stream1"
+
+    @pytest.mark.asyncio
+    async def test_stream_preserves_call_prefix(self):
+        """Streaming tool call with call_ prefix should remain unchanged."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_existing","function":{"name":"fn","arguments":"{}"}}]},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "gpt-4o", "resp_test"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        added = [d for t, d in parsed if t == "response.output_item.added"
+                 and d.get("item", {}).get("type") == "function_call"]
+        assert len(added) == 1
+        assert added[0]["item"]["id"] == "call_existing"
+
+    @pytest.mark.asyncio
+    async def test_stream_function_call_arguments_events_use_normalized_id(self):
+        """Function call argument delta and done events should use normalized IDs."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"toolu_argtest","function":{"name":"fn","arguments":"{\\"a\\":1}"}}]},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "gpt-4o", "resp_test"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        deltas = [d for t, d in parsed if t == "response.function_call_arguments.delta"]
+        assert len(deltas) >= 1
+        assert deltas[0]["item_id"] == "call_argtest"
+
+        dones = [d for t, d in parsed if t == "response.function_call_arguments.done"]
+        assert len(dones) == 1
+        assert dones[0]["item_id"] == "call_argtest"
+
+
+class TestResponsesToolIdRoundTrip:
+    """Verify round-trip ID handling: backend -> response -> client -> request."""
+
+    def test_round_trip_toolu_to_call_and_back(self):
+        """Backend sends toolu_ -> output has call_ -> client sends call_ in
+        function_call_output -> passes through correctly to backend."""
+        # Step 1: Backend returns toolu_-prefixed tool call
+        openai_result = {
+            "choices": [{
+                "message": {
+                    "content": None,
+                    "tool_calls": [{
+                        "id": "toolu_roundtrip1",
+                        "function": {"name": "search", "arguments": '{}'},
+                    }],
+                },
+                "finish_reason": "tool_calls",
+            }],
+            "usage": {"prompt_tokens": 5, "completion_tokens": 5, "total_tokens": 10},
+        }
+        output = responses_compat._build_output_items(openai_result)
+        tc = [o for o in output if o["type"] == "function_call"][0]
+        call_id = tc["call_id"]
+        assert call_id == "call_roundtrip1"
+
+        # Step 2: Client sends function_call_output with the call_ ID
+        body = {
+            "input": [
+                {"type": "function_call_output", "call_id": call_id, "output": "result"},
+            ],
+        }
+        msgs = responses_compat._convert_input_to_messages(body)
+        assert msgs[0]["tool_call_id"] == "call_roundtrip1"
+
+    def test_function_call_output_normalizes_toolu_prefix(self):
+        """function_call_output with toolu_ call_id should be normalized to call_."""
+        body = {
+            "input": [
+                {"type": "function_call_output", "call_id": "toolu_abc", "output": "result"},
+            ],
+        }
+        msgs = responses_compat._convert_input_to_messages(body)
+        assert msgs[0]["tool_call_id"] == "call_abc"
+
+
+# ---------------------------------------------------------------------------
 # Streaming conversion
 # ---------------------------------------------------------------------------
 

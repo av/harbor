@@ -170,9 +170,10 @@ class TestConvertMessages:
             ],
         }
         msgs = anthropic_compat._convert_messages(body)
+        # toolu_ prefix is normalized to call_ for the OpenAI backend
         assert msgs[0] == {
             "role": "tool",
-            "tool_call_id": "toolu_1",
+            "tool_call_id": "call_1",
             "content": "tool output",
         }
 
@@ -220,9 +221,10 @@ class TestConvertMessages:
         assert len(msgs) == 1
         assert msgs[0]["role"] == "assistant"
         assert msgs[0]["content"] == "Let me check."
+        # toolu_ prefix normalized to call_ for OpenAI backend
         assert msgs[0]["tool_calls"] == [
             {
-                "id": "toolu_1",
+                "id": "call_1",
                 "type": "function",
                 "function": {
                     "name": "search",
@@ -364,8 +366,9 @@ class TestBuildOpenaiBody:
         openai_body = anthropic_compat._build_openai_body(body)
 
         assert openai_body["messages"][0]["role"] == "assistant"
+        # toolu_ prefix normalized to call_ for OpenAI backend
         assert openai_body["messages"][0]["tool_calls"][0] == {
-            "id": "toolu_1",
+            "id": "call_1",
             "type": "function",
             "function": {
                 "name": "memory_recall",
@@ -374,7 +377,7 @@ class TestBuildOpenaiBody:
         }
         assert openai_body["messages"][1] == {
             "role": "tool",
-            "tool_call_id": "toolu_1",
+            "tool_call_id": "call_1",
             "content": "memory result",
         }
 
@@ -3088,6 +3091,295 @@ class TestConvertParamsExistingParams:
         }
         params = anthropic_compat._convert_params(body)
         assert "metadata" not in params
+
+
+# ---------------------------------------------------------------------------
+# Tool ID Normalization
+# ---------------------------------------------------------------------------
+
+
+class TestToolIdNormalization:
+    """Verify that compat_utils.to_anthropic_tool_id and to_openai_tool_id
+    correctly re-prefix tool IDs for their respective API surfaces."""
+
+    def test_to_anthropic_already_prefixed(self):
+        from compat_utils import to_anthropic_tool_id
+        assert to_anthropic_tool_id("toolu_abc123") == "toolu_abc123"
+
+    def test_to_anthropic_from_call_prefix(self):
+        from compat_utils import to_anthropic_tool_id
+        assert to_anthropic_tool_id("call_abc123") == "toolu_abc123"
+
+    def test_to_anthropic_from_chatcmpl_prefix(self):
+        from compat_utils import to_anthropic_tool_id
+        assert to_anthropic_tool_id("chatcmpl-abc123") == "toolu_abc123"
+
+    def test_to_anthropic_bare_id(self):
+        from compat_utils import to_anthropic_tool_id
+        assert to_anthropic_tool_id("abc123") == "toolu_abc123"
+
+    def test_to_anthropic_empty(self):
+        from compat_utils import to_anthropic_tool_id
+        assert to_anthropic_tool_id("") == ""
+
+    def test_to_openai_already_prefixed(self):
+        from compat_utils import to_openai_tool_id
+        assert to_openai_tool_id("call_abc123") == "call_abc123"
+
+    def test_to_openai_from_toolu_prefix(self):
+        from compat_utils import to_openai_tool_id
+        assert to_openai_tool_id("toolu_abc123") == "call_abc123"
+
+    def test_to_openai_from_chatcmpl_prefix(self):
+        from compat_utils import to_openai_tool_id
+        assert to_openai_tool_id("chatcmpl-abc123") == "call_abc123"
+
+    def test_to_openai_bare_id(self):
+        from compat_utils import to_openai_tool_id
+        assert to_openai_tool_id("abc123") == "call_abc123"
+
+    def test_to_openai_empty(self):
+        from compat_utils import to_openai_tool_id
+        assert to_openai_tool_id("") == ""
+
+
+class TestAnthropicToolIdNormalizationInResponses:
+    """Verify tool IDs are normalized to toolu_ prefix in Anthropic responses."""
+
+    def test_build_content_blocks_normalizes_call_prefix(self):
+        """Backend returns call_-prefixed IDs; should become toolu_ in Anthropic response."""
+        openai_result = {
+            "choices": [{
+                "message": {
+                    "content": None,
+                    "tool_calls": [{
+                        "id": "call_abc123",
+                        "function": {"name": "search", "arguments": '{"q": "test"}'},
+                    }],
+                },
+                "finish_reason": "tool_calls",
+            }],
+            "usage": {},
+        }
+        blocks = anthropic_compat._build_content_blocks(openai_result)
+        tool_block = [b for b in blocks if b["type"] == "tool_use"][0]
+        assert tool_block["id"] == "toolu_abc123"
+
+    def test_build_content_blocks_preserves_toolu_prefix(self):
+        """Backend returns toolu_-prefixed IDs; should remain unchanged."""
+        openai_result = {
+            "choices": [{
+                "message": {
+                    "content": None,
+                    "tool_calls": [{
+                        "id": "toolu_xyz789",
+                        "function": {"name": "fetch", "arguments": '{}'},
+                    }],
+                },
+                "finish_reason": "tool_calls",
+            }],
+            "usage": {},
+        }
+        blocks = anthropic_compat._build_content_blocks(openai_result)
+        tool_block = [b for b in blocks if b["type"] == "tool_use"][0]
+        assert tool_block["id"] == "toolu_xyz789"
+
+    def test_build_content_blocks_normalizes_chatcmpl_prefix(self):
+        """Backend returns chatcmpl-prefixed IDs; should become toolu_."""
+        openai_result = {
+            "choices": [{
+                "message": {
+                    "content": None,
+                    "tool_calls": [{
+                        "id": "chatcmpl-abc",
+                        "function": {"name": "fn", "arguments": '{}'},
+                    }],
+                },
+                "finish_reason": "tool_calls",
+            }],
+            "usage": {},
+        }
+        blocks = anthropic_compat._build_content_blocks(openai_result)
+        tool_block = [b for b in blocks if b["type"] == "tool_use"][0]
+        assert tool_block["id"] == "toolu_abc"
+
+    def test_build_anthropic_response_tool_ids_normalized(self):
+        """Full response builder should normalize tool IDs."""
+        openai_result = {
+            "choices": [{
+                "message": {
+                    "content": "Calling tool",
+                    "tool_calls": [{
+                        "id": "call_test999",
+                        "function": {"name": "search", "arguments": '{"q": "hello"}'},
+                    }],
+                },
+                "finish_reason": "tool_calls",
+            }],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 5},
+        }
+        response = anthropic_compat._build_anthropic_response(openai_result, "claude-test")
+        tool_blocks = [b for b in response["content"] if b["type"] == "tool_use"]
+        assert len(tool_blocks) == 1
+        assert tool_blocks[0]["id"] == "toolu_test999"
+
+    def test_build_content_blocks_missing_id_generates_toolu(self):
+        """Tool call with no id should generate a toolu_-prefixed ID."""
+        openai_result = {
+            "choices": [{
+                "message": {
+                    "content": None,
+                    "tool_calls": [{
+                        "function": {"name": "fn", "arguments": '{}'},
+                    }],
+                },
+                "finish_reason": "tool_calls",
+            }],
+            "usage": {},
+        }
+        blocks = anthropic_compat._build_content_blocks(openai_result)
+        tool_block = [b for b in blocks if b["type"] == "tool_use"][0]
+        assert tool_block["id"].startswith("toolu_")
+
+
+class TestAnthropicToolIdNormalizationInRequests:
+    """Verify tool IDs are normalized to call_ prefix when converting Anthropic
+    requests to OpenAI format for the backend."""
+
+    def test_tool_result_toolu_id_normalized_to_call(self):
+        """tool_result with toolu_ ID should become call_ in the OpenAI body."""
+        body = {
+            "messages": [{
+                "role": "user",
+                "content": [{
+                    "type": "tool_result",
+                    "tool_use_id": "toolu_abc123",
+                    "content": "result",
+                }],
+            }],
+        }
+        msgs = anthropic_compat._convert_messages(body)
+        assert msgs[0]["tool_call_id"] == "call_abc123"
+
+    def test_tool_result_call_id_passed_through(self):
+        """tool_result with call_ ID should remain unchanged (already correct)."""
+        body = {
+            "messages": [{
+                "role": "user",
+                "content": [{
+                    "type": "tool_result",
+                    "tool_use_id": "call_xyz",
+                    "content": "result",
+                }],
+            }],
+        }
+        msgs = anthropic_compat._convert_messages(body)
+        assert msgs[0]["tool_call_id"] == "call_xyz"
+
+    def test_assistant_tool_use_id_normalized_to_call(self):
+        """tool_use in assistant message should have id normalized to call_ for backend."""
+        body = {
+            "messages": [{
+                "role": "assistant",
+                "content": [{
+                    "type": "tool_use",
+                    "id": "toolu_def456",
+                    "name": "search",
+                    "input": {"q": "test"},
+                }],
+            }],
+        }
+        msgs = anthropic_compat._convert_messages(body)
+        assert msgs[0]["tool_calls"][0]["id"] == "call_def456"
+
+    def test_round_trip_ids_stay_consistent(self):
+        """Full round-trip: backend sends call_ -> response has toolu_ -> client sends
+        toolu_ in tool_result -> we convert back to call_ for backend."""
+        # Step 1: Backend result with call_ prefix
+        openai_result = {
+            "choices": [{
+                "message": {
+                    "content": None,
+                    "tool_calls": [{
+                        "id": "call_round1",
+                        "function": {"name": "search", "arguments": '{}'},
+                    }],
+                },
+                "finish_reason": "tool_calls",
+            }],
+            "usage": {},
+        }
+        # Step 2: Build Anthropic response -> should have toolu_ prefix
+        response = anthropic_compat._build_anthropic_response(openai_result, "claude-test")
+        tool_id = response["content"][0]["id"]
+        assert tool_id == "toolu_round1"
+
+        # Step 3: Client sends back tool_result with the toolu_ ID
+        body = {
+            "messages": [{
+                "role": "user",
+                "content": [{
+                    "type": "tool_result",
+                    "tool_use_id": tool_id,
+                    "content": "search results",
+                }],
+            }],
+        }
+        msgs = anthropic_compat._convert_messages(body)
+        # Step 4: Should be normalized back to call_ for the backend
+        assert msgs[0]["tool_call_id"] == "call_round1"
+
+
+class TestAnthropicToolIdNormalizationInStreaming:
+    """Verify tool IDs are normalized to toolu_ in Anthropic streaming responses."""
+
+    @pytest.mark.asyncio
+    async def test_stream_normalizes_call_prefix_to_toolu(self):
+        """Streaming tool call with call_ prefix should emit toolu_ in content_block_start."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_stream1","function":{"name":"search","arguments":""}}]},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\\"q\\":\\"test\\"}"}}]},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":5,"completion_tokens":10,"total_tokens":15}}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in anthropic_compat._anthropic_stream_converter(
+            mock_stream(), "claude-test"
+        ):
+            events.append(event)
+
+        # Find content_block_start with tool_use
+        for raw in events:
+            data = json.loads(raw.split("data: ", 1)[1]) if "data: " in raw else None
+            if data and data.get("type") == "content_block_start":
+                block = data.get("content_block", {})
+                if block.get("type") == "tool_use":
+                    assert block["id"] == "toolu_stream1"
+                    return
+        pytest.fail("No tool_use content_block_start found in stream events")
+
+    @pytest.mark.asyncio
+    async def test_stream_preserves_toolu_prefix(self):
+        """Streaming tool call with toolu_ prefix should remain unchanged."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"toolu_existing","function":{"name":"fn","arguments":"{}"}}]},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in anthropic_compat._anthropic_stream_converter(
+            mock_stream(), "claude-test"
+        ):
+            events.append(event)
+
+        for raw in events:
+            data = json.loads(raw.split("data: ", 1)[1]) if "data: " in raw else None
+            if data and data.get("type") == "content_block_start":
+                block = data.get("content_block", {})
+                if block.get("type") == "tool_use":
+                    assert block["id"] == "toolu_existing"
+                    return
+        pytest.fail("No tool_use content_block_start found in stream events")
 
 
 # ---------------------------------------------------------------------------

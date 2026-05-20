@@ -18,6 +18,7 @@ from compat_utils import (
     get_chunk_tool_calls as _get_chunk_tool_calls,
     get_chunk_usage as _get_chunk_usage,
     sse_event as _sse_event,
+    to_openai_tool_id as _to_openai_tool_id,
 )
 
 logger = log.setup_logger(__name__)
@@ -109,9 +110,10 @@ def _convert_input_to_messages(body: dict):
         messages.append({"role": role, "content": str(content)})
 
     elif item_type == "function_call_output":
+      raw_call_id = item.get("call_id", "")
       messages.append({
         "role": "tool",
-        "tool_call_id": item.get("call_id", ""),
+        "tool_call_id": _to_openai_tool_id(raw_call_id) if raw_call_id else "",
         "content": item.get("output", ""),
       })
 
@@ -353,7 +355,8 @@ def _build_output_items(openai_result):
 
   for tc in tool_calls:
     func = tc.get("function", {})
-    tc_id = tc.get("id", f"call_{shortuuid.random()}")
+    raw_id = tc.get("id") or f"call_{shortuuid.random()}"
+    tc_id = _to_openai_tool_id(raw_id)
     output.append({
       "type": "function_call",
       "id": tc_id,
@@ -746,7 +749,7 @@ async def _responses_stream_converter(
             tc_args = dotty.get(tc, "function.arguments", "")
 
             if tc_id:
-              tool_state["id"] = tc_id
+              tool_state["id"] = _to_openai_tool_id(tc_id)
             if tc_name:
               tool_state["name"] = tc_name
             if tc_args:

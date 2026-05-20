@@ -17,6 +17,8 @@ from compat_utils import (
     get_chunk_tool_calls as _get_chunk_tool_calls,
     get_chunk_usage as _get_chunk_usage,
     sse_event as _sse_event,
+    to_anthropic_tool_id as _to_anthropic_tool_id,
+    to_openai_tool_id as _to_openai_tool_id,
 )
 
 logger = log.setup_logger(__name__)
@@ -157,10 +159,11 @@ def _convert_user_message(content):
           if isinstance(b, dict) and b.get("type") == "text"
         ]
         tool_content = "\n".join(text_parts)
+      raw_tool_use_id = block.get("tool_use_id", "")
       tool_results.append(
         {
           "role": "tool",
-          "tool_call_id": block.get("tool_use_id", ""),
+          "tool_call_id": _to_openai_tool_id(raw_tool_use_id) if raw_tool_use_id else "",
           "content": str(tool_content),
         }
       )
@@ -191,9 +194,10 @@ def _convert_assistant_message(content):
     if block_type == "text":
       text_parts.append(block.get("text", ""))
     elif block_type == "tool_use":
+      raw_id = block.get("id", "")
       tool_calls.append(
         {
-          "id": block.get("id", ""),
+          "id": _to_openai_tool_id(raw_id) if raw_id else "",
           "type": "function",
           "function": {
             "name": block.get("name", ""),
@@ -358,10 +362,11 @@ def _build_content_blocks(openai_result):
       tc.get("function", {}).get("arguments", "{}")
     )
 
+    raw_id = tc.get("id") or f"toolu_{shortuuid.random()}"
     blocks.append(
       {
         "type": "tool_use",
-        "id": tc.get("id", f"toolu_{shortuuid.random()}"),
+        "id": _to_anthropic_tool_id(raw_id),
         "name": tc.get("function", {}).get("name", ""),
         "input": parsed_input,
       }
@@ -542,7 +547,7 @@ async def _anthropic_stream_converter(
             tc_args = dotty.get(tc, "function.arguments", "")
 
             if tc_id:
-              tool_state["id"] = tc_id
+              tool_state["id"] = _to_anthropic_tool_id(tc_id)
             if tc_name:
               tool_state["name"] = tc_name
             if tc_args:

@@ -1,14 +1,50 @@
 """Shared utilities for Boost API compatibility layers.
 
-Contains chunk parsing, SSE formatting, and constants used by both
-anthropic_compat.py and responses_compat.py.
+Contains chunk parsing, SSE formatting, ID normalization, and constants
+used by both anthropic_compat.py and responses_compat.py.
 """
 
 import json
+import re
 
 import dotty
 
 REQUEST_ID_HEADER = "request-id"
+
+# Tool use / tool call ID prefix patterns
+_KNOWN_PREFIXES_RE = re.compile(r"^(toolu_|call_|chatcmpl-)")
+
+
+def to_anthropic_tool_id(raw_id: str) -> str:
+    """Ensure a tool use ID has the ``toolu_`` prefix Anthropic clients expect.
+
+    If *raw_id* already starts with ``toolu_`` it is returned unchanged.
+    Otherwise the existing known prefix (``call_``, ``chatcmpl-``, etc.) is
+    stripped and ``toolu_`` is prepended.  Bare IDs without a known prefix
+    are simply prefixed.
+    """
+    if not raw_id:
+        return raw_id
+    if raw_id.startswith("toolu_"):
+        return raw_id
+    core = _KNOWN_PREFIXES_RE.sub("", raw_id, count=1)
+    return f"toolu_{core}"
+
+
+def to_openai_tool_id(raw_id: str) -> str:
+    """Ensure a tool call ID has the ``call_`` prefix OpenAI clients expect.
+
+    If *raw_id* already starts with ``call_`` it is returned unchanged.
+    Otherwise the existing known prefix (``toolu_``, ``chatcmpl-``, etc.) is
+    stripped and ``call_`` is prepended.  Bare IDs without a known prefix
+    are simply prefixed.
+    """
+    if not raw_id:
+        return raw_id
+    if raw_id.startswith("call_"):
+        return raw_id
+    core = _KNOWN_PREFIXES_RE.sub("", raw_id, count=1)
+    return f"call_{core}"
 
 
 def get_chunk_content(chunk):
