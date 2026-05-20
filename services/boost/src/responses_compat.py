@@ -821,6 +821,7 @@ async def _responses_stream_converter(
   seq += 1
 
   stream_error = None
+  stream_error_code = None
 
   def _close_reasoning_item():
     """Yield events to close an open reasoning output item. Returns list of SSE strings."""
@@ -1225,13 +1226,17 @@ async def _responses_stream_converter(
     logger.warning("Responses streaming backend error %d: %s", e.status_code, e.body[:256])
     if e.status_code == 429:
       stream_error = "Rate limit exceeded"
+      stream_error_code = "rate_limit_exceeded"
     elif e.status_code >= 500:
       stream_error = "Backend server error"
+      stream_error_code = "server_error"
     else:
       stream_error = "Backend request failed"
+      stream_error_code = "server_error"
   except Exception as e:
     logger.error("Responses stream conversion error: %s", e, exc_info=True)
     stream_error = "An internal error occurred during streaming"
+    stream_error_code = "server_error"
 
   if stream_error:
     if reasoning_item_open:
@@ -1413,6 +1418,10 @@ async def _responses_stream_converter(
       input_tokens=input_tokens,
       output_tokens=output_tokens,
     ),
+    "error": {
+      "code": stream_error_code or "server_error",
+      "message": stream_error,
+    } if stream_error else None,
     "incomplete_details": {"reason": _incomplete_reason(finish_reason)} if status == "incomplete" else None,
   }
 

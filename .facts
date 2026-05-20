@@ -569,6 +569,9 @@
 - label: Boost Responses input_tokens rejects non-object bodies and missing model or input fields with OpenAI-format 400 errors instead of 500
   command: cd services/boost && pytest -q tests/test_endpoint_isolation.py -k 'responses_input_tokens_validation'
   tags: [spec, boost-compat-validation-400, implemented]
+- label: Boost Responses API streaming response.failed events include a non-null response.error object with an SDK-compatible code and sanitized message
+  command: python -m pytest services/boost/tests/test_responses_pydantic_validation.py::TestFailedStreamValidation::test_failed_event_populates_error_object -q
+  tags: [spec, boost-responses-stream-error-schema, implemented]
 
 ## shared
 - label: Boost compat layers share a common auth.py module with get_api_key supporting both Authorization and x-api-key headers

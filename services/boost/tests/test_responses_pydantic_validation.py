@@ -706,6 +706,32 @@ class TestFailedStreamValidation:
         types = [t for t, _ in validated]
         assert "response.failed" in types
 
+    @pytest.mark.asyncio
+    async def test_failed_event_populates_error_object(self):
+        """The failed response carries a non-null SDK-compatible error object."""
+        from llm import BackendError
+
+        async def _backend_error_stream():
+            raise BackendError(429, "raw upstream rate limit detail")
+            yield  # make it an async generator
+
+        events = []
+        async for sse_str in responses_compat._responses_stream_converter(
+            _backend_error_stream(), "test-model", "resp_err3"
+        ):
+            events.append(sse_str)
+
+        parsed = _parse_sse_events(events)
+        validated = _validate_all_events(parsed)
+        failed = [(t, m) for t, m in validated if t == "response.failed"]
+
+        assert len(failed) == 1
+        error = failed[0][1].response.error
+        assert error is not None
+        assert error.code == "rate_limit_exceeded"
+        assert error.message == "Rate limit exceeded"
+        assert "raw upstream" not in error.message
+
 
 # ---------------------------------------------------------------------------
 # Incomplete response path
