@@ -434,6 +434,17 @@
 - label: Boost Responses API usage objects include input_tokens_details and output_tokens_details sub-objects required by the OpenAI SDK
   command: rg -q 'input_tokens_details' services/boost/src/responses_compat.py && rg -q 'output_tokens_details' services/boost/src/responses_compat.py && rg -q '_make_usage' services/boost/src/responses_compat.py && rg -q 'test_usage_has_token_details' services/boost/tests/test_responses_compat.py
   tags: [spec, implemented]
+- label: Boost Responses API supports reasoning via effort param mapping, reasoning output items with summary, reasoning streaming events, and reasoning_tokens in usage
+  command: grep -q 'reasoning_effort' services/boost/src/responses_compat.py && grep -q '"type": "reasoning"' services/boost/src/responses_compat.py && grep -q 'reasoning_tokens' services/boost/src/responses_compat.py && grep -q 'TestReasoningStreaming' services/boost/tests/test_responses_compat.py
+  tags: [spec, implemented]
+
+## shared
+- label: Boost compat layers share a common auth.py module with get_api_key supporting both Authorization and x-api-key headers
+  command: test -f services/boost/src/auth.py && grep -q 'get_api_key' services/boost/src/auth.py && grep -q 'x-api-key' services/boost/src/auth.py && grep -q 'from auth import' services/boost/src/anthropic_compat.py && grep -q 'from auth import' services/boost/src/responses_compat.py
+  tags: [spec, implemented]
+- label: Boost compat layers share a common compat_utils.py module with chunk extraction helpers and SSE event formatting
+  command: test -f services/boost/src/compat_utils.py && grep -q 'get_chunk_content' services/boost/src/compat_utils.py && grep -q 'get_chunk_reasoning' services/boost/src/compat_utils.py && grep -q 'sse_event' services/boost/src/compat_utils.py && grep -q 'from compat_utils import' services/boost/src/anthropic_compat.py && grep -q 'from compat_utils import' services/boost/src/responses_compat.py
+  tags: [spec, implemented]
 
 ## config
 - label: Boost upstream APIs are configured via semicolon-separated HARBOR_BOOST_OPENAI_URLS and HARBOR_BOOST_OPENAI_KEYS
