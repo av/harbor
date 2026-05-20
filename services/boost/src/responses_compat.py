@@ -13,11 +13,13 @@ import llm as llm_mod
 from auth import get_api_key
 from compat_utils import (
     OPENAI_REQUEST_ID_HEADER,
+    extract_boost_params as _extract_boost_params,
     get_chunk_content as _get_chunk_content,
     get_chunk_reasoning as _get_chunk_reasoning,
     get_chunk_refusal as _get_chunk_refusal,
     get_chunk_tool_calls as _get_chunk_tool_calls,
     get_chunk_usage as _get_chunk_usage,
+    parse_sse_chunks as _parse_sse_chunks,
     sse_event as _sse_event,
     to_openai_tool_id as _to_openai_tool_id,
 )
@@ -340,21 +342,6 @@ def _convert_tool_choice(body: dict):
       )
       return "auto"
   return None
-
-
-def _extract_boost_params(body: dict):
-  """Extract ``@boost_``-prefixed params from Responses API ``metadata``.
-
-  Responses API requests carry an optional ``metadata`` dict.  Any key
-  inside it that starts with ``@boost_`` is forwarded into the OpenAI body
-  so it reaches ``LLM.split_params()`` and becomes available as a boost
-  param (e.g. ``@boost_workflow``, ``@boost_pad_size``).
-  """
-  metadata = body.get("metadata")
-  if not metadata or not isinstance(metadata, dict):
-    return {}
-
-  return {k: v for k, v in metadata.items() if k.startswith("@boost_")}
 
 
 def _build_openai_body(body: dict):
@@ -813,19 +800,7 @@ async def _responses_stream_converter(
     return events
 
   try:
-    async for raw_chunk in response_stream:
-      chunk_str = raw_chunk if isinstance(raw_chunk, str) else raw_chunk.decode("utf-8")
-
-      for line in chunk_str.strip().split("\n"):
-        line = line.strip()
-        if not line or line == "data: [DONE]" or not line.startswith("data: "):
-          continue
-
-        try:
-          chunk = json.loads(line[6:])
-        except (json.JSONDecodeError, TypeError):
-          continue
-
+    async for chunk in _parse_sse_chunks(response_stream):
         chunk_reasoning = _get_chunk_reasoning(chunk)
         chunk_text = _get_chunk_content(chunk)
         chunk_refusal = _get_chunk_refusal(chunk)

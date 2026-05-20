@@ -85,3 +85,51 @@ def get_chunk_usage(chunk):
 
 def sse_event(event_type, data):
   return f"event: {event_type}\ndata: {json.dumps(data, default=str)}\n\n"
+
+
+def extract_boost_params(body: dict) -> dict:
+  """Extract ``@boost_``-prefixed params from a request's ``metadata`` dict.
+
+  Both Anthropic and Responses API requests carry an optional ``metadata``
+  dict.  Any key inside it that starts with ``@boost_`` is forwarded into
+  the OpenAI body so it reaches ``LLM.split_params()`` and becomes available
+  as a boost param (e.g. ``@boost_workflow``, ``@boost_pad_size``).
+  """
+  metadata = body.get("metadata")
+  if not metadata or not isinstance(metadata, dict):
+    return {}
+
+  return {k: v for k, v in metadata.items() if k.startswith("@boost_")}
+
+
+async def parse_sse_chunks(response_stream):
+  """Yield parsed JSON dicts from an OpenAI-format SSE stream.
+
+  Harbor's ``LLM.serve()`` yields stringified SSE chunks in the form
+  ``data: {...}\\n\\n`` or ``data: [DONE]``.  This async generator handles
+  decoding, line splitting, and JSON parsing — the boilerplate both
+  streaming converters previously duplicated.
+
+  The inner *response_stream* is explicitly closed in a ``finally`` block
+  so that client disconnects (which raise ``GeneratorExit`` on the caller)
+  propagate cleanup to the underlying ``LLM.generator()`` and stop the
+  background task from writing to a dead queue.
+  """
+  try:
+    async for raw_chunk in response_stream:
+      chunk_str = raw_chunk if isinstance(raw_chunk, str) else raw_chunk.decode("utf-8")
+
+      for line in chunk_str.strip().split("\n"):
+        line = line.strip()
+        if not line or line == "data: [DONE]" or not line.startswith("data: "):
+          continue
+
+        try:
+          yield json.loads(line[6:])
+        except (json.JSONDecodeError, TypeError):
+          continue
+  finally:
+    # Ensure the upstream async generator is closed even when the
+    # consumer is interrupted (client disconnect / GeneratorExit).
+    if hasattr(response_stream, "aclose"):
+      await response_stream.aclose()
