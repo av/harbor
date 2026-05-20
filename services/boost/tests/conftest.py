@@ -1,9 +1,10 @@
-"""Shared test fixtures for Boost compat layer tests.
+"""Shared test fixtures for Boost tests.
 
-Registers module stubs for heavy dependencies (mapper, llm) that the compat
-layers import but tests mock individually. All stubs carry the full set of
-attributes that any test file might monkeypatch, preventing cross-test
-isolation failures when pytest collects multiple test files in one session.
+Stubs the ``mapper`` module, whose real implementation has heavy dependencies
+(asyncache) that are not available in the test environment.  The ``llm``
+module is left alone — it imports successfully from *src/* and is needed by
+both the compat-layer tests (which mock it per-test) and ``test_streaming.py``
+(which exercises the real ``LLM`` class).
 """
 
 import os
@@ -15,23 +16,15 @@ if SRC_DIR not in sys.path:
     sys.path.insert(0, SRC_DIR)
 os.chdir(SRC_DIR)
 
-# Stub mapper and llm before any compat module is imported.
-# Both test files need these attributes for monkeypatch.setattr().
-for mod_name in ("mapper", "llm"):
-    stub = sys.modules.get(mod_name)
-    if stub is None or not hasattr(stub, "__stub__"):
-        stub = types.ModuleType(mod_name)
-        stub.__stub__ = True
-        sys.modules[mod_name] = stub
+# Stub only mapper — it cannot be imported in the test environment due to
+# missing asyncache.  The compat test files monkeypatch these attributes
+# per-test with real mocks.
+_mapper_stub = sys.modules.get("mapper")
+if _mapper_stub is None or not hasattr(_mapper_stub, "__stub__"):
+    _mapper_stub = types.ModuleType("mapper")
+    _mapper_stub.__stub__ = True
+    sys.modules["mapper"] = _mapper_stub
 
-    if mod_name == "mapper":
-        if not hasattr(stub, "list_downstream"):
-            stub.list_downstream = None
-        if not hasattr(stub, "resolve_request_config"):
-            stub.resolve_request_config = None
-        if not hasattr(stub, "is_direct_task"):
-            stub.is_direct_task = None
-
-    if mod_name == "llm":
-        if not hasattr(stub, "LLM"):
-            stub.LLM = None
+for _attr in ("list_downstream", "resolve_request_config", "is_direct_task"):
+    if not hasattr(_mapper_stub, _attr):
+        setattr(_mapper_stub, _attr, None)

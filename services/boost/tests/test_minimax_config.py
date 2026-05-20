@@ -12,6 +12,16 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 class TestMiniMaxAutoConfig(unittest.TestCase):
     """Test that MiniMax backend is auto-registered when API key is set."""
 
+    def setUp(self):
+        # Save the original config module so we can restore it after each test.
+        # _reload_config() replaces sys.modules['config'], which would leave
+        # other modules (e.g. auth.py) holding a stale reference.
+        self._orig_config = sys.modules.get('config')
+
+    def tearDown(self):
+        if self._orig_config is not None:
+            sys.modules['config'] = self._orig_config
+
     def _reload_config(self):
         """Reload the config module to pick up env var changes."""
         if 'config' in sys.modules:
