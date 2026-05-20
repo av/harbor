@@ -1517,5 +1517,141 @@ class TestExceptionHandlerRootHealthAndRequestIdMiddleware:
                 shutil.rmtree(scratch, ignore_errors=True)
 
 
+class TestAsyncEventEmitterAndWSReceiverCoverage:
+    """Iter 7 coverage for src/events.py AsyncEventEmitter (all methods/branches/locks from 19%) + main.py:180 emit + :183 disconnect in WS receiver using real LLM (emitter) + .on() + registry + make_client WS send/close. Non-overlapping with prior TestEventsHandlers (iter2) and TestExceptionHandler... (iter6) in this file."""
+
+    def test_event_emitter_init_on_emit_calls_listener(self):
+        """Covers emitter __init__ (via direct), on append under lock, emit collect+gather, _call_listener success."""
+        from events import AsyncEventEmitter
+        emitter = AsyncEventEmitter()
+        called = []
+        async def listener(data):
+            called.append(data)
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(emitter.on("test.evt", listener))
+            loop.run_until_complete(emitter.emit("test.evt", {"k": 1}))
+            assert called == [{"k": 1}]
+        finally:
+            loop.close()
+
+    def test_event_emitter_once_requires_coro_and_auto_removes(self):
+        """Covers once (coro check + once list), emit clears once after call."""
+        from events import AsyncEventEmitter
+        emitter = AsyncEventEmitter()
+        called = []
+        async def once_l(data):
+            called.append(data)
+        def sync_l(x):
+            pass
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            with pytest.raises(TypeError, match="Listener must be async"):
+                loop.run_until_complete(emitter.once("bad", sync_l))
+            loop.run_until_complete(emitter.once("once.evt", once_l))
+            loop.run_until_complete(emitter.emit("once.evt", "x"))
+            loop.run_until_complete(emitter.emit("once.evt", "y"))
+            assert called == ["x"]
+        finally:
+            loop.close()
+
+    def test_event_emitter_off_remove_all_named_and_global(self):
+        """Covers off (remove from listeners or once, warn if not), remove_all_listeners with/without event_name."""
+        from events import AsyncEventEmitter
+        emitter = AsyncEventEmitter()
+        called = []
+        async def l1(d): called.append(1)
+        async def l2(d): called.append(2)
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(emitter.on("e", l1))
+            loop.run_until_complete(emitter.on("e", l2))
+            loop.run_until_complete(emitter.off("e", l1))
+            loop.run_until_complete(emitter.emit("e", None))
+            assert called == [2]
+            loop.run_until_complete(emitter.remove_all_listeners("e"))
+            called.clear()
+            loop.run_until_complete(emitter.emit("e", None))
+            assert called == []
+            loop.run_until_complete(emitter.on("f", l1))
+            loop.run_until_complete(emitter.remove_all_listeners())
+            loop.run_until_complete(emitter.emit("f", None))
+            assert called == []
+        finally:
+            loop.close()
+
+    def test_event_emitter_emit_no_listeners_path(self):
+        """Covers emit early return + debug log when no listeners registered."""
+        from events import AsyncEventEmitter
+        emitter = AsyncEventEmitter()
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(emitter.emit("no.listeners", "x"))
+        finally:
+            loop.close()
+
+    @pytest.mark.asyncio
+    async def test_event_emitter_listener_error_caught_in_call_listener(self):
+        """Covers _call_listener except: logs error but does not propagate, other listeners continue."""
+        from events import AsyncEventEmitter
+        emitter = AsyncEventEmitter()
+        called = []
+        async def bad(d):
+            raise RuntimeError("listener boom")
+        async def good(d):
+            called.append("good")
+        await emitter.on("err", bad)
+        await emitter.on("err", good)
+        await emitter.emit("err", {})
+        assert called == ["good"]  # continued after error
+
+    def test_ws_receiver_emit_and_disconnect_with_real_llm_emitter(self):
+        """Drives real main.py WS receiver (180: await llm.emit('websocket.message', data) from receive_json; 183: break on WebSocketDisconnect) + real emitter integration (LLM.on + emit from receiver task, like promx apply pattern)."""
+        from llm_registry import llm_registry
+        from llm import LLM
+        llm_registry._registry.clear()
+        class MinimalLLM(LLM):
+            def __init__(self):
+                super().__init__(
+                    url="http://127.0.0.1:1",
+                    model="test",
+                    messages=[{"role": "user", "content": "hi"}]
+                )
+                self.ws_captured = []
+            async def listen(self):
+                yield {"delta": {"content": "pre-chunk"}}
+                await asyncio.sleep(0.25)  # hold sender task open longer so receiver can process client send_json and hit emit(180)
+            def parse_chunk(self, c):
+                return c if isinstance(c, dict) else {"p": c}
+        llm = MinimalLLM()
+        llm_registry.register(llm)
+        async def capture(data):
+            llm.ws_captured.append(data)
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(llm.on("websocket.message", capture))
+            client = make_client()
+            with client.websocket_connect(f"/events/{llm.id}/ws") as ws:
+                _ = ws.receive_json()
+                try:
+                    ws.send_json({"type": "websocket.message", "val": 42})
+                except Exception:
+                    pass
+                import time
+                time.sleep(0.1)  # give receiver task window to await receive_json, execute emit(180) before client close triggers disconnect(183)
+            # context exit closes -> receiver hits disconnect break
+            assert llm_registry.get(llm.id) is not None
+            assert len(llm.ws_captured) >= 1, "real emitter.emit from WS receiver must have invoked the on() listener"
+            assert llm.ws_captured[0].get("val") == 42
+        finally:
+            loop.close()
+            llm_registry._registry.clear()
+
+
 if __name__ == "__main__":
     unittest.main()
