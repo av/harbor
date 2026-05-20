@@ -25,6 +25,7 @@ if _mapper_stub is None or not hasattr(_mapper_stub, "__stub__"):
     _mapper_stub.__stub__ = True
     sys.modules["mapper"] = _mapper_stub
 
-for _attr in ("list_downstream", "resolve_request_config", "is_direct_task"):
+for _attr in ("list_downstream", "resolve_request_config", "is_direct_task",
+              "get_proxy_model", "workflow_models"):
     if not hasattr(_mapper_stub, _attr):
         setattr(_mapper_stub, _attr, None)

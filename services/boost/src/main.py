@@ -99,8 +99,32 @@ async def websocket_event(stream_id: str, websocket: WebSocket):
 # --- OpenAI Compatible ---------------------
 
 
-@app.get("/v1/models")
-async def get_boost_models(api_key: str = Depends(get_api_key)):
+def _is_anthropic_client(request: Request) -> bool:
+  """Detect whether the request originates from an Anthropic SDK client.
+
+  The Anthropic SDK sends ``anthropic-version`` on every request.
+  ``x-api-key`` without ``Authorization`` is a weaker signal but still
+  indicates an Anthropic-style caller.
+  """
+  if request.headers.get("anthropic-version"):
+    return True
+  if request.headers.get("x-api-key") and not request.headers.get("authorization"):
+    return True
+  return False
+
+
+def _to_anthropic_model(model: dict) -> dict:
+  """Convert an OpenAI-format model dict to Anthropic ModelInfo format."""
+  return {
+    "id": model.get("id", ""),
+    "type": "model",
+    "display_name": model.get("name") or model.get("id", ""),
+    "created_at": "1970-01-01T00:00:00Z",
+  }
+
+
+async def _list_models():
+  """Resolve the full list of serveable models (shared by both formats)."""
   downstream = await mapper.list_downstream()
   enabled_modules = mods.registry.keys() if config.BOOST_MODS.value == [
     'all'
@@ -131,6 +155,52 @@ async def get_boost_models(api_key: str = Depends(get_api_key)):
       final.append(model)
 
   logger.debug(f"Serving {len(final)} models in the API")
+  return final
+
+
+@app.get("/v1/models/{model_id:path}")
+async def get_boost_model_by_id(
+  model_id: str, request: Request, api_key: str = Depends(get_api_key)
+):
+  models = await _list_models()
+  match = next((m for m in models if m.get("id") == model_id), None)
+
+  if match is None:
+    if _is_anthropic_client(request):
+      return JSONResponse(
+        status_code=404,
+        content={
+          "type": "error",
+          "error": {
+            "type": "not_found_error",
+            "message": f"Model not found: {model_id}",
+          },
+        },
+      )
+    raise HTTPException(status_code=404, detail=f"Model not found: {model_id}")
+
+  if _is_anthropic_client(request):
+    return JSONResponse(content=_to_anthropic_model(match), status_code=200)
+
+  return JSONResponse(content=match, status_code=200)
+
+
+@app.get("/v1/models")
+async def get_boost_models(request: Request, api_key: str = Depends(get_api_key)):
+  final = await _list_models()
+
+  if _is_anthropic_client(request):
+    anthropic_data = [_to_anthropic_model(m) for m in final]
+    first_id = anthropic_data[0]["id"] if anthropic_data else None
+    last_id = anthropic_data[-1]["id"] if anthropic_data else None
+    return JSONResponse(
+      content={
+        'data': anthropic_data,
+        'has_more': False,
+        'first_id': first_id,
+        'last_id': last_id,
+      }, status_code=200
+    )
 
   return JSONResponse(
     content={
