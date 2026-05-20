@@ -334,7 +334,12 @@ def _build_openai_body(body: dict):
 
 
 def _build_output_items(openai_result):
-  """Convert Chat Completions result to Responses API output items."""
+  """Convert Chat Completions result to Responses API output items.
+
+  The SDK computes ``Response.output_text`` client-side by concatenating
+  all ``output_text`` blocks from ``message`` output items, so the server
+  does not need to send a separate ``output_text`` field.
+  """
   output = []
 
   # Reasoning/thinking content — emitted as a reasoning output item before the message

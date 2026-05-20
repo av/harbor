@@ -3703,3 +3703,148 @@ class TestStoreMetadataTruncationIntegration:
                     assert data["response"]["truncation"] == "auto"
             except (json.JSONDecodeError, KeyError):
                 continue
+
+
+# ---------------------------------------------------------------------------
+# SDK output_text Property Compatibility
+# ---------------------------------------------------------------------------
+
+
+class TestOutputTextProperty:
+    """Verify that the SDK's computed ``output_text`` property works correctly
+    with responses built by our compat layer.
+
+    ``output_text`` is a client-side property on ``Response`` that concatenates
+    all ``output_text`` content blocks from ``message`` output items.  The server
+    does NOT send it as a JSON field.
+    """
+
+    def _parse_response(self, data):
+        """Parse a response dict through the SDK model, skip if SDK missing."""
+        try:
+            from openai.types.responses import Response
+            return Response.model_validate(data)
+        except ImportError:
+            pytest.skip("openai SDK not installed")
+
+    def test_output_text_from_single_message(self):
+        result = {
+            "choices": [{"message": {"content": "Hello world"}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 5, "completion_tokens": 3, "total_tokens": 8},
+        }
+        resp_data = responses_compat._build_responses_response(result, "gpt-4o", "resp_1")
+        parsed = self._parse_response(resp_data)
+        assert parsed.output_text == "Hello world"
+
+    def test_output_text_empty_content(self):
+        result = {
+            "choices": [{"message": {"content": ""}, "finish_reason": "stop"}],
+            "usage": {},
+        }
+        resp_data = responses_compat._build_responses_response(result, "gpt-4o", "resp_2")
+        parsed = self._parse_response(resp_data)
+        # Empty content still produces a message item with empty text
+        assert parsed.output_text == ""
+
+    def test_output_text_no_content_only_tool_calls(self):
+        result = {
+            "choices": [{
+                "message": {
+                    "content": None,
+                    "tool_calls": [{"id": "call_1", "function": {"name": "f", "arguments": "{}"}}],
+                },
+                "finish_reason": "tool_calls",
+            }],
+            "usage": {},
+        }
+        resp_data = responses_compat._build_responses_response(result, "gpt-4o", "resp_3")
+        parsed = self._parse_response(resp_data)
+        # No message output item, only function_call items
+        assert parsed.output_text == ""
+
+    def test_output_text_with_mixed_output_items(self):
+        result = {
+            "choices": [{
+                "message": {
+                    "content": "Let me help.",
+                    "tool_calls": [{"id": "call_1", "function": {"name": "f", "arguments": "{}"}}],
+                },
+                "finish_reason": "tool_calls",
+            }],
+            "usage": {},
+        }
+        resp_data = responses_compat._build_responses_response(result, "gpt-4o", "resp_4")
+        parsed = self._parse_response(resp_data)
+        assert parsed.output_text == "Let me help."
+
+    def test_output_text_not_in_json(self):
+        """output_text must NOT appear as a key in the serialized JSON."""
+        result = {
+            "choices": [{"message": {"content": "text"}, "finish_reason": "stop"}],
+            "usage": {},
+        }
+        resp_data = responses_compat._build_responses_response(result, "gpt-4o", "resp_5")
+        assert "output_text" not in resp_data or isinstance(
+            resp_data.get("output_text"), type(None)
+        )
+        # The only output_text references should be inside content blocks
+        assert resp_data["output"][0]["content"][0]["type"] == "output_text"
+
+    def test_text_field_is_config_not_content(self):
+        """The ``text`` field is a ResponseTextConfig, not concatenated content."""
+        result = {
+            "choices": [{"message": {"content": "hello"}, "finish_reason": "stop"}],
+            "usage": {},
+        }
+        resp_data = responses_compat._build_responses_response(result, "gpt-4o", "resp_6")
+        assert resp_data["text"] == {"format": {"type": "text"}}
+        parsed = self._parse_response(resp_data)
+        assert parsed.text is not None
+        assert parsed.text.format is not None
+        assert parsed.text.format.type == "text"
+
+    @pytest.mark.asyncio
+    async def test_output_text_from_streaming_completed(self):
+        """Verify the completed response from streaming can produce output_text."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"Hi"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{"content":" there"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"finish_reason":"stop","delta":{},"index":0}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "gpt-4o", "resp_stream"
+        ):
+            events.append(event)
+
+        parsed_events = _parse_sse_events(events)
+
+        # The completed response should have the text config field
+        completed = [d for t, d in parsed_events if t == "response.completed"]
+        assert len(completed) == 1
+        resp_data = completed[0]["response"]
+        assert resp_data["text"] == {"format": {"type": "text"}}
+
+        # Verify text done event has the full concatenated text
+        text_done = [d for t, d in parsed_events if t == "response.output_text.done"]
+        assert len(text_done) == 1
+        assert text_done[0]["text"] == "Hi there"
+
+    @pytest.mark.asyncio
+    async def test_streaming_skeleton_has_text_config(self):
+        """Both created and in_progress skeleton responses must include text config."""
+        async def mock_stream():
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "gpt-4o", "resp_skel"
+        ):
+            events.append(event)
+
+        parsed_events = _parse_sse_events(events)
+        created = [d for t, d in parsed_events if t == "response.created"]
+        in_progress = [d for t, d in parsed_events if t == "response.in_progress"]
+        assert created[0]["response"]["text"] == {"format": {"type": "text"}}
+        assert in_progress[0]["response"]["text"] == {"format": {"type": "text"}}
