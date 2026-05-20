@@ -734,7 +734,7 @@ async def _anthropic_stream_converter(
                 },
               )
   except Exception as e:
-    logger.error(f"Error during stream conversion: {e}", exc_info=True)
+    logger.error("Anthropic stream conversion error: %s", e, exc_info=True)
     # Use a generic message to avoid leaking internal details (backend URLs,
     # connection errors, stack traces) to the client via the SSE stream.
     stream_error = "An internal error occurred during streaming"
@@ -904,6 +904,11 @@ async def post_messages(request: Request, api_key: str = Depends(get_api_key)):
     request_model = json_body["model"]
     stop_sequences = json_body.get("stop_sequences")
     is_stream = json_body.get("stream", False)
+    msg_count = len(json_body.get("messages", []))
+    logger.info(
+      "Anthropic messages request: model=%s stream=%s messages=%d",
+      request_model, is_stream, msg_count,
+    )
     openai_body = _build_openai_body(json_body)
 
     # Refresh downstream models to ensure routing works
@@ -919,8 +924,10 @@ async def post_messages(request: Request, api_key: str = Depends(get_api_key)):
       and proxy.workflow is None
       and proxy.boost_params.get("workflow") is None
     ):
+      logger.debug("Anthropic request routed as direct task: model=%s", request_model)
       result = await proxy.chat_completion()
       response = _build_anthropic_response(result, request_model, stop_sequences)
+      logger.info("Anthropic response: model=%s stop_reason=%s", request_model, response.get("stop_reason"))
       return JSONResponse(
         content=response,
         status_code=200,
@@ -933,6 +940,7 @@ async def post_messages(request: Request, api_key: str = Depends(get_api_key)):
       return _anthropic_error(500, "No completion returned", request_id=request_id, beta_flags=beta_flags)
 
     if is_stream:
+      logger.debug("Starting Anthropic streaming response: model=%s", request_model)
       return StreamingResponse(
         _anthropic_stream_converter(completion, request_model, stop_sequences),
         media_type="text/event-stream",
@@ -941,6 +949,7 @@ async def post_messages(request: Request, api_key: str = Depends(get_api_key)):
     else:
       result = await proxy.consume_stream(completion)
       response = _build_anthropic_response(result, request_model, stop_sequences)
+      logger.info("Anthropic response: model=%s stop_reason=%s", request_model, response.get("stop_reason"))
       return JSONResponse(
         content=response,
         status_code=200,
@@ -952,16 +961,16 @@ async def post_messages(request: Request, api_key: str = Depends(get_api_key)):
     # Sanitize 5xx error details to avoid leaking internal information
     detail = str(e.detail) if e.status_code < 500 else "Internal server error"
     if e.status_code >= 500:
-      logger.error(f"HTTPException {e.status_code} in anthropic handler: {e.detail}")
+      logger.error("Anthropic handler HTTPException %d: %s", e.status_code, e.detail)
     return _anthropic_error(e.status_code, detail, error_type, request_id=request_id, beta_flags=beta_flags)
   except ValueError as e:
     # Log the full error but only surface a safe message to the client.
     # ValueError from mapper (e.g. missing model specifier) may contain
     # internal details we don't want to leak.
-    logger.warning(f"Request validation error: {e}")
+    logger.warning("Anthropic handler validation error: %s", e)
     return _anthropic_error(400, "Invalid request: could not resolve model or parameters", request_id=request_id, beta_flags=beta_flags)
   except Exception as e:
-    logger.error(f"Unexpected error in anthropic handler: {e}", exc_info=True)
+    logger.error("Anthropic handler unexpected error: %s", e, exc_info=True)
     return _anthropic_error(500, "Internal server error", request_id=request_id, beta_flags=beta_flags)
 
 
@@ -987,11 +996,17 @@ async def post_count_tokens(request: Request, api_key: str = Depends(get_api_key
     if not messages or not isinstance(messages, list) or len(messages) == 0:
       return _anthropic_error(400, "messages must be a non-empty array", request_id=request_id, beta_flags=beta_flags)
 
+    logger.info(
+      "Anthropic count_tokens request: model=%s messages=%d",
+      json_body["model"], len(messages),
+    )
+
     # Convert to OpenAI format for token counting
     openai_messages = _convert_messages(json_body)
     tools = _convert_tools(json_body)
 
     input_tokens = count_messages_tokens(openai_messages, tools or None)
+    logger.info("Anthropic count_tokens response: input_tokens=%d", input_tokens)
 
     return JSONResponse(
       content={"input_tokens": input_tokens},
@@ -1003,13 +1018,13 @@ async def post_count_tokens(request: Request, api_key: str = Depends(get_api_key
     error_type = ERROR_TYPE_MAP.get(e.status_code, "api_error")
     detail = str(e.detail) if e.status_code < 500 else "Internal server error"
     if e.status_code >= 500:
-      logger.error(f"HTTPException {e.status_code} in count_tokens handler: {e.detail}")
+      logger.error("Anthropic count_tokens HTTPException %d: %s", e.status_code, e.detail)
     return _anthropic_error(e.status_code, detail, error_type, request_id=request_id, beta_flags=beta_flags)
   except ValueError as e:
-    logger.warning(f"Request validation error in count_tokens: {e}")
+    logger.warning("Anthropic count_tokens validation error: %s", e)
     return _anthropic_error(400, "Invalid request: could not resolve model or parameters", request_id=request_id, beta_flags=beta_flags)
   except Exception as e:
-    logger.error(f"Unexpected error in count_tokens handler: {e}", exc_info=True)
+    logger.error("Anthropic count_tokens unexpected error: %s", e, exc_info=True)
     return _anthropic_error(500, "Internal server error", request_id=request_id, beta_flags=beta_flags)
 
 

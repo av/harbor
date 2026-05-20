@@ -1052,7 +1052,7 @@ async def _responses_stream_converter(
               seq += 1
 
   except Exception as e:
-    logger.error(f"Error during responses stream conversion: {e}", exc_info=True)
+    logger.error("Responses stream conversion error: %s", e, exc_info=True)
     # Use a generic message to avoid leaking internal details (backend URLs,
     # connection errors, stack traces) to the client via the SSE stream.
     stream_error = "An internal error occurred during streaming"
@@ -1279,6 +1279,11 @@ async def post_responses(request: Request, api_key: str = Depends(get_api_key)):
     is_stream = json_body.get("stream", False)
     response_id = f"resp_{shortuuid.random()}"
 
+    logger.info(
+      "Responses API request: model=%s stream=%s",
+      request_model, is_stream,
+    )
+
     # Log if client requests persistence (Harbor Boost does not persist responses)
     if json_body.get("store") is True:
       logger.debug(
@@ -1301,8 +1306,10 @@ async def post_responses(request: Request, api_key: str = Depends(get_api_key)):
       and proxy.workflow is None
       and proxy.boost_params.get("workflow") is None
     ):
+      logger.debug("Responses request routed as direct task: model=%s", request_model)
       result = await proxy.chat_completion()
       response = _build_responses_response(result, request_model, response_id, request_body=json_body)
+      logger.info("Responses API response: model=%s status=%s", request_model, response.get("status"))
       return JSONResponse(
         content=response,
         status_code=200,
@@ -1315,6 +1322,7 @@ async def post_responses(request: Request, api_key: str = Depends(get_api_key)):
       return _responses_error(500, "No completion returned", request_id=request_id)
 
     if is_stream:
+      logger.debug("Starting Responses streaming response: model=%s", request_model)
       return StreamingResponse(
         _responses_stream_converter(completion, request_model, response_id, request_body=json_body),
         media_type="text/event-stream",
@@ -1323,6 +1331,7 @@ async def post_responses(request: Request, api_key: str = Depends(get_api_key)):
     else:
       result = await proxy.consume_stream(completion)
       response = _build_responses_response(result, request_model, response_id, request_body=json_body)
+      logger.info("Responses API response: model=%s status=%s", request_model, response.get("status"))
       return JSONResponse(
         content=response,
         status_code=200,
@@ -1333,16 +1342,16 @@ async def post_responses(request: Request, api_key: str = Depends(get_api_key)):
     # Sanitize 5xx error details to avoid leaking internal information
     detail = str(e.detail) if e.status_code < 500 else "Internal server error"
     if e.status_code >= 500:
-      logger.error(f"HTTPException {e.status_code} in responses handler: {e.detail}")
+      logger.error("Responses handler HTTPException %d: %s", e.status_code, e.detail)
     return _responses_error(e.status_code, detail, request_id=request_id)
   except ValueError as e:
     # Log the full error but only surface a safe message to the client.
     # ValueError from mapper (e.g. missing model specifier) may contain
     # internal details we don't want to leak.
-    logger.warning(f"Request validation error: {e}")
+    logger.warning("Responses handler validation error: %s", e)
     return _responses_error(400, "Invalid request: could not resolve model or parameters", request_id=request_id)
   except Exception as e:
-    logger.error(f"Unexpected error in responses handler: {e}", exc_info=True)
+    logger.error("Responses handler unexpected error: %s", e, exc_info=True)
     return _responses_error(500, "Internal server error", request_id=request_id)
 
 

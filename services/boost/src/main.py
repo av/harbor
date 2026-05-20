@@ -71,7 +71,7 @@ async def _http_exception_handler(request: Request, exc: HTTPException):
   # Sanitize 5xx error details to avoid leaking internal information
   safe_detail = str(exc.detail) if exc.status_code < 500 else "Internal server error"
   if exc.status_code >= 500:
-    logger.error(f"HTTPException {exc.status_code} at {path}: {exc.detail}")
+    logger.error("HTTPException %d at %s: %s", exc.status_code, path, exc.detail)
 
   if path.startswith("/v1/messages"):
     error_type = _ANTHROPIC_ERROR_TYPE_MAP.get(exc.status_code, "api_error")
@@ -237,7 +237,7 @@ async def _list_models():
     if should_serve:
       final.append(model)
 
-  logger.debug(f"Serving {len(final)} models in the API")
+  logger.debug("Serving %d models in the API", len(final))
   return final
 
 
@@ -253,7 +253,7 @@ async def get_boost_model_by_id(
   try:
     models = await _list_models()
   except Exception as e:
-    logger.error(f"Failed to list models: {e}", exc_info=True)
+    logger.error("Failed to list models: %s", e, exc_info=True)
     if _is_anthropic_client(request):
       return JSONResponse(
         status_code=500,
@@ -297,7 +297,7 @@ async def get_boost_models(request: Request, api_key: str = Depends(get_api_key)
   try:
     final = await _list_models()
   except Exception as e:
-    logger.error(f"Failed to list models: {e}", exc_info=True)
+    logger.error("Failed to list models: %s", e, exc_info=True)
     if _is_anthropic_client(request):
       return JSONResponse(
         status_code=500,
@@ -338,15 +338,17 @@ async def post_boost_chat_completion(
 ):
   body = await request.body()
 
-  logger.debug(f"Request body: {body[:256]}...")
-
   try:
     decoded = body.decode("utf-8")
     json_body = json.loads(decoded)
     stream = json_body.get("stream", False)
   except json.JSONDecodeError:
-    logger.debug(f"Invalid JSON in request body: {body[:100]}")
+    logger.warning("Invalid JSON in chat completions request body")
     raise HTTPException(status_code=400, detail="Invalid JSON in request body")
+
+  model = json_body.get("model", "unknown")
+  msg_count = len(json_body.get("messages", []))
+  logger.info("Chat completions request: model=%s stream=%s messages=%d", model, stream, msg_count)
 
   # Refresh downstream models to ensure
   # that we know where to route the requests
@@ -399,7 +401,7 @@ if config.ENABLE_ANTHROPIC_COMPAT.value:
 
 # ------------ Startup ----------------
 
-logger.info(f"Boosting: {config.BOOST_APIS}")
+logger.info("Boosting: %s", config.BOOST_APIS)
 if len(config.BOOST_AUTH) == 0:
   logger.warning("No API keys specified - boost will accept all requests")
 
