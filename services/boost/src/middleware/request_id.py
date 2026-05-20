@@ -1,9 +1,14 @@
+import shutil
+from pathlib import Path
+
 from fastapi import Request
 from contextvars import ContextVar
 import uuid
 from starlette.middleware.base import BaseHTTPMiddleware
 
 request_id_var: ContextVar[str] = ContextVar("request_id", default="")
+
+SCRATCH_ROOT = Path("/tmp/harbor-boost-tools")
 
 
 class RequestIDMiddleware(BaseHTTPMiddleware):
@@ -14,5 +19,9 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
     request_id_var.set(request_id)
     response = await call_next(request)
     response.headers["X-Request-ID"] = request_id
+
+    scratch_dir = SCRATCH_ROOT / request_id
+    if scratch_dir.is_dir():
+      shutil.rmtree(scratch_dir, ignore_errors=True)
 
     return response

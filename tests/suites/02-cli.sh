@@ -42,6 +42,19 @@ assert_match() {
   fi
 }
 
+assert_not_match() {
+  local name="$1" regex="$2"; shift 2
+  suite_log "$name"
+  if ! "$@" >/tmp/cli-step.out 2>&1; then
+    cat /tmp/cli-step.out >&2
+    fail "$name (exit $?)"
+  fi
+  if grep -Eq -- "$regex" /tmp/cli-step.out; then
+    cat /tmp/cli-step.out >&2
+    fail "$name (output unexpectedly matched /$regex/)"
+  fi
+}
+
 # 1. Version + help — the script must boot without errors.
 assert_match "harbor --version"      'Harbor CLI version: [0-9]+\.[0-9]+\.[0-9]+' harbor --version
 assert_match "harbor help (alias)"   'Usage:'                                     harbor --help
@@ -92,6 +105,311 @@ assert_ok    "env ollama port reset" harbor env ollama OLLAMA_HOST 0.0.0.0
 #    from the running container's published port, so it only succeeds
 #    once the service is up — that path is exercised in the smoke suite.
 assert_match "harbor cmd ollama"     'docker[ -]compose'            harbor cmd ollama
+
+# 7b. launch — OpenCode is both a host tool adapter name and a Harbor service.
+#     Users need an explicit service mode that does not require the host tool
+#     binary and still reuses the active Harbor compose selection.
+fake_bin="$(mktemp -d)"
+fake_docker_log="$(mktemp)"
+cat >"$fake_bin/docker" <<'EOF'
+#!/usr/bin/env bash
+case "$*" in
+  "compose ps --format {{.Service}}")
+    echo "ollama"
+    exit 0
+    ;;
+  "compose ps --services --filter status=running")
+    echo "ollama"
+    exit 0
+    ;;
+  "compose ps -a --services --filter status=running")
+    echo "ollama"
+    exit 0
+    ;;
+  "port harbor.ollama")
+    echo "11434/tcp -> 0.0.0.0:11434"
+    exit 0
+    ;;
+esac
+
+if [ "$1" = "compose" ]; then
+  printf '%s\n' "$*" >>"$HARBOR_FAKE_DOCKER_LOG"
+  if [ "${HARBOR_FAKE_PROMPTFOO_UP_EXIT:-0}" != "0" ] && [[ "$*" == *" up -d --wait"* ]]; then
+    exit "$HARBOR_FAKE_PROMPTFOO_UP_EXIT"
+  fi
+  if [ "${HARBOR_FAKE_PROMPTFOO_RUN_EXIT:-0}" != "0" ] && [[ "$*" == *" run -T --rm"* ]] && [[ "$*" == *" --entrypoint promptfoo promptfoo --version"* ]]; then
+    exit "$HARBOR_FAKE_PROMPTFOO_RUN_EXIT"
+  fi
+  exit 0
+fi
+
+exit 0
+EOF
+cat >"$fake_bin/curl" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' '{"data":[{"id":"test-model"}]}'
+EOF
+chmod +x "$fake_bin/docker" "$fake_bin/curl"
+
+assert_match "launch help documents service mode" '--service opencode' harbor launch --help
+assert_match "launch help lists supported launch targets" 'Supported launch targets:' harbor launch --help
+assert_match "launch help lists host tools" 'Host tools: .*codex.*pi.*vscode' harbor launch --help
+assert_match "launch help lists service CLI shortcuts" 'Service CLI shortcuts: .*plandex.*promptfoo.*tokscale' harbor launch --help
+assert_match "launch help lists container service fallback" "Container services: any service from 'harbor ls'.*mi.*opencode" harbor launch --help
+assert_match "launch help documents web as the only tool modifier" '^--model, --config, and --web\.$' harbor launch --help
+assert_not_match "launch help does not list removed tool groups" '--time|--notes|--files|--scratch' harbor launch --help
+
+suite_log "launch help avoids broken generic service --help example"
+if harbor launch --help >/tmp/cli-step.out 2>&1 && grep -Eq -- 'harbor launch llamacpp --help' /tmp/cli-step.out; then
+  cat /tmp/cli-step.out >&2
+  fail "launch help advertised a generic service --help example that treats --help as the container command"
+fi
+
+suite_log "launch --service requires a handle"
+if harbor launch --service >/tmp/cli-step.out 2>&1; then
+  cat /tmp/cli-step.out >&2
+  fail "launch --service without handle unexpectedly succeeded"
+fi
+if ! grep -Eq -- 'Usage: harbor launch \[launch-options\] \[--service\] <service\|tool>' /tmp/cli-step.out; then
+  cat /tmp/cli-step.out >&2
+  fail "launch --service without handle did not print usage"
+fi
+
+suite_log "launch opencode missing host tool suggests service mode"
+: >"$fake_docker_log"
+if HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false HARBOR_FAKE_DOCKER_LOG="$fake_docker_log" PATH="$fake_bin:/usr/bin:/bin" ./harbor.sh launch --backend ollama --model test-model opencode >/tmp/cli-step.out 2>&1; then
+  cat /tmp/cli-step.out >&2
+  fail "launch opencode missing host tool unexpectedly succeeded"
+fi
+if ! grep -Eq -- 'harbor launch --service opencode' /tmp/cli-step.out; then
+  cat /tmp/cli-step.out >&2
+  fail "launch opencode missing host tool did not suggest service mode"
+fi
+if [ -s "$fake_docker_log" ]; then
+  cat "$fake_docker_log" >&2
+  fail "launch opencode missing host tool started compose before validating the host binary"
+fi
+
+assert_ok "launch --service opencode" env HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false HARBOR_FAKE_DOCKER_LOG="$fake_docker_log" PATH="$fake_bin:$PATH" harbor launch --service opencode --help
+if ! grep -Eq -- 'run -T --rm opencode --help' "$fake_docker_log"; then
+  cat "$fake_docker_log" >&2
+  fail "launch --service opencode did not dispatch to docker compose run"
+fi
+
+suite_log "launch promptfoo propagates startup failure"
+: >"$fake_docker_log"
+if HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false HARBOR_FAKE_DOCKER_LOG="$fake_docker_log" HARBOR_FAKE_PROMPTFOO_UP_EXIT=42 PATH="$fake_bin:$PATH" ./harbor.sh launch promptfoo --version >/tmp/cli-step.out 2>&1; then
+  cat /tmp/cli-step.out >&2
+  fail "launch promptfoo startup failure unexpectedly succeeded"
+fi
+if grep -Eq -- 'run .*--entrypoint promptfoo promptfoo --version' "$fake_docker_log"; then
+  cat "$fake_docker_log" >&2
+  fail "launch promptfoo continued to CLI run after startup failure"
+fi
+
+suite_log "launch promptfoo uses noninteractive run flag and propagates CLI failure"
+: >"$fake_docker_log"
+if HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false HARBOR_FAKE_DOCKER_LOG="$fake_docker_log" HARBOR_FAKE_PROMPTFOO_RUN_EXIT=43 PATH="$fake_bin:$PATH" ./harbor.sh launch promptfoo --version >/tmp/cli-step.out 2>&1; then
+  cat /tmp/cli-step.out >&2
+  fail "launch promptfoo CLI failure unexpectedly succeeded"
+fi
+if ! grep -Eq -- 'run -T --rm .* --entrypoint promptfoo promptfoo --version' "$fake_docker_log"; then
+  cat "$fake_docker_log" >&2
+  fail "launch promptfoo did not use noninteractive compose run"
+fi
+if grep -Eq -- 'run .* -it ' "$fake_docker_log"; then
+  cat "$fake_docker_log" >&2
+  fail "launch promptfoo used interactive compose run without a TTY"
+fi
+rm -rf "$fake_bin" "$fake_docker_log"
+
+# 7c. launch host adapters — backend/model discovery failures should be
+#     actionable from a user's terminal, and --model must avoid parsing
+#     /v1/models while still checking that the selected backend is reachable.
+launch_fake_bin="$(mktemp -d)"
+launch_fake_curl_log="$(mktemp)"
+launch_fake_docker_state="$(mktemp)"
+cat >"$launch_fake_bin/docker" <<'EOF'
+#!/usr/bin/env bash
+running_services() {
+  printf '%s\n' ${HARBOR_FAKE_RUNNING_SERVICES:-}
+  if [ -n "${HARBOR_FAKE_DOCKER_STATE:-}" ] && [ -f "$HARBOR_FAKE_DOCKER_STATE" ]; then
+    cat "$HARBOR_FAKE_DOCKER_STATE"
+  fi
+}
+
+case "$*" in
+  "compose ps --format {{.Service}}")
+    running_services
+    exit 0
+    ;;
+  "compose ps --services --filter status=running")
+    running_services
+    exit 0
+    ;;
+  "compose ps -a --services --filter status=running")
+    running_services
+    exit 0
+    ;;
+  "port harbor.ollama")
+    echo "11434/tcp -> 0.0.0.0:11434"
+    exit 0
+    ;;
+  "port harbor.llamacpp")
+    echo "8080/tcp -> 0.0.0.0:33821"
+    exit 0
+    ;;
+  "port harbor.unsloth-studio")
+    echo "34851/tcp -> 0.0.0.0:34851"
+    exit 0
+    ;;
+esac
+
+if [ "$1" = "compose" ]; then
+  if [ -n "${HARBOR_FAKE_DOCKER_STATE:-}" ] && [[ " $* " == *" up -d --wait "* ]]; then
+    seen_wait=false
+    for arg in "$@"; do
+      if $seen_wait; then
+        case "$arg" in
+          -*)
+            ;;
+          *)
+            printf '%s\n' "$arg" >>"$HARBOR_FAKE_DOCKER_STATE"
+            ;;
+        esac
+      fi
+      if [ "$arg" = "--wait" ]; then
+        seen_wait=true
+      fi
+    done
+  fi
+  exit 0
+fi
+
+exit 0
+EOF
+cat >"$launch_fake_bin/curl" <<'EOF'
+#!/usr/bin/env bash
+if [ -n "${HARBOR_FAKE_CURL_LOG:-}" ]; then
+  printf '%s\n' "$*" >>"$HARBOR_FAKE_CURL_LOG"
+fi
+
+case "${HARBOR_FAKE_CURL_MODE:-models}" in
+  fail)
+    exit 7
+    ;;
+  empty)
+    printf '%s\n' '{"data":[]}'
+    ;;
+  invalid)
+    printf '%s\n' 'not-json'
+    ;;
+  *)
+    printf '%s\n' '{"data":[{"id":"fake-discovered"}]}'
+    ;;
+esac
+EOF
+chmod +x "$launch_fake_bin/docker" "$launch_fake_bin/curl"
+
+assert_launch_missing_option() {
+  local name="$1"
+  local expected="$2"
+  shift 2
+
+  suite_log "$name"
+  : >"$launch_fake_docker_state"
+  if HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false HARBOR_FAKE_RUNNING_SERVICES=ollama HARBOR_FAKE_DOCKER_STATE="$launch_fake_docker_state" PATH="$launch_fake_bin:/usr/bin:/bin" ./harbor.sh launch "$@" >/tmp/cli-step.out 2>&1; then
+    cat /tmp/cli-step.out >&2
+    fail "$name unexpectedly succeeded"
+  fi
+  if ! grep -Fq -- "$expected" /tmp/cli-step.out; then
+    cat /tmp/cli-step.out >&2
+    fail "$name did not print usage"
+  fi
+}
+
+suite_log "launch host options reject missing values"
+assert_launch_missing_option "launch --backend rejects omitted value" "Usage: harbor launch --backend <value> <tool> [args]" --backend
+assert_launch_missing_option "launch --backend rejects option as value" "Usage: harbor launch --backend <value> <tool> [args]" --backend --model explicit codex
+assert_launch_missing_option "launch --backend= rejects empty inline value" "Usage: harbor launch --backend <value> <tool> [args]" --backend= --model explicit codex
+assert_launch_missing_option "launch --model rejects omitted value" "Usage: harbor launch --model <value> <tool> [args]" --model
+assert_launch_missing_option "launch --model rejects option as value" "Usage: harbor launch --model <value> <tool> [args]" --model --config codex
+assert_launch_missing_option "launch --model= rejects empty inline value" "Usage: harbor launch --model <value> <tool> [args]" --model= --backend ollama codex
+
+suite_log "launch --time is not a launch option"
+if HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false HARBOR_FAKE_RUNNING_SERVICES=ollama HARBOR_FAKE_DOCKER_STATE="$launch_fake_docker_state" PATH="$launch_fake_bin:/usr/bin:/bin" ./harbor.sh launch --time codex >/tmp/cli-step.out 2>&1; then
+  cat /tmp/cli-step.out >&2
+  fail "launch --time unexpectedly succeeded"
+fi
+if ! grep -Eq -- "Service '--time' not found" /tmp/cli-step.out; then
+  cat /tmp/cli-step.out >&2
+  fail "launch --time did not fail as an unsupported launch target"
+fi
+
+suite_log "launch codex starts llamacpp when no backend is running"
+: >"$launch_fake_docker_state"
+if ! HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false HARBOR_FAKE_RUNNING_SERVICES=webui HARBOR_FAKE_DOCKER_STATE="$launch_fake_docker_state" PATH="$launch_fake_bin:/usr/bin:/bin" ./harbor.sh launch --config codex >/tmp/cli-step.out 2>&1; then
+  cat /tmp/cli-step.out >&2
+  fail "launch codex without running backend did not start llamacpp"
+fi
+if ! grep -Eq -- 'No running Harbor OpenAI-compatible backend found; starting llamacpp' /tmp/cli-step.out || ! grep -Eq -- '^backend=llamacpp$' /tmp/cli-step.out; then
+  cat /tmp/cli-step.out >&2
+  fail "launch codex without running backend did not use llamacpp"
+fi
+
+suite_log "launch codex starts explicit backend when missing"
+: >"$launch_fake_docker_state"
+if ! HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false HARBOR_FAKE_RUNNING_SERVICES=webui HARBOR_FAKE_DOCKER_STATE="$launch_fake_docker_state" PATH="$launch_fake_bin:/usr/bin:/bin" ./harbor.sh launch --backend ollama --config codex >/tmp/cli-step.out 2>&1; then
+  cat /tmp/cli-step.out >&2
+  fail "launch codex with stopped explicit backend did not start it"
+fi
+if ! grep -Eq -- "Backend 'ollama' is not running; starting it" /tmp/cli-step.out || ! grep -Eq -- '^backend=ollama$' /tmp/cli-step.out; then
+  cat /tmp/cli-step.out >&2
+  fail "launch codex with stopped explicit backend did not use ollama"
+fi
+
+suite_log "launch codex reports explicit backend unreachable"
+if HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false HARBOR_FAKE_RUNNING_SERVICES=ollama HARBOR_FAKE_CURL_MODE=fail PATH="$launch_fake_bin:/usr/bin:/bin" ./harbor.sh launch --backend ollama --model test-model --config codex >/tmp/cli-step.out 2>&1; then
+  cat /tmp/cli-step.out >&2
+  fail "launch codex with unreachable explicit backend unexpectedly succeeded"
+fi
+if ! grep -Eq -- "Backend 'ollama' is running, but its OpenAI-compatible endpoint is not reachable" /tmp/cli-step.out; then
+  cat /tmp/cli-step.out >&2
+  fail "launch codex with unreachable explicit backend did not print reachability error"
+fi
+
+suite_log "launch codex reports empty /v1/models"
+if HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false HARBOR_FAKE_RUNNING_SERVICES=unsloth-studio HARBOR_FAKE_CURL_MODE=empty PATH="$launch_fake_bin:/usr/bin:/bin" ./harbor.sh launch --backend unsloth-studio --config codex >/tmp/cli-step.out 2>&1; then
+  cat /tmp/cli-step.out >&2
+  fail "launch codex with empty models unexpectedly succeeded"
+fi
+if ! grep -Eq -- "did not advertise any models" /tmp/cli-step.out || ! grep -Eq -- 'harbor launch --backend unsloth-studio --model <model> codex' /tmp/cli-step.out; then
+  cat /tmp/cli-step.out >&2
+  fail "launch codex with empty models did not print remediation"
+fi
+
+suite_log "launch codex reports invalid /v1/models"
+if HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false HARBOR_FAKE_RUNNING_SERVICES=unsloth-studio HARBOR_FAKE_CURL_MODE=invalid PATH="$launch_fake_bin:/usr/bin:/bin" ./harbor.sh launch --backend unsloth-studio --config codex >/tmp/cli-step.out 2>&1; then
+  cat /tmp/cli-step.out >&2
+  fail "launch codex with invalid models unexpectedly succeeded"
+fi
+if ! grep -Eq -- "returned an invalid /v1/models response" /tmp/cli-step.out || ! grep -Eq -- 'pass a known model explicitly with --model <model>' /tmp/cli-step.out; then
+  cat /tmp/cli-step.out >&2
+  fail "launch codex with invalid models did not print remediation"
+fi
+
+suite_log "launch codex --model skips model discovery"
+: >"$launch_fake_curl_log"
+assert_ok "launch codex --model skips model discovery" env HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false HARBOR_FAKE_RUNNING_SERVICES=ollama HARBOR_FAKE_CURL_MODE=invalid HARBOR_FAKE_CURL_LOG="$launch_fake_curl_log" PATH="$launch_fake_bin:/usr/bin:/bin" ./harbor.sh launch --backend ollama --model explicit-model --config codex
+if ! grep -Eq -- '^model=explicit-model$' /tmp/cli-step.out; then
+  cat /tmp/cli-step.out >&2
+  fail "launch codex --model did not use the explicit model"
+fi
+if [ "$(wc -l <"$launch_fake_curl_log")" -ne 1 ]; then
+  cat "$launch_fake_curl_log" >&2
+  fail "launch codex --model called curl more than once"
+fi
+rm -rf "$launch_fake_bin" "$launch_fake_curl_log" "$launch_fake_docker_state"
 
 # 8. Doctor — runs without bringing services up. requirements.sh-derived
 #    checks (docker, compose v2 >= 2.23, git, curl) all pass against the

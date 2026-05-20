@@ -49,6 +49,10 @@ harbor pf --help
 harbor ps # harbor.promptfoo
 ```
 
+Harbor runs the Promptfoo service as the configured host user and prepares the
+workspace bind mount with `HARBOR_USER_ID` and `HARBOR_GROUP_ID`, so Promptfoo
+can write its global config while the files remain manageable from the host.
+
 Promptfoo backend serves all recorded results in the web UI:
 
 ```bash

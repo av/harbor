@@ -67,6 +67,49 @@ Boost comes with [a lot of built-in modules](../docs/5.2.3-Harbor-Boost-Modules)
 |-|-|-|
 | ![](../docs/boost-dot.png) | ![](../docs/boost-klmbr.png) | ![](../docs/boost-r0.png) |
 
+#### Workflows and agents
+
+Workflows let one advertised model prefix run multiple configured modules in order. Use them for small agents that need a system prompt, tools, and a completion strategy together.
+
+The default preconfigured workflow file is `/boost/workflows.yaml`. Mount a file there, or point `HARBOR_BOOST_WORKFLOWS_FILE` at a `.yaml`, `.yml`, or `.json` file.
+
+```yaml
+workflows:
+  research:
+    name: Research Agent
+    description: Uses web tools before answering
+    modules:
+      - module: system
+        config:
+          prompt: Use available tools before answering current or external questions.
+      - module: tools
+        config:
+          tools:
+            - web_search
+            - read_url
+            - current_time
+      - module: final
+```
+
+You can also configure workflows inline:
+
+```bash
+harbor config set HARBOR_BOOST_WORKFLOWS '{
+  "research": {
+    "name": "Research Agent",
+    "description": "Uses web tools before answering",
+    "modules": [
+      { "module": "system", "config": { "prompt": "Use available tools before answering current or external questions." } },
+      { "module": "tools", "config": { "tools": ["web_search", "read_url", "current_time"] } },
+      { "module": "final" }
+    ]
+  }
+}'
+harbor config update
+```
+
+If the downstream backend serves `llama3.2`, Boost will advertise `research-llama3.2`. You can also send an ad hoc workflow in a chat completion request with `@boost_workflow` while using a normal base model.
+
 #### Scripting
 
 Creating custom modules is a first-class feature and one of the main use-cases for Harbor Boost.

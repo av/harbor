@@ -11,6 +11,7 @@ services:
     env_file:
       - ./.env
       - ./services/promptfoo/override.env
+    user: "${HARBOR_USER_ID}:${HARBOR_GROUP_ID}"
     environment:
       - PROMPTFOO_REMOTE_API_BASE_URL=${HARBOR_PROMPTFOO_REMOTE_API_BASE_URL}
       - PROMPTFOO_REMOTE_APP_BASE_URL=http://localhost:${HARBOR_PROMPTFOO_REMOTE_APP_BASE_URL}

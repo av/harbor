@@ -12,7 +12,7 @@ FROM alpine:3
 
 RUN apk add --no-cache \
         openrc \
-        ca-certificates curl git bash sudo \
+        ca-certificates curl git jq bash sudo \
         docker docker-compose docker-cli-buildx \
         fuse-overlayfs \
         iproute2 iptables \

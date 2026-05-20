@@ -53,7 +53,7 @@ function parseArgs(raw: string[]): Args {
     installSource: "github",
     jobs: defaultJobs(),
     json: false,
-    // 1800s per row accommodates first-run image builds + all three suites
+    // 1800s per row accommodates first-run image builds + the full suite set
     // on the slowest distro (fedora-43 routinely ~10m for install+smoke).
     // Override via --timeout. 0 disables.
     timeoutSeconds: 1800,

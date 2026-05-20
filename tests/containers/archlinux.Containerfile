@@ -16,7 +16,7 @@ ENV container=docker
 RUN pacman -Syu --noconfirm \
     && pacman -S --noconfirm --needed \
         systemd \
-        ca-certificates curl git sudo \
+        ca-certificates curl git jq sudo \
         docker docker-compose docker-buildx \
         fuse-overlayfs \
         iproute2 iptables-nft \
