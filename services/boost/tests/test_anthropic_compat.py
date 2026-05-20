@@ -3388,7 +3388,12 @@ class TestAnthropicToolIdNormalizationInStreaming:
 # ---------------------------------------------------------------------------
 
 def _parse_sse_events(raw_text):
-    """Parse raw SSE text into a list of data payloads (dicts)."""
+    """Parse raw SSE text into a list of data payloads (dicts).
+
+    Skips non-data events such as ``event: ping`` whose payload has no
+    ``type`` field — these are connection keep-alive signals, not
+    Anthropic protocol events.
+    """
     events = []
     for block in raw_text.strip().split("\n\n"):
         data_line = None
@@ -3397,9 +3402,13 @@ def _parse_sse_events(raw_text):
                 data_line = line[6:]
         if data_line:
             try:
-                events.append(json.loads(data_line))
+                parsed = json.loads(data_line)
             except json.JSONDecodeError:
-                pass
+                continue
+            # Skip ping and other non-protocol events (no "type" key)
+            if isinstance(parsed, dict) and "type" not in parsed:
+                continue
+            events.append(parsed)
     return events
 
 
@@ -4436,6 +4445,165 @@ class TestMessageBatchesStubs:
             headers={"Authorization": "Bearer secret-key"},
         )
         assert resp.status_code == 501
+
+
+# ---------------------------------------------------------------------------
+# Streaming ping event
+# ---------------------------------------------------------------------------
+
+class TestStreamingPingEvent:
+    """Verify that a ping event is emitted immediately after message_start."""
+
+    @pytest.mark.asyncio
+    async def test_ping_emitted_after_message_start(self):
+        async def response_stream():
+            yield 'data: {"choices": [{"delta": {"content": "Hi"}}]}\n\n'
+            yield 'data: {"choices": [{"delta": {}, "finish_reason": "stop"}]}\n\n'
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "claude-test")
+        ]
+
+        # First event is message_start, second should be ping
+        assert len(events) >= 2
+        assert "message_start" in events[0]
+        assert "event: ping" in events[1]
+        assert '"data": {}' not in events[1]  # data should be {} (the object)
+        assert "data: {}" in events[1]
+
+    @pytest.mark.asyncio
+    async def test_ping_is_valid_sse(self):
+        async def response_stream():
+            yield 'data: {"choices": [{"delta": {"content": "x"}}]}\n\n'
+            yield 'data: {"choices": [{"delta": {}, "finish_reason": "stop"}]}\n\n'
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "m")
+        ]
+
+        ping_event = events[1]
+        # Should be a well-formed SSE event with event type and data
+        assert ping_event.startswith("event: ping\n")
+        assert ping_event.endswith("\n\n")
+
+    @pytest.mark.asyncio
+    async def test_ping_before_content_blocks(self):
+        async def response_stream():
+            yield 'data: {"choices": [{"delta": {"content": "Hello"}}]}\n\n'
+            yield 'data: {"choices": [{"delta": {}, "finish_reason": "stop"}]}\n\n'
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "m")
+        ]
+
+        # Verify ordering: message_start, ping, content_block_start, ...
+        event_types = []
+        for e in events:
+            if "event: " in e:
+                event_type = e.split("event: ")[1].split("\n")[0]
+                event_types.append(event_type)
+
+        assert event_types[0] == "message_start"
+        assert event_types[1] == "ping"
+        assert event_types[2] == "content_block_start"
+
+    @pytest.mark.asyncio
+    async def test_ping_present_in_empty_stream(self):
+        """Even when the backend sends no content, ping should still be emitted."""
+        async def response_stream():
+            yield 'data: {"choices": [{"delta": {}, "finish_reason": "stop"}]}\n\n'
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "m")
+        ]
+
+        joined = "".join(events)
+        assert "event: ping" in joined
+
+    @pytest.mark.asyncio
+    async def test_only_one_ping_emitted(self):
+        """Exactly one ping event should be emitted per stream."""
+        async def response_stream():
+            for i in range(10):
+                yield f'data: {{"choices": [{{"delta": {{"content": "chunk{i}"}}}}]}}\n\n'
+            yield 'data: {"choices": [{"delta": {}, "finish_reason": "stop"}]}\n\n'
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "m")
+        ]
+
+        ping_count = sum(1 for e in events if "event: ping" in e)
+        assert ping_count == 1
+
+
+# ---------------------------------------------------------------------------
+# Comprehensive error type mapping
+# ---------------------------------------------------------------------------
+
+class TestErrorTypeMapping:
+    """Verify all Anthropic error types map correctly per the spec."""
+
+    def test_400_invalid_request_error(self):
+        resp = anthropic_compat._anthropic_error(400, "bad request")
+        body = json.loads(resp.body.decode())
+        assert body["error"]["type"] == "invalid_request_error"
+
+    def test_401_authentication_error(self):
+        resp = anthropic_compat._anthropic_error(401, "unauthorized")
+        body = json.loads(resp.body.decode())
+        assert body["error"]["type"] == "authentication_error"
+
+    def test_403_permission_error(self):
+        resp = anthropic_compat._anthropic_error(403, "forbidden")
+        body = json.loads(resp.body.decode())
+        assert body["error"]["type"] == "permission_error"
+
+    def test_404_not_found_error(self):
+        resp = anthropic_compat._anthropic_error(404, "not found")
+        body = json.loads(resp.body.decode())
+        assert body["error"]["type"] == "not_found_error"
+
+    def test_429_rate_limit_error(self):
+        resp = anthropic_compat._anthropic_error(429, "rate limited")
+        body = json.loads(resp.body.decode())
+        assert body["error"]["type"] == "rate_limit_error"
+
+    def test_500_api_error(self):
+        resp = anthropic_compat._anthropic_error(500, "internal error")
+        body = json.loads(resp.body.decode())
+        assert body["error"]["type"] == "api_error"
+
+    def test_529_overloaded_error(self):
+        resp = anthropic_compat._anthropic_error(529, "overloaded")
+        body = json.loads(resp.body.decode())
+        assert body["error"]["type"] == "overloaded_error"
+
+    def test_unknown_status_defaults_to_api_error(self):
+        resp = anthropic_compat._anthropic_error(502, "bad gateway")
+        body = json.loads(resp.body.decode())
+        assert body["error"]["type"] == "api_error"
+
+    def test_error_map_has_all_anthropic_spec_codes(self):
+        expected_codes = {400, 401, 403, 404, 429, 500, 529}
+        assert set(anthropic_compat.ERROR_TYPE_MAP.keys()) == expected_codes
+
+    def test_error_response_format(self):
+        for code, expected_type in anthropic_compat.ERROR_TYPE_MAP.items():
+            resp = anthropic_compat._anthropic_error(code, f"error {code}")
+            assert resp.status_code == code
+            body = json.loads(resp.body.decode())
+            assert body["type"] == "error"
+            assert body["error"]["type"] == expected_type
+            assert body["error"]["message"] == f"error {code}"
+
+    def test_error_with_request_id(self):
+        resp = anthropic_compat._anthropic_error(400, "bad", request_id="req_123")
+        assert resp.headers.get("request-id") == "req_123"
 
 
 if __name__ == "__main__":

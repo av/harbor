@@ -516,6 +516,11 @@ async def _anthropic_stream_converter(
     },
   )
 
+  # Ping to signal the connection is alive and streaming has begun.
+  # Some clients or proxies close connections that receive no data
+  # for a while; this single early ping avoids that scenario.
+  yield _sse_event("ping", {})
+
   stream_error = None
 
   try:
