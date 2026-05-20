@@ -5,7 +5,7 @@ services:
       context: ./services/openfang
       dockerfile_inline: |
         FROM ghcr.io/av/tools:latest
-        ARG OPENFANG_VERSION=v0.2.2
+        ARG OPENFANG_VERSION=v0.6.9
         RUN set -e; \
             ARCH="$$(uname -m)"; \
             case "$$ARCH" in \
