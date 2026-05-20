@@ -1003,3 +1003,369 @@ class TestCombinedPathValidation:
             elif t == "response.output_item.done":
                 assert m.item.status in ("in_progress", "completed", "incomplete"), \
                     f"output_item.done has unexpected status: {m.item.status}"
+
+
+# ---------------------------------------------------------------------------
+# Comprehensive non-streaming response variations
+# ---------------------------------------------------------------------------
+
+class TestNonStreamingMultipleOutputItems:
+    """Validate non-streaming responses with multiple output item combinations."""
+
+    def test_text_plus_function_call_plus_reasoning_validates(self):
+        """Response with reasoning + text + function_call output items validates."""
+        result = openai_result(content="I'll search for that.",
+                               reasoning_content="Reasoning about the query.",
+                               finish_reason="tool_calls")
+        result["choices"][0]["message"]["tool_calls"] = [{
+            "id": "call_abc",
+            "type": "function",
+            "function": {"name": "web_search", "arguments": '{"query":"test"}'},
+        }]
+        resp = responses_compat._build_responses_response(
+            result, "gpt-4o", "resp_multi1"
+        )
+        validated = sdk.Response.model_validate(resp)
+
+        types = [o.type for o in validated.output]
+        assert "reasoning" in types
+        assert "message" in types
+        assert "function_call" in types
+        assert len(validated.output) == 3
+
+    def test_multiple_function_calls_validates(self):
+        """Response with only function_call items (no text) validates."""
+        result = openai_result(content=None, finish_reason="tool_calls")
+        result["choices"][0]["message"]["content"] = None
+        result["choices"][0]["message"]["tool_calls"] = [
+            {"id": "call_1", "type": "function",
+             "function": {"name": "get_weather", "arguments": '{"city":"NYC"}'}},
+            {"id": "call_2", "type": "function",
+             "function": {"name": "get_time", "arguments": '{"tz":"UTC"}'}},
+        ]
+        resp = responses_compat._build_responses_response(
+            result, "test-model", "resp_multi2"
+        )
+        validated = sdk.Response.model_validate(resp)
+
+        fc_items = [o for o in validated.output if o.type == "function_call"]
+        assert len(fc_items) == 2
+        names = {o.name for o in fc_items}
+        assert names == {"get_weather", "get_time"}
+        for fc in fc_items:
+            assert fc.call_id == fc.id
+            assert isinstance(fc.arguments, str)
+            assert fc.status == "completed"
+
+
+class TestNonStreamingAnnotations:
+    """Validate non-streaming responses with text annotations."""
+
+    def test_url_citation_annotations_validate(self):
+        """Response with url_citation annotations validates."""
+        result = openai_result(content="According to sources...")
+        result["choices"][0]["message"]["annotations"] = [
+            {
+                "type": "url_citation",
+                "url_citation": {
+                    "start_index": 0,
+                    "end_index": 25,
+                    "url": "https://example.com",
+                    "title": "Example Source",
+                },
+            }
+        ]
+        resp = responses_compat._build_responses_response(
+            result, "test-model", "resp_ann1"
+        )
+        validated = sdk.Response.model_validate(resp)
+
+        msg_items = [o for o in validated.output if o.type == "message"]
+        assert len(msg_items) == 1
+        text_parts = [c for c in msg_items[0].content if c.type == "output_text"]
+        assert len(text_parts) == 1
+        assert len(text_parts[0].annotations) == 1
+        ann = text_parts[0].annotations[0]
+        assert ann.type == "url_citation"
+        assert ann.url == "https://example.com"
+
+    def test_perplexity_citations_validate(self):
+        """Response with Perplexity-style citations validates."""
+        result = openai_result(content="Here is the info.")
+        result["choices"][0]["message"]["citations"] = [
+            "https://example.com/page1",
+            "https://example.com/page2",
+        ]
+        resp = responses_compat._build_responses_response(
+            result, "test-model", "resp_ann2"
+        )
+        validated = sdk.Response.model_validate(resp)
+
+        msg_items = [o for o in validated.output if o.type == "message"]
+        text_parts = [c for c in msg_items[0].content if c.type == "output_text"]
+        assert len(text_parts[0].annotations) == 2
+
+
+class TestNonStreamingRefusal:
+    """Validate non-streaming responses with refusal content."""
+
+    def test_refusal_response_validates(self):
+        """Response with refusal validates with correct structure."""
+        result = openai_result(content=None)
+        result["choices"][0]["message"]["content"] = None
+        result["choices"][0]["message"]["refusal"] = "I cannot assist with that request."
+        resp = responses_compat._build_responses_response(
+            result, "test-model", "resp_ref1"
+        )
+        validated = sdk.Response.model_validate(resp)
+
+        assert validated.status == "completed"
+        msg_items = [o for o in validated.output if o.type == "message"]
+        assert len(msg_items) == 1
+        refusal_parts = [c for c in msg_items[0].content if c.type == "refusal"]
+        assert len(refusal_parts) == 1
+        assert refusal_parts[0].refusal == "I cannot assist with that request."
+
+    def test_refusal_replaces_text_validates(self):
+        """When refusal is set, it takes precedence over text content."""
+        result = openai_result(content=None)
+        result["choices"][0]["message"]["content"] = None
+        result["choices"][0]["message"]["refusal"] = "Refused."
+        resp = responses_compat._build_responses_response(
+            result, "test-model", "resp_ref2"
+        )
+        validated = sdk.Response.model_validate(resp)
+
+        msg_items = [o for o in validated.output if o.type == "message"]
+        assert len(msg_items) == 1
+        text_parts = [c for c in msg_items[0].content if c.type == "output_text"]
+        assert len(text_parts) == 0
+
+
+class TestNonStreamingIncomplete:
+    """Validate non-streaming responses with incomplete status."""
+
+    def test_length_incomplete_validates(self):
+        """Response with finish_reason=length produces valid incomplete response."""
+        result = openai_result(content="truncated output", finish_reason="length")
+        resp = responses_compat._build_responses_response(
+            result, "test-model", "resp_inc1"
+        )
+        validated = sdk.Response.model_validate(resp)
+
+        assert validated.status == "incomplete"
+        assert validated.incomplete_details is not None
+        assert validated.incomplete_details.reason == "max_output_tokens"
+        assert validated.completed_at is None
+
+    def test_content_filter_incomplete_validates(self):
+        """Response with finish_reason=content_filter produces valid incomplete."""
+        result = openai_result(content="filtered", finish_reason="content_filter")
+        resp = responses_compat._build_responses_response(
+            result, "test-model", "resp_inc2"
+        )
+        validated = sdk.Response.model_validate(resp)
+
+        assert validated.status == "incomplete"
+        assert validated.incomplete_details is not None
+        assert validated.incomplete_details.reason == "content_filter"
+
+
+class TestNonStreamingAllMetadata:
+    """Validate non-streaming responses with all metadata fields."""
+
+    def test_instructions_echo_validates(self):
+        """Instructions from request echoed in response validates."""
+        result = openai_result(content="Brief response.")
+        resp = responses_compat._build_responses_response(
+            result, "test-model", "resp_meta1",
+            request_body={"instructions": "Be very brief and concise."}
+        )
+        validated = sdk.Response.model_validate(resp)
+        assert validated.instructions == "Be very brief and concise."
+
+    def test_user_echo_validates(self):
+        """User from request echoed in response validates."""
+        result = openai_result(content="Response.")
+        resp = responses_compat._build_responses_response(
+            result, "test-model", "resp_meta2",
+            request_body={"user": "user_abc123"}
+        )
+        validated = sdk.Response.model_validate(resp)
+        assert validated.user == "user_abc123"
+
+    def test_reasoning_config_echo_validates(self):
+        """Reasoning config from request echoed in response validates."""
+        result = openai_result(content="Deep answer.")
+        resp = responses_compat._build_responses_response(
+            result, "test-model", "resp_meta3",
+            request_body={"reasoning": {"effort": "high"}}
+        )
+        validated = sdk.Response.model_validate(resp)
+        assert validated.reasoning is not None
+
+    def test_all_metadata_combined_validates(self):
+        """Response with all metadata fields set validates."""
+        result = openai_result(content="Full response.", prompt_tokens=500,
+                               completion_tokens=200)
+        resp = responses_compat._build_responses_response(
+            result, "gpt-4o", "resp_meta4",
+            request_body={
+                "instructions": "Be helpful.",
+                "user": "user_xyz",
+                "metadata": {"env": "prod", "version": "2.0"},
+                "reasoning": {"effort": "medium"},
+                "truncation": "auto",
+                "parallel_tool_calls": False,
+            }
+        )
+        validated = sdk.Response.model_validate(resp)
+
+        assert validated.instructions == "Be helpful."
+        assert validated.user == "user_xyz"
+        assert validated.metadata == {"env": "prod", "version": "2.0"}
+        assert validated.truncation == "auto"
+        assert validated.parallel_tool_calls is False
+        assert validated.model == "gpt-4o"
+        assert validated.status == "completed"
+        assert validated.store is False
+        assert validated.error is None
+
+
+class TestNonStreamingCompletedAt:
+    """Validate completed_at timestamp handling."""
+
+    def test_completed_response_has_completed_at(self):
+        """Completed responses have a completed_at timestamp."""
+        result = openai_result(content="Done.")
+        resp = responses_compat._build_responses_response(
+            result, "test-model", "resp_ts1"
+        )
+        validated = sdk.Response.model_validate(resp)
+
+        assert validated.status == "completed"
+        assert validated.completed_at is not None
+        assert isinstance(validated.completed_at, (int, float))
+        assert validated.completed_at > 0
+
+    def test_incomplete_response_no_completed_at(self):
+        """Incomplete responses have no completed_at timestamp."""
+        result = openai_result(content="partial", finish_reason="length")
+        resp = responses_compat._build_responses_response(
+            result, "test-model", "resp_ts2"
+        )
+        validated = sdk.Response.model_validate(resp)
+
+        assert validated.status == "incomplete"
+        assert validated.completed_at is None
+
+    def test_created_at_present(self):
+        """All responses have a created_at timestamp."""
+        result = openai_result(content="any")
+        resp = responses_compat._build_responses_response(
+            result, "test-model", "resp_ts3"
+        )
+        validated = sdk.Response.model_validate(resp)
+
+        assert validated.created_at is not None
+        assert isinstance(validated.created_at, (int, float))
+        assert validated.created_at > 0
+
+
+class TestNonStreamingResponseStructure:
+    """Validate the overall Response structure for completeness."""
+
+    def test_response_object_field(self):
+        """Response has object='response'."""
+        result = openai_result()
+        resp = responses_compat._build_responses_response(
+            result, "test-model", "resp_struct1"
+        )
+        validated = sdk.Response.model_validate(resp)
+        assert validated.object == "response"
+
+    def test_response_id_preserved(self):
+        """Response ID from the call is preserved."""
+        result = openai_result()
+        resp = responses_compat._build_responses_response(
+            result, "test-model", "resp_custom_id"
+        )
+        validated = sdk.Response.model_validate(resp)
+        assert validated.id == "resp_custom_id"
+
+    def test_tools_empty_by_default(self):
+        """Tools array is empty by default."""
+        result = openai_result()
+        resp = responses_compat._build_responses_response(
+            result, "test-model", "resp_struct2"
+        )
+        validated = sdk.Response.model_validate(resp)
+        assert validated.tools == []
+
+    def test_text_format_default(self):
+        """Text format defaults to plain text."""
+        result = openai_result()
+        resp = responses_compat._build_responses_response(
+            result, "test-model", "resp_struct3"
+        )
+        validated = sdk.Response.model_validate(resp)
+        assert validated.text.format.type == "text"
+
+    def test_usage_token_details_validates(self):
+        """Usage includes input_tokens_details and output_tokens_details."""
+        result = openai_result(prompt_tokens=100, completion_tokens=50)
+        resp = responses_compat._build_responses_response(
+            result, "test-model", "resp_struct4"
+        )
+        validated = sdk.Response.model_validate(resp)
+
+        assert validated.usage.input_tokens == 100
+        assert validated.usage.output_tokens == 50
+        assert validated.usage.total_tokens == 150
+        assert validated.usage.input_tokens_details.cached_tokens == 0
+        assert validated.usage.output_tokens_details.reasoning_tokens == 0
+
+    def test_reasoning_tokens_in_usage_validates(self):
+        """Usage with reasoning tokens validates."""
+        result = openai_result(content="answer", reasoning_content="thinking",
+                               prompt_tokens=50, completion_tokens=30)
+        result["usage"]["completion_tokens_details"] = {"reasoning_tokens": 20}
+        resp = responses_compat._build_responses_response(
+            result, "test-model", "resp_struct5"
+        )
+        validated = sdk.Response.model_validate(resp)
+
+        assert validated.usage.output_tokens_details.reasoning_tokens == 20
+
+    def test_reasoning_output_item_has_status(self):
+        """Reasoning output items have status field."""
+        result = openai_result(content="answer", reasoning_content="deep thought")
+        resp = responses_compat._build_responses_response(
+            result, "test-model", "resp_struct6"
+        )
+        validated = sdk.Response.model_validate(resp)
+
+        reasoning_items = [o for o in validated.output if o.type == "reasoning"]
+        assert len(reasoning_items) == 1
+        assert reasoning_items[0].status == "completed"
+        assert len(reasoning_items[0].summary) == 1
+        assert reasoning_items[0].summary[0].type == "summary_text"
+        assert reasoning_items[0].summary[0].text == "deep thought"
+
+    def test_function_call_id_and_call_id_match(self):
+        """Function call items have matching id and call_id."""
+        result = openai_result(content=None, finish_reason="tool_calls")
+        result["choices"][0]["message"]["content"] = None
+        result["choices"][0]["message"]["tool_calls"] = [{
+            "id": "call_match_test",
+            "type": "function",
+            "function": {"name": "fn", "arguments": "{}"},
+        }]
+        resp = responses_compat._build_responses_response(
+            result, "test-model", "resp_struct7"
+        )
+        validated = sdk.Response.model_validate(resp)
+
+        fc_items = [o for o in validated.output if o.type == "function_call"]
+        assert len(fc_items) == 1
+        assert fc_items[0].id == fc_items[0].call_id

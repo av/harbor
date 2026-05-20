@@ -1071,3 +1071,247 @@ class TestMidStreamErrorValidation:
             elif t == "content_block_stop":
                 open_indices.discard(m.index)
         assert len(open_indices) == 0, f"Unclosed blocks: {open_indices}"
+
+
+# ---------------------------------------------------------------------------
+# Comprehensive non-streaming response variations
+# ---------------------------------------------------------------------------
+
+class TestNonStreamingMultipleContentBlocks:
+    """Validate non-streaming responses with multiple content block combinations."""
+
+    def test_text_plus_tool_use_plus_thinking_validates(self):
+        """Response with thinking + text + tool_use content blocks validates."""
+        result = openai_result(content="I'll search for that.",
+                               reasoning_content="Let me reason about this query.",
+                               finish_reason="tool_calls")
+        result["choices"][0]["message"]["tool_calls"] = [{
+            "id": "call_abc123",
+            "type": "function",
+            "function": {"name": "web_search", "arguments": '{"query":"test"}'},
+        }]
+        resp = anthropic_compat._build_anthropic_response(result, "claude-3-opus")
+        validated = sdk.Message.model_validate(resp)
+
+        types = [c.type for c in validated.content]
+        assert "thinking" in types
+        assert "text" in types
+        assert "tool_use" in types
+        assert len(validated.content) == 3
+        # Order: thinking first, then text, then tool_use
+        assert types == ["thinking", "text", "tool_use"]
+
+    def test_only_tool_use_blocks_validates(self):
+        """Response with only tool_use blocks (no text content) validates."""
+        result = openai_result(content=None, finish_reason="tool_calls")
+        result["choices"][0]["message"]["content"] = None
+        result["choices"][0]["message"]["tool_calls"] = [
+            {
+                "id": "call_1",
+                "type": "function",
+                "function": {"name": "get_weather", "arguments": '{"city":"NYC"}'},
+            },
+            {
+                "id": "call_2",
+                "type": "function",
+                "function": {"name": "get_time", "arguments": '{"tz":"UTC"}'},
+            },
+        ]
+        resp = anthropic_compat._build_anthropic_response(result, "test-model")
+        validated = sdk.Message.model_validate(resp)
+
+        assert validated.stop_reason == "tool_use"
+        assert all(c.type == "tool_use" for c in validated.content)
+        assert len(validated.content) == 2
+        names = {c.name for c in validated.content}
+        assert names == {"get_weather", "get_time"}
+        # Each tool_use block should have parsed input
+        for block in validated.content:
+            assert isinstance(block.input, dict)
+            assert isinstance(block.id, str)
+            assert block.id.startswith("toolu_")
+
+    def test_thinking_plus_signature_validates(self):
+        """Response with thinking block (which includes signature) validates."""
+        result = openai_result(content="The answer is 42.",
+                               reasoning_content="Deep thinking about the question.")
+        resp = anthropic_compat._build_anthropic_response(result, "test-model")
+        validated = sdk.Message.model_validate(resp)
+
+        thinking_blocks = [c for c in validated.content if c.type == "thinking"]
+        assert len(thinking_blocks) == 1
+        assert thinking_blocks[0].thinking == "Deep thinking about the question."
+        assert thinking_blocks[0].signature == ""
+        # Text block follows
+        text_blocks = [c for c in validated.content if c.type == "text"]
+        assert len(text_blocks) == 1
+        assert text_blocks[0].text == "The answer is 42."
+
+    def test_stop_reason_stop_sequence_validates(self):
+        """Response with stop_reason=stop_sequence validates with stop_sequence value."""
+        result = openai_result(content="Hello world\n\nHuman:", finish_reason="stop")
+        resp = anthropic_compat._build_anthropic_response(
+            result, "test-model", stop_sequences=["\n\nHuman:"]
+        )
+        validated = sdk.Message.model_validate(resp)
+
+        assert validated.stop_reason == "stop_sequence"
+        assert validated.stop_sequence == "\n\nHuman:"
+
+    def test_max_usage_values_validates(self):
+        """Response with large token usage values validates."""
+        result = openai_result(content="response text",
+                               prompt_tokens=128000, completion_tokens=4096)
+        resp = anthropic_compat._build_anthropic_response(result, "test-model")
+        validated = sdk.Message.model_validate(resp)
+
+        assert validated.usage.input_tokens == 128000
+        assert validated.usage.output_tokens == 4096
+
+    def test_cache_usage_fields_validate(self):
+        """Response with cache usage fields set to zero validates."""
+        result = openai_result(content="cached response")
+        resp = anthropic_compat._build_anthropic_response(result, "test-model")
+        validated = sdk.Message.model_validate(resp)
+
+        assert validated.usage.cache_creation_input_tokens == 0
+        assert validated.usage.cache_read_input_tokens == 0
+        assert isinstance(validated.usage.input_tokens, int)
+        assert isinstance(validated.usage.output_tokens, int)
+
+
+class TestNonStreamingCountTokensValidation:
+    """Validate count_tokens response against Anthropic SDK model."""
+
+    def test_count_tokens_response_validates(self):
+        """A count_tokens response validates as MessageTokensCount."""
+        resp_data = {"input_tokens": 42}
+        validated = sdk.MessageTokensCount.model_validate(resp_data)
+        assert validated.input_tokens == 42
+
+    def test_count_tokens_zero_validates(self):
+        """Zero token count validates."""
+        resp_data = {"input_tokens": 0}
+        validated = sdk.MessageTokensCount.model_validate(resp_data)
+        assert validated.input_tokens == 0
+
+    def test_count_tokens_large_value_validates(self):
+        """Large token count validates."""
+        resp_data = {"input_tokens": 200000}
+        validated = sdk.MessageTokensCount.model_validate(resp_data)
+        assert validated.input_tokens == 200000
+
+
+class TestNonStreamingEdgeCases:
+    """Validate edge-case non-streaming responses."""
+
+    def test_multiple_tool_calls_validates(self):
+        """Response with multiple tool calls validates with correct IDs."""
+        result = openai_result(content=None, finish_reason="tool_calls")
+        result["choices"][0]["message"]["content"] = None
+        result["choices"][0]["message"]["tool_calls"] = [
+            {"id": "call_a", "type": "function",
+             "function": {"name": "fn1", "arguments": '{"x":1}'}},
+            {"id": "call_b", "type": "function",
+             "function": {"name": "fn2", "arguments": '{"y":2}'}},
+            {"id": "call_c", "type": "function",
+             "function": {"name": "fn3", "arguments": '{"z":3}'}},
+        ]
+        resp = anthropic_compat._build_anthropic_response(result, "test-model")
+        validated = sdk.Message.model_validate(resp)
+
+        assert len(validated.content) == 3
+        for block in validated.content:
+            assert block.type == "tool_use"
+            assert block.id.startswith("toolu_")
+            assert isinstance(block.input, dict)
+            assert isinstance(block.name, str)
+
+    def test_text_with_tool_calls_validates(self):
+        """Response with both text content and tool calls validates."""
+        result = openai_result(content="Let me help with that.", finish_reason="tool_calls")
+        result["choices"][0]["message"]["tool_calls"] = [{
+            "id": "call_xyz",
+            "type": "function",
+            "function": {"name": "calculator", "arguments": '{"expr":"2+2"}'},
+        }]
+        resp = anthropic_compat._build_anthropic_response(result, "test-model")
+        validated = sdk.Message.model_validate(resp)
+
+        types = [c.type for c in validated.content]
+        assert "text" in types
+        assert "tool_use" in types
+        assert validated.stop_reason == "tool_use"
+
+    def test_thinking_only_validates(self):
+        """Response with only thinking content (no text) validates."""
+        result = openai_result(content=None, reasoning_content="Internal reasoning only.")
+        result["choices"][0]["message"]["content"] = None
+        resp = anthropic_compat._build_anthropic_response(result, "test-model")
+        validated = sdk.Message.model_validate(resp)
+
+        # Should have thinking block only (no empty text fallback when thinking exists)
+        types = [c.type for c in validated.content]
+        assert "thinking" in types
+        assert len(validated.content) == 1
+        assert validated.content[0].thinking == "Internal reasoning only."
+
+    def test_zero_usage_validates(self):
+        """Response with zero token usage validates."""
+        result = openai_result(content="", prompt_tokens=0, completion_tokens=0)
+        resp = anthropic_compat._build_anthropic_response(result, "test-model")
+        validated = sdk.Message.model_validate(resp)
+
+        assert validated.usage.input_tokens == 0
+        assert validated.usage.output_tokens == 0
+
+    def test_all_fields_present_validates(self):
+        """All expected Message fields are present and correctly typed."""
+        result = openai_result(content="Complete response.")
+        resp = anthropic_compat._build_anthropic_response(result, "claude-3.5-sonnet")
+        validated = sdk.Message.model_validate(resp)
+
+        assert isinstance(validated.id, str)
+        assert validated.id.startswith("msg_")
+        assert validated.type == "message"
+        assert validated.role == "assistant"
+        assert isinstance(validated.model, str)
+        assert validated.model == "claude-3.5-sonnet"
+        assert isinstance(validated.content, list)
+        assert validated.stop_reason in ("end_turn", "max_tokens", "stop_sequence", "tool_use")
+        assert isinstance(validated.usage, sdk.Usage)
+
+    def test_tool_use_with_empty_arguments_validates(self):
+        """Tool use with empty object arguments validates."""
+        result = openai_result(content=None, finish_reason="tool_calls")
+        result["choices"][0]["message"]["content"] = None
+        result["choices"][0]["message"]["tool_calls"] = [{
+            "id": "call_empty",
+            "type": "function",
+            "function": {"name": "no_args_tool", "arguments": "{}"},
+        }]
+        resp = anthropic_compat._build_anthropic_response(result, "test-model")
+        validated = sdk.Message.model_validate(resp)
+
+        tool_blocks = [c for c in validated.content if c.type == "tool_use"]
+        assert len(tool_blocks) == 1
+        assert tool_blocks[0].input == {}
+
+    def test_tool_use_with_complex_arguments_validates(self):
+        """Tool use with nested/complex arguments validates."""
+        complex_args = '{"filters":{"status":"active","tags":["a","b"]},"limit":10,"nested":{"deep":{"value":true}}}'
+        result = openai_result(content=None, finish_reason="tool_calls")
+        result["choices"][0]["message"]["content"] = None
+        result["choices"][0]["message"]["tool_calls"] = [{
+            "id": "call_complex",
+            "type": "function",
+            "function": {"name": "complex_tool", "arguments": complex_args},
+        }]
+        resp = anthropic_compat._build_anthropic_response(result, "test-model")
+        validated = sdk.Message.model_validate(resp)
+
+        tool_blocks = [c for c in validated.content if c.type == "tool_use"]
+        assert len(tool_blocks) == 1
+        assert isinstance(tool_blocks[0].input, dict)
+        assert tool_blocks[0].input["limit"] == 10
+        assert tool_blocks[0].input["filters"]["status"] == "active"
