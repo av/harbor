@@ -665,3 +665,21 @@
 - label: release metadata advertises v0.4.18 consistently in seed, CLI, app manifests, and README News
   command: grep -q 'const VERSION = "0.4.18";' .scripts/seed.ts && grep -q 'version="0.4.18"' harbor.sh && grep -q '"version": "0.4.18"' package.json && grep -q '"version": "0.4.18"' app/package.json && grep -q '"version": "0.4.18"' app/src-tauri/tauri.conf.json && grep -q '^version = "0.4.18"' app/src-tauri/Cargo.toml && grep -q '^- \*\*v0\.4\.18\*\* -' README.md
   tags: [spec, implemented]
+
+# boost > streaming
+- label: Boost SSE streaming responses include a retry interval (3000ms), periodic keep-alive comments (every 15s), and standard SSE headers (Cache-Control: no-cache, Connection: keep-alive, X-Accel-Buffering: no) to prevent proxy/load-balancer idle-timeout disconnects
+  command: grep -q 'SSE_RETRY_MS' services/boost/src/compat_utils.py && grep -q 'SSE_KEEPALIVE_INTERVAL' services/boost/src/compat_utils.py && grep -q 'sse_retry' services/boost/src/anthropic_compat.py && grep -q 'sse_event_with_retry' services/boost/src/responses_compat.py && grep -q 'sse_keepalive' services/boost/src/anthropic_compat.py && grep -q 'sse_keepalive' services/boost/src/responses_compat.py && echo PASS
+  tags: [spec, implemented]
+
+# boost > shared
+- label: Both Boost compat layers pass through OpenAI Chat Completions params (seed, frequency_penalty, presence_penalty, logit_bias, logprobs, top_logprobs, n, and response_format for Anthropic) so backends that support them can act on them
+  command: grep -q '_OPENAI_PASSTHROUGH_PARAMS' services/boost/src/anthropic_compat.py && grep -q '_OPENAI_PASSTHROUGH_PARAMS' services/boost/src/responses_compat.py && grep -q 'seed' services/boost/src/anthropic_compat.py && grep -q 'frequency_penalty' services/boost/src/anthropic_compat.py && echo PASS
+  tags: [spec, implemented]
+- label: Both Boost compat layers guard _convert_tools against non-dict items in the tools array, silently skipping invalid entries instead of crashing with AttributeError
+  command: grep -q 'isinstance(tool, dict)' services/boost/src/anthropic_compat.py && grep -q 'isinstance(tool, dict)' services/boost/src/responses_compat.py && echo PASS
+  tags: [spec, implemented]
+
+# boost > internals
+- label: Boost LLM.consume_stream() accumulates reasoning_content, refusal, and completion_tokens_details from streaming chunks so non-streaming compat layer responses include thinking blocks, refusals, and reasoning token counts
+  command: grep -q 'reasoning_content' services/boost/src/llm.py && grep -q 'refusal' services/boost/src/llm.py && grep -q 'completion_tokens_details' services/boost/src/llm.py && echo PASS
+  tags: [spec, implemented]
