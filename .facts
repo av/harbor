@@ -3,6 +3,39 @@
 - label: cli > launch > harbor launch validates the selected host tool binary before starting backend, Boost, or tool-group services for non-config launches
   command: rg -q 'started compose before validating the host binary' tests/suites/02-cli.sh && bash tests/suites/02-cli.sh
   tags: [spec, launch-host-validate, implemented]
+- label: boost > shared > Boost auth returns HTTP 401 for missing or invalid API keys and main.py formats auth errors in SDK-specific schemas (Anthropic error envelope for /v1/messages, OpenAI error envelope for /v1/responses)
+  command: grep -q 'status_code=401' services/boost/src/auth.py && grep -q '_http_exception_handler' services/boost/src/main.py && grep -q '_ANTHROPIC_ERROR_TYPE_MAP' services/boost/src/main.py && grep -q '_OPENAI_ERROR_TYPE_MAP' services/boost/src/main.py
+  tags: [spec, implemented]
+- label: boost > anthropic compat > Boost Anthropic count_tokens uses local tiktoken estimation (cl100k_base encoding with framing overhead) via token_counter.py, falling back to chars/4 when tiktoken is unavailable
+  command: test -f services/boost/src/token_counter.py && grep -q 'count_messages_tokens' services/boost/src/token_counter.py && grep -q 'cl100k_base' services/boost/src/token_counter.py && grep -q 'from token_counter import' services/boost/src/anthropic_compat.py
+  tags: [spec, implemented]
+- label: boost > responses api > Boost Responses API maps text.format structured output configs (json_schema with strict schema, json_object) to OpenAI response_format in the Chat Completions request
+  command: grep -q 'response_format' services/boost/src/responses_compat.py && grep -q 'json_schema' services/boost/src/responses_compat.py && grep -q 'json_object' services/boost/src/responses_compat.py
+  tags: [spec, implemented]
+- label: boost > responses api > Boost Responses API handles refusal content from backends in both non-streaming (refusal output item) and streaming (refusal delta/done events) paths
+  command: grep -q 'refusal' services/boost/src/responses_compat.py && grep -q 'get_chunk_refusal' services/boost/src/compat_utils.py && grep -q 'refusal_open' services/boost/src/responses_compat.py
+  tags: [spec, implemented]
+- label: boost > responses api > Boost Responses API streaming emits terminal events (response.completed, response.incomplete, or response.failed) based on finish reason and error state
+  command: grep -q 'response.completed' services/boost/src/responses_compat.py && grep -q 'response.incomplete' services/boost/src/responses_compat.py && grep -q 'response.failed' services/boost/src/responses_compat.py && grep -q 'terminal_event' services/boost/src/responses_compat.py
+  tags: [spec, implemented]
+- label: boost > responses api > Boost Responses API maps content_filter finish reason to incomplete status and echoes instructions and user params from the request into the response object
+  command: grep -q 'content_filter' services/boost/src/responses_compat.py && grep -q '"instructions"' services/boost/src/responses_compat.py && grep -q '"user"' services/boost/src/responses_compat.py
+  tags: [spec, implemented]
+- label: boost > shared > Boost compat layers extract prefixed keys from the metadata dict and inject them into the OpenAI request body, enabling workflow selection and module config through Anthropic/Responses APIs
+  command: grep -q 'extract_boost_params' services/boost/src/compat_utils.py && grep -q 'extract_boost_params' services/boost/src/anthropic_compat.py && grep -q 'extract_boost_params' services/boost/src/responses_compat.py
+  tags: [boost_, spec, implemented]
+- label: boost > shared > Boost auth strips the Bearer scheme prefix case-insensitively and sanitizes 5xx error details to generic messages in the global exception handler to prevent info leakage
+  command: grep -q '\.lower()' services/boost/src/auth.py && grep -q 'safe_detail' services/boost/src/main.py && grep -q 'Internal server error' services/boost/src/main.py
+  tags: [spec, implemented]
+- label: boost > internals > Boost LLM.serve() calls emit_done on all exit paths (including module-not-found), attaches a done_callback to background tasks for failure detection, and resets is_streaming in a finally block to prevent resource leaks on client disconnect
+  command: grep -q 'emit_done' services/boost/src/llm.py && grep -q 'add_done_callback' services/boost/src/llm.py && grep -q 'finally' services/boost/src/llm.py && grep -q 'is_streaming = False' services/boost/src/llm.py
+  tags: [spec, implemented]
+- label: boost > shared > Boost compat layers log request lifecycle at INFO level (model, stream mode, message count) and auth events, while avoiding sensitive data in log output
+  command: test -f services/boost/tests/test_logging.py && grep -q 'logger' services/boost/src/anthropic_compat.py && grep -q 'logger' services/boost/src/responses_compat.py && grep -q 'logger' services/boost/src/auth.py
+  tags: [spec, implemented]
+- label: boost > shared > Boost format.clean_text_preserve_newlines applies urllib percent decoding to handle percent-encoded content from backends
+  command: grep -q 'unquote' services/boost/src/format.py && grep -q 'from urllib.parse import unquote' services/boost/src/format.py
+  tags: [spec, implemented]
 # project
 - Harbor is a containerized LLM toolkit distributed as a Docker Compose project with a CLI and Tauri desktop app
 - label: the project is licensed under Apache 2.0
@@ -417,8 +450,8 @@
 - label: Boost Anthropic compat passes through top_k parameter for backends that support it (vLLM, Ollama, llama.cpp)
   command: grep -q 'top_k' services/boost/src/anthropic_compat.py && grep -q 'test_top_k' services/boost/tests/test_anthropic_compat.py
   tags: [spec, implemented]
-- label: Boost Anthropic compat accepts the anthropic-beta request header with comma-separated feature flags and logs them at debug level without rejecting the request
-  command: grep -q '_parse_beta_flags' services/boost/src/anthropic_compat.py && grep -q 'anthropic-beta' services/boost/src/anthropic_compat.py && grep -q 'TestParseBetaFlags' services/boost/tests/test_anthropic_compat.py
+- label: Boost Anthropic compat accepts the anthropic-beta request header with comma-separated feature flags, logs them at debug level, and echoes recognized flags back in the anthropic-beta response header
+  command: grep -q '_parse_beta_flags' services/boost/src/anthropic_compat.py && grep -q 'RECOGNIZED_BETA_FLAGS' services/boost/src/anthropic_compat.py && grep -q 'anthropic-beta.*join' services/boost/src/anthropic_compat.py
   tags: [spec, implemented]
 - label: Boost Anthropic compat supports document content blocks with best-effort conversion (image types forwarded as images, others as text placeholders) and URL image sources
   command: grep -q 'document' services/boost/src/anthropic_compat.py && grep -q 'source_type == "url"' services/boost/src/anthropic_compat.py
