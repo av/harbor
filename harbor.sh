@@ -1742,9 +1742,21 @@ launch_print_host_config() {
 
     case "$tool" in
     claude)
-        echo "ANTHROPIC_AUTH_TOKEN=ollama"
-        echo "ANTHROPIC_API_KEY="
-        echo "ANTHROPIC_BASE_URL=$base_url"
+        if [ "$backend" = "ollama" ]; then
+            echo "ANTHROPIC_AUTH_TOKEN=ollama"
+            echo "ANTHROPIC_API_KEY="
+            echo "ANTHROPIC_BASE_URL=$base_url"
+        elif [ "$backend" = "boost" ]; then
+            local boost_url
+            boost_url=$(get_url boost 2>/dev/null || echo "$base_url")
+            local boost_key
+            boost_key=$(env_manager --silent get BOOST_API_KEY 2>/dev/null || true)
+            echo "ANTHROPIC_API_KEY=${boost_key:-sk-boost}"
+            echo "ANTHROPIC_BASE_URL=$boost_url"
+        else
+            echo "ANTHROPIC_API_KEY=$api_key"
+            echo "ANTHROPIC_BASE_URL=$base_url"
+        fi
         ;;
     copilot)
         echo "COPILOT_PROVIDER_BASE_URL=$api_url"
@@ -1878,7 +1890,7 @@ launch_host_tool_command() {
     done
 
     if [ ${#boost_tool_groups[@]} -gt 0 ] && [ "$tool" = "claude" ]; then
-        log_error "harbor launch $tool does not support --web because Claude Code uses Ollama's Anthropic-compatible API."
+        log_error "harbor launch $tool does not support --web because Claude Code uses the Anthropic Messages API, not OpenAI Chat Completions."
         log_info "Use an OpenAI-compatible host tool such as codex, opencode, copilot, droid, openclaw, pi, pool, or hermes."
         return 1
     fi
@@ -1945,11 +1957,9 @@ launch_host_tool_command() {
         fi
 
         backend="boost"
-        if ! $config_only; then
-            if ! backend_url=$(get_url boost 2>/dev/null); then
-                log_error "Could not resolve a host URL for Boost."
-                return 1
-            fi
+        if ! backend_url=$(get_url boost 2>/dev/null); then
+            log_error "Could not resolve a host URL for Boost."
+            return 1
         fi
         api_url=$(launch_url_with_v1 "$backend_url")
         api_key=$(env_manager --silent get BOOST_API_KEY 2>/dev/null || true)
@@ -1967,15 +1977,26 @@ launch_host_tool_command() {
 
     case "$tool" in
     claude)
-        if [ "$backend" != "ollama" ]; then
-            log_error "Claude Code launch currently requires Harbor's ollama backend because it uses Ollama's Anthropic-compatible API."
-            return 1
+        local claude_base_url=""
+        local claude_api_key=""
+        local claude_auth_token=""
+
+        if [ "$backend" = "ollama" ]; then
+            claude_base_url="$backend_url"
+            claude_auth_token="ollama"
+        elif [ "$backend" = "boost" ]; then
+            claude_base_url=$(get_url boost 2>/dev/null)
+            claude_api_key=$(env_manager --silent get BOOST_API_KEY 2>/dev/null || true)
+            claude_api_key="${claude_api_key:-sk-boost}"
+        else
+            claude_base_url="$backend_url"
+            claude_api_key="$api_key"
         fi
 
         if launch_args_include_model "${tool_args[@]}"; then
-            ANTHROPIC_AUTH_TOKEN=ollama ANTHROPIC_API_KEY="" ANTHROPIC_BASE_URL="$backend_url" launch_in_original_dir claude "${tool_args[@]}"
+            ANTHROPIC_AUTH_TOKEN="$claude_auth_token" ANTHROPIC_API_KEY="$claude_api_key" ANTHROPIC_BASE_URL="$claude_base_url" launch_in_original_dir claude "${tool_args[@]}"
         else
-            ANTHROPIC_AUTH_TOKEN=ollama ANTHROPIC_API_KEY="" ANTHROPIC_BASE_URL="$backend_url" launch_in_original_dir claude --model "$model" "${tool_args[@]}"
+            ANTHROPIC_AUTH_TOKEN="$claude_auth_token" ANTHROPIC_API_KEY="$claude_api_key" ANTHROPIC_BASE_URL="$claude_base_url" launch_in_original_dir claude --model "$model" "${tool_args[@]}"
         fi
         ;;
     copilot)

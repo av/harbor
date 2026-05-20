@@ -172,6 +172,9 @@
 - label: harbor launch exposes only --web as a Boost tool-group modifier and rejects removed tool groups such as --time, --notes, --files, and --scratch as unsupported launch targets or tool args
   command: ./harbor.sh launch --help | rg -q -- '--web' && ! ./harbor.sh launch --help | rg -q -- '--time|--notes|--files|--scratch' && rg -q 'launch --time is not a launch option' tests/suites/02-cli.sh
   tags: [spec, implemented]
+- label: harbor launch claude honors an explicit non-Boost backend even when Boost is also running
+  command: rg -q 'claude explicit non-Boost backend ignores running Boost' tests/suites/05-launch-smoke.sh && bash tests/suites/05-launch-smoke.sh
+  tags: [spec, launch-claude-explicit-backend, implemented]
 
 # services
 - label: compose.yml is the base layer, defining only the harbor-network

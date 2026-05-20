@@ -481,6 +481,18 @@ assert_log '^arg=llama3\.2:latest$'
 assert_log '^arg=-p$'
 assert_log '^arg=hello$'
 
+run_launch "claude explicit non-Boost backend ignores running Boost" \
+  "boost vllm" "root-array" \
+  --backend vllm --model root-array-model claude -p "hello"
+assert_log '^tool=claude$'
+assert_log '^ANTHROPIC_AUTH_TOKEN=$'
+assert_log '^ANTHROPIC_API_KEY=sk-harbor$'
+assert_log '^ANTHROPIC_BASE_URL=http://localhost:33822$'
+assert_log '^arg=--model$'
+assert_log '^arg=root-array-model$'
+assert_log '^arg=-p$'
+assert_log '^arg=hello$'
+
 run_launch "opencode accepts root-array model schema and writes inline provider config" \
   "llamacpp" "root-array" \
   --backend llamacpp opencode run
