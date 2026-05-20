@@ -35,7 +35,7 @@ class Chat:
     return Chat.from_conversation(self.history())
 
   def has_substring(self, substring):
-    return any(substring in msg.content for msg in self.plain())
+    return any(substring in (msg.content or "") for msg in self.plain())
 
   def match(self, **kwargs):
     return selection.match(self, **kwargs)
