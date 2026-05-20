@@ -6622,46 +6622,54 @@ class TestMapStopReasonDefaultToStopSequence:
 
 
 # ---------------------------------------------------------------------------
-# Fix: clean_text_preserve_newlines percent decoding
+# clean_text_preserve_newlines preserves percent sequences
 # ---------------------------------------------------------------------------
 
-class TestCleanTextPercentDecoding:
-    """clean_text_preserve_newlines should URL-decode percent-encoded text."""
+class TestCleanTextPreservesPercentEncoding:
+    """Percent-encoded sequences in LLM output must NOT be decoded.
 
-    def test_decodes_percent_encoded_colon(self):
+    LLM text commonly contains URLs with percent-encoded characters.
+    Decoding them would corrupt the URLs and change the semantic meaning
+    of the output.
+    """
+
+    def test_preserves_percent_encoded_url(self):
         import format
-        result = format.clean_text_preserve_newlines("hello%3Aworld")
-        assert result == "hello:world"
+        text = "Visit https://example.com/path%20to%20page for more info"
+        result = format.clean_text_preserve_newlines(text)
+        assert "%20" in result
 
-    def test_decodes_percent_encoded_space(self):
+    def test_preserves_encoded_query_string(self):
         import format
-        result = format.clean_text_preserve_newlines("hello%20world")
-        assert result == "hello world"
+        text = "curl https://api.example.com/search?q=hello%20world"
+        result = format.clean_text_preserve_newlines(text)
+        assert "%20" in result
 
-    def test_decodes_multiple_percent_sequences(self):
+    def test_preserves_percent_in_percentages(self):
         import format
-        result = format.clean_text_preserve_newlines("key%3Dvalue%26other%3D2")
-        assert result == "key=value&other=2"
+        result = format.clean_text_preserve_newlines("100% done")
+        assert result == "100% done"
 
-    def test_preserves_already_decoded_text(self):
+    def test_preserves_double_encoding(self):
+        import format
+        text = "The encoded form of %20 is %2520"
+        result = format.clean_text_preserve_newlines(text)
+        assert "%2520" in result
+
+    def test_preserves_plain_text(self):
         import format
         result = format.clean_text_preserve_newlines("hello world")
         assert result == "hello world"
 
-    def test_preserves_newlines_after_decoding(self):
+    def test_still_normalizes_whitespace(self):
         import format
-        result = format.clean_text_preserve_newlines("line1%3A%20foo\nline2%3A%20bar")
-        assert result == "line1: foo\nline2: bar"
+        result = format.clean_text_preserve_newlines("hello   \t  world")
+        assert result == "hello world"
 
-    def test_decodes_percent_encoded_slash(self):
+    def test_still_collapses_blank_lines(self):
         import format
-        result = format.clean_text_preserve_newlines("path%2Fto%2Ffile")
-        assert result == "path/to/file"
-
-    def test_handles_mixed_encoded_and_plain(self):
-        import format
-        result = format.clean_text_preserve_newlines("Hello%2C world%21 How are you%3F")
-        assert result == "Hello, world! How are you?"
+        result = format.clean_text_preserve_newlines("a\n\n\n\nb")
+        assert result == "a\n\nb"
 
 
 # ---------------------------------------------------------------------------
