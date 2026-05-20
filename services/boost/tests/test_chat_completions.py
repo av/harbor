@@ -10,6 +10,9 @@ and format.py.  Uses TestClient with mocked mapper/LLM to exercise:
 - BackendError propagation with rate-limit headers
 - Auth enforcement (401 status, case-insensitive Bearer)
 - JSON parse errors
+- Tools/function payloads (tools arrays, legacy functions, tool_calls/tool-role messages)
+- Large request body edges
+- Extended invalid JSON + decode error paths and specific error returns (400/500)
 - Exception handler routing (chat completions uses default format)
 """
 
@@ -535,3 +538,131 @@ class TestMapperIntegration:
         resp = client.post("/v1/chat/completions", json=_chat_body())
         # Should not crash (500) - the error is caught
         assert resp.status_code == 500  # unhandled ValueError becomes 500 in FastAPI
+
+
+# ===========================================================================
+# Tools/functions payloads + large bodies + extended invalid JSON/decode edges
+# (Iteration 5: exercises main.py chat handler json parse, logging, direct/serve
+# paths with complex payloads, plus 400/500 error return shapes)
+# ===========================================================================
+
+class TestChatCompletionsToolsFunctionsPayloads:
+    """POST /v1/chat/completions with real tools/functions payloads (exercises json parse + logging + mapper path with extra keys in main handler)."""
+
+    def test_non_streaming_with_tools_array(self, monkeypatch):
+        """Tools definitions + tool_choice in request body are accepted and reach handler."""
+        result = _openai_result(content="OK")
+        fake = _FakeLLM(consume_result=result, stream_chunks=[])
+        _setup_mocks(monkeypatch, fake)
+
+        client = _make_client()
+        tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_weather",
+                    "description": "Get current weather",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {"location": {"type": "string"}},
+                    },
+                },
+            }
+        ]
+        body = _chat_body(tools=tools, tool_choice="auto")
+        resp = client.post("/v1/chat/completions", json=body)
+        assert resp.status_code == 200
+        assert resp.json()["choices"][0]["message"]["content"] == "OK"
+
+    def test_non_streaming_with_legacy_functions(self, monkeypatch):
+        """Legacy 'functions' key (pre-tools OpenAI) is handled by body parse in main handler."""
+        result = _openai_result()
+        fake = _FakeLLM(consume_result=result, stream_chunks=[])
+        _setup_mocks(monkeypatch, fake)
+
+        client = _make_client()
+        functions = [{"name": "calc", "description": "math", "parameters": {"type": "object"}}]
+        resp = client.post("/v1/chat/completions", json=_chat_body(functions=functions))
+        assert resp.status_code == 200
+
+    def test_with_tool_calls_in_conversation_messages(self, monkeypatch):
+        """Messages containing tool_calls and subsequent tool role exercise full body parse + msg_count log."""
+        result = _openai_result(content="done")
+        fake = _FakeLLM(consume_result=result, stream_chunks=[])
+        _setup_mocks(monkeypatch, fake)
+
+        client = _make_client()
+        messages = [
+            {"role": "user", "content": "What's weather in Paris?"},
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {
+                        "id": "call_123",
+                        "type": "function",
+                        "function": {"name": "get_weather", "arguments": '{"location": "Paris"}'},
+                    }
+                ],
+            },
+            {"role": "tool", "tool_call_id": "call_123", "content": "15C sunny"},
+        ]
+        resp = client.post("/v1/chat/completions", json={"model": "test", "messages": messages})
+        assert resp.status_code == 200
+
+
+class TestChatCompletionsLargeAndInvalidJsonEdges:
+    """Large request bodies and additional invalid JSON/decode error paths for the main handler's try: decode+loads + specific except + uncaught -> error returns."""
+
+    def test_large_body_with_many_tools_and_long_content(self, monkeypatch):
+        """Large payload (30 tools + 5k char content) should decode, json.loads, log, and process without error in chat handler."""
+        result = _openai_result(content="Large handled")
+        fake = _FakeLLM(consume_result=result, stream_chunks=[])
+        _setup_mocks(monkeypatch, fake)
+
+        client = _make_client()
+        long_content = "x" * 5000
+        many_tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": f"tool_{i}",
+                    "description": f"Tool number {i}",
+                    "parameters": {"type": "object", "properties": {"arg": {"type": "string"}}},
+                },
+            }
+            for i in range(30)
+        ]
+        body = _chat_body(messages=[{"role": "user", "content": long_content}], tools=many_tools)
+        resp = client.post("/v1/chat/completions", json=body)
+        assert resp.status_code == 200
+        assert "Large handled" in resp.text
+
+    def test_invalid_json_malformed_object_returns_400(self):
+        """Another JSONDecodeError case (trailing comma after valid start) hits the exact except JSONDecodeError -> 400 in main handler."""
+        client = _make_client()
+        bad = b'{"model": "x", "messages": [{"role": "user", "content": "hi"}], }'  # trailing comma
+        resp = client.post(
+            "/v1/chat/completions",
+            content=bad,
+            headers={"content-type": "application/json"},
+        )
+        assert resp.status_code == 400
+        body = resp.json()
+        assert "detail" in body
+        assert "Invalid JSON in request body" in body["detail"]
+
+    def test_non_utf8_bytes_hit_decode_before_json_and_return_500(self):
+        """Bytes failing .decode('utf-8') are NOT caught by JSONDecodeError except (different exception), propagate to 500 error return path (plain-text 500 from server, since only HTTPException has custom JSON handler in main)."""
+        client = _make_client()
+        # leading invalid utf8 sequence before json
+        bad_utf8 = b'\x80\x81{"model": "x", "messages": []}'
+        resp = client.post(
+            "/v1/chat/completions",
+            content=bad_utf8,
+            headers={"content-type": "application/json"},
+        )
+        assert resp.status_code == 500
+        # Non-HTTPException errors from inside chat handler yield plain "Internal Server Error" (not JSON via the HTTPExc handler)
+        assert "Internal Server Error" in resp.text
+        # No JSON body for this path; confirms different return shape vs the caught JSONDecodeError 400 case
