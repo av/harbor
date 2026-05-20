@@ -5116,5 +5116,286 @@ class TestToolResultInConvertMessages:
         assert msgs[2]["content"] == "Please analyze these results"
 
 
+# ---------------------------------------------------------------------------
+# Usage tracking in streaming
+# ---------------------------------------------------------------------------
+
+
+class TestStreamingUsageTracking:
+    """Verify usage (input_tokens / output_tokens) is captured correctly
+    from OpenAI-format streaming chunks and emitted in the Anthropic
+    message_start and message_delta events."""
+
+    @pytest.mark.asyncio
+    async def test_message_start_has_zero_usage(self):
+        """message_start is emitted before any chunks arrive, so usage must
+        be zeros (we cannot know the prompt token count yet)."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"hi"}}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":99,"completion_tokens":10}}\n\n'
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(mock_stream(), "m")
+        ]
+        parsed = _parse_sse_events("".join(events))
+        msg_start = [e for e in parsed if e["type"] == "message_start"][0]
+        assert msg_start["message"]["usage"]["input_tokens"] == 0
+        assert msg_start["message"]["usage"]["output_tokens"] == 0
+
+    @pytest.mark.asyncio
+    async def test_message_delta_has_final_usage(self):
+        """message_delta carries the accumulated usage from the stream."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"a"}}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":20,"completion_tokens":8}}\n\n'
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(mock_stream(), "m")
+        ]
+        parsed = _parse_sse_events("".join(events))
+        msg_delta = [e for e in parsed if e["type"] == "message_delta"][0]
+        assert msg_delta["usage"]["input_tokens"] == 20
+        assert msg_delta["usage"]["output_tokens"] == 8
+
+    @pytest.mark.asyncio
+    async def test_usage_from_separate_final_chunk(self):
+        """OpenAI backends with stream_options.include_usage send usage in a
+        separate chunk with choices:[]. The converter must capture it."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"hello"}}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n'
+            # Separate usage-only chunk (OpenAI pattern)
+            yield 'data: {"choices":[],"usage":{"prompt_tokens":15,"completion_tokens":4}}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(mock_stream(), "m")
+        ]
+        parsed = _parse_sse_events("".join(events))
+        msg_delta = [e for e in parsed if e["type"] == "message_delta"][0]
+        assert msg_delta["usage"]["input_tokens"] == 15
+        assert msg_delta["usage"]["output_tokens"] == 4
+
+    @pytest.mark.asyncio
+    async def test_no_usage_from_backend_defaults_to_zero(self):
+        """When the backend sends no usage at all, both counts default to 0."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"yo"}}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n'
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(mock_stream(), "m")
+        ]
+        parsed = _parse_sse_events("".join(events))
+        msg_delta = [e for e in parsed if e["type"] == "message_delta"][0]
+        assert msg_delta["usage"]["input_tokens"] == 0
+        assert msg_delta["usage"]["output_tokens"] == 0
+
+    @pytest.mark.asyncio
+    async def test_usage_in_early_chunk_preserved(self):
+        """If usage appears in an early chunk (not the final one), it should
+        still be captured — later chunks without usage should not reset it."""
+        async def mock_stream():
+            # First chunk has usage
+            yield 'data: {"choices":[{"delta":{"content":"a"}}],"usage":{"prompt_tokens":50,"completion_tokens":1}}\n\n'
+            # Subsequent chunks have no usage
+            yield 'data: {"choices":[{"delta":{"content":"b"}}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n'
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(mock_stream(), "m")
+        ]
+        parsed = _parse_sse_events("".join(events))
+        msg_delta = [e for e in parsed if e["type"] == "message_delta"][0]
+        assert msg_delta["usage"]["input_tokens"] == 50
+        # output_tokens stays at 1 from the first chunk
+        assert msg_delta["usage"]["output_tokens"] == 1
+
+    @pytest.mark.asyncio
+    async def test_usage_updated_by_later_chunk(self):
+        """When a later chunk carries updated usage (higher values), the
+        converter should use the later values."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"a"}}],"usage":{"prompt_tokens":10,"completion_tokens":1}}\n\n'
+            yield 'data: {"choices":[{"delta":{"content":"b"}}],"usage":{"prompt_tokens":10,"completion_tokens":5}}\n\n'
+            yield 'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":9}}\n\n'
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(mock_stream(), "m")
+        ]
+        parsed = _parse_sse_events("".join(events))
+        msg_delta = [e for e in parsed if e["type"] == "message_delta"][0]
+        assert msg_delta["usage"]["input_tokens"] == 10
+        # Should be the final non-zero value
+        assert msg_delta["usage"]["output_tokens"] == 9
+
+    @pytest.mark.asyncio
+    async def test_message_delta_has_cache_usage_fields(self):
+        """message_delta.usage must include cache usage fields (always 0)."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":5,"completion_tokens":2}}\n\n'
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(mock_stream(), "m")
+        ]
+        parsed = _parse_sse_events("".join(events))
+        msg_delta = [e for e in parsed if e["type"] == "message_delta"][0]
+        assert msg_delta["usage"]["cache_creation_input_tokens"] == 0
+        assert msg_delta["usage"]["cache_read_input_tokens"] == 0
+
+    @pytest.mark.asyncio
+    async def test_message_start_has_cache_usage_fields(self):
+        """message_start.usage must include cache usage fields (always 0)."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n'
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(mock_stream(), "m")
+        ]
+        parsed = _parse_sse_events("".join(events))
+        msg_start = [e for e in parsed if e["type"] == "message_start"][0]
+        assert msg_start["message"]["usage"]["cache_creation_input_tokens"] == 0
+        assert msg_start["message"]["usage"]["cache_read_input_tokens"] == 0
+
+    @pytest.mark.asyncio
+    async def test_stream_with_tool_calls_captures_usage(self):
+        """Usage is captured correctly even when the stream contains tool calls."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","function":{"name":"foo","arguments":"{"}}]}}]}\n\n'
+            yield 'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"}"}}]}}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":30,"completion_tokens":12}}\n\n'
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(mock_stream(), "m")
+        ]
+        parsed = _parse_sse_events("".join(events))
+        msg_delta = [e for e in parsed if e["type"] == "message_delta"][0]
+        assert msg_delta["usage"]["input_tokens"] == 30
+        assert msg_delta["usage"]["output_tokens"] == 12
+
+
+# ---------------------------------------------------------------------------
+# Usage tracking in Responses API streaming
+# ---------------------------------------------------------------------------
+
+
+class TestResponsesStreamingUsageTracking:
+    """Verify usage tracking in the Responses API streaming converter."""
+
+    @pytest.mark.asyncio
+    async def test_no_usage_from_backend(self):
+        """When backend sends no usage at all, completed event has zeros."""
+        import responses_compat
+
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"hi"}}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "model", "resp_nu"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events_responses(events)
+        completed = [d for t, d in parsed if t == "response.completed"]
+        usage = completed[0]["response"]["usage"]
+        assert usage["input_tokens"] == 0
+        assert usage["output_tokens"] == 0
+        assert usage["total_tokens"] == 0
+
+    @pytest.mark.asyncio
+    async def test_usage_in_early_chunk_preserved(self):
+        """Usage from an early chunk is preserved when later chunks lack it."""
+        import responses_compat
+
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"x"}}],"usage":{"prompt_tokens":25,"completion_tokens":3}}\n\n'
+            yield 'data: {"choices":[{"delta":{"content":"y"}}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "model", "resp_early"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events_responses(events)
+        completed = [d for t, d in parsed if t == "response.completed"]
+        usage = completed[0]["response"]["usage"]
+        assert usage["input_tokens"] == 25
+        assert usage["output_tokens"] == 3
+
+    @pytest.mark.asyncio
+    async def test_usage_with_tool_calls(self):
+        """Usage is captured when stream contains tool calls."""
+        import responses_compat
+
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","function":{"name":"fn","arguments":"{}"}}]}}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":40,"completion_tokens":15}}\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "model", "resp_tc"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events_responses(events)
+        completed = [d for t, d in parsed if t == "response.completed"]
+        usage = completed[0]["response"]["usage"]
+        assert usage["input_tokens"] == 40
+        assert usage["output_tokens"] == 15
+
+    @pytest.mark.asyncio
+    async def test_completed_usage_has_token_details(self):
+        """The completed event usage must include input/output_tokens_details."""
+        import responses_compat
+
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"hi"}}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":5,"completion_tokens":2}}\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "model", "resp_det"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events_responses(events)
+        completed = [d for t, d in parsed if t == "response.completed"]
+        usage = completed[0]["response"]["usage"]
+        assert "input_tokens_details" in usage
+        assert usage["input_tokens_details"]["cached_tokens"] == 0
+        assert "output_tokens_details" in usage
+        assert usage["output_tokens_details"]["reasoning_tokens"] == 0
+
+
+def _parse_sse_events_responses(raw_events):
+    """Parse Responses API SSE strings into (event_type, data_dict) tuples."""
+    parsed = []
+    for raw in raw_events:
+        lines = raw.strip().split("\n")
+        event_type = None
+        data_str = None
+        for line in lines:
+            if line.startswith("event: "):
+                event_type = line[7:]
+            elif line.startswith("data: "):
+                data_str = line[6:]
+        if event_type and data_str:
+            parsed.append((event_type, json.loads(data_str)))
+    return parsed
+
+
 if __name__ == "__main__":
     unittest.main()
