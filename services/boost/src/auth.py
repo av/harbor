@@ -26,4 +26,4 @@ async def get_api_key(
   if candidate and candidate in config.BOOST_AUTH:
     return candidate
 
-  raise HTTPException(status_code=403, detail="Unauthorized")
+  raise HTTPException(status_code=401, detail="Unauthorized")

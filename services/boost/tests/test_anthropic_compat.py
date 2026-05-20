@@ -1088,12 +1088,26 @@ class TestChunkUtilities:
 # The real ``mapper`` and ``llm`` modules are stubbed at the top of this file,
 # so we patch functions/classes directly on the ``anthropic_compat`` module.
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 from starlette.testclient import TestClient
 from unittest.mock import AsyncMock
 
 _integration_app = FastAPI()
 _integration_app.include_router(anthropic_compat.anthropic_compatible_routes)
+
+
+@_integration_app.exception_handler(HTTPException)
+async def _test_http_exception_handler(request: Request, exc: HTTPException):
+  """Mirror the global handler from main.py for test fidelity."""
+  error_type = anthropic_compat.ERROR_TYPE_MAP.get(exc.status_code, "api_error")
+  return JSONResponse(
+    status_code=exc.status_code,
+    content={
+      "type": "error",
+      "error": {"type": error_type, "message": str(exc.detail)},
+    },
+  )
 
 
 def _make_client(auth_key=None):
@@ -1174,18 +1188,26 @@ class _FakeLLM:
 class TestIntegrationAuth:
     """Test that the route enforces API key authentication."""
 
-    def test_missing_auth_returns_403(self):
+    def test_missing_auth_returns_401(self):
         client = _make_client(auth_key="sk-secret")
         resp = client.post("/v1/messages", json=_ANTHRO_BODY)
-        assert resp.status_code == 403
+        assert resp.status_code == 401
 
-    def test_wrong_api_key_returns_403(self):
+    def test_missing_auth_has_anthropic_error_format(self):
+        client = _make_client(auth_key="sk-secret")
+        resp = client.post("/v1/messages", json=_ANTHRO_BODY)
+        body = resp.json()
+        assert body["type"] == "error"
+        assert body["error"]["type"] == "authentication_error"
+        assert isinstance(body["error"]["message"], str)
+
+    def test_wrong_api_key_returns_401(self):
         client = _make_client(auth_key="sk-secret")
         resp = client.post(
             "/v1/messages", json=_ANTHRO_BODY,
             headers={"x-api-key": "sk-wrong"},
         )
-        assert resp.status_code == 403
+        assert resp.status_code == 401
 
     def test_correct_x_api_key_passes_auth(self):
         fake_llm = _FakeLLM(
@@ -1695,7 +1717,7 @@ class TestIntegrationCountTokens:
             "model": "test",
             "messages": [{"role": "user", "content": "hi"}],
         })
-        assert resp.status_code == 403
+        assert resp.status_code == 401
 
     def test_count_tokens_none_completion_returns_500(self):
         fake_llm = _FakeLLM(stream_chunks=[])
@@ -5425,10 +5447,10 @@ class TestMessageBatchesStubs:
     def test_batch_endpoints_require_auth(self):
         client = _make_client(auth_key="secret-key")
         resp = client.post("/v1/messages/batches", json={})
-        assert resp.status_code == 403
+        assert resp.status_code == 401
 
         resp = client.get("/v1/messages/batches")
-        assert resp.status_code == 403
+        assert resp.status_code == 401
 
     def test_batch_create_with_auth(self):
         client = _make_client(auth_key="secret-key")

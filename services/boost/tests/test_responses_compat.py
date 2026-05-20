@@ -1554,18 +1554,42 @@ class TestSDKCompatibility:
 # ---------------------------------------------------------------------------
 
 
+def _make_responses_app():
+    """Build a test FastAPI app with the responses router and error handler."""
+    from fastapi import FastAPI, HTTPException, Request
+    from fastapi.responses import JSONResponse
+
+    app = FastAPI()
+    app.include_router(responses_compat.responses_compatible_routes)
+
+    @app.exception_handler(HTTPException)
+    async def _handler(request: Request, exc: HTTPException):
+        error_type = responses_compat.ERROR_TYPE_MAP.get(exc.status_code, "server_error")
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={
+                "error": {
+                    "message": str(exc.detail),
+                    "type": error_type,
+                    "param": None,
+                    "code": None,
+                },
+            },
+        )
+
+    return app
+
+
 class TestResponsesRouteIntegration:
     @pytest.fixture(autouse=True)
     def setup_app(self, monkeypatch):
         """Set up a test FastAPI app with the responses router."""
-        from fastapi import FastAPI
         from fastapi.testclient import TestClient
 
         import config as _cfg
         monkeypatch.setattr(_cfg, "BOOST_AUTH", [])
 
-        app = FastAPI()
-        app.include_router(responses_compat.responses_compatible_routes)
+        app = _make_responses_app()
         self.client = TestClient(app)
 
     def test_missing_model_returns_400(self):
@@ -1734,7 +1758,23 @@ class TestResponsesRouteIntegration:
             "input": "hello",
         })
 
-        assert resp.status_code == 403
+        assert resp.status_code == 401
+
+    def test_auth_error_has_openai_error_format(self, monkeypatch):
+        import config as _cfg
+        monkeypatch.setattr(_cfg, "BOOST_AUTH", ["sk-test"])
+
+        resp = self.client.post("/v1/responses", json={
+            "model": "gpt-4o",
+            "input": "hello",
+        })
+
+        body = resp.json()
+        assert "error" in body
+        assert body["error"]["type"] == "authentication_error"
+        assert isinstance(body["error"]["message"], str)
+        assert "param" in body["error"]
+        assert "code" in body["error"]
 
     def test_auth_accepted(self, monkeypatch):
         import config as _cfg
@@ -1788,14 +1828,12 @@ class TestResponsesRequestIdHeader:
 
     @pytest.fixture(autouse=True)
     def setup_app(self, monkeypatch):
-        from fastapi import FastAPI
         from fastapi.testclient import TestClient
 
         import config as _cfg
         monkeypatch.setattr(_cfg, "BOOST_AUTH", [])
 
-        app = FastAPI()
-        app.include_router(responses_compat.responses_compatible_routes)
+        app = _make_responses_app()
         self.client = TestClient(app)
 
     def _assert_request_id(self, resp):
@@ -2504,14 +2542,12 @@ class TestResponsesEdgeCaseIntegration:
 
     @pytest.fixture(autouse=True)
     def setup_app(self, monkeypatch):
-        from fastapi import FastAPI
         from fastapi.testclient import TestClient
 
         import config as _cfg
         monkeypatch.setattr(_cfg, "BOOST_AUTH", [])
 
-        app = FastAPI()
-        app.include_router(responses_compat.responses_compatible_routes)
+        app = _make_responses_app()
         self.client = TestClient(app)
 
     def test_empty_model_string_returns_400(self):
@@ -3139,14 +3175,12 @@ class TestReasoningIntegration:
 
     @pytest.fixture(autouse=True)
     def setup_app(self, monkeypatch):
-        from fastapi import FastAPI
         from fastapi.testclient import TestClient
 
         import config as _cfg
         monkeypatch.setattr(_cfg, "BOOST_AUTH", [])
 
-        app = FastAPI()
-        app.include_router(responses_compat.responses_compatible_routes)
+        app = _make_responses_app()
         self.client = TestClient(app)
 
     def test_reasoning_param_passed_through(self, monkeypatch):
@@ -3555,14 +3589,12 @@ class TestStoreMetadataTruncationIntegration:
 
     @pytest.fixture(autouse=True)
     def setup_app(self, monkeypatch):
-        from fastapi import FastAPI
         from fastapi.testclient import TestClient
 
         import config as _cfg
         monkeypatch.setattr(_cfg, "BOOST_AUTH", [])
 
-        app = FastAPI()
-        app.include_router(responses_compat.responses_compatible_routes)
+        app = _make_responses_app()
         self.client = TestClient(app)
 
     def _mock_llm(self, monkeypatch, result=None):
@@ -3935,14 +3967,12 @@ class TestResponseStubEndpoints:
 
     @pytest.fixture(autouse=True)
     def setup_app(self, monkeypatch):
-        from fastapi import FastAPI
         from fastapi.testclient import TestClient
 
         import config as _cfg
         monkeypatch.setattr(_cfg, "BOOST_AUTH", [])
 
-        app = FastAPI()
-        app.include_router(responses_compat.responses_compatible_routes)
+        app = _make_responses_app()
         self.client = TestClient(app)
 
     def _assert_not_found(self, resp):

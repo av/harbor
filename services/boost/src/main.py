@@ -34,6 +34,67 @@ app.add_middleware(RequestIDMiddleware)
 app.add_middleware(RequestStateMiddleware)
 
 
+# Format HTTPExceptions raised by dependencies (e.g. auth) to match the
+# error schema each SDK expects.  Without this handler, FastAPI returns
+# ``{"detail": "..."}`` which no SDK can parse into a typed error.
+
+_ANTHROPIC_ERROR_TYPE_MAP = {
+  400: "invalid_request_error",
+  401: "authentication_error",
+  403: "permission_error",
+  404: "not_found_error",
+  429: "rate_limit_error",
+  500: "api_error",
+  529: "overloaded_error",
+}
+
+_OPENAI_ERROR_TYPE_MAP = {
+  400: "invalid_request_error",
+  401: "authentication_error",
+  403: "permission_error",
+  404: "not_found_error",
+  409: "conflict_error",
+  422: "invalid_request_error",
+  429: "rate_limit_error",
+  500: "server_error",
+}
+
+
+@app.exception_handler(HTTPException)
+async def _http_exception_handler(request: Request, exc: HTTPException):
+  path = request.url.path
+
+  if path.startswith("/v1/messages"):
+    error_type = _ANTHROPIC_ERROR_TYPE_MAP.get(exc.status_code, "api_error")
+    return JSONResponse(
+      status_code=exc.status_code,
+      content={
+        "type": "error",
+        "error": {"type": error_type, "message": str(exc.detail)},
+      },
+    )
+
+  if path.startswith("/v1/responses"):
+    error_type = _OPENAI_ERROR_TYPE_MAP.get(exc.status_code, "server_error")
+    return JSONResponse(
+      status_code=exc.status_code,
+      content={
+        "error": {
+          "message": str(exc.detail),
+          "type": error_type,
+          "param": None,
+          "code": None,
+        },
+      },
+    )
+
+  # Default FastAPI behavior for other paths
+  return JSONResponse(
+    status_code=exc.status_code,
+    content={"detail": exc.detail},
+  )
+
+
 @app.get("/")
 async def root():
   return JSONResponse(
