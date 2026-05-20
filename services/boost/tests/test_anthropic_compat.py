@@ -5558,6 +5558,64 @@ class TestMessageBatchesStubs:
             assert "type" in body["error"]
             assert "message" in body["error"]
 
+    # --- DELETE /v1/messages/batches/{batch_id} ---
+
+    def test_delete_batch_returns_404(self):
+        client = _make_client()
+        resp = client.delete("/v1/messages/batches/batch_abc123")
+        assert resp.status_code == 404
+        body = resp.json()
+        assert body["type"] == "error"
+        assert body["error"]["type"] == "not_found_error"
+        assert "batch_abc123" in body["error"]["message"]
+
+    def test_delete_batch_message_explains_not_supported(self):
+        client = _make_client()
+        resp = client.delete("/v1/messages/batches/batch_abc123")
+        body = resp.json()
+        assert "not supported" in body["error"]["message"]
+        assert "POST /v1/messages" in body["error"]["message"]
+
+    def test_delete_batch_any_id(self):
+        client = _make_client()
+        resp = client.delete("/v1/messages/batches/batch_xyz999")
+        assert resp.status_code == 404
+        body = resp.json()
+        assert "batch_xyz999" in body["error"]["message"]
+
+    def test_delete_batch_includes_request_id_header(self):
+        client = _make_client()
+        resp = client.delete("/v1/messages/batches/batch_x")
+        assert "request-id" in resp.headers
+        assert resp.headers["request-id"].startswith("req_")
+
+    def test_delete_batch_includes_anthropic_version_header(self):
+        client = _make_client()
+        resp = client.delete("/v1/messages/batches/batch_x")
+        assert resp.headers.get("anthropic-version") == "2023-06-01"
+
+    def test_delete_batch_echoes_beta_flags(self):
+        client = _make_client()
+        resp = client.delete(
+            "/v1/messages/batches/batch_x",
+            headers={"anthropic-beta": "prompt-caching-2024-07-31"},
+        )
+        assert resp.status_code == 404
+        assert "prompt-caching-2024-07-31" in resp.headers.get("anthropic-beta", "")
+
+    def test_delete_batch_requires_auth(self):
+        client = _make_client(auth_key="secret-key")
+        resp = client.delete("/v1/messages/batches/batch_x")
+        assert resp.status_code == 401
+
+    def test_delete_batch_error_body_structure(self):
+        client = _make_client()
+        resp = client.delete("/v1/messages/batches/batch_x")
+        body = resp.json()
+        assert body["type"] == "error"
+        assert "type" in body["error"]
+        assert "message" in body["error"]
+
 
 # ---------------------------------------------------------------------------
 # Streaming ping event

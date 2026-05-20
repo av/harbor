@@ -4064,6 +4064,206 @@ class TestResponseStubEndpoints:
             assert "code" in body["error"]
             assert "param" in body["error"]
 
+    # --- GET /v1/responses/{response_id}/input_items ---
+
+    def test_input_items_returns_404(self):
+        resp = self.client.get("/v1/responses/resp_abc123/input_items")
+        self._assert_not_found(resp)
+
+    def test_input_items_includes_response_id_in_message(self):
+        resp = self.client.get("/v1/responses/resp_abc123/input_items")
+        body = resp.json()
+        assert "resp_abc123" in body["error"]["message"]
+
+    def test_input_items_explains_no_persistence(self):
+        resp = self.client.get("/v1/responses/resp_abc123/input_items")
+        body = resp.json()
+        assert "not persist" in body["error"]["message"] or "store" in body["error"]["message"]
+
+    def test_input_items_any_id(self):
+        resp = self.client.get("/v1/responses/resp_xyz999/input_items")
+        self._assert_not_found(resp)
+        body = resp.json()
+        assert "resp_xyz999" in body["error"]["message"]
+
+    def test_input_items_has_request_id(self):
+        resp = self.client.get("/v1/responses/resp_abc123/input_items")
+        assert "x-request-id" in resp.headers
+        assert resp.headers["x-request-id"].startswith("req_")
+
+    def test_input_items_error_body_structure(self):
+        resp = self.client.get("/v1/responses/resp_x/input_items")
+        body = resp.json()
+        assert "error" in body
+        assert "message" in body["error"]
+        assert "type" in body["error"]
+        assert "code" in body["error"]
+        assert "param" in body["error"]
+        assert body["error"]["param"] is None
+
+
+# ---------------------------------------------------------------------------
+# Input token counting: POST /v1/responses/input_tokens
+# ---------------------------------------------------------------------------
+
+
+class TestCountResponseInputTokens:
+    """Tests for POST /v1/responses/input_tokens — local token counting
+    for the Responses API surface."""
+
+    @pytest.fixture(autouse=True)
+    def setup_app(self, monkeypatch):
+        from fastapi.testclient import TestClient
+
+        import config as _cfg
+        monkeypatch.setattr(_cfg, "BOOST_AUTH", [])
+
+        app = _make_responses_app()
+        self.client = TestClient(app)
+
+    def test_basic_token_count(self):
+        resp = self.client.post("/v1/responses/input_tokens", json={
+            "model": "gpt-4o",
+            "input": "Hello, world!",
+        })
+        assert resp.status_code == 200
+        body = resp.json()
+        assert "input_tokens" in body
+        assert isinstance(body["input_tokens"], int)
+        assert body["input_tokens"] > 0
+
+    def test_response_includes_object_field(self):
+        resp = self.client.post("/v1/responses/input_tokens", json={
+            "model": "gpt-4o",
+            "input": "Hello",
+        })
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["object"] == "response.input_tokens"
+
+    def test_array_input(self):
+        resp = self.client.post("/v1/responses/input_tokens", json={
+            "model": "gpt-4o",
+            "input": [
+                {"type": "message", "role": "user", "content": "Hi there"},
+            ],
+        })
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["input_tokens"] > 0
+
+    def test_instructions_contribute_to_count(self):
+        resp_no_inst = self.client.post("/v1/responses/input_tokens", json={
+            "model": "gpt-4o",
+            "input": "hi",
+        })
+        resp_with_inst = self.client.post("/v1/responses/input_tokens", json={
+            "model": "gpt-4o",
+            "input": "hi",
+            "instructions": "You are a helpful assistant that provides detailed answers.",
+        })
+        assert resp_no_inst.status_code == 200
+        assert resp_with_inst.status_code == 200
+        assert resp_with_inst.json()["input_tokens"] > resp_no_inst.json()["input_tokens"]
+
+    def test_count_with_tools(self):
+        resp_no_tools = self.client.post("/v1/responses/input_tokens", json={
+            "model": "gpt-4o",
+            "input": "hi",
+        })
+        resp_with_tools = self.client.post("/v1/responses/input_tokens", json={
+            "model": "gpt-4o",
+            "input": "hi",
+            "tools": [
+                {
+                    "type": "function",
+                    "name": "get_weather",
+                    "description": "Get the current weather for a location",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "location": {"type": "string", "description": "City and state"},
+                        },
+                        "required": ["location"],
+                    },
+                },
+            ],
+        })
+        assert resp_no_tools.status_code == 200
+        assert resp_with_tools.status_code == 200
+        assert resp_with_tools.json()["input_tokens"] > resp_no_tools.json()["input_tokens"]
+
+    def test_count_with_multiple_tools(self):
+        resp = self.client.post("/v1/responses/input_tokens", json={
+            "model": "gpt-4o",
+            "input": "hi",
+            "tools": [
+                {
+                    "type": "function",
+                    "name": "tool_a",
+                    "description": "First tool",
+                    "parameters": {"type": "object", "properties": {}},
+                },
+                {
+                    "type": "function",
+                    "name": "tool_b",
+                    "description": "Second tool with more params",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "x": {"type": "string"},
+                            "y": {"type": "integer"},
+                        },
+                    },
+                },
+            ],
+        })
+        assert resp.status_code == 200
+        assert resp.json()["input_tokens"] > 0
+
+    def test_invalid_json_returns_400(self):
+        resp = self.client.post(
+            "/v1/responses/input_tokens",
+            content=b"not json",
+            headers={"Content-Type": "application/json"},
+        )
+        assert resp.status_code == 400
+        body = resp.json()
+        assert "JSON" in body["error"]["message"] or "json" in body["error"]["message"].lower()
+
+    def test_empty_input_still_counts(self):
+        resp = self.client.post("/v1/responses/input_tokens", json={
+            "model": "gpt-4o",
+            "input": "",
+        })
+        assert resp.status_code == 200
+        body = resp.json()
+        assert isinstance(body["input_tokens"], int)
+
+    def test_has_request_id_header(self):
+        resp = self.client.post("/v1/responses/input_tokens", json={
+            "model": "gpt-4o",
+            "input": "test",
+        })
+        assert "x-request-id" in resp.headers
+        assert resp.headers["x-request-id"].startswith("req_")
+
+    def test_web_search_tool_contributes_to_count(self):
+        """web_search_preview tools are mapped to a function tool
+        and should contribute tokens."""
+        resp_no_tools = self.client.post("/v1/responses/input_tokens", json={
+            "model": "gpt-4o",
+            "input": "hi",
+        })
+        resp_with_ws = self.client.post("/v1/responses/input_tokens", json={
+            "model": "gpt-4o",
+            "input": "hi",
+            "tools": [{"type": "web_search_preview"}],
+        })
+        assert resp_no_tools.status_code == 200
+        assert resp_with_ws.status_code == 200
+        assert resp_with_ws.json()["input_tokens"] > resp_no_tools.json()["input_tokens"]
+
 
 # ---------------------------------------------------------------------------
 # Audio content parts: input_audio
