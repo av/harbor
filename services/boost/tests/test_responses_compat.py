@@ -6635,3 +6635,580 @@ class TestSecurityMetadataInjection:
         assert "user_id" not in openai_body
         assert openai_body["model"] == "test"
         assert openai_body["@boost_pad_size"] == 10
+
+
+# ---------------------------------------------------------------------------
+# Annotations: extract_annotations (compat_utils)
+# ---------------------------------------------------------------------------
+
+
+class TestExtractAnnotations:
+    """Tests for compat_utils.extract_annotations — the shared helper that
+    converts Chat Completions annotations/citations to Responses API format."""
+
+    def test_empty_message(self):
+        from compat_utils import extract_annotations
+        assert extract_annotations({}) == []
+
+    def test_none_annotations(self):
+        from compat_utils import extract_annotations
+        assert extract_annotations({"annotations": None}) == []
+
+    def test_empty_annotations(self):
+        from compat_utils import extract_annotations
+        assert extract_annotations({"annotations": []}) == []
+
+    def test_url_citation(self):
+        from compat_utils import extract_annotations
+        message = {
+            "annotations": [{
+                "type": "url_citation",
+                "url_citation": {
+                    "start_index": 10,
+                    "end_index": 50,
+                    "url": "https://example.com/article",
+                    "title": "Example Article",
+                },
+            }],
+        }
+        result = extract_annotations(message)
+        assert len(result) == 1
+        assert result[0]["type"] == "url_citation"
+        assert result[0]["start_index"] == 10
+        assert result[0]["end_index"] == 50
+        assert result[0]["url"] == "https://example.com/article"
+        assert result[0]["title"] == "Example Article"
+
+    def test_multiple_url_citations(self):
+        from compat_utils import extract_annotations
+        message = {
+            "annotations": [
+                {
+                    "type": "url_citation",
+                    "url_citation": {
+                        "start_index": 0,
+                        "end_index": 20,
+                        "url": "https://a.com",
+                        "title": "A",
+                    },
+                },
+                {
+                    "type": "url_citation",
+                    "url_citation": {
+                        "start_index": 30,
+                        "end_index": 60,
+                        "url": "https://b.com",
+                        "title": "B",
+                    },
+                },
+            ],
+        }
+        result = extract_annotations(message)
+        assert len(result) == 2
+        assert result[0]["url"] == "https://a.com"
+        assert result[1]["url"] == "https://b.com"
+
+    def test_file_citation(self):
+        from compat_utils import extract_annotations
+        message = {
+            "annotations": [{
+                "type": "file_citation",
+                "file_id": "file-abc",
+                "filename": "report.pdf",
+                "index": 5,
+            }],
+        }
+        result = extract_annotations(message)
+        assert len(result) == 1
+        assert result[0]["type"] == "file_citation"
+        assert result[0]["file_id"] == "file-abc"
+        assert result[0]["filename"] == "report.pdf"
+        assert result[0]["index"] == 5
+
+    def test_file_path(self):
+        from compat_utils import extract_annotations
+        message = {
+            "annotations": [{
+                "type": "file_path",
+                "file_id": "file-xyz",
+                "index": 3,
+            }],
+        }
+        result = extract_annotations(message)
+        assert len(result) == 1
+        assert result[0]["type"] == "file_path"
+        assert result[0]["file_id"] == "file-xyz"
+        assert result[0]["index"] == 3
+
+    def test_mixed_annotation_types(self):
+        from compat_utils import extract_annotations
+        message = {
+            "annotations": [
+                {
+                    "type": "url_citation",
+                    "url_citation": {
+                        "start_index": 0, "end_index": 10,
+                        "url": "https://x.com", "title": "X",
+                    },
+                },
+                {
+                    "type": "file_citation",
+                    "file_id": "file-1",
+                    "filename": "doc.txt",
+                    "index": 2,
+                },
+                {
+                    "type": "file_path",
+                    "file_id": "file-2",
+                    "index": 4,
+                },
+            ],
+        }
+        result = extract_annotations(message)
+        assert len(result) == 3
+        assert result[0]["type"] == "url_citation"
+        assert result[1]["type"] == "file_citation"
+        assert result[2]["type"] == "file_path"
+
+    def test_unknown_annotation_type_skipped(self):
+        from compat_utils import extract_annotations
+        message = {
+            "annotations": [
+                {"type": "unknown_type", "data": "something"},
+                {
+                    "type": "url_citation",
+                    "url_citation": {
+                        "start_index": 0, "end_index": 5,
+                        "url": "https://known.com", "title": "Known",
+                    },
+                },
+            ],
+        }
+        result = extract_annotations(message)
+        assert len(result) == 1
+        assert result[0]["url"] == "https://known.com"
+
+    def test_non_dict_annotation_skipped(self):
+        from compat_utils import extract_annotations
+        result = extract_annotations({"annotations": ["not a dict", 42]})
+        assert result == []
+
+    def test_perplexity_citations(self):
+        """Perplexity returns a flat list of URL strings as 'citations'."""
+        from compat_utils import extract_annotations
+        message = {
+            "citations": [
+                "https://perplexity.ai/article1",
+                "https://perplexity.ai/article2",
+            ],
+        }
+        result = extract_annotations(message)
+        assert len(result) == 2
+        assert result[0]["type"] == "url_citation"
+        assert result[0]["url"] == "https://perplexity.ai/article1"
+        assert result[0]["title"] == ""
+        assert result[0]["start_index"] == 0
+        assert result[0]["end_index"] == 0
+        assert result[1]["url"] == "https://perplexity.ai/article2"
+
+    def test_perplexity_empty_citations(self):
+        from compat_utils import extract_annotations
+        assert extract_annotations({"citations": []}) == []
+
+    def test_perplexity_non_string_citations_skipped(self):
+        from compat_utils import extract_annotations
+        result = extract_annotations({"citations": [None, "", 42, "https://valid.com"]})
+        assert len(result) == 1
+        assert result[0]["url"] == "https://valid.com"
+
+    def test_openai_annotations_take_priority_over_citations(self):
+        """When both annotations and citations exist, annotations win."""
+        from compat_utils import extract_annotations
+        message = {
+            "annotations": [{
+                "type": "url_citation",
+                "url_citation": {
+                    "start_index": 0, "end_index": 10,
+                    "url": "https://openai.com", "title": "OpenAI",
+                },
+            }],
+            "citations": ["https://perplexity.com"],
+        }
+        result = extract_annotations(message)
+        assert len(result) == 1
+        assert result[0]["url"] == "https://openai.com"
+
+    def test_url_citation_missing_fields_default(self):
+        from compat_utils import extract_annotations
+        message = {
+            "annotations": [{
+                "type": "url_citation",
+                "url_citation": {},
+            }],
+        }
+        result = extract_annotations(message)
+        assert len(result) == 1
+        assert result[0]["start_index"] == 0
+        assert result[0]["end_index"] == 0
+        assert result[0]["url"] == ""
+        assert result[0]["title"] == ""
+
+
+# ---------------------------------------------------------------------------
+# Annotations: _build_output_items with annotations
+# ---------------------------------------------------------------------------
+
+
+class TestBuildOutputItemsAnnotations:
+    """Tests that _build_output_items correctly extracts annotations from
+    the Chat Completions message and includes them in output text items."""
+
+    def test_text_with_url_citations(self):
+        openai_result = {
+            "choices": [{
+                "message": {
+                    "content": "According to the article [1]...",
+                    "annotations": [{
+                        "type": "url_citation",
+                        "url_citation": {
+                            "start_index": 24,
+                            "end_index": 27,
+                            "url": "https://example.com",
+                            "title": "Example",
+                        },
+                    }],
+                },
+                "finish_reason": "stop",
+            }],
+        }
+        output = responses_compat._build_output_items(openai_result)
+        assert len(output) == 1
+        assert output[0]["type"] == "message"
+        text_part = output[0]["content"][0]
+        assert text_part["type"] == "output_text"
+        assert len(text_part["annotations"]) == 1
+        assert text_part["annotations"][0]["type"] == "url_citation"
+        assert text_part["annotations"][0]["url"] == "https://example.com"
+
+    def test_text_without_annotations_has_empty_list(self):
+        openai_result = {
+            "choices": [{"message": {"content": "plain text"}, "finish_reason": "stop"}],
+        }
+        output = responses_compat._build_output_items(openai_result)
+        assert output[0]["content"][0]["annotations"] == []
+
+    def test_perplexity_citations_in_message(self):
+        openai_result = {
+            "choices": [{
+                "message": {
+                    "content": "Python is great.",
+                    "citations": [
+                        "https://python.org",
+                        "https://docs.python.org",
+                    ],
+                },
+                "finish_reason": "stop",
+            }],
+        }
+        output = responses_compat._build_output_items(openai_result)
+        text_part = output[0]["content"][0]
+        assert len(text_part["annotations"]) == 2
+        assert text_part["annotations"][0]["url"] == "https://python.org"
+        assert text_part["annotations"][1]["url"] == "https://docs.python.org"
+        assert all(a["type"] == "url_citation" for a in text_part["annotations"])
+
+    def test_refusal_has_no_annotations(self):
+        openai_result = {
+            "choices": [{
+                "message": {
+                    "refusal": "I cannot help with that",
+                    "annotations": [{
+                        "type": "url_citation",
+                        "url_citation": {
+                            "start_index": 0, "end_index": 5,
+                            "url": "https://x.com", "title": "X",
+                        },
+                    }],
+                },
+                "finish_reason": "stop",
+            }],
+        }
+        output = responses_compat._build_output_items(openai_result)
+        assert output[0]["content"][0]["type"] == "refusal"
+        assert "annotations" not in output[0]["content"][0]
+
+    def test_empty_content_fallback_has_empty_annotations(self):
+        openai_result = {
+            "choices": [{"message": {"content": None}, "finish_reason": "stop"}],
+        }
+        output = responses_compat._build_output_items(openai_result)
+        assert output[0]["content"][0]["annotations"] == []
+
+    def test_multiple_annotations_preserved(self):
+        openai_result = {
+            "choices": [{
+                "message": {
+                    "content": "See [1] and [2] for details.",
+                    "annotations": [
+                        {
+                            "type": "url_citation",
+                            "url_citation": {
+                                "start_index": 4, "end_index": 7,
+                                "url": "https://a.com", "title": "A",
+                            },
+                        },
+                        {
+                            "type": "url_citation",
+                            "url_citation": {
+                                "start_index": 12, "end_index": 15,
+                                "url": "https://b.com", "title": "B",
+                            },
+                        },
+                    ],
+                },
+                "finish_reason": "stop",
+            }],
+        }
+        output = responses_compat._build_output_items(openai_result)
+        text_part = output[0]["content"][0]
+        assert len(text_part["annotations"]) == 2
+        assert text_part["annotations"][0]["start_index"] == 4
+        assert text_part["annotations"][1]["start_index"] == 12
+
+
+# ---------------------------------------------------------------------------
+# Annotations: Streaming with annotations
+# ---------------------------------------------------------------------------
+
+
+class TestAnnotationsStreaming:
+    """Tests that streaming converter emits annotation.added events when
+    annotations are available (from backend citations in chunks)."""
+
+    @pytest.mark.asyncio
+    async def test_perplexity_citations_in_stream(self):
+        """Perplexity sends citations as a top-level array in streaming chunks."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"Python is great."},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}],"citations":["https://python.org","https://docs.python.org"]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "pplx-70b", "resp_ann1"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        event_types = [t for t, _ in parsed]
+
+        # Annotation events should be emitted before output_text.done
+        assert "response.output_text.annotation.added" in event_types
+        ann_events = [(t, d) for t, d in parsed if t == "response.output_text.annotation.added"]
+        assert len(ann_events) == 2
+
+        assert ann_events[0][1]["annotation"]["url"] == "https://python.org"
+        assert ann_events[0][1]["annotation"]["type"] == "url_citation"
+        assert ann_events[0][1]["annotation_index"] == 0
+        assert ann_events[0][1]["content_index"] == 0
+
+        assert ann_events[1][1]["annotation"]["url"] == "https://docs.python.org"
+        assert ann_events[1][1]["annotation_index"] == 1
+
+    @pytest.mark.asyncio
+    async def test_no_annotations_no_events(self):
+        """Normal stream without annotations produces no annotation events."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"Hello"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "gpt-4o", "resp_noann"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        event_types = [t for t, _ in parsed]
+        assert "response.output_text.annotation.added" not in event_types
+
+    @pytest.mark.asyncio
+    async def test_annotation_event_has_required_fields(self):
+        """Each annotation.added event must have all SDK-required fields."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"text"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}],"citations":["https://x.com"]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "model", "resp_annf"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        ann_events = [d for t, d in parsed if t == "response.output_text.annotation.added"]
+        assert len(ann_events) == 1
+        evt = ann_events[0]
+        assert evt["type"] == "response.output_text.annotation.added"
+        assert "sequence_number" in evt
+        assert "item_id" in evt
+        assert "output_index" in evt
+        assert "content_index" in evt
+        assert evt["content_index"] == 0
+        assert "annotation_index" in evt
+        assert evt["annotation_index"] == 0
+        assert "annotation" in evt
+        assert evt["annotation"]["type"] == "url_citation"
+
+    @pytest.mark.asyncio
+    async def test_annotation_events_before_text_done(self):
+        """Annotation events must appear before output_text.done."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"hi"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}],"citations":["https://z.com"]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "model", "resp_annorder"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        event_types = [t for t, _ in parsed]
+
+        ann_idx = event_types.index("response.output_text.annotation.added")
+        done_idx = event_types.index("response.output_text.done")
+        assert ann_idx < done_idx
+
+    @pytest.mark.asyncio
+    async def test_annotations_in_content_part_done(self):
+        """content_part.done and output_item.done carry the accumulated annotations."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"hello"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}],"citations":["https://cite.com"]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "model", "resp_annpart"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+
+        # content_part.done should carry annotations
+        part_done = [d for t, d in parsed if t == "response.content_part.done"]
+        assert len(part_done) == 1
+        assert len(part_done[0]["part"]["annotations"]) == 1
+        assert part_done[0]["part"]["annotations"][0]["url"] == "https://cite.com"
+
+        # output_item.done should carry annotations
+        item_done = [d for t, d in parsed if t == "response.output_item.done"]
+        msg_items = [d for d in item_done if d["item"]["type"] == "message"]
+        assert len(msg_items) == 1
+        assert len(msg_items[0]["item"]["content"][0]["annotations"]) == 1
+
+    @pytest.mark.asyncio
+    async def test_annotations_cleared_on_error_new_item(self):
+        """When error occurs before any text, the error text item has no annotations."""
+        async def mock_stream():
+            raise RuntimeError("boom")
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "model", "resp_annerr"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        item_done = [d for t, d in parsed if t == "response.output_item.done"]
+        assert len(item_done) == 1
+        assert item_done[0]["item"]["content"][0]["annotations"] == []
+
+    @pytest.mark.asyncio
+    async def test_annotations_preserved_on_error_existing_item(self):
+        """When error occurs mid-stream, pre-error annotations survive on the existing item."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"hello"},"index":0}],"citations":["https://pre-error.com"]}\n\n'
+            raise RuntimeError("boom")
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "model", "resp_annerr2"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        item_done = [d for t, d in parsed if t == "response.output_item.done"]
+        assert len(item_done) == 1
+        # Pre-error annotations are preserved since the text item was already open
+        anns = item_done[0]["item"]["content"][0]["annotations"]
+        assert len(anns) == 1
+        assert anns[0]["url"] == "https://pre-error.com"
+
+    @pytest.mark.asyncio
+    async def test_annotation_sdk_validation(self):
+        """annotation.added events validate against the OpenAI SDK model."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"x"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}],"citations":["https://sdk.com"]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "model", "resp_annsdk"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        ann_events = [d for t, d in parsed if t == "response.output_text.annotation.added"]
+        assert len(ann_events) == 1
+
+        try:
+            from openai.types.responses import ResponseOutputTextAnnotationAddedEvent
+            ResponseOutputTextAnnotationAddedEvent.model_validate(ann_events[0])
+        except ImportError:
+            pytest.skip("openai SDK not installed")
+
+    @pytest.mark.asyncio
+    async def test_delta_annotations_from_backend(self):
+        """Future backends may send annotations on streaming deltas."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"text","annotations":[{"type":"url_citation","url_citation":{"start_index":0,"end_index":4,"url":"https://delta.com","title":"Delta"}}]},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "model", "resp_deltaann"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        ann_events = [d for t, d in parsed if t == "response.output_text.annotation.added"]
+        assert len(ann_events) == 1
+        assert ann_events[0]["annotation"]["url"] == "https://delta.com"
+        assert ann_events[0]["annotation"]["title"] == "Delta"
+
+    @pytest.mark.asyncio
+    async def test_sequence_numbers_monotonic_with_annotations(self):
+        """sequence_number must be monotonically increasing across all events
+        including annotation events."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"hi"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}],"citations":["https://a.com","https://b.com"]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "model", "resp_annseq"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        seq_numbers = [d["sequence_number"] for _, d in parsed]
+        for i in range(1, len(seq_numbers)):
+            assert seq_numbers[i] > seq_numbers[i - 1]

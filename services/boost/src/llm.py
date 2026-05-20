@@ -632,6 +632,8 @@ class LLM(AsyncEventEmitter):
     content = ""
     tool_calls = []
     last_finish_reason = None
+    annotations = []
+    citations = []
     usage = {
       "prompt_tokens": 0,
       "completion_tokens": 0,
@@ -655,6 +657,20 @@ class LLM(AsyncEventEmitter):
           if val:
             usage[key] = val
 
+      # Accumulate annotations from chunks (some backends like
+      # Perplexity send citations in the final streaming chunk)
+      chunk_annotations = (
+        chunk.get("choices", [{}])[0]
+        .get("delta", {})
+        .get("annotations")
+      ) if chunk.get("choices") else None
+      if chunk_annotations:
+        annotations.extend(chunk_annotations)
+
+      chunk_citations = chunk.get("citations")
+      if chunk_citations and isinstance(chunk_citations, list):
+        citations = chunk_citations  # last-wins (Perplexity sends once)
+
       content += chunk_content
       tool_calls.extend(chunk_tools)
       if chunk_finish_reason is not None:
@@ -663,6 +679,12 @@ class LLM(AsyncEventEmitter):
     if output_obj:
       output_obj["choices"][0]["message"]["content"] = content
       output_obj["usage"] = usage
+
+      if annotations:
+        output_obj["choices"][0]["message"]["annotations"] = annotations
+
+      if citations:
+        output_obj["choices"][0]["message"]["citations"] = citations
 
       if len(tool_calls) > 0:
         output_obj["choices"][0]["message"]["tool_calls"] = tool_calls

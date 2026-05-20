@@ -13,6 +13,7 @@ import llm as llm_mod
 from auth import get_api_key
 from compat_utils import (
     OPENAI_REQUEST_ID_HEADER,
+    extract_annotations as _extract_annotations,
     extract_boost_params as _extract_boost_params,
     get_chunk_content as _get_chunk_content,
     get_chunk_reasoning as _get_chunk_reasoning,
@@ -459,6 +460,10 @@ def _build_output_items(openai_result):
   refusal = dotty.get(openai_result, "choices.0.message.refusal")
   tool_calls = dotty.get(openai_result, "choices.0.message.tool_calls", [])
 
+  # Extract annotations from the Chat Completions message (OpenAI web-search
+  # url_citations, Perplexity citations, etc.)
+  annotations = _extract_annotations(message, str(content or ""))
+
   if refusal:
     output.append({
       "type": "message",
@@ -482,7 +487,7 @@ def _build_output_items(openai_result):
         {
           "type": "output_text",
           "text": format.clean_text_preserve_newlines(str(content)),
-          "annotations": [],
+          "annotations": annotations,
         }
       ],
     })
@@ -628,6 +633,7 @@ async def _responses_stream_converter(
   reasoning_id = None
   text_item_open = False
   text_content = ""
+  text_annotations = []
   msg_id = None
   tool_blocks = {}
   input_tokens = 0
@@ -751,6 +757,19 @@ async def _responses_stream_converter(
     nonlocal seq
     events = []
 
+    # Emit annotation.added events for any accumulated annotations
+    for ann_idx, ann in enumerate(text_annotations):
+      events.append(_sse_event("response.output_text.annotation.added", {
+        "type": "response.output_text.annotation.added",
+        "item_id": msg_id,
+        "output_index": output_index,
+        "content_index": 0,
+        "annotation_index": ann_idx,
+        "annotation": ann,
+        "sequence_number": seq,
+      }))
+      seq += 1
+
     # output_text.done
     events.append(_sse_event("response.output_text.done", {
       "type": "response.output_text.done",
@@ -772,7 +791,7 @@ async def _responses_stream_converter(
       "part": {
         "type": "output_text",
         "text": text_content,
-        "annotations": [],
+        "annotations": text_annotations,
       },
       "sequence_number": seq,
     }))
@@ -790,7 +809,7 @@ async def _responses_stream_converter(
         "content": [{
           "type": "output_text",
           "text": text_content,
-          "annotations": [],
+          "annotations": text_annotations,
         }],
       },
       "sequence_number": seq,
@@ -813,6 +832,21 @@ async def _responses_stream_converter(
 
         input_tokens = chunk_usage.get("prompt_tokens", 0) or input_tokens
         output_tokens = chunk_usage.get("completion_tokens", 0) or output_tokens
+
+        # Accumulate annotations from chunks.  Some backends send
+        # citations as a top-level array (Perplexity) or on the
+        # choice delta (future OpenAI streaming annotations).
+        chunk_anns = dotty.get(chunk, "choices.0.delta.annotations")
+        if chunk_anns and isinstance(chunk_anns, list):
+          for ann in chunk_anns:
+            if isinstance(ann, dict):
+              converted = _extract_annotations({"annotations": [ann]})
+              text_annotations.extend(converted)
+
+        chunk_citations = chunk.get("citations")
+        if chunk_citations and isinstance(chunk_citations, list):
+          # Perplexity sends citations once; rebuild the full list
+          text_annotations = _extract_annotations({"citations": chunk_citations})
 
         # --- Reasoning content (before text) ---
         if chunk_reasoning:
@@ -1091,6 +1125,7 @@ async def _responses_stream_converter(
       seq += 1
       text_item_open = True
       text_content = ""
+      text_annotations = []
 
     error_text = f"\n\n[Stream error: {stream_error}]"
     text_content += error_text

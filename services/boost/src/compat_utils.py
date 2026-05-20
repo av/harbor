@@ -83,6 +83,72 @@ def get_chunk_usage(chunk):
   }
 
 
+def extract_annotations(message: dict, text: str = "") -> list:
+  """Extract annotations from a Chat Completions message and convert to
+  Responses API ``url_citation`` format.
+
+  Sources checked (in order):
+
+  1. ``message.annotations`` — the OpenAI Chat Completions annotation
+     format (used by OpenAI web-search responses and OpenRouter).  Each
+     entry wraps a ``url_citation`` with ``start_index``/``end_index``,
+     ``title``, and ``url``.
+
+  2. ``message.citations`` / top-level ``citations`` — the Perplexity
+     format.  A flat list of URL strings with no positional or title
+     metadata.  Since there are no character indices, we synthesize
+     ``start_index = end_index = 0`` and ``title = ""`` so the SDK
+     can still parse the objects.
+
+  Returns a list of Responses API annotation dicts (``type: url_citation``).
+  """
+  annotations = []
+
+  # Source 1: OpenAI message.annotations (structured citations)
+  raw_annotations = message.get("annotations") or []
+  for ann in raw_annotations:
+    if not isinstance(ann, dict):
+      continue
+    ann_type = ann.get("type")
+    if ann_type == "url_citation":
+      citation = ann.get("url_citation", {})
+      annotations.append({
+        "type": "url_citation",
+        "start_index": citation.get("start_index", 0),
+        "end_index": citation.get("end_index", 0),
+        "url": citation.get("url", ""),
+        "title": citation.get("title", ""),
+      })
+    elif ann_type == "file_citation":
+      annotations.append({
+        "type": "file_citation",
+        "file_id": ann.get("file_id", ""),
+        "filename": ann.get("filename", ""),
+        "index": ann.get("index", 0),
+      })
+    elif ann_type == "file_path":
+      annotations.append({
+        "type": "file_path",
+        "file_id": ann.get("file_id", ""),
+        "index": ann.get("index", 0),
+      })
+
+  # Source 2: Perplexity-style citations (flat URL list)
+  if not annotations:
+    raw_citations = message.get("citations") or []
+    for url in raw_citations:
+      if isinstance(url, str) and url:
+        annotations.append({
+          "type": "url_citation",
+          "start_index": 0,
+          "end_index": 0,
+          "url": url,
+          "title": "",
+        })
+
+  return annotations
+
+
 def sse_event(event_type, data):
   return f"event: {event_type}\ndata: {json.dumps(data, default=str)}\n\n"
 
