@@ -10,6 +10,8 @@ import re
 import dotty
 
 REQUEST_ID_HEADER = "request-id"
+ANTHROPIC_VERSION_HEADER = "anthropic-version"
+ANTHROPIC_VERSION = "2023-06-01"
 
 # Tool use / tool call ID prefix patterns
 _KNOWN_PREFIXES_RE = re.compile(r"^(toolu_|call_|chatcmpl-)")

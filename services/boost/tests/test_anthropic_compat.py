@@ -692,9 +692,9 @@ class TestMapStopReason:
             stop_sequences=["\n\nHuman:"],
             content_text="Hello world",
         )
-        # Falls back to first sequence when sequences are provided but none match
-        assert reason == "stop_sequence"
-        assert seq == "\n\nHuman:"
+        # No sequence matched the content — model ended naturally
+        assert reason == "end_turn"
+        assert seq is None
 
     def test_stop_with_sequences_but_no_content(self):
         reason, seq = anthropic_compat._map_stop_reason(
@@ -702,8 +702,9 @@ class TestMapStopReason:
             stop_sequences=["\n\nHuman:"],
             content_text=None,
         )
-        assert reason == "stop_sequence"
-        assert seq == "\n\nHuman:"
+        # No content to check — treat as natural end
+        assert reason == "end_turn"
+        assert seq is None
 
     def test_unknown_reason_defaults_to_end_turn(self):
         reason, seq = anthropic_compat._map_stop_reason("unknown_reason")
@@ -4018,6 +4019,331 @@ class TestImageAndDocumentBlocks:
         assert content[1]["type"] == "image_url"
         assert content[1]["image_url"]["url"] == "https://example.com/chart.png"
         assert content[2] == {"type": "text", "text": "[Document: application/pdf]"}
+
+
+# ---------------------------------------------------------------------------
+# anthropic-version response header
+# ---------------------------------------------------------------------------
+
+class TestAnthropicVersionHeader:
+    """Verify anthropic-version header is present in all response paths."""
+
+    def setup_method(self):
+        import config as _cfg
+        _cfg.BOOST_AUTH = []
+
+    def test_non_streaming_response_has_anthropic_version(self):
+        fake_llm = _FakeLLM(
+            consume_result=_fake_openai_result(),
+            stream_chunks=[],
+        )
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+            patch.object(anthropic_compat, "llm_mod") as mock_llm_mod,
+        ):
+            mock_mapper.list_downstream = AsyncMock()
+            mock_mapper.resolve_request_config = MagicMock(return_value={})
+            mock_mapper.is_direct_task = MagicMock(return_value=False)
+            mock_llm_mod.LLM = MagicMock(return_value=fake_llm)
+
+            client = TestClient(_integration_app, raise_server_exceptions=False)
+            resp = client.post("/v1/messages", json=_ANTHRO_BODY)
+
+        assert resp.status_code == 200
+        assert resp.headers.get("anthropic-version") == "2023-06-01"
+
+    def test_streaming_response_has_anthropic_version(self):
+        chunks = [
+            'data: {"choices": [{"delta": {"content": "Hi"}}]}\n\n',
+            'data: {"choices": [{"delta": {}, "finish_reason": "stop"}], '
+            '"usage": {"prompt_tokens": 5, "completion_tokens": 1}}\n\n',
+        ]
+        fake_llm = _FakeLLM(stream_chunks=chunks)
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+            patch.object(anthropic_compat, "llm_mod") as mock_llm_mod,
+        ):
+            mock_mapper.list_downstream = AsyncMock()
+            mock_mapper.resolve_request_config = MagicMock(return_value={})
+            mock_mapper.is_direct_task = MagicMock(return_value=False)
+            mock_llm_mod.LLM = MagicMock(return_value=fake_llm)
+
+            client = TestClient(_integration_app, raise_server_exceptions=False)
+            resp = client.post("/v1/messages", json={**_ANTHRO_BODY, "stream": True})
+
+        assert resp.status_code == 200
+        assert resp.headers.get("anthropic-version") == "2023-06-01"
+
+    def test_direct_task_response_has_anthropic_version(self):
+        openai_result = _fake_openai_result(content="Title")
+        fake_llm = _FakeLLM(chat_completion_result=openai_result)
+        fake_llm.workflow = None
+        fake_llm.boost_params = {}
+
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+            patch.object(anthropic_compat, "llm_mod") as mock_llm_mod,
+        ):
+            mock_mapper.list_downstream = AsyncMock()
+            mock_mapper.resolve_request_config = MagicMock(return_value={})
+            mock_mapper.is_direct_task = MagicMock(return_value=True)
+            mock_llm_mod.LLM = MagicMock(return_value=fake_llm)
+
+            client = TestClient(_integration_app, raise_server_exceptions=False)
+            resp = client.post("/v1/messages", json=_ANTHRO_BODY)
+
+        assert resp.status_code == 200
+        assert resp.headers.get("anthropic-version") == "2023-06-01"
+
+    def test_count_tokens_response_has_anthropic_version(self):
+        openai_result = _fake_openai_result(prompt_tokens=20)
+        fake_llm = _FakeLLM(consume_result=openai_result, stream_chunks=[])
+
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+            patch.object(anthropic_compat, "llm_mod") as mock_llm_mod,
+        ):
+            mock_mapper.list_downstream = AsyncMock()
+            mock_mapper.resolve_request_config = MagicMock(return_value={})
+            mock_llm_mod.LLM = MagicMock(return_value=fake_llm)
+
+            client = TestClient(_integration_app, raise_server_exceptions=False)
+            resp = client.post("/v1/messages/count_tokens", json={
+                "model": "test",
+                "messages": [{"role": "user", "content": "hi"}],
+            })
+
+        assert resp.status_code == 200
+        assert resp.headers.get("anthropic-version") == "2023-06-01"
+
+    def test_error_response_has_anthropic_version(self):
+        client = TestClient(_integration_app, raise_server_exceptions=False)
+        resp = client.post("/v1/messages", json={
+            "max_tokens": 128,
+            "messages": [{"role": "user", "content": "hi"}],
+        })
+        # Missing model -> 400
+        assert resp.status_code == 400
+        assert resp.headers.get("anthropic-version") == "2023-06-01"
+
+    def test_anthropic_headers_helper_without_request_id(self):
+        headers = anthropic_compat._anthropic_headers()
+        assert headers["anthropic-version"] == "2023-06-01"
+        assert "request-id" not in headers
+
+    def test_anthropic_headers_helper_with_request_id(self):
+        headers = anthropic_compat._anthropic_headers("req_abc123")
+        assert headers["anthropic-version"] == "2023-06-01"
+        assert headers["request-id"] == "req_abc123"
+
+
+# ---------------------------------------------------------------------------
+# Improved stop_sequences handling
+# ---------------------------------------------------------------------------
+
+class TestStopSequenceHandling:
+    """Test stop_sequence detection in non-streaming and streaming paths."""
+
+    def test_stop_reason_with_matching_sequence_among_multiple(self):
+        reason, seq = anthropic_compat._map_stop_reason(
+            "stop",
+            stop_sequences=["\n\nHuman:", "\n\nAssistant:", "STOP"],
+            content_text="Here is some textSTOP",
+        )
+        assert reason == "stop_sequence"
+        assert seq == "STOP"
+
+    def test_stop_reason_matches_first_applicable_sequence(self):
+        # When multiple sequences could match, the first in the list wins
+        reason, seq = anthropic_compat._map_stop_reason(
+            "stop",
+            stop_sequences=["end", "the end"],
+            content_text="This is the end",
+        )
+        assert reason == "stop_sequence"
+        assert seq == "end"
+
+    def test_stop_reason_with_empty_content(self):
+        reason, seq = anthropic_compat._map_stop_reason(
+            "stop",
+            stop_sequences=["\n\nHuman:"],
+            content_text="",
+        )
+        # Empty string can't end with any stop sequence
+        assert reason == "end_turn"
+        assert seq is None
+
+    def test_stop_reason_content_with_trailing_whitespace(self):
+        # rstrip() is applied before checking
+        reason, seq = anthropic_compat._map_stop_reason(
+            "stop",
+            stop_sequences=["\n\nHuman:"],
+            content_text="Hello\n\nHuman:   ",
+        )
+        assert reason == "stop_sequence"
+        assert seq == "\n\nHuman:"
+
+    def test_stop_reason_no_sequences_is_end_turn(self):
+        reason, seq = anthropic_compat._map_stop_reason(
+            "stop",
+            stop_sequences=None,
+            content_text="Hello world",
+        )
+        assert reason == "end_turn"
+        assert seq is None
+
+    def test_stop_reason_empty_sequences_list_is_end_turn(self):
+        reason, seq = anthropic_compat._map_stop_reason(
+            "stop",
+            stop_sequences=[],
+            content_text="Hello world",
+        )
+        assert reason == "end_turn"
+        assert seq is None
+
+    def test_non_streaming_stop_sequence_in_response(self):
+        """Non-streaming response includes stop_sequence field when sequence matched."""
+        import config as _cfg
+        _cfg.BOOST_AUTH = []
+
+        openai_result = _fake_openai_result(
+            content="Hello\n\nHuman:",
+            finish_reason="stop",
+        )
+        fake_llm = _FakeLLM(consume_result=openai_result, stream_chunks=[])
+
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+            patch.object(anthropic_compat, "llm_mod") as mock_llm_mod,
+        ):
+            mock_mapper.list_downstream = AsyncMock()
+            mock_mapper.resolve_request_config = MagicMock(return_value={})
+            mock_mapper.is_direct_task = MagicMock(return_value=False)
+            mock_llm_mod.LLM = MagicMock(return_value=fake_llm)
+
+            client = TestClient(_integration_app, raise_server_exceptions=False)
+            resp = client.post("/v1/messages", json={
+                **_ANTHRO_BODY,
+                "stop_sequences": ["\n\nHuman:"],
+            })
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["stop_reason"] == "stop_sequence"
+        assert body["stop_sequence"] == "\n\nHuman:"
+
+    def test_non_streaming_no_match_is_end_turn(self):
+        """Non-streaming response with stop_sequences but no match returns end_turn."""
+        import config as _cfg
+        _cfg.BOOST_AUTH = []
+
+        openai_result = _fake_openai_result(
+            content="Hello world",
+            finish_reason="stop",
+        )
+        fake_llm = _FakeLLM(consume_result=openai_result, stream_chunks=[])
+
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+            patch.object(anthropic_compat, "llm_mod") as mock_llm_mod,
+        ):
+            mock_mapper.list_downstream = AsyncMock()
+            mock_mapper.resolve_request_config = MagicMock(return_value={})
+            mock_mapper.is_direct_task = MagicMock(return_value=False)
+            mock_llm_mod.LLM = MagicMock(return_value=fake_llm)
+
+            client = TestClient(_integration_app, raise_server_exceptions=False)
+            resp = client.post("/v1/messages", json={
+                **_ANTHRO_BODY,
+                "stop_sequences": ["\n\nHuman:"],
+            })
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["stop_reason"] == "end_turn"
+        assert body["stop_sequence"] is None
+
+    @pytest.mark.asyncio
+    async def test_streaming_stop_sequence_in_message_delta(self):
+        """Streaming message_delta includes stop_sequence when sequence matched."""
+        async def response_stream():
+            yield 'data: {"choices": [{"delta": {"content": "Hello\\n\\nHuman:"}}]}\n\n'
+            yield (
+                'data: {"choices": [{"delta": {}, "finish_reason": "stop"}], '
+                '"usage": {"prompt_tokens": 5, "completion_tokens": 2}}\n\n'
+            )
+
+        events = []
+        async for event in anthropic_compat._anthropic_stream_converter(
+            response_stream(), "claude-test",
+            stop_sequences=["\n\nHuman:"],
+        ):
+            events.append(event)
+
+        # Find message_delta
+        for event in events:
+            if '"type": "message_delta"' in event:
+                data_line = [l for l in event.strip().split("\n") if l.startswith("data: ")][0]
+                payload = json.loads(data_line[6:])
+                assert payload["delta"]["stop_reason"] == "stop_sequence"
+                assert payload["delta"]["stop_sequence"] == "\n\nHuman:"
+                break
+        else:
+            pytest.fail("No message_delta event found")
+
+    @pytest.mark.asyncio
+    async def test_streaming_no_match_is_end_turn(self):
+        """Streaming message_delta returns end_turn when stop_sequences don't match."""
+        async def response_stream():
+            yield 'data: {"choices": [{"delta": {"content": "Hello world"}}]}\n\n'
+            yield (
+                'data: {"choices": [{"delta": {}, "finish_reason": "stop"}], '
+                '"usage": {"prompt_tokens": 5, "completion_tokens": 2}}\n\n'
+            )
+
+        events = []
+        async for event in anthropic_compat._anthropic_stream_converter(
+            response_stream(), "claude-test",
+            stop_sequences=["\n\nHuman:"],
+        ):
+            events.append(event)
+
+        for event in events:
+            if '"type": "message_delta"' in event:
+                data_line = [l for l in event.strip().split("\n") if l.startswith("data: ")][0]
+                payload = json.loads(data_line[6:])
+                assert payload["delta"]["stop_reason"] == "end_turn"
+                assert payload["delta"]["stop_sequence"] is None
+                break
+        else:
+            pytest.fail("No message_delta event found")
+
+    @pytest.mark.asyncio
+    async def test_streaming_stop_sequence_with_multiple_sequences(self):
+        """Streaming correctly identifies which stop sequence matched."""
+        async def response_stream():
+            yield 'data: {"choices": [{"delta": {"content": "Result\\n\\nAssistant:"}}]}\n\n'
+            yield (
+                'data: {"choices": [{"delta": {}, "finish_reason": "stop"}], '
+                '"usage": {"prompt_tokens": 5, "completion_tokens": 3}}\n\n'
+            )
+
+        events = []
+        async for event in anthropic_compat._anthropic_stream_converter(
+            response_stream(), "claude-test",
+            stop_sequences=["\n\nHuman:", "\n\nAssistant:"],
+        ):
+            events.append(event)
+
+        for event in events:
+            if '"type": "message_delta"' in event:
+                data_line = [l for l in event.strip().split("\n") if l.startswith("data: ")][0]
+                payload = json.loads(data_line[6:])
+                assert payload["delta"]["stop_reason"] == "stop_sequence"
+                assert payload["delta"]["stop_sequence"] == "\n\nAssistant:"
+                break
+        else:
+            pytest.fail("No message_delta event found")
 
 
 if __name__ == "__main__":

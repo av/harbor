@@ -11,6 +11,8 @@ import mapper
 import llm as llm_mod
 from auth import get_api_key
 from compat_utils import (
+    ANTHROPIC_VERSION,
+    ANTHROPIC_VERSION_HEADER,
     REQUEST_ID_HEADER,
     get_chunk_content as _get_chunk_content,
     get_chunk_reasoning as _get_chunk_reasoning,
@@ -35,16 +37,21 @@ ERROR_TYPE_MAP = {
 }
 
 
+def _anthropic_headers(request_id=None):
+  """Build standard Anthropic response headers."""
+  headers = {ANTHROPIC_VERSION_HEADER: ANTHROPIC_VERSION}
+  if request_id:
+    headers[REQUEST_ID_HEADER] = request_id
+  return headers
+
+
 def _anthropic_error(status_code, message, error_type=None, request_id=None):
   if error_type is None:
     error_type = ERROR_TYPE_MAP.get(status_code, "api_error")
-  headers = {}
-  if request_id:
-    headers[REQUEST_ID_HEADER] = request_id
   return JSONResponse(
     status_code=status_code,
     content={"type": "error", "error": {"type": error_type, "message": message}},
-    headers=headers,
+    headers=_anthropic_headers(request_id),
   )
 
 
@@ -366,13 +373,18 @@ def _map_stop_reason(finish_reason, stop_sequences=None, content_text=None):
     return "tool_use", None
 
   if finish_reason == "stop" and stop_sequences:
+    # OpenAI backends return finish_reason "stop" for both natural end-of-turn
+    # and stop sequence hits.  Check if the generated text ends with any of
+    # the requested stop sequences to disambiguate.
     if content_text:
       stripped = content_text.rstrip()
       for seq in stop_sequences:
         if stripped.endswith(seq):
           return "stop_sequence", seq
 
-    return "stop_sequence", stop_sequences[0]
+    # No content or no match — the model ended naturally despite stop_sequences
+    # being configured.  Report end_turn, not stop_sequence.
+    return "end_turn", None
 
   return "end_turn", None
 
@@ -855,7 +867,7 @@ async def post_messages(request: Request, api_key: str = Depends(get_api_key)):
       return JSONResponse(
         content=response,
         status_code=200,
-        headers={REQUEST_ID_HEADER: request_id},
+        headers=_anthropic_headers(request_id),
       )
 
     completion = await proxy.serve()
@@ -867,7 +879,7 @@ async def post_messages(request: Request, api_key: str = Depends(get_api_key)):
       return StreamingResponse(
         _anthropic_stream_converter(completion, request_model, stop_sequences),
         media_type="text/event-stream",
-        headers={REQUEST_ID_HEADER: request_id},
+        headers=_anthropic_headers(request_id),
       )
     else:
       result = await proxy.consume_stream(completion)
@@ -875,7 +887,7 @@ async def post_messages(request: Request, api_key: str = Depends(get_api_key)):
       return JSONResponse(
         content=response,
         status_code=200,
-        headers={REQUEST_ID_HEADER: request_id},
+        headers=_anthropic_headers(request_id),
       )
 
   except HTTPException as e:
@@ -930,7 +942,7 @@ async def post_count_tokens(request: Request, api_key: str = Depends(get_api_key
     return JSONResponse(
       content={"input_tokens": input_tokens},
       status_code=200,
-      headers={REQUEST_ID_HEADER: request_id},
+      headers=_anthropic_headers(request_id),
     )
 
   except HTTPException as e:
