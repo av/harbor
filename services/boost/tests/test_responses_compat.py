@@ -7212,3 +7212,221 @@ class TestAnnotationsStreaming:
         seq_numbers = [d["sequence_number"] for _, d in parsed]
         for i in range(1, len(seq_numbers)):
             assert seq_numbers[i] > seq_numbers[i - 1]
+
+
+# ---------------------------------------------------------------------------
+# Model name handling: verify the original requested model name is always
+# echoed back in responses, regardless of what the mapper resolves to.
+# ---------------------------------------------------------------------------
+
+
+class TestModelNamePreservation:
+    """Ensure the original request model name is echoed in all response paths."""
+
+    def test_non_streaming_response_echoes_request_model(self):
+        """Non-streaming response 'model' field matches the original request model."""
+        openai_result = {
+            "choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}],
+            "model": "resolved-backend-model",
+            "usage": {"prompt_tokens": 5, "completion_tokens": 1, "total_tokens": 6},
+        }
+        response = responses_compat._build_responses_response(
+            openai_result, "my-custom-model", "resp_1"
+        )
+        assert response["model"] == "my-custom-model"
+
+    def test_module_prefixed_model_echoed_in_response(self):
+        """Model with module prefix (e.g., 'g1-gpt-4o') is echoed as-is."""
+        openai_result = {
+            "choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}],
+            "model": "gpt-4o",  # mapper strips 'g1-' prefix
+            "usage": {"prompt_tokens": 5, "completion_tokens": 1, "total_tokens": 6},
+        }
+        response = responses_compat._build_responses_response(
+            openai_result, "g1-gpt-4o", "resp_2"
+        )
+        assert response["model"] == "g1-gpt-4o"
+
+    def test_workflow_prefixed_model_echoed_in_response(self):
+        """Model with workflow prefix (e.g., 'cot::gpt-4o') is echoed as-is."""
+        openai_result = {
+            "choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}],
+            "model": "gpt-4o",
+            "usage": {"prompt_tokens": 5, "completion_tokens": 1, "total_tokens": 6},
+        }
+        response = responses_compat._build_responses_response(
+            openai_result, "cot::gpt-4o", "resp_3"
+        )
+        assert response["model"] == "cot::gpt-4o"
+
+    def test_aliased_model_echoes_request_name_not_backend_name(self):
+        """Response echoes the client's model name, not the backend's resolved name."""
+        openai_result = {
+            "choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}],
+            "model": "openai/gpt-4",  # backend's resolved model
+            "usage": {"prompt_tokens": 5, "completion_tokens": 1, "total_tokens": 6},
+        }
+        response = responses_compat._build_responses_response(
+            openai_result, "claude-3-opus-20240229", "resp_4"
+        )
+        assert response["model"] == "claude-3-opus-20240229"
+
+    @pytest.mark.asyncio
+    async def test_streaming_created_event_has_request_model(self):
+        """response.created event should contain the original request model."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"Hi"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "g1-gpt-4o-turbo", "resp_5"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        created = [d for t, d in parsed if t == "response.created"][0]
+        assert created["response"]["model"] == "g1-gpt-4o-turbo"
+
+    @pytest.mark.asyncio
+    async def test_streaming_completed_event_has_request_model(self):
+        """response.completed event should contain the original request model."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"ok"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "mcts-claude-3", "resp_6"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        completed = [d for t, d in parsed if t == "response.completed"][0]
+        assert completed["response"]["model"] == "mcts-claude-3"
+
+    @pytest.mark.asyncio
+    async def test_streaming_model_matches_non_streaming(self):
+        """Streaming and non-streaming paths should report the same model name."""
+        request_model = "mcts-openai/gpt-4o"
+
+        # Non-streaming
+        openai_result = {
+            "choices": [{"message": {"content": "Hello"}, "finish_reason": "stop"}],
+            "model": "openai/gpt-4o",
+            "usage": {"prompt_tokens": 5, "completion_tokens": 1, "total_tokens": 6},
+        }
+        response = responses_compat._build_responses_response(
+            openai_result, request_model, "resp_7"
+        )
+        non_streaming_model = response["model"]
+
+        # Streaming
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"Hello"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), request_model, "resp_7s"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        created = [d for t, d in parsed if t == "response.created"][0]
+        streaming_model = created["response"]["model"]
+
+        assert non_streaming_model == streaming_model == request_model
+
+    def test_direct_task_echoes_request_model(self, monkeypatch):
+        """Direct task path (chat_completion) should still echo the original model name."""
+        mock_result = {
+            "choices": [{"message": {"content": "title"}, "finish_reason": "stop"}],
+            "model": "some-backend-model",
+            "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+        }
+
+        async def mock_list_downstream():
+            return []
+
+        mock_llm = MagicMock()
+        mock_llm.workflow = None
+        mock_llm.boost_params = {}
+
+        async def mock_chat_completion():
+            return mock_result
+
+        mock_llm.chat_completion = mock_chat_completion
+
+        monkeypatch.setattr(responses_compat.mapper, "list_downstream", mock_list_downstream)
+        monkeypatch.setattr(responses_compat.mapper, "resolve_request_config", lambda body: {})
+        monkeypatch.setattr(responses_compat.mapper, "is_direct_task", lambda proxy: True)
+        monkeypatch.setattr(responses_compat.llm_mod, "LLM", lambda **kw: mock_llm)
+
+        import config as _cfg
+        monkeypatch.setattr(_cfg, "BOOST_AUTH", [])
+
+        app = _make_responses_app()
+        from fastapi.testclient import TestClient
+        client = TestClient(app)
+
+        resp = client.post("/v1/responses", json={
+            "model": "my-workflow-model",
+            "input": "hello",
+        })
+
+        assert resp.status_code == 200
+        assert resp.json()["model"] == "my-workflow-model"
+
+    def test_integration_non_streaming_model_preserved(self, monkeypatch):
+        """Full integration: non-streaming response model is the request model."""
+        mock_result = {
+            "id": "chatcmpl-1",
+            "object": "chat.completion",
+            "created": 1000,
+            "model": "resolved-backend-model",
+            "choices": [{"index": 0, "message": {"role": "assistant", "content": "hi"}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 5, "completion_tokens": 1, "total_tokens": 6},
+        }
+
+        async def mock_list_downstream():
+            return []
+
+        mock_llm = MagicMock()
+        mock_llm.workflow = None
+        mock_llm.boost_params = {}
+
+        async def mock_serve():
+            async def gen():
+                yield f'data: {json.dumps(mock_result)}\n\n'
+                yield 'data: [DONE]\n\n'
+            return gen()
+
+        async def mock_consume(stream):
+            return mock_result
+
+        mock_llm.serve = mock_serve
+        mock_llm.consume_stream = mock_consume
+
+        monkeypatch.setattr(responses_compat.mapper, "list_downstream", mock_list_downstream)
+        monkeypatch.setattr(responses_compat.mapper, "resolve_request_config", lambda body: {})
+        monkeypatch.setattr(responses_compat.mapper, "is_direct_task", lambda proxy: False)
+        monkeypatch.setattr(responses_compat.llm_mod, "LLM", lambda **kw: mock_llm)
+
+        import config as _cfg
+        monkeypatch.setattr(_cfg, "BOOST_AUTH", [])
+
+        app = _make_responses_app()
+        from fastapi.testclient import TestClient
+        client = TestClient(app)
+
+        resp = client.post("/v1/responses", json={
+            "model": "g1-claude-3-5-sonnet",
+            "input": "hello",
+        })
+
+        assert resp.status_code == 200
+        assert resp.json()["model"] == "g1-claude-3-5-sonnet"

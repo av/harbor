@@ -7537,5 +7537,219 @@ class TestSecurityTokenCounting:
         assert isinstance(result, int)
 
 
+# ---------------------------------------------------------------------------
+# Model name handling: verify the original requested model name is always
+# echoed back in responses, regardless of what the mapper resolves to.
+# ---------------------------------------------------------------------------
+
+
+class TestModelNamePreservation:
+    """Ensure the original request model name is echoed in all response paths."""
+
+    def setup_method(self):
+        import config as _cfg
+        _cfg.BOOST_AUTH = []
+
+    def _make_request(self, model_name, **kwargs):
+        """Return an Anthropic-format request body with the given model name."""
+        return {
+            "model": model_name,
+            "max_tokens": 128,
+            "messages": [{"role": "user", "content": "Hello"}],
+            **kwargs,
+        }
+
+    def test_non_streaming_response_echoes_request_model(self):
+        """Non-streaming response 'model' field matches the original request model."""
+        openai_result = _fake_openai_result(content="ok", finish_reason="stop")
+        # Backend returns a different model name (simulating resolution)
+        openai_result["model"] = "resolved-backend-model"
+        fake_llm = _FakeLLM(consume_result=openai_result, stream_chunks=[])
+
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+            patch.object(anthropic_compat, "llm_mod") as mock_llm_mod,
+        ):
+            mock_mapper.list_downstream = AsyncMock()
+            mock_mapper.resolve_request_config = MagicMock(return_value={})
+            mock_mapper.is_direct_task = MagicMock(return_value=False)
+            mock_llm_mod.LLM = MagicMock(return_value=fake_llm)
+
+            client = TestClient(_integration_app, raise_server_exceptions=False)
+            resp = client.post("/v1/messages", json=self._make_request("my-custom-model"))
+
+        body = resp.json()
+        assert body["model"] == "my-custom-model"
+
+    def test_module_prefixed_model_echoed_in_response(self):
+        """Model name with module prefix (e.g., 'g1-gpt-4o') is echoed as-is."""
+        openai_result = _fake_openai_result(content="ok")
+        openai_result["model"] = "gpt-4o"  # mapper strips 'g1-' prefix
+        fake_llm = _FakeLLM(consume_result=openai_result, stream_chunks=[])
+
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+            patch.object(anthropic_compat, "llm_mod") as mock_llm_mod,
+        ):
+            mock_mapper.list_downstream = AsyncMock()
+            mock_mapper.resolve_request_config = MagicMock(return_value={})
+            mock_mapper.is_direct_task = MagicMock(return_value=False)
+            mock_llm_mod.LLM = MagicMock(return_value=fake_llm)
+
+            client = TestClient(_integration_app, raise_server_exceptions=False)
+            resp = client.post("/v1/messages", json=self._make_request("g1-gpt-4o"))
+
+        assert resp.json()["model"] == "g1-gpt-4o"
+
+    def test_workflow_prefixed_model_echoed_in_response(self):
+        """Model name with workflow prefix (e.g., 'cot::gpt-4o') is echoed as-is."""
+        openai_result = _fake_openai_result(content="ok")
+        openai_result["model"] = "gpt-4o"
+        fake_llm = _FakeLLM(consume_result=openai_result, stream_chunks=[])
+
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+            patch.object(anthropic_compat, "llm_mod") as mock_llm_mod,
+        ):
+            mock_mapper.list_downstream = AsyncMock()
+            mock_mapper.resolve_request_config = MagicMock(return_value={})
+            mock_mapper.is_direct_task = MagicMock(return_value=False)
+            mock_llm_mod.LLM = MagicMock(return_value=fake_llm)
+
+            client = TestClient(_integration_app, raise_server_exceptions=False)
+            resp = client.post("/v1/messages", json=self._make_request("cot::gpt-4o"))
+
+        assert resp.json()["model"] == "cot::gpt-4o"
+
+    def test_aliased_model_echoes_request_name_not_backend_name(self):
+        """If request says 'claude-3-opus' but backend resolves to 'openai/gpt-4', response has 'claude-3-opus'."""
+        openai_result = _fake_openai_result(content="ok")
+        openai_result["model"] = "openai/gpt-4"  # backend's resolved model
+        fake_llm = _FakeLLM(consume_result=openai_result, stream_chunks=[])
+
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+            patch.object(anthropic_compat, "llm_mod") as mock_llm_mod,
+        ):
+            mock_mapper.list_downstream = AsyncMock()
+            mock_mapper.resolve_request_config = MagicMock(return_value={})
+            mock_mapper.is_direct_task = MagicMock(return_value=False)
+            mock_llm_mod.LLM = MagicMock(return_value=fake_llm)
+
+            client = TestClient(_integration_app, raise_server_exceptions=False)
+            resp = client.post("/v1/messages", json=self._make_request("claude-3-opus-20240229"))
+
+        assert resp.json()["model"] == "claude-3-opus-20240229"
+
+    def test_direct_task_echoes_request_model(self):
+        """Direct task path (chat_completion) should still echo the original model name."""
+        openai_result = _fake_openai_result(content="Title")
+        openai_result["model"] = "some-backend-model"
+        fake_llm = _FakeLLM(
+            chat_completion_result=openai_result,
+            stream_chunks=[],
+        )
+
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+            patch.object(anthropic_compat, "llm_mod") as mock_llm_mod,
+        ):
+            mock_mapper.list_downstream = AsyncMock()
+            mock_mapper.resolve_request_config = MagicMock(return_value={})
+            mock_mapper.is_direct_task = MagicMock(return_value=True)
+            mock_llm_mod.LLM = MagicMock(return_value=fake_llm)
+
+            client = TestClient(_integration_app, raise_server_exceptions=False)
+            resp = client.post("/v1/messages", json=self._make_request("my-direct-task-model"))
+
+        assert resp.json()["model"] == "my-direct-task-model"
+
+
+class TestModelNameStreamingPreservation:
+    """Verify model name in streaming events matches the non-streaming response."""
+
+    def setup_method(self):
+        import config as _cfg
+        _cfg.BOOST_AUTH = []
+
+    @pytest.mark.asyncio
+    async def test_streaming_message_start_has_request_model(self):
+        """message_start event should contain the original request model, not the backend model."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"Hi"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in anthropic_compat._anthropic_stream_converter(
+            mock_stream(), "g1-claude-3-5-sonnet"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events("".join(events))
+        msg_start = [e for e in parsed if e["type"] == "message_start"][0]
+        assert msg_start["message"]["model"] == "g1-claude-3-5-sonnet"
+
+    @pytest.mark.asyncio
+    async def test_streaming_model_matches_non_streaming(self):
+        """Streaming and non-streaming paths should report the same model name."""
+        request_model = "mcts-openai/gpt-4o"
+
+        # Non-streaming
+        openai_result = _fake_openai_result(content="Hello")
+        openai_result["model"] = "openai/gpt-4o"  # backend name
+        response = anthropic_compat._build_anthropic_response(openai_result, request_model)
+        non_streaming_model = response["model"]
+
+        # Streaming
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"Hello"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in anthropic_compat._anthropic_stream_converter(
+            mock_stream(), request_model
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events("".join(events))
+        msg_start = [e for e in parsed if e["type"] == "message_start"][0]
+        streaming_model = msg_start["message"]["model"]
+
+        assert non_streaming_model == streaming_model == request_model
+
+    @pytest.mark.asyncio
+    async def test_streaming_integration_echoes_request_model(self):
+        """Full integration: streaming response echoes the Anthropic request model."""
+        import config as _cfg
+        _cfg.BOOST_AUTH = []
+
+        chunk = 'data: {"choices":[{"delta":{"content":"ok"},"index":0}]}\n\n'
+        done = 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}\n\n'
+        fake_llm = _FakeLLM(stream_chunks=[chunk, done, "data: [DONE]\n\n"])
+
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+            patch.object(anthropic_compat, "llm_mod") as mock_llm_mod,
+        ):
+            mock_mapper.list_downstream = AsyncMock()
+            mock_mapper.resolve_request_config = MagicMock(return_value={})
+            mock_mapper.is_direct_task = MagicMock(return_value=False)
+            mock_llm_mod.LLM = MagicMock(return_value=fake_llm)
+
+            client = TestClient(_integration_app, raise_server_exceptions=False)
+            resp = client.post("/v1/messages", json={
+                "model": "g1-claude-3-haiku",
+                "max_tokens": 100,
+                "messages": [{"role": "user", "content": "hi"}],
+                "stream": True,
+            })
+
+        parsed = _parse_sse_events(resp.text)
+        msg_start = [e for e in parsed if e["type"] == "message_start"][0]
+        assert msg_start["message"]["model"] == "g1-claude-3-haiku"
+
+
 if __name__ == "__main__":
     unittest.main()
