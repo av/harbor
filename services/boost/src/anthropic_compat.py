@@ -346,10 +346,29 @@ def _convert_params(body: dict):
   max_tokens = body.get("max_tokens") or 0
   thinking = body.get("thinking")
 
-  if thinking and isinstance(thinking, dict) and thinking.get("type") == "enabled":
-    budget_tokens = thinking.get("budget_tokens", 0)
-    # Map to max_completion_tokens which covers both reasoning + output
-    params["max_completion_tokens"] = budget_tokens + max_tokens
+  # output_config.effort maps to reasoning effort in compatible backends.
+  # When set, it implies the model should use thinking/reasoning, so we
+  # use max_completion_tokens instead of max_tokens.
+  output_config = body.get("output_config")
+  effort = None
+  if output_config and isinstance(output_config, dict):
+    effort = output_config.get("effort")
+
+  if thinking and isinstance(thinking, dict):
+    thinking_type = thinking.get("type")
+    if thinking_type == "enabled":
+      budget_tokens = thinking.get("budget_tokens", 0)
+      # Map to max_completion_tokens which covers both reasoning + output
+      params["max_completion_tokens"] = budget_tokens + max_tokens
+    elif thinking_type == "adaptive":
+      # Adaptive thinking: the model decides how much to think.
+      # No budget_tokens — just use max_completion_tokens = max_tokens
+      # to allow the backend to allocate reasoning budget dynamically.
+      params["max_completion_tokens"] = max_tokens
+  elif effort:
+    # output_config.effort without explicit thinking config — some backends
+    # accept reasoning_effort or similar params.
+    params["max_completion_tokens"] = max_tokens
   elif max_tokens > 0:
     params["max_tokens"] = max_tokens
 
@@ -486,6 +505,7 @@ def _build_content_blocks(openai_result):
       {
         "type": "thinking",
         "thinking": str(reasoning),
+        "signature": "",
       }
     )
 
@@ -623,7 +643,7 @@ async def _anthropic_stream_converter(
               {
                 "type": "content_block_start",
                 "index": block_index,
-                "content_block": {"type": "thinking", "thinking": ""},
+                "content_block": {"type": "thinking", "thinking": "", "signature": ""},
               },
             )
             thinking_block_open = True
