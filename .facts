@@ -408,6 +408,9 @@
 - label: Boost Anthropic compat handles mid-stream errors gracefully with proper SSE envelope closure
   command: rg -q 'except.*Exception' services/boost/src/anthropic_compat.py && rg -q 'test_mid_stream_exception' services/boost/tests/test_anthropic_compat.py
   tags: [spec, implemented]
+- label: Boost Anthropic compat supports extended thinking by mapping thinking param to max_completion_tokens, producing thinking content blocks from backend reasoning_content, and stripping thinking blocks from request message history
+  command: rg -q 'thinking' services/boost/src/anthropic_compat.py && rg -q 'reasoning_content' services/boost/src/anthropic_compat.py && rg -q 'thinking_delta' services/boost/src/anthropic_compat.py && rg -q 'test_assistant_message_thinking_blocks_stripped' services/boost/tests/test_anthropic_compat.py && rg -q 'test_reasoning_content_produces_thinking_block' services/boost/tests/test_anthropic_compat.py
+  tags: [spec, implemented]
 
 ## responses api
 - label: Boost exposes POST /v1/responses endpoint for OpenAI Responses API compatibility

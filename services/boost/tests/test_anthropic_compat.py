@@ -251,6 +251,80 @@ class TestConvertMessages:
         assert msgs[0]["content"] is None
         assert len(msgs[0]["tool_calls"]) == 1
 
+    def test_assistant_message_thinking_blocks_stripped(self):
+        """Thinking blocks in assistant message history should be silently skipped."""
+        body = {
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "thinking", "thinking": "Let me analyze..."},
+                        {"type": "text", "text": "The answer is 42."},
+                    ],
+                }
+            ],
+        }
+        msgs = anthropic_compat._convert_messages(body)
+        assert len(msgs) == 1
+        assert msgs[0]["role"] == "assistant"
+        assert msgs[0]["content"] == "The answer is 42."
+        assert "tool_calls" not in msgs[0]
+
+    def test_assistant_message_thinking_only_stripped(self):
+        """Assistant message with only thinking blocks produces a valid message with None content."""
+        body = {
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "thinking", "thinking": "Deep internal reasoning..."},
+                    ],
+                }
+            ],
+        }
+        msgs = anthropic_compat._convert_messages(body)
+        assert len(msgs) == 1
+        assert msgs[0]["role"] == "assistant"
+        assert msgs[0]["content"] is None
+
+    def test_assistant_message_thinking_with_tool_use(self):
+        """Thinking blocks alongside tool_use blocks should be stripped, tool_use preserved."""
+        body = {
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "thinking", "thinking": "I need to search for this."},
+                        {"type": "tool_use", "id": "toolu_1", "name": "search", "input": {"q": "test"}},
+                    ],
+                }
+            ],
+        }
+        msgs = anthropic_compat._convert_messages(body)
+        assert len(msgs) == 1
+        assert msgs[0]["content"] is None
+        assert len(msgs[0]["tool_calls"]) == 1
+        assert msgs[0]["tool_calls"][0]["function"]["name"] == "search"
+
+    def test_assistant_message_thinking_text_and_tool_use(self):
+        """All three block types: thinking stripped, text and tool_use preserved."""
+        body = {
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "thinking", "thinking": "Reasoning here."},
+                        {"type": "text", "text": "I found something."},
+                        {"type": "tool_use", "id": "toolu_1", "name": "fetch", "input": {"url": "http://example.com"}},
+                    ],
+                }
+            ],
+        }
+        msgs = anthropic_compat._convert_messages(body)
+        assert len(msgs) == 1
+        assert msgs[0]["content"] == "I found something."
+        assert len(msgs[0]["tool_calls"]) == 1
+
 
 # ---------------------------------------------------------------------------
 # _build_openai_body — full pipeline

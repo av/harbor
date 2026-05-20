@@ -191,6 +191,7 @@ def _convert_assistant_message(content):
           },
         }
       )
+    # Skip thinking blocks — no OpenAI equivalent for conversation history
 
   msg = {"role": "assistant"}
   if text_parts:
