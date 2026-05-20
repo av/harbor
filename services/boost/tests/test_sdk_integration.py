@@ -1013,3 +1013,549 @@ class TestCrossSDKConsistency:
 
         assert a_text == "Streamed content"
         assert o_text == "Streamed content"
+
+
+# ---------------------------------------------------------------------------
+# Anthropic SDK — Extended Thinking Streaming
+# ---------------------------------------------------------------------------
+
+
+class TestAnthropicSDKStreamingWithThinking:
+    """Streaming with extended thinking enabled — thinking blocks must appear."""
+
+    @pytest.mark.asyncio
+    async def test_stream_thinking_blocks_appear(self, app, mock_mapper_obj):
+        """When the backend emits reasoning_content, the SDK should surface
+        thinking events via the stream."""
+        chunks = []
+        # Reasoning/thinking chunk
+        chunks.append(_sse_chunk({
+            "choices": [{"delta": {"role": "assistant",
+                                   "reasoning_content": "Let me think step by step..."}, "index": 0}],
+        }))
+        # More reasoning
+        chunks.append(_sse_chunk({
+            "choices": [{"delta": {"reasoning_content": " First, consider X."}, "index": 0}],
+        }))
+        # Text chunk (after thinking ends)
+        chunks.append(_sse_chunk({
+            "choices": [{"delta": {"content": "The answer is 42."}, "index": 0}],
+        }))
+        # Finish
+        chunks.append(_sse_chunk({
+            "choices": [{"delta": {}, "index": 0, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30},
+        }))
+        chunks.append("data: [DONE]\n\n")
+
+        fake = _FakeLLM(stream_chunks=chunks)
+        with _patch_both_layers(fake, mock_mapper_obj):
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as http:
+                client = anthropic.AsyncAnthropic(
+                    api_key="test-key",
+                    base_url="http://test",
+                    http_client=http,
+                )
+                event_types = []
+                thinking_text = ""
+                output_text = ""
+                async with client.messages.stream(
+                    model="test-model",
+                    max_tokens=1024,
+                    thinking={
+                        "type": "enabled",
+                        "budget_tokens": 2048,
+                    },
+                    messages=[{"role": "user", "content": "What is the meaning of life?"}],
+                ) as stream:
+                    async for event in stream:
+                        event_types.append(event.type)
+                        if event.type == "content_block_delta":
+                            if hasattr(event.delta, "thinking"):
+                                thinking_text += event.delta.thinking
+                            elif hasattr(event.delta, "text"):
+                                output_text += event.delta.text
+
+        # Thinking block events must be present
+        assert "content_block_start" in event_types
+        assert "content_block_delta" in event_types
+        assert "content_block_stop" in event_types
+        # Thinking content was streamed
+        assert "Let me think step by step..." in thinking_text
+        assert "First, consider X." in thinking_text
+        # Normal text was also streamed
+        assert output_text == "The answer is 42."
+
+    @pytest.mark.asyncio
+    async def test_stream_thinking_final_message_has_thinking_block(self, app, mock_mapper_obj):
+        """The final message from a thinking-enabled stream should contain
+        a thinking block followed by a text block."""
+        chunks = []
+        chunks.append(_sse_chunk({
+            "choices": [{"delta": {"reasoning_content": "Reasoning here."}, "index": 0}],
+        }))
+        chunks.append(_sse_chunk({
+            "choices": [{"delta": {"content": "Final answer."}, "index": 0}],
+        }))
+        chunks.append(_sse_chunk({
+            "choices": [{"delta": {}, "index": 0, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 5, "completion_tokens": 10, "total_tokens": 15},
+        }))
+        chunks.append("data: [DONE]\n\n")
+
+        fake = _FakeLLM(stream_chunks=chunks)
+        with _patch_both_layers(fake, mock_mapper_obj):
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as http:
+                client = anthropic.AsyncAnthropic(
+                    api_key="test-key",
+                    base_url="http://test",
+                    http_client=http,
+                )
+                async with client.messages.stream(
+                    model="test-model",
+                    max_tokens=512,
+                    thinking={"type": "enabled", "budget_tokens": 1024},
+                    messages=[{"role": "user", "content": "Think first."}],
+                ) as stream:
+                    message = await stream.get_final_message()
+
+        assert isinstance(message, anthropic.types.Message)
+        # Should have at least two content blocks: thinking + text
+        assert len(message.content) >= 2
+        # First block should be thinking type
+        assert message.content[0].type == "thinking"
+        assert "Reasoning here." in message.content[0].thinking
+        # Second (or last) block should be text
+        text_blocks = [b for b in message.content if b.type == "text"]
+        assert len(text_blocks) >= 1
+        assert text_blocks[0].text == "Final answer."
+
+
+# ---------------------------------------------------------------------------
+# Anthropic SDK — Non-streaming with multiple tools
+# ---------------------------------------------------------------------------
+
+
+class TestAnthropicSDKMultiToolUse:
+    """Non-streaming with multiple tool_use blocks — verify toolu_ IDs."""
+
+    @pytest.mark.asyncio
+    async def test_multiple_tool_calls_have_valid_toolu_ids(self, app, mock_mapper_obj):
+        """When backend returns multiple tool calls, each should have a
+        unique toolu_ prefixed ID after normalization."""
+        result = _openai_result(content=None, finish_reason="tool_calls")
+        result["choices"][0]["message"]["content"] = None
+        result["choices"][0]["message"]["tool_calls"] = [
+            {
+                "id": "call_abc111",
+                "type": "function",
+                "function": {"name": "get_weather", "arguments": '{"city":"NYC"}'},
+            },
+            {
+                "id": "call_def222",
+                "type": "function",
+                "function": {"name": "get_time", "arguments": '{"timezone":"EST"}'},
+            },
+            {
+                "id": "call_ghi333",
+                "type": "function",
+                "function": {"name": "get_news", "arguments": '{"topic":"tech"}'},
+            },
+        ]
+
+        fake = _FakeLLM(consume_result=result, stream_chunks=[])
+        with _patch_both_layers(fake, mock_mapper_obj):
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as http:
+                client = anthropic.AsyncAnthropic(
+                    api_key="test-key",
+                    base_url="http://test",
+                    http_client=http,
+                )
+                message = await client.messages.create(
+                    model="test-model",
+                    max_tokens=256,
+                    messages=[{"role": "user", "content": "What is the weather, time, and news?"}],
+                    tools=[
+                        {
+                            "name": "get_weather",
+                            "description": "Get weather for a city",
+                            "input_schema": {"type": "object", "properties": {"city": {"type": "string"}}},
+                        },
+                        {
+                            "name": "get_time",
+                            "description": "Get time for a timezone",
+                            "input_schema": {"type": "object", "properties": {"timezone": {"type": "string"}}},
+                        },
+                        {
+                            "name": "get_news",
+                            "description": "Get news on a topic",
+                            "input_schema": {"type": "object", "properties": {"topic": {"type": "string"}}},
+                        },
+                    ],
+                )
+
+        assert message.stop_reason == "tool_use"
+        tool_blocks = [b for b in message.content if b.type == "tool_use"]
+        assert len(tool_blocks) == 3
+
+        # All IDs must be toolu_-prefixed
+        ids = [b.id for b in tool_blocks]
+        for tool_id in ids:
+            assert tool_id.startswith("toolu_"), f"Expected toolu_ prefix, got {tool_id}"
+
+        # All IDs must be unique
+        assert len(set(ids)) == 3, f"Expected 3 unique IDs, got {ids}"
+
+        # Verify correct names and inputs
+        names = {b.name for b in tool_blocks}
+        assert names == {"get_weather", "get_time", "get_news"}
+        for block in tool_blocks:
+            assert isinstance(block, anthropic.types.ToolUseBlock)
+            assert isinstance(block.input, dict)
+
+
+# ---------------------------------------------------------------------------
+# Anthropic SDK — Count tokens with tools
+# ---------------------------------------------------------------------------
+
+
+class TestAnthropicSDKCountTokensWithTools:
+    """Count tokens endpoint should accept tool definitions."""
+
+    @pytest.mark.asyncio
+    async def test_count_tokens_with_tools_returns_higher_count(self, app, mock_mapper_obj):
+        """Including tool definitions should increase the token count."""
+        with _patch_both_layers(_FakeLLM(), mock_mapper_obj):
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as http:
+                client = anthropic.AsyncAnthropic(
+                    api_key="test-key",
+                    base_url="http://test",
+                    http_client=http,
+                )
+                # Without tools
+                without_tools = await client.messages.count_tokens(
+                    model="test-model",
+                    messages=[{"role": "user", "content": "What is the weather?"}],
+                )
+                # With tools
+                with_tools = await client.messages.count_tokens(
+                    model="test-model",
+                    messages=[{"role": "user", "content": "What is the weather?"}],
+                    tools=[
+                        {
+                            "name": "get_weather",
+                            "description": "Get the current weather for a given city",
+                            "input_schema": {
+                                "type": "object",
+                                "properties": {
+                                    "city": {"type": "string", "description": "City name"},
+                                    "units": {"type": "string", "enum": ["celsius", "fahrenheit"]},
+                                },
+                                "required": ["city"],
+                            },
+                        },
+                    ],
+                )
+
+        assert isinstance(without_tools, anthropic.types.MessageTokensCount)
+        assert isinstance(with_tools, anthropic.types.MessageTokensCount)
+        # Tools should add tokens
+        assert with_tools.input_tokens > without_tools.input_tokens
+
+
+# ---------------------------------------------------------------------------
+# Anthropic SDK — Beta flags echo
+# ---------------------------------------------------------------------------
+
+
+class TestAnthropicSDKBetaFlags:
+    """Verify anthropic-beta header is echoed back in responses."""
+
+    @pytest.mark.asyncio
+    async def test_beta_flags_echoed_in_response(self, app, mock_mapper_obj):
+        """Recognized beta flags should be echoed back in the response header."""
+        fake = _FakeLLM(
+            consume_result=_openai_result(content="Hello!"),
+            stream_chunks=[],
+        )
+        with _patch_both_layers(fake, mock_mapper_obj):
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as http:
+                client = anthropic.AsyncAnthropic(
+                    api_key="test-key",
+                    base_url="http://test",
+                    http_client=http,
+                )
+                # Use with_raw_response to inspect headers
+                raw = await client.messages.with_raw_response.create(
+                    model="test-model",
+                    max_tokens=128,
+                    messages=[{"role": "user", "content": "Hello"}],
+                    extra_headers={
+                        "anthropic-beta": "prompt-caching-2024-07-31,extended-thinking-2025-01-24"
+                    },
+                )
+
+        # The response should have the anthropic-beta header echoed back
+        beta_header = raw.http_response.headers.get("anthropic-beta")
+        assert beta_header is not None
+        echoed_flags = [f.strip() for f in beta_header.split(",")]
+        assert "prompt-caching-2024-07-31" in echoed_flags
+        assert "extended-thinking-2025-01-24" in echoed_flags
+
+    @pytest.mark.asyncio
+    async def test_unrecognized_beta_flags_not_echoed(self, app, mock_mapper_obj):
+        """Unrecognized beta flags should NOT be echoed back."""
+        fake = _FakeLLM(
+            consume_result=_openai_result(content="Hello!"),
+            stream_chunks=[],
+        )
+        with _patch_both_layers(fake, mock_mapper_obj):
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as http:
+                client = anthropic.AsyncAnthropic(
+                    api_key="test-key",
+                    base_url="http://test",
+                    http_client=http,
+                )
+                raw = await client.messages.with_raw_response.create(
+                    model="test-model",
+                    max_tokens=128,
+                    messages=[{"role": "user", "content": "Hello"}],
+                    extra_headers={
+                        "anthropic-beta": "nonexistent-feature-2025-01-01"
+                    },
+                )
+
+        # Unrecognized flag should not appear in the response
+        beta_header = raw.http_response.headers.get("anthropic-beta")
+        # Either no header at all, or empty
+        if beta_header:
+            assert "nonexistent-feature" not in beta_header
+
+
+# ---------------------------------------------------------------------------
+# OpenAI SDK — Streaming with reasoning
+# ---------------------------------------------------------------------------
+
+
+class TestOpenAISDKStreamingWithReasoning:
+    """Streaming responses with reasoning enabled."""
+
+    @pytest.mark.asyncio
+    async def test_stream_reasoning_events_appear(self, app, mock_mapper_obj):
+        """When the backend emits reasoning_content, the Responses API should
+        surface reasoning events in the stream."""
+        chunks = []
+        # Reasoning chunk
+        chunks.append(_sse_chunk({
+            "choices": [{"delta": {"reasoning_content": "Step 1: analyze the problem."}, "index": 0}],
+        }))
+        chunks.append(_sse_chunk({
+            "choices": [{"delta": {"reasoning_content": " Step 2: solve it."}, "index": 0}],
+        }))
+        # Text chunk
+        chunks.append(_sse_chunk({
+            "choices": [{"delta": {"content": "The answer is 7."}, "index": 0}],
+        }))
+        # Finish
+        chunks.append(_sse_chunk({
+            "choices": [{"delta": {}, "index": 0, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 8, "completion_tokens": 15, "total_tokens": 23},
+        }))
+        chunks.append("data: [DONE]\n\n")
+
+        fake = _FakeLLM(stream_chunks=chunks)
+        with _patch_both_layers(fake, mock_mapper_obj):
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as http:
+                client = openai.AsyncOpenAI(
+                    api_key="test-key",
+                    base_url="http://test/v1",
+                    http_client=http,
+                )
+                event_types = []
+                text_deltas = ""
+                async with client.responses.stream(
+                    model="test-model",
+                    input="What is 3 + 4?",
+                    reasoning={"effort": "high"},
+                ) as stream:
+                    async for event in stream:
+                        event_types.append(event.type)
+                        if event.type == "response.output_text.delta":
+                            text_deltas += event.delta
+
+        # Reasoning events should be present
+        assert "response.output_item.added" in event_types
+        assert "response.output_text.delta" in event_types
+        assert "response.completed" in event_types
+        # Text content was streamed correctly
+        assert text_deltas == "The answer is 7."
+
+    @pytest.mark.asyncio
+    async def test_stream_reasoning_emits_reasoning_output_item(self, app, mock_mapper_obj):
+        """When the backend emits reasoning_content, the stream should include
+        output_item.added events for both a reasoning item and a message item."""
+        chunks = []
+        chunks.append(_sse_chunk({
+            "choices": [{"delta": {"reasoning_content": "Thinking..."}, "index": 0}],
+        }))
+        chunks.append(_sse_chunk({
+            "choices": [{"delta": {"content": "Done."}, "index": 0}],
+        }))
+        chunks.append(_sse_chunk({
+            "choices": [{"delta": {}, "index": 0, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 5, "completion_tokens": 8, "total_tokens": 13},
+        }))
+        chunks.append("data: [DONE]\n\n")
+
+        fake = _FakeLLM(stream_chunks=chunks)
+        with _patch_both_layers(fake, mock_mapper_obj):
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as http:
+                client = openai.AsyncOpenAI(
+                    api_key="test-key",
+                    base_url="http://test/v1",
+                    http_client=http,
+                )
+                event_types = []
+                added_item_types = []
+                completed = False
+                async with client.responses.stream(
+                    model="test-model",
+                    input="Think then answer.",
+                    reasoning={"effort": "medium"},
+                ) as stream:
+                    async for event in stream:
+                        event_types.append(event.type)
+                        if event.type == "response.output_item.added":
+                            added_item_types.append(event.item.type)
+                        if event.type == "response.completed":
+                            completed = True
+
+        assert completed
+        # The stream should have emitted output_item.added for reasoning and message
+        assert "reasoning" in added_item_types
+        assert "message" in added_item_types
+        # Verify full event lifecycle
+        assert "response.created" in event_types
+        assert "response.completed" in event_types
+
+
+# ---------------------------------------------------------------------------
+# OpenAI SDK — Non-streaming with structured output
+# ---------------------------------------------------------------------------
+
+
+class TestOpenAISDKStructuredOutput:
+    """Non-streaming response with text.format structured output."""
+
+    @pytest.mark.asyncio
+    async def test_structured_output_json_schema(self, app, mock_mapper_obj):
+        """text.format with json_schema should return valid structured output."""
+        fake = _FakeLLM(
+            consume_result=_openai_result(content='{"name":"Alice","age":30}'),
+            stream_chunks=[],
+        )
+        with _patch_both_layers(fake, mock_mapper_obj):
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as http:
+                client = openai.AsyncOpenAI(
+                    api_key="test-key",
+                    base_url="http://test/v1",
+                    http_client=http,
+                )
+                response = await client.responses.create(
+                    model="test-model",
+                    input="Generate a person JSON.",
+                    text={
+                        "format": {
+                            "type": "json_schema",
+                            "name": "person",
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "name": {"type": "string"},
+                                    "age": {"type": "integer"},
+                                },
+                                "required": ["name", "age"],
+                            },
+                        },
+                    },
+                )
+
+        assert isinstance(response, openai.types.responses.Response)
+        assert response.status == "completed"
+        # The response content should contain the JSON
+        msg_items = [o for o in response.output if o.type == "message"]
+        assert len(msg_items) >= 1
+        text_content = msg_items[0].content[0].text
+        parsed = json.loads(text_content)
+        assert parsed["name"] == "Alice"
+        assert parsed["age"] == 30
+
+    @pytest.mark.asyncio
+    async def test_structured_output_json_object(self, app, mock_mapper_obj):
+        """text.format with json_object type should work."""
+        fake = _FakeLLM(
+            consume_result=_openai_result(content='{"result": true}'),
+            stream_chunks=[],
+        )
+        with _patch_both_layers(fake, mock_mapper_obj):
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as http:
+                client = openai.AsyncOpenAI(
+                    api_key="test-key",
+                    base_url="http://test/v1",
+                    http_client=http,
+                )
+                response = await client.responses.create(
+                    model="test-model",
+                    input="Is the sky blue? Answer in JSON.",
+                    text={"format": {"type": "json_object"}},
+                )
+
+        assert isinstance(response, openai.types.responses.Response)
+        assert response.status == "completed"
+        text_content = response.output[0].content[0].text
+        parsed = json.loads(text_content)
+        assert parsed["result"] is True
+
+
+# ---------------------------------------------------------------------------
+# OpenAI SDK — Error handling: model not found
+# ---------------------------------------------------------------------------
+
+
+class TestOpenAISDKModelNotFound:
+    """Verify 404 from mapper surfaces as NotFoundError."""
+
+    @pytest.mark.asyncio
+    async def test_model_not_found_raises_not_found_error(self, app):
+        """When mapper raises HTTPException(404), the SDK should raise NotFoundError."""
+        mock = _mock_mapper()
+        mock.resolve_request_config = MagicMock(
+            side_effect=responses_compat.HTTPException(
+                status_code=404, detail="Model 'nonexistent' not found"
+            ),
+        )
+        with _patch_both_layers(_FakeLLM(), mock):
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as http:
+                client = openai.AsyncOpenAI(
+                    api_key="test-key",
+                    base_url="http://test/v1",
+                    http_client=http,
+                )
+                with pytest.raises(openai.NotFoundError) as exc_info:
+                    await client.responses.create(
+                        model="nonexistent",
+                        input="Hello",
+                    )
+
+        assert exc_info.value.status_code == 404
