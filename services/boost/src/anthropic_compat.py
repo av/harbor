@@ -393,6 +393,12 @@ def _convert_tool_choice(body: dict):
   if not tc:
     return None
 
+  # Anthropic's API expects tool_choice to be an object with a "type" field.
+  # Guard against non-dict values (strings, ints, etc.) that would crash
+  # on .get() calls.
+  if not isinstance(tc, dict):
+    return None
+
   tc_type = tc.get("type")
   if tc_type == "auto":
     return "auto"
