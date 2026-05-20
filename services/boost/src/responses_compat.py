@@ -10,9 +10,11 @@ import shortuuid
 import log
 import mapper
 import llm as llm_mod
+from llm import BackendError
 from auth import get_api_key
 from compat_utils import (
     OPENAI_REQUEST_ID_HEADER,
+    RATE_LIMIT_FORWARD_HEADERS,
     _get_finish_reason,
     extract_annotations as _extract_annotations,
     extract_boost_params as _extract_boost_params,
@@ -1379,6 +1381,22 @@ async def post_responses(request: Request, api_key: str = Depends(get_api_key)):
         headers={OPENAI_REQUEST_ID_HEADER: request_id},
       )
 
+  except BackendError as e:
+    # Forward rate-limit / retry headers from the backend so the SDK
+    # can implement automatic retries with the correct backoff.
+    logger.warning("Responses handler backend error %d: %s", e.status_code, e.body[:256])
+    status = e.status_code
+    if status == 429:
+      detail = "Rate limit exceeded"
+    elif status >= 500:
+      detail = "Backend server error"
+    else:
+      detail = "Backend request failed"
+    resp = _responses_error(status, detail, request_id=request_id)
+    for hdr, val in e.headers.items():
+      if hdr in RATE_LIMIT_FORWARD_HEADERS:
+        resp.headers[hdr] = val
+    return resp
   except HTTPException as e:
     # Sanitize 5xx error details to avoid leaking internal information
     detail = str(e.detail) if e.status_code < 500 else "Internal server error"

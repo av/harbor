@@ -21,6 +21,7 @@ import mapper
 import config
 import mods
 import llm
+from llm import BackendError
 from llm_registry import llm_registry
 
 logger = setup_logger(__name__)
@@ -358,29 +359,40 @@ async def post_boost_chat_completion(
   proxy_config = mapper.resolve_request_config(json_body)
   proxy = llm.LLM(**proxy_config)
 
-  # WebUI will send a few additional workflows
-  # that we simply want to delegate to the underlying model as is, without boosting
-  if (
-    mapper.is_direct_task(proxy)
-    and proxy.workflow is None
-    and proxy.boost_params.get("workflow") is None
-  ):
-    logger.debug("Detected direct task, skipping boost")
-    return JSONResponse(content=await proxy.chat_completion(), status_code=200)
+  try:
+    # WebUI will send a few additional workflows
+    # that we simply want to delegate to the underlying model as is, without boosting
+    if (
+      mapper.is_direct_task(proxy)
+      and proxy.workflow is None
+      and proxy.boost_params.get("workflow") is None
+    ):
+      logger.debug("Detected direct task, skipping boost")
+      return JSONResponse(content=await proxy.chat_completion(), status_code=200)
 
-  # This is where the "boost" happens
-  completion = await proxy.serve()
+    # This is where the "boost" happens
+    completion = await proxy.serve()
 
-  if completion is None:
-    return JSONResponse(
-      content={"error": "No completion returned"}, status_code=500
+    if completion is None:
+      return JSONResponse(
+        content={"error": "No completion returned"}, status_code=500
+      )
+
+    if stream:
+      return StreamingResponse(completion, media_type="text/event-stream")
+    else:
+      content = await proxy.consume_stream(completion)
+      return JSONResponse(content=content, status_code=200)
+
+  except BackendError as e:
+    logger.warning("Chat completions backend error %d: %s", e.status_code, e.body[:256])
+    resp = JSONResponse(
+      content={"error": {"message": "Backend request failed", "type": "server_error"}},
+      status_code=e.status_code,
     )
-
-  if stream:
-    return StreamingResponse(completion, media_type="text/event-stream")
-  else:
-    content = await proxy.consume_stream(completion)
-    return JSONResponse(content=content, status_code=200)
+    for hdr, val in e.headers.items():
+      resp.headers[hdr] = val
+    return resp
 
 
 # --- OpenAI Responses API Compatible ---------

@@ -12,6 +12,19 @@ OPENAI_REQUEST_ID_HEADER = "x-request-id"
 ANTHROPIC_VERSION_HEADER = "anthropic-version"
 ANTHROPIC_VERSION = "2023-06-01"
 
+# Rate limit and retry headers that SDK clients inspect.
+# Both Anthropic and OpenAI SDKs use these for automatic retry decisions.
+RATE_LIMIT_FORWARD_HEADERS = frozenset({
+    "retry-after",
+    "retry-after-ms",
+    "x-ratelimit-limit-requests",
+    "x-ratelimit-limit-tokens",
+    "x-ratelimit-remaining-requests",
+    "x-ratelimit-remaining-tokens",
+    "x-ratelimit-reset-requests",
+    "x-ratelimit-reset-tokens",
+})
+
 # Tool use / tool call ID prefix patterns
 _KNOWN_PREFIXES_RE = re.compile(r"^(toolu_|call_|chatcmpl-)")
 

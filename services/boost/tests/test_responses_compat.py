@@ -7494,3 +7494,198 @@ class TestModelNamePreservation:
 
         assert resp.status_code == 200
         assert resp.json()["model"] == "g1-claude-3-5-sonnet"
+
+
+# ---------------------------------------------------------------------------
+# BackendError and rate limit header forwarding
+# ---------------------------------------------------------------------------
+
+from llm import BackendError
+
+
+class TestResponsesBackendErrorIntegration:
+    """Integration tests: BackendError from LLM is caught and rate limit headers forwarded."""
+
+    @pytest.fixture(autouse=True)
+    def setup_app(self, monkeypatch):
+        from fastapi.testclient import TestClient
+        import config as _cfg
+        monkeypatch.setattr(_cfg, "BOOST_AUTH", [])
+        app = _make_responses_app()
+        self.client = TestClient(app)
+
+    def test_429_returns_rate_limit_error_with_headers(self, monkeypatch):
+        """When the backend returns 429 with rate limit headers, those headers
+        appear on the response and the status code is 429."""
+        rate_limit_headers = {
+            "retry-after": "30",
+            "x-ratelimit-limit-requests": "100",
+            "x-ratelimit-remaining-requests": "0",
+            "x-ratelimit-reset-requests": "2026-05-20T12:00:00Z",
+        }
+
+        async def mock_list_downstream():
+            return []
+
+        def raise_backend_error(**kw):
+            raise BackendError(429, "rate limited", rate_limit_headers)
+
+        monkeypatch.setattr(responses_compat.mapper, "list_downstream", mock_list_downstream)
+        monkeypatch.setattr(responses_compat.mapper, "resolve_request_config", lambda body: {})
+        monkeypatch.setattr(responses_compat.mapper, "is_direct_task", lambda proxy: False)
+        monkeypatch.setattr(responses_compat.llm_mod, "LLM", raise_backend_error)
+
+        resp = self.client.post("/v1/responses", json={
+            "model": "gpt-4o",
+            "input": "hello",
+        })
+
+        assert resp.status_code == 429
+        body = resp.json()
+        assert body["error"]["type"] == "rate_limit_error"
+        assert "Rate limit" in body["error"]["message"]
+        assert resp.headers.get("retry-after") == "30"
+        assert resp.headers.get("x-ratelimit-limit-requests") == "100"
+        assert resp.headers.get("x-ratelimit-remaining-requests") == "0"
+        assert resp.headers.get("x-ratelimit-reset-requests") == "2026-05-20T12:00:00Z"
+
+    def test_429_from_serve_with_all_headers(self, monkeypatch):
+        """When serve() raises BackendError(429), all rate limit headers are forwarded."""
+        all_headers = {
+            "retry-after": "10",
+            "retry-after-ms": "10000",
+            "x-ratelimit-limit-requests": "200",
+            "x-ratelimit-limit-tokens": "40000",
+            "x-ratelimit-remaining-requests": "0",
+            "x-ratelimit-remaining-tokens": "0",
+            "x-ratelimit-reset-requests": "2026-05-20T12:01:00Z",
+            "x-ratelimit-reset-tokens": "2026-05-20T12:01:00Z",
+        }
+
+        async def mock_list_downstream():
+            return []
+
+        mock_llm = MagicMock()
+        mock_llm.workflow = None
+        mock_llm.boost_params = {}
+        mock_llm.module = None
+        async def _raise_serve():
+            raise BackendError(429, '{"error": "too many requests"}', all_headers)
+        mock_llm.serve = _raise_serve
+
+        monkeypatch.setattr(responses_compat.mapper, "list_downstream", mock_list_downstream)
+        monkeypatch.setattr(responses_compat.mapper, "resolve_request_config", lambda body: {})
+        monkeypatch.setattr(responses_compat.mapper, "is_direct_task", lambda proxy: False)
+        monkeypatch.setattr(responses_compat.llm_mod, "LLM", lambda **kw: mock_llm)
+
+        resp = self.client.post("/v1/responses", json={
+            "model": "gpt-4o",
+            "input": "hello",
+        })
+
+        assert resp.status_code == 429
+        for hdr, val in all_headers.items():
+            assert resp.headers.get(hdr) == val, f"Missing or wrong header: {hdr}"
+
+    def test_429_from_direct_task(self, monkeypatch):
+        """When chat_completion() raises BackendError(429), it is caught."""
+        async def mock_list_downstream():
+            return []
+
+        mock_llm = MagicMock()
+        mock_llm.workflow = None
+        mock_llm.boost_params = {}
+        mock_llm.module = None
+        mock_llm.chat = MagicMock()
+        mock_llm.chat.has_substring = MagicMock(return_value=False)
+        async def _raise_chat():
+            raise BackendError(429, "rate limited", {"retry-after": "5"})
+        mock_llm.chat_completion = _raise_chat
+
+        monkeypatch.setattr(responses_compat.mapper, "list_downstream", mock_list_downstream)
+        monkeypatch.setattr(responses_compat.mapper, "resolve_request_config", lambda body: {})
+        monkeypatch.setattr(responses_compat.mapper, "is_direct_task", lambda proxy: True)
+        monkeypatch.setattr(responses_compat.llm_mod, "LLM", lambda **kw: mock_llm)
+
+        resp = self.client.post("/v1/responses", json={
+            "model": "gpt-4o",
+            "input": "hello",
+        })
+
+        assert resp.status_code == 429
+        assert resp.headers.get("retry-after") == "5"
+        body = resp.json()
+        assert body["error"]["type"] == "rate_limit_error"
+
+    def test_500_backend_error_no_rate_limit_headers(self, monkeypatch):
+        """A 500 BackendError returns 500 without rate limit headers."""
+        async def mock_list_downstream():
+            return []
+
+        def raise_backend_error(**kw):
+            raise BackendError(500, "internal error")
+
+        monkeypatch.setattr(responses_compat.mapper, "list_downstream", mock_list_downstream)
+        monkeypatch.setattr(responses_compat.mapper, "resolve_request_config", lambda body: {})
+        monkeypatch.setattr(responses_compat.mapper, "is_direct_task", lambda proxy: False)
+        monkeypatch.setattr(responses_compat.llm_mod, "LLM", raise_backend_error)
+
+        resp = self.client.post("/v1/responses", json={
+            "model": "gpt-4o",
+            "input": "hello",
+        })
+
+        assert resp.status_code == 500
+        body = resp.json()
+        assert body["error"]["type"] == "server_error"
+        assert "Backend server error" in body["error"]["message"]
+        assert resp.headers.get("retry-after") is None
+
+    def test_backend_error_does_not_leak_body(self, monkeypatch):
+        """The backend error body (which may contain internal URLs) is not
+        forwarded to the client."""
+        async def mock_list_downstream():
+            return []
+
+        def raise_backend_error(**kw):
+            raise BackendError(
+                429,
+                '{"error": "rate limited at http://internal-backend:8080"}',
+                {"retry-after": "10"},
+            )
+
+        monkeypatch.setattr(responses_compat.mapper, "list_downstream", mock_list_downstream)
+        monkeypatch.setattr(responses_compat.mapper, "resolve_request_config", lambda body: {})
+        monkeypatch.setattr(responses_compat.mapper, "is_direct_task", lambda proxy: False)
+        monkeypatch.setattr(responses_compat.llm_mod, "LLM", raise_backend_error)
+
+        resp = self.client.post("/v1/responses", json={
+            "model": "gpt-4o",
+            "input": "hello",
+        })
+
+        assert resp.status_code == 429
+        body = resp.json()
+        assert "internal-backend" not in body["error"]["message"]
+        assert "8080" not in body["error"]["message"]
+
+    def test_backend_error_preserves_request_id(self, monkeypatch):
+        """BackendError responses still have the x-request-id header."""
+        async def mock_list_downstream():
+            return []
+
+        def raise_backend_error(**kw):
+            raise BackendError(429, "rate limited", {"retry-after": "10"})
+
+        monkeypatch.setattr(responses_compat.mapper, "list_downstream", mock_list_downstream)
+        monkeypatch.setattr(responses_compat.mapper, "resolve_request_config", lambda body: {})
+        monkeypatch.setattr(responses_compat.mapper, "is_direct_task", lambda proxy: False)
+        monkeypatch.setattr(responses_compat.llm_mod, "LLM", raise_backend_error)
+
+        resp = self.client.post("/v1/responses", json={
+            "model": "gpt-4o",
+            "input": "hello",
+        })
+
+        assert resp.headers.get("x-request-id") is not None
+        assert resp.headers.get("x-request-id").startswith("req_")

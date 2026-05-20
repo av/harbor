@@ -9,11 +9,13 @@ import log
 import shortuuid
 import mapper
 import llm as llm_mod
+from llm import BackendError
 from auth import get_api_key
 from token_counter import count_messages_tokens
 from compat_utils import (
     ANTHROPIC_VERSION,
     ANTHROPIC_VERSION_HEADER,
+    RATE_LIMIT_FORWARD_HEADERS,
     REQUEST_ID_HEADER,
     _get_finish_reason,
     extract_boost_params as _extract_boost_params,
@@ -958,6 +960,23 @@ async def post_messages(request: Request, api_key: str = Depends(get_api_key)):
         headers=_anthropic_headers(request_id, beta_flags),
       )
 
+  except BackendError as e:
+    # Forward rate-limit / retry headers from the backend so the SDK
+    # can implement automatic retries with the correct backoff.
+    logger.warning("Anthropic handler backend error %d: %s", e.status_code, e.body[:256])
+    status = e.status_code
+    # Map backend status to a safe client message
+    if status == 429:
+      detail = "Rate limit exceeded"
+    elif status >= 500:
+      detail = "Backend server error"
+    else:
+      detail = "Backend request failed"
+    resp = _anthropic_error(status, detail, request_id=request_id, beta_flags=beta_flags)
+    for hdr, val in e.headers.items():
+      if hdr in RATE_LIMIT_FORWARD_HEADERS:
+        resp.headers[hdr] = val
+    return resp
   except HTTPException as e:
     error_type = ERROR_TYPE_MAP.get(e.status_code, "api_error")
     # Sanitize 5xx error details to avoid leaking internal information

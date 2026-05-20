@@ -22,6 +22,47 @@ logger = log.setup_logger(__name__)
 
 BOOST_PARAM_PREFIX = "@boost_"
 
+# Headers that SDK clients use for rate limiting and retry logic.
+# When the backend sends these, we forward them to the caller.
+RATE_LIMIT_HEADERS = frozenset({
+    "retry-after",
+    "retry-after-ms",
+    "x-ratelimit-limit-requests",
+    "x-ratelimit-limit-tokens",
+    "x-ratelimit-remaining-requests",
+    "x-ratelimit-remaining-tokens",
+    "x-ratelimit-reset-requests",
+    "x-ratelimit-reset-tokens",
+})
+
+
+class BackendError(Exception):
+    """Raised when the upstream LLM backend returns a non-200 response.
+
+    Carries the HTTP status code, response body, and any rate-limit / retry
+    headers from the backend so that compat layers can forward them to clients.
+    """
+
+    def __init__(self, status_code: int, body: str, headers: dict = None):
+        self.status_code = status_code
+        self.body = body
+        self.headers = headers or {}
+        super().__init__(f"Backend returned {status_code}: {body[:200]}")
+
+    @classmethod
+    def from_httpx(cls, exc: httpx.HTTPStatusError):
+        """Construct from an httpx HTTPStatusError, extracting rate-limit headers."""
+        resp = exc.response
+        rl_headers = {
+            k.lower(): v for k, v in resp.headers.items()
+            if k.lower() in RATE_LIMIT_HEADERS
+        }
+        try:
+            body = resp.text
+        except Exception:
+            body = str(exc)
+        return cls(resp.status_code, body, rl_headers)
+
 
 class LLM(AsyncEventEmitter):
   url: str
@@ -448,7 +489,7 @@ class LLM(AsyncEventEmitter):
           except httpx.HTTPStatusError as e:
             body = await e.response.aread()
             logger.error(f"Chat completion error {body.decode('utf-8')}")
-            raise
+            raise BackendError.from_httpx(e)
 
           buffer = b''
 
@@ -622,6 +663,12 @@ class LLM(AsyncEventEmitter):
       response = await client.post(
         self.chat_completion_endpoint, headers=self.headers, json=body
       )
+      try:
+        response.raise_for_status()
+      except httpx.HTTPStatusError as e:
+        logger.error("Chat completion error %d: %s", e.response.status_code, response.text[:256])
+        raise BackendError.from_httpx(e)
+
       result = response.json()
       if should_resolve:
         return self.get_response_content(params, result)
