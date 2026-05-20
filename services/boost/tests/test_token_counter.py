@@ -3,7 +3,10 @@
 import json
 from unittest.mock import patch
 
+import pytest
 import token_counter
+
+_has_tiktoken = token_counter._USE_TIKTOKEN
 
 
 class TestTokenLen:
@@ -262,6 +265,7 @@ class TestHeuristicFallback:
             assert 5 < count < 100
 
 
+@pytest.mark.skipif(not _has_tiktoken, reason="tiktoken not installed")
 class TestTiktokenIntegration:
     """Test that tiktoken is actually available and producing counts."""
 
@@ -269,7 +273,6 @@ class TestTiktokenIntegration:
         assert token_counter._USE_TIKTOKEN is True
 
     def test_tiktoken_produces_known_count(self):
-        # "Hello world" with cl100k_base encoding is 2 tokens
         count = token_counter._tiktoken_len("Hello world")
         assert count == 2
 
