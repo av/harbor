@@ -520,6 +520,91 @@ class TestConvertToolChoice:
     def test_unknown_type(self):
         assert anthropic_compat._convert_tool_choice({"tool_choice": {"type": "unknown"}}) is None
 
+    def test_disable_parallel_tool_use_does_not_affect_choice(self):
+        # disable_parallel_tool_use is handled in _build_openai_body, not here
+        result = anthropic_compat._convert_tool_choice(
+            {"tool_choice": {"type": "auto", "disable_parallel_tool_use": True}}
+        )
+        assert result == "auto"
+
+
+# ---------------------------------------------------------------------------
+# parallel_tool_calls mapping
+# ---------------------------------------------------------------------------
+
+
+class TestParallelToolCalls:
+    def test_disable_parallel_with_auto(self):
+        body = {
+            "model": "claude-3",
+            "max_tokens": 128,
+            "messages": [{"role": "user", "content": "hi"}],
+            "tool_choice": {"type": "auto", "disable_parallel_tool_use": True},
+        }
+        openai_body = anthropic_compat._build_openai_body(body)
+        assert openai_body["parallel_tool_calls"] is False
+        assert openai_body["tool_choice"] == "auto"
+
+    def test_disable_parallel_with_any(self):
+        body = {
+            "model": "claude-3",
+            "max_tokens": 128,
+            "messages": [{"role": "user", "content": "hi"}],
+            "tool_choice": {"type": "any", "disable_parallel_tool_use": True},
+        }
+        openai_body = anthropic_compat._build_openai_body(body)
+        assert openai_body["parallel_tool_calls"] is False
+        assert openai_body["tool_choice"] == "required"
+
+    def test_disable_parallel_with_specific_tool(self):
+        body = {
+            "model": "claude-3",
+            "max_tokens": 128,
+            "messages": [{"role": "user", "content": "hi"}],
+            "tool_choice": {"type": "tool", "name": "search", "disable_parallel_tool_use": True},
+        }
+        openai_body = anthropic_compat._build_openai_body(body)
+        assert openai_body["parallel_tool_calls"] is False
+
+    def test_parallel_not_disabled_by_default(self):
+        body = {
+            "model": "claude-3",
+            "max_tokens": 128,
+            "messages": [{"role": "user", "content": "hi"}],
+            "tool_choice": {"type": "auto"},
+        }
+        openai_body = anthropic_compat._build_openai_body(body)
+        assert "parallel_tool_calls" not in openai_body
+
+    def test_parallel_not_set_when_false(self):
+        body = {
+            "model": "claude-3",
+            "max_tokens": 128,
+            "messages": [{"role": "user", "content": "hi"}],
+            "tool_choice": {"type": "auto", "disable_parallel_tool_use": False},
+        }
+        openai_body = anthropic_compat._build_openai_body(body)
+        assert "parallel_tool_calls" not in openai_body
+
+    def test_parallel_not_set_without_tool_choice(self):
+        body = {
+            "model": "claude-3",
+            "max_tokens": 128,
+            "messages": [{"role": "user", "content": "hi"}],
+        }
+        openai_body = anthropic_compat._build_openai_body(body)
+        assert "parallel_tool_calls" not in openai_body
+
+    def test_parallel_not_set_with_none_tool_choice(self):
+        body = {
+            "model": "claude-3",
+            "max_tokens": 128,
+            "messages": [{"role": "user", "content": "hi"}],
+            "tool_choice": {"type": "none"},
+        }
+        openai_body = anthropic_compat._build_openai_body(body)
+        assert "parallel_tool_calls" not in openai_body
+
 
 # ---------------------------------------------------------------------------
 # Response building: _build_anthropic_response, _build_content_blocks

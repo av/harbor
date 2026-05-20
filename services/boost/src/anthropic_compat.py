@@ -388,6 +388,11 @@ def _build_openai_body(body: dict):
   if tool_choice is not None:
     openai_body["tool_choice"] = tool_choice
 
+  # Map Anthropic's disable_parallel_tool_use to OpenAI's parallel_tool_calls
+  tc = body.get("tool_choice")
+  if isinstance(tc, dict) and tc.get("disable_parallel_tool_use"):
+    openai_body["parallel_tool_calls"] = False
+
   return openai_body
 
 
