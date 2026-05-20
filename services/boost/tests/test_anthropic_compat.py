@@ -2084,6 +2084,507 @@ class TestStreamEdgeCases:
 
 
 # ---------------------------------------------------------------------------
+# Deep streaming edge cases
+# ---------------------------------------------------------------------------
+
+class TestStreamConverterDeepEdgeCases:
+    """Test subtle edge cases in the streaming converter that can occur
+    with various real-world backends."""
+
+    @pytest.mark.asyncio
+    async def test_chunk_with_both_text_and_tool_calls(self):
+        """Some backends send text content AND tool calls in the same chunk.
+        Both must be processed: text emitted first, then text block closed,
+        then tool block opened."""
+        async def response_stream():
+            yield (
+                'data: {"choices": [{"delta": {"content": "Let me search.", '
+                '"tool_calls": [{"index": 0, "id": "call_abc", '
+                '"function": {"name": "web_search", "arguments": "{\\"q\\": \\"test\\"}"}}]}}]}\n\n'
+            )
+            yield (
+                'data: {"choices": [{"delta": {}, "finish_reason": "tool_calls"}], '
+                '"usage": {"prompt_tokens": 5, "completion_tokens": 10}}\n\n'
+            )
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "test-model")
+        ]
+        joined = "".join(events)
+        parsed = _parse_sse_events(joined)
+
+        # Should have both text and tool_use blocks
+        assert "Let me search." in joined
+        assert '"type": "tool_use"' in joined
+
+        # Verify event ordering: text block opened, text delta, text block closed,
+        # then tool block opened
+        types = [e.get("type") for e in parsed]
+        assert "content_block_start" in types
+        assert "text_delta" in [e.get("delta", {}).get("type") for e in parsed if e.get("type") == "content_block_delta"]
+
+        # Count content_block_start events — should be 2 (text + tool)
+        starts = [e for e in parsed if e.get("type") == "content_block_start"]
+        assert len(starts) == 2
+        assert starts[0]["content_block"]["type"] == "text"
+        assert starts[1]["content_block"]["type"] == "tool_use"
+
+        # Both blocks should have content_block_stop
+        stops = [e for e in parsed if e.get("type") == "content_block_stop"]
+        assert len(stops) == 2
+
+    @pytest.mark.asyncio
+    async def test_chunk_with_text_and_multiple_tool_calls(self):
+        """A single chunk containing text AND multiple tool calls."""
+        async def response_stream():
+            yield (
+                'data: {"choices": [{"delta": {"content": "Found it.", '
+                '"tool_calls": ['
+                '{"index": 0, "id": "call_1", "function": {"name": "search", "arguments": "{\\"a\\": 1}"}}, '
+                '{"index": 1, "id": "call_2", "function": {"name": "calc", "arguments": "{\\"b\\": 2}"}}'
+                ']}}]}\n\n'
+            )
+            yield (
+                'data: {"choices": [{"delta": {}, "finish_reason": "tool_calls"}], '
+                '"usage": {"prompt_tokens": 5, "completion_tokens": 10}}\n\n'
+            )
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "test-model")
+        ]
+        joined = "".join(events)
+        parsed = _parse_sse_events(joined)
+
+        # 3 content_block_start events: 1 text + 2 tools
+        starts = [e for e in parsed if e.get("type") == "content_block_start"]
+        assert len(starts) == 3
+        assert starts[0]["content_block"]["type"] == "text"
+        assert starts[1]["content_block"]["type"] == "tool_use"
+        assert starts[2]["content_block"]["type"] == "tool_use"
+
+        # 3 content_block_stop events
+        stops = [e for e in parsed if e.get("type") == "content_block_stop"]
+        assert len(stops) == 3
+
+    @pytest.mark.asyncio
+    async def test_tool_call_with_empty_name(self):
+        """A tool call chunk with name: '' should emit the block with empty name."""
+        async def response_stream():
+            yield (
+                'data: {"choices": [{"delta": {"tool_calls": ['
+                '{"index": 0, "id": "call_x", "function": {"name": "", "arguments": "{\\"k\\": \\"v\\"}"}}]}}]}\n\n'
+            )
+            yield (
+                'data: {"choices": [{"delta": {}, "finish_reason": "tool_calls"}], '
+                '"usage": {"prompt_tokens": 1, "completion_tokens": 1}}\n\n'
+            )
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "test-model")
+        ]
+        joined = "".join(events)
+        parsed = _parse_sse_events(joined)
+
+        # Tool block should be emitted (has id) even with empty name
+        starts = [e for e in parsed if e.get("type") == "content_block_start"]
+        assert len(starts) == 1
+        assert starts[0]["content_block"]["type"] == "tool_use"
+        assert starts[0]["content_block"]["name"] == ""
+
+    @pytest.mark.asyncio
+    async def test_tool_call_with_null_name(self):
+        """A tool call chunk with name: null should emit with empty name."""
+        async def response_stream():
+            yield (
+                'data: {"choices": [{"delta": {"tool_calls": ['
+                '{"index": 0, "id": "call_y", "function": {"name": null, "arguments": "{}"}}'
+                ']}}]}\n\n'
+            )
+            yield (
+                'data: {"choices": [{"delta": {}, "finish_reason": "tool_calls"}], '
+                '"usage": {"prompt_tokens": 1, "completion_tokens": 1}}\n\n'
+            )
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "test-model")
+        ]
+        joined = "".join(events)
+        parsed = _parse_sse_events(joined)
+
+        starts = [e for e in parsed if e.get("type") == "content_block_start"]
+        assert len(starts) == 1
+        assert starts[0]["content_block"]["name"] == ""
+
+    @pytest.mark.asyncio
+    async def test_tool_call_no_function_key(self):
+        """A tool call chunk with id but no function key at all."""
+        async def response_stream():
+            yield (
+                'data: {"choices": [{"delta": {"tool_calls": ['
+                '{"index": 0, "id": "call_z"}'
+                ']}}]}\n\n'
+            )
+            yield (
+                'data: {"choices": [{"delta": {}, "finish_reason": "tool_calls"}], '
+                '"usage": {"prompt_tokens": 1, "completion_tokens": 1}}\n\n'
+            )
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "test-model")
+        ]
+        joined = "".join(events)
+        parsed = _parse_sse_events(joined)
+
+        starts = [e for e in parsed if e.get("type") == "content_block_start"]
+        assert len(starts) == 1
+        assert starts[0]["content_block"]["name"] == ""
+        assert starts[0]["content_block"]["input"] == {}
+
+    @pytest.mark.asyncio
+    async def test_each_block_gets_exactly_one_stop_event(self):
+        """Verify no block gets zero or two content_block_stop events.
+        Tests text + thinking + tool combination."""
+        async def response_stream():
+            # Thinking
+            yield 'data: {"choices": [{"delta": {"reasoning_content": "Let me think..."}}]}\n\n'
+            # Text
+            yield 'data: {"choices": [{"delta": {"content": "Here is the answer."}}]}\n\n'
+            # Two tools
+            yield (
+                'data: {"choices": [{"delta": {"tool_calls": ['
+                '{"index": 0, "id": "call_a", "function": {"name": "search", "arguments": "{}"}}]}}]}\n\n'
+            )
+            yield (
+                'data: {"choices": [{"delta": {"tool_calls": ['
+                '{"index": 1, "id": "call_b", "function": {"name": "calc", "arguments": "{}"}}]}}]}\n\n'
+            )
+            yield (
+                'data: {"choices": [{"delta": {}, "finish_reason": "tool_calls"}], '
+                '"usage": {"prompt_tokens": 5, "completion_tokens": 10}}\n\n'
+            )
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "test-model")
+        ]
+        joined = "".join(events)
+        parsed = _parse_sse_events(joined)
+
+        starts = [e for e in parsed if e.get("type") == "content_block_start"]
+        stops = [e for e in parsed if e.get("type") == "content_block_stop"]
+
+        # 4 blocks: thinking + text + 2 tools
+        assert len(starts) == 4
+        assert len(stops) == 4
+
+        # Verify each index appears exactly once in stops
+        stop_indices = [e["index"] for e in stops]
+        assert sorted(stop_indices) == [0, 1, 2, 3]
+
+    @pytest.mark.asyncio
+    async def test_finish_reason_only_stream(self):
+        """Stream with ONLY a finish_reason chunk and no content at all.
+        Should produce valid message envelope with no content blocks."""
+        async def response_stream():
+            yield (
+                'data: {"choices": [{"delta": {}, "finish_reason": "stop"}], '
+                '"usage": {"prompt_tokens": 0, "completion_tokens": 0}}\n\n'
+            )
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "test-model")
+        ]
+        joined = "".join(events)
+        parsed = _parse_sse_events(joined)
+
+        types = [e.get("type") for e in parsed]
+        assert "message_start" in types
+        assert "message_delta" in types
+        assert "message_stop" in types
+        # No content blocks at all
+        assert "content_block_start" not in types
+        assert "content_block_delta" not in types
+        assert "content_block_stop" not in types
+
+    @pytest.mark.asyncio
+    async def test_empty_text_deltas_skipped(self):
+        """Chunks with delta.content: '' should not emit text_delta events."""
+        async def response_stream():
+            yield 'data: {"choices": [{"delta": {"content": ""}}]}\n\n'
+            yield 'data: {"choices": [{"delta": {"content": ""}}]}\n\n'
+            yield 'data: {"choices": [{"delta": {"content": "Hello"}}]}\n\n'
+            yield 'data: {"choices": [{"delta": {"content": ""}}]}\n\n'
+            yield 'data: {"choices": [{"delta": {}, "finish_reason": "stop"}], "usage": {"prompt_tokens": 1, "completion_tokens": 1}}\n\n'
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "test-model")
+        ]
+        joined = "".join(events)
+        parsed = _parse_sse_events(joined)
+
+        # Only one text_delta should be emitted (for "Hello")
+        deltas = [
+            e for e in parsed
+            if e.get("type") == "content_block_delta"
+            and e.get("delta", {}).get("type") == "text_delta"
+        ]
+        assert len(deltas) == 1
+        assert deltas[0]["delta"]["text"] == "Hello"
+
+    @pytest.mark.asyncio
+    async def test_null_content_deltas_skipped(self):
+        """Chunks with delta.content: null should not emit text_delta events."""
+        async def response_stream():
+            yield 'data: {"choices": [{"delta": {"content": null}}]}\n\n'
+            yield 'data: {"choices": [{"delta": {"content": "World"}}]}\n\n'
+            yield 'data: {"choices": [{"delta": {}, "finish_reason": "stop"}], "usage": {"prompt_tokens": 1, "completion_tokens": 1}}\n\n'
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "test-model")
+        ]
+        joined = "".join(events)
+        parsed = _parse_sse_events(joined)
+
+        deltas = [
+            e for e in parsed
+            if e.get("type") == "content_block_delta"
+            and e.get("delta", {}).get("type") == "text_delta"
+        ]
+        assert len(deltas) == 1
+        assert deltas[0]["delta"]["text"] == "World"
+
+    @pytest.mark.asyncio
+    async def test_role_in_delta_ignored(self):
+        """Some backends send delta.role: 'assistant' in the first chunk.
+        This should be silently ignored."""
+        async def response_stream():
+            yield 'data: {"choices": [{"delta": {"role": "assistant"}}]}\n\n'
+            yield 'data: {"choices": [{"delta": {"content": "Hi"}}]}\n\n'
+            yield 'data: {"choices": [{"delta": {}, "finish_reason": "stop"}], "usage": {"prompt_tokens": 1, "completion_tokens": 1}}\n\n'
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "test-model")
+        ]
+        joined = "".join(events)
+        parsed = _parse_sse_events(joined)
+
+        # The role chunk should not produce any content blocks
+        # Only the "Hi" chunk should produce a text block
+        deltas = [
+            e for e in parsed
+            if e.get("type") == "content_block_delta"
+        ]
+        assert len(deltas) == 1
+        assert deltas[0]["delta"]["text"] == "Hi"
+
+        # "assistant" should not appear in any content
+        assert '"role"' not in joined or '"assistant"' in joined  # role appears in message_start
+        # No assistant text in content
+        for e in parsed:
+            if e.get("type") == "content_block_delta":
+                assert "assistant" not in str(e.get("delta", {}).get("text", ""))
+
+    @pytest.mark.asyncio
+    async def test_role_and_null_content_in_first_chunk(self):
+        """Backend sends role + null content in first chunk, then real content later."""
+        async def response_stream():
+            yield 'data: {"choices": [{"delta": {"role": "assistant", "content": null}}]}\n\n'
+            yield 'data: {"choices": [{"delta": {"content": "Response"}}]}\n\n'
+            yield 'data: {"choices": [{"delta": {}, "finish_reason": "stop"}], "usage": {"prompt_tokens": 1, "completion_tokens": 1}}\n\n'
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "test-model")
+        ]
+        joined = "".join(events)
+        parsed = _parse_sse_events(joined)
+
+        # Only one content_block_start for the text
+        starts = [e for e in parsed if e.get("type") == "content_block_start"]
+        assert len(starts) == 1
+        assert starts[0]["content_block"]["type"] == "text"
+
+        # Only one text_delta
+        deltas = [
+            e for e in parsed
+            if e.get("type") == "content_block_delta"
+            and e.get("delta", {}).get("type") == "text_delta"
+        ]
+        assert len(deltas) == 1
+        assert deltas[0]["delta"]["text"] == "Response"
+
+    @pytest.mark.asyncio
+    async def test_tool_args_before_id(self):
+        """Some backends send tool arguments before the id chunk.
+        The converter should defer emission until the id arrives and flush
+        accumulated arguments."""
+        async def response_stream():
+            # First chunk: args only, no id
+            yield (
+                'data: {"choices": [{"delta": {"tool_calls": ['
+                '{"index": 0, "function": {"arguments": "{\\"key\\""}}'
+                ']}}]}\n\n'
+            )
+            # Second chunk: more args
+            yield (
+                'data: {"choices": [{"delta": {"tool_calls": ['
+                '{"index": 0, "function": {"arguments": ": \\"val\\"}"}}'
+                ']}}]}\n\n'
+            )
+            # Third chunk: id and name arrive
+            yield (
+                'data: {"choices": [{"delta": {"tool_calls": ['
+                '{"index": 0, "id": "call_late", "function": {"name": "my_tool"}}'
+                ']}}]}\n\n'
+            )
+            yield (
+                'data: {"choices": [{"delta": {}, "finish_reason": "tool_calls"}], '
+                '"usage": {"prompt_tokens": 1, "completion_tokens": 1}}\n\n'
+            )
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "test-model")
+        ]
+        joined = "".join(events)
+        parsed = _parse_sse_events(joined)
+
+        # Tool should be emitted when id arrives
+        starts = [e for e in parsed if e.get("type") == "content_block_start"]
+        assert len(starts) == 1
+        assert starts[0]["content_block"]["name"] == "my_tool"
+
+        # Accumulated arguments should be flushed
+        deltas = [
+            e for e in parsed
+            if e.get("type") == "content_block_delta"
+            and e.get("delta", {}).get("type") == "input_json_delta"
+        ]
+        assert len(deltas) == 1
+        assert deltas[0]["delta"]["partial_json"] == '{"key": "val"}'
+
+    @pytest.mark.asyncio
+    async def test_tool_no_id_is_deferred_then_flushed(self):
+        """Tool call chunks with arguments but never an id should be skipped
+        in the deferred flush (no id means no block to emit)."""
+        async def response_stream():
+            yield (
+                'data: {"choices": [{"delta": {"tool_calls": ['
+                '{"index": 0, "function": {"name": "ghost", "arguments": "{}"}}'
+                ']}}]}\n\n'
+            )
+            yield (
+                'data: {"choices": [{"delta": {}, "finish_reason": "stop"}], '
+                '"usage": {"prompt_tokens": 1, "completion_tokens": 1}}\n\n'
+            )
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "test-model")
+        ]
+        joined = "".join(events)
+        parsed = _parse_sse_events(joined)
+
+        # No tool block should be emitted since there's no id
+        starts = [e for e in parsed if e.get("type") == "content_block_start"]
+        assert len(starts) == 0
+        assert '"type": "tool_use"' not in joined
+
+    @pytest.mark.asyncio
+    async def test_interleaved_text_after_tool_reopens_text_block(self):
+        """Unlikely but possible: text arrives, then tool, then more text.
+        The second text should open a new text block."""
+        async def response_stream():
+            yield 'data: {"choices": [{"delta": {"content": "First."}}]}\n\n'
+            yield (
+                'data: {"choices": [{"delta": {"tool_calls": ['
+                '{"index": 0, "id": "call_m", "function": {"name": "search", "arguments": "{}"}}'
+                ']}}]}\n\n'
+            )
+            yield 'data: {"choices": [{"delta": {"content": "Second."}}]}\n\n'
+            yield (
+                'data: {"choices": [{"delta": {}, "finish_reason": "stop"}], '
+                '"usage": {"prompt_tokens": 1, "completion_tokens": 1}}\n\n'
+            )
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "test-model")
+        ]
+        joined = "".join(events)
+        parsed = _parse_sse_events(joined)
+
+        # Should have 3 content_block_starts: text, tool, text
+        starts = [e for e in parsed if e.get("type") == "content_block_start"]
+        assert len(starts) == 3
+        assert starts[0]["content_block"]["type"] == "text"
+        assert starts[1]["content_block"]["type"] == "tool_use"
+        assert starts[2]["content_block"]["type"] == "text"
+
+        # Each block should have exactly one stop
+        stops = [e for e in parsed if e.get("type") == "content_block_stop"]
+        assert len(stops) == 3
+
+    @pytest.mark.asyncio
+    async def test_multiple_consecutive_empty_chunks(self):
+        """Multiple chunks with no content, role, or tool_calls.
+        Common with keepalive chunks from some backends."""
+        async def response_stream():
+            yield 'data: {"choices": [{"delta": {}}]}\n\n'
+            yield 'data: {"choices": [{"delta": {}}]}\n\n'
+            yield 'data: {"choices": [{"delta": {}}]}\n\n'
+            yield 'data: {"choices": [{"delta": {"content": "Finally"}}]}\n\n'
+            yield 'data: {"choices": [{"delta": {}, "finish_reason": "stop"}], "usage": {"prompt_tokens": 1, "completion_tokens": 1}}\n\n'
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "test-model")
+        ]
+        joined = "".join(events)
+        parsed = _parse_sse_events(joined)
+
+        # Only one text delta
+        deltas = [
+            e for e in parsed
+            if e.get("type") == "content_block_delta"
+        ]
+        assert len(deltas) == 1
+        assert deltas[0]["delta"]["text"] == "Finally"
+
+    @pytest.mark.asyncio
+    async def test_finish_reason_tool_calls_without_tool_blocks(self):
+        """Backend sends finish_reason: tool_calls but no actual tool_calls
+        in any chunk. Should map to end_turn, not tool_use."""
+        async def response_stream():
+            yield 'data: {"choices": [{"delta": {"content": "Done"}}]}\n\n'
+            yield (
+                'data: {"choices": [{"delta": {}, "finish_reason": "tool_calls"}], '
+                '"usage": {"prompt_tokens": 1, "completion_tokens": 1}}\n\n'
+            )
+
+        events = [
+            event async for event in
+            anthropic_compat._anthropic_stream_converter(response_stream(), "test-model")
+        ]
+        joined = "".join(events)
+        parsed = _parse_sse_events(joined)
+
+        # finish_reason is tool_calls but no visible tool_use, so should be end_turn
+        msg_delta = [e for e in parsed if e.get("type") == "message_delta"]
+        assert len(msg_delta) == 1
+        assert msg_delta[0]["delta"]["stop_reason"] == "end_turn"
+
+
+# ---------------------------------------------------------------------------
 # Request field acceptance
 # ---------------------------------------------------------------------------
 
