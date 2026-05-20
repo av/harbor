@@ -57,6 +57,7 @@
 - label: boost > shared > Boost streaming converters use direct dict access (_get_delta, _get_finish_reason) from compat_utils instead of dotty.get in the hot path, avoiding per-chunk parse_path overhead
   command: grep -q '_get_delta' services/boost/src/compat_utils.py && grep -q '_get_finish_reason' services/boost/src/compat_utils.py && grep -q 'from compat_utils import' services/boost/src/anthropic_compat.py && grep -q 'from compat_utils import' services/boost/src/responses_compat.py
   tags: [spec, implemented]
+- Boost /v1/models HTTP handler _list_models must exercise module proxy appending (when BOOST_MODS non-empty, mods.registry.get returns module) and filter application (when MODEL_FILTER non-empty, selection.matches_filter decides should_serve) branches, returning appropriate boosted proxy models (e.g. klmbr-*) or filtered results in OpenAI/Anthropic formats; covered by dedicated tests in test_models.py with assertions on response data @implemented
 # project
 - Harbor is a containerized LLM toolkit distributed as a Docker Compose project with a CLI and Tauri desktop app
 - label: the project is licensed under Apache 2.0

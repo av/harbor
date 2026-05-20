@@ -591,3 +591,52 @@ class TestGlobalExceptionHandler:
         assert resp.headers.get(ANTHROPIC_VERSION_HEADER) is None
 
         _cfg.BOOST_AUTH = []
+
+
+# ---------------------------------------------------------------------------
+# Coverage for previously untested _list_models branches (module proxies + filter)
+# High-impact: core /v1/models HTTP surface that advertises boosted models to all clients/SDKs
+# ---------------------------------------------------------------------------
+
+class TestModelsModulesAndFilterBranches:
+    """Cover the module proxy appending (240-242) and filter matching (250) paths in _list_models."""
+
+    @patch.object(main.mapper, "list_downstream", new_callable=AsyncMock)
+    @patch.object(main.mapper, "workflow_models", return_value=[])
+    @patch.object(main.mapper, "get_proxy_model", return_value={"id": "klmbr-model-a", "object": "model", "owned_by": "boost-proxy"})
+    def test_list_includes_module_proxy_models_when_BOOST_MODS_nonempty(self, mock_get_proxy, _wf, mock_downstream):
+        """When BOOST_MODS includes a loaded module like klmbr, the proxy model from get_proxy_model is appended and served over HTTP."""
+        mock_downstream.return_value = SAMPLE_MODELS
+        main.config.BOOST_MODS.__value__ = ["klmbr"]
+        main.config.SERVE_BASE_MODELS.__value__ = True
+        main.config.MODEL_FILTER.__value__ = []
+
+        client = _make_client()
+        resp = client.get("/v1/models", headers={"authorization": "Bearer sk-test"})
+
+        assert resp.status_code == 200
+        data = resp.json()
+        ids = [m.get("id") for m in data.get("data", [])]
+        assert "model-a" in ids
+        assert "klmbr-model-a" in ids  # proxy from the module loop branch
+        assert mock_get_proxy.called  # exercised the if mod is not None path
+
+    @patch.object(main.mapper, "list_downstream", new_callable=AsyncMock)
+    @patch.object(main.mapper, "workflow_models", return_value=[])
+    @patch.object(main.mapper, "get_proxy_model", return_value={"id": "mcts-model-b", "object": "model"})
+    @patch.object(main.selection, "matches_filter", return_value=True)
+    def test_filter_branch_invokes_matches_filter_and_includes_when_true(self, mock_match, mock_get_proxy, _wf, mock_downstream):
+        """Non-empty MODEL_FILTER triggers the should_filter branch and calls matches_filter; result decides inclusion."""
+        mock_downstream.return_value = SAMPLE_MODELS
+        main.config.BOOST_MODS.__value__ = ["mcts"]
+        main.config.SERVE_BASE_MODELS.__value__ = True
+        main.config.MODEL_FILTER.__value__ = {"id": {"regex": "model-.*"}}
+
+        client = _make_client()
+        resp = client.get("/v1/models", headers={"authorization": "Bearer sk-test"})
+
+        assert resp.status_code == 200
+        data = resp.json()
+        ids = [m.get("id") for m in data.get("data", [])]
+        assert "mcts-model-b" in ids  # included because mock_match returned True
+        assert mock_match.called  # exercised line 250 in _list_models
