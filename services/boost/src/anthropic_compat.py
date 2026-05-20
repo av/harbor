@@ -460,10 +460,34 @@ def _build_openai_body(body: dict):
   if isinstance(tc, dict) and tc.get("disable_parallel_tool_use"):
     openai_body["parallel_tool_calls"] = False
 
+  # Passthrough OpenAI Chat Completions params that some clients send
+  # alongside Anthropic requests (via metadata or direct injection).
+  # These aren't part of the Anthropic API spec but are useful when
+  # the backend supports them.
+  for key in _OPENAI_PASSTHROUGH_PARAMS:
+    if key in body:
+      openai_body[key] = body[key]
+
   # Forward @boost_ params from metadata into the body for LLM.split_params()
   openai_body.update(_extract_boost_params(body))
 
   return openai_body
+
+
+# Chat Completions parameters that are not part of the Anthropic API but
+# may appear in requests from tools or SDKs that bolt extra fields on.
+# These are passed through verbatim so backends that support them can
+# act on them (e.g. vLLM, Ollama, llama.cpp).
+_OPENAI_PASSTHROUGH_PARAMS = frozenset({
+  "seed",
+  "frequency_penalty",
+  "presence_penalty",
+  "logit_bias",
+  "logprobs",
+  "top_logprobs",
+  "response_format",
+  "n",
+})
 
 
 # --- Response building ---

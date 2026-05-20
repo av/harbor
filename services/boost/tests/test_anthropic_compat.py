@@ -8253,5 +8253,175 @@ class TestStopReasonPauseTurnRefusal:
         assert reason == "stop_sequence"
 
 
+# ---------------------------------------------------------------------------
+# OpenAI passthrough params
+# ---------------------------------------------------------------------------
+
+class TestOpenAIPassthroughParams:
+    """Verify that OpenAI Chat Completions params not in the Anthropic spec
+    are passed through to the backend when present."""
+
+    def test_seed_passthrough(self):
+        body = {
+            "model": "test-model",
+            "max_tokens": 128,
+            "messages": [{"role": "user", "content": "hello"}],
+            "seed": 42,
+        }
+        openai_body = anthropic_compat._build_openai_body(body)
+        assert openai_body["seed"] == 42
+
+    def test_frequency_penalty_passthrough(self):
+        body = {
+            "model": "test-model",
+            "max_tokens": 128,
+            "messages": [{"role": "user", "content": "hello"}],
+            "frequency_penalty": 0.5,
+        }
+        openai_body = anthropic_compat._build_openai_body(body)
+        assert openai_body["frequency_penalty"] == 0.5
+
+    def test_presence_penalty_passthrough(self):
+        body = {
+            "model": "test-model",
+            "max_tokens": 128,
+            "messages": [{"role": "user", "content": "hello"}],
+            "presence_penalty": 0.3,
+        }
+        openai_body = anthropic_compat._build_openai_body(body)
+        assert openai_body["presence_penalty"] == 0.3
+
+    def test_logit_bias_passthrough(self):
+        body = {
+            "model": "test-model",
+            "max_tokens": 128,
+            "messages": [{"role": "user", "content": "hello"}],
+            "logit_bias": {"50256": -100},
+        }
+        openai_body = anthropic_compat._build_openai_body(body)
+        assert openai_body["logit_bias"] == {"50256": -100}
+
+    def test_logprobs_passthrough(self):
+        body = {
+            "model": "test-model",
+            "max_tokens": 128,
+            "messages": [{"role": "user", "content": "hello"}],
+            "logprobs": True,
+        }
+        openai_body = anthropic_compat._build_openai_body(body)
+        assert openai_body["logprobs"] is True
+
+    def test_top_logprobs_passthrough(self):
+        body = {
+            "model": "test-model",
+            "max_tokens": 128,
+            "messages": [{"role": "user", "content": "hello"}],
+            "logprobs": True,
+            "top_logprobs": 5,
+        }
+        openai_body = anthropic_compat._build_openai_body(body)
+        assert openai_body["top_logprobs"] == 5
+
+    def test_response_format_passthrough(self):
+        body = {
+            "model": "test-model",
+            "max_tokens": 128,
+            "messages": [{"role": "user", "content": "hello"}],
+            "response_format": {"type": "json_object"},
+        }
+        openai_body = anthropic_compat._build_openai_body(body)
+        assert openai_body["response_format"] == {"type": "json_object"}
+
+    def test_n_passthrough(self):
+        body = {
+            "model": "test-model",
+            "max_tokens": 128,
+            "messages": [{"role": "user", "content": "hello"}],
+            "n": 3,
+        }
+        openai_body = anthropic_compat._build_openai_body(body)
+        assert openai_body["n"] == 3
+
+    def test_multiple_passthrough_params(self):
+        body = {
+            "model": "test-model",
+            "max_tokens": 128,
+            "messages": [{"role": "user", "content": "hello"}],
+            "seed": 42,
+            "frequency_penalty": 0.5,
+            "presence_penalty": 0.3,
+            "logprobs": True,
+            "top_logprobs": 3,
+        }
+        openai_body = anthropic_compat._build_openai_body(body)
+        assert openai_body["seed"] == 42
+        assert openai_body["frequency_penalty"] == 0.5
+        assert openai_body["presence_penalty"] == 0.3
+        assert openai_body["logprobs"] is True
+        assert openai_body["top_logprobs"] == 3
+
+    def test_absent_passthrough_params_not_included(self):
+        body = {
+            "model": "test-model",
+            "max_tokens": 128,
+            "messages": [{"role": "user", "content": "hello"}],
+        }
+        openai_body = anthropic_compat._build_openai_body(body)
+        for key in ("seed", "frequency_penalty", "presence_penalty",
+                    "logit_bias", "logprobs", "top_logprobs", "n",
+                    "response_format"):
+            assert key not in openai_body
+
+    def test_truly_unknown_fields_still_ignored(self):
+        """Fields not in the passthrough set should still be silently ignored."""
+        body = {
+            "model": "test-model",
+            "max_tokens": 128,
+            "messages": [{"role": "user", "content": "hello"}],
+            "custom_field": "value",
+            "another_unknown": 123,
+        }
+        openai_body = anthropic_compat._build_openai_body(body)
+        assert "custom_field" not in openai_body
+        assert "another_unknown" not in openai_body
+
+    def test_passthrough_coexists_with_anthropic_params(self):
+        """Passthrough params should work alongside Anthropic-native params."""
+        body = {
+            "model": "test-model",
+            "max_tokens": 256,
+            "temperature": 0.7,
+            "top_p": 0.9,
+            "top_k": 40,
+            "stop_sequences": ["\n\n"],
+            "messages": [{"role": "user", "content": "hello"}],
+            "seed": 42,
+            "frequency_penalty": 0.2,
+        }
+        openai_body = anthropic_compat._build_openai_body(body)
+        assert openai_body["max_tokens"] == 256
+        assert openai_body["temperature"] == 0.7
+        assert openai_body["top_p"] == 0.9
+        assert openai_body["top_k"] == 40
+        assert openai_body["stop"] == ["\n\n"]
+        assert openai_body["seed"] == 42
+        assert openai_body["frequency_penalty"] == 0.2
+
+    def test_zero_values_passed_through(self):
+        """Zero values should be passed through (not treated as absent)."""
+        body = {
+            "model": "test-model",
+            "max_tokens": 128,
+            "messages": [{"role": "user", "content": "hello"}],
+            "frequency_penalty": 0,
+            "presence_penalty": 0,
+            "seed": 0,
+        }
+        openai_body = anthropic_compat._build_openai_body(body)
+        assert openai_body["frequency_penalty"] == 0
+        assert openai_body["presence_penalty"] == 0
+        assert openai_body["seed"] == 0
+
+
 if __name__ == "__main__":
     unittest.main()

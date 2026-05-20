@@ -457,10 +457,31 @@ def _build_openai_body(body: dict):
   if "parallel_tool_calls" in body:
     openai_body["parallel_tool_calls"] = body["parallel_tool_calls"]
 
+  # Passthrough Chat Completions params that some clients send alongside
+  # Responses API requests.  These aren't part of the Responses API spec
+  # but are useful when the backend supports them.
+  for key in _OPENAI_PASSTHROUGH_PARAMS:
+    if key in body:
+      openai_body[key] = body[key]
+
   # Forward @boost_ params from metadata into the body for LLM.split_params()
   openai_body.update(_extract_boost_params(body))
 
   return openai_body
+
+
+# Chat Completions parameters that are not part of the Responses API but
+# may appear in requests from tools or SDKs.  These are passed through
+# verbatim so backends that support them can act on them.
+_OPENAI_PASSTHROUGH_PARAMS = frozenset({
+  "seed",
+  "frequency_penalty",
+  "presence_penalty",
+  "logit_bias",
+  "logprobs",
+  "top_logprobs",
+  "n",
+})
 
 
 # --- Response conversion (Chat Completions -> Responses) ---
