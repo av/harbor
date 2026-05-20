@@ -3586,5 +3586,178 @@ class TestBetaFlagsIntegration:
             assert resp.status_code == 200
 
 
+# ---------------------------------------------------------------------------
+# System prompt edge cases
+# ---------------------------------------------------------------------------
+
+class TestSystemPromptEdgeCases:
+    """Verify system field handling for edge cases not covered elsewhere."""
+
+    def test_empty_string_system_produces_no_message(self):
+        """system: '' is falsy and should not produce a system message."""
+        body = {
+            "system": "",
+            "messages": [{"role": "user", "content": "hi"}],
+        }
+        msgs = anthropic_compat._convert_messages(body)
+        assert len(msgs) == 1
+        assert msgs[0]["role"] == "user"
+
+    def test_empty_list_system_produces_no_message(self):
+        """system: [] is falsy and should not produce a system message."""
+        body = {
+            "system": [],
+            "messages": [{"role": "user", "content": "hi"}],
+        }
+        msgs = anthropic_compat._convert_messages(body)
+        assert len(msgs) == 1
+        assert msgs[0]["role"] == "user"
+
+    def test_whitespace_only_string_system_is_preserved(self):
+        """Whitespace-only system string is truthy and should be passed through."""
+        body = {
+            "system": "   ",
+            "messages": [{"role": "user", "content": "hi"}],
+        }
+        msgs = anthropic_compat._convert_messages(body)
+        assert len(msgs) == 2
+        assert msgs[0] == {"role": "system", "content": "   "}
+
+    def test_system_list_with_only_non_text_blocks(self):
+        """System array containing only non-text blocks should not produce a system message."""
+        body = {
+            "system": [
+                {"type": "image", "source": {"data": "abc"}},
+            ],
+            "messages": [{"role": "user", "content": "hi"}],
+        }
+        msgs = anthropic_compat._convert_messages(body)
+        assert len(msgs) == 1
+        assert msgs[0]["role"] == "user"
+
+    def test_system_list_with_mixed_text_and_non_text_blocks(self):
+        """Non-text blocks in the system array are silently dropped."""
+        body = {
+            "system": [
+                {"type": "text", "text": "Important context."},
+                {"type": "image", "source": {"data": "abc"}},
+                {"type": "text", "text": "More context."},
+            ],
+            "messages": [{"role": "user", "content": "hi"}],
+        }
+        msgs = anthropic_compat._convert_messages(body)
+        assert len(msgs) == 2
+        assert msgs[0] == {"role": "system", "content": "Important context.\nMore context."}
+
+    def test_system_text_block_missing_text_key(self):
+        """A text block without a 'text' key should not crash; defaults to empty string."""
+        body = {
+            "system": [
+                {"type": "text"},  # missing 'text' key
+            ],
+            "messages": [{"role": "user", "content": "hi"}],
+        }
+        msgs = anthropic_compat._convert_messages(body)
+        # text_parts will be [""], which is truthy, so a system message with "" is created
+        assert len(msgs) == 2
+        assert msgs[0] == {"role": "system", "content": ""}
+
+    def test_system_list_with_cache_control_only_blocks(self):
+        """System array with cache_control but valid text should work; cache_control stripped."""
+        body = {
+            "system": [
+                {"type": "text", "text": "Cached.", "cache_control": {"type": "ephemeral"}},
+                {"type": "text", "text": "Also cached.", "cache_control": {"type": "ephemeral"}},
+            ],
+            "messages": [{"role": "user", "content": "hi"}],
+        }
+        msgs = anthropic_compat._convert_messages(body)
+        assert len(msgs) == 2
+        system_msg = msgs[0]
+        assert system_msg["content"] == "Cached.\nAlso cached."
+        assert "cache_control" not in system_msg
+        assert "cache_control" not in str(system_msg)
+
+    def test_system_absent_produces_no_system_message(self):
+        """When 'system' key is entirely absent, no system message is produced."""
+        body = {
+            "messages": [{"role": "user", "content": "hi"}],
+        }
+        msgs = anthropic_compat._convert_messages(body)
+        assert len(msgs) == 1
+        assert msgs[0]["role"] == "user"
+
+    def test_system_none_produces_no_system_message(self):
+        """Explicit system: null should be treated the same as absent."""
+        body = {
+            "system": None,
+            "messages": [{"role": "user", "content": "hi"}],
+        }
+        msgs = anthropic_compat._convert_messages(body)
+        assert len(msgs) == 1
+        assert msgs[0]["role"] == "user"
+
+    def test_user_text_block_missing_text_key(self):
+        """A user text block without a 'text' key should not crash; defaults to empty string."""
+        body = {
+            "messages": [{
+                "role": "user",
+                "content": [{"type": "text"}],
+            }],
+        }
+        msgs = anthropic_compat._convert_messages(body)
+        assert len(msgs) == 1
+        assert msgs[0] == {"role": "user", "content": ""}
+
+    def test_system_with_very_long_text(self):
+        """Very long system text should not be truncated."""
+        long_text = "x" * 100_000
+        body = {
+            "system": long_text,
+            "messages": [{"role": "user", "content": "hi"}],
+        }
+        msgs = anthropic_compat._convert_messages(body)
+        assert msgs[0]["content"] == long_text
+        assert len(msgs[0]["content"]) == 100_000
+
+    def test_system_array_with_very_long_text_blocks(self):
+        """Very long system array text should not be truncated."""
+        long_text = "y" * 50_000
+        body = {
+            "system": [
+                {"type": "text", "text": long_text},
+                {"type": "text", "text": long_text},
+            ],
+            "messages": [{"role": "user", "content": "hi"}],
+        }
+        msgs = anthropic_compat._convert_messages(body)
+        assert msgs[0]["content"] == f"{long_text}\n{long_text}"
+        assert len(msgs[0]["content"]) == 100_001  # 50k + newline + 50k
+
+    def test_system_array_plain_strings_ignored(self):
+        """Plain strings in the system array (invalid format) are silently ignored."""
+        body = {
+            "system": ["This is not a valid block"],
+            "messages": [{"role": "user", "content": "hi"}],
+        }
+        msgs = anthropic_compat._convert_messages(body)
+        # The string is not a dict, so isinstance(block, dict) fails -> filtered out
+        assert len(msgs) == 1
+        assert msgs[0]["role"] == "user"
+
+    def test_system_array_empty_text_blocks_joined(self):
+        """Multiple empty text blocks should produce a system message with just newlines."""
+        body = {
+            "system": [
+                {"type": "text", "text": ""},
+                {"type": "text", "text": ""},
+            ],
+            "messages": [{"role": "user", "content": "hi"}],
+        }
+        msgs = anthropic_compat._convert_messages(body)
+        assert len(msgs) == 2
+        assert msgs[0] == {"role": "system", "content": "\n"}
+
+
 if __name__ == "__main__":
     unittest.main()

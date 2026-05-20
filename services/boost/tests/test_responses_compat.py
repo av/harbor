@@ -3125,3 +3125,78 @@ class TestReasoningIntegration:
         assert "response.reasoning_summary_part.done" in text
         assert "response.output_text.delta" in text
         assert "response.completed" in text
+
+
+# ---------------------------------------------------------------------------
+# Instructions / system prompt edge cases
+# ---------------------------------------------------------------------------
+
+class TestInstructionsEdgeCases:
+    """Verify instructions field handling for edge cases."""
+
+    def test_none_instructions_produces_no_system_message(self):
+        """Explicit instructions: null should be treated the same as absent."""
+        body = {"input": "hi", "instructions": None}
+        msgs = responses_compat._convert_input_to_messages(body)
+        assert len(msgs) == 1
+        assert msgs[0]["role"] == "user"
+
+    def test_whitespace_only_instructions_preserved(self):
+        """Whitespace-only instructions are truthy and should be passed through."""
+        body = {"input": "hi", "instructions": "   "}
+        msgs = responses_compat._convert_input_to_messages(body)
+        assert len(msgs) == 2
+        assert msgs[0] == {"role": "system", "content": "   "}
+        assert msgs[1] == {"role": "user", "content": "hi"}
+
+    def test_absent_instructions_produces_no_system_message(self):
+        """When instructions key is entirely absent, no system message is produced."""
+        body = {"input": "hi"}
+        msgs = responses_compat._convert_input_to_messages(body)
+        assert len(msgs) == 1
+        assert msgs[0]["role"] == "user"
+
+    def test_instructions_with_input_containing_system_message(self):
+        """Instructions combined with input that has a system role message produces two system messages."""
+        body = {
+            "instructions": "Be helpful.",
+            "input": [
+                {"type": "message", "role": "system", "content": "Additional system context."},
+                {"type": "message", "role": "user", "content": "hello"},
+            ],
+        }
+        msgs = responses_compat._convert_input_to_messages(body)
+        assert len(msgs) == 3
+        # Instructions become the first system message
+        assert msgs[0] == {"role": "system", "content": "Be helpful."}
+        # Input system message is preserved as-is
+        assert msgs[1] == {"role": "system", "content": "Additional system context."}
+        assert msgs[2] == {"role": "user", "content": "hello"}
+
+    def test_very_long_instructions_not_truncated(self):
+        """Very long instructions should not be truncated."""
+        long_text = "x" * 100_000
+        body = {"input": "hi", "instructions": long_text}
+        msgs = responses_compat._convert_input_to_messages(body)
+        assert msgs[0]["content"] == long_text
+        assert len(msgs[0]["content"]) == 100_000
+
+    def test_multiline_instructions(self):
+        """Multi-line instructions should be passed through verbatim."""
+        body = {"input": "hi", "instructions": "Line 1.\nLine 2.\nLine 3."}
+        msgs = responses_compat._convert_input_to_messages(body)
+        assert msgs[0] == {"role": "system", "content": "Line 1.\nLine 2.\nLine 3."}
+
+    def test_instructions_with_no_input(self):
+        """Instructions without input produce only the system message (input=None)."""
+        body = {"instructions": "context only"}
+        msgs = responses_compat._convert_input_to_messages(body)
+        assert msgs == [{"role": "system", "content": "context only"}]
+
+    def test_instructions_with_empty_string_input(self):
+        """Instructions with empty string input produce system + user messages."""
+        body = {"input": "", "instructions": "be helpful"}
+        msgs = responses_compat._convert_input_to_messages(body)
+        assert len(msgs) == 2
+        assert msgs[0] == {"role": "system", "content": "be helpful"}
+        assert msgs[1] == {"role": "user", "content": ""}

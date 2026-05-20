@@ -129,7 +129,7 @@ def _convert_messages(body: dict):
       # Only text is extracted; cache_control and other block-level
       # metadata are intentionally dropped.
       text_parts = [
-        block["text"]
+        block.get("text", "")
         for block in system
         if isinstance(block, dict) and block.get("type") == "text"
       ]
@@ -162,7 +162,7 @@ def _convert_user_message(content):
     block_type = block.get("type")
 
     if block_type == "text":
-      openai_parts.append({"type": "text", "text": block["text"]})
+      openai_parts.append({"type": "text", "text": block.get("text", "")})
     elif block_type == "image":
       source = block.get("source", {})
       media_type = source.get("media_type", "image/png")
