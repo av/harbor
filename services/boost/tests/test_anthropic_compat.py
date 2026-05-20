@@ -6420,5 +6420,606 @@ class TestCleanTextPercentDecoding:
         assert result == "Hello, world! How are you?"
 
 
+# ---------------------------------------------------------------------------
+# Multi-turn conversation handling
+# ---------------------------------------------------------------------------
+
+
+class TestMultiTurnConversations:
+    """Verify end-to-end multi-turn conversation conversion through
+    _convert_messages and _build_openai_body for realistic conversation
+    patterns that Anthropic SDK clients produce."""
+
+    def test_basic_multi_turn_user_assistant_user(self):
+        """User -> Assistant -> User follow-up produces correct OpenAI messages."""
+        body = {
+            "model": "claude-3",
+            "max_tokens": 128,
+            "messages": [
+                {"role": "user", "content": "What is Python?"},
+                {"role": "assistant", "content": "Python is a programming language."},
+                {"role": "user", "content": "What are its main features?"},
+            ],
+        }
+        msgs = anthropic_compat._convert_messages(body)
+        assert len(msgs) == 3
+        assert msgs[0] == {"role": "user", "content": "What is Python?"}
+        assert msgs[1] == {"role": "assistant", "content": "Python is a programming language."}
+        assert msgs[2] == {"role": "user", "content": "What are its main features?"}
+
+    def test_system_prompt_plus_multi_turn(self):
+        """System prompt + multi-turn conversation."""
+        body = {
+            "model": "claude-3",
+            "max_tokens": 128,
+            "system": "You are a helpful coding assistant.",
+            "messages": [
+                {"role": "user", "content": "Write hello world in Python"},
+                {"role": "assistant", "content": "print('hello world')"},
+                {"role": "user", "content": "Now in JavaScript"},
+            ],
+        }
+        msgs = anthropic_compat._convert_messages(body)
+        assert len(msgs) == 4
+        assert msgs[0] == {"role": "system", "content": "You are a helpful coding assistant."}
+        assert msgs[1] == {"role": "user", "content": "Write hello world in Python"}
+        assert msgs[2] == {"role": "assistant", "content": "print('hello world')"}
+        assert msgs[3] == {"role": "user", "content": "Now in JavaScript"}
+
+    def test_tool_use_single_turn_full_flow(self):
+        """User -> Assistant (tool_use) -> User (tool_result) -> expected follow-up."""
+        body = {
+            "model": "claude-3",
+            "max_tokens": 128,
+            "messages": [
+                {"role": "user", "content": "What is the weather in NYC?"},
+                {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "text", "text": "Let me check the weather."},
+                        {
+                            "type": "tool_use",
+                            "id": "toolu_weather1",
+                            "name": "get_weather",
+                            "input": {"city": "NYC"},
+                        },
+                    ],
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": "toolu_weather1",
+                            "content": "72F, Sunny",
+                        },
+                    ],
+                },
+            ],
+        }
+        msgs = anthropic_compat._convert_messages(body)
+        assert len(msgs) == 3
+        # User question
+        assert msgs[0] == {"role": "user", "content": "What is the weather in NYC?"}
+        # Assistant with tool call
+        assert msgs[1]["role"] == "assistant"
+        assert msgs[1]["content"] == "Let me check the weather."
+        assert len(msgs[1]["tool_calls"]) == 1
+        assert msgs[1]["tool_calls"][0]["id"] == "call_weather1"
+        assert msgs[1]["tool_calls"][0]["function"]["name"] == "get_weather"
+        assert msgs[1]["tool_calls"][0]["function"]["arguments"] == '{"city": "NYC"}'
+        # Tool result
+        assert msgs[2] == {
+            "role": "tool",
+            "tool_call_id": "call_weather1",
+            "content": "72F, Sunny",
+        }
+
+    def test_multiple_tool_use_blocks_single_assistant_message(self):
+        """Assistant message with multiple tool_use blocks followed by
+        multiple tool_results in a single user message."""
+        body = {
+            "model": "claude-3",
+            "max_tokens": 128,
+            "messages": [
+                {"role": "user", "content": "Compare weather in NYC and LA"},
+                {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "text", "text": "I'll check both cities."},
+                        {
+                            "type": "tool_use",
+                            "id": "toolu_nyc",
+                            "name": "get_weather",
+                            "input": {"city": "NYC"},
+                        },
+                        {
+                            "type": "tool_use",
+                            "id": "toolu_la",
+                            "name": "get_weather",
+                            "input": {"city": "LA"},
+                        },
+                    ],
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": "toolu_nyc",
+                            "content": "72F, Sunny",
+                        },
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": "toolu_la",
+                            "content": "85F, Clear",
+                        },
+                    ],
+                },
+            ],
+        }
+        msgs = anthropic_compat._convert_messages(body)
+        assert len(msgs) == 4
+        # User question
+        assert msgs[0]["role"] == "user"
+        # Assistant with two tool calls
+        assert msgs[1]["role"] == "assistant"
+        assert msgs[1]["content"] == "I'll check both cities."
+        assert len(msgs[1]["tool_calls"]) == 2
+        assert msgs[1]["tool_calls"][0]["id"] == "call_nyc"
+        assert msgs[1]["tool_calls"][1]["id"] == "call_la"
+        # Two tool results (extracted from single user message)
+        assert msgs[2] == {"role": "tool", "tool_call_id": "call_nyc", "content": "72F, Sunny"}
+        assert msgs[3] == {"role": "tool", "tool_call_id": "call_la", "content": "85F, Clear"}
+
+    def test_tool_use_then_follow_up_conversation(self):
+        """Full tool-use round trip followed by continued conversation."""
+        body = {
+            "model": "claude-3",
+            "max_tokens": 128,
+            "system": "You are a weather bot.",
+            "messages": [
+                {"role": "user", "content": "Weather in NYC?"},
+                {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "tool_use",
+                            "id": "toolu_w1",
+                            "name": "get_weather",
+                            "input": {"city": "NYC"},
+                        },
+                    ],
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": "toolu_w1",
+                            "content": "72F, Sunny",
+                        },
+                    ],
+                },
+                {"role": "assistant", "content": "It's 72F and sunny in NYC!"},
+                {"role": "user", "content": "Thanks! How about LA?"},
+            ],
+        }
+        msgs = anthropic_compat._convert_messages(body)
+        assert len(msgs) == 6
+        assert msgs[0] == {"role": "system", "content": "You are a weather bot."}
+        assert msgs[1] == {"role": "user", "content": "Weather in NYC?"}
+        assert msgs[2]["role"] == "assistant"
+        assert msgs[2]["content"] is None
+        assert msgs[2]["tool_calls"][0]["id"] == "call_w1"
+        assert msgs[3] == {"role": "tool", "tool_call_id": "call_w1", "content": "72F, Sunny"}
+        assert msgs[4] == {"role": "assistant", "content": "It's 72F and sunny in NYC!"}
+        assert msgs[5] == {"role": "user", "content": "Thanks! How about LA?"}
+
+    def test_tool_result_with_is_error(self):
+        """Tool result with is_error=true in a multi-turn context."""
+        body = {
+            "model": "claude-3",
+            "max_tokens": 128,
+            "messages": [
+                {"role": "user", "content": "Read /etc/shadow"},
+                {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "tool_use",
+                            "id": "toolu_read1",
+                            "name": "read_file",
+                            "input": {"path": "/etc/shadow"},
+                        },
+                    ],
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": "toolu_read1",
+                            "is_error": True,
+                            "content": "Permission denied",
+                        },
+                    ],
+                },
+            ],
+        }
+        msgs = anthropic_compat._convert_messages(body)
+        assert len(msgs) == 3
+        assert msgs[2]["role"] == "tool"
+        assert msgs[2]["content"] == "Error: Permission denied"
+
+    def test_thinking_blocks_stripped_in_multi_turn(self):
+        """Thinking blocks in assistant history are stripped during multi-turn conversion."""
+        body = {
+            "model": "claude-3",
+            "max_tokens": 128,
+            "messages": [
+                {"role": "user", "content": "What is 2+2?"},
+                {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "thinking", "thinking": "This is basic arithmetic. 2+2=4."},
+                        {"type": "text", "text": "The answer is 4."},
+                    ],
+                },
+                {"role": "user", "content": "And 3+3?"},
+            ],
+        }
+        msgs = anthropic_compat._convert_messages(body)
+        assert len(msgs) == 3
+        # Thinking block stripped, only text remains
+        assert msgs[1]["role"] == "assistant"
+        assert msgs[1]["content"] == "The answer is 4."
+        assert "tool_calls" not in msgs[1]
+        assert msgs[2] == {"role": "user", "content": "And 3+3?"}
+
+    def test_mixed_text_and_tool_use_in_assistant_message(self):
+        """Assistant message with both text and tool_use content blocks."""
+        body = {
+            "model": "claude-3",
+            "max_tokens": 128,
+            "messages": [
+                {"role": "user", "content": "Search and summarize AI news"},
+                {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "text", "text": "I'll search for AI news."},
+                        {
+                            "type": "tool_use",
+                            "id": "toolu_search1",
+                            "name": "web_search",
+                            "input": {"query": "latest AI news"},
+                        },
+                    ],
+                },
+            ],
+        }
+        msgs = anthropic_compat._convert_messages(body)
+        assert len(msgs) == 2
+        assert msgs[1]["role"] == "assistant"
+        assert msgs[1]["content"] == "I'll search for AI news."
+        assert len(msgs[1]["tool_calls"]) == 1
+        assert msgs[1]["tool_calls"][0]["function"]["name"] == "web_search"
+
+    def test_tool_use_with_complex_input(self):
+        """Tool use with nested JSON input correctly serialized."""
+        body = {
+            "model": "claude-3",
+            "max_tokens": 128,
+            "messages": [
+                {"role": "user", "content": "Create a chart"},
+                {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "tool_use",
+                            "id": "toolu_chart1",
+                            "name": "create_chart",
+                            "input": {
+                                "type": "bar",
+                                "data": [1, 2, 3],
+                                "options": {"title": "Sales", "legend": True},
+                            },
+                        },
+                    ],
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": "toolu_chart1",
+                            "content": [{"type": "text", "text": "Chart created successfully"}],
+                        },
+                    ],
+                },
+            ],
+        }
+        msgs = anthropic_compat._convert_messages(body)
+        assert len(msgs) == 3
+        # Tool call arguments should be JSON-serialized
+        args = json.loads(msgs[1]["tool_calls"][0]["function"]["arguments"])
+        assert args["type"] == "bar"
+        assert args["data"] == [1, 2, 3]
+        assert args["options"]["title"] == "Sales"
+
+    def test_multiple_tool_rounds(self):
+        """Two consecutive tool-use rounds: user -> assistant(tool) -> tool_result ->
+        assistant(text+tool) -> tool_result+follow-up."""
+        body = {
+            "model": "claude-3",
+            "max_tokens": 128,
+            "messages": [
+                {"role": "user", "content": "Plan a trip to Paris"},
+                # First tool round
+                {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "tool_use",
+                            "id": "toolu_flights",
+                            "name": "search_flights",
+                            "input": {"dest": "CDG"},
+                        },
+                    ],
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": "toolu_flights",
+                            "content": "Flight AA100, $500",
+                        },
+                    ],
+                },
+                # Second tool round
+                {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "text", "text": "Found a flight. Now searching hotels."},
+                        {
+                            "type": "tool_use",
+                            "id": "toolu_hotels",
+                            "name": "search_hotels",
+                            "input": {"city": "Paris"},
+                        },
+                    ],
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": "toolu_hotels",
+                            "content": "Hotel Le Marais, $200/night",
+                        },
+                        {"type": "text", "text": "Book both please!"},
+                    ],
+                },
+            ],
+        }
+        msgs = anthropic_compat._convert_messages(body)
+        assert len(msgs) == 6
+        assert msgs[0] == {"role": "user", "content": "Plan a trip to Paris"}
+        # First tool round
+        assert msgs[1]["role"] == "assistant"
+        assert msgs[1]["tool_calls"][0]["function"]["name"] == "search_flights"
+        assert msgs[2] == {"role": "tool", "tool_call_id": "call_flights", "content": "Flight AA100, $500"}
+        # Second tool round
+        assert msgs[3]["role"] == "assistant"
+        assert msgs[3]["content"] == "Found a flight. Now searching hotels."
+        assert msgs[3]["tool_calls"][0]["function"]["name"] == "search_hotels"
+        assert msgs[4] == {"role": "tool", "tool_call_id": "call_hotels", "content": "Hotel Le Marais, $200/night"}
+        # Follow-up text from same user message as tool_result
+        assert msgs[5] == {"role": "user", "content": "Book both please!"}
+
+    def test_tool_result_with_array_content(self):
+        """Tool result with array of text blocks."""
+        body = {
+            "model": "claude-3",
+            "max_tokens": 128,
+            "messages": [
+                {"role": "user", "content": "Run the query"},
+                {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "tool_use",
+                            "id": "toolu_db1",
+                            "name": "run_query",
+                            "input": {"sql": "SELECT 1"},
+                        },
+                    ],
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": "toolu_db1",
+                            "content": [
+                                {"type": "text", "text": "Row 1: id=1"},
+                                {"type": "text", "text": "Row 2: id=2"},
+                            ],
+                        },
+                    ],
+                },
+            ],
+        }
+        msgs = anthropic_compat._convert_messages(body)
+        assert msgs[2]["role"] == "tool"
+        assert msgs[2]["content"] == "Row 1: id=1\nRow 2: id=2"
+
+    def test_system_list_with_multi_turn_and_tools(self):
+        """System prompt as list of blocks + multi-turn with tool use."""
+        body = {
+            "model": "claude-3",
+            "max_tokens": 128,
+            "system": [
+                {"type": "text", "text": "You are a helpful assistant."},
+                {"type": "text", "text": "Always be concise."},
+            ],
+            "messages": [
+                {"role": "user", "content": "Search for cats"},
+                {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "tool_use",
+                            "id": "toolu_s1",
+                            "name": "search",
+                            "input": {"q": "cats"},
+                        },
+                    ],
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": "toolu_s1",
+                            "content": "Cats are domesticated felines.",
+                        },
+                    ],
+                },
+            ],
+        }
+        msgs = anthropic_compat._convert_messages(body)
+        assert len(msgs) == 4
+        assert msgs[0] == {"role": "system", "content": "You are a helpful assistant.\nAlways be concise."}
+        assert msgs[1] == {"role": "user", "content": "Search for cats"}
+        assert msgs[2]["role"] == "assistant"
+        assert msgs[3]["role"] == "tool"
+
+    def test_build_openai_body_preserves_multi_turn(self):
+        """_build_openai_body correctly processes a full multi-turn request."""
+        body = {
+            "model": "claude-3",
+            "max_tokens": 256,
+            "temperature": 0.5,
+            "system": "You are helpful.",
+            "messages": [
+                {"role": "user", "content": "Hello"},
+                {"role": "assistant", "content": "Hi! How can I help?"},
+                {"role": "user", "content": "Tell me a joke"},
+            ],
+            "tools": [
+                {
+                    "name": "search",
+                    "description": "Search",
+                    "input_schema": {"type": "object", "properties": {}},
+                },
+            ],
+        }
+        openai_body = anthropic_compat._build_openai_body(body)
+        assert openai_body["model"] == "claude-3"
+        assert openai_body["max_tokens"] == 256
+        assert openai_body["temperature"] == 0.5
+        assert len(openai_body["messages"]) == 4  # system + 3 messages
+        assert openai_body["messages"][0]["role"] == "system"
+        assert len(openai_body["tools"]) == 1
+
+    def test_tool_result_text_and_image_in_multi_turn(self):
+        """Tool result with both text and image in a multi-turn conversation.
+        Image gets extracted into a follow-up user message."""
+        body = {
+            "model": "claude-3",
+            "max_tokens": 128,
+            "messages": [
+                {"role": "user", "content": "Take a screenshot"},
+                {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "tool_use",
+                            "id": "toolu_ss1",
+                            "name": "screenshot",
+                            "input": {},
+                        },
+                    ],
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": "toolu_ss1",
+                            "content": [
+                                {"type": "text", "text": "Screenshot captured"},
+                                {
+                                    "type": "image",
+                                    "source": {
+                                        "type": "base64",
+                                        "media_type": "image/png",
+                                        "data": "iVBOR...",
+                                    },
+                                },
+                            ],
+                        },
+                        {"type": "text", "text": "What do you see?"},
+                    ],
+                },
+            ],
+        }
+        msgs = anthropic_compat._convert_messages(body)
+        # tool result (text only)
+        assert msgs[1]["role"] == "assistant"
+        assert msgs[2]["role"] == "tool"
+        assert msgs[2]["content"] == "Screenshot captured"
+        # Follow-up user message with image (from tool result)
+        assert msgs[3]["role"] == "user"
+        assert msgs[3]["content"][0]["type"] == "image_url"
+        # User text message
+        assert msgs[4]["role"] == "user"
+        assert msgs[4]["content"] == "What do you see?"
+
+    def test_thinking_then_tool_use_in_multi_turn(self):
+        """Assistant message with thinking + tool_use, followed by tool_result."""
+        body = {
+            "model": "claude-3",
+            "max_tokens": 128,
+            "messages": [
+                {"role": "user", "content": "Calculate 123 * 456"},
+                {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "thinking", "thinking": "I should use the calculator tool for this."},
+                        {
+                            "type": "tool_use",
+                            "id": "toolu_calc1",
+                            "name": "calculator",
+                            "input": {"expression": "123 * 456"},
+                        },
+                    ],
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": "toolu_calc1",
+                            "content": "56088",
+                        },
+                    ],
+                },
+            ],
+        }
+        msgs = anthropic_compat._convert_messages(body)
+        assert len(msgs) == 3
+        # Thinking stripped, tool_use preserved
+        assert msgs[1]["role"] == "assistant"
+        assert msgs[1]["content"] is None
+        assert len(msgs[1]["tool_calls"]) == 1
+        assert msgs[1]["tool_calls"][0]["function"]["name"] == "calculator"
+        # Tool result
+        assert msgs[2]["role"] == "tool"
+        assert msgs[2]["content"] == "56088"
+
+
 if __name__ == "__main__":
     unittest.main()

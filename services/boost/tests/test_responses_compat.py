@@ -4242,7 +4242,11 @@ class TestComputerUseItems:
             }
             responses_compat._convert_input_to_messages(body)
             mock_logger.debug.assert_called()
-            assert "computer_call_output" in mock_logger.debug.call_args[0][0]
+            # The debug message uses %s formatting; check that computer_call_output
+            # appears either in the format string or as a positional argument
+            call_args = mock_logger.debug.call_args[0]
+            full_msg = call_args[0] % call_args[1:] if len(call_args) > 1 else call_args[0]
+            assert "computer_call_output" in full_msg
 
     def test_computer_call_output_among_valid_items(self):
         """computer_call_output mixed with valid items; only valid items kept."""
@@ -6022,3 +6026,407 @@ class TestPreviousResponseId:
             responses_compat._build_openai_body(body)
             calls = [str(c) for c in mock_debug.call_args_list]
             assert not any("previous_response_id" in c for c in calls)
+
+
+# ---------------------------------------------------------------------------
+# Multi-turn conversation handling
+# ---------------------------------------------------------------------------
+
+
+class TestMultiTurnConversations:
+    """Verify end-to-end multi-turn conversation conversion through
+    _convert_input_to_messages for realistic conversation patterns that
+    OpenAI Responses API clients produce."""
+
+    def test_basic_multi_turn_user_assistant_user(self):
+        """Simple user -> assistant -> user follow-up."""
+        body = {"input": [
+            {"type": "message", "role": "user", "content": "What is Python?"},
+            {"type": "message", "role": "assistant", "content": "A programming language."},
+            {"type": "message", "role": "user", "content": "What are its features?"},
+        ]}
+        msgs = responses_compat._convert_input_to_messages(body)
+        assert len(msgs) == 3
+        assert msgs[0] == {"role": "user", "content": "What is Python?"}
+        assert msgs[1] == {"role": "assistant", "content": "A programming language."}
+        assert msgs[2] == {"role": "user", "content": "What are its features?"}
+
+    def test_instructions_plus_multi_turn(self):
+        """Instructions (system prompt) with multi-turn history."""
+        body = {
+            "instructions": "You are a coding tutor.",
+            "input": [
+                {"type": "message", "role": "user", "content": "Teach me Python"},
+                {"type": "message", "role": "assistant", "content": "Let's start with variables."},
+                {"type": "message", "role": "user", "content": "Show me an example"},
+            ],
+        }
+        msgs = responses_compat._convert_input_to_messages(body)
+        assert len(msgs) == 4
+        assert msgs[0] == {"role": "system", "content": "You are a coding tutor."}
+        assert msgs[1] == {"role": "user", "content": "Teach me Python"}
+        assert msgs[2] == {"role": "assistant", "content": "Let's start with variables."}
+        assert msgs[3] == {"role": "user", "content": "Show me an example"}
+
+    def test_function_call_in_input(self):
+        """function_call items from previous response echoed in input should
+        be converted to assistant messages with tool_calls."""
+        body = {"input": [
+            {"type": "message", "role": "user", "content": "Weather in NYC?"},
+            {
+                "type": "function_call",
+                "id": "call_w1",
+                "call_id": "call_w1",
+                "name": "get_weather",
+                "arguments": '{"city": "NYC"}',
+            },
+            {
+                "type": "function_call_output",
+                "call_id": "call_w1",
+                "output": "72F, Sunny",
+            },
+        ]}
+        msgs = responses_compat._convert_input_to_messages(body)
+        assert len(msgs) == 3
+        # User message
+        assert msgs[0] == {"role": "user", "content": "Weather in NYC?"}
+        # function_call -> assistant with tool_calls
+        assert msgs[1]["role"] == "assistant"
+        assert msgs[1]["content"] is None
+        assert len(msgs[1]["tool_calls"]) == 1
+        assert msgs[1]["tool_calls"][0]["id"] == "call_w1"
+        assert msgs[1]["tool_calls"][0]["function"]["name"] == "get_weather"
+        assert msgs[1]["tool_calls"][0]["function"]["arguments"] == '{"city": "NYC"}'
+        # function_call_output -> tool result
+        assert msgs[2] == {"role": "tool", "tool_call_id": "call_w1", "content": "72F, Sunny"}
+
+    def test_multiple_function_calls_merged_into_single_assistant_message(self):
+        """Consecutive function_call items should merge into one assistant message
+        with multiple tool_calls, matching the Chat Completions API pattern."""
+        body = {"input": [
+            {"type": "message", "role": "user", "content": "Weather in NYC and LA?"},
+            {
+                "type": "function_call",
+                "call_id": "call_nyc",
+                "name": "get_weather",
+                "arguments": '{"city": "NYC"}',
+            },
+            {
+                "type": "function_call",
+                "call_id": "call_la",
+                "name": "get_weather",
+                "arguments": '{"city": "LA"}',
+            },
+            {
+                "type": "function_call_output",
+                "call_id": "call_nyc",
+                "output": "72F, Sunny",
+            },
+            {
+                "type": "function_call_output",
+                "call_id": "call_la",
+                "output": "85F, Clear",
+            },
+        ]}
+        msgs = responses_compat._convert_input_to_messages(body)
+        assert len(msgs) == 4
+        # User message
+        assert msgs[0]["role"] == "user"
+        # Two function_calls merged into one assistant message
+        assert msgs[1]["role"] == "assistant"
+        assert msgs[1]["content"] is None
+        assert len(msgs[1]["tool_calls"]) == 2
+        assert msgs[1]["tool_calls"][0]["function"]["name"] == "get_weather"
+        assert msgs[1]["tool_calls"][0]["id"] == "call_nyc"
+        assert msgs[1]["tool_calls"][1]["id"] == "call_la"
+        # Two tool results
+        assert msgs[2] == {"role": "tool", "tool_call_id": "call_nyc", "content": "72F, Sunny"}
+        assert msgs[3] == {"role": "tool", "tool_call_id": "call_la", "content": "85F, Clear"}
+
+    def test_function_call_uses_id_when_call_id_missing(self):
+        """function_call item with only 'id' (no 'call_id') should use id."""
+        body = {"input": [
+            {
+                "type": "function_call",
+                "id": "call_abc",
+                "name": "search",
+                "arguments": '{"q": "test"}',
+            },
+        ]}
+        msgs = responses_compat._convert_input_to_messages(body)
+        assert msgs[0]["tool_calls"][0]["id"] == "call_abc"
+
+    def test_function_call_normalizes_toolu_prefix(self):
+        """function_call item with toolu_ prefix should be normalized to call_."""
+        body = {"input": [
+            {
+                "type": "function_call",
+                "call_id": "toolu_xyz",
+                "name": "tool1",
+                "arguments": "{}",
+            },
+        ]}
+        msgs = responses_compat._convert_input_to_messages(body)
+        assert msgs[0]["tool_calls"][0]["id"] == "call_xyz"
+
+    def test_function_call_then_output_then_followup(self):
+        """Full tool-use round trip followed by continued conversation."""
+        body = {
+            "instructions": "You are helpful.",
+            "input": [
+                {"type": "message", "role": "user", "content": "Search for cats"},
+                {
+                    "type": "function_call",
+                    "call_id": "call_s1",
+                    "name": "search",
+                    "arguments": '{"q": "cats"}',
+                },
+                {
+                    "type": "function_call_output",
+                    "call_id": "call_s1",
+                    "output": "Cats are domesticated felines.",
+                },
+                {"type": "message", "role": "assistant", "content": "Cats are domesticated felines!"},
+                {"type": "message", "role": "user", "content": "Tell me more about kittens"},
+            ],
+        }
+        msgs = responses_compat._convert_input_to_messages(body)
+        assert len(msgs) == 6
+        assert msgs[0] == {"role": "system", "content": "You are helpful."}
+        assert msgs[1] == {"role": "user", "content": "Search for cats"}
+        assert msgs[2]["role"] == "assistant"
+        assert msgs[2]["tool_calls"][0]["function"]["name"] == "search"
+        assert msgs[3] == {"role": "tool", "tool_call_id": "call_s1", "content": "Cats are domesticated felines."}
+        assert msgs[4] == {"role": "assistant", "content": "Cats are domesticated felines!"}
+        assert msgs[5] == {"role": "user", "content": "Tell me more about kittens"}
+
+    def test_reasoning_items_silently_skipped(self):
+        """reasoning items from previous responses should be silently skipped
+        without logging a warning."""
+        body = {"input": [
+            {"type": "message", "role": "user", "content": "What is 2+2?"},
+            {
+                "type": "reasoning",
+                "id": "rs_abc",
+                "summary": [{"type": "summary_text", "text": "Basic arithmetic..."}],
+            },
+            {"type": "message", "role": "assistant", "content": "4"},
+            {"type": "message", "role": "user", "content": "And 3+3?"},
+        ]}
+        with patch("responses_compat.logger") as mock_logger:
+            msgs = responses_compat._convert_input_to_messages(body)
+            # Should not log a warning for reasoning items
+            mock_logger.warning.assert_not_called()
+            # reasoning debug is OK
+        assert len(msgs) == 3
+        assert msgs[0] == {"role": "user", "content": "What is 2+2?"}
+        assert msgs[1] == {"role": "assistant", "content": "4"}
+        assert msgs[2] == {"role": "user", "content": "And 3+3?"}
+
+    def test_reasoning_plus_function_call_in_continuation(self):
+        """Previous response output (reasoning + function_call) echoed back
+        with function_call_output."""
+        body = {"input": [
+            {"type": "message", "role": "user", "content": "What is the weather?"},
+            {
+                "type": "reasoning",
+                "id": "rs_think1",
+                "summary": [{"type": "summary_text", "text": "Need to use weather tool."}],
+            },
+            {
+                "type": "function_call",
+                "call_id": "call_w2",
+                "name": "get_weather",
+                "arguments": '{"city": "NYC"}',
+            },
+            {
+                "type": "function_call_output",
+                "call_id": "call_w2",
+                "output": "72F",
+            },
+        ]}
+        msgs = responses_compat._convert_input_to_messages(body)
+        assert len(msgs) == 3
+        # reasoning is skipped
+        assert msgs[0] == {"role": "user", "content": "What is the weather?"}
+        # function_call -> assistant
+        assert msgs[1]["role"] == "assistant"
+        assert msgs[1]["tool_calls"][0]["id"] == "call_w2"
+        # function_call_output -> tool result
+        assert msgs[2] == {"role": "tool", "tool_call_id": "call_w2", "content": "72F"}
+
+    def test_message_with_content_parts_in_multi_turn(self):
+        """Multi-turn with content parts (images) in messages."""
+        body = {"input": [
+            {
+                "type": "message",
+                "role": "user",
+                "content": [
+                    {"type": "input_text", "text": "Describe this image"},
+                    {"type": "input_image", "image_url": "https://example.com/cat.jpg"},
+                ],
+            },
+            {"type": "message", "role": "assistant", "content": "It shows a cat."},
+            {"type": "message", "role": "user", "content": "What breed?"},
+        ]}
+        msgs = responses_compat._convert_input_to_messages(body)
+        assert len(msgs) == 3
+        # First message has content parts (not collapsed because mixed types)
+        assert isinstance(msgs[0]["content"], list)
+        assert msgs[0]["content"][0] == {"type": "text", "text": "Describe this image"}
+        assert msgs[0]["content"][1]["type"] == "image_url"
+        # Assistant and follow-up are plain strings
+        assert msgs[1] == {"role": "assistant", "content": "It shows a cat."}
+        assert msgs[2] == {"role": "user", "content": "What breed?"}
+
+    def test_multiple_tool_rounds(self):
+        """Two consecutive tool-use rounds in one input array."""
+        body = {"input": [
+            {"type": "message", "role": "user", "content": "Plan a trip"},
+            # First tool round
+            {
+                "type": "function_call",
+                "call_id": "call_flights",
+                "name": "search_flights",
+                "arguments": '{"dest": "CDG"}',
+            },
+            {
+                "type": "function_call_output",
+                "call_id": "call_flights",
+                "output": "Flight AA100, $500",
+            },
+            # Assistant responds then invokes another tool
+            {"type": "message", "role": "assistant", "content": "Found a flight. Checking hotels."},
+            {
+                "type": "function_call",
+                "call_id": "call_hotels",
+                "name": "search_hotels",
+                "arguments": '{"city": "Paris"}',
+            },
+            {
+                "type": "function_call_output",
+                "call_id": "call_hotels",
+                "output": "Hotel Le Marais, $200/night",
+            },
+            {"type": "message", "role": "user", "content": "Book both!"},
+        ]}
+        msgs = responses_compat._convert_input_to_messages(body)
+        assert len(msgs) == 7
+        assert msgs[0] == {"role": "user", "content": "Plan a trip"}
+        # First tool round
+        assert msgs[1]["role"] == "assistant"
+        assert msgs[1]["tool_calls"][0]["function"]["name"] == "search_flights"
+        assert msgs[2] == {"role": "tool", "tool_call_id": "call_flights", "content": "Flight AA100, $500"}
+        # Assistant text + second tool round
+        assert msgs[3] == {"role": "assistant", "content": "Found a flight. Checking hotels."}
+        assert msgs[4]["role"] == "assistant"
+        assert msgs[4]["tool_calls"][0]["function"]["name"] == "search_hotels"
+        assert msgs[5] == {"role": "tool", "tool_call_id": "call_hotels", "content": "Hotel Le Marais, $200/night"}
+        assert msgs[6] == {"role": "user", "content": "Book both!"}
+
+    def test_function_call_without_arguments(self):
+        """function_call with no arguments field should default to '{}'."""
+        body = {"input": [
+            {
+                "type": "function_call",
+                "call_id": "call_1",
+                "name": "get_time",
+            },
+        ]}
+        msgs = responses_compat._convert_input_to_messages(body)
+        assert msgs[0]["tool_calls"][0]["function"]["arguments"] == "{}"
+
+    def test_function_call_not_merged_after_non_assistant_message(self):
+        """function_call items separated by a non-assistant message should
+        NOT merge into the same assistant message."""
+        body = {"input": [
+            {
+                "type": "function_call",
+                "call_id": "call_1",
+                "name": "tool_a",
+                "arguments": "{}",
+            },
+            {
+                "type": "function_call_output",
+                "call_id": "call_1",
+                "output": "result_a",
+            },
+            {
+                "type": "function_call",
+                "call_id": "call_2",
+                "name": "tool_b",
+                "arguments": "{}",
+            },
+        ]}
+        msgs = responses_compat._convert_input_to_messages(body)
+        # First function_call -> assistant
+        assert msgs[0]["role"] == "assistant"
+        assert len(msgs[0]["tool_calls"]) == 1
+        assert msgs[0]["tool_calls"][0]["id"] == "call_1"
+        # Tool result separates the two
+        assert msgs[1]["role"] == "tool"
+        # Second function_call -> new assistant message (not merged with first)
+        assert msgs[2]["role"] == "assistant"
+        assert len(msgs[2]["tool_calls"]) == 1
+        assert msgs[2]["tool_calls"][0]["id"] == "call_2"
+
+    def test_simple_string_input_still_works(self):
+        """String input should still produce a single user message."""
+        body = {"input": "Hello, world!"}
+        msgs = responses_compat._convert_input_to_messages(body)
+        assert msgs == [{"role": "user", "content": "Hello, world!"}]
+
+    def test_item_reference_skipped_in_multi_turn(self):
+        """item_reference items should be silently skipped."""
+        body = {"input": [
+            {"type": "message", "role": "user", "content": "hi"},
+            {"type": "item_reference", "id": "msg_prev123"},
+            {"type": "message", "role": "assistant", "content": "hello"},
+            {"type": "message", "role": "user", "content": "how are you?"},
+        ]}
+        msgs = responses_compat._convert_input_to_messages(body)
+        assert len(msgs) == 3
+        assert msgs[0]["content"] == "hi"
+        assert msgs[1]["content"] == "hello"
+        assert msgs[2]["content"] == "how are you?"
+
+    def test_build_openai_body_with_multi_turn_tool_use(self):
+        """_build_openai_body correctly processes multi-turn tool-use input."""
+        body = {
+            "model": "gpt-4o",
+            "instructions": "Be helpful.",
+            "input": [
+                {"type": "message", "role": "user", "content": "Search for cats"},
+                {
+                    "type": "function_call",
+                    "call_id": "call_s1",
+                    "name": "search",
+                    "arguments": '{"q": "cats"}',
+                },
+                {
+                    "type": "function_call_output",
+                    "call_id": "call_s1",
+                    "output": "Cats are domesticated felines.",
+                },
+                {"type": "message", "role": "user", "content": "Tell me more"},
+            ],
+            "tools": [
+                {
+                    "type": "function",
+                    "name": "search",
+                    "description": "Search the web",
+                    "parameters": {"type": "object", "properties": {"q": {"type": "string"}}},
+                },
+            ],
+        }
+        openai_body = responses_compat._build_openai_body(body)
+        assert openai_body["model"] == "gpt-4o"
+        # system + user + assistant(tool_call) + tool_result + user
+        assert len(openai_body["messages"]) == 5
+        assert openai_body["messages"][0] == {"role": "system", "content": "Be helpful."}
+        assert openai_body["messages"][1] == {"role": "user", "content": "Search for cats"}
+        assert openai_body["messages"][2]["role"] == "assistant"
+        assert openai_body["messages"][2]["tool_calls"][0]["function"]["name"] == "search"
+        assert openai_body["messages"][3]["role"] == "tool"
+        assert openai_body["messages"][4] == {"role": "user", "content": "Tell me more"}
+        assert len(openai_body["tools"]) == 1
