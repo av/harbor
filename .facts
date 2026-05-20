@@ -435,6 +435,18 @@
 - label: Boost Anthropic compat exposes message batches API stubs (create, list, get, results, cancel) that return 501 or 404 for SDK compatibility
   command: grep -q 'batches' services/boost/src/anthropic_compat.py && grep -q 'create_message_batch' services/boost/src/anthropic_compat.py && grep -q 'cancel_message_batch' services/boost/src/anthropic_compat.py
   tags: [spec, implemented]
+- label: Boost Anthropic compat validates that model, max_tokens, and a non-empty messages array are present, and rejects messages with role system in favor of the top-level system parameter
+  command: grep -q '_validate_request' services/boost/src/anthropic_compat.py && grep -q 'model is required' services/boost/src/anthropic_compat.py && grep -q 'max_tokens is required' services/boost/src/anthropic_compat.py && grep -q 'role.*system.*not allowed' services/boost/src/anthropic_compat.py
+  tags: [spec, implemented]
+- label: Boost Anthropic compat includes cache_creation_input_tokens and cache_read_input_tokens (always 0) in all usage objects for SDK compatibility
+  command: grep -q 'cache_creation_input_tokens' services/boost/src/anthropic_compat.py && grep -q 'cache_read_input_tokens' services/boost/src/anthropic_compat.py
+  tags: [spec, implemented]
+- label: Boost Anthropic compat maps disable_parallel_tool_use in tool_choice to parallel_tool_calls false in the OpenAI request body
+  command: grep -q 'disable_parallel_tool_use' services/boost/src/anthropic_compat.py && grep -q 'parallel_tool_calls' services/boost/src/anthropic_compat.py
+  tags: [spec, implemented]
+- label: Boost Anthropic compat converts tool_result blocks with is_error support and extracts image content from arrays into follow-up user messages for vision-capable backends
+  command: grep -q 'tool_result' services/boost/src/anthropic_compat.py && grep -q 'is_error' services/boost/src/anthropic_compat.py && grep -q 'image_parts' services/boost/src/anthropic_compat.py
+  tags: [spec, implemented]
 
 ## responses api
 - label: Boost exposes POST /v1/responses endpoint for OpenAI Responses API compatibility
@@ -472,6 +484,18 @@
   tags: [spec, implemented]
 - label: Boost Responses API accepts truncation parameter (logged warning, reflected in response), store (always false), and metadata (passthrough)
   command: grep -q 'truncation' services/boost/src/responses_compat.py && grep -q '"store": False' services/boost/src/responses_compat.py && grep -q 'metadata' services/boost/src/responses_compat.py
+  tags: [spec, implemented]
+- label: Boost Responses API passes through parallel_tool_calls in both request conversion and response objects
+  command: grep -q 'parallel_tool_calls' services/boost/src/responses_compat.py && grep -c 'parallel_tool_calls' services/boost/src/responses_compat.py | grep -q '[3-9]'
+  tags: [spec, implemented]
+- label: Boost Responses API converts content parts including input_text, input_image, input_audio, and input_file types to Chat Completions format with best-effort fallbacks for unsupported types
+  command: grep -q '_convert_content_parts' services/boost/src/responses_compat.py && grep -q 'input_text' services/boost/src/responses_compat.py && grep -q 'input_image' services/boost/src/responses_compat.py && grep -q 'input_audio' services/boost/src/responses_compat.py && grep -q 'input_file' services/boost/src/responses_compat.py
+  tags: [spec, implemented]
+- label: Boost Responses API streaming handles mid-stream errors by emitting the error as text in a message item and closing the SSE envelope with status failed
+  command: grep -q 'stream_error' services/boost/src/responses_compat.py && grep -q 'Stream error' services/boost/src/responses_compat.py && grep -q 'status.*failed' services/boost/src/responses_compat.py
+  tags: [spec, implemented]
+- label: Boost Responses API maps finish_reason length to status incomplete with incomplete_details reason max_output_tokens
+  command: grep -q 'incomplete_details' services/boost/src/responses_compat.py && grep -q 'max_output_tokens' services/boost/src/responses_compat.py && grep -q '_map_status' services/boost/src/responses_compat.py
   tags: [spec, implemented]
 
 ## shared
