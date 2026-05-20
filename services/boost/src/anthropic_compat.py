@@ -953,3 +953,38 @@ async def post_count_tokens(request: Request, api_key: str = Depends(get_api_key
   except Exception as e:
     logger.error(f"Unexpected error in count_tokens handler: {e}", exc_info=True)
     return _anthropic_error(500, "Internal server error", request_id=request_id)
+
+
+# --- Message Batches stubs ---
+
+_BATCHES_NOT_SUPPORTED = "Message batches are not supported by Harbor Boost"
+
+
+@anthropic_compatible_routes.post("/v1/messages/batches")
+async def create_message_batch(request: Request, api_key: str = Depends(get_api_key)):
+  request_id = f"req_{shortuuid.random()}"
+  return _anthropic_error(501, _BATCHES_NOT_SUPPORTED, "not_supported_error", request_id=request_id)
+
+
+@anthropic_compatible_routes.get("/v1/messages/batches")
+async def list_message_batches(request: Request, api_key: str = Depends(get_api_key)):
+  request_id = f"req_{shortuuid.random()}"
+  return _anthropic_error(501, _BATCHES_NOT_SUPPORTED, "not_supported_error", request_id=request_id)
+
+
+@anthropic_compatible_routes.get("/v1/messages/batches/{batch_id}")
+async def get_message_batch(batch_id: str, request: Request, api_key: str = Depends(get_api_key)):
+  request_id = f"req_{shortuuid.random()}"
+  return _anthropic_error(404, f"Batch {batch_id} not found", request_id=request_id)
+
+
+@anthropic_compatible_routes.get("/v1/messages/batches/{batch_id}/results")
+async def get_message_batch_results(batch_id: str, request: Request, api_key: str = Depends(get_api_key)):
+  request_id = f"req_{shortuuid.random()}"
+  return _anthropic_error(404, f"Batch {batch_id} not found", request_id=request_id)
+
+
+@anthropic_compatible_routes.post("/v1/messages/batches/{batch_id}/cancel")
+async def cancel_message_batch(batch_id: str, request: Request, api_key: str = Depends(get_api_key)):
+  request_id = f"req_{shortuuid.random()}"
+  return _anthropic_error(404, f"Batch {batch_id} not found", request_id=request_id)

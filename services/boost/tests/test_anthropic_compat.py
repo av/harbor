@@ -4346,5 +4346,97 @@ class TestStopSequenceHandling:
             pytest.fail("No message_delta event found")
 
 
+# ===========================================================================
+# Message Batches stubs
+# ===========================================================================
+
+class TestMessageBatchesStubs:
+    """All batch endpoints return proper Anthropic-format errors."""
+
+    def test_create_batch_returns_501(self):
+        client = _make_client()
+        resp = client.post("/v1/messages/batches", json={"requests": []})
+        assert resp.status_code == 501
+        body = resp.json()
+        assert body["type"] == "error"
+        assert body["error"]["type"] == "not_supported_error"
+        assert "not supported" in body["error"]["message"]
+
+    def test_list_batches_returns_501(self):
+        client = _make_client()
+        resp = client.get("/v1/messages/batches")
+        assert resp.status_code == 501
+        body = resp.json()
+        assert body["type"] == "error"
+        assert body["error"]["type"] == "not_supported_error"
+
+    def test_get_batch_returns_404(self):
+        client = _make_client()
+        resp = client.get("/v1/messages/batches/batch_abc123")
+        assert resp.status_code == 404
+        body = resp.json()
+        assert body["type"] == "error"
+        assert body["error"]["type"] == "not_found_error"
+        assert "batch_abc123" in body["error"]["message"]
+
+    def test_get_batch_results_returns_404(self):
+        client = _make_client()
+        resp = client.get("/v1/messages/batches/batch_abc123/results")
+        assert resp.status_code == 404
+        body = resp.json()
+        assert body["type"] == "error"
+        assert body["error"]["type"] == "not_found_error"
+        assert "batch_abc123" in body["error"]["message"]
+
+    def test_cancel_batch_returns_404(self):
+        client = _make_client()
+        resp = client.post("/v1/messages/batches/batch_abc123/cancel")
+        assert resp.status_code == 404
+        body = resp.json()
+        assert body["type"] == "error"
+        assert body["error"]["type"] == "not_found_error"
+        assert "batch_abc123" in body["error"]["message"]
+
+    def test_batch_endpoints_include_request_id_header(self):
+        client = _make_client()
+        for method, path in [
+            ("post", "/v1/messages/batches"),
+            ("get", "/v1/messages/batches"),
+            ("get", "/v1/messages/batches/batch_x"),
+            ("get", "/v1/messages/batches/batch_x/results"),
+            ("post", "/v1/messages/batches/batch_x/cancel"),
+        ]:
+            resp = getattr(client, method)(path)
+            assert "request-id" in resp.headers, f"Missing request-id on {method.upper()} {path}"
+            assert resp.headers["request-id"].startswith("req_")
+
+    def test_batch_endpoints_include_anthropic_version_header(self):
+        client = _make_client()
+        for method, path in [
+            ("post", "/v1/messages/batches"),
+            ("get", "/v1/messages/batches"),
+            ("get", "/v1/messages/batches/batch_x"),
+        ]:
+            resp = getattr(client, method)(path)
+            assert resp.headers.get("anthropic-version") == "2023-06-01"
+
+    def test_batch_endpoints_require_auth(self):
+        client = _make_client(auth_key="secret-key")
+        resp = client.post("/v1/messages/batches", json={})
+        assert resp.status_code == 403
+
+        resp = client.get("/v1/messages/batches")
+        assert resp.status_code == 403
+
+    def test_batch_create_with_auth(self):
+        client = _make_client(auth_key="secret-key")
+        resp = client.post(
+            "/v1/messages/batches",
+            json={},
+            headers={"Authorization": "Bearer secret-key"},
+        )
+        assert resp.status_code == 501
+
+
 if __name__ == "__main__":
     unittest.main()
