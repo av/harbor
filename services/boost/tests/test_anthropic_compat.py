@@ -1673,26 +1673,17 @@ class TestIntegrationCountTokens:
         _cfg.BOOST_AUTH = []
 
     def test_count_tokens_returns_input_tokens(self):
-        openai_result = _fake_openai_result(prompt_tokens=42, completion_tokens=1)
-        fake_llm = _FakeLLM(consume_result=openai_result, stream_chunks=[])
-
-        with (
-            patch.object(anthropic_compat, "mapper") as mock_mapper,
-            patch.object(anthropic_compat, "llm_mod") as mock_llm_mod,
-        ):
-            mock_mapper.list_downstream = AsyncMock()
-            mock_mapper.resolve_request_config = MagicMock(return_value={})
-            mock_llm_mod.LLM = MagicMock(return_value=fake_llm)
-
-            client = TestClient(_integration_app, raise_server_exceptions=False)
-            resp = client.post("/v1/messages/count_tokens", json={
-                "model": "claude-test",
-                "messages": [{"role": "user", "content": "Count me"}],
-            })
+        client = TestClient(_integration_app, raise_server_exceptions=False)
+        resp = client.post("/v1/messages/count_tokens", json={
+            "model": "claude-test",
+            "messages": [{"role": "user", "content": "Count me"}],
+        })
 
         assert resp.status_code == 200
         body = resp.json()
-        assert body == {"input_tokens": 42}
+        assert "input_tokens" in body
+        assert isinstance(body["input_tokens"], int)
+        assert body["input_tokens"] > 0
 
     def test_count_tokens_missing_model_returns_400(self):
         client = TestClient(_integration_app, raise_server_exceptions=False)
@@ -1719,25 +1710,51 @@ class TestIntegrationCountTokens:
         })
         assert resp.status_code == 401
 
-    def test_count_tokens_none_completion_returns_500(self):
-        fake_llm = _FakeLLM(stream_chunks=[])
-        fake_llm.serve = AsyncMock(return_value=None)
+    def test_count_tokens_with_system_message(self):
+        """System messages should contribute to the token count."""
+        client = TestClient(_integration_app, raise_server_exceptions=False)
+        resp_no_sys = client.post("/v1/messages/count_tokens", json={
+            "model": "test",
+            "messages": [{"role": "user", "content": "hi"}],
+        })
+        resp_with_sys = client.post("/v1/messages/count_tokens", json={
+            "model": "test",
+            "system": "You are a helpful assistant that answers concisely.",
+            "messages": [{"role": "user", "content": "hi"}],
+        })
 
-        with (
-            patch.object(anthropic_compat, "mapper") as mock_mapper,
-            patch.object(anthropic_compat, "llm_mod") as mock_llm_mod,
-        ):
-            mock_mapper.list_downstream = AsyncMock()
-            mock_mapper.resolve_request_config = MagicMock(return_value={})
-            mock_llm_mod.LLM = MagicMock(return_value=fake_llm)
+        assert resp_no_sys.status_code == 200
+        assert resp_with_sys.status_code == 200
+        assert resp_with_sys.json()["input_tokens"] > resp_no_sys.json()["input_tokens"]
 
-            client = TestClient(_integration_app, raise_server_exceptions=False)
-            resp = client.post("/v1/messages/count_tokens", json={
-                "model": "test",
-                "messages": [{"role": "user", "content": "hi"}],
-            })
+    def test_count_tokens_with_tools(self):
+        """Tool definitions should contribute to the token count."""
+        client = TestClient(_integration_app, raise_server_exceptions=False)
+        resp_no_tools = client.post("/v1/messages/count_tokens", json={
+            "model": "test",
+            "messages": [{"role": "user", "content": "hi"}],
+        })
+        resp_with_tools = client.post("/v1/messages/count_tokens", json={
+            "model": "test",
+            "messages": [{"role": "user", "content": "hi"}],
+            "tools": [
+                {
+                    "name": "get_weather",
+                    "description": "Get the current weather for a location",
+                    "input_schema": {
+                        "type": "object",
+                        "properties": {
+                            "location": {"type": "string", "description": "City and state"},
+                        },
+                        "required": ["location"],
+                    },
+                },
+            ],
+        })
 
-        assert resp.status_code == 500
+        assert resp_no_tools.status_code == 200
+        assert resp_with_tools.status_code == 200
+        assert resp_with_tools.json()["input_tokens"] > resp_no_tools.json()["input_tokens"]
 
 
 # ---------------------------------------------------------------------------
@@ -1779,31 +1796,17 @@ class TestMapperErrorPropagation:
         assert body["error"]["type"] == "not_found_error"
         assert "nonexistent-model" in body["error"]["message"]
 
-    def test_unknown_model_in_count_tokens_returns_404(self):
-        """count_tokens endpoint should also return Anthropic-format 404."""
-        from fastapi import HTTPException as FastAPIHTTPException
+    def test_count_tokens_accepts_any_model_name(self):
+        """count_tokens does local estimation and accepts any model name
+        without requiring backend resolution."""
+        client = TestClient(_integration_app, raise_server_exceptions=False)
+        resp = client.post("/v1/messages/count_tokens", json={
+            "model": "nonexistent-model",
+            "messages": [{"role": "user", "content": "hi"}],
+        })
 
-        with (
-            patch.object(anthropic_compat, "mapper") as mock_mapper,
-        ):
-            mock_mapper.list_downstream = AsyncMock()
-            mock_mapper.resolve_request_config = MagicMock(
-                side_effect=FastAPIHTTPException(
-                    status_code=404,
-                    detail="Unknown model: 'bad-model'",
-                )
-            )
-
-            client = TestClient(_integration_app, raise_server_exceptions=False)
-            resp = client.post("/v1/messages/count_tokens", json={
-                "model": "bad-model",
-                "messages": [{"role": "user", "content": "hi"}],
-            })
-
-        assert resp.status_code == 404
-        body = resp.json()
-        assert body["type"] == "error"
-        assert body["error"]["type"] == "not_found_error"
+        assert resp.status_code == 200
+        assert resp.json()["input_tokens"] > 0
 
     def test_value_error_returns_400_anthropic_error(self):
         """When mapper raises ValueError (no model specifier),
@@ -1825,26 +1828,21 @@ class TestMapperErrorPropagation:
         assert body["error"]["type"] == "invalid_request_error"
         assert "model" in body["error"]["message"].lower()
 
-    def test_value_error_in_count_tokens_returns_400(self):
-        """count_tokens endpoint should also return 400 for ValueError."""
-        with (
-            patch.object(anthropic_compat, "mapper") as mock_mapper,
-        ):
-            mock_mapper.list_downstream = AsyncMock()
-            mock_mapper.resolve_request_config = MagicMock(
-                side_effect=ValueError("Unable to proxy request without a model specifier")
-            )
+    def test_count_tokens_longer_text_yields_more_tokens(self):
+        """Longer messages should produce higher token counts."""
+        client = TestClient(_integration_app, raise_server_exceptions=False)
+        resp_short = client.post("/v1/messages/count_tokens", json={
+            "model": "test",
+            "messages": [{"role": "user", "content": "hi"}],
+        })
+        resp_long = client.post("/v1/messages/count_tokens", json={
+            "model": "test",
+            "messages": [{"role": "user", "content": "This is a much longer message that should result in a significantly higher token count than the short one."}],
+        })
 
-            client = TestClient(_integration_app, raise_server_exceptions=False)
-            resp = client.post("/v1/messages/count_tokens", json={
-                "model": "test",
-                "messages": [{"role": "user", "content": "hi"}],
-            })
-
-        assert resp.status_code == 400
-        body = resp.json()
-        assert body["type"] == "error"
-        assert body["error"]["type"] == "invalid_request_error"
+        assert resp_short.status_code == 200
+        assert resp_long.status_code == 200
+        assert resp_long.json()["input_tokens"] > resp_short.json()["input_tokens"]
 
     def test_generic_exception_returns_500(self):
         """Unexpected exceptions should return Anthropic-format 500."""
@@ -1967,23 +1965,12 @@ class TestResponseHeaders:
         assert "request-id" in resp.headers
 
     def test_count_tokens_has_request_id(self):
-        """count_tokens responses should include x-request-id."""
-        openai_result = _fake_openai_result(prompt_tokens=20)
-        fake_llm = _FakeLLM(consume_result=openai_result, stream_chunks=[])
-
-        with (
-            patch.object(anthropic_compat, "mapper") as mock_mapper,
-            patch.object(anthropic_compat, "llm_mod") as mock_llm_mod,
-        ):
-            mock_mapper.list_downstream = AsyncMock()
-            mock_mapper.resolve_request_config = MagicMock(return_value={})
-            mock_llm_mod.LLM = MagicMock(return_value=fake_llm)
-
-            client = TestClient(_integration_app, raise_server_exceptions=False)
-            resp = client.post("/v1/messages/count_tokens", json={
-                "model": "test",
-                "messages": [{"role": "user", "content": "hi"}],
-            })
+        """count_tokens responses should include request-id."""
+        client = TestClient(_integration_app, raise_server_exceptions=False)
+        resp = client.post("/v1/messages/count_tokens", json={
+            "model": "test",
+            "messages": [{"role": "user", "content": "hi"}],
+        })
 
         assert resp.status_code == 200
         assert "request-id" in resp.headers
@@ -4587,28 +4574,15 @@ class TestBetaFlagsIntegration:
             assert resp.status_code == 200
 
     def test_count_tokens_accepts_beta_header(self):
-        fake_llm = _FakeLLM(
-            consume_result=_fake_openai_result(),
-            stream_chunks=[],
+        client = _make_client()
+        resp = client.post(
+            "/v1/messages/count_tokens", json=_ANTHRO_BODY,
+            headers={
+                "authorization": "Bearer test-key",
+                "anthropic-beta": "prompt-caching-2024-07-31",
+            },
         )
-        with (
-            patch.object(anthropic_compat, "mapper") as mock_mapper,
-            patch.object(anthropic_compat, "llm_mod") as mock_llm_mod,
-        ):
-            mock_mapper.list_downstream = AsyncMock()
-            mock_mapper.resolve_request_config = MagicMock(return_value={})
-            mock_mapper.is_direct_task = MagicMock(return_value=False)
-            mock_llm_mod.LLM = MagicMock(return_value=fake_llm)
-
-            client = _make_client()
-            resp = client.post(
-                "/v1/messages/count_tokens", json=_ANTHRO_BODY,
-                headers={
-                    "authorization": "Bearer test-key",
-                    "anthropic-beta": "prompt-caching-2024-07-31",
-                },
-            )
-            assert resp.status_code == 200
+        assert resp.status_code == 200
 
 
 # ---------------------------------------------------------------------------
@@ -5120,22 +5094,11 @@ class TestAnthropicVersionHeader:
         assert resp.headers.get("anthropic-version") == "2023-06-01"
 
     def test_count_tokens_response_has_anthropic_version(self):
-        openai_result = _fake_openai_result(prompt_tokens=20)
-        fake_llm = _FakeLLM(consume_result=openai_result, stream_chunks=[])
-
-        with (
-            patch.object(anthropic_compat, "mapper") as mock_mapper,
-            patch.object(anthropic_compat, "llm_mod") as mock_llm_mod,
-        ):
-            mock_mapper.list_downstream = AsyncMock()
-            mock_mapper.resolve_request_config = MagicMock(return_value={})
-            mock_llm_mod.LLM = MagicMock(return_value=fake_llm)
-
-            client = TestClient(_integration_app, raise_server_exceptions=False)
-            resp = client.post("/v1/messages/count_tokens", json={
-                "model": "test",
-                "messages": [{"role": "user", "content": "hi"}],
-            })
+        client = TestClient(_integration_app, raise_server_exceptions=False)
+        resp = client.post("/v1/messages/count_tokens", json={
+            "model": "test",
+            "messages": [{"role": "user", "content": "hi"}],
+        })
 
         assert resp.status_code == 200
         assert resp.headers.get("anthropic-version") == "2023-06-01"

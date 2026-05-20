@@ -10,6 +10,7 @@ import shortuuid
 import mapper
 import llm as llm_mod
 from auth import get_api_key
+from token_counter import count_messages_tokens
 from compat_utils import (
     ANTHROPIC_VERSION,
     ANTHROPIC_VERSION_HEADER,
@@ -961,23 +962,11 @@ async def post_count_tokens(request: Request, api_key: str = Depends(get_api_key
     if not messages or not isinstance(messages, list) or len(messages) == 0:
       return _anthropic_error(400, "messages must be a non-empty array", request_id=request_id)
 
-    openai_body = _build_openai_body(
-      {**json_body, "max_tokens": 1, "stream": False}
-    )
+    # Convert to OpenAI format for token counting
+    openai_messages = _convert_messages(json_body)
+    tools = _convert_tools(json_body)
 
-    await mapper.list_downstream()
-
-    proxy_config = mapper.resolve_request_config(openai_body)
-    proxy = llm_mod.LLM(**proxy_config)
-
-    completion = await proxy.serve()
-
-    if completion is None:
-      return _anthropic_error(500, "No completion returned", request_id=request_id)
-
-    result = await proxy.consume_stream(completion)
-    usage = dotty.get(result, "usage", {})
-    input_tokens = usage.get("prompt_tokens", 0)
+    input_tokens = count_messages_tokens(openai_messages, tools or None)
 
     return JSONResponse(
       content={"input_tokens": input_tokens},
