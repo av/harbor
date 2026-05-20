@@ -4001,3 +4001,307 @@ class TestResponseStubEndpoints:
         resp = self.client.post("/v1/responses/resp_abc123/cancel")
         assert "x-request-id" in resp.headers
         assert resp.headers["x-request-id"].startswith("req_")
+
+
+# ---------------------------------------------------------------------------
+# Audio content parts: input_audio
+# ---------------------------------------------------------------------------
+
+
+class TestInputAudioContentParts:
+    """Verify input_audio content parts are correctly mapped to
+    OpenAI Chat Completions input_audio format."""
+
+    def test_audio_basic_with_data_and_format(self):
+        """input_audio with data and format maps correctly."""
+        result = responses_compat._convert_content_parts([
+            {"type": "input_audio", "data": "base64audiodata", "format": "mp3"},
+        ])
+        assert isinstance(result, list)
+        assert len(result) == 1
+        assert result[0]["type"] == "input_audio"
+        assert result[0]["input_audio"]["data"] == "base64audiodata"
+        assert result[0]["input_audio"]["format"] == "mp3"
+
+    def test_audio_default_format_is_wav(self):
+        """When format is omitted, it defaults to wav."""
+        result = responses_compat._convert_content_parts([
+            {"type": "input_audio", "data": "someb64"},
+        ])
+        assert isinstance(result, list)
+        assert result[0]["input_audio"]["format"] == "wav"
+
+    def test_audio_empty_data(self):
+        """Empty data string is passed through."""
+        result = responses_compat._convert_content_parts([
+            {"type": "input_audio", "data": "", "format": "pcm16"},
+        ])
+        assert isinstance(result, list)
+        assert result[0]["input_audio"]["data"] == ""
+        assert result[0]["input_audio"]["format"] == "pcm16"
+
+    def test_audio_missing_data_key(self):
+        """Missing data key defaults to empty string."""
+        result = responses_compat._convert_content_parts([
+            {"type": "input_audio", "format": "wav"},
+        ])
+        assert isinstance(result, list)
+        assert result[0]["input_audio"]["data"] == ""
+
+    def test_audio_wav_format(self):
+        result = responses_compat._convert_content_parts([
+            {"type": "input_audio", "data": "wavdata", "format": "wav"},
+        ])
+        assert result[0]["input_audio"]["format"] == "wav"
+
+    def test_audio_pcm16_format(self):
+        result = responses_compat._convert_content_parts([
+            {"type": "input_audio", "data": "pcmdata", "format": "pcm16"},
+        ])
+        assert result[0]["input_audio"]["format"] == "pcm16"
+
+    def test_audio_mixed_with_text_no_collapse(self):
+        """Audio + text parts should NOT collapse to a string."""
+        result = responses_compat._convert_content_parts([
+            {"type": "input_text", "text": "transcribe this"},
+            {"type": "input_audio", "data": "audiodata", "format": "mp3"},
+        ])
+        assert isinstance(result, list)
+        assert len(result) == 2
+        assert result[0]["type"] == "text"
+        assert result[1]["type"] == "input_audio"
+
+    def test_audio_mixed_with_image(self):
+        """Audio + image parts stay as list."""
+        result = responses_compat._convert_content_parts([
+            {"type": "input_image", "image_url": "https://example.com/img.png"},
+            {"type": "input_audio", "data": "audiodata", "format": "wav"},
+        ])
+        assert isinstance(result, list)
+        assert len(result) == 2
+        assert result[0]["type"] == "image_url"
+        assert result[1]["type"] == "input_audio"
+
+    def test_audio_in_message_item(self):
+        """input_audio in a message item's content list is preserved."""
+        body = {
+            "input": [
+                {
+                    "type": "message",
+                    "role": "user",
+                    "content": [
+                        {"type": "input_text", "text": "What is this?"},
+                        {"type": "input_audio", "data": "abc123", "format": "mp3"},
+                    ],
+                }
+            ],
+        }
+        messages = responses_compat._convert_input_to_messages(body)
+        assert len(messages) == 1
+        content = messages[0]["content"]
+        assert isinstance(content, list)
+        assert len(content) == 2
+        assert content[1]["type"] == "input_audio"
+        assert content[1]["input_audio"]["data"] == "abc123"
+
+
+# ---------------------------------------------------------------------------
+# File content parts: input_file
+# ---------------------------------------------------------------------------
+
+
+class TestInputFileContentParts:
+    """Verify input_file content parts are handled gracefully since
+    Chat Completions has no direct file upload equivalent."""
+
+    def test_input_file_with_filename(self):
+        """input_file with filename produces a text placeholder."""
+        result = responses_compat._convert_content_parts([
+            {"type": "input_file", "filename": "report.pdf", "file_id": "file-abc"},
+        ])
+        assert "report.pdf" in result  # collapsed to string since only text parts
+
+    def test_input_file_with_file_id_only(self):
+        """input_file with only file_id uses it in placeholder."""
+        result = responses_compat._convert_content_parts([
+            {"type": "input_file", "file_id": "file-xyz"},
+        ])
+        assert "file-xyz" in result
+
+    def test_input_file_no_identifiers(self):
+        """input_file with no filename or file_id produces generic placeholder."""
+        result = responses_compat._convert_content_parts([
+            {"type": "input_file"},
+        ])
+        assert "[Attached file]" in result
+
+    def test_input_file_logs_warning(self):
+        """input_file should log a warning about no equivalent."""
+        with patch("responses_compat.logger") as mock_logger:
+            responses_compat._convert_content_parts([
+                {"type": "input_file", "filename": "data.csv"},
+            ])
+            mock_logger.warning.assert_called_once()
+            assert "input_file" in mock_logger.warning.call_args[0][0]
+
+    def test_input_file_mixed_with_text(self):
+        """input_file with text keeps list format (both are text type but different content)."""
+        result = responses_compat._convert_content_parts([
+            {"type": "input_text", "text": "Please analyze this file"},
+            {"type": "input_file", "filename": "data.csv"},
+        ])
+        # Both become text type, so they collapse to a single string
+        assert isinstance(result, str)
+        assert "analyze" in result
+        assert "data.csv" in result
+
+    def test_input_file_mixed_with_audio(self):
+        """input_file alongside audio stays as a list."""
+        result = responses_compat._convert_content_parts([
+            {"type": "input_file", "filename": "doc.txt"},
+            {"type": "input_audio", "data": "abc", "format": "wav"},
+        ])
+        assert isinstance(result, list)
+        assert len(result) == 2
+        assert result[0]["type"] == "text"
+        assert result[1]["type"] == "input_audio"
+
+    def test_input_file_filename_preferred_over_file_id(self):
+        """filename is preferred over file_id for the placeholder text."""
+        result = responses_compat._convert_content_parts([
+            {"type": "input_file", "filename": "report.pdf", "file_id": "file-123"},
+        ])
+        assert "report.pdf" in result
+
+
+# ---------------------------------------------------------------------------
+# Computer use items: silently skipped with logging
+# ---------------------------------------------------------------------------
+
+
+class TestComputerUseItems:
+    """Verify computer_call_output items in input are silently skipped."""
+
+    def test_computer_call_output_skipped(self):
+        """computer_call_output items should be skipped entirely."""
+        body = {
+            "input": [
+                {"type": "message", "role": "user", "content": "hello"},
+                {
+                    "type": "computer_call_output",
+                    "call_id": "cu_abc",
+                    "output": {"type": "computer_screenshot", "image_url": "data:..."},
+                },
+            ],
+        }
+        messages = responses_compat._convert_input_to_messages(body)
+        assert len(messages) == 1
+        assert messages[0]["content"] == "hello"
+
+    def test_computer_call_output_logs_debug(self):
+        """computer_call_output should log at debug level."""
+        with patch("responses_compat.logger") as mock_logger:
+            body = {
+                "input": [
+                    {
+                        "type": "computer_call_output",
+                        "call_id": "cu_abc",
+                        "output": {},
+                    },
+                ],
+            }
+            responses_compat._convert_input_to_messages(body)
+            mock_logger.debug.assert_called()
+            assert "computer_call_output" in mock_logger.debug.call_args[0][0]
+
+    def test_computer_call_output_among_valid_items(self):
+        """computer_call_output mixed with valid items; only valid items kept."""
+        body = {
+            "input": [
+                {"type": "message", "role": "user", "content": "first"},
+                {
+                    "type": "computer_call_output",
+                    "call_id": "cu_1",
+                    "output": {},
+                },
+                {"type": "message", "role": "assistant", "content": "second"},
+                {
+                    "type": "computer_call_output",
+                    "call_id": "cu_2",
+                    "output": {},
+                },
+                {"type": "message", "role": "user", "content": "third"},
+            ],
+        }
+        messages = responses_compat._convert_input_to_messages(body)
+        assert len(messages) == 3
+        assert messages[0]["content"] == "first"
+        assert messages[1]["content"] == "second"
+        assert messages[2]["content"] == "third"
+
+    def test_only_computer_call_outputs_produces_empty(self):
+        """If input contains only computer_call_output items, messages is empty."""
+        body = {
+            "input": [
+                {"type": "computer_call_output", "call_id": "cu_1", "output": {}},
+                {"type": "computer_call_output", "call_id": "cu_2", "output": {}},
+            ],
+        }
+        messages = responses_compat._convert_input_to_messages(body)
+        assert messages == []
+
+
+# ---------------------------------------------------------------------------
+# Unknown input item types: logged warning
+# ---------------------------------------------------------------------------
+
+
+class TestUnknownInputItemTypes:
+    """Verify that unknown input item types are skipped with a warning."""
+
+    def test_unknown_item_type_skipped(self):
+        """Items with unrecognized type should be silently skipped."""
+        body = {
+            "input": [
+                {"type": "message", "role": "user", "content": "hello"},
+                {"type": "totally_new_feature", "data": "something"},
+            ],
+        }
+        messages = responses_compat._convert_input_to_messages(body)
+        assert len(messages) == 1
+        assert messages[0]["content"] == "hello"
+
+    def test_unknown_item_type_logs_warning(self):
+        """Unknown item types should produce a log warning."""
+        with patch("responses_compat.logger") as mock_logger:
+            body = {
+                "input": [
+                    {"type": "future_type_v2", "data": "something"},
+                ],
+            }
+            responses_compat._convert_input_to_messages(body)
+            mock_logger.warning.assert_called()
+            assert "future_type_v2" in mock_logger.warning.call_args[0][1]
+
+    def test_item_without_type_key_skipped(self):
+        """Dict items with no type key should be skipped (type is None)."""
+        body = {
+            "input": [
+                {"role": "user", "content": "no type field"},
+            ],
+        }
+        messages = responses_compat._convert_input_to_messages(body)
+        # No type -> item_type is None -> no elif matches, else branch:
+        # None is falsy, so warning is not logged, item is just skipped
+        assert messages == []
+
+    def test_item_reference_still_skipped_silently(self):
+        """item_reference should be skipped without any warning."""
+        with patch("responses_compat.logger") as mock_logger:
+            body = {
+                "input": [
+                    {"type": "item_reference", "id": "item_abc"},
+                ],
+            }
+            responses_compat._convert_input_to_messages(body)
+            mock_logger.warning.assert_not_called()

@@ -126,6 +126,15 @@ def _convert_input_to_messages(body: dict):
       # References to previous response items; skip in translation
       pass
 
+    elif item_type == "computer_call_output":
+      # OpenAI computer use outputs; not supported, silently skip
+      logger.debug("Skipping computer_call_output input item (not supported)")
+
+    else:
+      # Unknown item type; skip with a warning so callers can debug
+      if item_type:
+        logger.warning("Unknown input item type '%s' skipped", item_type)
+
   return messages
 
 
@@ -172,6 +181,20 @@ def _convert_content_parts(content_parts):
       openai_parts.append({
         "type": "input_audio",
         "input_audio": {"data": data, "format": fmt},
+      })
+
+    elif part_type == "input_file":
+      # File uploads have no direct Chat Completions equivalent.
+      # Best-effort: if the file contains text, pass it through as text.
+      file_text = part.get("filename") or part.get("file_id") or ""
+      logger.warning(
+        "input_file content part has no Chat Completions equivalent and "
+        "will be represented as a text placeholder (file: %s)",
+        file_text,
+      )
+      openai_parts.append({
+        "type": "text",
+        "text": f"[Attached file: {file_text}]" if file_text else "[Attached file]",
       })
 
     elif part_type == "text":
