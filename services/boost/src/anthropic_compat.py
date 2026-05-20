@@ -89,6 +89,14 @@ def _validate_request(body: dict, request_id=None):
 
 
 def _convert_messages(body: dict):
+  """Convert Anthropic messages to OpenAI format.
+
+  Anthropic content blocks may carry ``cache_control`` directives (e.g.
+  ``{"type": "ephemeral"}``).  These are intentionally stripped during
+  conversion because OpenAI-compatible backends do not support prompt
+  caching via inline annotations — only the ``text`` / ``image`` / tool
+  payload is extracted from each block.
+  """
   openai_messages = []
 
   system = body.get("system")
@@ -96,6 +104,8 @@ def _convert_messages(body: dict):
     if isinstance(system, str):
       openai_messages.append({"role": "system", "content": system})
     elif isinstance(system, list):
+      # Only text is extracted; cache_control and other block-level
+      # metadata are intentionally dropped.
       text_parts = [
         block["text"]
         for block in system
@@ -222,6 +232,10 @@ def _convert_params(body: dict):
     params["temperature"] = body["temperature"]
   if "top_p" in body:
     params["top_p"] = body["top_p"]
+  if "top_k" in body:
+    # Best-effort passthrough — some OpenAI-compatible backends (vLLM, Ollama,
+    # llama.cpp) accept top_k; others silently ignore it.
+    params["top_k"] = body["top_k"]
   if "stop_sequences" in body:
     params["stop"] = body["stop_sequences"]
   if body.get("stream"):

@@ -2885,6 +2885,212 @@ class TestGetChunkReasoning:
 
 
 # ---------------------------------------------------------------------------
+# top_k passthrough
+# ---------------------------------------------------------------------------
+
+class TestConvertParamsTopK:
+    def test_top_k_passed_through(self):
+        body = {"max_tokens": 256, "top_k": 40}
+        params = anthropic_compat._convert_params(body)
+        assert params["top_k"] == 40
+        assert params["max_tokens"] == 256
+
+    def test_top_k_absent_not_included(self):
+        body = {"max_tokens": 256}
+        params = anthropic_compat._convert_params(body)
+        assert "top_k" not in params
+
+    def test_top_k_with_temperature_and_top_p(self):
+        body = {"max_tokens": 256, "temperature": 0.8, "top_p": 0.95, "top_k": 50}
+        params = anthropic_compat._convert_params(body)
+        assert params["top_k"] == 50
+        assert params["temperature"] == 0.8
+        assert params["top_p"] == 0.95
+
+    def test_top_k_zero(self):
+        """top_k=0 is a valid value (some backends treat it as disabled)."""
+        body = {"max_tokens": 256, "top_k": 0}
+        params = anthropic_compat._convert_params(body)
+        # 0 is falsy but present — the check is "in body", not truthiness
+        assert "top_k" in params
+        assert params["top_k"] == 0
+
+    def test_top_k_in_build_openai_body(self):
+        """Verify top_k flows through _build_openai_body end-to-end."""
+        body = {
+            "model": "test-model",
+            "max_tokens": 128,
+            "top_k": 40,
+            "messages": [{"role": "user", "content": "hello"}],
+        }
+        openai_body = anthropic_compat._build_openai_body(body)
+        assert openai_body["top_k"] == 40
+
+
+class TestConvertParamsTopKIntegration:
+    """Verify top_k reaches the OpenAI body in the route handler."""
+
+    def setup_method(self):
+        import config as _cfg
+        _cfg.BOOST_AUTH = []
+
+    def test_top_k_forwarded_to_backend(self):
+        fake_llm = _FakeLLM(
+            consume_result=_fake_openai_result(),
+            stream_chunks=[],
+        )
+
+        captured_body = {}
+
+        def capture_resolve(body):
+            captured_body.update(body)
+            return {}
+
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+            patch.object(anthropic_compat, "llm_mod") as mock_llm_mod,
+        ):
+            mock_mapper.list_downstream = AsyncMock()
+            mock_mapper.resolve_request_config = MagicMock(side_effect=capture_resolve)
+            mock_mapper.is_direct_task = MagicMock(return_value=False)
+            mock_llm_mod.LLM = MagicMock(return_value=fake_llm)
+
+            client = TestClient(_integration_app, raise_server_exceptions=False)
+            resp = client.post("/v1/messages", json={
+                **_ANTHRO_BODY,
+                "top_k": 40,
+            })
+
+        assert resp.status_code == 200
+        assert captured_body.get("top_k") == 40
+
+
+# ---------------------------------------------------------------------------
+# cache_control stripping verification
+# ---------------------------------------------------------------------------
+
+class TestCacheControlStripped:
+    """Verify cache_control directives on content blocks are stripped during conversion."""
+
+    def test_system_cache_control_stripped(self):
+        """cache_control on system text blocks is not forwarded."""
+        body = {
+            "model": "m",
+            "max_tokens": 64,
+            "system": [
+                {"type": "text", "text": "System prompt.", "cache_control": {"type": "ephemeral"}},
+            ],
+            "messages": [{"role": "user", "content": "hi"}],
+        }
+        openai_body = anthropic_compat._build_openai_body(body)
+        system_msg = openai_body["messages"][0]
+        assert system_msg["role"] == "system"
+        assert system_msg["content"] == "System prompt."
+        assert "cache_control" not in system_msg
+
+    def test_user_text_cache_control_stripped(self):
+        """cache_control on user text blocks is not forwarded."""
+        body = {
+            "model": "m",
+            "max_tokens": 64,
+            "messages": [{
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Hello", "cache_control": {"type": "ephemeral"}},
+                ],
+            }],
+        }
+        openai_body = anthropic_compat._build_openai_body(body)
+        user_msg = openai_body["messages"][0]
+        assert user_msg["role"] == "user"
+        assert user_msg["content"] == "Hello"
+        assert "cache_control" not in str(user_msg)
+
+    def test_multi_system_blocks_with_cache_control(self):
+        """Multiple system blocks, some with cache_control, are joined correctly."""
+        body = {
+            "model": "m",
+            "max_tokens": 64,
+            "system": [
+                {"type": "text", "text": "Part 1"},
+                {"type": "text", "text": "Part 2", "cache_control": {"type": "ephemeral"}},
+            ],
+            "messages": [{"role": "user", "content": "hi"}],
+        }
+        openai_body = anthropic_compat._build_openai_body(body)
+        system_msg = openai_body["messages"][0]
+        assert system_msg["content"] == "Part 1\nPart 2"
+
+    def test_tool_result_cache_control_stripped(self):
+        """cache_control on tool_result content blocks is not forwarded."""
+        body = {
+            "model": "m",
+            "max_tokens": 64,
+            "messages": [{
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "toolu_abc",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": "Result text",
+                                "cache_control": {"type": "ephemeral"},
+                            }
+                        ],
+                    }
+                ],
+            }],
+        }
+        openai_body = anthropic_compat._build_openai_body(body)
+        tool_msg = openai_body["messages"][0]
+        assert tool_msg["role"] == "tool"
+        assert tool_msg["content"] == "Result text"
+        assert "cache_control" not in str(tool_msg)
+
+
+# ---------------------------------------------------------------------------
+# Verify temperature, top_p are already handled
+# ---------------------------------------------------------------------------
+
+class TestConvertParamsExistingParams:
+    """Confirm that temperature and top_p are correctly forwarded."""
+
+    def test_temperature_forwarded(self):
+        body = {"max_tokens": 256, "temperature": 0.5}
+        params = anthropic_compat._convert_params(body)
+        assert params["temperature"] == 0.5
+
+    def test_temperature_zero(self):
+        """temperature=0 is valid and should be forwarded."""
+        body = {"max_tokens": 256, "temperature": 0}
+        params = anthropic_compat._convert_params(body)
+        assert "temperature" in params
+        assert params["temperature"] == 0
+
+    def test_top_p_forwarded(self):
+        body = {"max_tokens": 256, "top_p": 0.9}
+        params = anthropic_compat._convert_params(body)
+        assert params["top_p"] == 0.9
+
+    def test_top_p_zero(self):
+        body = {"max_tokens": 256, "top_p": 0}
+        params = anthropic_compat._convert_params(body)
+        assert "top_p" in params
+        assert params["top_p"] == 0
+
+    def test_metadata_not_forwarded(self):
+        """metadata is silently accepted but not passed to the OpenAI body."""
+        body = {
+            "max_tokens": 256,
+            "metadata": {"user_id": "user-123"},
+        }
+        params = anthropic_compat._convert_params(body)
+        assert "metadata" not in params
+
+
+# ---------------------------------------------------------------------------
 # SSE parsing helper
 # ---------------------------------------------------------------------------
 
