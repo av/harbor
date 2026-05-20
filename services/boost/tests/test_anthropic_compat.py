@@ -36,9 +36,8 @@ def make_request(headers=None):
 class TestSynthesizeAuthorization:
     def test_uses_x_api_key_when_authorization_is_missing(self):
         request = make_request({"x-api-key": "sk-anthropic"})
-        extra = anthropic_compat._synthesize_authorization(request)
+        anthropic_compat._synthesize_authorization(request)
 
-        assert extra["authorization"] == "Bearer sk-anthropic"
         assert request.headers["authorization"] == "Bearer sk-anthropic"
 
     def test_preserves_explicit_authorization_header(self):
@@ -46,9 +45,8 @@ class TestSynthesizeAuthorization:
             "authorization": "Bearer explicit-token",
             "x-api-key": "sk-anthropic",
         })
-        extra = anthropic_compat._synthesize_authorization(request)
+        anthropic_compat._synthesize_authorization(request)
 
-        assert extra["authorization"] == "Bearer explicit-token"
         assert request.headers["authorization"] == "Bearer explicit-token"
         auth_headers = [
             h for h in request.scope["headers"]
@@ -915,33 +913,6 @@ class TestChunkUtilities:
         usage = anthropic_compat._get_chunk_usage(chunk)
         assert usage["prompt_tokens"] == 0
         assert usage["completion_tokens"] == 0
-
-
-# ---------------------------------------------------------------------------
-# _has_complete_tool_call_arguments
-# ---------------------------------------------------------------------------
-
-class TestHasCompleteToolCallArguments:
-    def test_valid_json_object(self):
-        assert anthropic_compat._has_complete_tool_call_arguments('{"key": "value"}') is True
-
-    def test_empty_object(self):
-        assert anthropic_compat._has_complete_tool_call_arguments("{}") is True
-
-    def test_incomplete_json(self):
-        assert anthropic_compat._has_complete_tool_call_arguments('{"key": "val') is False
-
-    def test_json_array(self):
-        assert anthropic_compat._has_complete_tool_call_arguments('[1, 2, 3]') is False
-
-    def test_not_string(self):
-        assert anthropic_compat._has_complete_tool_call_arguments(42) is False
-
-    def test_empty_string(self):
-        assert anthropic_compat._has_complete_tool_call_arguments("") is False
-
-    def test_none(self):
-        assert anthropic_compat._has_complete_tool_call_arguments(None) is False
 
 
 # ===========================================================================

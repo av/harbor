@@ -10,7 +10,6 @@ import shortuuid
 import log
 import mapper
 import llm as llm_mod
-import config
 from auth import get_api_key
 from compat_utils import (
     REQUEST_ID_HEADER,

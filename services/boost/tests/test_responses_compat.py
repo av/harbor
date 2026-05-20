@@ -1044,7 +1044,8 @@ class TestResponsesRouteIntegration:
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
 
-        monkeypatch.setattr(responses_compat.config, "BOOST_AUTH", [])
+        import config as _cfg
+        monkeypatch.setattr(_cfg, "BOOST_AUTH", [])
 
         app = FastAPI()
         app.include_router(responses_compat.responses_compatible_routes)
@@ -1208,7 +1209,8 @@ class TestResponsesRouteIntegration:
         assert resp.status_code == 400
 
     def test_auth_required(self, monkeypatch):
-        monkeypatch.setattr(responses_compat.config, "BOOST_AUTH", ["sk-test"])
+        import config as _cfg
+        monkeypatch.setattr(_cfg, "BOOST_AUTH", ["sk-test"])
 
         resp = self.client.post("/v1/responses", json={
             "model": "gpt-4o",
@@ -1218,7 +1220,8 @@ class TestResponsesRouteIntegration:
         assert resp.status_code == 403
 
     def test_auth_accepted(self, monkeypatch):
-        monkeypatch.setattr(responses_compat.config, "BOOST_AUTH", ["sk-test"])
+        import config as _cfg
+        monkeypatch.setattr(_cfg, "BOOST_AUTH", ["sk-test"])
 
         async def mock_list_downstream():
             return []
@@ -1271,7 +1274,8 @@ class TestResponsesRequestIdHeader:
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
 
-        monkeypatch.setattr(responses_compat.config, "BOOST_AUTH", [])
+        import config as _cfg
+        monkeypatch.setattr(_cfg, "BOOST_AUTH", [])
 
         app = FastAPI()
         app.include_router(responses_compat.responses_compatible_routes)
@@ -1986,7 +1990,8 @@ class TestResponsesEdgeCaseIntegration:
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
 
-        monkeypatch.setattr(responses_compat.config, "BOOST_AUTH", [])
+        import config as _cfg
+        monkeypatch.setattr(_cfg, "BOOST_AUTH", [])
 
         app = FastAPI()
         app.include_router(responses_compat.responses_compatible_routes)

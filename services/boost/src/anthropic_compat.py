@@ -9,7 +9,6 @@ import log
 import shortuuid
 import mapper
 import llm as llm_mod
-import config
 from auth import get_api_key
 from compat_utils import (
     REQUEST_ID_HEADER,
@@ -33,28 +32,29 @@ ERROR_TYPE_MAP = {
 }
 
 
-def _anthropic_error(status_code, message, error_type=None):
+def _anthropic_error(status_code, message, error_type=None, request_id=None):
   if error_type is None:
     error_type = ERROR_TYPE_MAP.get(status_code, "api_error")
+  headers = {}
+  if request_id:
+    headers[REQUEST_ID_HEADER] = request_id
   return JSONResponse(
     status_code=status_code,
     content={"type": "error", "error": {"type": error_type, "message": message}},
+    headers=headers,
   )
 
 
 # --- Auth ---
 
-def _synthesize_authorization(request: Request) -> dict:
+def _synthesize_authorization(request: Request):
   """Convert x-api-key header to Authorization header if needed.
-  Returns dict of extra headers to forward to the backend."""
+  Mutates request.scope so downstream code sees a standard Authorization header."""
   auth_header_val = request.headers.get("authorization")
   api_key = request.headers.get("x-api-key")
 
-  extra_headers = {}
-
   if not auth_header_val and api_key:
     synthesized = f"Bearer {api_key}"
-    extra_headers["authorization"] = synthesized
     scope = request.scope
     raw_headers = list(scope.get("headers", []))
     raw_headers.append((b"authorization", synthesized.encode()))
@@ -62,31 +62,26 @@ def _synthesize_authorization(request: Request) -> dict:
     if hasattr(request, "_headers"):
       del request._headers
 
-  auth_header_val = request.headers.get("authorization")
-  if auth_header_val:
-    extra_headers["authorization"] = auth_header_val
-
-  return extra_headers
-
 
 # --- Request validation and conversion ---
 
-def _validate_request(body: dict):
+def _validate_request(body: dict, request_id=None):
   if "model" not in body or not body["model"]:
-    return _anthropic_error(400, "model is required")
+    return _anthropic_error(400, "model is required", request_id=request_id)
 
   if "max_tokens" not in body:
-    return _anthropic_error(400, "max_tokens is required")
+    return _anthropic_error(400, "max_tokens is required", request_id=request_id)
 
   messages = body.get("messages")
   if not messages or not isinstance(messages, list) or len(messages) == 0:
-    return _anthropic_error(400, "messages must be a non-empty array")
+    return _anthropic_error(400, "messages must be a non-empty array", request_id=request_id)
 
   for msg in messages:
     if msg.get("role") == "system":
       return _anthropic_error(
         400,
         'messages containing role "system" are not allowed; use top-level system parameter',
+        request_id=request_id,
       )
 
   return None
@@ -373,25 +368,6 @@ def _build_anthropic_response(openai_result, request_model, stop_sequences=None)
   }
 
   return response
-
-
-# --- SSE helpers ---
-
-
-def _has_complete_tool_call_arguments(arguments):
-  if not isinstance(arguments, str):
-    return False
-
-  stripped = arguments.strip()
-  if not stripped.startswith("{") or not stripped.endswith("}"):
-    return False
-
-  try:
-    parsed = json.loads(stripped)
-  except (json.JSONDecodeError, TypeError):
-    return False
-
-  return isinstance(parsed, dict)
 
 
 # --- Streaming conversion ---
@@ -687,9 +663,9 @@ async def post_messages(request: Request, api_key: str = Depends(get_api_key)):
     try:
       json_body = json.loads(body.decode("utf-8"))
     except json.JSONDecodeError:
-      return _anthropic_error(400, "Invalid JSON in request body")
+      return _anthropic_error(400, "Invalid JSON in request body", request_id=request_id)
 
-    validation_error = _validate_request(json_body)
+    validation_error = _validate_request(json_body, request_id=request_id)
     if validation_error:
       return validation_error
 
@@ -722,7 +698,7 @@ async def post_messages(request: Request, api_key: str = Depends(get_api_key)):
     completion = await proxy.serve()
 
     if completion is None:
-      return _anthropic_error(500, "No completion returned")
+      return _anthropic_error(500, "No completion returned", request_id=request_id)
 
     if is_stream:
       return StreamingResponse(
@@ -741,12 +717,12 @@ async def post_messages(request: Request, api_key: str = Depends(get_api_key)):
 
   except HTTPException as e:
     error_type = ERROR_TYPE_MAP.get(e.status_code, "api_error")
-    return _anthropic_error(e.status_code, e.detail, error_type)
+    return _anthropic_error(e.status_code, e.detail, error_type, request_id=request_id)
   except ValueError as e:
-    return _anthropic_error(400, str(e))
+    return _anthropic_error(400, str(e), request_id=request_id)
   except Exception as e:
     logger.error(f"Unexpected error in anthropic handler: {e}", exc_info=True)
-    return _anthropic_error(500, "Internal server error")
+    return _anthropic_error(500, "Internal server error", request_id=request_id)
 
 
 @anthropic_compatible_routes.post("/v1/messages/count_tokens")
@@ -760,14 +736,14 @@ async def post_count_tokens(request: Request, api_key: str = Depends(get_api_key
     try:
       json_body = json.loads(body.decode("utf-8"))
     except json.JSONDecodeError:
-      return _anthropic_error(400, "Invalid JSON in request body")
+      return _anthropic_error(400, "Invalid JSON in request body", request_id=request_id)
 
     if "model" not in json_body or not json_body["model"]:
-      return _anthropic_error(400, "model is required")
+      return _anthropic_error(400, "model is required", request_id=request_id)
 
     messages = json_body.get("messages")
     if not messages or not isinstance(messages, list) or len(messages) == 0:
-      return _anthropic_error(400, "messages must be a non-empty array")
+      return _anthropic_error(400, "messages must be a non-empty array", request_id=request_id)
 
     openai_body = _build_openai_body(
       {**json_body, "max_tokens": 1, "stream": False}
@@ -781,7 +757,7 @@ async def post_count_tokens(request: Request, api_key: str = Depends(get_api_key
     completion = await proxy.serve()
 
     if completion is None:
-      return _anthropic_error(500, "No completion returned")
+      return _anthropic_error(500, "No completion returned", request_id=request_id)
 
     result = await proxy.consume_stream(completion)
     usage = dotty.get(result, "usage", {})
@@ -795,9 +771,9 @@ async def post_count_tokens(request: Request, api_key: str = Depends(get_api_key
 
   except HTTPException as e:
     error_type = ERROR_TYPE_MAP.get(e.status_code, "api_error")
-    return _anthropic_error(e.status_code, e.detail, error_type)
+    return _anthropic_error(e.status_code, e.detail, error_type, request_id=request_id)
   except ValueError as e:
-    return _anthropic_error(400, str(e))
+    return _anthropic_error(400, str(e), request_id=request_id)
   except Exception as e:
     logger.error(f"Unexpected error in count_tokens handler: {e}", exc_info=True)
-    return _anthropic_error(500, "Internal server error")
+    return _anthropic_error(500, "Internal server error", request_id=request_id)
