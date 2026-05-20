@@ -3759,5 +3759,266 @@ class TestSystemPromptEdgeCases:
         assert msgs[0] == {"role": "system", "content": "\n"}
 
 
+# ---------------------------------------------------------------------------
+# Image and document content block handling
+# ---------------------------------------------------------------------------
+
+
+class TestImageAndDocumentBlocks:
+    """Test image and document content block handling in _convert_user_message."""
+
+    def test_base64_image_default_media_type(self):
+        """Base64 image without explicit media_type defaults to image/png."""
+        body = {
+            "messages": [{
+                "role": "user",
+                "content": [
+                    {"type": "image", "source": {"type": "base64", "data": "iVBOR"}},
+                ],
+            }],
+        }
+        msgs = anthropic_compat._convert_messages(body)
+        assert len(msgs) == 1
+        content = msgs[0]["content"]
+        assert isinstance(content, list)
+        assert content[0]["type"] == "image_url"
+        assert content[0]["image_url"]["url"] == "data:image/png;base64,iVBOR"
+
+    def test_base64_image_with_media_type(self):
+        """Base64 image with explicit media_type uses that type."""
+        body = {
+            "messages": [{
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "image/webp",
+                            "data": "WEBPDATA",
+                        },
+                    },
+                ],
+            }],
+        }
+        msgs = anthropic_compat._convert_messages(body)
+        content = msgs[0]["content"]
+        assert content[0]["image_url"]["url"] == "data:image/webp;base64,WEBPDATA"
+
+    def test_url_image_source(self):
+        """URL-based image source should map to image_url with the URL directly."""
+        body = {
+            "messages": [{
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "url",
+                            "url": "https://example.com/photo.jpg",
+                        },
+                    },
+                ],
+            }],
+        }
+        msgs = anthropic_compat._convert_messages(body)
+        content = msgs[0]["content"]
+        assert isinstance(content, list)
+        assert content[0]["type"] == "image_url"
+        assert content[0]["image_url"]["url"] == "https://example.com/photo.jpg"
+
+    def test_url_image_with_text(self):
+        """URL image mixed with text produces multi-part content."""
+        body = {
+            "messages": [{
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "What is this?"},
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "url",
+                            "url": "https://cdn.example.com/cat.png",
+                        },
+                    },
+                ],
+            }],
+        }
+        msgs = anthropic_compat._convert_messages(body)
+        assert len(msgs) == 1
+        content = msgs[0]["content"]
+        assert content[0] == {"type": "text", "text": "What is this?"}
+        assert content[1]["type"] == "image_url"
+        assert content[1]["image_url"]["url"] == "https://cdn.example.com/cat.png"
+
+    def test_image_source_type_defaults_to_base64(self):
+        """When source.type is missing, defaults to base64 handling."""
+        body = {
+            "messages": [{
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "source": {
+                            "media_type": "image/gif",
+                            "data": "R0lGOD",
+                        },
+                    },
+                ],
+            }],
+        }
+        msgs = anthropic_compat._convert_messages(body)
+        content = msgs[0]["content"]
+        assert content[0]["image_url"]["url"] == "data:image/gif;base64,R0lGOD"
+
+    def test_multiple_images(self):
+        """Multiple image blocks should all be converted."""
+        body = {
+            "messages": [{
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "source": {"type": "base64", "media_type": "image/jpeg", "data": "img1"},
+                    },
+                    {
+                        "type": "image",
+                        "source": {"type": "url", "url": "https://example.com/img2.png"},
+                    },
+                ],
+            }],
+        }
+        msgs = anthropic_compat._convert_messages(body)
+        content = msgs[0]["content"]
+        assert len(content) == 2
+        assert content[0]["image_url"]["url"] == "data:image/jpeg;base64,img1"
+        assert content[1]["image_url"]["url"] == "https://example.com/img2.png"
+
+    def test_image_with_empty_source(self):
+        """Image block with empty source should not crash."""
+        body = {
+            "messages": [{
+                "role": "user",
+                "content": [
+                    {"type": "image", "source": {}},
+                ],
+            }],
+        }
+        msgs = anthropic_compat._convert_messages(body)
+        content = msgs[0]["content"]
+        # Defaults to base64 path with empty data
+        assert content[0]["type"] == "image_url"
+        assert content[0]["image_url"]["url"] == "data:image/png;base64,"
+
+    def test_document_base64_pdf(self):
+        """PDF document block should produce a text placeholder."""
+        body = {
+            "messages": [{
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Summarize this PDF."},
+                    {
+                        "type": "document",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "application/pdf",
+                            "data": "JVBERi0...",
+                        },
+                    },
+                ],
+            }],
+        }
+        msgs = anthropic_compat._convert_messages(body)
+        content = msgs[0]["content"]
+        assert len(content) == 2
+        assert content[0] == {"type": "text", "text": "Summarize this PDF."}
+        assert content[1] == {"type": "text", "text": "[Document: application/pdf]"}
+
+    def test_document_url(self):
+        """Document URL source should produce a text placeholder with the URL."""
+        body = {
+            "messages": [{
+                "role": "user",
+                "content": [
+                    {
+                        "type": "document",
+                        "source": {
+                            "type": "url",
+                            "url": "https://example.com/report.pdf",
+                        },
+                    },
+                ],
+            }],
+        }
+        msgs = anthropic_compat._convert_messages(body)
+        # Single text part collapses to string content
+        assert msgs[0]["content"] == "[Document: https://example.com/report.pdf]"
+
+    def test_document_with_image_media_type(self):
+        """Document block with image/ media type should be passed as an image."""
+        body = {
+            "messages": [{
+                "role": "user",
+                "content": [
+                    {
+                        "type": "document",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "image/tiff",
+                            "data": "TIFFDATA",
+                        },
+                    },
+                ],
+            }],
+        }
+        msgs = anthropic_compat._convert_messages(body)
+        content = msgs[0]["content"]
+        assert content[0]["type"] == "image_url"
+        assert content[0]["image_url"]["url"] == "data:image/tiff;base64,TIFFDATA"
+
+    def test_document_default_media_type(self):
+        """Document without media_type defaults to application/pdf."""
+        body = {
+            "messages": [{
+                "role": "user",
+                "content": [
+                    {
+                        "type": "document",
+                        "source": {"type": "base64", "data": "somedata"},
+                    },
+                ],
+            }],
+        }
+        msgs = anthropic_compat._convert_messages(body)
+        # Single text part collapses to string content
+        assert msgs[0]["content"] == "[Document: application/pdf]"
+
+    def test_text_image_document_mixed(self):
+        """All three content types mixed in one message."""
+        body = {
+            "messages": [{
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Analyze these:"},
+                    {
+                        "type": "image",
+                        "source": {"type": "url", "url": "https://example.com/chart.png"},
+                    },
+                    {
+                        "type": "document",
+                        "source": {"type": "base64", "media_type": "application/pdf", "data": "PDF"},
+                    },
+                ],
+            }],
+        }
+        msgs = anthropic_compat._convert_messages(body)
+        content = msgs[0]["content"]
+        assert len(content) == 3
+        assert content[0] == {"type": "text", "text": "Analyze these:"}
+        assert content[1]["type"] == "image_url"
+        assert content[1]["image_url"]["url"] == "https://example.com/chart.png"
+        assert content[2] == {"type": "text", "text": "[Document: application/pdf]"}
+
+
 if __name__ == "__main__":
     unittest.main()

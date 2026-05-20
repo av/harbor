@@ -140,19 +140,25 @@ def _convert_content_parts(content_parts):
 
     elif part_type == "input_image":
       image_url = part.get("image_url")
+      detail = part.get("detail")
       if image_url:
+        img_part = {"url": image_url}
+        if detail:
+          img_part["detail"] = detail
         openai_parts.append({
           "type": "image_url",
-          "image_url": {"url": image_url},
+          "image_url": img_part,
         })
       else:
-        # Base64 image
-        detail = part.get("detail", "auto")
+        # file_id reference — best-effort passthrough
         file_id = part.get("file_id", "")
         if file_id:
+          img_part = {"url": file_id}
+          if detail:
+            img_part["detail"] = detail
           openai_parts.append({
             "type": "image_url",
-            "image_url": {"url": file_id, "detail": detail},
+            "image_url": img_part,
           })
 
     elif part_type == "input_audio":

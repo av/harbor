@@ -179,6 +179,99 @@ class TestConvertContentParts:
         ])
         assert result == "some text"
 
+    def test_input_image_with_url(self):
+        """input_image with image_url string maps to image_url part."""
+        result = responses_compat._convert_content_parts([
+            {"type": "input_image", "image_url": "https://example.com/photo.jpg"},
+        ])
+        assert isinstance(result, list)
+        assert result[0]["type"] == "image_url"
+        assert result[0]["image_url"]["url"] == "https://example.com/photo.jpg"
+        assert "detail" not in result[0]["image_url"]
+
+    def test_input_image_with_url_and_detail(self):
+        """input_image with image_url and detail passes both through."""
+        result = responses_compat._convert_content_parts([
+            {"type": "input_image", "image_url": "https://example.com/photo.jpg", "detail": "high"},
+        ])
+        assert result[0]["image_url"]["url"] == "https://example.com/photo.jpg"
+        assert result[0]["image_url"]["detail"] == "high"
+
+    def test_input_image_with_data_url(self):
+        """input_image with a data: URI in image_url passes through correctly."""
+        data_url = "data:image/png;base64,iVBORw0KGgoAAAA"
+        result = responses_compat._convert_content_parts([
+            {"type": "input_image", "image_url": data_url},
+        ])
+        assert result[0]["image_url"]["url"] == data_url
+
+    def test_input_image_with_file_id(self):
+        """input_image with file_id (no image_url) passes file_id as URL."""
+        result = responses_compat._convert_content_parts([
+            {"type": "input_image", "file_id": "file-abc123"},
+        ])
+        assert isinstance(result, list)
+        assert result[0]["type"] == "image_url"
+        assert result[0]["image_url"]["url"] == "file-abc123"
+
+    def test_input_image_with_file_id_and_detail(self):
+        """input_image with file_id and detail passes both through."""
+        result = responses_compat._convert_content_parts([
+            {"type": "input_image", "file_id": "file-xyz", "detail": "low"},
+        ])
+        assert result[0]["image_url"]["url"] == "file-xyz"
+        assert result[0]["image_url"]["detail"] == "low"
+
+    def test_input_image_neither_url_nor_file_id(self):
+        """input_image with neither image_url nor file_id produces no image part."""
+        result = responses_compat._convert_content_parts([
+            {"type": "input_image"},
+        ])
+        # No output parts => empty list collapsed to empty string
+        assert result == ""
+
+    def test_input_image_prefers_url_over_file_id(self):
+        """When both image_url and file_id are present, image_url wins."""
+        result = responses_compat._convert_content_parts([
+            {
+                "type": "input_image",
+                "image_url": "https://example.com/img.png",
+                "file_id": "file-abc",
+            },
+        ])
+        assert result[0]["image_url"]["url"] == "https://example.com/img.png"
+
+    def test_multiple_images(self):
+        """Multiple input_image parts should all be converted."""
+        result = responses_compat._convert_content_parts([
+            {"type": "input_image", "image_url": "https://example.com/a.png"},
+            {"type": "input_image", "image_url": "https://example.com/b.png"},
+        ])
+        assert isinstance(result, list)
+        assert len(result) == 2
+        assert result[0]["image_url"]["url"] == "https://example.com/a.png"
+        assert result[1]["image_url"]["url"] == "https://example.com/b.png"
+
+    def test_input_image_detail_not_added_when_absent(self):
+        """detail key should be omitted from the output when not specified."""
+        result = responses_compat._convert_content_parts([
+            {"type": "input_image", "image_url": "https://example.com/photo.jpg"},
+        ])
+        assert "detail" not in result[0]["image_url"]
+
+    def test_text_and_multiple_images(self):
+        """Text mixed with multiple images preserves order."""
+        result = responses_compat._convert_content_parts([
+            {"type": "input_text", "text": "Compare these:"},
+            {"type": "input_image", "image_url": "https://a.com/1.png"},
+            {"type": "input_image", "image_url": "https://b.com/2.png"},
+        ])
+        assert isinstance(result, list)
+        assert len(result) == 3
+        assert result[0] == {"type": "text", "text": "Compare these:"}
+        assert result[1]["image_url"]["url"] == "https://a.com/1.png"
+        assert result[2]["image_url"]["url"] == "https://b.com/2.png"
+
 
 # ---------------------------------------------------------------------------
 # Tool conversion

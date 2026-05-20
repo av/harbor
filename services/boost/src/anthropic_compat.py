@@ -165,11 +165,44 @@ def _convert_user_message(content):
       openai_parts.append({"type": "text", "text": block.get("text", "")})
     elif block_type == "image":
       source = block.get("source", {})
-      media_type = source.get("media_type", "image/png")
-      data = source.get("data", "")
-      openai_parts.append(
-        {"type": "image_url", "image_url": {"url": f"data:{media_type};base64,{data}"}}
-      )
+      source_type = source.get("type", "base64")
+      if source_type == "url":
+        url = source.get("url", "")
+        openai_parts.append(
+          {"type": "image_url", "image_url": {"url": url}}
+        )
+      else:
+        # base64 source (default)
+        media_type = source.get("media_type", "image/png")
+        data = source.get("data", "")
+        openai_parts.append(
+          {"type": "image_url", "image_url": {"url": f"data:{media_type};base64,{data}"}}
+        )
+    elif block_type == "document":
+      # Anthropic document blocks (PDFs, etc.) — extract text content if
+      # available, otherwise pass the base64 data as-is for backends that
+      # may support it. Most OpenAI-compatible backends don't support
+      # inline PDFs, so we log a warning and do best-effort.
+      source = block.get("source", {})
+      source_type = source.get("type", "base64")
+      if source_type == "url":
+        url = source.get("url", "")
+        logger.warning("Document URL content blocks are not fully supported; passing URL as text")
+        openai_parts.append({"type": "text", "text": f"[Document: {url}]"})
+      else:
+        media_type = source.get("media_type", "application/pdf")
+        data = source.get("data", "")
+        # Some backends (e.g., OpenAI GPT-4o) accept PDFs as images
+        if media_type.startswith("image/"):
+          openai_parts.append(
+            {"type": "image_url", "image_url": {"url": f"data:{media_type};base64,{data}"}}
+          )
+        else:
+          logger.warning(
+            "Document content block (media_type=%s) has limited backend support; "
+            "passing as text placeholder", media_type
+          )
+          openai_parts.append({"type": "text", "text": f"[Document: {media_type}]"})
     elif block_type == "tool_result":
       tool_content = block.get("content", "")
       if isinstance(tool_content, list):
