@@ -229,7 +229,7 @@ def _make_fresh_app(anthropic_compat="true", responses_api="true"):
     }
 
     # Remove modules that need reloading
-    for mod_name in ("config", "main", "anthropic_compat", "responses_compat"):
+    for mod_name in ("config", "main", "auth", "anthropic_compat", "responses_compat"):
         sys.modules.pop(mod_name, None)
 
     with patch.dict(os.environ, env_patch, clear=False):

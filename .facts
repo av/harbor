@@ -628,6 +628,9 @@
 - label: Boost endpoint isolation is verified by 72 tests covering wrong-SDK-on-wrong-endpoint errors, method not allowed, path traversal safety, concurrent request independence, content-type mismatches, CORS preflight, and response format isolation
   command: test -f services/boost/tests/test_endpoint_isolation.py && rg -c 'def test_' services/boost/tests/test_endpoint_isolation.py | grep -q '7[0-9]'
   tags: [spec, implemented]
+- label: Boost compat endpoint isolation tests and config route-registration tests pass in the same pytest process without stale auth state causing /v1/models to return 401 when BOOST_AUTH is empty
+  command: cd services/boost && uv run pytest tests/test_endpoint_isolation.py tests/test_config.py -q
+  tags: [spec, boost-config-auth-isolation, implemented]
 
 # testing
 - label: tests use a Deno-based orchestrator running sequential suites across parallel containerized distros
