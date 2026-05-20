@@ -7931,5 +7931,322 @@ class TestAnthropicBackendErrorIntegration:
         assert resp.headers.get("request-id").startswith("req_")
 
 
+# ---------------------------------------------------------------------------
+# SDK Compatibility Audit: adaptive thinking, output_config, signature_delta
+# ---------------------------------------------------------------------------
+
+class TestAdaptiveThinking:
+    """Tests for thinking.type=adaptive (SDK ThinkingConfigAdaptiveParam)."""
+
+    def test_adaptive_thinking_uses_max_completion_tokens(self):
+        body = {
+            "max_tokens": 2048,
+            "thinking": {"type": "adaptive"},
+        }
+        params = anthropic_compat._convert_params(body)
+        assert params["max_completion_tokens"] == 2048
+        assert "max_tokens" not in params
+
+    def test_adaptive_thinking_with_stream(self):
+        body = {
+            "max_tokens": 512,
+            "thinking": {"type": "adaptive"},
+            "stream": True,
+        }
+        params = anthropic_compat._convert_params(body)
+        assert params["max_completion_tokens"] == 512
+        assert params["stream"] is True
+        assert "max_tokens" not in params
+
+    def test_adaptive_thinking_no_budget_tokens_key(self):
+        """Adaptive thinking has no budget_tokens — should not crash."""
+        body = {
+            "max_tokens": 1000,
+            "thinking": {"type": "adaptive"},
+        }
+        params = anthropic_compat._convert_params(body)
+        assert params["max_completion_tokens"] == 1000
+
+    def test_adaptive_with_display_summarized(self):
+        """display field is accepted without error."""
+        body = {
+            "max_tokens": 4096,
+            "thinking": {"type": "adaptive", "display": "summarized"},
+        }
+        params = anthropic_compat._convert_params(body)
+        assert params["max_completion_tokens"] == 4096
+
+
+class TestOutputConfigEffort:
+    """Tests for output_config.effort (SDK OutputConfigParam)."""
+
+    def test_effort_without_thinking_uses_max_completion_tokens(self):
+        body = {
+            "max_tokens": 1024,
+            "output_config": {"effort": "high"},
+        }
+        params = anthropic_compat._convert_params(body)
+        assert params["max_completion_tokens"] == 1024
+        assert "max_tokens" not in params
+
+    def test_effort_with_thinking_enabled_thinking_wins(self):
+        """When both thinking and effort are set, thinking takes precedence."""
+        body = {
+            "max_tokens": 1024,
+            "thinking": {"type": "enabled", "budget_tokens": 5000},
+            "output_config": {"effort": "high"},
+        }
+        params = anthropic_compat._convert_params(body)
+        assert params["max_completion_tokens"] == 6024
+
+    def test_effort_with_thinking_disabled_uses_effort(self):
+        """disabled thinking + effort => thinking disabled wins (max_tokens)."""
+        body = {
+            "max_tokens": 1024,
+            "thinking": {"type": "disabled"},
+            "output_config": {"effort": "max"},
+        }
+        params = anthropic_compat._convert_params(body)
+        # thinking.type=disabled takes precedence, falls to else branch
+        assert params["max_tokens"] == 1024
+
+    def test_effort_none_ignored(self):
+        """effort=None is ignored."""
+        body = {
+            "max_tokens": 1024,
+            "output_config": {"effort": None},
+        }
+        params = anthropic_compat._convert_params(body)
+        assert params["max_tokens"] == 1024
+
+    def test_output_config_empty_dict_ignored(self):
+        body = {
+            "max_tokens": 512,
+            "output_config": {},
+        }
+        params = anthropic_compat._convert_params(body)
+        assert params["max_tokens"] == 512
+
+    def test_output_config_non_dict_ignored(self):
+        body = {
+            "max_tokens": 512,
+            "output_config": "invalid",
+        }
+        params = anthropic_compat._convert_params(body)
+        assert params["max_tokens"] == 512
+
+
+class TestThinkingBlockSignature:
+    """Tests for signature field in thinking content blocks (SDK ThinkingBlock)."""
+
+    def test_non_streaming_thinking_block_has_signature(self):
+        """SDK's ThinkingBlock requires a signature field."""
+        result = _fake_openai_result(content="Answer")
+        result["choices"][0]["message"]["reasoning_content"] = "Deep thought"
+        blocks = anthropic_compat._build_content_blocks(result)
+        thinking = blocks[0]
+        assert thinking["type"] == "thinking"
+        assert "signature" in thinking
+        assert thinking["signature"] == ""
+
+    def test_streaming_thinking_block_start_has_signature(self):
+        """content_block_start for thinking must include signature field."""
+        import asyncio
+
+        async def run():
+            async def gen():
+                yield f'data: {json.dumps({"choices": [{"delta": {"reasoning_content": "hmm"}, "index": 0}]})}\n\n'
+                yield f'data: {json.dumps({"choices": [{"delta": {"content": "ok"}, "finish_reason": "stop", "index": 0}], "usage": {"prompt_tokens": 5, "completion_tokens": 3, "total_tokens": 8}})}\n\n'
+                yield "data: [DONE]\n\n"
+
+            events = []
+            async for event in anthropic_compat._anthropic_stream_converter(
+                gen(), "test-model"
+            ):
+                events.append(event)
+            return events
+
+        events = asyncio.run(run())
+        # Find thinking content_block_start
+        for raw in events:
+            if "content_block_start" in raw:
+                data = json.loads(raw.split("data: ")[1])
+                if data.get("content_block", {}).get("type") == "thinking":
+                    assert "signature" in data["content_block"]
+                    assert data["content_block"]["signature"] == ""
+                    break
+        else:
+            pytest.fail("No thinking content_block_start found")
+
+    def test_streaming_signature_delta_before_thinking_block_stop(self):
+        """A signature_delta event should precede thinking block's content_block_stop."""
+        import asyncio
+
+        async def run():
+            async def gen():
+                yield f'data: {json.dumps({"choices": [{"delta": {"reasoning_content": "thinking..."}, "index": 0}]})}\n\n'
+                yield f'data: {json.dumps({"choices": [{"delta": {"content": "answer"}, "finish_reason": "stop", "index": 0}], "usage": {"prompt_tokens": 5, "completion_tokens": 3, "total_tokens": 8}})}\n\n'
+                yield "data: [DONE]\n\n"
+
+            events = []
+            async for event in anthropic_compat._anthropic_stream_converter(
+                gen(), "test-model"
+            ):
+                events.append(event)
+            return events
+
+        raw_events = asyncio.run(run())
+        parsed = []
+        for raw in raw_events:
+            if "data: " in raw:
+                try:
+                    d = json.loads(raw.split("data: ")[1])
+                    parsed.append(d)
+                except json.JSONDecodeError:
+                    pass
+
+        # Find the thinking block index
+        thinking_idx = None
+        for ev in parsed:
+            if ev.get("type") == "content_block_start":
+                if ev.get("content_block", {}).get("type") == "thinking":
+                    thinking_idx = ev["index"]
+
+        assert thinking_idx is not None
+
+        # Find all events for the thinking block index
+        thinking_events = [
+            ev for ev in parsed
+            if ev.get("index") == thinking_idx and ev.get("type") in (
+                "content_block_delta", "content_block_stop"
+            )
+        ]
+
+        # The last delta before stop should be signature_delta
+        deltas = [ev for ev in thinking_events if ev.get("type") == "content_block_delta"]
+        stops = [ev for ev in thinking_events if ev.get("type") == "content_block_stop"]
+
+        assert len(stops) == 1
+        assert deltas[-1]["delta"]["type"] == "signature_delta"
+        assert deltas[-1]["delta"]["signature"] == ""
+
+
+class TestRedactedThinkingInRequests:
+    """Tests for redacted_thinking blocks in assistant messages."""
+
+    def test_redacted_thinking_stripped_from_assistant(self):
+        """redacted_thinking blocks in assistant messages should be silently dropped."""
+        content = [
+            {"type": "redacted_thinking", "data": "abc123encrypted"},
+            {"type": "text", "text": "Hello!"},
+        ]
+        messages = anthropic_compat._convert_assistant_message(content)
+        assert len(messages) == 1
+        msg = messages[0]
+        assert msg["role"] == "assistant"
+        assert msg["content"] == "Hello!"
+        assert "tool_calls" not in msg
+
+    def test_redacted_thinking_only_produces_null_content(self):
+        """If assistant message has only redacted_thinking, content should be null."""
+        content = [
+            {"type": "redacted_thinking", "data": "encrypted"},
+        ]
+        messages = anthropic_compat._convert_assistant_message(content)
+        assert len(messages) == 1
+        assert messages[0]["content"] is None
+
+    def test_mixed_thinking_redacted_thinking_text(self):
+        """Both thinking and redacted_thinking should be stripped."""
+        content = [
+            {"type": "thinking", "thinking": "Let me think...", "signature": "sig"},
+            {"type": "redacted_thinking", "data": "secret"},
+            {"type": "text", "text": "Result"},
+            {"type": "tool_use", "id": "toolu_1", "name": "search", "input": {"q": "test"}},
+        ]
+        messages = anthropic_compat._convert_assistant_message(content)
+        assert len(messages) == 1
+        msg = messages[0]
+        assert msg["content"] == "Result"
+        assert len(msg["tool_calls"]) == 1
+
+
+class TestServiceTierAndInferenceGeo:
+    """Verify new SDK params are accepted without error."""
+
+    def test_service_tier_accepted(self):
+        """service_tier should not cause validation errors."""
+        body = {
+            "model": "claude-test",
+            "max_tokens": 100,
+            "messages": [{"role": "user", "content": "hi"}],
+            "service_tier": "auto",
+        }
+        err = anthropic_compat._validate_request(body)
+        assert err is None
+
+    def test_inference_geo_accepted(self):
+        body = {
+            "model": "claude-test",
+            "max_tokens": 100,
+            "messages": [{"role": "user", "content": "hi"}],
+            "inference_geo": "us",
+        }
+        err = anthropic_compat._validate_request(body)
+        assert err is None
+
+    def test_container_accepted(self):
+        body = {
+            "model": "claude-test",
+            "max_tokens": 100,
+            "messages": [{"role": "user", "content": "hi"}],
+            "container": "ctnr_abc123",
+        }
+        err = anthropic_compat._validate_request(body)
+        assert err is None
+
+    def test_output_config_accepted(self):
+        body = {
+            "model": "claude-test",
+            "max_tokens": 100,
+            "messages": [{"role": "user", "content": "hi"}],
+            "output_config": {"effort": "high"},
+        }
+        err = anthropic_compat._validate_request(body)
+        assert err is None
+
+    def test_all_new_params_together(self):
+        body = {
+            "model": "claude-test",
+            "max_tokens": 100,
+            "messages": [{"role": "user", "content": "hi"}],
+            "service_tier": "standard_only",
+            "inference_geo": "eu",
+            "container": "ctnr_123",
+            "output_config": {"effort": "max", "format": {"type": "json_schema", "schema": {}}},
+        }
+        err = anthropic_compat._validate_request(body)
+        assert err is None
+
+
+class TestStopReasonPauseTurnRefusal:
+    """Verify stop_reason values from SDK StopReason type."""
+
+    def test_known_stop_reasons_are_valid(self):
+        """SDK StopReason: end_turn, max_tokens, stop_sequence, tool_use, pause_turn, refusal."""
+        # Our _map_stop_reason produces end_turn, max_tokens, stop_sequence, tool_use
+        reason, seq = anthropic_compat._map_stop_reason("stop")
+        assert reason == "end_turn"
+
+        reason, seq = anthropic_compat._map_stop_reason("length")
+        assert reason == "max_tokens"
+
+        reason, seq = anthropic_compat._map_stop_reason("tool_calls")
+        assert reason == "tool_use"
+
+        reason, seq = anthropic_compat._map_stop_reason("stop", stop_sequences=["END"])
+        assert reason == "stop_sequence"
+
+
 if __name__ == "__main__":
     unittest.main()

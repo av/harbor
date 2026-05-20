@@ -326,7 +326,7 @@ def _convert_assistant_message(content):
           },
         }
       )
-    # Skip thinking blocks — no OpenAI equivalent for conversation history
+    # Skip thinking and redacted_thinking blocks — no OpenAI equivalent
 
   msg = {"role": "assistant"}
   if text_parts:
@@ -365,6 +365,10 @@ def _convert_params(body: dict):
       # No budget_tokens — just use max_completion_tokens = max_tokens
       # to allow the backend to allocate reasoning budget dynamically.
       params["max_completion_tokens"] = max_tokens
+    else:
+      # "disabled" or unknown type — fall through to plain max_tokens
+      if max_tokens > 0:
+        params["max_tokens"] = max_tokens
   elif effort:
     # output_config.effort without explicit thinking config — some backends
     # accept reasoning_effort or similar params.
@@ -661,6 +665,14 @@ async def _anthropic_stream_converter(
           # Close thinking block before opening text block
           if thinking_block_open:
             yield _sse_event(
+              "content_block_delta",
+              {
+                "type": "content_block_delta",
+                "index": block_index,
+                "delta": {"type": "signature_delta", "signature": ""},
+              },
+            )
+            yield _sse_event(
               "content_block_stop",
               {
                 "type": "content_block_stop",
@@ -713,6 +725,14 @@ async def _anthropic_stream_converter(
 
             if not tool_state.get("emitted") and tool_state.get("id"):
               if thinking_block_open:
+                yield _sse_event(
+                  "content_block_delta",
+                  {
+                    "type": "content_block_delta",
+                    "index": block_index,
+                    "delta": {"type": "signature_delta", "signature": ""},
+                  },
+                )
                 yield _sse_event(
                   "content_block_stop",
                   {
@@ -785,6 +805,14 @@ async def _anthropic_stream_converter(
   if stream_error:
     if thinking_block_open:
       yield _sse_event(
+        "content_block_delta",
+        {
+          "type": "content_block_delta",
+          "index": block_index,
+          "delta": {"type": "signature_delta", "signature": ""},
+        },
+      )
+      yield _sse_event(
         "content_block_stop",
         {
           "type": "content_block_stop",
@@ -815,6 +843,14 @@ async def _anthropic_stream_converter(
 
   # Close thinking block if still open
   if thinking_block_open:
+    yield _sse_event(
+      "content_block_delta",
+      {
+        "type": "content_block_delta",
+        "index": block_index,
+        "delta": {"type": "signature_delta", "signature": ""},
+      },
+    )
     yield _sse_event(
       "content_block_stop",
       {
