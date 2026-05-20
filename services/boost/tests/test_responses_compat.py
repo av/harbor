@@ -4959,3 +4959,712 @@ class TestResponsesParamEdgeCases:
         body = {"model": "gpt-4o", "input": "hi"}
         result = responses_compat._build_openai_body(body)
         assert "temperature" not in result
+
+
+# ---------------------------------------------------------------------------
+# Deep edge case audit of _responses_stream_converter
+# ---------------------------------------------------------------------------
+
+
+class TestStreamConverterDeepEdgeCaseAudit:
+    """Systematic audit of streaming converter edge cases (a)-(j).
+
+    Each test targets a specific scenario from the edge case checklist.
+    """
+
+    # (a) Chunk with both text content AND tool calls in the same delta
+    @pytest.mark.asyncio
+    async def test_chunk_with_text_and_tool_calls_same_delta(self):
+        """A single chunk containing both text content and tool_calls should
+        emit text events first, close the text item, then emit tool events."""
+        async def mock_stream():
+            yield (
+                'data: {"choices":[{"delta":{"content":"Let me search",'
+                '"tool_calls":[{"index":0,"id":"call_combo","function":{"name":"search","arguments":"{\\"q\\":\\"test\\"}"}}]'
+                '},"index":0}]}\n\n'
+            )
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"tool_calls"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "gpt-4o", "resp_combo"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        event_types = [t for t, _ in parsed]
+
+        # Text item opens, gets delta, then closes before tool opens
+        assert "response.output_text.delta" in event_types
+        assert "response.output_text.done" in event_types
+        assert "response.function_call_arguments.delta" in event_types
+        assert "response.function_call_arguments.done" in event_types
+
+        # Text done must precede tool added
+        text_done_idx = event_types.index("response.output_text.done")
+        tool_added_indices = [
+            i for i, (t, d) in enumerate(parsed)
+            if t == "response.output_item.added" and d["item"]["type"] == "function_call"
+        ]
+        assert all(text_done_idx < idx for idx in tool_added_indices)
+
+        # Both text and tool content are correct
+        text_deltas = [d for t, d in parsed if t == "response.output_text.delta"]
+        assert text_deltas[0]["delta"] == "Let me search"
+        args_done = [d for t, d in parsed if t == "response.function_call_arguments.done"]
+        assert args_done[0]["arguments"] == '{"q":"test"}'
+
+    @pytest.mark.asyncio
+    async def test_chunk_with_text_and_two_tool_calls_same_delta(self):
+        """Single chunk with text + 2 tool calls in same delta."""
+        async def mock_stream():
+            yield (
+                'data: {"choices":[{"delta":{"content":"Calling tools",'
+                '"tool_calls":['
+                '{"index":0,"id":"call_x1","function":{"name":"fn1","arguments":"{}"}},'
+                '{"index":1,"id":"call_x2","function":{"name":"fn2","arguments":"{}"}}'
+                ']},"index":0}]}\n\n'
+            )
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"tool_calls"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "gpt-4o", "resp_combo2"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+
+        # 3 output_item.added: 1 message + 2 function_calls
+        added = [d for t, d in parsed if t == "response.output_item.added"]
+        assert len(added) == 3
+        assert added[0]["item"]["type"] == "message"
+        assert added[1]["item"]["type"] == "function_call"
+        assert added[2]["item"]["type"] == "function_call"
+
+        # 3 output_item.done: 1 message + 2 function_calls
+        done = [d for t, d in parsed if t == "response.output_item.done"]
+        assert len(done) == 3
+
+    # (b) Tool call with empty/null name
+    @pytest.mark.asyncio
+    async def test_tool_call_with_empty_name(self):
+        """Tool call where function name is empty string."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_noname","function":{"name":"","arguments":"{\\"k\\":1}"}}]},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"tool_calls"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "model", "resp_emptyname"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+
+        # Tool should still be emitted with empty name
+        tool_added = [d for t, d in parsed if t == "response.output_item.added"]
+        assert len(tool_added) == 1
+        assert tool_added[0]["item"]["name"] == ""
+        assert tool_added[0]["item"]["type"] == "function_call"
+
+        # Done event should also have empty name
+        tool_done = [d for t, d in parsed if t == "response.output_item.done"]
+        assert len(tool_done) == 1
+        assert tool_done[0]["item"]["name"] == ""
+
+    @pytest.mark.asyncio
+    async def test_tool_call_with_null_name(self):
+        """Tool call where function name is null/missing."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_nullname","function":{"name":null,"arguments":"{}"}}]},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"tool_calls"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "model", "resp_nullname"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+
+        tool_added = [d for t, d in parsed if t == "response.output_item.added"]
+        assert len(tool_added) == 1
+        # null name -> dotty.get returns None which is falsy, so tool_state["name"] is never set
+        # get defaults to ""
+        assert tool_added[0]["item"]["name"] == ""
+
+    @pytest.mark.asyncio
+    async def test_tool_call_with_missing_function_key(self):
+        """Tool call chunk with no function key at all."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_nofunc"}]},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"name":"fn","arguments":"{\\"a\\":1}"}}]},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"tool_calls"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "model", "resp_nofunc"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+
+        # First chunk has id but no function -> tool emitted with empty name initially
+        tool_added = [d for t, d in parsed if t == "response.output_item.added"]
+        assert len(tool_added) == 1
+        assert tool_added[0]["item"]["name"] == ""
+
+        # Second chunk provides name and args -> emitted as delta
+        args_done = [d for t, d in parsed if t == "response.function_call_arguments.done"]
+        assert len(args_done) == 1
+        assert args_done[0]["arguments"] == '{"a":1}'
+
+        # Done item should have the name from the second chunk
+        tool_done = [d for t, d in parsed if t == "response.output_item.done"]
+        assert tool_done[0]["item"]["name"] == "fn"
+
+    # (c) Empty text deltas (content: "")
+    @pytest.mark.asyncio
+    async def test_empty_text_delta_skipped(self):
+        """Chunks with content: '' should not produce output_text.delta events."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":""},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{"content":"real text"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{"content":""},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "model", "resp_empty_delta"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+
+        # Only one text delta for "real text", empty ones are skipped
+        text_deltas = [d for t, d in parsed if t == "response.output_text.delta"]
+        assert len(text_deltas) == 1
+        assert text_deltas[0]["delta"] == "real text"
+
+    @pytest.mark.asyncio
+    async def test_null_content_delta_skipped(self):
+        """Chunks with content: null should not produce output_text.delta events."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":null},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{"content":"actual"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "model", "resp_null_delta"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+
+        text_deltas = [d for t, d in parsed if t == "response.output_text.delta"]
+        assert len(text_deltas) == 1
+        assert text_deltas[0]["delta"] == "actual"
+
+    @pytest.mark.asyncio
+    async def test_all_empty_text_deltas_no_text_item(self):
+        """Stream with only empty content deltas produces no text item."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":""},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{"content":""},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "model", "resp_all_empty"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        event_types = [t for t, _ in parsed]
+
+        # No text item should be opened
+        assert "response.output_text.delta" not in event_types
+        assert "response.output_item.added" not in event_types
+        # But should still have created + completed
+        assert event_types[0] == "response.created"
+        assert event_types[-1] == "response.completed"
+
+    # (d) Finish-reason-only stream (no content at all)
+    @pytest.mark.asyncio
+    async def test_finish_reason_only_stream_valid_envelope(self):
+        """Stream with only finish_reason chunk (no content/tools) produces a
+        valid response envelope with no output items."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "gpt-4o", "resp_fr_only"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        event_types = [t for t, _ in parsed]
+
+        assert event_types[0] == "response.created"
+        assert event_types[1] == "response.in_progress"
+        assert event_types[-1] == "response.completed"
+
+        # No output items emitted
+        assert "response.output_item.added" not in event_types
+        assert "response.output_text.delta" not in event_types
+        assert "response.function_call_arguments.delta" not in event_types
+
+        # Completed event has valid structure
+        completed = [d for t, d in parsed if t == "response.completed"]
+        assert completed[0]["response"]["status"] == "completed"
+        assert completed[0]["response"]["id"] == "resp_fr_only"
+
+    @pytest.mark.asyncio
+    async def test_finish_reason_length_maps_to_incomplete(self):
+        """finish_reason 'length' should map to status 'incomplete'."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"truncated"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"length"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "model", "resp_fr_len"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        completed = [d for t, d in parsed if t == "response.completed"]
+        assert completed[0]["response"]["status"] == "incomplete"
+        assert completed[0]["response"]["incomplete_details"] == {"reason": "max_output_tokens"}
+
+    # (e) Reasoning content interleaved with text — transitions correct?
+    @pytest.mark.asyncio
+    async def test_reasoning_to_text_transition_closes_reasoning(self):
+        """When text arrives after reasoning, the reasoning item must be fully
+        closed (text.done + part.done + item.done) before the text item opens."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"reasoning_content":"think"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{"reasoning_content":"..."},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{"content":"answer"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "o3", "resp_r2t"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        event_types = [t for t, _ in parsed]
+
+        # Reasoning close events must come before text open events
+        reasoning_item_done_idx = next(
+            i for i, (t, d) in enumerate(parsed)
+            if t == "response.output_item.done" and d["item"]["type"] == "reasoning"
+        )
+        text_item_added_idx = next(
+            i for i, (t, d) in enumerate(parsed)
+            if t == "response.output_item.added" and d["item"]["type"] == "message"
+        )
+        assert reasoning_item_done_idx < text_item_added_idx
+
+        # Reasoning text.done and part.done must precede item.done
+        reasoning_text_done_idx = event_types.index("response.reasoning_summary_text.done")
+        reasoning_part_done_idx = event_types.index("response.reasoning_summary_part.done")
+        assert reasoning_text_done_idx < reasoning_part_done_idx
+        assert reasoning_part_done_idx < reasoning_item_done_idx
+
+        # Reasoning text.done should contain accumulated reasoning
+        reasoning_text_done = [d for t, d in parsed if t == "response.reasoning_summary_text.done"]
+        assert reasoning_text_done[0]["text"] == "think..."
+
+    @pytest.mark.asyncio
+    async def test_reasoning_and_text_in_same_chunk(self):
+        """Both reasoning_content and content in the same delta chunk."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"reasoning_content":"think","content":"answer"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "o3", "resp_rt_same"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        event_types = [t for t, _ in parsed]
+
+        # Both reasoning and text should be emitted
+        assert "response.reasoning_summary_text.delta" in event_types
+        assert "response.output_text.delta" in event_types
+
+        # Reasoning item should be opened and closed before text item opens
+        reasoning_added = [d for t, d in parsed
+                          if t == "response.output_item.added" and d["item"]["type"] == "reasoning"]
+        msg_added = [d for t, d in parsed
+                    if t == "response.output_item.added" and d["item"]["type"] == "message"]
+        assert len(reasoning_added) == 1
+        assert len(msg_added) == 1
+
+        # Reasoning at output_index 0, text at output_index 1
+        assert reasoning_added[0]["output_index"] == 0
+        assert msg_added[0]["output_index"] == 1
+
+    @pytest.mark.asyncio
+    async def test_reasoning_then_tool_no_text(self):
+        """Reasoning followed directly by tool calls, no text content."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"reasoning_content":"I need to search"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_rt","function":{"name":"search","arguments":"{\\"q\\":\\"test\\"}"}}]},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"tool_calls"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "o3", "resp_r2tool"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+
+        # Reasoning closes before tool opens
+        reasoning_done = [d for t, d in parsed
+                         if t == "response.output_item.done" and d["item"]["type"] == "reasoning"]
+        tool_added = [d for t, d in parsed
+                     if t == "response.output_item.added" and d["item"]["type"] == "function_call"]
+        assert len(reasoning_done) == 1
+        assert len(tool_added) == 1
+        assert reasoning_done[0]["output_index"] == 0
+        assert tool_added[0]["output_index"] == 1
+
+        # No text message item
+        msg_added = [d for t, d in parsed
+                    if t == "response.output_item.added" and d["item"]["type"] == "message"]
+        assert len(msg_added) == 0
+
+    # (f) Multiple tool calls in a single chunk
+    @pytest.mark.asyncio
+    async def test_three_tools_in_one_chunk(self):
+        """Three tool calls arrive in a single tool_calls array within one chunk."""
+        async def mock_stream():
+            yield (
+                'data: {"choices":[{"delta":{"tool_calls":['
+                '{"index":0,"id":"call_a","function":{"name":"fn_a","arguments":"{\\"x\\":1}"}},'
+                '{"index":1,"id":"call_b","function":{"name":"fn_b","arguments":"{\\"y\\":2}"}},'
+                '{"index":2,"id":"call_c","function":{"name":"fn_c","arguments":"{\\"z\\":3}"}}'
+                ']},"index":0}]}\n\n'
+            )
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"tool_calls"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "model", "resp_3tools"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+
+        # Three output_item.added events for function_calls
+        tool_added = [d for t, d in parsed
+                     if t == "response.output_item.added" and d["item"]["type"] == "function_call"]
+        assert len(tool_added) == 3
+        assert [t["item"]["name"] for t in tool_added] == ["fn_a", "fn_b", "fn_c"]
+
+        # Three function_call_arguments.done events
+        args_done = [d for t, d in parsed if t == "response.function_call_arguments.done"]
+        assert len(args_done) == 3
+        assert args_done[0]["arguments"] == '{"x":1}'
+        assert args_done[1]["arguments"] == '{"y":2}'
+        assert args_done[2]["arguments"] == '{"z":3}'
+
+        # Three output_item.done
+        tool_done = [d for t, d in parsed
+                    if t == "response.output_item.done" and d["item"]["type"] == "function_call"]
+        assert len(tool_done) == 3
+
+        # Output indices are 0, 1, 2
+        assert [t["output_index"] for t in tool_added] == [0, 1, 2]
+
+    # (g) Tool arguments arriving before the tool ID — deferred emission
+    @pytest.mark.asyncio
+    async def test_tool_args_before_id_deferred(self):
+        """Arguments arrive before the tool ID; emission is deferred until ID arrives."""
+        async def mock_stream():
+            # Args arrive first, no id
+            yield 'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\\"key\\":"}}]},"index":0}]}\n\n'
+            # More args, still no id
+            yield 'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\\"val\\"}"}}]},"index":0}]}\n\n'
+            # Now id and name arrive
+            yield 'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_deferred","function":{"name":"lookup"}}]},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"tool_calls"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "model", "resp_deferred"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+
+        # No output_item.added before the ID arrives
+        # (first two chunks should NOT produce output_item.added)
+        tool_added = [d for t, d in parsed if t == "response.output_item.added"]
+        assert len(tool_added) == 1
+        assert tool_added[0]["item"]["id"] == "call_deferred"
+        assert tool_added[0]["item"]["name"] == "lookup"
+
+        # Accumulated arguments emitted as delta after item.added
+        arg_deltas = [d for t, d in parsed if t == "response.function_call_arguments.delta"]
+        assert len(arg_deltas) == 1
+        assert arg_deltas[0]["delta"] == '{"key":"val"}'
+
+        # Done event has full arguments
+        args_done = [d for t, d in parsed if t == "response.function_call_arguments.done"]
+        assert args_done[0]["arguments"] == '{"key":"val"}'
+
+    @pytest.mark.asyncio
+    async def test_tool_args_before_id_no_id_ever(self):
+        """Arguments arrive but ID never arrives; tool is handled in cleanup."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\\"a\\":1}"}}]},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"tool_calls"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "model", "resp_no_id"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+
+        # Tool without ID is never emitted (no output_item.added for function_call)
+        tool_added = [d for t, d in parsed
+                     if t == "response.output_item.added" and d["item"]["type"] == "function_call"]
+        assert len(tool_added) == 0
+
+        # Stream still completes normally
+        assert parsed[-1][0] == "response.completed"
+
+    # (h) Stream that produces no output items at all
+    @pytest.mark.asyncio
+    async def test_no_output_items_stream_valid_response(self):
+        """Empty stream (only DONE) produces valid response with no output items."""
+        async def mock_stream():
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "gpt-4o", "resp_noop"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        event_types = [t for t, _ in parsed]
+
+        # Minimum valid envelope: created, in_progress, completed
+        assert event_types == [
+            "response.created",
+            "response.in_progress",
+            "response.completed",
+        ]
+
+        # Completed response has empty output
+        completed = [d for t, d in parsed if t == "response.completed"]
+        assert completed[0]["response"]["output"] == []
+        assert completed[0]["response"]["status"] == "completed"
+
+    @pytest.mark.asyncio
+    async def test_only_keepalive_chunks_no_output(self):
+        """Stream with only empty delta chunks produces no output items."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "model", "resp_keepalive"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        event_types = [t for t, _ in parsed]
+
+        assert "response.output_item.added" not in event_types
+        assert "response.output_text.delta" not in event_types
+        assert event_types[-1] == "response.completed"
+
+    # (i) Very large argument strings — any truncation?
+    @pytest.mark.asyncio
+    async def test_very_large_tool_arguments_no_truncation(self):
+        """Large argument strings (100KB+) are passed through without truncation."""
+        large_value = "x" * 100_000
+        args_json = json.dumps({"data": large_value})
+        # Split args into multiple chunks to simulate streaming
+        chunk_size = 10_000
+        chunks = [args_json[i:i+chunk_size] for i in range(0, len(args_json), chunk_size)]
+
+        async def mock_stream():
+            # First chunk: id + name + first args chunk
+            yield f'data: {{"choices":[{{"delta":{{"tool_calls":[{{"index":0,"id":"call_big","function":{{"name":"process","arguments":"{_json_escape(chunks[0])}"}}}}]}},"index":0}}]}}\n\n'
+            # Remaining chunks: args only
+            for chunk in chunks[1:]:
+                yield f'data: {{"choices":[{{"delta":{{"tool_calls":[{{"index":0,"function":{{"arguments":"{_json_escape(chunk)}"}}}}]}},"index":0}}]}}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"tool_calls"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "model", "resp_large"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+
+        # function_call_arguments.done should have the full accumulated args
+        args_done = [d for t, d in parsed if t == "response.function_call_arguments.done"]
+        assert len(args_done) == 1
+        assert args_done[0]["arguments"] == args_json
+        assert len(args_done[0]["arguments"]) == len(args_json)
+
+        # output_item.done should also have full args
+        tool_done = [d for t, d in parsed
+                    if t == "response.output_item.done" and d["item"]["type"] == "function_call"]
+        assert tool_done[0]["item"]["arguments"] == args_json
+
+    # (j) Backend sends usage in multiple chunks — accumulated correctly?
+    @pytest.mark.asyncio
+    async def test_usage_in_separate_final_chunk(self):
+        """Usage arriving in a separate final chunk (standard OpenAI pattern)."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"hello"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}\n\n'
+            # Usage in separate chunk (OpenAI stream_options.include_usage pattern)
+            yield 'data: {"choices":[],"usage":{"prompt_tokens":25,"completion_tokens":10,"total_tokens":35}}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "model", "resp_usage_sep"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        completed = [d for t, d in parsed if t == "response.completed"]
+        usage = completed[0]["response"]["usage"]
+        assert usage["input_tokens"] == 25
+        assert usage["output_tokens"] == 10
+        assert usage["total_tokens"] == 35
+
+    @pytest.mark.asyncio
+    async def test_usage_in_same_chunk_as_finish_reason(self):
+        """Usage arriving in the same chunk as finish_reason."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"hi"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}],"usage":{"prompt_tokens":5,"completion_tokens":2,"total_tokens":7}}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "model", "resp_usage_same"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        completed = [d for t, d in parsed if t == "response.completed"]
+        usage = completed[0]["response"]["usage"]
+        assert usage["input_tokens"] == 5
+        assert usage["output_tokens"] == 2
+
+    @pytest.mark.asyncio
+    async def test_usage_in_multiple_chunks_last_wins(self):
+        """When usage appears in multiple chunks, the last non-zero values are used."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"hi"},"index":0}]}\n\n'
+            # First usage chunk (partial -- some backends send this early)
+            yield 'data: {"choices":[{"delta":{},"index":0}],"usage":{"prompt_tokens":10,"completion_tokens":0,"total_tokens":10}}\n\n'
+            # Second usage chunk (final, with completion tokens)
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "model", "resp_usage_multi"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        completed = [d for t, d in parsed if t == "response.completed"]
+        usage = completed[0]["response"]["usage"]
+        # Last non-zero value wins for each field
+        assert usage["input_tokens"] == 10
+        assert usage["output_tokens"] == 5
+
+    @pytest.mark.asyncio
+    async def test_usage_with_zero_prompt_tokens_preserves_previous(self):
+        """If a later chunk reports prompt_tokens:0, the previous non-zero value is kept."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"hi"},"index":0}]}\n\n'
+            # Usage with real prompt_tokens
+            yield 'data: {"usage":{"prompt_tokens":20,"completion_tokens":3,"total_tokens":23}}\n\n'
+            # Later chunk with zero prompt_tokens (shouldn't overwrite)
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}],"usage":{"prompt_tokens":0,"completion_tokens":3,"total_tokens":3}}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "model", "resp_usage_zero"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        completed = [d for t, d in parsed if t == "response.completed"]
+        usage = completed[0]["response"]["usage"]
+        # prompt_tokens: 0 in second chunk doesn't overwrite the 20 from first
+        assert usage["input_tokens"] == 20
+        assert usage["output_tokens"] == 3
+
+    @pytest.mark.asyncio
+    async def test_no_usage_in_stream_defaults_to_zero(self):
+        """Stream with no usage chunks defaults to 0 tokens."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"hi"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "model", "resp_no_usage"
+        ):
+            events.append(event)
+
+        parsed = _parse_sse_events(events)
+        completed = [d for t, d in parsed if t == "response.completed"]
+        usage = completed[0]["response"]["usage"]
+        assert usage["input_tokens"] == 0
+        assert usage["output_tokens"] == 0
+        assert usage["total_tokens"] == 0
+
+
+def _json_escape(s):
+    """Escape a string for embedding in a JSON string value."""
+    return s.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
