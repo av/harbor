@@ -411,6 +411,12 @@
 - label: Boost Anthropic compat supports extended thinking by mapping thinking param to max_completion_tokens, producing thinking content blocks from backend reasoning_content, and stripping thinking blocks from request message history
   command: rg -q 'thinking' services/boost/src/anthropic_compat.py && rg -q 'reasoning_content' services/boost/src/anthropic_compat.py && rg -q 'thinking_delta' services/boost/src/anthropic_compat.py && rg -q 'test_assistant_message_thinking_blocks_stripped' services/boost/tests/test_anthropic_compat.py && rg -q 'test_reasoning_content_produces_thinking_block' services/boost/tests/test_anthropic_compat.py
   tags: [spec, implemented]
+- label: Boost Anthropic compat passes through top_k parameter for backends that support it (vLLM, Ollama, llama.cpp)
+  command: grep -q 'top_k' services/boost/src/anthropic_compat.py && grep -q 'test_top_k' services/boost/tests/test_anthropic_compat.py
+  tags: [spec, implemented]
+- label: Boost Anthropic compat accepts the anthropic-beta request header with comma-separated feature flags and logs them at debug level without rejecting the request
+  command: grep -q '_parse_beta_flags' services/boost/src/anthropic_compat.py && grep -q 'anthropic-beta' services/boost/src/anthropic_compat.py && grep -q 'TestParseBetaFlags' services/boost/tests/test_anthropic_compat.py
+  tags: [spec, implemented]
 
 ## responses api
 - label: Boost exposes POST /v1/responses endpoint for OpenAI Responses API compatibility
@@ -437,6 +443,9 @@
 - label: Boost Responses API supports reasoning via effort param mapping, reasoning output items with summary, reasoning streaming events, and reasoning_tokens in usage
   command: grep -q 'reasoning_effort' services/boost/src/responses_compat.py && grep -q '"type": "reasoning"' services/boost/src/responses_compat.py && grep -q 'reasoning_tokens' services/boost/src/responses_compat.py && grep -q 'TestReasoningStreaming' services/boost/tests/test_responses_compat.py
   tags: [spec, implemented]
+- label: Boost Responses API maps web_search_preview and web_search tool types to Harbor's web_search function tool, and logs warnings for unsupported built-in tools (file_search, code_interpreter)
+  command: grep -q '_WEB_SEARCH_TYPES' services/boost/src/responses_compat.py && grep -q '_UNSUPPORTED_BUILTIN_TOOLS' services/boost/src/responses_compat.py && grep -q 'web_search' services/boost/src/responses_compat.py
+  tags: [spec, implemented]
 
 ## shared
 - label: Boost compat layers share a common auth.py module with get_api_key supporting both Authorization and x-api-key headers
@@ -444,6 +453,9 @@
   tags: [spec, implemented]
 - label: Boost compat layers share a common compat_utils.py module with chunk extraction helpers and SSE event formatting
   command: test -f services/boost/src/compat_utils.py && grep -q 'get_chunk_content' services/boost/src/compat_utils.py && grep -q 'get_chunk_reasoning' services/boost/src/compat_utils.py && grep -q 'sse_event' services/boost/src/compat_utils.py && grep -q 'from compat_utils import' services/boost/src/anthropic_compat.py && grep -q 'from compat_utils import' services/boost/src/responses_compat.py
+  tags: [spec, implemented]
+- label: Boost compat_utils normalizes tool IDs between toolu_ (Anthropic) and call_ (OpenAI) prefixes via to_anthropic_tool_id and to_openai_tool_id, applied in request conversion, response building, and streaming for both compat layers
+  command: grep -q 'to_anthropic_tool_id' services/boost/src/compat_utils.py && grep -q 'to_openai_tool_id' services/boost/src/compat_utils.py && grep -q 'to_anthropic_tool_id' services/boost/src/anthropic_compat.py && grep -q 'to_openai_tool_id' services/boost/src/anthropic_compat.py && grep -q 'to_openai_tool_id' services/boost/src/responses_compat.py
   tags: [spec, implemented]
 
 ## config

@@ -3494,5 +3494,97 @@ class TestCacheUsageFields:
         assert body["usage"]["cache_read_input_tokens"] == 0
 
 
+# ---------------------------------------------------------------------------
+# Beta flags: _parse_beta_flags
+# ---------------------------------------------------------------------------
+
+class TestParseBetaFlags:
+    def test_returns_empty_list_when_no_header(self):
+        request = make_request({})
+        flags = anthropic_compat._parse_beta_flags(request)
+        assert flags == []
+
+    def test_parses_single_flag(self):
+        request = make_request({"anthropic-beta": "prompt-caching-2024-07-31"})
+        flags = anthropic_compat._parse_beta_flags(request)
+        assert flags == ["prompt-caching-2024-07-31"]
+
+    def test_parses_multiple_comma_separated_flags(self):
+        request = make_request({
+            "anthropic-beta": "max-tokens-3-5-sonnet-2024-07-15,prompt-caching-2024-07-31"
+        })
+        flags = anthropic_compat._parse_beta_flags(request)
+        assert flags == ["max-tokens-3-5-sonnet-2024-07-15", "prompt-caching-2024-07-31"]
+
+    def test_strips_whitespace_around_flags(self):
+        request = make_request({
+            "anthropic-beta": " flag-a , flag-b , flag-c "
+        })
+        flags = anthropic_compat._parse_beta_flags(request)
+        assert flags == ["flag-a", "flag-b", "flag-c"]
+
+    def test_ignores_empty_segments(self):
+        request = make_request({"anthropic-beta": "flag-a,,flag-b,"})
+        flags = anthropic_compat._parse_beta_flags(request)
+        assert flags == ["flag-a", "flag-b"]
+
+    def test_empty_string_returns_empty_list(self):
+        request = make_request({"anthropic-beta": ""})
+        flags = anthropic_compat._parse_beta_flags(request)
+        assert flags == []
+
+
+class TestBetaFlagsIntegration:
+    """Verify that requests with anthropic-beta header are accepted."""
+
+    def test_messages_accepts_beta_header(self):
+        fake_llm = _FakeLLM(
+            consume_result=_fake_openai_result(),
+            stream_chunks=[],
+        )
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+            patch.object(anthropic_compat, "llm_mod") as mock_llm_mod,
+        ):
+            mock_mapper.list_downstream = AsyncMock()
+            mock_mapper.resolve_request_config = MagicMock(return_value={})
+            mock_mapper.is_direct_task = MagicMock(return_value=False)
+            mock_llm_mod.LLM = MagicMock(return_value=fake_llm)
+
+            client = _make_client()
+            resp = client.post(
+                "/v1/messages", json=_ANTHRO_BODY,
+                headers={
+                    "authorization": "Bearer test-key",
+                    "anthropic-beta": "max-tokens-3-5-sonnet-2024-07-15,prompt-caching-2024-07-31",
+                },
+            )
+            assert resp.status_code == 200
+
+    def test_count_tokens_accepts_beta_header(self):
+        fake_llm = _FakeLLM(
+            consume_result=_fake_openai_result(),
+            stream_chunks=[],
+        )
+        with (
+            patch.object(anthropic_compat, "mapper") as mock_mapper,
+            patch.object(anthropic_compat, "llm_mod") as mock_llm_mod,
+        ):
+            mock_mapper.list_downstream = AsyncMock()
+            mock_mapper.resolve_request_config = MagicMock(return_value={})
+            mock_mapper.is_direct_task = MagicMock(return_value=False)
+            mock_llm_mod.LLM = MagicMock(return_value=fake_llm)
+
+            client = _make_client()
+            resp = client.post(
+                "/v1/messages/count_tokens", json=_ANTHRO_BODY,
+                headers={
+                    "authorization": "Bearer test-key",
+                    "anthropic-beta": "prompt-caching-2024-07-31",
+                },
+            )
+            assert resp.status_code == 200
+
+
 if __name__ == "__main__":
     unittest.main()
