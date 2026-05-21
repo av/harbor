@@ -873,3 +873,227 @@ class TestDeepMapperBranchesViaChatHTTP:
                 assert "direct" in str(resp.json())
         finally:
             restore()
+
+
+class TestMainPyRemainingHttpHandlerPaths:
+    """Drive remaining main.py HTTP handler paths (210 x-api-key in _is_anthropic_client, 278-289/335-346 5xx error envelopes anthro/openai, 298-310 404 not-found shaped, 415-436 chat serve+stream+BackendError header forward) via HTTP in the mandated safe general test_config.py only; follows iter13/14 patterns, avoids all prior dedicated test files and fact ids."""
+
+    def test_x_api_key_without_auth_header_hits_210_and_models_list_5xx_anthro_envelope(self):
+        """Hit _is_anthropic_client 210 (x-api-key and not authorization) + 335-346 anthro 5xx in /v1/models list error path."""
+        client, main_mod, restore = _make_fresh_app(
+            anthropic_compat="false", responses_api="false"
+        )
+        try:
+            mock_list = AsyncMock(side_effect=Exception("simulated list failure for 5xx"))
+            main_mod.mapper.list_downstream = mock_list
+            main_mod.mapper.workflow_models = MagicMock(return_value=[])
+
+            # x-api-key present, no authorization header -> line 209-210 triggers anthro True
+            headers = {"x-api-key": "sk-anthro-only"}
+            resp = client.get("/v1/models", headers=headers)
+            assert resp.status_code == 500
+            data = resp.json()
+            assert data.get("type") == "error"
+            assert "api_error" in str(data)
+            assert "Failed to list models" in str(data)
+        finally:
+            restore()
+
+    def test_authorization_header_hits_openai_5xx_error_envelope_in_models_list(self):
+        """Hit openai-shaped 5xx (335-346 else) for list models when _is_anthropic False (has authorization)."""
+        client, main_mod, restore = _make_fresh_app(
+            anthropic_compat="false", responses_api="false"
+        )
+        try:
+            mock_list = AsyncMock(side_effect=Exception("boom"))
+            main_mod.mapper.list_downstream = mock_list
+            main_mod.mapper.workflow_models = MagicMock(return_value=[])
+
+            headers = {"authorization": "Bearer test"}
+            resp = client.get("/v1/models", headers=headers)
+            assert resp.status_code == 500
+            data = resp.json()
+            assert "detail" in data
+            assert "Failed to list models" in data["detail"]
+        finally:
+            restore()
+
+    @patch("mapper.list_downstream", new_callable=AsyncMock)
+    @patch("mapper.workflow_models", return_value=[])
+    def test_model_by_id_404_anthropic_envelope_via_xapikey_hits_298_310(self, _wf, mock_down):
+        """Exercise 404 not-found anthro path (298-310) in get_boost_model_by_id using x-api-key (hits 210) after successful list."""
+        client, main_mod, restore = _make_fresh_app(
+            anthropic_compat="false", responses_api="false"
+        )
+        try:
+            main_mod.mapper.list_downstream = mock_down
+            main_mod.mapper.workflow_models = _wf
+            mock_down.return_value = [
+                {"id": "exists-model", "object": "model", "created": 0, "owned_by": "o"},
+            ]
+            main_mod.config.BOOST_MODS.__value__ = []
+            main_mod.config.SERVE_BASE_MODELS.__value__ = True
+            main_mod.config.MODEL_FILTER.__value__ = []
+
+            headers = {"x-api-key": "sk-anthro-404"}
+            resp = client.get("/v1/models/no-such-model-xyz", headers=headers)
+            assert resp.status_code == 404
+            data = resp.json()
+            assert data.get("type") == "error"
+            assert data.get("error", {}).get("type") == "not_found_error"
+        finally:
+            restore()
+
+    def test_model_by_id_404_openai_envelope_via_auth_header(self):
+        """Exercise openai 404 (310+) in get model by id when _is_anthropic False."""
+        client, main_mod, restore = _make_fresh_app(
+            anthropic_compat="false", responses_api="false"
+        )
+        try:
+            mock_list = AsyncMock(return_value=[{"id": "exists", "object": "model"}])
+            main_mod.mapper.list_downstream = mock_list
+            main_mod.mapper.workflow_models = MagicMock(return_value=[])
+            main_mod.mapper.get_proxy_model = MagicMock(return_value={"id": "p", "object": "model"})
+            main_mod.config.BOOST_MODS.__value__ = []
+            main_mod.config.SERVE_BASE_MODELS.__value__ = True
+            main_mod.config.MODEL_FILTER.__value__ = []
+
+            headers = {"authorization": "Bearer test"}
+            resp = client.get("/v1/models/does-not-exist", headers=headers)
+            assert resp.status_code == 404
+            data = resp.json()
+            assert "detail" in data
+            assert "Model not found" in data["detail"]
+        finally:
+            restore()
+
+    def test_chat_serve_non_direct_non_stream_hits_415_and_consume_425(self):
+        """Drive chat post past direct-check to await proxy.serve() (415) + non-stream consume (425) by forcing is_direct=False."""
+        client, main_mod, restore = _make_fresh_app(
+            anthropic_compat="false", responses_api="false"
+        )
+        try:
+            main_mod.mapper.list_downstream = AsyncMock(return_value=[])
+            main_mod.mapper.resolve_request_config = MagicMock(return_value={
+                "url": "http://fake:8080",
+                "api_key": "sk-test",
+                "headers": {},
+                "model": "base-model",
+                "module": None,
+                "workflow": None,
+                "params": {},
+                "boost_params": {},
+            })
+            main_mod.mapper.is_direct_task = MagicMock(return_value=False)
+
+            with patch.object(main_mod.llm, "LLM") as mock_llm_cls:
+                fake = MagicMock()
+                fake.workflow = None
+                fake.boost_params = {}
+                fake.serve = AsyncMock(return_value=object())  # the stream generator proxy
+                fake.consume_stream = AsyncMock(return_value={"id": "chat-1", "choices": [{"message": {"content": "served"}}]})
+                mock_llm_cls.return_value = fake
+
+                body = {"model": "base-model", "messages": [{"role": "user", "content": "normal query"}]}
+                resp = client.post(
+                    "/v1/chat/completions",
+                    json=body,
+                    headers={"authorization": "Bearer test"},
+                )
+                if resp.status_code >= 400:
+                    print("CHAT SERVE NONDIRECT ERROR:", resp.status_code, resp.text)
+                assert resp.status_code == 200
+                assert "served" in str(resp.json())
+        finally:
+            restore()
+
+    def test_chat_serve_stream_true_hits_422_stream_branch(self):
+        """Drive the if stream: StreamingResponse (422-423) branch after serve()."""
+        client, main_mod, restore = _make_fresh_app(
+            anthropic_compat="false", responses_api="false"
+        )
+        try:
+            main_mod.mapper.list_downstream = AsyncMock(return_value=[])
+            main_mod.mapper.resolve_request_config = MagicMock(return_value={
+                "url": "http://fake:8080",
+                "api_key": "sk-test",
+                "headers": {},
+                "model": "base-model",
+                "module": None,
+                "workflow": None,
+                "params": {},
+                "boost_params": {},
+            })
+            main_mod.mapper.is_direct_task = MagicMock(return_value=False)
+
+            with patch.object(main_mod.llm, "LLM") as mock_llm_cls:
+                fake = MagicMock()
+                fake.workflow = None
+                fake.boost_params = {}
+                # serve returns async iterable for the response
+                async def dummy_stream():
+                    yield b'data: {"choices":[{"delta":{}}]}\n\n'
+                    yield b'data: [DONE]\n\n'
+                fake.serve = AsyncMock(return_value=dummy_stream())
+                mock_llm_cls.return_value = fake
+
+                body = {"model": "base-model", "messages": [{"role": "user", "content": "stream"}], "stream": True}
+                resp = client.post(
+                    "/v1/chat/completions",
+                    json=body,
+                    headers={"authorization": "Bearer test"},
+                )
+                if resp.status_code >= 400:
+                    print("CHAT SERVE STREAM ERROR:", resp.status_code, resp.text)
+                assert resp.status_code == 200
+                assert "text/event-stream" in resp.headers.get("content-type", "")
+        finally:
+            restore()
+
+    def test_chat_backend_error_after_serve_hits_428_436_and_forwards_headers(self):
+        """Drive the except BackendError (428) + header copy (434-436) after reaching serve() (non-direct)."""
+        client, main_mod, restore = _make_fresh_app(
+            anthropic_compat="false", responses_api="false"
+        )
+        try:
+            main_mod.mapper.list_downstream = AsyncMock(return_value=[])
+            main_mod.mapper.resolve_request_config = MagicMock(return_value={
+                "url": "http://fake:8080",
+                "api_key": "sk-test",
+                "headers": {},
+                "model": "base-model",
+                "module": None,
+                "workflow": None,
+                "params": {},
+                "boost_params": {},
+            })
+            main_mod.mapper.is_direct_task = MagicMock(return_value=False)
+
+            with patch.object(main_mod.llm, "LLM") as mock_llm_cls:
+                fake = MagicMock()
+                fake.workflow = None
+                fake.boost_params = {}
+                be = main_mod.llm.BackendError(
+                    429,
+                    b'{"error": "rate limited"}',
+                    {"retry-after": "5", "x-ratelimit-remaining": "0"},
+                )
+                fake.serve = AsyncMock(side_effect=be)
+                mock_llm_cls.return_value = fake
+
+                body = {"model": "base-model", "messages": [{"role": "user", "content": "will fail backend"}]}
+                resp = client.post(
+                    "/v1/chat/completions",
+                    json=body,
+                    headers={"authorization": "Bearer test"},
+                )
+                if resp.status_code >= 400:
+                    print("CHAT BE ERROR:", resp.status_code, resp.text)
+                assert resp.status_code == 429
+                data = resp.json()
+                assert "Backend request failed" in str(data)
+                # headers forwarded from the except block
+                assert resp.headers.get("retry-after") == "5"
+                assert resp.headers.get("x-ratelimit-remaining") == "0"
+        finally:
+            restore()
