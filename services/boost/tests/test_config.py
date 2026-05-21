@@ -874,6 +874,69 @@ class TestDeepMapperBranchesViaChatHTTP:
         finally:
             restore()
 
+    def test_mapper_workflow_resolve_81_and_title_task_145_via_http_chat_edge(self):
+        """Exercise mapper 81 (resolve_proxy_model workflow branch: return base_model from split_workflow when prefix not in mods.registry) + 145 (is_title_generation_task body) via edge workflow-prefixed model in resolve_request_config (called by chat HTTP) + direct edge call; uses real mapper reload + /v1/chat/completions in test_config.py only."""
+        client, main_mod, restore = _make_fresh_app(
+            anthropic_compat="false", responses_api="false"
+        )
+        try:
+            # setup workflows FIRST (with current fresh config), populate, THEN import mapper so mapper's "import workflows" binds to a workflows module whose registry() already includes our wf81test (prevents stale bound workflows ref from earlier mapper import)
+            main_mod.config.WORKFLOWS.__value__ = "wf81test=klmbr"
+            sys.modules.pop("workflows", None)
+            import workflows as _wf_mod
+            import mods as _mods_mod
+            _wf_mod.invalidate_registry()
+            wf_reg = _wf_mod.registry()
+            assert "wf81test" in wf_reg
+            assert "wf81test" not in getattr(_mods_mod, "registry", {}), "workflow prefix must not collide to reach line 81"
+
+            # now import real mapper (after wf) so it binds to wf-aware workflows
+            if "mapper" in sys.modules:
+                del sys.modules["mapper"]
+            import mapper as real_mapper
+            sys.modules["mapper"] = real_mapper
+            main_mod.mapper = real_mapper
+            if hasattr(real_mapper.list_downstream, "cache"):
+                real_mapper.list_downstream.cache.clear()
+
+            # prep MODEL_TO_BACKEND for the *base* model that resolve_proxy will return
+            real_mapper.MODEL_TO_BACKEND["basemodel81"] = "https://fake"
+
+            # also set for list_downstream compat though not strictly needed here
+            main_mod.config.BOOST_APIS = ["https://fake"]
+            main_mod.config.BOOST_KEYS = ["sk-f"]
+
+            with patch.object(main_mod.llm, "LLM") as mock_llm_cls:
+                fake = MagicMock()
+                fake.chat = MagicMock()
+                # side_effect so title prompt makes is_direct True (direct branch, like sibling test); still executes resolve_proxy_model( wf81test- ) ->81 before the if
+                fake.chat.has_substring.side_effect = lambda s: "3-5 word title" in (s or "")
+                fake.workflow = None
+                fake.boost_params = {}
+                fake.chat_completion = AsyncMock(return_value={"id": "wf-81", "choices": [{"message": {"content": "wf81ok"}}]})
+                mock_llm_cls.return_value = fake
+
+                # model prefix "wf81test-" triggers workflow split (not mods) -> line 81 in resolve_proxy_model via resolve_request_config in chat handler
+                body = {
+                    "model": "wf81test-basemodel81",
+                    "messages": [{"role": "user", "content": "Generate a concise, 3-5 word title for the edge workflow input"}]
+                }
+                resp = client.post("/v1/chat/completions", json=body, headers={"authorization": "Bearer test"})
+                assert resp.status_code == 200
+                assert "wf81ok" in str(resp.json())
+
+                # direct edge call to hit 145 (is_title_generation_task return) 
+                title_llm = MagicMock()
+                title_llm.chat = MagicMock()
+                title_llm.chat.has_substring.return_value = True
+                assert real_mapper.is_title_generation_task(title_llm) is True
+
+                # also verify resolve_proxy_model directly returns base (confirms 81 path)
+                resolved = real_mapper.resolve_proxy_model("wf81test-basemodel81")
+                assert resolved == "basemodel81"
+        finally:
+            restore()
+
 
 class TestMainPyRemainingHttpHandlerPaths:
     """Drive remaining main.py HTTP handler paths (210 x-api-key in _is_anthropic_client, 278-289/335-346 5xx error envelopes anthro/openai, 298-310 404 not-found shaped, 415-436 chat serve+stream+BackendError header forward) via HTTP in the mandated safe general test_config.py only; follows iter13/14 patterns, avoids all prior dedicated test files and fact ids."""
