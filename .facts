@@ -539,6 +539,7 @@
 - label: Boost Anthropic message batch create rejects invalid JSON with an Anthropic-format 400 error before returning the unsupported-batches stub error
   command: cd services/boost && PYTHONPATH=tests:src .venv/bin/python -m pytest tests/test_anthropic_compat.py::TestMessageBatchesStubs::test_create_batch_rejects_invalid_json -q
   tags: [spec, boost-anthropic-batch-invalid-json, implemented]
+- Boost Anthropic compat _anthropic_stream_converter keepalive timing branch (line 683 when now-last >= SSE_KEEPALIVE_INTERVAL) and deferred tool flush logic (lines 946-974 for tool_states with id but not emitted at cleanup, plus surrounding flush for-loop) must be covered by targeted tests added to dedicated test_anthropic_compat.py only (patches for timing+monkeypatch SSE_KEEPALIVE_INTERVAL small + sleep in async gens for keepalive comments; mixed streams with tool_calls args-before-id and text+tool for flush/closes); asserts on emitted events and cov lift on those branches; no changes to anthropic_compat.py or other test files @implemented
 
 ## responses api
 - label: Boost exposes POST /v1/responses endpoint for OpenAI Responses API compatibility

@@ -9077,5 +9077,138 @@ class TestStreamingEstimatedInputTokensIntegration:
         assert body["usage"]["input_tokens"] == 25
 
 
+# ---------------------------------------------------------------------------
+# Deep keepalive (683) + deferred tool flush (946+) coverage for
+# _anthropic_stream_converter (iter-9 scope; patches + mixed tool streams;
+# dedicated test_anthropic_compat.py only)
+# ---------------------------------------------------------------------------
+
+class TestAnthropicStreamConverterDeepKeepAndToolFlush:
+    """Targeted coverage for keepalive timing branch and tool flush paths
+    in _anthropic_stream_converter (symmetric to responses_compat deep iter8)."""
+
+    @pytest.mark.asyncio
+    async def test_keepalive_emitted_on_interval_elapsed(self, monkeypatch):
+        """Patch SSE_KEEPALIVE_INTERVAL small + sleep between yields to drive
+        the keepalive check/yield at 682-684."""
+        monkeypatch.setattr(anthropic_compat, "SSE_KEEPALIVE_INTERVAL", 0.01)
+        import asyncio
+        async def response_stream():
+            yield 'data: {"choices": [{"delta": {"content": "slow1"}}]}\n\n'
+            await asyncio.sleep(0.05)
+            yield 'data: {"choices": [{"delta": {"content": "slow2"}}]}\n\n'
+            yield 'data: {"choices": [{"delta": {}, "finish_reason": "stop"}], "usage": {"prompt_tokens": 1, "completion_tokens": 1}}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in anthropic_compat._anthropic_stream_converter(response_stream(), "claude-test"):
+            events.append(event)
+        comments = [e for e in events if e.strip().startswith(":")]
+        assert len(comments) >= 1, "SSE keepalive comment must be emitted when interval elapses"
+        assert any("keep-alive" in c for c in comments)
+
+    @pytest.mark.asyncio
+    async def test_tool_args_before_id_emits_on_arrival_and_no_id_skipped_in_flush(self):
+        """Tool args arrive before id (emits when id chunk seen); extra no-id tool drives
+        the flush for-loop + no-id continue (939-945 area)."""
+        async def response_stream():
+            # tool 0: args first (no id)
+            yield (
+                'data: {"choices": [{"delta": {"tool_calls": ['
+                '{"index": 0, "function": {"arguments": "{\\"q\\":"}}]}}]}\n\n'
+            )
+            # tool 0: id arrives in next chunk -> triggers emit in main loop
+            yield (
+                'data: {"choices": [{"delta": {"tool_calls": ['
+                '{"index": 0, "id": "call_foo123", "function": {"name": "search", "arguments": "\\"x\\"}"}}]}}]}\n\n'
+            )
+            # tool 1: args only, never id -> hits no-id continue in deferred flush
+            yield (
+                'data: {"choices": [{"delta": {"tool_calls": ['
+                '{"index": 1, "function": {"arguments": "{\\"y\\":1}"}}]}}]}\n\n'
+            )
+            yield (
+                'data: {"choices": [{"delta": {}, "finish_reason": "tool_calls"}], '
+                '"usage": {"prompt_tokens": 7, "completion_tokens": 2}}\n\n'
+            )
+            yield 'data: [DONE]\n\n'
+
+        events = [e async for e in anthropic_compat._anthropic_stream_converter(response_stream(), "claude-test")]
+        joined = "".join(events)
+        parsed = _parse_sse_events(joined)
+        tool_blocks = [p for p in parsed if p.get("type") == "content_block_start" and p.get("content_block", {}).get("type") == "tool_use"]
+        assert len(tool_blocks) == 1
+        assert "toolu_foo123" in joined or (tool_blocks and tool_blocks[0]["content_block"].get("id", "").startswith("toolu_"))
+        # flush executed (no crash on the no-id tool1)
+        assert "message_stop" in joined
+
+    @pytest.mark.asyncio
+    async def test_text_then_tool_mixed_stream_drives_text_close_before_tool(self):
+        """Text followed by tool drives text_block close (803+) then tool start;
+        exercises flush-adjacent close paths."""
+        async def response_stream():
+            yield 'data: {"choices": [{"delta": {"content": "Let me use a tool."}}]}\n\n'
+            yield (
+                'data: {"choices": [{"delta": {"tool_calls": ['
+                '{"index": 0, "id": "call_mix", "function": {"name": "calc", "arguments": "{}"}}]}}]}\n\n'
+            )
+            yield (
+                'data: {"choices": [{"delta": {}, "finish_reason": "tool_calls"}], '
+                '"usage": {"prompt_tokens": 4, "completion_tokens": 1}}\n\n'
+            )
+            yield 'data: [DONE]\n\n'
+
+        events = [e async for e in anthropic_compat._anthropic_stream_converter(response_stream(), "claude-test")]
+        joined = "".join(events)
+        # text block was opened+closed before tool block
+        assert "text_delta" in joined and "tool_use" in joined
+        # at least one content_block_stop for the text
+        assert joined.count("content_block_stop") >= 1
+
+    @pytest.mark.asyncio
+    async def test_keepalive_and_tool_via_http_make_anthropic_app_patches(self, monkeypatch):
+        """Drive keepalive (small interval + sleep in mock gen) + tool stream
+        through the real POST /v1/messages streaming path using _make_client +
+        patches on mapper/llm (full converter execution under handler)."""
+        import asyncio
+        from unittest.mock import AsyncMock, MagicMock
+        monkeypatch.setattr(anthropic_compat, "SSE_KEEPALIVE_INTERVAL", 0.01)
+
+        fake_llm = MagicMock()
+        fake_llm.workflow = None
+        fake_llm.boost_params = {}
+
+        async def mock_serve():
+            async def gen():
+                yield 'data: {"choices":[{"delta":{"content":"pre"}}]}\n\n'
+                await asyncio.sleep(0.05)  # allow keepalive check
+                yield 'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_http","function":{"name":"do","arguments":"{\\"z\\":9}"}}]}}]}\n\n'
+                yield 'data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":6,"completion_tokens":2}}\n\n'
+                yield 'data: [DONE]\n\n'
+            return gen()
+
+        fake_llm.serve = mock_serve
+        monkeypatch.setattr(anthropic_compat.mapper, "list_downstream", AsyncMock(return_value=[]))
+        monkeypatch.setattr(anthropic_compat.mapper, "resolve_request_config", lambda body: {})
+        monkeypatch.setattr(anthropic_compat.mapper, "is_direct_task", lambda proxy: False)
+        monkeypatch.setattr(anthropic_compat.llm_mod, "LLM", lambda **kw: fake_llm)
+
+        body = {
+            "model": "claude-test",
+            "max_tokens": 32,
+            "messages": [{"role": "user", "content": "do it"}],
+            "stream": True,
+            "tools": [{"name": "do", "description": "d", "input_schema": {"type": "object", "properties": {}}}],
+        }
+        client = _make_client()
+        resp = client.post("/v1/messages", json=body)
+        assert resp.status_code == 200
+        text = resp.text
+        assert "tool_use" in text or "content_block_start" in text
+        assert "message_stop" in text
+        # keepalive comment may appear due to sleep+patch
+        assert ": keep-alive" in text or "keep-alive" in text
+
+
 if __name__ == "__main__":
     unittest.main()
