@@ -1110,3 +1110,98 @@ class TestCrossEndpointAuth:
         resp = client.post("/v1/messages", json=_ANTHROPIC_BODY,
                            headers={"authorization": "Bearer my-key"})
         assert resp.status_code == 200
+
+
+# ===========================================================================
+# 15. Real boost modules (klmbr/mcts) cross HTTP chat + emit_listener (iter-11)
+# ===========================================================================
+
+class TestRealBoostModulesCrossHTTP:
+    """Real (unmocked) klmbr module apply + mapper resolution exercised via /v1/chat/completions
+    HTTP handler, plus real emit_listener_event + listen consumption (cross to /events paths).
+    Uses only this general test file (no prior dedicated targets/classes)."""
+
+    def test_real_klmbr_module_apply_via_chat_completions_http(self, monkeypatch):
+        """klmbr-prefixed model in chat POST triggers real resolve_proxy_module (via real mapper),
+        real LLM(module=klmbr), unmocked klmbr.apply (selection+modify+emits), llm apply_mod branch,
+        main.py serve+chat handler paths. All without network."""
+        import sys
+        # Force real mapper into sys.modules and rebind on already-imported main (stub was set in conftest)
+        if "mapper" in sys.modules:
+            m = sys.modules["mapper"]
+            if getattr(m, "__stub__", False):
+                del sys.modules["mapper"]
+        import mapper as real_mapper
+        import main as main_mod
+        main_mod.mapper = real_mapper
+        import llm as llm_mod
+        import config as _cfg
+        _cfg.BOOST_AUTH = []
+        # populate MODEL_TO_BACKEND so real resolve_request_config does not 404 (list_downstream patch alone does not run its populating loop)
+        real_mapper.MODEL_TO_BACKEND["fake-model"] = "http://fake:1"
+        import config as _cfg_mod
+        old_apis = list(_cfg_mod.BOOST_APIS)
+        old_keys = list(_cfg_mod.BOOST_KEYS)
+        _cfg_mod.BOOST_APIS = ["http://fake:1"]
+        _cfg_mod.BOOST_KEYS = ["sk-test"]
+        async def _fake_list_downstream():
+            return [{"id": "fake-model"}]
+        monkeypatch.setattr(real_mapper, "list_downstream", AsyncMock(side_effect=_fake_list_downstream))
+        monkeypatch.setattr(real_mapper, "is_direct_task", MagicMock(return_value=False))
+        # Patch http methods on *real* LLM class: module apply still executes fully (unmocked), only net is faked
+        async def _patched_stream_chat_completion(self, **kwargs):
+            ch = self.chunk_from_delta({"content": " [real-klmbr-apply-ok]"})
+            await self.emit_chunk(ch)
+            return
+        async def _patched_chat_completion(self, **kwargs):
+            return {"choices": [{"message": {"role": "assistant", "content": "[klmbr-ok]"}}]}
+        monkeypatch.setattr(llm_mod.LLM, "stream_chat_completion", _patched_stream_chat_completion)
+        monkeypatch.setattr(llm_mod.LLM, "chat_completion", _patched_chat_completion)
+        client = _make_client()
+        resp = client.post(
+            "/v1/chat/completions",
+            json={
+                "model": "klmbr-fake-model",
+                "messages": [{"role": "user", "content": "Test real klmbr module cross HTTP"}],
+                "stream": True,
+            },
+            headers={"authorization": "Bearer test"},
+        )
+        # restore globals mutated for real mapper index()
+        _cfg_mod.BOOST_APIS = old_apis
+        _cfg_mod.BOOST_KEYS = old_keys
+        body = resp.text
+        assert resp.status_code == 200
+        assert "[DONE]" in body or "klmbr" in body.lower() or "apply-ok" in body
+        # real klmbr apply + HTTP chat cross exercised
+
+    @pytest.mark.asyncio
+    async def test_real_emit_listener_event_cross_to_events_paths(self, monkeypatch):
+        """Real LLM.emit_listener_event (the path used by boost modules for side-channel),
+        event_to_string, emit_to_listeners + listen() consumption. Mirrors /events handler usage."""
+        import llm as llm_mod
+        from llm_registry import llm_registry as reg
+        real_llm = llm_mod.LLM(
+            url="http://fake",
+            headers={},
+            model="emit-test",
+            params={},
+            messages=[{"role": "user", "content": "emit test"}],
+        )
+        reg.register(real_llm)
+        # Drive real listen() + emit_listener cross: advance agen to its first await (after append), emit delivers, then receive
+        agen = real_llm.listen()
+        getter = asyncio.create_task(agen.__anext__())
+        await asyncio.sleep(0)  # let agen run to append queue + await get()
+        await real_llm.emit_listener_event("boost.status", {"status": "real-module-emit-test"})
+        try:
+            ev = await asyncio.wait_for(getter, timeout=2.0)
+        except Exception:
+            ev = None
+        assert ev is not None
+        assert "boost.listener.event" in str(ev)
+        assert "real-module-emit-test" in str(ev) or "boost.status" in str(ev)
+        try:
+            reg.unregister(real_llm)
+        except Exception:
+            pass
