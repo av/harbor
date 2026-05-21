@@ -666,3 +666,89 @@ class TestChatCompletionsLargeAndInvalidJsonEdges:
         # Non-HTTPException errors from inside chat handler yield plain "Internal Server Error" (not JSON via the HTTPExc handler)
         assert "Internal Server Error" in resp.text
         # No JSON body for this path; confirms different return shape vs the caught JSONDecodeError 400 case
+
+
+# ===========================================================================
+# Real (un-patched) mapper.py coverage via /v1/chat/completions HTTP (Iter 10)
+# Exercises tool payloads through real resolve_request_config (and proxy helpers)
+# so that "tools"/"tool_choice" etc flow into params (no stub); min mocks only for
+# net/list + direct + LLM; verifies resolution; lifts mapper from 0%.
+# ===========================================================================
+
+class TestRealMapperToolResolutionViaChatHTTP:
+    """Real mapper (unmocked resolve_request_config etc) for tool parsing/resolution
+    exercised in the chat completions HTTP path.
+    """
+
+    def test_real_mapper_resolves_tools_and_tool_choice_into_params(self, monkeypatch):
+        """Tools payload reaches real mapper.resolve_request_config; captured config has tools in params."""
+        import sys
+        from unittest.mock import AsyncMock, MagicMock
+
+        old_mapper = sys.modules.get("mapper")
+        try:
+            if "mapper" in sys.modules:
+                del sys.modules["mapper"]
+            import mapper as real_mapper
+            import main as main_mod
+            import llm as llm_mod
+            import config as config_mod
+
+            # Rebind so handler's runtime "mapper.xxx" and "import mapper" lookups use real
+            main_mod.mapper = real_mapper
+
+            # Configure for successful real resolve (no 404, no index error on keys)
+            monkeypatch.setattr(config_mod, "BOOST_APIS", ["http://fake.test"], raising=False)
+            monkeypatch.setattr(config_mod, "BOOST_KEYS", ["fakekey"], raising=False)
+            real_mapper.MODEL_TO_BACKEND.clear()
+            real_mapper.MODEL_TO_BACKEND["test-model"] = "http://fake.test"
+
+            # Min mocks only (real resolve + helpers exercised; avoid net in list_downstream)
+            monkeypatch.setattr("mapper.list_downstream", AsyncMock(return_value=[]))
+            monkeypatch.setattr("mapper.is_direct_task", MagicMock(return_value=False))
+
+            # Capture return of *real* resolve to verify tool keys preserved in params
+            captured = {}
+            orig = real_mapper.resolve_request_config
+
+            def resolve_capture(body):
+                cfg = orig(body)
+                captured["cfg"] = cfg
+                return cfg
+
+            monkeypatch.setattr("mapper.resolve_request_config", resolve_capture)
+
+            # LLM
+            result = _openai_result(content="OK-real-mapper")
+            fake = _FakeLLM(consume_result=result, stream_chunks=[])
+            monkeypatch.setattr(llm_mod, "LLM", lambda **kwargs: fake)
+
+            client = _make_client()
+            tools = [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "get_weather",
+                        "description": "Get weather",
+                        "parameters": {"type": "object"},
+                    },
+                }
+            ]
+            body = _chat_body(tools=tools, tool_choice="auto")
+            resp = client.post("/v1/chat/completions", json=body)
+
+            assert resp.status_code == 200
+            assert "cfg" in captured
+            params = captured["cfg"].get("params", {})
+            assert "tools" in params, "real resolve must have kept tools from body (not stripped)"
+            assert params["tools"] == tools
+            assert "tool_choice" in params
+            assert captured["cfg"]["model"] == "test-model"
+            # proxy resolution helpers were exercised inside real resolve_request_config
+            assert captured["cfg"]["module"] is None
+            assert captured["cfg"]["workflow"] is None
+        finally:
+            if old_mapper is not None:
+                sys.modules["mapper"] = old_mapper
+                import main as main_mod2
+                main_mod2.mapper = old_mapper
