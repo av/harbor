@@ -9060,3 +9060,87 @@ class TestResponsesStreamConverterDeepBranches:
         assert "response.function_call_arguments" in text
         assert "response.completed" in text or "response.failed" in text
 
+
+# ---------------------------------------------------------------------------
+# Token counter coverage via HTTP count endpoint (iter 12)
+# Drive real count_messages_tokens branches (list content multimodal,
+# tool_calls) through /v1/responses/input_tokens without patching counter.
+# ---------------------------------------------------------------------------
+
+class TestTokenCounterBranchesViaHTTPInputTokens:
+    """New tests (rl2) exercising token_counter.py via the responses input_tokens
+    HTTP endpoint using rich payloads that produce content=list and tool_calls
+    in the messages passed to count_messages_tokens.
+    """
+
+    @pytest.fixture(autouse=True)
+    def setup_app(self, monkeypatch):
+        from fastapi.testclient import TestClient
+
+        import config as _cfg
+        monkeypatch.setattr(_cfg, "BOOST_AUTH", [])
+
+        app = _make_responses_app()
+        self.client = TestClient(app)
+
+    def test_input_tokens_multimodal_content_list_with_image_hits_list_branches(self):
+        """Content list with input_text + input_image produces content=list
+        in openai_messages -> hits 104-119 (text, image_url, etc) in counter."""
+        resp = self.client.post("/v1/responses/input_tokens", json={
+            "model": "gpt-4o",
+            "input": [
+                {
+                    "type": "message",
+                    "role": "user",
+                    "content": [
+                        {"type": "input_text", "text": "what is in the image?"},
+                        {"type": "input_image", "image_url": "https://example.com/cat.png", "detail": "low"},
+                        {"type": "input_audio", "data": "base64xxx", "format": "wav"},  # hits else (input_audio type) branch 115-119 in counter
+                    ],
+                }
+            ],
+        })
+        assert resp.status_code == 200
+        body = resp.json()
+        assert "input_tokens" in body
+        assert isinstance(body["input_tokens"], int)
+        assert body["input_tokens"] > 0
+
+    def test_input_tokens_function_call_item_hits_tool_calls_branch(self):
+        """function_call item in input produces assistant msg with tool_calls
+        -> hits 122-128 (name+args count) in counter."""
+        resp = self.client.post("/v1/responses/input_tokens", json={
+            "model": "gpt-4o",
+            "input": [
+                {
+                    "type": "function_call",
+                    "call_id": "call_xyz",
+                    "name": "search",
+                    "arguments": '{"query":"test"}',
+                }
+            ],
+        })
+        assert resp.status_code == 200
+        assert resp.json()["input_tokens"] > 0
+
+    def test_input_tokens_mixed_content_and_function_call(self):
+        """Combined to ensure both list and tool_calls paths exercised in one flow."""
+        resp = self.client.post("/v1/responses/input_tokens", json={
+            "model": "gpt-4o",
+            "input": [
+                {
+                    "type": "message",
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": "use tool on this image"}]
+                },
+                {
+                    "type": "function_call",
+                    "call_id": "c1",
+                    "name": "analyze_image",
+                    "arguments": "{}",
+                },
+            ],
+        })
+        assert resp.status_code == 200
+        assert resp.json()["input_tokens"] > 0
+
