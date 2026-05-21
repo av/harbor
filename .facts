@@ -67,6 +67,7 @@
 - boost > responses api > _responses_stream_converter deep branches (keepalive at 964-965 on interval, refusal close_reasoning 1107-1109/close_text 1130-1132 before refusal item, BackendError 1239-1248 rate/5xx/else setting stream_error_code, deferred non-emitted tool with id at 1361-1388 in final close) must be driven to coverage via targeted tests added to the dedicated test_responses_compat.py (using make_responses_app + LLM patches for HTTP /v1/responses?stream=true with reasoning+refusal+tool content streams, and direct _converter calls with delayed async gens for keepalive, BackendError(429/500) raises, mixed order streams that trigger closes); post-edit cov on responses_compat.py shows the lines covered, all new tests pass @implemented
 - Boost token_counter HTTP coverage: the count_messages_tokens branches for list content (text/image_url/else in multimodal), tool_calls in assistant messages, and related must be driven to coverage by posting appropriate rich payloads (content parts lists with input_image, function_call items) to the /v1/responses/input_tokens (and/or anthropic count_tokens) HTTP endpoints in the dedicated test files, exercising the real (unpatched) counter inside the handlers; new tests appended to test_responses_compat.py (appropriate for its input_tokens endpoint) @implemented
 - Boost main.py HTTP handlers must cover remaining branches via test_config.py (non-prior test file): _list_models module proxy loop (240-242 when BOOST_MODS non-empty + registry.get non-None) and filter application (250 when MODEL_FILTER non-empty, calling selection.matches_filter), chat handler JSONDecodeError path (387-389 returning 400), and direct task early return (411-412 when mapper.is_direct_task returns True, with no workflow); exercised by new tests using _make_fresh_app + config.__value__ sets + mapper patches + client HTTP GET/POST /v1/models and /v1/chat/completions asserting status + shapes; @implemented
+- Boost mapper.py lines 81 (workflow branch return base_model in resolve_proxy_model) and 145 (is_title_generation_task body) remnants must be exercised via edge inputs (non-mod-colliding workflow-prefixed model ids in resolve_request_config/resolve_proxy_model + is_title_generation_task call) using real mapper in test_config.py HTTP chat paths (/v1/chat/completions with workflow models) and tool paths to reach 100% mapper cov @implemented
 # project
 - Harbor is a containerized LLM toolkit distributed as a Docker Compose project with a CLI and Tauri desktop app
 - label: the project is licensed under Apache 2.0
@@ -695,6 +696,15 @@
   command: test $(find docs -name '*.md' | wc -l) -ge 100
 - label: docs are auto-generated via 'harbor dev docs'
   command: test -f .scripts/docs.ts
+- label: README and user-facing docs introduce harbor launch as the workflow for running host coding tools or service CLIs against Harbor backends, with examples for backend/model selection, --web, --config, and --service
+  command: rg -q 'harbor launch --backend ollama --model qwen3.5:4b codex' README.md docs/1.-Harbor-User-Guide.md docs/3.-Harbor-CLI-Reference.md && rg -q 'harbor launch --web --backend ollama --model qwen3.5:4b codex' README.md docs/1.-Harbor-User-Guide.md docs/3.-Harbor-CLI-Reference.md && rg -q 'harbor launch --config opencode' README.md docs/1.-Harbor-User-Guide.md docs/3.-Harbor-CLI-Reference.md && rg -q 'harbor launch --service opencode --help' README.md docs/1.-Harbor-User-Guide.md docs/3.-Harbor-CLI-Reference.md
+  tags: [spec, launch-docs, implemented]
+- label: README is the project's landing page and contains only user-facing information
+  command: rg -q '^## What can Harbor do\?' README.md && ! rg -qi 'maintainers: regenerate docs|fresh-maintainer|harbor dev docs|syncs the sibling wiki checkout' README.md
+  tags: [spec, readme-cleanup, implemented]
+- label: README Services section reflects the current service metadata catalog rather than a stale hand-written subset
+  command: rg -q 'Open Design' README.md && rg -q 'Voicebox' README.md && rg -q 'Needle' README.md && rg -q 'npcsh' README.md
+  tags: [spec, readme-services, implemented]
 
 ## integrations
 - core high-star Harbor services (ollama, webui, dify, vllm, comfyui, librechat, anythingllm, aider, etc.) have a high-level 'Integrations' section immediately below their 'Starting' heading in their docs/*.md files @implemented
