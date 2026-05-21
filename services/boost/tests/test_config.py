@@ -1097,3 +1097,90 @@ class TestMainPyRemainingHttpHandlerPaths:
                 assert resp.headers.get("x-ratelimit-remaining") == "0"
         finally:
             restore()
+
+
+class TestPlainNonHTTP5xxPaths:
+    """Cover plain non-HTTPException 500 error paths in HTTP handlers (default FastAPI/Starlette 'Internal Server Error' text/plain response for uncaught exc, since only HTTPException has custom handler).
+
+    Uses safe general test_config.py only (per iter16 rules + AVOID priors); forces UnicodeDecodeError (narrow except only catches JSONDecodeError) and other uncaught raises via bad bytes + patches on list_downstream/serve.
+    """
+
+    def test_chat_unicode_decode_error_yields_plain_internal_server_error_text(self):
+        """Bytes failing .decode('utf-8') are NOT caught by JSONDecodeError except (different exception), propagate to default 500 plain-text path (not shaped JSON via HTTPExc handler)."""
+        client, main_mod, restore = _make_fresh_app(
+            anthropic_compat="false", responses_api="false"
+        )
+        try:
+            # send invalid utf8 bytes directly (content= bypasses json= which would encode)
+            bad_body = b"\xff\xfe\x80 not valid utf-8 at all"
+            resp = client.post(
+                "/v1/chat/completions",
+                content=bad_body,
+                headers={"authorization": "Bearer test", "content-type": "application/json"},
+            )
+            assert resp.status_code == 500
+            assert resp.text == "Internal Server Error"
+            ct = resp.headers.get("content-type", "")
+            assert "text/plain" in ct
+            # confirm it is NOT a JSON error envelope (plain default vs HTTPExc-shaped)
+            assert not resp.text.strip().startswith("{")
+            # also not the "Invalid JSON" which would be 400 via HTTPExc
+        finally:
+            restore()
+
+    def test_chat_list_downstream_uncaught_exception_yields_plain_500(self):
+        """Uncaught Exception from await mapper.list_downstream() (outside any try that turns it into HTTPExc or Backend) hits default plain 500 text path."""
+        client, main_mod, restore = _make_fresh_app(
+            anthropic_compat="false", responses_api="false"
+        )
+        try:
+            main_mod.mapper.list_downstream = AsyncMock(side_effect=RuntimeError("simulated uncaught in list"))
+            body = {"model": "base-model", "messages": [{"role": "user", "content": "x"}]}
+            resp = client.post(
+                "/v1/chat/completions",
+                json=body,
+                headers={"authorization": "Bearer test"},
+            )
+            assert resp.status_code == 500
+            assert resp.text == "Internal Server Error"
+            assert "text/plain" in resp.headers.get("content-type", "")
+        finally:
+            restore()
+
+    def test_chat_serve_non_backend_error_uncaught_yields_plain_500(self):
+        """Exception raised from proxy.serve() that is NOT BackendError (the only one caught in inner try) escapes to default plain 500."""
+        client, main_mod, restore = _make_fresh_app(
+            anthropic_compat="false", responses_api="false"
+        )
+        try:
+            main_mod.mapper.list_downstream = AsyncMock(return_value=[])
+            main_mod.mapper.resolve_request_config = MagicMock(return_value={
+                "url": "http://fake:8080",
+                "api_key": "sk-test",
+                "headers": {},
+                "model": "base-model",
+                "module": None,
+                "workflow": None,
+                "params": {},
+                "boost_params": {},
+            })
+            main_mod.mapper.is_direct_task = MagicMock(return_value=False)
+
+            with patch.object(main_mod.llm, "LLM") as mock_llm_cls:
+                fake = MagicMock()
+                fake.workflow = None
+                fake.boost_params = {}
+                fake.serve = AsyncMock(side_effect=ValueError("unc aught non-BE in serve"))
+                mock_llm_cls.return_value = fake
+
+                body = {"model": "base-model", "messages": [{"role": "user", "content": "will raise plain"}]}
+                resp = client.post(
+                    "/v1/chat/completions",
+                    json=body,
+                    headers={"authorization": "Bearer test"},
+                )
+                assert resp.status_code == 500
+                assert resp.text == "Internal Server Error"
+                assert "text/plain" in resp.headers.get("content-type", "")
+        finally:
+            restore()
