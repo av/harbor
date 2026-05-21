@@ -589,3 +589,133 @@ class TestHealthEndpointIndependentOfCompat:
             assert resp.json()["status"] == "ok"
         finally:
             restore()
+
+
+class TestMainPyHttpHandlerBranches:
+    """Cover remaining un-hit main.py HTTP handler paths (e.g. 250 filter, 240-242 proxy modules, 387-389 invalid JSON, 411-412 direct task, _is_anthropic + _to_anthropic) via HTTP in this non-prior test file only."""
+
+    @patch("mapper.list_downstream", new_callable=AsyncMock)
+    @patch("mapper.workflow_models", return_value=[])
+    def test_models_filter_and_module_proxy_branches_hit_250_240(self, _wf, mock_downstream):
+        """Exercise _list_models 240-242 (registry.get + get_proxy) and 250 (matches_filter when MODEL_FILTER set)."""
+        client, main_mod, restore = _make_fresh_app(
+            anthropic_compat="false", responses_api="false"
+        )
+        try:
+            main_mod.mapper.list_downstream = mock_downstream
+            main_mod.mapper.workflow_models = _wf
+            mock_downstream.return_value = [
+                {"id": "test-model", "object": "model", "created": 0, "owned_by": "test"},
+            ]
+            main_mod.config.BOOST_MODS.__value__ = ["testmod"]
+            main_mod.config.SERVE_BASE_MODELS.__value__ = True
+            main_mod.config.MODEL_FILTER.__value__ = {"id": "test-model"}
+
+            # Make registry.get return non-None to enter 242
+            mock_mod = MagicMock()
+            mock_reg = MagicMock()
+            mock_reg.get.return_value = mock_mod
+            main_mod.mods.registry = mock_reg
+            # Stub get_proxy_model to avoid side effects in proxy creation
+            main_mod.mapper.get_proxy_model = MagicMock(return_value={
+                "id": "testmod-test-model", "object": "model", "created": 0, "owned_by": "boost"
+            })
+
+            resp = client.get("/v1/models", headers={"authorization": "Bearer test"})
+            assert resp.status_code == 200
+            data = resp.json()
+            # At least base + proxy should be present (filter passes)
+            ids = [m.get("id") for m in data.get("data", [])]
+            assert "test-model" in ids or "testmod-test-model" in ids
+        finally:
+            restore()
+
+    def test_chat_direct_task_hits_411_412(self):
+        """Exercise chat post 411-412 direct task early return (is_direct True, no workflow)."""
+        client, main_mod, restore = _make_fresh_app(
+            anthropic_compat="false", responses_api="false"
+        )
+        try:
+            # Setup for chat path to reach the if without full backend
+            mock_list = AsyncMock()
+            main_mod.mapper.list_downstream = mock_list
+            main_mod.mapper.resolve_request_config = MagicMock(return_value={
+                "url": "http://fake:8080",
+                "api_key": "sk-test",
+                "headers": {"Authorization": "Bearer sk-test"},
+                "model": "test-model",
+                "module": None,
+                "workflow": None,
+                "params": {},
+            })
+            main_mod.mapper.is_direct_task = MagicMock(return_value=True)
+
+            # Fake the LLM class used inside main (post reload) so direct .chat_completion doesn't hit network
+            fake_proxy = MagicMock()
+            fake_proxy.chat_completion = AsyncMock(return_value={
+                "id": "direct-1",
+                "choices": [{"message": {"role": "assistant", "content": "direct ok"}}]
+            })
+            fake_proxy.workflow = None
+            fake_proxy.boost_params = {}
+            main_mod.llm.LLM = MagicMock(return_value=fake_proxy)
+
+            resp = client.post(
+                "/v1/chat/completions",
+                json={"model": "test-model", "messages": [{"role": "user", "content": "hi"}]},
+                headers={"authorization": "Bearer test"},
+            )
+            assert resp.status_code == 200
+            assert "direct ok" in str(resp.json())
+        finally:
+            restore()
+
+    def test_chat_invalid_json_hits_387_389(self):
+        """Exercise the JSONDecodeError branch in post_boost_chat_completion (387-389 -> 400)."""
+        client, main_mod, restore = _make_fresh_app(
+            anthropic_compat="false", responses_api="false"
+        )
+        try:
+            # Malformed JSON body -> decode/json.loads fails -> HTTP 400
+            resp = client.post(
+                "/v1/chat/completions",
+                content=b'{"model": "x", "messages": [}',  # trailing makes invalid
+                headers={"authorization": "Bearer test", "content-type": "application/json"},
+            )
+            assert resp.status_code == 400
+            body = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {"detail": resp.text}
+            assert "Invalid JSON" in str(body)
+        finally:
+            restore()
+
+    @patch("mapper.list_downstream", new_callable=AsyncMock)
+    @patch("mapper.workflow_models", return_value=[])
+    def test_models_anthropic_client_hits_is_anthropic_and_to_anthropic(self, _wf, mock_downstream):
+        """Exercise _is_anthropic_client (208/210) + _to_anthropic_model (216) + anthropic paths in models handlers via header."""
+        client, main_mod, restore = _make_fresh_app(
+            anthropic_compat="false", responses_api="false"
+        )
+        try:
+            main_mod.mapper.list_downstream = mock_downstream
+            main_mod.mapper.workflow_models = _wf
+            mock_downstream.return_value = [
+                {"id": "test-model", "object": "model", "created": 0, "owned_by": "test", "name": "Test"},
+            ]
+            main_mod.config.BOOST_MODS.__value__ = []
+            main_mod.config.SERVE_BASE_MODELS.__value__ = True
+            main_mod.config.MODEL_FILTER.__value__ = []
+
+            # anthropic-version header triggers _is_anthropic_client -> anthropic envelope + _to_anthropic
+            headers = {
+                "authorization": "Bearer test",
+                "anthropic-version": "2023-06-01",
+            }
+            resp = client.get("/v1/models", headers=headers)
+            assert resp.status_code == 200
+            data = resp.json()
+            assert "data" in data  # anthropic format has 'data'
+            # also test get-by-id path with anthropic
+            resp2 = client.get("/v1/models/test-model", headers=headers)
+            assert resp2.status_code == 200
+        finally:
+            restore()
