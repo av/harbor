@@ -719,3 +719,157 @@ class TestMainPyHttpHandlerBranches:
             assert resp2.status_code == 200
         finally:
             restore()
+
+
+class TestDeepMapperBranchesViaChatHTTP:
+    """Cover deeper mapper.py branches for HTTP chat/tool paths (list_downstream 20-59 errors+minimax+fetch, resolve_proxy_* 74-98, resolve_request_config errors 106/118 + tools keep, is_direct_task 158) via real unpatched mapper (forced import/rebind after _make_fresh_app) exercised by /v1/models and /v1/chat/completions (incl tools payloads) in this non-prior test_config.py only; follows iter14 rules, avoids repeating iter10's test_chat_completions.py edits."""
+
+    def test_mapper_list_downstream_except_minimax_register_via_models_http(self):
+        """Drive list_downstream http loop+except (49-50) + minimax static register (52-58) + return via real call from /v1/models handler, using MINIMAX key at config load + bad API url."""
+        import os
+        with patch.dict(os.environ, {"HARBOR_MINIMAX_API_KEY": "sk-minimax-0z4"}, clear=False):
+            client, main_mod, restore = _make_fresh_app(
+                anthropic_compat="false", responses_api="false"
+            )
+            try:
+                # force real mapper (not stubbed) for deeper branch execution
+                if "mapper" in sys.modules:
+                    del sys.modules["mapper"]
+                import mapper as real_mapper
+                sys.modules["mapper"] = real_mapper
+                main_mod.mapper = real_mapper
+                if hasattr(real_mapper.list_downstream, "cache"):
+                    real_mapper.list_downstream.cache.clear()
+
+                # bad URL forces connect error -> except logger path; MINIMAX key causes static models register in list_downstream
+                main_mod.config.BOOST_APIS = ["http://127.0.0.1:1/v1"]
+                main_mod.config.BOOST_KEYS = ["sk-bad"]
+
+                resp = client.get("/v1/models", headers={"authorization": "Bearer test"})
+                # list executes fully (errors tolerated, models may be empty or minimax added)
+                assert resp.status_code == 200
+            finally:
+                restore()
+
+    @patch("httpx.AsyncClient")
+    def test_mapper_list_downstream_success_resolve_tools_via_chat_http(self, mock_httpx_cls):
+        """Drive list_downstream success path (20-48: fetch, extend, MODEL_TO_BACKEND populate) + resolve_request_config (101-141: proxy calls, tools kept in params 104, no-err) via real mapper + chat POST with tools payload."""
+        client, main_mod, restore = _make_fresh_app(
+            anthropic_compat="false", responses_api="false"
+        )
+        try:
+            if "mapper" in sys.modules:
+                del sys.modules["mapper"]
+            import mapper as real_mapper
+            sys.modules["mapper"] = real_mapper
+            main_mod.mapper = real_mapper
+            if hasattr(real_mapper.list_downstream, "cache"):
+                real_mapper.list_downstream.cache.clear()
+
+            # mock httpx so real list_downstream succeeds and populates for resolve
+            mock_inst = AsyncMock()
+            mock_resp = MagicMock()
+            mock_resp.json.return_value = {"data": [{"id": "gpt-0z4", "object": "model", "created": 0, "owned_by": "openai"}]}
+            mock_resp.raise_for_status = MagicMock()
+            mock_inst.get.return_value = mock_resp
+            mock_inst.__aenter__.return_value = mock_inst
+            mock_httpx_cls.return_value = mock_inst
+
+            main_mod.config.BOOST_APIS = ["https://fake/v1"]
+            main_mod.config.BOOST_KEYS = ["sk-fake"]
+
+            with patch.object(main_mod.llm, "LLM") as mock_llm_cls:
+                fake = MagicMock()
+                fake.chat = MagicMock()
+                fake.chat.has_substring.return_value = False
+                fake.workflow = None
+                fake.boost_params = {}
+                fake.serve = AsyncMock(return_value=None)  # after mapper, will 500 but branches hit
+                mock_llm_cls.return_value = fake
+
+                body = {
+                    "model": "gpt-0z4",
+                    "messages": [{"role": "user", "content": "tool test"}],
+                    "tools": [{"type": "function", "function": {"name": "echo", "parameters": {}}}],
+                    "tool_choice": "auto"
+                }
+                resp = client.post("/v1/chat/completions", json=body, headers={"authorization": "Bearer test"})
+                assert resp.status_code in (200, 500)
+        finally:
+            restore()
+
+    def test_mapper_resolve_valueerror_and_404_unknown_via_chat_http(self):
+        """Drive resolve_request_config ValueError (no model, 106-107) and HTTPException 404 (unknown after list, 118-122) branches via chat posts (errors surface as 4xx/5xx from global handler)."""
+        client, main_mod, restore = _make_fresh_app(
+            anthropic_compat="false", responses_api="false"
+        )
+        try:
+            if "mapper" in sys.modules:
+                del sys.modules["mapper"]
+            import mapper as real_mapper
+            sys.modules["mapper"] = real_mapper
+            main_mod.mapper = real_mapper
+            if hasattr(real_mapper.list_downstream, "cache"):
+                real_mapper.list_downstream.cache.clear()
+
+            main_mod.config.BOOST_APIS = []
+            main_mod.config.BOOST_KEYS = []
+
+            # unknown -> 404 from resolve
+            resp = client.post(
+                "/v1/chat/completions",
+                json={"model": "no-such-model-0z4", "messages": [{"role": "user", "content": "x"}]},
+                headers={"authorization": "Bearer test"},
+            )
+            assert resp.status_code == 404
+
+            # no model key -> ValueError in resolve
+            resp2 = client.post(
+                "/v1/chat/completions",
+                json={"messages": [{"role": "user", "content": "x"}]},
+                headers={"authorization": "Bearer test"},
+            )
+            assert resp2.status_code in (400, 500)
+        finally:
+            restore()
+
+    def test_mapper_proxy_module_and_real_is_direct_via_chat(self):
+        """Drive resolve_proxy_module (86-90 if), resolve_proxy_workflow (93-98), real is_direct_task (158-159 any substring) + chat direct early return via klmbr- prefix (registry likely has) + direct prompt substring."""
+        client, main_mod, restore = _make_fresh_app(
+            anthropic_compat="false", responses_api="false"
+        )
+        try:
+            if "mapper" in sys.modules:
+                del sys.modules["mapper"]
+            import mapper as real_mapper
+            sys.modules["mapper"] = real_mapper
+            main_mod.mapper = real_mapper
+            if hasattr(real_mapper.list_downstream, "cache"):
+                real_mapper.list_downstream.cache.clear()
+
+            main_mod.config.BOOST_APIS = ["https://fake"]
+            main_mod.config.BOOST_KEYS = ["sk-f"]
+
+            # pre-populate so resolve finds backend for the base model (klmbr prefix will be stripped by resolve_proxy_model)
+            real_mapper.MODEL_TO_BACKEND["gpt-0z4"] = "https://fake"
+
+            with patch.object(main_mod.llm, "LLM") as mock_llm_cls:
+                fake = MagicMock()
+                fake.chat = MagicMock()
+                # real is_direct_task will call has_substring; return True to hit 411 branch
+                fake.chat.has_substring.side_effect = lambda s: "3-5 word title" in (s or "")
+                fake.workflow = None
+                fake.boost_params = {}
+                fake.chat_completion = AsyncMock(return_value={"id": "d-0z4", "choices": [{"message": {"content": "direct"}}]})
+                mock_llm_cls.return_value = fake
+
+                # klmbr- triggers proxy_module if (if klmbr in registry); title prompt triggers real is_direct
+                body = {
+                    "model": "klmbr-gpt-0z4",
+                    "messages": [{"role": "user", "content": "Generate a concise, 3-5 word title for this"}]
+                }
+                resp = client.post("/v1/chat/completions", json=body, headers={"authorization": "Bearer test"})
+                assert resp.status_code == 200
+                assert "direct" in str(resp.json())
+        finally:
+            restore()

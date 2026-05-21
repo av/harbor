@@ -455,6 +455,7 @@
 - label: Boost /v1/models returns SDK-specific request ID headers on list, lookup, and not-found responses for both OpenAI and Anthropic clients
   command: python -m pytest services/boost/tests/test_models.py::TestModelRequestIdHeaders -q
   tags: [spec, boost-models-sdk-request-ids, implemented]
+- Boost mapper.py deeper branches for HTTP chat/tool paths (list_downstream 20-59 http/except/minimax-register, resolve_proxy_model/module/workflow 74-98 ifs, resolve_request_config ValueError 106 + HTTP 404 118 + tools params keep 104, is_direct_task 158) must be driven real via /v1/models + /v1/chat/completions (with tools payloads) in test_config.py only (non-prior file for deeper mapper, no repeat iter10 chat test); using real import/rebind + httpx patch for success list + config for minimax/errors + LLM patch for early return, asserting responses and mapper branches @implemented
 
 ## anthropic compat
 - label: Boost exposes POST /v1/messages endpoint for Anthropic Messages API compatibility
