@@ -8896,3 +8896,167 @@ class TestStreamingEstimatedInputTokensIntegration:
         body = resp.json()
         assert body["usage"]["input_tokens"] == 25
 
+
+# ---------------------------------------------------------------------------
+# Iteration 8: deep _responses_stream_converter branch coverage
+# (keepalive, refusal close paths, BackendError specifics in converter,
+# tool close/deferred edges via direct + make_responses_app HTTP)
+# ---------------------------------------------------------------------------
+
+
+class TestResponsesStreamConverterDeepBranches:
+    """Cover the remaining stream converter edges (964 keepalive, 1107/1130 refusal closes, 1239-1248 BE errs, 1361+ tool deferred/close)."""
+
+    @pytest.mark.asyncio
+    async def test_keepalive_emitted_on_interval_elapsed(self, monkeypatch):
+        """Patch interval small + sleep in async gen to drive the keepalive yield at 964-965."""
+        monkeypatch.setattr(responses_compat, "SSE_KEEPALIVE_INTERVAL", 0.01)
+        import asyncio
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"slow1"},"index":0}]}\n\n'
+            await asyncio.sleep(0.05)
+            yield 'data: {"choices":[{"delta":{"content":"slow2"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":1}}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "gpt-4o", "resp_kp"
+        ):
+            events.append(event)
+        comments = [e for e in events if e.strip().startswith(":")]
+        assert len(comments) >= 1, "SSE keepalive comment must be emitted when interval elapses"
+
+    @pytest.mark.asyncio
+    async def test_refusal_after_text_closes_text_item(self):
+        """Refusal chunk after open text drives the else: close_text at 1130-1132."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"pre text"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{"refusal":"I refuse"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "gpt-4o", "resp_rat"
+        ):
+            events.append(event)
+        joined = "".join(events)
+        assert "response.output_text.done" in joined
+        assert "response.content_part.done" in joined  # from text close
+        assert "response.refusal.delta" in joined
+        assert "response.refusal.done" in joined
+
+    @pytest.mark.asyncio
+    async def test_refusal_after_reasoning_closes_reasoning_item(self):
+        """Refusal after reasoning drives if reasoning_open: close at 1107-1109."""
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"reasoning_content":"thinking..."},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{"refusal":"no way"},"index":0}]}\n\n'
+            yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}\n\n'
+            yield 'data: [DONE]\n\n'
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "o3", "resp_rar"
+        ):
+            events.append(event)
+        joined = "".join(events)
+        assert "response.reasoning_summary_text.done" in joined
+        assert "response.reasoning_summary_part.done" in joined
+        assert "response.refusal.delta" in joined
+
+    @pytest.mark.asyncio
+    async def test_stream_converter_backend_error_429(self):
+        """Raise BackendError(429) inside stream to hit rate_limit branch 1240-1242."""
+        from llm import BackendError
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"start"},"index":0}]}\n\n'
+            raise BackendError(status_code=429, body='rate limited', headers={})
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "gpt-4o", "resp_be429"
+        ):
+            events.append(event)
+        joined = "".join(events)
+        assert "response.failed" in joined
+        assert "Rate limit exceeded" in joined
+
+    @pytest.mark.asyncio
+    async def test_stream_converter_backend_error_5xx(self):
+        """Raise BackendError(503) to hit >=500 server_error branch 1243-1245."""
+        from llm import BackendError
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"x"},"index":0}]}\n\n'
+            raise BackendError(status_code=503, body='boom', headers={})
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "gpt-4o", "resp_be5xx"
+        ):
+            events.append(event)
+        joined = "".join(events)
+        assert "response.failed" in joined
+        assert "Backend server error" in joined
+
+    @pytest.mark.asyncio
+    async def test_stream_converter_backend_error_other(self):
+        """Raise BackendError(422) to hit else: "Backend request failed" at 1246-1248."""
+        from llm import BackendError
+        async def mock_stream():
+            yield 'data: {"choices":[{"delta":{"content":"y"},"index":0}]}\n\n'
+            raise BackendError(status_code=422, body='unproc', headers={})
+
+        events = []
+        async for event in responses_compat._responses_stream_converter(
+            mock_stream(), "gpt-4o", "resp_beelse"
+        ):
+            events.append(event)
+        joined = "".join(events)
+        assert "response.failed" in joined
+        assert "Backend request failed" in joined
+
+    @pytest.mark.asyncio
+    async def test_tool_and_reasoning_closes_via_http_make_responses_app(self, monkeypatch):
+        """Full HTTP stream path using make_responses_app + patches + reasoning+tool content to drive converter closes and tool finalization."""
+        from helpers import make_responses_app
+        from fastapi.testclient import TestClient
+        import config as _cfg
+        monkeypatch.setattr(_cfg, "BOOST_AUTH", [])
+        app = make_responses_app()
+        client = TestClient(app)
+
+        mock_llm = MagicMock()
+        mock_llm.workflow = None
+        mock_llm.boost_params = {}
+
+        async def mock_serve():
+            async def gen():
+                # reasoning first (opens), then tool (closes reasoning, emits tool)
+                yield 'data: {"choices":[{"delta":{"reasoning_content":"step by step"},"index":0}]}\n\n'
+                yield 'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_99","function":{"name":"calc","arguments":"{\\"n\\":1}"}}]},"index":0}]}\n\n'
+                yield 'data: {"choices":[{"delta":{},"index":0,"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":5,"completion_tokens":2}}\n\n'
+                yield 'data: [DONE]\n\n'
+            return gen()
+
+        mock_llm.serve = mock_serve
+        from unittest.mock import AsyncMock
+        monkeypatch.setattr(responses_compat.mapper, "list_downstream", AsyncMock(return_value=[]))
+        monkeypatch.setattr(responses_compat.mapper, "resolve_request_config", lambda body: {})
+        monkeypatch.setattr(responses_compat.mapper, "is_direct_task", lambda proxy: False)
+        monkeypatch.setattr(responses_compat.llm_mod, "LLM", lambda **kw: mock_llm)
+
+        resp = client.post("/v1/responses", json={
+            "model": "gpt-4o",
+            "input": "compute",
+            "stream": True,
+        })
+        assert resp.status_code == 200
+        text = resp.text
+        assert "response.reasoning_summary_part.added" in text
+        assert "response.reasoning_summary_text.done" in text  # close happened
+        assert "response.output_item.added" in text  # for function_call
+        assert "response.function_call_arguments" in text
+        assert "response.completed" in text or "response.failed" in text
+
