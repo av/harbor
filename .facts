@@ -787,3 +787,12 @@
 - label: the Guides index links the Harbor vs Manual Docker Compose for Local AI guide
   command: rg -q 'Harbor vs Manual Docker Compose for Local AI' docs/8.-Guides.md && rg -q './8.4-Harbor-vs-Manual-Docker-Compose-for-Local-AI.md' docs/8.-Guides.md
   tags: [spec, seo-guides-iter4, implemented]
+- label: the Guides index and docs Home link the OpenAI-Compatible Local LLM Backends guide
+  command: rg -q 'OpenAI-Compatible Local LLM Backends' docs/8.-Guides.md && rg -q '8.5-OpenAI-Compatible-Local-LLM-Backends' docs/README.md
+  tags: [spec, seo-guides-iter5, implemented]
+- label: the OpenAI-compatible backends guide explains how Harbor users can choose or swap Ollama, llama.cpp, and vLLM backends for OpenAI-compatible frontends, clients, and Harbor Launch
+  command: rg -q 'harbor defaults rm ollama' docs/8.5-OpenAI-Compatible-Local-LLM-Backends.md && rg -q 'harbor defaults add vllm' docs/8.5-OpenAI-Compatible-Local-LLM-Backends.md && rg -q 'harbor up webui ollama' docs/8.5-OpenAI-Compatible-Local-LLM-Backends.md && rg -q 'harbor launch --backend llamacpp' docs/8.5-OpenAI-Compatible-Local-LLM-Backends.md
+  tags: [spec, seo-guides-iter5, implemented]
+- label: docs/8.5-OpenAI-Compatible-Local-LLM-Backends.md exists as a guide targeting local OpenAI compatible API, vLLM OpenAI compatible server, llama.cpp OpenAI compatible server, and Ollama OpenAI compatible API search intent
+  command: test -f docs/8.5-OpenAI-Compatible-Local-LLM-Backends.md && rg -q 'local OpenAI compatible API' docs/8.5-OpenAI-Compatible-Local-LLM-Backends.md && rg -q 'vLLM OpenAI compatible server' docs/8.5-OpenAI-Compatible-Local-LLM-Backends.md && rg -q 'llama.cpp OpenAI compatible server' docs/8.5-OpenAI-Compatible-Local-LLM-Backends.md && rg -q 'Ollama OpenAI compatible API' docs/8.5-OpenAI-Compatible-Local-LLM-Backends.md
+  tags: [spec, seo-guides-iter5, implemented]
