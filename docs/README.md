@@ -25,7 +25,7 @@ Welcome to the harbor wiki!
   Read about the way Harbor uses Docker Compose to manage services.
 - [Harbor Guides](https://github.com/av/harbor/wiki/8.-Guides)<br/>
   Practical guides for local LLM stacks, Docker Compose orchestration, and common Harbor workflows.
-  Start with [Local LLM Stack with Docker Compose](https://github.com/av/harbor/wiki/8.1-Local-LLM-Stack-with-Docker-Compose), [Ollama + Open WebUI + SearXNG Local Web RAG Setup](https://github.com/av/harbor/wiki/8.2-Ollama-Open-WebUI-SearXNG-Local-Web-RAG-Setup), or [Run Coding Agents with Local LLMs](https://github.com/av/harbor/wiki/8.3-Run-Coding-Agents-with-Local-LLMs).
+  Start with [Local LLM Stack with Docker Compose](https://github.com/av/harbor/wiki/8.1-Local-LLM-Stack-with-Docker-Compose), [Ollama + Open WebUI + SearXNG Local Web RAG Setup](https://github.com/av/harbor/wiki/8.2-Ollama-Open-WebUI-SearXNG-Local-Web-RAG-Setup), [Run Coding Agents with Local LLMs](https://github.com/av/harbor/wiki/8.3-Run-Coding-Agents-with-Local-LLMs), or [Harbor vs Manual Docker Compose for Local AI](https://github.com/av/harbor/wiki/8.4-Harbor-vs-Manual-Docker-Compose-for-Local-AI).
 - [Adding A New Service](https://github.com/av/harbor/wiki/7.-Adding-A-New-Service)<br/>
   Documentation on bringing more services into the Harbor toolkit.
 

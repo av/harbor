@@ -775,3 +775,15 @@
 - label: the coding agents SEO guide documents explicit Harbor Launch backend and model selection examples for Codex, Claude Code, and OpenCode
   command: rg -q 'harbor launch --backend ollama --model qwen3.5:4b codex' docs/8.3-Run-Coding-Agents-with-Local-LLMs.md && rg -q 'harbor launch --backend ollama --model qwen3.5:4b claude' docs/8.3-Run-Coding-Agents-with-Local-LLMs.md && rg -q 'harbor launch --backend llamacpp --model Qwen3.5-4B opencode' docs/8.3-Run-Coding-Agents-with-Local-LLMs.md
   tags: [spec, seo-guides-iter3, implemented]
+- label: the Harbor vs Compose guide explains service selection, cross-service integrations, shared config, Harbor CLI/App workflows, harbor eject, and Harbor Launch adapters
+  command: rg -q 'service selection' docs/8.4-Harbor-vs-Manual-Docker-Compose-for-Local-AI.md && rg -q 'cross-service integration' docs/8.4-Harbor-vs-Manual-Docker-Compose-for-Local-AI.md && rg -q 'shared configuration' docs/8.4-Harbor-vs-Manual-Docker-Compose-for-Local-AI.md && rg -q 'Harbor CLI' docs/8.4-Harbor-vs-Manual-Docker-Compose-for-Local-AI.md && rg -q 'Harbor App' docs/8.4-Harbor-vs-Manual-Docker-Compose-for-Local-AI.md && rg -q 'harbor eject' docs/8.4-Harbor-vs-Manual-Docker-Compose-for-Local-AI.md && rg -q 'Harbor Launch' docs/8.4-Harbor-vs-Manual-Docker-Compose-for-Local-AI.md
+  tags: [spec, seo-guides-iter4, implemented]
+- label: docs/8.4-Harbor-vs-Manual-Docker-Compose-for-Local-AI.md exists as a guide comparing Harbor with manual Docker Compose for a local AI stack
+  command: test -f docs/8.4-Harbor-vs-Manual-Docker-Compose-for-Local-AI.md && rg -q 'Harbor vs Manual Docker Compose for Local AI' docs/8.4-Harbor-vs-Manual-Docker-Compose-for-Local-AI.md && rg -q 'local AI stack' docs/8.4-Harbor-vs-Manual-Docker-Compose-for-Local-AI.md
+  tags: [spec, seo-guides-iter4, implemented]
+- label: docs/README.md links the Harbor vs Manual Docker Compose for Local AI guide from the docs home
+  command: rg -q 'Harbor vs Manual Docker Compose for Local AI' docs/README.md && rg -q '8.4-Harbor-vs-Manual-Docker-Compose-for-Local-AI' docs/README.md
+  tags: [spec, seo-guides-iter4, implemented]
+- label: the Guides index links the Harbor vs Manual Docker Compose for Local AI guide
+  command: rg -q 'Harbor vs Manual Docker Compose for Local AI' docs/8.-Guides.md && rg -q './8.4-Harbor-vs-Manual-Docker-Compose-for-Local-AI.md' docs/8.-Guides.md
+  tags: [spec, seo-guides-iter4, implemented]
