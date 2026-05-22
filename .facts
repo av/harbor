@@ -832,3 +832,12 @@
 - label: OpenAI-Compatible Local LLM Backends warns that vLLM is a heavier backend that should be matched to GPU or accelerator capacity
   command: rg -q 'Treat vLLM as a heavier backend than the default Ollama path' docs/8.5-OpenAI-Compatible-Local-LLM-Backends.md && rg -q 'GPU or accelerator capacity' docs/8.5-OpenAI-Compatible-Local-LLM-Backends.md
   tags: [spec, seo-guides-iter9, implemented]
+- label: the docs publishing scripts discover Harbor Guides pages from docs/*.md without a separate page-order manifest
+  command: rg -q 'createDocsPageSet' .scripts/docs.ts .scripts/docs-to-app.ts && rg -q 'Deno.readDirSync\(docsPath\)' .scripts/docs.ts && rg -q 'fs.readdir\(docsPath' .scripts/docs-to-app.ts && test -f docs/8.-Guides.md && test -f docs/8.6-Self-Hosted-AI-Stack-for-Developers.md
+  tags: [spec, seo-guides-iter10, implemented]
+- label: docs/README.md lists Adding A New Service before Harbor Guides to match the numeric wiki filename order of 7 before 8
+  command: python3 -c "from pathlib import Path; text=Path('docs/README.md').read_text(); raise SystemExit(0 if text.index('[Adding A New Service]') < text.index('[Harbor Guides]') else 1)"
+  tags: [spec, seo-guides-iter10, implemented]
+- label: the docs Home Harbor Guides entry links to the Guides index and all six 8.x guide wiki pages
+  command: python3 -c "from pathlib import Path; text=Path('docs/README.md').read_text(); need=['8.-Guides','8.1-Local-LLM-Stack-with-Docker-Compose','8.2-Ollama-Open-WebUI-SearXNG-Local-Web-RAG-Setup','8.3-Run-Coding-Agents-with-Local-LLMs','8.4-Harbor-vs-Manual-Docker-Compose-for-Local-AI','8.5-OpenAI-Compatible-Local-LLM-Backends','8.6-Self-Hosted-AI-Stack-for-Developers']; raise SystemExit(0 if all(n in text for n in need) else 1)"
+  tags: [spec, seo-guides-iter10, implemented]
