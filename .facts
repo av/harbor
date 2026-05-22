@@ -823,3 +823,12 @@
 - label: docs/8.4-Harbor-vs-Manual-Docker-Compose-for-Local-AI.md demonstrates Compose inspection with a service-specific harbor cmd example instead of harbor cmd -h
   command: rg -q 'harbor cmd webui ollama' docs/8.4-Harbor-vs-Manual-Docker-Compose-for-Local-AI.md && ! rg -q 'harbor cmd -h' docs/8.4-Harbor-vs-Manual-Docker-Compose-for-Local-AI.md
   tags: [spec, seo-guides-iter8, implemented]
+- label: Self-Hosted AI Stack for Developers presents optional image, voice, workflow, and proxy services as separate opt-in startup commands
+  command: rg -q 'Bring up optional layers one at a time' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && rg -q 'harbor up comfyui' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && rg -q 'harbor up speaches' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && rg -q 'harbor up dify' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && ! rg -q 'harbor up comfyui speaches dify boost' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md
+  tags: [spec, seo-guides-iter9, implemented]
+- label: Local LLM Stack with Docker Compose tells users to review startup and hardware notes before combining SearXNG, Speaches, and ComfyUI
+  command: rg -q 'Before combining these services, review the startup and hardware notes' docs/8.1-Local-LLM-Stack-with-Docker-Compose.md && rg -q 'ComfyUI.*can pull a multi-gigabyte image' docs/8.1-Local-LLM-Stack-with-Docker-Compose.md && rg -q 'Speaches.*can use a CUDA image' docs/8.1-Local-LLM-Stack-with-Docker-Compose.md
+  tags: [spec, seo-guides-iter9, implemented]
+- label: OpenAI-Compatible Local LLM Backends warns that vLLM is a heavier backend that should be matched to GPU or accelerator capacity
+  command: rg -q 'Treat vLLM as a heavier backend than the default Ollama path' docs/8.5-OpenAI-Compatible-Local-LLM-Backends.md && rg -q 'GPU or accelerator capacity' docs/8.5-OpenAI-Compatible-Local-LLM-Backends.md
+  tags: [spec, seo-guides-iter9, implemented]
