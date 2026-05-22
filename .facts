@@ -763,3 +763,15 @@
 - label: Boost LLM.consume_stream() accumulates reasoning_content, refusal, and completion_tokens_details from streaming chunks so non-streaming compat layer responses include thinking blocks, refusals, and reasoning token counts
   command: grep -q 'reasoning_content' services/boost/src/llm.py && grep -q 'refusal' services/boost/src/llm.py && grep -q 'completion_tokens_details' services/boost/src/llm.py && echo PASS
   tags: [spec, implemented]
+
+# seo
+## guides
+- label: docs/8.3-Run-Coding-Agents-with-Local-LLMs.md is a guide about running Codex, Claude Code, and OpenCode with local LLMs through Harbor Launch
+  command: test -f docs/8.3-Run-Coding-Agents-with-Local-LLMs.md && rg -q 'local LLM for Codex' docs/8.3-Run-Coding-Agents-with-Local-LLMs.md && rg -q 'local LLM for Claude Code' docs/8.3-Run-Coding-Agents-with-Local-LLMs.md && rg -q 'local LLM for OpenCode' docs/8.3-Run-Coding-Agents-with-Local-LLMs.md && rg -q 'OpenAI-compatible local backend' docs/8.3-Run-Coding-Agents-with-Local-LLMs.md
+  tags: [spec, seo-guides-iter3, implemented]
+- label: the Guides index and docs Home link to the coding agents local LLM guide
+  command: rg -q '8.3-Run-Coding-Agents-with-Local-LLMs' docs/8.-Guides.md && rg -q '8.3-Run-Coding-Agents-with-Local-LLMs' docs/README.md
+  tags: [spec, seo-guides-iter3, implemented]
+- label: the coding agents SEO guide documents explicit Harbor Launch backend and model selection examples for Codex, Claude Code, and OpenCode
+  command: rg -q 'harbor launch --backend ollama --model qwen3.5:4b codex' docs/8.3-Run-Coding-Agents-with-Local-LLMs.md && rg -q 'harbor launch --backend ollama --model qwen3.5:4b claude' docs/8.3-Run-Coding-Agents-with-Local-LLMs.md && rg -q 'harbor launch --backend llamacpp --model Qwen3.5-4B opencode' docs/8.3-Run-Coding-Agents-with-Local-LLMs.md
+  tags: [spec, seo-guides-iter3, implemented]
