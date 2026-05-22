@@ -55,6 +55,8 @@ Harbor is a CLI and companion app that lets you spin up a complete local LLM sta
 - [Harbor CLI Reference](https://github.com/av/harbor/wiki/3.-Harbor-CLI-Reference)<br/>
   Read more about Harbor CLI commands and options.
   Read about supported services and the ways to configure them.
+- [Harbor Guides](https://github.com/av/harbor/wiki/8.-Guides)<br/>
+  Practical guides for local LLM stack setup, local web RAG, coding agents, OpenAI-compatible backends, and self-hosted AI stack planning.
 - [Join our Discord](https://discord.gg/8nDRphrhSF)<br/>
   Get help, share your experience, and contribute to the project.
 

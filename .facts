@@ -808,3 +808,12 @@
 - label: the self-hosted AI stack guide links to the existing Harbor guides for Docker Compose local LLMs, local web RAG, coding agents, manual Compose comparison, and OpenAI-compatible backends
   command: grep -q '8.1-Local-LLM-Stack-with-Docker-Compose.md' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && grep -q '8.2-Ollama-Open-WebUI-SearXNG-Local-Web-RAG-Setup.md' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && grep -q '8.3-Run-Coding-Agents-with-Local-LLMs.md' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && grep -q '8.4-Harbor-vs-Manual-Docker-Compose-for-Local-AI.md' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && grep -q '8.5-OpenAI-Compatible-Local-LLM-Backends.md' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md
   tags: [spec, seo-guides-iter6, implemented]
+- label: the six Harbor SEO guide articles link back to the Harbor Guides index
+  command: for f in docs/8.[1-6]-*.md; do rg -q "\[Harbor Guides\]\(\./8\.-Guides\.md\)" "$f" || exit 1; done
+  tags: [spec, seo-guides-iter7, implemented]
+- label: docs/README.md presents the Harbor Guides entry with links to the Guides index and all six SEO guide wiki pages
+  command: rg -q 'Harbor Guides' docs/README.md && rg -q '8\.-Guides' docs/README.md && rg -q '8\.1-Local-LLM-Stack-with-Docker-Compose' docs/README.md && rg -q '8\.2-Ollama-Open-WebUI-SearXNG-Local-Web-RAG-Setup' docs/README.md && rg -q '8\.3-Run-Coding-Agents-with-Local-LLMs' docs/README.md && rg -q '8\.4-Harbor-vs-Manual-Docker-Compose-for-Local-AI' docs/README.md && rg -q '8\.5-OpenAI-Compatible-Local-LLM-Backends' docs/README.md && rg -q '8\.6-Self-Hosted-AI-Stack-for-Developers' docs/README.md
+  tags: [spec, seo-guides-iter7, implemented]
+- label: README.md documentation links readers to the Harbor Guides wiki section and highlights local LLM stack, local web RAG, coding agents, OpenAI-compatible backends, and self-hosted AI stack guides
+  command: rg -q 'Harbor Guides' README.md && rg -q 'local LLM stack' README.md && rg -q 'local web RAG' README.md && rg -q 'coding agents' README.md && rg -q 'OpenAI-compatible backends' README.md && rg -q 'self-hosted AI stack' README.md
+  tags: [spec, seo-guides-iter7, implemented]
