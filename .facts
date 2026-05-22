@@ -720,6 +720,18 @@
 - label: docs > guides > docs/README.md links the Guides section and the Local LLM Stack with Docker Compose guide from the docs home
   command: rg -q 'Harbor Guides' docs/README.md && rg -q '8.-Guides' docs/README.md && rg -q '8.1-Local-LLM-Stack-with-Docker-Compose' docs/README.md
   tags: [spec, seo-guides-iter1, implemented]
+- label: docs/8.2-Ollama-Open-WebUI-SearXNG-Local-Web-RAG-Setup.md exists as a Harbor guide for Ollama, Open WebUI, and SearXNG local web RAG
+  command: test -f docs/8.2-Ollama-Open-WebUI-SearXNG-Local-Web-RAG-Setup.md
+  tags: [spec, seo-guides-iter2, implemented]
+- label: docs/8.2-Ollama-Open-WebUI-SearXNG-Local-Web-RAG-Setup.md targets Ollama Open WebUI Docker Compose, Open WebUI SearXNG, and local web RAG search intent
+  command: grep -Fq 'Ollama Open WebUI Docker Compose' docs/8.2-Ollama-Open-WebUI-SearXNG-Local-Web-RAG-Setup.md && grep -Fq 'Open WebUI SearXNG' docs/8.2-Ollama-Open-WebUI-SearXNG-Local-Web-RAG-Setup.md && grep -Fq 'local web RAG' docs/8.2-Ollama-Open-WebUI-SearXNG-Local-Web-RAG-Setup.md
+  tags: [spec, seo-guides-iter2, implemented]
+- label: docs/8.-Guides.md links the Ollama + Open WebUI + SearXNG Local Web RAG Setup guide
+  command: grep -Fq '[Ollama + Open WebUI + SearXNG Local Web RAG Setup](./8.2-Ollama-Open-WebUI-SearXNG-Local-Web-RAG-Setup.md)' docs/8.-Guides.md
+  tags: [spec, seo-guides-iter2, implemented]
+- label: docs/README.md links the Ollama + Open WebUI + SearXNG Local Web RAG Setup guide from the docs home
+  command: grep -Fq '8.2-Ollama-Open-WebUI-SearXNG-Local-Web-RAG-Setup' docs/README.md
+  tags: [spec, seo-guides-iter2, implemented]
 
 # ci
 - label: CI has 5 GitHub Actions workflows: app-release, bench-docker, boost-docker, lint, and test
