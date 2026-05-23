@@ -605,6 +605,9 @@
 - label: Boost Responses cancel stub rejects invalid JSON request bodies with an OpenAI-format 400 before returning the non-persistence 404
   command: cd services/boost && python -m pytest tests/test_responses_compat.py::TestResponseStubEndpoints::test_cancel_response_rejects_invalid_json -q
   tags: [spec, boost-responses-cancel-invalid-json, implemented]
+- label: Boost Responses API preserves function-call context when reconstructing chat history: assistant function_call items keep tool_calls, tool outputs keep tool_call_id, and assistant tool-call content sent to Ollama-compatible chat backends is an empty string rather than null
+  command: pytest -q services/boost/tests/test_chat_node.py services/boost/tests/test_responses_compat.py -k 'from_conversation_preserves_tool_metadata or function_call_input_uses_empty_assistant_content'
+  tags: [spec, implemented]
 
 ## shared
 - label: Boost compat layers share a common auth.py module with get_api_key supporting both Authorization and x-api-key headers
@@ -803,8 +806,8 @@
 - label: docs/8.6-Self-Hosted-AI-Stack-for-Developers.md exists as a Harbor guide targeting self-hosted AI stack, private AI stack, open source AI stack, and local AI toolkit search intent
   command: test -f docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && grep -qi 'self-hosted AI stack' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && grep -qi 'private AI stack' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && grep -qi 'open source AI stack' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && grep -qi 'local AI toolkit' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md
   tags: [spec, seo-guides-iter6, implemented]
-- label: the self-hosted AI stack guide covers chat, coding, RAG/search, tools, image, voice, workflows, benchmarks, and observability as Harbor developer stack areas
-  command: grep -qi 'chat' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && grep -qi 'coding' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && grep -qi 'RAG' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && grep -qi 'tools' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && grep -qi 'image' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && grep -qi 'voice' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && grep -qi 'workflows' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && grep -qi 'benchmarks' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && grep -qi 'observability' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md
+- label: the self-hosted AI stack guide is keyword-oriented around self-hosted AI stack, private AI stack, open source AI stack, local AI toolkit, local AI stack, and Docker Compose orchestration while using OpenCode and harbor launch as the main developer workflow example
+  command: rg -qi 'self-hosted AI stack' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && rg -qi 'private AI stack' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && rg -qi 'open source AI stack' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && rg -qi 'local AI toolkit' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && rg -qi 'local AI stack' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && rg -q 'Docker Compose' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && rg -q 'OpenCode' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && rg -q 'harbor launch' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md
   tags: [spec, seo-guides-iter6, implemented]
 - label: the Guides index and docs Home link the Self-Hosted AI Stack for Developers guide
   command: grep -q '8.6-Self-Hosted-AI-Stack-for-Developers.md' docs/8.-Guides.md && grep -q '8.6-Self-Hosted-AI-Stack-for-Developers' docs/README.md
@@ -812,11 +815,11 @@
 - label: the self-hosted AI stack guide links to the existing Harbor guides for Docker Compose local LLMs, local web RAG, coding agents, manual Compose comparison, and OpenAI-compatible backends
   command: grep -q '8.1-Local-LLM-Stack-with-Docker-Compose.md' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && grep -q '8.2-Ollama-Open-WebUI-SearXNG-Local-Web-RAG-Setup.md' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && grep -q '8.3-Run-Coding-Agents-with-Local-LLMs.md' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && grep -q '8.4-Harbor-vs-Manual-Docker-Compose-for-Local-AI.md' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && grep -q '8.5-OpenAI-Compatible-Local-LLM-Backends.md' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md
   tags: [spec, seo-guides-iter6, implemented]
-- label: the six Harbor SEO guide articles link back to the Harbor Guides index
-  command: for f in docs/8.[1-6]-*.md; do rg -q "\[Harbor Guides\]\(\./8\.-Guides\.md\)" "$f" || exit 1; done
+- label: the seven Harbor SEO guide articles link back to the Harbor Guides index
+  command: for f in docs/8.[1-7]-*.md; do rg -q "\[Harbor Guides\]\(\./8\.-Guides\.md\)" "$f" || exit 1; done
   tags: [spec, seo-guides-iter7, implemented]
-- label: docs/README.md presents the Harbor Guides entry with links to the Guides index and all six SEO guide wiki pages
-  command: rg -q 'Harbor Guides' docs/README.md && rg -q '8\.-Guides' docs/README.md && rg -q '8\.1-Local-LLM-Stack-with-Docker-Compose' docs/README.md && rg -q '8\.2-Ollama-Open-WebUI-SearXNG-Local-Web-RAG-Setup' docs/README.md && rg -q '8\.3-Run-Coding-Agents-with-Local-LLMs' docs/README.md && rg -q '8\.4-Harbor-vs-Manual-Docker-Compose-for-Local-AI' docs/README.md && rg -q '8\.5-OpenAI-Compatible-Local-LLM-Backends' docs/README.md && rg -q '8\.6-Self-Hosted-AI-Stack-for-Developers' docs/README.md
+- label: docs/README.md presents the Harbor Guides entry with links to the Guides index and all seven SEO guide wiki pages
+  command: rg -q 'Harbor Guides' docs/README.md && rg -q '8\.-Guides' docs/README.md && rg -q '8\.1-Local-LLM-Stack-with-Docker-Compose' docs/README.md && rg -q '8\.2-Ollama-Open-WebUI-SearXNG-Local-Web-RAG-Setup' docs/README.md && rg -q '8\.3-Run-Coding-Agents-with-Local-LLMs' docs/README.md && rg -q '8\.4-Harbor-vs-Manual-Docker-Compose-for-Local-AI' docs/README.md && rg -q '8\.5-OpenAI-Compatible-Local-LLM-Backends' docs/README.md && rg -q '8\.6-Self-Hosted-AI-Stack-for-Developers' docs/README.md && rg -q '8\.7-Run-Hermes-Agent-with-Harbor' docs/README.md
   tags: [spec, seo-guides-iter7, implemented]
 - label: README.md documentation links readers to the Harbor Guides wiki section and highlights local LLM stack, local web RAG, coding agents, OpenAI-compatible backends, and self-hosted AI stack guides
   command: rg -q 'Harbor Guides' README.md && rg -q 'local LLM stack' README.md && rg -q 'local web RAG' README.md && rg -q 'coding agents' README.md && rg -q 'OpenAI-compatible backends' README.md && rg -q 'self-hosted AI stack' README.md
@@ -827,8 +830,8 @@
 - label: docs/8.4-Harbor-vs-Manual-Docker-Compose-for-Local-AI.md demonstrates Compose inspection with a service-specific harbor cmd example instead of harbor cmd -h
   command: rg -q 'harbor cmd webui ollama' docs/8.4-Harbor-vs-Manual-Docker-Compose-for-Local-AI.md && ! rg -q 'harbor cmd -h' docs/8.4-Harbor-vs-Manual-Docker-Compose-for-Local-AI.md
   tags: [spec, seo-guides-iter8, implemented]
-- label: Self-Hosted AI Stack for Developers presents optional image, voice, workflow, and proxy services as separate opt-in startup commands
-  command: rg -q 'Bring up optional layers one at a time' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && rg -q 'harbor up comfyui' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && rg -q 'harbor up speaches' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && rg -q 'harbor up dify' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && ! rg -q 'harbor up comfyui speaches dify boost' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md
+- label: Self-Hosted AI Stack for Developers gives practical startup commands that prioritize OpenCode through harbor launch, optional web search through --web/SearXNG, and supporting developer services rather than leading with image, voice, or app-builder services
+  command: rg -q 'harbor launch --config opencode' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && rg -q 'harbor launch --backend ollama --model qwen3.5:4b opencode' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && rg -q 'harbor launch --web --backend ollama --model qwen3.5:4b opencode' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && rg -q 'harbor up searxng' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && ! rg -q 'harbor up comfyui' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && ! rg -q 'harbor up speaches' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && ! rg -q 'harbor up dify' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md
   tags: [spec, seo-guides-iter9, implemented]
 - label: Local LLM Stack with Docker Compose tells users to review startup and hardware notes before combining SearXNG, Speaches, and ComfyUI
   command: rg -q 'Before combining these services, review the startup and hardware notes' docs/8.1-Local-LLM-Stack-with-Docker-Compose.md && rg -q 'ComfyUI.*can pull a multi-gigabyte image' docs/8.1-Local-LLM-Stack-with-Docker-Compose.md && rg -q 'Speaches.*can use a CUDA image' docs/8.1-Local-LLM-Stack-with-Docker-Compose.md
@@ -842,6 +845,21 @@
 - label: docs/README.md lists Adding A New Service before Harbor Guides to match the numeric wiki filename order of 7 before 8
   command: python3 -c "from pathlib import Path; text=Path('docs/README.md').read_text(); raise SystemExit(0 if text.index('[Adding A New Service]') < text.index('[Harbor Guides]') else 1)"
   tags: [spec, seo-guides-iter10, implemented]
-- label: the docs Home Harbor Guides entry links to the Guides index and all six 8.x guide wiki pages
-  command: python3 -c "from pathlib import Path; text=Path('docs/README.md').read_text(); need=['8.-Guides','8.1-Local-LLM-Stack-with-Docker-Compose','8.2-Ollama-Open-WebUI-SearXNG-Local-Web-RAG-Setup','8.3-Run-Coding-Agents-with-Local-LLMs','8.4-Harbor-vs-Manual-Docker-Compose-for-Local-AI','8.5-OpenAI-Compatible-Local-LLM-Backends','8.6-Self-Hosted-AI-Stack-for-Developers']; raise SystemExit(0 if all(n in text for n in need) else 1)"
+- label: the docs Home Harbor Guides entry links to the Guides index and all seven 8.x guide wiki pages
+  command: python3 -c "from pathlib import Path; text=Path('docs/README.md').read_text(); need=['8.-Guides','8.1-Local-LLM-Stack-with-Docker-Compose','8.2-Ollama-Open-WebUI-SearXNG-Local-Web-RAG-Setup','8.3-Run-Coding-Agents-with-Local-LLMs','8.4-Harbor-vs-Manual-Docker-Compose-for-Local-AI','8.5-OpenAI-Compatible-Local-LLM-Backends','8.6-Self-Hosted-AI-Stack-for-Developers','8.7-Run-Hermes-Agent-with-Harbor']; raise SystemExit(0 if all(n in text for n in need) else 1)"
   tags: [spec, seo-guides-iter10, implemented]
+- label: the self-hosted AI stack guide describes host OpenCode via harbor launch and containerized OpenCode as user-selectable modes without prescribing one as better for day-to-day repository work or persistent workspaces
+  command: rg -q 'Choose the mode that fits your preferred OpenCode workflow' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && ! rg -q 'day-to-day repository work|persistent sessions|persistent service data|workspace mounts' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md
+  tags: [spec, seo-guides-iter9, implemented]
+- label: docs/8.7-Run-Hermes-Agent-with-Harbor.md exists as a keyword-oriented Harbor guide targeting Hermes Agent Harbor, run Hermes Agent with local LLMs, Hermes Agent Ollama, Hermes Agent Docker Compose, and local AI agent search intent
+  command: test -f docs/8.7-Run-Hermes-Agent-with-Harbor.md && rg -qi 'Hermes Agent.*Harbor|Harbor.*Hermes Agent' docs/8.7-Run-Hermes-Agent-with-Harbor.md && rg -qi 'run Hermes Agent with local LLMs' docs/8.7-Run-Hermes-Agent-with-Harbor.md && rg -qi 'Hermes Agent.*Ollama|Ollama.*Hermes Agent' docs/8.7-Run-Hermes-Agent-with-Harbor.md && rg -qi 'Hermes Agent.*Docker Compose|Docker Compose.*Hermes Agent' docs/8.7-Run-Hermes-Agent-with-Harbor.md && rg -qi 'local AI agent' docs/8.7-Run-Hermes-Agent-with-Harbor.md
+  tags: [spec, seo-guides-iter11, implemented]
+- label: the Hermes Agent Harbor guide links to the Hermes service docs, Harbor Launch CLI reference, Local LLM Stack with Docker Compose, Run Coding Agents with Local LLMs, OpenAI-Compatible Local LLM Backends, and Harbor Guides index
+  command: rg -q '2.3.76-Satellite-Hermes-Agent.md' docs/8.7-Run-Hermes-Agent-with-Harbor.md && rg -q '3.-Harbor-CLI-Reference.md#harbor-launch-launch-options---service-servicetool-args' docs/8.7-Run-Hermes-Agent-with-Harbor.md && rg -q '8.1-Local-LLM-Stack-with-Docker-Compose.md' docs/8.7-Run-Hermes-Agent-with-Harbor.md && rg -q '8.3-Run-Coding-Agents-with-Local-LLMs.md' docs/8.7-Run-Hermes-Agent-with-Harbor.md && rg -q '8.5-OpenAI-Compatible-Local-LLM-Backends.md' docs/8.7-Run-Hermes-Agent-with-Harbor.md && rg -q '8.-Guides.md' docs/8.7-Run-Hermes-Agent-with-Harbor.md
+  tags: [spec, seo-guides-iter11, implemented]
+- label: the Guides index and docs Home link the Run Hermes Agent with Harbor guide
+  command: rg -q 'Run Hermes Agent with Harbor' docs/8.-Guides.md && rg -q '8.7-Run-Hermes-Agent-with-Harbor' docs/README.md
+  tags: [spec, seo-guides-iter11, implemented]
+- label: the Hermes Agent Harbor guide documents both user-selectable modes: harbor launch for an installed host hermes CLI using a selected Harbor backend, and harbor up hermes plus harbor hermes for the containerized Hermes service/API server
+  command: rg -q 'harbor launch --backend ollama --model qwen3.5:4b hermes' docs/8.7-Run-Hermes-Agent-with-Harbor.md && rg -q 'harbor launch --web --backend ollama --model qwen3.5:4b hermes' docs/8.7-Run-Hermes-Agent-with-Harbor.md && rg -q 'harbor up hermes' docs/8.7-Run-Hermes-Agent-with-Harbor.md && rg -q 'harbor hermes chat' docs/8.7-Run-Hermes-Agent-with-Harbor.md && rg -q 'http://localhost:34801/v1' docs/8.7-Run-Hermes-Agent-with-Harbor.md
+  tags: [spec, seo-guides-iter11, implemented]

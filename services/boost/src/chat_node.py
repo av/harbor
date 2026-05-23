@@ -23,14 +23,27 @@ class ChatNode:
   @staticmethod
   def from_conversation(messages):
     root_message = messages[0]
-    node = ChatNode(role=root_message['role'], content=root_message['content'])
+    node = ChatNode.from_message(root_message)
 
     for message in messages[1:]:
-      child = ChatNode(role=message['role'], content=message['content'])
+      child = ChatNode.from_message(message)
       node.add_child(child)
       node = child
 
     return node
+
+  @staticmethod
+  def from_message(message):
+    content = message.get('content', '')
+    if content is None:
+      content = ''
+
+    return ChatNode(
+      role=message.get('role', ''),
+      content=content,
+      tool_call_id=message.get('tool_call_id'),
+      tool_calls=message.get('tool_calls') or [],
+    )
 
   def __init__(self, **kwargs):
     self.id = ''.join(

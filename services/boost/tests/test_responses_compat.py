@@ -2113,6 +2113,31 @@ class TestInputConversionEdgeCases:
         msgs = responses_compat._convert_input_to_messages(body)
         assert msgs == [{"role": "tool", "tool_call_id": "", "content": "some result"}]
 
+    def test_function_call_input_uses_empty_assistant_content(self):
+        body = {"input": [
+            {
+                "type": "function_call",
+                "call_id": "call_123",
+                "name": "web_search",
+                "arguments": "{\"query\":\"harbor\"}",
+            },
+        ]}
+
+        msgs = responses_compat._convert_input_to_messages(body)
+
+        assert msgs == [{
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [{
+                "id": "call_123",
+                "type": "function",
+                "function": {
+                    "name": "web_search",
+                    "arguments": "{\"query\":\"harbor\"}",
+                },
+            }],
+        }]
+
     def test_non_dict_non_string_item(self):
         """Non-dict, non-string items in the input array should be stringified."""
         body = {"input": [42, True]}
@@ -6468,7 +6493,7 @@ class TestMultiTurnConversations:
         assert msgs[0] == {"role": "user", "content": "Weather in NYC?"}
         # function_call -> assistant with tool_calls
         assert msgs[1]["role"] == "assistant"
-        assert msgs[1]["content"] is None
+        assert msgs[1]["content"] == ""
         assert len(msgs[1]["tool_calls"]) == 1
         assert msgs[1]["tool_calls"][0]["id"] == "call_w1"
         assert msgs[1]["tool_calls"][0]["function"]["name"] == "get_weather"
@@ -6510,7 +6535,7 @@ class TestMultiTurnConversations:
         assert msgs[0]["role"] == "user"
         # Two function_calls merged into one assistant message
         assert msgs[1]["role"] == "assistant"
-        assert msgs[1]["content"] is None
+        assert msgs[1]["content"] == ""
         assert len(msgs[1]["tool_calls"]) == 2
         assert msgs[1]["tool_calls"][0]["function"]["name"] == "get_weather"
         assert msgs[1]["tool_calls"][0]["id"] == "call_nyc"
@@ -9143,4 +9168,3 @@ class TestTokenCounterBranchesViaHTTPInputTokens:
         })
         assert resp.status_code == 200
         assert resp.json()["input_tokens"] > 0
-

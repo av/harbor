@@ -179,7 +179,7 @@ def _convert_input_to_messages(body: dict):
       else:
         messages.append({
           "role": "assistant",
-          "content": None,
+          "content": "",
           "tool_calls": [tc_entry],
         })
 

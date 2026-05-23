@@ -46,14 +46,8 @@ node_modules/
 # langfuse
 langfuse/db/
 
-# Local scripts (catchall) — scripts/* ignores top-level entries individually
-# so we can explicitly un-ignore the tracked subdirs. `scripts/` alone would
-# exclude the directory and make any `!scripts/<name>/…` exception unreachable.
-# scripts/specs/ stays ignored — personal scratch area.
 scripts/*
 !scripts/lint/
-!scripts/seo/
-!scripts/seo/plan.md
 
 # LiteLLM
 litellm/db
