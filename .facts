@@ -765,6 +765,10 @@
   tags: [spec, implemented]
 
 # seo
+- label: scripts/seo/plan.md documents Harbor SEO keyword priorities for local LLM, local AI, Ollama, Open WebUI, and Docker Compose search intent
+  command: test -f scripts/seo/plan.md && rg -q 'local LLM stack' scripts/seo/plan.md && rg -q 'Ollama \+ Open WebUI' scripts/seo/plan.md && rg -q 'Docker Compose' scripts/seo/plan.md
+  tags: [spec, seo-plan, implemented]
+
 ## guides
 - label: docs/8.3-Run-Coding-Agents-with-Local-LLMs.md is a guide about running Codex, Claude Code, and OpenCode with local LLMs through Harbor Launch
   command: test -f docs/8.3-Run-Coding-Agents-with-Local-LLMs.md && rg -q 'local LLM for Codex' docs/8.3-Run-Coding-Agents-with-Local-LLMs.md && rg -q 'local LLM for Claude Code' docs/8.3-Run-Coding-Agents-with-Local-LLMs.md && rg -q 'local LLM for OpenCode' docs/8.3-Run-Coding-Agents-with-Local-LLMs.md && rg -q 'OpenAI-compatible local backend' docs/8.3-Run-Coding-Agents-with-Local-LLMs.md

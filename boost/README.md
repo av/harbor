@@ -3,7 +3,7 @@
 
 ![splash](../docs/harbor-boost.png)
 
-`boost` is an optimising LLM proxy with OpenAI-compatible API.
+`boost` is an optimising LLM proxy with OpenAI-compatible, Anthropic-compatible, and OpenAI Responses APIs.
 
 ### Documentation
 
@@ -24,6 +24,18 @@
 #### OpenAI-compatible API
 
 Acts as a drop-in proxy for OpenAI APIs, compatible with most LLM providers and clients. Boost can be used as a "plain" proxy to combine multiple LLM backends behind a single endpoint with a single API key.
+
+#### Anthropic-compatible API
+
+Boost can also accept requests in the Anthropic Messages API format. Any Anthropic SDK client can be pointed at Boost's URL, and Boost will convert the request to OpenAI format internally, route it through the normal proxy pipeline (modules, workflows, model routing), and convert the response back to Anthropic format.
+
+This is enabled by default. See the [API section](#anthropic-compatible-api-1) below for endpoint details and usage examples.
+
+#### OpenAI Responses API
+
+Boost supports the OpenAI Responses API (`/v1/responses`), a newer alternative to Chat Completions. The Responses API uses a different input/output shape (input items and output items instead of messages) and a different streaming event format. Boost converts Responses API requests to Chat Completions internally, routes them through the normal pipeline, and converts results back to Responses API format.
+
+This is enabled by default. See the [API section](#openai-responses-api-1) below for endpoint details and usage examples.
 
 ![Short overview of boost behavior](../docs/boost-behavior.png)
 
@@ -200,18 +212,21 @@ See the [http catalog](https://github.com/av/harbor/blob/main/http-catalog/boost
 
 **Authorization**
 
-When [configured](#boost-configuration) to require an API key, you can provide the API key in the `Authorization` header.
+When [configured](#boost-configuration) to require an API key, you can provide the API key in the `Authorization` or `x-api-key` header. All API surfaces (Chat Completions, Messages, Responses, Models) accept both styles.
 
 ```http
-<!-- All three versions are accepted -->
+<!-- All of these are accepted -->
 Authorization: sk-boost
 Authorization: bearer sk-boost
 Authorization: Bearer sk-boost
+x-api-key: sk-boost
 ```
 
-**`GET /v1/models`**
+**`GET /v1/models`** and **`GET /v1/models/{model_id}`**
 
-List boosted models. `boost` will serve additional models as per enabled modules. For example:
+List boosted models or retrieve a specific model. The response format is auto-detected based on client headers: Anthropic SDK clients (detected via `anthropic-version` header, or `x-api-key` without `Authorization`) receive Anthropic `ModelInfo` format (with `data`/`has_more`/`first_id`/`last_id` envelope and `type: "model"` items); all other clients receive OpenAI format. The single-model endpoint returns 404 in the appropriate error format when a model is not found.
+
+`boost` will serve additional models as per enabled modules. For example:
 
 ```jsonc
 [
@@ -259,6 +274,289 @@ Listen to a specific stream of events (associated with a single completion workf
 **`GET /health`**
 
 Health check endpoint. Returns `{ status: 'ok' }` if the service is running.
+
+#### Anthropic-compatible API
+
+Boost exposes an Anthropic-compatible Messages API that translates between Anthropic and OpenAI formats. Enabled by default via [`HARBOR_BOOST_ANTHROPIC_COMPAT`](../docs/5.2.2-Harbor-Boost-Configuration.md#harbor_boost_anthropic_compat).
+
+Incoming requests are converted to OpenAI format, routed through the normal Boost pipeline (model routing, modules, workflows), and responses are converted back to Anthropic format. Both streaming and non-streaming modes are supported.
+
+**Supported features:**
+
+- Messages with text content
+- System prompts (top-level `system` parameter, string or array-of-blocks)
+- Images (base64 and URL sources)
+- Document content blocks (best-effort; image-type documents forwarded as images, others as text placeholders)
+- Tool use (function calling) with tool ID normalization (`toolu_`/`call_` prefix conversion)
+- `tool_result` with `is_error` flag and image content (images forwarded as follow-up user message)
+- Tool choice (`auto`, `any`, `none`, named tool)
+- `disable_parallel_tool_use` mapped to `parallel_tool_calls: false`
+- Stop sequences (OpenAI backends strip stop sequences from output; Boost infers `stop_sequence` vs `end_turn` by checking the generated text)
+- Extended thinking (`thinking.type: enabled` maps to `max_completion_tokens` for backends; responses include `thinking` content blocks with required `signature: ""` field). Adaptive thinking (`thinking.type: adaptive`) maps to `max_completion_tokens = max_tokens`, letting the backend decide how much reasoning to use. `output_config.effort` is also accepted as a reasoning-effort signal when no explicit `thinking` config is present. Streaming emits `signature_delta` events for SDK compatibility.
+- `max_tokens` validated as a positive integer (rejects non-numeric, zero, and negative values)
+- `top_k` passthrough (best-effort for backends that support it, e.g. vLLM, Ollama)
+- `anthropic-beta` header accepted (parsed and logged, recognized flags echoed back in response)
+- `anthropic-version` response header on all responses
+- `@boost_` params via `metadata` dict (workflow selection, module config forwarded to the proxy pipeline)
+- Request parameter passthrough: `seed`, `frequency_penalty`, `presence_penalty`, `logit_bias`, `logprobs`, `top_logprobs`, `response_format`, `n` are forwarded to the backend when present in the request body (not part of the Anthropic spec, but useful for backends that support them)
+- Streaming (SSE with Anthropic event types: `message_start`, `ping`, `content_block_start`, `content_block_delta`, `content_block_stop`, `message_delta`, `message_stop`); optimized for performance with direct dict access on the hot path
+- SSE streams include a `retry: 3000` interval for client reconnection, periodic keep-alive comments (every 15 s) to prevent proxy/load-balancer idle-timeout disconnects, and standard headers (`Cache-Control: no-cache`, `Connection: keep-alive`, `X-Accel-Buffering: no`)
+- Mid-stream error handling (if the backend stream fails, a sanitized error is emitted as a text block and the SSE envelope is properly closed; raw exception details are logged server-side only). `BackendError` exceptions from the backend are caught during streaming with status-code-specific messages (429 becomes "Rate limit exceeded", 5xx becomes "Backend server error").
+- Backend error mapping (429 mapped to `rate_limit_error`, 5xx to `api_error`) with rate limit header forwarding (`retry-after`, `x-ratelimit-*`)
+- `cache_creation_input_tokens` and `cache_read_input_tokens` fields included in usage (always 0, for SDK compatibility)
+- Token counting (local estimation via tiktoken or chars/4 heuristic; no backend call needed)
+- Authentication returns 401 (not 403) with Anthropic-format error body on failure; case-insensitive `Bearer` prefix stripping
+- Message batches API stubs with informative error messages guiding callers to use `/v1/messages` (create/list return 501, get/results/cancel return 404)
+
+**Authentication**
+
+The same API keys configured for the OpenAI-compatible API apply. You can authenticate using either header style:
+
+```http
+x-api-key: sk-boost
+Authorization: Bearer sk-boost
+```
+
+**`POST /v1/messages`**
+
+Anthropic Messages API endpoint. Accepts the same request format as the Anthropic API.
+
+```bash
+POST http://localhost:34131/v1/messages
+
+{
+  "model": "llama3.1",
+  "max_tokens": 1024,
+  "messages": [
+    { "role": "user", "content": "Tell me about LLMs" }
+  ]
+}
+```
+
+Streaming is supported via `"stream": true` in the request body. When streaming, the response uses Anthropic SSE event types: `message_start`, `content_block_start`, `content_block_delta`, `content_block_stop`, `message_delta`, `message_stop`.
+
+**`POST /v1/messages/count_tokens`**
+
+Returns the input token count for a set of messages without generating a completion. Token counting is performed locally using tiktoken (cl100k\_base encoding) with a chars/4 heuristic fallback, so no backend call is made.
+
+```bash
+POST http://localhost:34131/v1/messages/count_tokens
+
+{
+  "model": "llama3.1",
+  "messages": [
+    { "role": "user", "content": "Tell me about LLMs" }
+  ]
+}
+```
+
+Response:
+
+```json
+{ "input_tokens": 12 }
+```
+
+**Example: Anthropic Python SDK**
+
+Point the Anthropic SDK at Boost's URL:
+
+```python
+import anthropic
+
+client = anthropic.Anthropic(
+    base_url="http://localhost:34131",
+    api_key="sk-boost",  # or any valid Boost API key
+)
+
+message = client.messages.create(
+    model="llama3.1",
+    max_tokens=1024,
+    messages=[
+        {"role": "user", "content": "Hello!"}
+    ],
+)
+
+print(message.content[0].text)
+```
+
+Streaming:
+
+```python
+with client.messages.stream(
+    model="llama3.1",
+    max_tokens=1024,
+    messages=[{"role": "user", "content": "Hello!"}],
+) as stream:
+    for text in stream.text_stream:
+        print(text, end="", flush=True)
+```
+
+#### OpenAI Responses API
+
+Boost exposes an OpenAI Responses API-compatible endpoint that translates between the Responses API format and Chat Completions. Enabled by default via [`HARBOR_BOOST_RESPONSES_API`](../docs/5.2.2-Harbor-Boost-Configuration.md#harbor_boost_responses_api).
+
+Incoming requests are converted to Chat Completions format, routed through the normal Boost pipeline (model routing, modules, workflows), and responses are converted back to Responses API format. Both streaming and non-streaming modes are supported.
+
+**Supported features:**
+
+- String input (single user message) and array input (message items, function call outputs, function call items for multi-turn context)
+- Content parts: `input_text`, `input_image` (URL and base64 with `detail`), `input_audio`, `input_file` (graceful degradation to text placeholder)
+- `reasoning` and `computer_call_output` input items silently skipped (not supported)
+- Instructions (mapped to a system message, echoed back in the response)
+- Function tools (with name, description, parameters) and tool ID normalization (`call_` prefix)
+- `web_search` / `web_search_preview` tool mapped to Harbor's web\_search function; unsupported built-in tool types (`file_search`, `code_interpreter`, `computer_use_preview`, `image_generation`, `mcp`, `local_shell`, etc.) logged as warnings and skipped
+- Tool choice (`auto`, `none`, `required`, named function); string values pass through directly
+- `parallel_tool_calls` passthrough
+- `max_output_tokens`, `temperature`, `top_p`
+- `user` parameter passthrough (echoed in the response)
+- `include` parameter accepted without error (SDK compatibility; not acted on)
+- Request parameter passthrough: `seed`, `frequency_penalty`, `presence_penalty`, `logit_bias`, `logprobs`, `top_logprobs`, `n` are forwarded to the backend when present (not part of the Responses API spec, but useful for backends that support them)
+- `service_tier` parameter accepted without error (SDK compatibility; not acted on)
+- `@boost_` params via `metadata` dict (workflow selection, module config forwarded to the proxy pipeline)
+- Reasoning (`reasoning.effort` mapped to backend `reasoning_effort`; `reasoning.summary`/`reasoning.generate_summary` forwarded as `reasoning_summary`; responses include `reasoning` output items with `status` field and summary text). The reasoning config from the request is echoed in the response.
+- Structured outputs via `text.format` (`json_schema` and `json_object` mapped to `response_format`)
+- Refusal handling (backend refusals emitted as `refusal` content parts with streaming `refusal.delta` / `refusal.done` events)
+- Annotations from backends: OpenAI `url_citation`, `file_citation`, `file_path` annotations and Perplexity-style `citations` (flat URL list) are extracted and included in output text content parts
+- Truncation parameter (accepted and reflected; backends manage their own context windows)
+- `store` (always false) and `metadata` (passthrough)
+- `completed_at` timestamp set on responses with `completed` status
+- `incomplete_details` with reason (`max_output_tokens` or `content_filter`) when status is `incomplete`
+- Streaming with full Responses API event lifecycle: `response.created`, `response.in_progress`, output item/content part events, `.done` events for text/function args, and terminal events (`response.completed`, `response.incomplete`, or `response.failed`); optimized for performance with direct dict access on the hot path
+- All streaming events include `sequence_number` (monotonically increasing) and text events include `logprobs: []`
+- SSE streams include a `retry: 3000` interval (embedded in the first event to avoid data-less SSE frames that crash some SDKs), periodic keep-alive comments (every 15 s), and standard headers (`Cache-Control: no-cache`, `Connection: keep-alive`, `X-Accel-Buffering: no`)
+- Mid-stream error handling (sanitized errors emitted as text content; stream terminates with `response.failed`; raw details logged server-side only). `BackendError` exceptions are caught during streaming with status-code-specific messages.
+- Backend error mapping (429 mapped to `rate_limit_error`, 5xx to `server_error`) with rate limit header forwarding (`retry-after`, `x-ratelimit-*`)
+- Authentication returns 401 with OpenAI-format error body on failure; case-insensitive `Bearer` prefix stripping
+- GET/DELETE/cancel stubs with informative error messages and response IDs (returns 404 since responses are not persisted)
+
+**Authentication**
+
+The same API keys configured for the OpenAI-compatible API apply. Both `Authorization` and `x-api-key` headers are supported:
+
+```http
+Authorization: Bearer sk-boost
+x-api-key: sk-boost
+```
+
+**`POST /v1/responses`**
+
+OpenAI Responses API endpoint.
+
+```bash
+POST http://localhost:34131/v1/responses
+
+{
+  "model": "llama3.1",
+  "input": "Tell me about LLMs"
+}
+```
+
+Array input with structured messages:
+
+```bash
+POST http://localhost:34131/v1/responses
+
+{
+  "model": "llama3.1",
+  "instructions": "You are a helpful assistant.",
+  "input": [
+    {
+      "type": "message",
+      "role": "user",
+      "content": "Tell me about LLMs"
+    }
+  ]
+}
+```
+
+The response is a response object with output items:
+
+```json
+{
+  "id": "resp_abc123",
+  "object": "response",
+  "status": "completed",
+  "model": "llama3.1",
+  "output": [
+    {
+      "type": "message",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "output_text",
+          "text": "LLMs are..."
+        }
+      ]
+    }
+  ],
+  "usage": {
+    "input_tokens": 12,
+    "output_tokens": 48,
+    "total_tokens": 60
+  }
+}
+```
+
+Streaming is supported via `"stream": true` in the request body. When streaming, the response uses Responses API SSE event types: `response.created`, `response.in_progress`, `response.output_item.added`, `response.content_part.added`, `response.output_text.delta`, `response.output_text.done`, `response.function_call_arguments.delta`, `response.function_call_arguments.done`, `response.content_part.done`, `response.output_item.done`, and a terminal event (`response.completed`, `response.incomplete`, or `response.failed`). Reasoning streams additionally emit `response.reasoning_summary_part.added`, `response.reasoning_summary_text.delta`, `response.reasoning_summary_text.done`, and `response.reasoning_summary_part.done`.
+
+**Example: OpenAI Python SDK**
+
+Point the OpenAI SDK at Boost's URL and use the `responses.create()` method:
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="http://localhost:34131/v1",
+    api_key="sk-boost",  # or any valid Boost API key
+)
+
+response = client.responses.create(
+    model="llama3.1",
+    input="Hello!",
+)
+
+print(response.output[0].content[0].text)
+```
+
+Streaming:
+
+```python
+stream = client.responses.create(
+    model="llama3.1",
+    input="Hello!",
+    stream=True,
+)
+
+for event in stream:
+    if event.type == "response.output_text.delta":
+        print(event.delta, end="", flush=True)
+```
+
+With tools:
+
+```python
+response = client.responses.create(
+    model="llama3.1",
+    input="What is the weather in Paris?",
+    tools=[{
+        "type": "function",
+        "name": "get_weather",
+        "description": "Get current weather",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "location": {"type": "string"}
+            },
+            "required": ["location"],
+        },
+    }],
+)
+
+for item in response.output:
+    if item.type == "function_call":
+        print(f"Call: {item.name}({item.arguments})")
+```
 
 ### Standalone usage
 

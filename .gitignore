@@ -52,6 +52,8 @@ langfuse/db/
 # scripts/specs/ stays ignored — personal scratch area.
 scripts/*
 !scripts/lint/
+!scripts/seo/
+!scripts/seo/plan.md
 
 # LiteLLM
 litellm/db
