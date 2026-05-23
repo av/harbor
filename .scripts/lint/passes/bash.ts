@@ -3,7 +3,7 @@
 
 // Bash compatibility rules pass.
 //
-// Rules live as data in scripts/lint/rules.yaml. Each rule pairs an ID, a
+// Rules live as data in .scripts/lint/rules.yaml. Each rule pairs an ID, a
 // regex, and a human-readable fix hint. We run each rule's regex over the
 // lines of every matching file and emit findings. Inline escapes via
 // `# harbor-lint disable=<RULE_ID>` on the offending line are honoured.

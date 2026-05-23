@@ -32,11 +32,11 @@ interface RawRule {
 }
 
 const REPO_ROOT = Deno.cwd();
-const RULES_PATH = `${REPO_ROOT}/scripts/lint/rules.yaml`;
-const FIXTURES_ROOT = `${REPO_ROOT}/scripts/lint/fixtures`;
+const RULES_PATH = `${REPO_ROOT}/.scripts/lint/rules.yaml`;
+const FIXTURES_ROOT = `${REPO_ROOT}/.scripts/lint/fixtures`;
 const COMPOSE_FIXTURES_ROOT = `${FIXTURES_ROOT}/compose`;
 const SHELLCHECK_FIXTURES_ROOT = `${FIXTURES_ROOT}/shellcheck`;
-const RUN_TS = `${REPO_ROOT}/scripts/lint/run.ts`;
+const RUN_TS = `${REPO_ROOT}/.scripts/lint/run.ts`;
 
 async function loadRuleIds(): Promise<Map<string, string>> {
   const raw = await Deno.readTextFile(RULES_PATH);
@@ -244,7 +244,7 @@ interface ComposeRow {
   notes: string[];
 }
 
-const COMPOSE_GLOB = "scripts/lint/fixtures/compose/**/*.yml";
+const COMPOSE_GLOB = ".scripts/lint/fixtures/compose/**/*.yml";
 
 // Single batched run over every compose fixture; result keyed by repo-rel
 // path, then by rule name → count. Mirrors the bash-section optimisation.
@@ -357,7 +357,7 @@ async function runComposeSection(): Promise<{ rows: ComposeRow[]; failures: numb
 function printComposeSection(rows: ComposeRow[]) {
   console.log("== Compose pass ==");
   if (rows.length === 0) {
-    console.log("(no compose fixtures found at scripts/lint/fixtures/compose/)");
+    console.log("(no compose fixtures found at .scripts/lint/fixtures/compose/)");
     console.log();
     return;
   }
@@ -418,8 +418,8 @@ async function runShellcheckSection(): Promise<{ row: ShellcheckRow; failure: bo
     return { row: { status: "SKIP", notes }, failure: false };
   }
 
-  const failRel = "scripts/lint/fixtures/shellcheck/fail.sh";
-  const passRel = "scripts/lint/fixtures/shellcheck/pass.sh";
+  const failRel = ".scripts/lint/fixtures/shellcheck/fail.sh";
+  const passRel = ".scripts/lint/fixtures/shellcheck/pass.sh";
 
   let failFindings: Finding[] = [];
   let passFindings: Finding[] = [];
@@ -463,7 +463,7 @@ function printShellcheckSection(row: ShellcheckRow) {
   console.log("== Shellcheck pass ==");
   console.log("Fixture                                       result");
   console.log("-".repeat(54));
-  console.log("scripts/lint/fixtures/shellcheck/{pass,fail}  ".padEnd(46) + row.status);
+  console.log(".scripts/lint/fixtures/shellcheck/{pass,fail}  ".padEnd(46) + row.status);
   for (const n of row.notes) {
     console.log(`  - ${n}`);
   }
@@ -499,8 +499,8 @@ async function runOrchestratorSection(): Promise<{ rows: OrchestratorRow[]; fail
   // the harness past the 5-second budget.
   const [helpRes, failRes, passRes] = await Promise.all([
     runOrchestrator(["--help"]),
-    runOrchestrator(["--rules", "--files", "scripts/lint/fixtures/HARBOR001/fail.sh"]),
-    runOrchestrator(["--rules", "--files", "scripts/lint/fixtures/HARBOR001/pass.sh"]),
+    runOrchestrator(["--rules", "--files", ".scripts/lint/fixtures/HARBOR001/fail.sh"]),
+    runOrchestrator(["--rules", "--files", ".scripts/lint/fixtures/HARBOR001/pass.sh"]),
   ]);
 
   const rows: OrchestratorRow[] = [];

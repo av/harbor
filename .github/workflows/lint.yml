@@ -15,7 +15,7 @@ on:
       - '.scripts/**/*.sh'
       - '.scripts/lint.ts'
       - '.scripts/lint-self-test.ts'
-      - 'scripts/lint/**'
+      - '.scripts/lint/**'
   pull_request:
     branches: [main]
     paths:
@@ -30,7 +30,7 @@ on:
       - '.scripts/**/*.sh'
       - '.scripts/lint.ts'
       - '.scripts/lint-self-test.ts'
-      - 'scripts/lint/**'
+      - '.scripts/lint/**'
   workflow_dispatch:
 
 jobs:

@@ -47,7 +47,6 @@ node_modules/
 langfuse/db/
 
 scripts/*
-!scripts/lint/
 
 # LiteLLM
 litellm/db

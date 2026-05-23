@@ -6,7 +6,7 @@
 # the false-positive rate bites us.
 #
 # Every rule MUST ship with a passing fixture and a failing fixture under
-# scripts/lint/fixtures/<rule-id>/ so the rule itself is testable:
+# .scripts/lint/fixtures/<rule-id>/ so the rule itself is testable:
 #   fail.sh — must trigger the rule
 #   pass.sh — must NOT trigger the rule
 #

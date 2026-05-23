@@ -690,9 +690,12 @@
 
 # lint
 - label: lint uses a custom 3-pass Deno orchestrator with 10 HARBOR-prefixed rules
-  command: test -f scripts/lint/run.ts && test -f scripts/lint/rules.yaml && grep -c 'HARBOR0' scripts/lint/rules.yaml | grep -q '[0-9]'
+  command: test -f .scripts/lint/run.ts && test -f .scripts/lint/rules.yaml && grep -c 'HARBOR0' .scripts/lint/rules.yaml | grep -q '[0-9]'
 - label: lint self-tests validate rules against fixture files
-  command: test -f scripts/lint/self-test.ts && test -d scripts/lint/fixtures
+  command: test -f .scripts/lint/self-test.ts && test -d .scripts/lint/fixtures
+- label: The bash rules lint pass reports no HARBOR001/HARBOR007/HARBOR009 findings in harbor.sh or tests/suites/02-cli.sh
+  command: bash harbor.sh dev lint --rules --files harbor.sh,tests/suites/02-cli.sh --json | jq -e '.findings | map(select(.rule == "HARBOR001" or .rule == "HARBOR007" or .rule == "HARBOR009")) | length == 0'
+  tags: [spec, lint-debt, implemented]
 
 # docs
 - label: documentation lives in docs/ with hierarchical numbering and covers 100+ services
@@ -863,3 +866,16 @@
 - label: the Hermes Agent Harbor guide documents both user-selectable modes: harbor launch for an installed host hermes CLI using a selected Harbor backend, and harbor up hermes plus harbor hermes for the containerized Hermes service/API server
   command: rg -q 'harbor launch --backend ollama --model qwen3.5:4b hermes' docs/8.7-Run-Hermes-Agent-with-Harbor.md && rg -q 'harbor launch --web --backend ollama --model qwen3.5:4b hermes' docs/8.7-Run-Hermes-Agent-with-Harbor.md && rg -q 'harbor up hermes' docs/8.7-Run-Hermes-Agent-with-Harbor.md && rg -q 'harbor hermes chat' docs/8.7-Run-Hermes-Agent-with-Harbor.md && rg -q 'http://localhost:34801/v1' docs/8.7-Run-Hermes-Agent-with-Harbor.md
   tags: [spec, seo-guides-iter11, implemented]
+
+# dev
+
+## lint
+- label: Harbor lint implementation files and fixtures live under .scripts/lint, not scripts/lint
+  command: test -f .scripts/lint/run.ts && test -f .scripts/lint/self-test.ts && test -f .scripts/lint/rules.yaml && test ! -e scripts/lint
+  tags: [spec, lint-migration, implemented]
+- label: The repository does not unignore scripts/lint because scripts/ is reserved for local gitignored files
+  command: grep -q '^scripts/\*$' .gitignore && ! grep -q '^!scripts/lint/' .gitignore
+  tags: [spec, lint-migration, implemented]
+- label: harbor dev lint and harbor dev lint-self-test dispatch directly to .scripts/lint implementations
+  command: grep -q './lint/run.ts' .scripts/lint.ts && grep -q './lint/self-test.ts' .scripts/lint-self-test.ts && ! grep -R -q '../scripts/lint' .scripts/lint.ts .scripts/lint-self-test.ts
+  tags: [spec, lint-migration, implemented]

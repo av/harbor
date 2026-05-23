@@ -1272,8 +1272,7 @@ launch_discover_model() {
 }
 
 launch_model_is_embedding() {
-    local model
-    model=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
+    local model="${1,,}"
 
     case "$model" in
     *embed* | *embedding* | *bge-* | *e5-* | *gte-* | *rerank*)

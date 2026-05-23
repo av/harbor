@@ -109,8 +109,8 @@ assert_match "harbor cmd ollama"     'docker[ -]compose'            harbor cmd o
 # 7b. launch — OpenCode is both a host tool adapter name and a Harbor service.
 #     Users need an explicit service mode that does not require the host tool
 #     binary and still reuses the active Harbor compose selection.
-fake_bin="$(mktemp -d)"
-fake_docker_log="$(mktemp)"
+fake_bin="$(mktemp -d -t harbor.XXXXXX)"
+fake_docker_log="$(mktemp -t harbor.XXXXXX)"
 cat >"$fake_bin/docker" <<'EOF'
 #!/usr/bin/env bash
 case "$*" in
@@ -226,9 +226,9 @@ rm -rf "$fake_bin" "$fake_docker_log"
 # 7c. launch host adapters — backend/model discovery failures should be
 #     actionable from a user's terminal, and --model must avoid parsing
 #     /v1/models while still checking that the selected backend is reachable.
-launch_fake_bin="$(mktemp -d)"
-launch_fake_curl_log="$(mktemp)"
-launch_fake_docker_state="$(mktemp)"
+launch_fake_bin="$(mktemp -d -t harbor.XXXXXX)"
+launch_fake_curl_log="$(mktemp -t harbor.XXXXXX)"
+launch_fake_docker_state="$(mktemp -t harbor.XXXXXX)"
 cat >"$launch_fake_bin/docker" <<'EOF'
 #!/usr/bin/env bash
 running_services() {
@@ -405,7 +405,7 @@ if ! grep -Eq -- '^model=explicit-model$' /tmp/cli-step.out; then
   cat /tmp/cli-step.out >&2
   fail "launch codex --model did not use the explicit model"
 fi
-if [ "$(wc -l <"$launch_fake_curl_log")" -ne 1 ]; then
+if [ "$(wc -l <"$launch_fake_curl_log" | tr -d ' ')" -ne 1 ]; then
   cat "$launch_fake_curl_log" >&2
   fail "launch codex --model called curl more than once"
 fi
