@@ -45,7 +45,7 @@ Harbor is a CLI and companion app that lets you spin up a complete local LLM sta
 ## Documentation
 
 - [Installing Harbor](https://github.com/av/harbor/wiki/1.0.-Installing-Harbor)<br/>
-  Guides to install Harbor CLI and App
+  Guides to install Harbor CLI and App, including the [agent install prompt](./install.md) for Claude Code, Codex, and similar tools
 - [Harbor User Guide](https://github.com/av/harbor/wiki/1.-Harbor-User-Guide)<br/>
   High-level overview of working with Harbor
 - [Harbor App](https://github.com/av/harbor/wiki/1.1-Harbor-App)<br/>

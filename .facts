@@ -711,6 +711,12 @@
 - label: README Services section reflects the current service metadata catalog rather than a stale hand-written subset
   command: rg -q 'Open Design' README.md && rg -q 'Voicebox' README.md && rg -q 'Needle' README.md && rg -q 'npcsh' README.md
   tags: [spec, readme-services, implemented]
+- label: install.md tells agentic tools to orchestrate Harbor CLI installation through install.sh, including optional dependency setup and post-install verification
+  command: test -f install.md && grep -q 'OBJECTIVE: Orchestrate Harbor CLI installation' install.md && grep -q 'install.sh' install.md && grep -q -- '--install-requirements' install.md && grep -q 'harbor doctor' install.md && grep -q 'harbor --version' install.md
+  tags: [spec, implemented]
+- label: Installing Harbor docs mention install.md as the agent-oriented install prompt and show Claude Code and Codex invocation examples
+  command: rg -q 'install\.md' docs/1.0.-Installing-Harbor.md README.md docs/README.md && rg -q 'Claude Code' docs/1.0.-Installing-Harbor.md && rg -q 'codex.*install\.md' docs/1.0.-Installing-Harbor.md
+  tags: [spec, implemented]
 
 ## integrations
 - core high-star Harbor services (ollama, webui, dify, vllm, comfyui, librechat, anythingllm, aider, etc.) have a high-level 'Integrations' section immediately below their 'Starting' heading in their docs/*.md files @implemented

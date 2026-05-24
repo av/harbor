@@ -3,7 +3,7 @@ Welcome to the harbor wiki!
 ![Diagram outlining Harbor services](./harbor-arch-diag.png)
 
 - [Installing Harbor](https://github.com/av/harbor/wiki/1.0.-Installing-Harbor)<br/>
-  Guides to install Harbor CLI and App
+  Guides to install Harbor CLI and App, including the [agent install prompt](https://github.com/av/harbor/blob/main/install.md) for Claude Code, Codex, and similar tools
 - [Harbor User Guide](https://github.com/av/harbor/wiki/1.-Harbor-User-Guide)<br/>
   High-level overview of working with Harbor
 - [Harbor Tools](https://github.com/av/harbor/wiki/1.2-Tools)<br/>
