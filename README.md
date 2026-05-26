@@ -1,8 +1,4 @@
-
-
-https://github.com/user-attachments/assets/8a7705e1-6f0e-4374-8784-62b95816aebc
-
-
+https://github.com/user-attachments/assets/e4897391-c5a8-4391-93c3-9f8b76155f11
 
 [![GitHub Tag](https://img.shields.io/github/v/tag/av/harbor)](https://github.com/av/harbor/releases)
 ![GitHub repo size](https://img.shields.io/github/repo-size/av/harbor)
