@@ -1,0 +1,12 @@
+mlx_port: ${HARBOR_MLX_WORKER_PORT}
+manager_port: ${HARBOR_MLX_RUNNER_PORT}
+host: "0.0.0.0"
+auto_unload: ${HARBOR_MLX_AUTO_UNLOAD}
+max_loaded_models: ${HARBOR_MLX_MAX_LOADED_MODELS}
+
+models:
+  - name: "${HARBOR_MLX_MODEL}"
+    type: "${HARBOR_MLX_MODEL_TYPE}"
+    hf_path: "${HARBOR_MLX_HF_PATH}"
+    context_length: ${HARBOR_MLX_CONTEXT_LENGTH}
+    max_kv_cache_size: ${HARBOR_MLX_MAX_KV_CACHE_SIZE}

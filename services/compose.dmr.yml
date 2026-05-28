@@ -1,0 +1,19 @@
+services:
+  dmr:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.dmr
+    image: ${HARBOR_DMR_IMAGE}:${HARBOR_DMR_VERSION}
+    env_file:
+      - ./.env
+      - ./services/dmr/override.env
+    ports:
+      - ${HARBOR_DMR_HOST_PORT}:8080
+    volumes:
+      - ./services/dmr/Caddyfile:/etc/caddy/Caddyfile:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/v1/models >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    networks:
+      - harbor-network

@@ -1,0 +1,18 @@
+:8080 {
+	handle /health {
+		respond "ok" 200
+	}
+
+	handle_path /v1/* {
+		rewrite * /engines/v1{path}
+		reverse_proxy {$HARBOR_DMR_UPSTREAM_URL}
+	}
+
+	handle /models* {
+		reverse_proxy {$HARBOR_DMR_UPSTREAM_URL}
+	}
+
+	handle /api/* {
+		reverse_proxy {$HARBOR_DMR_UPSTREAM_URL}
+	}
+}

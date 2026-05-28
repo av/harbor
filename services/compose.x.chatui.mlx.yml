@@ -1,0 +1,4 @@
+services:
+  chatui:
+    volumes:
+      - ./services/chatui/configs/chatui.mlx.yml:/app/configs/chatui.mlx.yml

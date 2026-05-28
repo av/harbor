@@ -1,27 +1,40 @@
-import { red, yellow, gray } from "jsr:@std/fmt/colors";
-import process from 'node:process';
+/// <reference lib="deno.ns" />
+
+import { gray, red, yellow } from "jsr:@std/fmt/colors";
+import process from "node:process";
 
 export const BUILTIN_CAPS = ["nvidia", "mdc", "cdi", "rocm", "build"];
 export const CONFIG_PREFIX = "HARBOR_";
 export const LOG_LEVELS = ["debug", "info", "warn", "error"];
 
-export function errorToString(err) {
+type LogLevel = typeof LOG_LEVELS[number];
+type LogFn = (...args: unknown[]) => void;
+type AliasArg = string | string[];
+
+type Logger = LogFn & {
+  debug: LogFn;
+  error: LogFn;
+  info: LogFn;
+  warn: LogFn;
+};
+
+export function errorToString(err: unknown): string {
   if (err instanceof Error) {
     return err.stack || err.message || String(err);
   }
 
-  if (typeof err === "object") {
+  if (err !== null && typeof err === "object") {
     return JSON.stringify(err);
   }
 
   return String(err);
 }
 
-function _log(...args) {
+function _log(...args: unknown[]): void {
   process.stderr.write(args.join(" ") + "\n");
 }
 
-export function time() {
+export function time(): string {
   const d = new Date();
   const hours = d.getHours().toString().padStart(2, "0");
   const minutes = d.getMinutes().toString().padStart(2, "0");
@@ -35,46 +48,55 @@ const currentLogLevel = (
   "INFO"
 ).toLocaleLowerCase();
 
-function logRouter(level, fn) {
+function logRouter(level: LogLevel, fn: LogFn): LogFn {
   if (LOG_LEVELS.indexOf(level) >= LOG_LEVELS.indexOf(currentLogLevel)) {
-    return (...args) => {
+    return (...args: unknown[]): void => {
       fn(...args);
     };
   }
 
-  return () => { };
+  return () => {};
 }
 
-export const log = Object.assign(_log, {
-  debug: logRouter("debug", (...args) =>
-    log(`${gray(time())} [${gray("DEBUG")}]`, gray(args.join(" ")))
+export const log: Logger = Object.assign(_log, {
+  debug: logRouter(
+    "debug",
+    (...args: unknown[]) =>
+      log(`${gray(time())} [${gray("DEBUG")}]`, gray(args.join(" "))),
   ),
-  error: logRouter("error", (...args) =>
-    log(`${gray(time())} [${red("ERROR")}]`, ...args)
+  error: logRouter(
+    "error",
+    (...args: unknown[]) => log(`${gray(time())} [${red("ERROR")}]`, ...args),
   ),
-  info: logRouter("info", (...args) => log(`${gray(time())} [INFO]`, ...args)),
-  warn: logRouter("warn", (...args) =>
-    log(`${gray(time())} [${yellow("WARN")}]`, ...args)
+  info: logRouter(
+    "info",
+    (...args: unknown[]) => log(`${gray(time())} [INFO]`, ...args),
+  ),
+  warn: logRouter(
+    "warn",
+    (...args: unknown[]) => log(`${gray(time())} [${yellow("WARN")}]`, ...args),
   ),
 });
 
-export function getArgs() {
+export function getArgs(): string[] {
   return process.argv.slice(2);
 }
 
-export function shiftArgs(args, n = 1) {
+export function shiftArgs<T>(args: T[], n = 1): T[] {
   return args.slice(n);
 }
 
-export function nextTick() {
+export function nextTick(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
-export function once(fn) {
-  let result;
+export function once<TArgs extends unknown[], TResult>(
+  fn: (...args: TArgs) => TResult,
+): (...args: TArgs) => TResult {
+  let result: TResult;
   let called = false;
 
-  return (...args) => {
+  return (...args: TArgs): TResult => {
     if (called) {
       return result;
     }
@@ -93,7 +115,7 @@ export function once(fn) {
  * @param {string[]} args
  * @param {string|string[]} aliases
  */
-export function consumeFlagArg(args, aliases) {
+export function consumeFlagArg(args: string[], aliases: AliasArg): boolean {
   if (typeof aliases === "string") {
     aliases = [aliases];
   }
@@ -119,7 +141,10 @@ export function consumeFlagArg(args, aliases) {
  * @param {string|string[]} aliases
  * @returns
  */
-export function consumeArg(args, aliases) {
+export function consumeArg(
+  args: string[],
+  aliases: AliasArg,
+): string | undefined {
   if (typeof aliases === "string") {
     aliases = [aliases];
   }
@@ -141,8 +166,8 @@ export function consumeArg(args, aliases) {
  * @param {string} input
  * @returns {string}
  */
-export function decodeBashValue(input) {
-  if (!input) return '';
+export function decodeBashValue(input: string): string {
+  if (!input) return "";
 
   // Trim surrounding whitespace
   input = input.trim();
@@ -155,30 +180,38 @@ export function decodeBashValue(input) {
   // Double-quoted: interpret escape sequences
   if (input.startsWith('"') && input.endsWith('"')) {
     const inner = input.slice(1, -1);
-    return inner.replace(/\\(["\\$`nrt])/g, (_, ch) => {
+    return inner.replace(/\\(["\\$`nrt])/g, (_: string, ch: string): string => {
       switch (ch) {
-        case 'n': return '\n';
-        case 'r': return '\r';
-        case 't': return '\t';
-        case '"': return '"';
-        case '\\': return '\\';
-        case '$': return '$';
-        case '`': return '`';
-        default: return ch;
+        case "n":
+          return "\n";
+        case "r":
+          return "\r";
+        case "t":
+          return "\t";
+        case '"':
+          return '"';
+        case "\\":
+          return "\\";
+        case "$":
+          return "$";
+        case "`":
+          return "`";
+        default:
+          return ch;
       }
     });
   }
 
   // Unquoted: interpret backslash escapes
-  return input.replace(/\\(.)/g, '$1');
+  return input.replace(/\\(.)/g, "$1");
 }
 
 /**
  * @param {string} value
  * @returns {string}
  */
-export function encodeBashValue(value) {
-  if (value === '') return '""'; // empty string must be quoted
+export function encodeBashValue(value: string): string {
+  if (value === "") return '""'; // empty string must be quoted
 
   // Safe unquoted characters: alphanumerics and a few symbols
   const safeUnquoted = /^[a-zA-Z0-9._\/-]+$/;
@@ -192,20 +225,20 @@ export function encodeBashValue(value) {
   }
 
   // Fallback: use double quotes and escape necessary characters
-  const escaped = value.replace(/["\\$`]/g, '\\$&')
-    .replace(/\n/g, '\\n')
-    .replace(/\r/g, '\\r')
-    .replace(/\t/g, '\\t');
+  const escaped = value.replace(/["\\$`]/g, "\\$&")
+    .replace(/\n/g, "\\n")
+    .replace(/\r/g, "\\r")
+    .replace(/\t/g, "\\t");
 
   return `"${escaped}"`;
 }
 
-const fileCache = new Map();
+const fileCache = new Map<string, Promise<string>>();
 
-export function cachedReadFile(path: string) {
+export function cachedReadFile(path: string): Promise<string> {
   if (!fileCache.has(path)) {
     fileCache.set(path, Deno.readTextFile(path));
   }
 
-  return fileCache.get(path);
+  return fileCache.get(path)!;
 }

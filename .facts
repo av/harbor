@@ -68,6 +68,21 @@
 - Boost token_counter HTTP coverage: the count_messages_tokens branches for list content (text/image_url/else in multimodal), tool_calls in assistant messages, and related must be driven to coverage by posting appropriate rich payloads (content parts lists with input_image, function_call items) to the /v1/responses/input_tokens (and/or anthropic count_tokens) HTTP endpoints in the dedicated test files, exercising the real (unpatched) counter inside the handlers; new tests appended to test_responses_compat.py (appropriate for its input_tokens endpoint) @implemented
 - Boost main.py HTTP handlers must cover remaining branches via test_config.py (non-prior test file): _list_models module proxy loop (240-242 when BOOST_MODS non-empty + registry.get non-None) and filter application (250 when MODEL_FILTER non-empty, calling selection.matches_filter), chat handler JSONDecodeError path (387-389 returning 400), and direct task early return (411-412 when mapper.is_direct_task returns True, with no workflow); exercised by new tests using _make_fresh_app + config.__value__ sets + mapper patches + client HTTP GET/POST /v1/models and /v1/chat/completions asserting status + shapes; @implemented
 - Boost mapper.py lines 81 (workflow branch return base_model in resolve_proxy_model) and 145 (is_title_generation_task body) remnants must be exercised via edge inputs (non-mod-colliding workflow-prefixed model ids in resolve_request_config/resolve_proxy_model + is_title_generation_task call) using real mapper in test_config.py HTTP chat paths (/v1/chat/completions with workflow models) and tool paths to reach 100% mapper cov @implemented
+- label: services > dmr > dmr is integrated as a Harbor backend service with a proxy container, host-native Docker Model Runner lifecycle management, docs, metadata, and OpenAI-compatible cross-service integrations
+  command: test -f services/compose.dmr.yml && test -f services/dmr/Caddyfile && rg -q 'run_dmr_command' harbor.sh && rg -q 'dmr' app/src/serviceMetadata.ts docs/2.2.22-Backend-Docker-Model-Runner.md services/compose.x.webui.dmr.yml
+  tags: [spec, dmr-service, implemented]
+- label: services > mlx > mlx is integrated as a Harbor backend service with a proxy container, host-native mlx-serve lifecycle management, docs, metadata, and OpenAI-compatible cross-service integrations
+  command: test -f services/compose.mlx.yml && test -f services/mlx/Caddyfile && rg -q 'run_mlx_command' harbor.sh && rg -q 'mlx' app/src/serviceMetadata.ts docs/2.2.23-Backend-MLX.md services/compose.x.webui.mlx.yml
+  tags: [spec, mlx-service, implemented]
+- label: cli > models > harbor models supports source-aware list, pull, and rm operations for dmr and mlx without changing the default Ollama/HuggingFace/llama.cpp routing
+  command: rg -q 'source.*dmr' routines/models.ts routines/models/types.ts && rg -q 'source.*mlx' routines/models.ts routines/models/types.ts && rg -q -- '--source' harbor.sh docs/3.-Harbor-CLI-Reference.md
+  tags: [spec, dmr-service, mlx-service, implemented]
+- label: cli > launch > dmr and mlx are registered as OpenAI-compatible Harbor launch backends with model config keys and docs
+  command: rg -q 'dmr.*mlx|mlx.*dmr' harbor.sh && rg -q 'dmr.model' harbor.sh && rg -q 'mlx.model' harbor.sh && rg -q 'harbor launch --backend dmr' docs/3.-Harbor-CLI-Reference.md && rg -q 'harbor launch --backend mlx' docs/3.-Harbor-CLI-Reference.md
+  tags: [spec, dmr-service, mlx-service, implemented]
+- label: cli > routines > routines/utils.ts has explicit TypeScript annotations for shared utility exports so deno check routines/models.ts is not blocked by implicit-any diagnostics
+  command: deno check routines/models.ts
+  tags: [spec, routines-utils, implemented]
 # project
 - Harbor is a containerized LLM toolkit distributed as a Docker Compose project with a CLI and Tauri desktop app
 - label: the project is licensed under Apache 2.0

@@ -1,0 +1,4 @@
+services:
+  webui:
+    volumes:
+      - ./services/webui/configs/config.mlx.json:/app/configs/config.mlx.json

@@ -117,6 +117,14 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         wikiUrl: `${wikiUrl}/2.3.8-Satellite:-cloudflared`,
         tooltip: 'A helper service allowing to expose Harbor services over the internet.',
     },
+    dmr: {
+        name: 'Docker Model Runner',
+        tags: [HST.backend, HST.api],
+        projectUrl: 'https://docs.docker.com/ai/model-runner/',
+        logo: 'https://www.google.com/s2/favicons?domain=docker.com&sz=128',
+        wikiUrl: `${wikiUrl}/2.2.22-Backend-Docker-Model-Runner`,
+        tooltip: 'Docker-managed local model runner exposed to Harbor as an OpenAI-compatible backend.',
+    },
     chatui: {
         name: 'HuggingFace ChatUI',
         tags: [HST.frontend],
@@ -1032,6 +1040,14 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         logo: 'https://github.com/huggingface.png?size=200',
         wikiUrl: `${wikiUrl}/2.3.87-Satellite-ML-Intern`,
         tooltip: 'Hugging Face ML engineering agent that researches papers, trains models, and ships ML code with local or cloud LLM backends.',
+    },
+    mlx: {
+        name: 'MLX',
+        tags: [HST.backend, HST.api],
+        projectUrl: 'https://github.com/raspoli/mlx-serve',
+        logo: 'https://github.com/raspoli.png?size=200',
+        wikiUrl: `${wikiUrl}/2.2.23-Backend-MLX`,
+        tooltip: 'Host-native Apple Silicon MLX inference managed by Harbor through an OpenAI-compatible proxy.',
     },
     facts: {
         name: 'facts',

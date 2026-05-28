@@ -47,6 +47,8 @@ show_help() {
     echo "  langflow  - Configure Langflow UI Service"
     echo "  openai    - Configure OpenAI API keys and URLs"
     echo "  vllm      - Configure VLLM service"
+    echo "  dmr       - Configure Docker Model Runner backend"
+    echo "  mlx       - Configure host MLX backend"
     echo "  aphrodite - Configure Aphrodite service"
     echo "  tabbyapi  - Configure TabbyAPI service"
     echo "  mistralrs - Configure mistral.rs service"
@@ -100,7 +102,7 @@ show_help() {
     echo "    hf find <query> - Open HF Hub with a query (trending by default)"
     echo "    hf path <spec>  - Print a folder in HF cache for a given model spec"
     echo "    hf *            - Anything else is passed to the official Hugging Face CLI"
-    echo "  models            - Manage models across Ollama and HuggingFace caches"
+    echo "  models            - Manage models across Ollama, HuggingFace, llama.cpp, DMR, and MLX"
     echo "  k6                - Run K6 CLI"
     echo
     echo "Harbor CLI Commands:"
@@ -678,6 +680,17 @@ run_up() {
     fi
 
     log_debug "Running 'up' for services: ${up_args[*]} ${filtered_args[*]}"
+    for service in "${display_services[@]}"; do
+        case "$service" in
+        dmr)
+            run_dmr_command start
+            ;;
+        mlx)
+            run_mlx_command start
+            ;;
+        esac
+    done
+
     $(compose_with_options "${up_args[@]}" "${filtered_args[@]}") up -d --wait
     local up_exit=$?
 
@@ -721,8 +734,38 @@ run_down() {
     local services=$(get_active_services)
     local matched_services=()
     local compose_targets=("$@")
+    local requested_services=()
+    local stop_dmr=false
+    local stop_mlx=false
 
     log_debug "Active services: $services"
+
+    for service in "$@"; do
+        case "$service" in
+        --*)
+            ;;
+        dmr)
+            stop_dmr=true
+            requested_services+=("$service")
+            ;;
+        mlx)
+            stop_mlx=true
+            requested_services+=("$service")
+            ;;
+        *)
+            requested_services+=("$service")
+            ;;
+        esac
+    done
+
+    if [ ${#requested_services[@]} -eq 0 ]; then
+        if echo "$services" | grep -q '\bdmr\b'; then
+            stop_dmr=true
+        fi
+        if echo "$services" | grep -q '\bmlx\b'; then
+            stop_mlx=true
+        fi
+    fi
 
     # Sibling-finder uses raw active containers (not the compose-file-filtered
     # list) so companion services defined inside the same compose file —
@@ -752,6 +795,12 @@ run_down() {
     local down_exit=$?
 
     if [ $down_exit -eq 0 ]; then
+        if $stop_mlx; then
+            run_mlx_command stop || true
+        fi
+        if $stop_dmr; then
+            run_dmr_command stop || true
+        fi
         log_info "Services stopped."
     else
         log_error "Failed to stop services (exit code: $down_exit)"
@@ -978,7 +1027,7 @@ run_run() {
 
 launch_backend_is_supported() {
     case "$1" in
-    ollama | llamacpp | ikllamacpp | vllm | tabbyapi | mistralrs | sglang | lmdeploy | aphrodite | ktransformers | unsloth-studio)
+    ollama | llamacpp | ikllamacpp | vllm | dmr | mlx | tabbyapi | mistralrs | sglang | lmdeploy | aphrodite | ktransformers | unsloth-studio)
         return 0
         ;;
     *)
@@ -1000,6 +1049,12 @@ launch_backend_model_key() {
         ;;
     vllm)
         echo "vllm.model"
+        ;;
+    dmr)
+        echo "dmr.model"
+        ;;
+    mlx)
+        echo "mlx.model"
         ;;
     tabbyapi)
         echo "tabbyapi.model"
@@ -1066,7 +1121,7 @@ launch_start_services() {
 }
 
 launch_supported_backends() {
-    echo "ollama llamacpp ikllamacpp vllm tabbyapi mistralrs sglang lmdeploy aphrodite ktransformers unsloth-studio"
+    echo "ollama llamacpp ikllamacpp vllm dmr mlx tabbyapi mistralrs sglang lmdeploy aphrodite ktransformers unsloth-studio"
 }
 
 launch_supported_host_tools() {
@@ -2100,6 +2155,7 @@ run_launch_command() {
         echo
         echo "Supported launch targets:"
         echo "  Host tools: $(launch_supported_host_tools)"
+        echo "  Backends: $(launch_supported_backends)"
         echo "  Service CLI shortcuts: $(launch_supported_service_cli_handles)"
         echo "  Container services: any service from 'harbor ls'; use --service for collisions such as hermes, mi, openclaw, and opencode."
         echo
@@ -4910,24 +4966,195 @@ run_hf_command() {
 }
 
 show_models_help() {
-    echo "Manage models across Ollama and HuggingFace caches"
+    echo "Manage models across Ollama, HuggingFace, llama.cpp, DMR, and MLX"
     echo ""
     echo "Usage: harbor models <command> [options]"
     echo ""
     echo "Commands:"
-    echo "  ls [--json]       List all cached models"
-    echo "  pull <model>      Download a model (Ollama or HuggingFace)"
-    echo "  rm <model>        Remove a model from cache"
+    echo "  ls [--json] [--source SOURCE]  List models"
+    echo "  pull [--source SOURCE] <model> Download a model"
+    echo "  rm [--source SOURCE] <model>   Remove a model"
+    echo "  <source> <command> ...         Alias for --source SOURCE"
+    echo ""
+    echo "Sources: ollama, hf, llamacpp, dmr, mlx"
     echo ""
     echo "Examples:"
     echo "  harbor models ls"
+    echo "  harbor models ls --source dmr"
     echo "  harbor models ls --json"
     echo "  harbor models pull qwen3:8b"
+    echo "  harbor models pull --source dmr ai/smollm2"
+    echo "  harbor models pull --source mlx mlx-community/Qwen2.5-3B-Instruct-4bit"
     echo "  harbor models pull bartowski/Llama-3.2-1B-Instruct-GGUF"
     echo "  harbor models rm qwen3:8b"
 }
 
+config_bool_enabled() {
+    case "${1,,}" in
+    1 | true | yes | on)
+        return 0
+        ;;
+    esac
+
+    return 1
+}
+
+harbor_resolve_path() {
+    local path="$1"
+    path="${path/#\~/$HOME}"
+
+    case "$path" in
+    /*)
+        echo "$path"
+        ;;
+    ./*)
+        echo "$harbor_home/${path#./}"
+        ;;
+    *)
+        echo "$harbor_home/$path"
+        ;;
+    esac
+}
+
+sed_replacement_escape() {
+    printf '%s' "$1" | sed 's/[&|]/\\&/g'
+}
+
+docker_model_available() {
+    command -v docker >/dev/null 2>&1 && docker model --help >/dev/null 2>&1
+}
+
+dmr_host_start() {
+    local manage_host enable_tcp auto_pull runner_port model
+
+    manage_host=$(env_manager get dmr.manage.host)
+    if ! config_bool_enabled "$manage_host"; then
+        log_info "DMR host management is disabled; expecting Docker Model Runner at $(env_manager get dmr.upstream.url)."
+        return 0
+    fi
+
+    if ! docker_model_available; then
+        log_error "Docker Model Runner CLI is not available. Install/update Docker Desktop and ensure 'docker model' works."
+        return 1
+    fi
+
+    enable_tcp=$(env_manager get dmr.enable.tcp)
+    runner_port=$(env_manager get dmr.runner.port)
+    if config_bool_enabled "$enable_tcp"; then
+        if docker desktop enable model-runner --tcp "$runner_port" >/dev/null 2>&1; then
+            log_info "Docker Model Runner TCP endpoint enabled on port $runner_port."
+        else
+            log_warn "Could not enable Docker Model Runner TCP endpoint automatically; continuing with existing Docker Desktop configuration."
+        fi
+    fi
+
+    auto_pull=$(env_manager get dmr.auto.pull)
+    model=$(env_manager get dmr.model)
+    if config_bool_enabled "$auto_pull" && [ -n "$model" ]; then
+        if docker model inspect "$model" >/dev/null 2>&1; then
+            log_debug "DMR model already present: $model"
+        else
+            log_info "Pulling DMR model: $model"
+            docker model pull "$model"
+        fi
+    fi
+}
+
+dmr_host_stop() {
+    log_info "DMR proxy stopped; Docker Model Runner remains managed by Docker Desktop."
+}
+
+mlx_workspace_path() {
+    harbor_resolve_path "$(env_manager get mlx.workspace)"
+}
+
+mlx_render_config() {
+    local workspace template output
+    workspace=$(mlx_workspace_path)
+    template="$workspace/models.yaml.template"
+    output="$workspace/models.yaml"
+
+    if [ ! -f "$template" ]; then
+        log_error "MLX config template not found: $template"
+        return 1
+    fi
+
+    mkdir -p "$workspace/logs" "$workspace/cache"
+    sed \
+        -e "s|\${HARBOR_MLX_WORKER_PORT}|$(sed_replacement_escape "$(env_manager get mlx.worker.port)")|g" \
+        -e "s|\${HARBOR_MLX_RUNNER_PORT}|$(sed_replacement_escape "$(env_manager get mlx.runner.port)")|g" \
+        -e "s|\${HARBOR_MLX_AUTO_UNLOAD}|$(sed_replacement_escape "$(env_manager get mlx.auto.unload)")|g" \
+        -e "s|\${HARBOR_MLX_MAX_LOADED_MODELS}|$(sed_replacement_escape "$(env_manager get mlx.max.loaded.models)")|g" \
+        -e "s|\${HARBOR_MLX_MODEL}|$(sed_replacement_escape "$(env_manager get mlx.model)")|g" \
+        -e "s|\${HARBOR_MLX_MODEL_TYPE}|$(sed_replacement_escape "$(env_manager get mlx.model.type)")|g" \
+        -e "s|\${HARBOR_MLX_HF_PATH}|$(sed_replacement_escape "$(env_manager get mlx.hf.path)")|g" \
+        -e "s|\${HARBOR_MLX_CONTEXT_LENGTH}|$(sed_replacement_escape "$(env_manager get mlx.context.length)")|g" \
+        -e "s|\${HARBOR_MLX_MAX_KV_CACHE_SIZE}|$(sed_replacement_escape "$(env_manager get mlx.max.kv.cache.size)")|g" \
+        "$template" > "$output"
+}
+
+mlx_host_start() {
+    local manage_host auto_pull model workspace api_key
+
+    manage_host=$(env_manager get mlx.manage.host)
+    if ! config_bool_enabled "$manage_host"; then
+        log_info "MLX host management is disabled; expecting mlx-serve at $(env_manager get mlx.upstream.url)."
+        return 0
+    fi
+
+    if ! command -v mlx-serve >/dev/null 2>&1; then
+        log_error "mlx-serve is not installed on the host. Install it first, then retry: uv tool install mlx-serve"
+        return 1
+    fi
+
+    mlx_render_config
+    workspace=$(mlx_workspace_path)
+    api_key=$(env_manager get mlx.api.key)
+
+    log_info "Starting mlx-serve from $workspace"
+    (cd "$workspace" && MLX_API_KEY="$api_key" mlx-serve start)
+
+    auto_pull=$(env_manager get mlx.auto.pull)
+    model=$(env_manager get mlx.model)
+    if config_bool_enabled "$auto_pull" && [ -n "$model" ]; then
+        run_mlx_command pull "$model" || true
+    fi
+}
+
+mlx_host_stop() {
+    local manage_host workspace
+
+    manage_host=$(env_manager get mlx.manage.host)
+    if ! config_bool_enabled "$manage_host"; then
+        return 0
+    fi
+
+    if ! command -v mlx-serve >/dev/null 2>&1; then
+        return 0
+    fi
+
+    workspace=$(mlx_workspace_path)
+    log_info "Stopping mlx-serve"
+    (cd "$workspace" && mlx-serve stop)
+}
+
 run_models_routine() {
+    local requested_source=""
+    local arg
+    local prev_was_source=false
+    for arg in "$@"; do
+        if $prev_was_source; then
+            requested_source="$arg"
+            prev_was_source=false
+            continue
+        fi
+        case "$arg" in
+        --source | -s)
+            prev_was_source=true
+            ;;
+        esac
+    done
+
     local hf_cache
     hf_cache=$(env_manager get hf.cache)
     hf_cache="${hf_cache/#\~/$HOME}"
@@ -4936,14 +5163,40 @@ run_models_routine() {
     local llamacpp_cache
     llamacpp_cache=$(env_manager get llamacpp.cache)
     llamacpp_cache="${llamacpp_cache/#\~/$HOME}"
+    local dmr_url=""
+    if [ "$requested_source" = "dmr" ]; then
+        dmr_url=$(env_manager get dmr.upstream.url)
+        case "${dmr_url%/}" in
+        */engines)
+            dmr_url="${dmr_url%/}"
+            ;;
+        *)
+            dmr_url="${dmr_url%/}/engines"
+            ;;
+        esac
+    elif is_service_running "dmr"; then
+        dmr_url="http://dmr:8080"
+    fi
+    local mlx_url=""
+    if [ "$requested_source" = "mlx" ]; then
+        mlx_url=$(env_manager get mlx.upstream.url)
+    elif is_service_running "mlx"; then
+        mlx_url="http://mlx:8080"
+    fi
+    local dmr_api_key
+    dmr_api_key=$(env_manager get dmr.api.key)
+    local mlx_api_key
+    mlx_api_key=$(env_manager get mlx.api.key)
 
-    if ! is_service_running "ollama"; then
+    if { [ -z "$requested_source" ] || [ "$requested_source" = "ollama" ]; } && ! is_service_running "ollama"; then
         log_debug "Ollama is not running, launching..."
         run_up --no-defaults ollama
     fi
 
     docker run --rm \
         --network=harbor_harbor-network \
+        --add-host "host.docker.internal:host-gateway" \
+        --add-host "model-runner.docker.internal:host-gateway" \
         -v "$harbor_home:$harbor_home" \
         -v "$hf_cache:$hf_cache:rw" \
         -v "$llamacpp_cache:$llamacpp_cache:rw" \
@@ -4954,13 +5207,48 @@ run_models_routine() {
         -e "HARBOR_HF_CACHE=$hf_cache" \
         -e "HARBOR_OLLAMA_URL=$ollama_url" \
         -e "HARBOR_LLAMACPP_CACHE=$llamacpp_cache" \
+        -e "HARBOR_DMR_URL=$dmr_url" \
+        -e "HARBOR_MLX_URL=$mlx_url" \
+        -e "HARBOR_DMR_API_KEY=$dmr_api_key" \
+        -e "HARBOR_MLX_API_KEY=$mlx_api_key" \
         $default_routine_runtime \
         ./routines/models.ts "$@"
 }
 
 run_models_pull() {
+    local source=""
+    if [ "$1" = "--source" ] || [ "$1" = "-s" ]; then
+        source="$2"
+        shift 2
+    fi
+
     local model="$1"
     local repo="${model%:*}"
+
+    case "$source" in
+    dmr)
+        run_dmr_command pull "$model"
+        return
+        ;;
+    mlx)
+        run_mlx_command pull "$model"
+        return
+        ;;
+    ollama)
+        run_ollama_command pull "$model"
+        return
+        ;;
+    hf | llamacpp)
+        run_llamacpp_pull "$model"
+        return
+        ;;
+    "")
+        ;;
+    *)
+        log_error "Unknown model source: $source"
+        return 1
+        ;;
+    esac
 
     if [[ "$model" == *"/"* ]] && \
        curl -sf --head --connect-timeout 5 "https://huggingface.co/$repo" > /dev/null; then
@@ -4970,7 +5258,25 @@ run_models_pull() {
     fi
 }
 
+models_extract_source_subcommand() {
+    case "$1" in
+    ollama | hf | llamacpp | dmr | mlx)
+        echo "$1"
+        return 0
+        ;;
+    esac
+
+    return 1
+}
+
 run_models_command() {
+    local source_subcommand=""
+
+    if source_subcommand=$(models_extract_source_subcommand "$1" 2>/dev/null); then
+        shift
+        set -- "$1" "--source" "$source_subcommand" "${@:2}"
+    fi
+
     case "$1" in
     ls|list)
         shift
@@ -4982,6 +5288,24 @@ run_models_command() {
         ;;
     rm|remove)
         shift
+        if [ "$1" = "--source" ] || [ "$1" = "-s" ]; then
+            local source="$2"
+            shift 2
+            case "$source" in
+            dmr)
+                run_dmr_command rm "$@"
+                return
+                ;;
+            mlx)
+                run_mlx_command rm "$@"
+                return
+                ;;
+            *)
+                run_models_routine rm --source "$source" "$@"
+                return
+                ;;
+            esac
+        fi
         run_models_routine rm "$@"
         ;;
     -h|--help|help|"")
@@ -4991,6 +5315,107 @@ run_models_command() {
         log_error "Unknown models subcommand: $1"
         show_models_help
         exit 1
+        ;;
+    esac
+}
+
+run_dmr_command() {
+    local cmd="${1:-help}"
+    shift || true
+
+    case "$cmd" in
+    start | serve)
+        dmr_host_start
+        ;;
+    stop)
+        dmr_host_stop
+        ;;
+    status)
+        docker model status
+        ;;
+    ls | list | models)
+        docker model ls "$@"
+        ;;
+    pull)
+        docker_model_available || { log_error "Docker Model Runner CLI is not available."; return 1; }
+        docker model pull "$@"
+        ;;
+    rm | remove)
+        docker_model_available || { log_error "Docker Model Runner CLI is not available."; return 1; }
+        docker model rm "$@"
+        ;;
+    help | -h | --help)
+        echo "Usage: harbor dmr <start|stop|status|ls|pull|rm>"
+        echo "Manages Docker Model Runner for the Harbor dmr backend."
+        ;;
+    *)
+        log_error "Unknown dmr subcommand: $cmd"
+        return 1
+        ;;
+    esac
+}
+
+run_mlx_command() {
+    local cmd="${1:-help}"
+    shift || true
+    local url
+    url="$(env_manager get mlx.upstream.url)"
+    local api_key
+    api_key="$(env_manager get mlx.api.key)"
+
+    case "$cmd" in
+    start | serve)
+        mlx_host_start
+        ;;
+    stop)
+        mlx_host_stop
+        ;;
+    status)
+        if command -v mlx-serve >/dev/null 2>&1; then
+            (cd "$(mlx_workspace_path)" && mlx-serve status)
+        else
+            curl -fsS "$url/status"
+        fi
+        ;;
+    logs)
+        if command -v mlx-serve >/dev/null 2>&1; then
+            (cd "$(mlx_workspace_path)" && mlx-serve logs "$@")
+        else
+            log_error "mlx-serve is not installed on the host."
+            return 1
+        fi
+        ;;
+    pull)
+        local model="${1:-$(env_manager get mlx.model)}"
+        if [ -z "$model" ]; then
+            log_error "Usage: harbor mlx pull <model>"
+            return 1
+        fi
+        curl -fsS -X POST "$url/v1/models/pull" \
+            -H "Authorization: Bearer $api_key" \
+            -H "Content-Type: application/json" \
+            -d "{\"model\":\"$model\"}"
+        ;;
+    rm | remove)
+        local model="$1"
+        if [ -z "$model" ]; then
+            log_error "Usage: harbor mlx rm <model>"
+            return 1
+        fi
+        curl -fsS -X DELETE "$url/v1/models/$model" \
+            -H "Authorization: Bearer $api_key"
+        ;;
+    ls | list | models)
+        curl -fsS "$url/v1/models" \
+            -H "Authorization: Bearer $api_key"
+        ;;
+    help | -h | --help)
+        echo "Usage: harbor mlx <start|stop|status|logs|ls|pull|rm>"
+        echo "Manages host mlx-serve for the Harbor mlx backend."
+        ;;
+    *)
+        log_error "Unknown mlx subcommand: $cmd"
+        return 1
         ;;
     esac
 }
@@ -7123,6 +7548,14 @@ main_entrypoint() {
     vllm)
         shift
         run_vllm_command "$@"
+        ;;
+    dmr)
+        shift
+        run_dmr_command "$@"
+        ;;
+    mlx)
+        shift
+        run_mlx_command "$@"
         ;;
     aphrodite)
         shift

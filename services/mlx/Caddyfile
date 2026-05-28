@@ -1,0 +1,17 @@
+:8080 {
+	handle /health {
+		respond "ok" 200
+	}
+
+	handle /v1/* {
+		reverse_proxy {$HARBOR_MLX_UPSTREAM_URL}
+	}
+
+	handle /status* {
+		reverse_proxy {$HARBOR_MLX_UPSTREAM_URL}
+	}
+
+	handle /models* {
+		reverse_proxy {$HARBOR_MLX_UPSTREAM_URL}
+	}
+}

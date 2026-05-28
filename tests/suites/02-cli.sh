@@ -154,6 +154,7 @@ chmod +x "$fake_bin/docker" "$fake_bin/curl"
 assert_match "launch help documents service mode" '--service opencode' harbor launch --help
 assert_match "launch help lists supported launch targets" 'Supported launch targets:' harbor launch --help
 assert_match "launch help lists host tools" 'Host tools: .*codex.*pi.*vscode' harbor launch --help
+assert_match "launch help lists dmr and mlx backends" 'Backends: .*dmr.*mlx' harbor launch --help
 assert_match "launch help lists service CLI shortcuts" 'Service CLI shortcuts: .*plandex.*promptfoo.*tokscale' harbor launch --help
 assert_match "launch help lists container service fallback" "Container services: any service from 'harbor ls'.*mi.*opencode" harbor launch --help
 assert_match "launch help documents web as the only tool modifier" '^--model, --config, and --web\.$' harbor launch --help

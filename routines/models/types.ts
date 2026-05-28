@@ -31,7 +31,7 @@ export interface HfRepoInfo {
 }
 
 export interface ModelEntry {
-  source: 'ollama' | 'hf' | 'llamacpp';
+  source: 'ollama' | 'hf' | 'llamacpp' | 'dmr' | 'mlx';
   model: string;
   size: number;
   modified: string;

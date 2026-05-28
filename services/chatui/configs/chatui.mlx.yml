@@ -1,0 +1,8 @@
+envVars:
+  MODELS:
+    - name: mlx
+      id: mlx
+      endpoints:
+        - type: openai
+          baseURL: http://mlx:8080/v1
+          apiKey: sk-mlx

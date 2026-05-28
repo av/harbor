@@ -1,0 +1,6 @@
+model_list:
+  - model_name: dmr
+    litellm_params:
+      model: openai/${HARBOR_DMR_MODEL}
+      api_base: http://dmr:8080/v1
+      api_key: sk-dmr
