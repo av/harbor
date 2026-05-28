@@ -369,6 +369,14 @@ has_modern_compose() {
 # shellcheck disable=SC2034
 __anchor_fns=true
 
+harbor_upper() {
+    LC_ALL=C printf '%s' "$1" | tr 'a-z' 'A-Z'
+}
+
+harbor_lower() {
+    LC_ALL=C printf '%s' "$1" | tr 'A-Z' 'a-z'
+}
+
 resolve_compose_files() {
     # Find all .yml files in the services directory,
     # but do not go into subdirectories
@@ -1327,7 +1335,8 @@ launch_discover_model() {
 }
 
 launch_model_is_embedding() {
-    local model="${1,,}"
+    local model
+    model=$(harbor_lower "$1")
 
     case "$model" in
     *embed* | *embedding* | *bge-* | *e5-* | *gte-* | *rerank*)
@@ -3105,7 +3114,8 @@ env_manager() {
             $silent || log_info "Usage: harbor config get <key>"
             return 1
         fi
-        local upper_key="${2^^}"
+        local upper_key
+        upper_key=$(harbor_upper "$2")
         upper_key="${upper_key//[.-]/_}"
         upper_key="${upper_key#$prefix}"
         value=$(grep "^$prefix$upper_key=" "$env_file" | cut -d '=' -f2-)
@@ -3118,7 +3128,8 @@ env_manager() {
             $silent || log_info "Usage: harbor config set <key> <value>"
             return 1
         fi
-        local upper_key="${2^^}"
+        local upper_key
+        upper_key=$(harbor_upper "$2")
         upper_key="${upper_key//[.-]/_}"
         upper_key="${upper_key#$prefix}"
         shift 2          # Remove 'set' and the key from the arguments
@@ -3150,7 +3161,8 @@ env_manager() {
             $silent || log_info "Usage: harbor config unset <key>"
             return 1
         fi
-        local upper_key="${2^^}"
+        local upper_key
+        upper_key=$(harbor_upper "$2")
         upper_key="${upper_key//[.-]/_}"
         upper_key="${upper_key#$prefix}"
         if grep -q "^$prefix$upper_key=" "$env_file"; then
@@ -3193,7 +3205,8 @@ env_manager() {
             return 1
         fi
         local query="$2"
-        local query_lc="${query,,}"
+        local query_lc
+        query_lc=$(harbor_lower "$query")
         local normalized_query="${query_lc//[.-]/_}"
         local results
         results=$(grep -i "^$prefix" "$env_file" | while read -r line; do
@@ -3201,11 +3214,11 @@ env_manager() {
             value=${line#*=}
             value=$(echo "$value" | sed -E 's/^"(.*)"$/\1/')
             display_key="${key#$prefix}"
-            display_key="${display_key,,}"
+            display_key=$(harbor_lower "$display_key")
             display_key="${display_key/_/.}"
             hyphen_key="${display_key//./-}"
             normalized_key="${display_key//[.-]/_}"
-            search_blob="${line,,} ${value,,} ${display_key} ${hyphen_key} ${normalized_key}"
+            search_blob="$(harbor_lower "$line") $(harbor_lower "$value") ${display_key} ${hyphen_key} ${normalized_key}"
             if [[ "$search_blob" == *"$query_lc"* || "$search_blob" == *"$normalized_query"* ]]; then
                 echo "$line"
             fi
@@ -3218,7 +3231,7 @@ env_manager() {
             key=${line%%=*}
             value=${line#*=}
             value=$(echo "$value" | sed -E 's/^"(.*)"$/\1/')
-            display_key="${key,,}"
+            display_key=$(harbor_lower "$key")
             display_key="${display_key/_/.}"
             printf "%-30s %s\n" "$display_key" "$value"
         done
@@ -4990,7 +5003,7 @@ show_models_help() {
 }
 
 config_bool_enabled() {
-    case "${1,,}" in
+    case "$(harbor_lower "$1")" in
     1 | true | yes | on)
         return 0
         ;;
