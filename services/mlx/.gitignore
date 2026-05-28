@@ -1,3 +1,4 @@
 cache/
 logs/
-models.yaml
+.venv/
+uv.lock

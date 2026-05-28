@@ -30,7 +30,7 @@ async function cmdList(args: string[]) {
     shouldList('hf') ? listHfModels() : Promise.resolve([]),
     shouldList('llamacpp') ? listLlamacppModels() : Promise.resolve([]),
     shouldList('dmr') ? listOpenAiCompatibleModels({ source: 'dmr', url: process.env.HARBOR_DMR_URL, apiKey: process.env.HARBOR_DMR_API_KEY }) : Promise.resolve([]),
-    shouldList('mlx') ? listOpenAiCompatibleModels({ source: 'mlx', url: process.env.HARBOR_MLX_URL, apiKey: process.env.HARBOR_MLX_API_KEY }) : Promise.resolve([]),
+    shouldList('mlx') ? listOpenAiCompatibleModels({ source: 'mlx', url: process.env.HARBOR_MLX_URL }) : Promise.resolve([]),
   ]);
 
   const entries: ModelEntry[] = [

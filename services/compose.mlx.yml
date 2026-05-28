@@ -12,7 +12,7 @@ services:
     volumes:
       - ./services/mlx/Caddyfile:/etc/caddy/Caddyfile:ro
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/v1/models >/dev/null"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health >/dev/null"]
       interval: 5s
       timeout: 5s
       retries: 12

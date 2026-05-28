@@ -1044,8 +1044,8 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
     mlx: {
         name: 'MLX',
         tags: [HST.backend, HST.api],
-        projectUrl: 'https://github.com/raspoli/mlx-serve',
-        logo: 'https://github.com/raspoli.png?size=200',
+        projectUrl: 'https://github.com/ml-explore/mlx-lm',
+        logo: 'https://github.com/ml-explore.png?size=200',
         wikiUrl: `${wikiUrl}/2.2.23-Backend-MLX`,
         tooltip: 'Host-native Apple Silicon MLX inference managed by Harbor through an OpenAI-compatible proxy.',
     },
