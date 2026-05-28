@@ -1,4 +1,4 @@
-import { stringify as tomlStringify } from 'jsr:@std/toml';
+import { tomlStringify } from '../routines/utils';
 import type { ComposeContext, ComposeObject } from '../routines/composeTypes';
 import {
   BACKEND_MODEL_KEYS,

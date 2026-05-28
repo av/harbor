@@ -1,6 +1,7 @@
 /// <reference lib="deno.ns" />
 
 import process from "node:process";
+export { default as yaml } from "npm:yaml";
 
 export const BUILTIN_CAPS = ["nvidia", "mdc", "cdi", "rocm", "build"];
 export const CONFIG_PREFIX = "HARBOR_";
@@ -253,6 +254,60 @@ export function encodeBashValue(value: string): string {
     .replace(/\t/g, "\\t");
 
   return `"${escaped}"`;
+}
+
+export function deepMerge<T extends Record<string, unknown>>(target: T, source: T): T {
+  const result = { ...target } as Record<string, unknown>;
+  for (const key of Object.keys(source)) {
+    const sv = source[key];
+    const tv = target[key];
+    if (Array.isArray(tv) && Array.isArray(sv)) {
+      const merged = [...tv];
+      for (const item of sv) {
+        if (!merged.includes(item)) merged.push(item);
+      }
+      result[key] = merged;
+    } else if (
+      sv && tv &&
+      typeof sv === "object" && !Array.isArray(sv) &&
+      typeof tv === "object" && !Array.isArray(tv)
+    ) {
+      result[key] = deepMerge(
+        tv as Record<string, unknown>,
+        sv as Record<string, unknown>,
+      );
+    } else {
+      result[key] = sv;
+    }
+  }
+  return result as T;
+}
+
+function tomlValue(v: unknown): string {
+  if (typeof v === 'string') return JSON.stringify(v);
+  if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+  return JSON.stringify(v);
+}
+
+export function tomlStringify(obj: Record<string, unknown>): string {
+  const lines: string[] = [];
+  const tables: [string, Record<string, unknown>][] = [];
+  for (const [k, v] of Object.entries(obj)) {
+    if (typeof v === 'object' && v !== null && !Array.isArray(v)) {
+      tables.push([k, v as Record<string, unknown>]);
+    } else {
+      lines.push(`${k} = ${tomlValue(v)}`);
+    }
+  }
+  if (lines.length && tables.length) lines.push('');
+  for (const [section, vals] of tables) {
+    lines.push(`[${section}]`);
+    for (const [k, v] of Object.entries(vals)) {
+      lines.push(`${k} = ${tomlValue(v)}`);
+    }
+    lines.push('');
+  }
+  return lines.join('\n');
 }
 
 const fileCache = new Map<string, Promise<string>>();
