@@ -83,6 +83,9 @@
 - label: cli > routines > routines/utils.ts has explicit TypeScript annotations for shared utility exports so deno check routines/models.ts is not blocked by implicit-any diagnostics
   command: deno check routines/models.ts
   tags: [spec, routines-utils, implemented]
+- label: services > dmr/mlx > harbor up dmr and harbor up mlx automatically bootstrap missing host-managed backend components before starting their Harbor proxy services
+  command: rg -q 'dmr_install_components' harbor.sh && rg -q 'mlx_install_components' harbor.sh && rg -q 'automatic.*install|automatically install|auto-installs' docs/2.2.22-Backend-Docker-Model-Runner.md docs/2.2.23-Backend-MLX.md
+  tags: [spec, auto-host-bootstrap, implemented]
 # project
 - Harbor is a containerized LLM toolkit distributed as a Docker Compose project with a CLI and Tauri desktop app
 - label: the project is licensed under Apache 2.0

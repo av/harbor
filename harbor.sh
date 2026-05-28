@@ -5033,8 +5033,85 @@ sed_replacement_escape() {
     printf '%s' "$1" | sed 's/[&|]/\\&/g'
 }
 
+docker_cli_subcommand_available() {
+    local subcommand="$1"
+    command -v docker >/dev/null 2>&1 && docker "$subcommand" --help 2>&1 | grep -q "Usage:  docker $subcommand"
+}
+
+docker_model_subcommand_available() {
+    local subcommand="$1"
+    docker_cli_subcommand_available model && docker model "$subcommand" --help 2>&1 | grep -q "docker model $subcommand"
+}
+
 docker_model_available() {
-    command -v docker >/dev/null 2>&1 && docker model --help >/dev/null 2>&1
+    docker_cli_subcommand_available model
+}
+
+run_privileged_install_command() {
+    if [ "$(id -u)" -eq 0 ]; then
+        "$@"
+    else
+        if ! command -v sudo >/dev/null 2>&1; then
+            log_error "sudo is required to install host packages automatically."
+            return 1
+        fi
+        sudo "$@"
+    fi
+}
+
+dmr_install_linux_plugin() {
+    if command -v apt-get >/dev/null 2>&1; then
+        log_info "Installing Docker Model Runner plugin with apt."
+        run_privileged_install_command apt-get update
+        run_privileged_install_command apt-get install -y docker-model-plugin
+        return
+    fi
+
+    if command -v dnf >/dev/null 2>&1; then
+        log_info "Installing Docker Model Runner plugin with dnf."
+        run_privileged_install_command dnf install -y docker-model-plugin
+        return
+    fi
+
+    log_error "Docker Model Runner CLI is missing and automatic installation is only supported through apt or dnf on Linux."
+    return 1
+}
+
+dmr_desktop_enable_available() {
+    docker_cli_subcommand_available desktop && docker desktop enable model-runner --help 2>&1 | grep -q 'model-runner'
+}
+
+dmr_install_components() {
+    if docker_model_available; then
+        return 0
+    fi
+
+    log_info "Docker Model Runner CLI is missing; attempting to install or enable it."
+
+    if [[ "$(uname -s)" == "Linux" ]]; then
+        dmr_install_linux_plugin || return 1
+    elif dmr_desktop_enable_available; then
+        docker desktop enable model-runner || return 1
+    else
+        log_error "Docker Model Runner CLI is not available. Install/update Docker Desktop or install docker-model-plugin, then retry."
+        return 1
+    fi
+
+    if ! docker_model_available; then
+        log_error "Docker Model Runner CLI is still unavailable after automatic setup."
+        return 1
+    fi
+}
+
+dmr_install_runner() {
+    if docker model status >/dev/null 2>&1; then
+        return 0
+    fi
+
+    if docker_model_subcommand_available install-runner; then
+        log_info "Installing Docker Model Runner runtime."
+        docker model install-runner || return 1
+    fi
 }
 
 dmr_host_start() {
@@ -5046,10 +5123,8 @@ dmr_host_start() {
         return 0
     fi
 
-    if ! docker_model_available; then
-        log_error "Docker Model Runner CLI is not available. Install/update Docker Desktop and ensure 'docker model' works."
-        return 1
-    fi
+    dmr_install_components || return 1
+    dmr_install_runner || return 1
 
     enable_tcp=$(env_manager get dmr.enable.tcp)
     runner_port=$(env_manager get dmr.runner.port)
@@ -5106,6 +5181,52 @@ mlx_render_config() {
         "$template" > "$output"
 }
 
+mlx_add_uv_tool_bin_to_path() {
+    local tool_bin
+    tool_bin=$(uv tool dir --bin 2>/dev/null || true)
+
+    if [ -n "$tool_bin" ]; then
+        PATH="$tool_bin:$PATH"
+        export PATH
+    fi
+}
+
+mlx_install_uv() {
+    if command -v uv >/dev/null 2>&1; then
+        return 0
+    fi
+
+    if [[ "$(uname -s)" == "Darwin" ]] && command -v brew >/dev/null 2>&1; then
+        log_info "Installing uv with Homebrew."
+        brew install uv || return 1
+        return
+    fi
+
+    log_error "uv is required to install mlx-serve automatically. Install uv, then retry."
+    return 1
+}
+
+mlx_install_components() {
+    if command -v mlx-serve >/dev/null 2>&1; then
+        return 0
+    fi
+
+    if [[ "$(uname -s)" != "Darwin" ]]; then
+        log_error "mlx-serve is missing and automatic MLX host setup is only supported on macOS."
+        return 1
+    fi
+
+    mlx_install_uv || return 1
+    log_info "Installing mlx-serve with uv."
+    uv tool install mlx-serve || return 1
+    mlx_add_uv_tool_bin_to_path
+
+    if ! command -v mlx-serve >/dev/null 2>&1; then
+        log_error "mlx-serve is still unavailable after automatic setup. Ensure the uv tool bin directory is on PATH."
+        return 1
+    fi
+}
+
 mlx_host_start() {
     local manage_host auto_pull model workspace api_key
 
@@ -5115,10 +5236,7 @@ mlx_host_start() {
         return 0
     fi
 
-    if ! command -v mlx-serve >/dev/null 2>&1; then
-        log_error "mlx-serve is not installed on the host. Install it first, then retry: uv tool install mlx-serve"
-        return 1
-    fi
+    mlx_install_components || return 1
 
     mlx_render_config
     workspace=$(mlx_workspace_path)
