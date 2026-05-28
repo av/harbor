@@ -159,6 +159,13 @@ show_help() {
     echo "    defaults rm <handle|index>  - Remove, also accepts handle or index"
     echo "    defaults add <handle>       - Add"
     echo
+    echo "  volumes [ls|add|rm|clear]     - Manage custom volume mounts for services"
+    echo "    volumes ls                  - Show all services with custom volumes"
+    echo "    volumes ls <service>        - Show volumes for a specific service"
+    echo "    volumes add <svc> <src>:<dest> - Add a volume mount (docker-style notation)"
+    echo "    volumes rm <service> <index> - Remove by index"
+    echo "    volumes clear <service>     - Remove all custom volumes for a service"
+    echo
     echo "  find <file>           - Find a file in the caches visible to Harbor"
     echo "  ls|list [--active|-a] - List available/active Harbor services"
     echo "  ln|link [--short]     - Create a symlink to the CLI, --short for 'h' link"
@@ -798,17 +805,18 @@ run_down() {
         log_info "Stopping services: $*"
     fi
 
+    if $stop_mlx; then
+        run_mlx_command stop || true
+    fi
+    if $stop_dmr; then
+        run_dmr_command stop || true
+    fi
+
     matched_services_str=$(printf " %s" "${matched_services[@]}")
     $(compose_with_options "${compose_targets[@]}") down --remove-orphans --timeout 10 "$@" $matched_services_str
     local down_exit=$?
 
     if [ $down_exit -eq 0 ]; then
-        if $stop_mlx; then
-            run_mlx_command stop || true
-        fi
-        if $stop_dmr; then
-            run_dmr_command stop || true
-        fi
         log_info "Services stopped."
     else
         log_error "Failed to stop services (exit code: $down_exit)"
@@ -917,17 +925,7 @@ run_pull() {
         if echo "$available_services" | grep -q "^$service$"; then
             log_info "Pulling service $service"
         else
-            # Probe HF repo existence (200 OK) to determine if it's a Llama.cpp target
-            # Strip tag if present for the check
-            local repo="${service%:*}"
-
-            # Must look like org/repo (at least one slash) to be a candidate
-            if [[ "$service" == *"/"* ]] && curl --output /dev/null --silent --head --fail --connect-timeout 5 "https://huggingface.co/$repo"; then
-                run_llamacpp_pull "$service"
-                return 0
-            fi
-
-            run_ollama_command pull "$service"
+            run_models_pull "$service"
             return 0
         fi
     done
@@ -3177,15 +3175,7 @@ env_manager() {
         fi
         ;;
     list | ls)
-        # Trailing `|| true` so an empty match (e.g. a service whose
-        # override.env has only comments) reports as exit 0 — listing an
-        # empty set is not an error.
-        grep "^$prefix" "$env_file" | grep -v '^#\|^$' | sed "s/^$prefix//" | while read -r line; do
-            key=${line%%=*}
-            value=${line#*=}
-            value=$(echo "$value" | sed -E 's/^"(.*)"$/\1/')
-            printf "%-30s %s\n" "$key" "$value"
-        done || true
+        run_routine configSearch list --env-file "$env_file" --prefix "$prefix"
         ;;
     reset)
         shift
@@ -3200,41 +3190,7 @@ env_manager() {
         merge_env_files
         ;;
     search | find)
-        if [[ -z "$2" ]]; then
-            $silent || echo "Usage: harbor config search <query>"
-            return 1
-        fi
-        local query="$2"
-        local query_lc
-        query_lc=$(harbor_lower "$query")
-        local normalized_query="${query_lc//[.-]/_}"
-        local results
-        results=$(grep -i "^$prefix" "$env_file" | while read -r line; do
-            key=${line%%=*}
-            value=${line#*=}
-            value=$(echo "$value" | sed -E 's/^"(.*)"$/\1/')
-            display_key="${key#$prefix}"
-            display_key=$(harbor_lower "$display_key")
-            display_key="${display_key/_/.}"
-            hyphen_key="${display_key//./-}"
-            normalized_key="${display_key//[.-]/_}"
-            search_blob="$(harbor_lower "$line") $(harbor_lower "$value") ${display_key} ${hyphen_key} ${normalized_key}"
-            if [[ "$search_blob" == *"$query_lc"* || "$search_blob" == *"$normalized_query"* ]]; then
-                echo "$line"
-            fi
-        done)
-        if [[ -z "$results" ]]; then
-            $silent || echo "No results found for: $query"
-            return 0
-        fi
-        echo "$results" | sed "s/^$prefix//" | while read -r line; do
-            key=${line%%=*}
-            value=${line#*=}
-            value=$(echo "$value" | sed -E 's/^"(.*)"$/\1/')
-            display_key=$(harbor_lower "$key")
-            display_key="${display_key/_/.}"
-            printf "%-30s %s\n" "$display_key" "$value"
-        done
+        run_routine configSearch search --env-file "$env_file" --prefix "$prefix" "$2"
         ;;
     --help | -h)
         echo "Harbor configuration management"
@@ -4997,7 +4953,7 @@ show_models_help() {
     echo "  harbor models ls --json"
     echo "  harbor models pull qwen3:8b"
     echo "  harbor models pull --source dmr ai/smollm2"
-    echo "  harbor models pull --source mlx mlx-community/Qwen2.5-3B-Instruct-4bit"
+    echo "  harbor models pull mlx-community/Qwen3.5-4B-4bit"
     echo "  harbor models pull bartowski/Llama-3.2-1B-Instruct-GGUF"
     echo "  harbor models rm qwen3:8b"
 }
@@ -5129,7 +5085,7 @@ dmr_host_start() {
     enable_tcp=$(env_manager get dmr.enable.tcp)
     runner_port=$(env_manager get dmr.runner.port)
     if config_bool_enabled "$enable_tcp"; then
-        if docker desktop enable model-runner --tcp "$runner_port" >/dev/null 2>&1; then
+        if docker desktop enable model-runner --tcp="$runner_port" >/dev/null 2>&1; then
             log_info "Docker Model Runner TCP endpoint enabled on port $runner_port."
         else
             log_warn "Could not enable Docker Model Runner TCP endpoint automatically; continuing with existing Docker Desktop configuration."
@@ -5156,117 +5112,63 @@ mlx_workspace_path() {
     harbor_resolve_path "$(env_manager get mlx.workspace)"
 }
 
-mlx_render_config() {
-    local workspace template output
-    workspace=$(mlx_workspace_path)
-    template="$workspace/models.yaml.template"
-    output="$workspace/models.yaml"
-
-    if [ ! -f "$template" ]; then
-        log_error "MLX config template not found: $template"
-        return 1
-    fi
-
-    mkdir -p "$workspace/logs" "$workspace/cache"
-    sed \
-        -e "s|\${HARBOR_MLX_WORKER_PORT}|$(sed_replacement_escape "$(env_manager get mlx.worker.port)")|g" \
-        -e "s|\${HARBOR_MLX_RUNNER_PORT}|$(sed_replacement_escape "$(env_manager get mlx.runner.port)")|g" \
-        -e "s|\${HARBOR_MLX_AUTO_UNLOAD}|$(sed_replacement_escape "$(env_manager get mlx.auto.unload)")|g" \
-        -e "s|\${HARBOR_MLX_MAX_LOADED_MODELS}|$(sed_replacement_escape "$(env_manager get mlx.max.loaded.models)")|g" \
-        -e "s|\${HARBOR_MLX_MODEL}|$(sed_replacement_escape "$(env_manager get mlx.model)")|g" \
-        -e "s|\${HARBOR_MLX_MODEL_TYPE}|$(sed_replacement_escape "$(env_manager get mlx.model.type)")|g" \
-        -e "s|\${HARBOR_MLX_HF_PATH}|$(sed_replacement_escape "$(env_manager get mlx.hf.path)")|g" \
-        -e "s|\${HARBOR_MLX_CONTEXT_LENGTH}|$(sed_replacement_escape "$(env_manager get mlx.context.length)")|g" \
-        -e "s|\${HARBOR_MLX_MAX_KV_CACHE_SIZE}|$(sed_replacement_escape "$(env_manager get mlx.max.kv.cache.size)")|g" \
-        "$template" > "$output"
-}
-
-mlx_add_uv_tool_bin_to_path() {
-    local tool_bin
-    tool_bin=$(uv tool dir --bin 2>/dev/null || true)
-
-    if [ -n "$tool_bin" ]; then
-        PATH="$tool_bin:$PATH"
-        export PATH
-    fi
-}
-
-mlx_install_uv() {
-    if command -v uv >/dev/null 2>&1; then
-        return 0
-    fi
-
-    if [[ "$(uname -s)" == "Darwin" ]] && command -v brew >/dev/null 2>&1; then
-        log_info "Installing uv with Homebrew."
-        brew install uv || return 1
-        return
-    fi
-
-    log_error "uv is required to install mlx-serve automatically. Install uv, then retry."
-    return 1
-}
-
-mlx_install_components() {
-    if command -v mlx-serve >/dev/null 2>&1; then
-        return 0
-    fi
-
-    if [[ "$(uname -s)" != "Darwin" ]]; then
-        log_error "mlx-serve is missing and automatic MLX host setup is only supported on macOS."
-        return 1
-    fi
-
-    mlx_install_uv || return 1
-    log_info "Installing mlx-serve with uv."
-    uv tool install mlx-serve || return 1
-    mlx_add_uv_tool_bin_to_path
-
-    if ! command -v mlx-serve >/dev/null 2>&1; then
-        log_error "mlx-serve is still unavailable after automatic setup. Ensure the uv tool bin directory is on PATH."
-        return 1
-    fi
+mlx_uv_run() {
+    (cd "$(mlx_workspace_path)" && uv run "$@")
 }
 
 mlx_host_start() {
-    local manage_host auto_pull model workspace api_key
-
-    manage_host=$(env_manager get mlx.manage.host)
-    if ! config_bool_enabled "$manage_host"; then
-        log_info "MLX host management is disabled; expecting mlx-serve at $(env_manager get mlx.upstream.url)."
-        return 0
-    fi
-
-    mlx_install_components || return 1
-
-    mlx_render_config
-    workspace=$(mlx_workspace_path)
-    api_key=$(env_manager get mlx.api.key)
-
-    log_info "Starting mlx-serve from $workspace"
-    (cd "$workspace" && MLX_API_KEY="$api_key" mlx-serve start)
-
-    auto_pull=$(env_manager get mlx.auto.pull)
-    model=$(env_manager get mlx.model)
-    if config_bool_enabled "$auto_pull" && [ -n "$model" ]; then
-        run_mlx_command pull "$model" || true
-    fi
-}
-
-mlx_host_stop() {
     local manage_host workspace
 
     manage_host=$(env_manager get mlx.manage.host)
     if ! config_bool_enabled "$manage_host"; then
-        return 0
-    fi
-
-    if ! command -v mlx-serve >/dev/null 2>&1; then
+        log_info "MLX host management is disabled; expecting mlx-lm at $(env_manager get mlx.upstream.url)."
         return 0
     fi
 
     workspace=$(mlx_workspace_path)
-    log_info "Stopping mlx-serve"
-    (cd "$workspace" && mlx-serve stop)
+    mkdir -p "$workspace/logs"
+
+    local runner_port hf_path logfile local_url
+    runner_port=$(env_manager get mlx.runner.port)
+    hf_path=$(env_manager get mlx.hf.path)
+    logfile="$workspace/logs/mlx-lm.log"
+    local_url="http://localhost:$runner_port"
+
+    if curl -s -o /dev/null -w '' "$local_url/v1/models" 2>/dev/null; then
+        log_info "mlx-lm is already running on port $runner_port"
+    else
+        log_info "Starting mlx-lm from $workspace (model: $hf_path)"
+        (cd "$workspace" && nohup uv run python -m mlx_lm.server --model "$hf_path" --port "$runner_port" >>"$logfile" 2>&1 & disown)
+
+        local retries=0 max_retries=60
+        while ! curl -s -o /dev/null -w '' "$local_url/v1/models" 2>/dev/null; do
+            retries=$((retries + 1))
+            if [ "$retries" -ge "$max_retries" ]; then
+                log_error "mlx-lm failed to start within ${max_retries}s. Check $logfile"
+                return 1
+            fi
+            sleep 1
+        done
+        log_info "mlx-lm is ready on port $runner_port"
+    fi
+}
+
+mlx_host_stop() {
+    local manage_host runner_port pids
+
+    manage_host=$(env_manager get mlx.manage.host)
+    if ! config_bool_enabled "$manage_host"; then
+        return 0
+    fi
+
+    runner_port=$(env_manager get mlx.runner.port)
+    pids=$(lsof -ti "tcp:$runner_port" 2>/dev/null || true)
+    if [ -n "$pids" ]; then
+        log_info "Stopping mlx-lm (port $runner_port)"
+        echo "$pids" | xargs kill 2>/dev/null || true
+    else
+        log_debug "No mlx-lm process found on port $runner_port"
+    fi
 }
 
 run_models_routine() {
@@ -5316,8 +5218,6 @@ run_models_routine() {
     fi
     local dmr_api_key
     dmr_api_key=$(env_manager get dmr.api.key)
-    local mlx_api_key
-    mlx_api_key=$(env_manager get mlx.api.key)
 
     if { [ -z "$requested_source" ] || [ "$requested_source" = "ollama" ]; } && ! is_service_running "ollama"; then
         log_debug "Ollama is not running, launching..."
@@ -5341,7 +5241,6 @@ run_models_routine() {
         -e "HARBOR_DMR_URL=$dmr_url" \
         -e "HARBOR_MLX_URL=$mlx_url" \
         -e "HARBOR_DMR_API_KEY=$dmr_api_key" \
-        -e "HARBOR_MLX_API_KEY=$mlx_api_key" \
         $default_routine_runtime \
         ./routines/models.ts "$@"
 }
@@ -5369,7 +5268,11 @@ run_models_pull() {
         run_ollama_command pull "$model"
         return
         ;;
-    hf | llamacpp)
+    hf)
+        run_hf_docker_cli download "$model"
+        return
+        ;;
+    llamacpp)
         run_llamacpp_pull "$model"
         return
         ;;
@@ -5381,11 +5284,21 @@ run_models_pull() {
         ;;
     esac
 
-    if [[ "$model" == *"/"* ]] && \
-       curl -sf --head --connect-timeout 5 "https://huggingface.co/$repo" > /dev/null; then
+    local hf_meta
+    hf_meta=$(curl -sf --connect-timeout 5 "https://huggingface.co/api/models/$repo" 2>/dev/null) || true
+
+    if [ -z "$hf_meta" ]; then
+        run_ollama_command pull "$model"
+        return
+    fi
+
+    local has_gguf
+    has_gguf=$(echo "$hf_meta" | grep -o '"rfilename":"[^"]*\.gguf"' | head -1)
+
+    if [ -n "$has_gguf" ]; then
         run_llamacpp_pull "$model"
     else
-        run_ollama_command pull "$model"
+        run_hf_docker_cli download "$model"
     fi
 }
 
@@ -5489,10 +5402,9 @@ run_dmr_command() {
 run_mlx_command() {
     local cmd="${1:-help}"
     shift || true
-    local url
-    url="$(env_manager get mlx.upstream.url)"
-    local api_key
-    api_key="$(env_manager get mlx.api.key)"
+    local runner_port url
+    runner_port="$(env_manager get mlx.runner.port)"
+    url="http://localhost:$runner_port"
 
     case "$cmd" in
     start | serve)
@@ -5502,47 +5414,35 @@ run_mlx_command() {
         mlx_host_stop
         ;;
     status)
-        if command -v mlx-serve >/dev/null 2>&1; then
-            (cd "$(mlx_workspace_path)" && mlx-serve status)
-        else
-            curl -fsS "$url/status"
-        fi
+        curl -fsS "$url/v1/models"
         ;;
     logs)
-        if command -v mlx-serve >/dev/null 2>&1; then
-            (cd "$(mlx_workspace_path)" && mlx-serve logs "$@")
+        local logfile
+        logfile="$(mlx_workspace_path)/logs/mlx-lm.log"
+        if [ -f "$logfile" ]; then
+            cat "$logfile"
         else
-            log_error "mlx-serve is not installed on the host."
-            return 1
+            log_error "No log file found at $logfile"
         fi
         ;;
     pull)
-        local model="${1:-$(env_manager get mlx.model)}"
-        if [ -z "$model" ]; then
-            log_error "Usage: harbor mlx pull <model>"
+        local hf_path="${1:-$(env_manager get mlx.hf.path)}"
+        if [ -z "$hf_path" ]; then
+            log_error "Usage: harbor mlx pull <hf_path>"
             return 1
         fi
-        curl -fsS -X POST "$url/v1/models/pull" \
-            -H "Authorization: Bearer $api_key" \
-            -H "Content-Type: application/json" \
-            -d "{\"model\":\"$model\"}"
+        mlx_uv_run hf download "$hf_path"
         ;;
     rm | remove)
-        local model="$1"
-        if [ -z "$model" ]; then
-            log_error "Usage: harbor mlx rm <model>"
-            return 1
-        fi
-        curl -fsS -X DELETE "$url/v1/models/$model" \
-            -H "Authorization: Bearer $api_key"
+        log_error "Model removal is not supported. Manage the HuggingFace cache manually."
+        return 1
         ;;
     ls | list | models)
-        curl -fsS "$url/v1/models" \
-            -H "Authorization: Bearer $api_key"
+        curl -fsS "$url/v1/models"
         ;;
     help | -h | --help)
         echo "Usage: harbor mlx <start|stop|status|logs|ls|pull|rm>"
-        echo "Manages host mlx-serve for the Harbor mlx backend."
+        echo "Manages host mlx-lm for the Harbor mlx backend."
         ;;
     *)
         log_error "Unknown mlx subcommand: $cmd"
@@ -7531,6 +7431,86 @@ default_history_size=$(env_manager get history.size)
 default_legacy_cli=${HARBOR_LEGACY_CLI:-$(env_manager get legacy.cli)}
 default_routine_runtime=$(env_manager get routine.runtime)
 
+run_volumes_command() {
+    case "$1" in
+    --help | -h)
+        echo "Harbor custom volume mounts"
+        echo
+        echo "Manage custom host volume mounts for Harbor services."
+        echo "Volumes are injected into containers at startup."
+        echo
+        echo "Usage:"
+        echo "  harbor volumes ls                  - Show all services with custom volumes"
+        echo "  harbor volumes ls <service>        - Show volumes for a specific service"
+        echo "  harbor volumes add <svc> <src>:<dest> - Add a volume mount"
+        echo "  harbor volumes rm <service> <index> - Remove a volume by index"
+        echo "  harbor volumes clear <service>     - Remove all custom volumes for a service"
+        echo
+        echo "Examples:"
+        echo "  harbor volumes add ollama /data/models:/root/.ollama"
+        echo "  harbor volumes add ollama /certs/ca.pem:/etc/ssl/certs/ca.pem"
+        echo "  harbor volumes ls ollama"
+        echo "  harbor volumes rm ollama 0"
+        return 0
+        ;;
+    ls | list | "")
+        if [ -n "$2" ]; then
+            env_manager_arr "$2.volumes" ls
+        else
+            local found=false
+            local env_file="$harbor_home/.env"
+            grep "^HARBOR_.*_VOLUMES=" "$env_file" | while IFS='=' read -r key value; do
+                value="${value#\"}"
+                value="${value%\"}"
+                if [ -n "$value" ]; then
+                    found=true
+                    local svc_upper="${key#HARBOR_}"
+                    svc_upper="${svc_upper%_VOLUMES}"
+                    local svc_lower
+                    svc_lower=$(harbor_lower "$svc_upper" | tr '_' '-')
+                    echo "$svc_lower:"
+                    echo "$value" | tr ';' '\n' | while read -r vol; do
+                        echo "  $vol"
+                    done
+                fi
+            done
+            if ! grep "^HARBOR_.*_VOLUMES=" "$env_file" 2>/dev/null | grep -qvE '=""$|="$|=$'; then
+                log_info "No custom volumes configured"
+            fi
+        fi
+        ;;
+    add)
+        local service="$2"
+        local volume_spec="$3"
+        if [ -z "$service" ] || [ -z "$volume_spec" ]; then
+            echo "Usage: harbor volumes add <service> <source>:<dest>"
+            return 1
+        fi
+        env_manager_arr "$service.volumes" add "$volume_spec"
+        ;;
+    rm | remove)
+        local service="$2"
+        local index="$3"
+        if [ -z "$service" ]; then
+            echo "Usage: harbor volumes rm <service> <index>"
+            return 1
+        fi
+        env_manager_arr "$service.volumes" rm "$index"
+        ;;
+    clear)
+        local service="$2"
+        if [ -z "$service" ]; then
+            echo "Usage: harbor volumes clear <service>"
+            return 1
+        fi
+        env_manager_arr "$service.volumes" clear
+        ;;
+    *)
+        run_volumes_command --help
+        ;;
+    esac
+}
+
 main_entrypoint() {
     case "$1" in
     up | u | start | s)
@@ -7967,6 +7947,10 @@ main_entrypoint() {
     routine)
         shift
         run_routine "$@"
+        ;;
+    volumes)
+        shift
+        run_volumes_command "$@"
         ;;
     *)
         return $scramble_exit_code
