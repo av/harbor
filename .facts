@@ -202,6 +202,11 @@
   command: rg -q 'claude explicit non-Boost backend ignores running Boost' tests/suites/05-launch-smoke.sh && bash tests/suites/05-launch-smoke.sh
   tags: [spec, launch-claude-explicit-backend, implemented]
 
+## migrations
+- label: config migrations do not require the JSR package through routines/utils.ts
+  command: ! rg -q 'jsr:@std/fmt' routines/utils.ts && target=$(grep '^HARBOR_CONFIG_VERSION=' profiles/default.env | cut -d= -f2- | tr -d '"'); tmp_dir=$(mktemp -d); DENO_DIR="$tmp_dir" deno run --cached-only -A --unstable-sloppy-imports .scripts/migrate.ts --target "$target" --dry-run; status=$?; rm -rf "$tmp_dir"; exit $status
+  tags: [spec, fmt-migration, implemented]
+
 # services
 - label: compose.yml is the base layer, defining only the harbor-network
   command: grep -q 'harbor-network' compose.yml && ! grep -q 'services:' compose.yml

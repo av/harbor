@@ -1,6 +1,5 @@
 /// <reference lib="deno.ns" />
 
-import { gray, red, yellow } from "jsr:@std/fmt/colors";
 import process from "node:process";
 
 export const BUILTIN_CAPS = ["nvidia", "mdc", "cdi", "rocm", "build"];
@@ -17,6 +16,29 @@ type Logger = LogFn & {
   info: LogFn;
   warn: LogFn;
 };
+
+function color(open: number, close: number, text: string): string {
+  if (
+    process.env.NO_COLOR || process.env.DENO_NO_COLOR ||
+    process.env.TERM === "dumb"
+  ) {
+    return text;
+  }
+
+  return `\x1b[${open}m${text}\x1b[${close}m`;
+}
+
+function gray(text: string): string {
+  return color(90, 39, text);
+}
+
+function red(text: string): string {
+  return color(31, 39, text);
+}
+
+function yellow(text: string): string {
+  return color(33, 39, text);
+}
 
 export function errorToString(err: unknown): string {
   if (err instanceof Error) {
