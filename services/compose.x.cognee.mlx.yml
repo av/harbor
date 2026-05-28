@@ -1,0 +1,9 @@
+services:
+  cognee:
+    depends_on:
+      - mlx
+    environment:
+      - LLM_PROVIDER=openai
+      - LLM_API_KEY=sk-mlx
+      - LLM_MODEL=${HARBOR_MLX_MODEL}
+      - LLM_ENDPOINT=http://mlx:8080/v1

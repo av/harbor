@@ -1,0 +1,5 @@
+services:
+  astrbot:
+    environment:
+      # Configure in WebUI: http://dmr:8080/v1
+      - HARBOR_ASTRBOT_DMR_ENDPOINT=http://dmr:8080/v1

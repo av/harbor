@@ -1,0 +1,5 @@
+services:
+  plandex:
+    environment:
+      - OPENAI_API_KEY=sk-mlx
+      - OPENAI_API_BASE=http://mlx:8080/v1

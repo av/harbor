@@ -1,0 +1,10 @@
+services:
+  ml-intern:
+    depends_on:
+      - mlx
+    environment:
+      - ML_INTERN_MODEL=mlx/${HARBOR_MLX_MODEL}
+      - MLX_BASE_URL=http://mlx:8080/v1
+      - MLX_API_KEY=sk-mlx
+      - LOCAL_LLM_BASE_URL=http://mlx:8080/v1
+      - LOCAL_LLM_API_KEY=sk-mlx

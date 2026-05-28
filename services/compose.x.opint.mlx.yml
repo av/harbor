@@ -1,0 +1,7 @@
+services:
+  opint:
+    entrypoint: >
+      interpreter
+        --api_base http://mlx:8080/v1
+        --api_key sk-mlx
+        ${HARBOR_OPINT_CMD}

@@ -1,0 +1,5 @@
+services:
+  astrbot:
+    environment:
+      # Configure in WebUI: http://mlx:8080/v1
+      - HARBOR_ASTRBOT_MLX_ENDPOINT=http://mlx:8080/v1

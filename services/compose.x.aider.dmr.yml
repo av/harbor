@@ -1,0 +1,4 @@
+services:
+  aider:
+    volumes:
+      - ./services/aider/configs/aider.dmr.yml:/home/appuser/.aider/dmr.yml

@@ -1,0 +1,7 @@
+services:
+  sillytavern:
+    depends_on:
+      mlx:
+        condition: service_healthy
+    environment:
+      - SILLYTAVERN_MLX_URL=http://mlx:8080

@@ -1,0 +1,6 @@
+services:
+  hermes:
+    depends_on:
+      - mlx
+    environment:
+      - OPENAI_BASE_URL=http://mlx:8080/v1

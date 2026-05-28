@@ -1,0 +1,4 @@
+openai-api-base: http://dmr:8080/v1
+openai-api-key: sk-dmr
+model: openai/${HARBOR_AIDER_MODEL}
+verify-ssl: false

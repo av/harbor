@@ -1,0 +1,9 @@
+services:
+  mi:
+    depends_on:
+      dmr:
+        condition: service_healthy
+    environment:
+      - OPENAI_BASE_URL=http://dmr:8080
+      - OPENAI_API_KEY=sk-dmr
+      - MODEL=${HARBOR_DMR_MODEL}

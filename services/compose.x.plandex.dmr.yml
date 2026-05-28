@@ -1,0 +1,5 @@
+services:
+  plandex:
+    environment:
+      - OPENAI_API_KEY=sk-dmr
+      - OPENAI_API_BASE=http://dmr:8080/v1

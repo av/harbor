@@ -1,0 +1,7 @@
+services:
+  opint:
+    entrypoint: >
+      interpreter
+        --api_base http://dmr:8080/v1
+        --api_key sk-dmr
+        ${HARBOR_OPINT_CMD}

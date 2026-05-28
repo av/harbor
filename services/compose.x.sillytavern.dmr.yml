@@ -1,0 +1,7 @@
+services:
+  sillytavern:
+    depends_on:
+      dmr:
+        condition: service_healthy
+    environment:
+      - SILLYTAVERN_DMR_URL=http://dmr:8080

@@ -1,0 +1,9 @@
+services:
+  cognee:
+    depends_on:
+      - dmr
+    environment:
+      - LLM_PROVIDER=openai
+      - LLM_API_KEY=sk-dmr
+      - LLM_MODEL=${HARBOR_DMR_MODEL}
+      - LLM_ENDPOINT=http://dmr:8080/v1

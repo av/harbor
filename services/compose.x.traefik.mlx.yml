@@ -1,0 +1,12 @@
+services:
+  mlx:
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.mlx.rule=Host(`mlx.${HARBOR_TRAEFIK_DOMAIN}`)"
+      - "traefik.http.services.mlx.loadbalancer.server.port=8080"
+      - "traefik.http.routers.mlx.entrypoints=websecure"
+      - "traefik.http.routers.mlx.tls=true"
+      - "traefik.http.routers.mlx.service=mlx"
+
+    networks:
+      - traefik-public

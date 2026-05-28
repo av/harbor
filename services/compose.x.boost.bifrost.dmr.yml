@@ -1,0 +1,5 @@
+services:
+  boost:
+    depends_on:
+      bifrost-dmr-bootstrap:
+        condition: service_completed_successfully

@@ -1,0 +1,6 @@
+services:
+  hermes:
+    depends_on:
+      - dmr
+    environment:
+      - OPENAI_BASE_URL=http://dmr:8080/v1

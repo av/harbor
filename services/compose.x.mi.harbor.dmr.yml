@@ -1,0 +1,4 @@
+services:
+  mi:
+    environment:
+      - MODEL=${HARBOR_DMR_MODEL}

@@ -1,0 +1,9 @@
+services:
+  openterminal:
+    depends_on:
+      - mlx
+    environment:
+      - HARBOR_MLX_URL=http://mlx:8080
+      - HARBOR_MLX_OPENAI_URL=http://mlx:8080/v1
+      - HARBOR_MLX_API_KEY=sk-mlx
+      - HARBOR_MLX_MODEL=${HARBOR_MLX_MODEL}

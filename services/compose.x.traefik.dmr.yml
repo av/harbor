@@ -1,0 +1,12 @@
+services:
+  dmr:
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dmr.rule=Host(`dmr.${HARBOR_TRAEFIK_DOMAIN}`)"
+      - "traefik.http.services.dmr.loadbalancer.server.port=8080"
+      - "traefik.http.routers.dmr.entrypoints=websecure"
+      - "traefik.http.routers.dmr.tls=true"
+      - "traefik.http.routers.dmr.service=dmr"
+
+    networks:
+      - traefik-public

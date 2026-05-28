@@ -1,0 +1,9 @@
+services:
+  openterminal:
+    depends_on:
+      - dmr
+    environment:
+      - HARBOR_DMR_URL=http://dmr:8080
+      - HARBOR_DMR_OPENAI_URL=http://dmr:8080/v1
+      - HARBOR_DMR_API_KEY=sk-dmr
+      - HARBOR_DMR_MODEL=${HARBOR_DMR_MODEL}

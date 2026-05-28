@@ -1,0 +1,11 @@
+services:
+  open-design:
+    depends_on:
+      dmr:
+        condition: service_healthy
+    environment:
+      HARBOR_OPEN_DESIGN_DEFAULT_API_PROTOCOL: openai
+      HARBOR_OPEN_DESIGN_DEFAULT_BASE_URL: http://dmr:8080/v1
+      HARBOR_OPEN_DESIGN_DEFAULT_API_KEY: sk-dmr
+      HARBOR_OPEN_DESIGN_DEFAULT_MODEL: ${HARBOR_DMR_MODEL}
+      HARBOR_OPEN_DESIGN_DEFAULT_PROVIDER_BASE_URL: http://dmr:8080/v1
