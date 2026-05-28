@@ -11,7 +11,7 @@ services:
       - dify-db
       - dify-redis
     volumes:
-      - ${HARBOR_DIFY_VOLUMES}/app/storage:/app/api/storage
+      - ${HARBOR_DIFY_WORKSPACE}/app/storage:/app/api/storage
     networks:
       - harbor-network
 
@@ -27,7 +27,7 @@ services:
       - dify-db
       - dify-redis
     volumes:
-      - ${HARBOR_DIFY_VOLUMES}/app/storage:/app/api/storage
+      - ${HARBOR_DIFY_WORKSPACE}/app/storage:/app/api/storage
     networks:
       - harbor-network
 
@@ -47,7 +47,7 @@ services:
       - ./.env
       - ./services/dify/override.env
     volumes:
-      - ${HARBOR_DIFY_VOLUMES}/db/data:/var/lib/postgresql/data/pgdata
+      - ${HARBOR_DIFY_WORKSPACE}/db/data:/var/lib/postgresql/data/pgdata
     ports:
       - ${HARBOR_DIFY_DB_HOST_PORT}:5432
     healthcheck:
@@ -65,7 +65,7 @@ services:
       - ./.env
       - ./services/dify/override.env
     volumes:
-      - ${HARBOR_DIFY_VOLUMES}/redis/data:/data
+      - ${HARBOR_DIFY_WORKSPACE}/redis/data:/data
     command: redis-server --requirepass difyai123456
     healthcheck:
       test: [ "CMD", "redis-cli", "ping" ]
@@ -81,7 +81,7 @@ services:
       - ./.env
       - ./services/dify/override.env
     volumes:
-      - ${HARBOR_DIFY_VOLUMES}/sandbox/dependencies:/dependencies
+      - ${HARBOR_DIFY_WORKSPACE}/sandbox/dependencies:/dependencies
     networks:
       - harbor-network
 
@@ -111,10 +111,10 @@ services:
       - ./.env
       - ./services/dify/override.env
     volumes:
-      - ${HARBOR_DIFY_VOLUMES}/certbot/conf:/etc/letsencrypt
-      - ${HARBOR_DIFY_VOLUMES}/certbot/www:/var/www/html
-      - ${HARBOR_DIFY_VOLUMES}/certbot/logs:/var/log/letsencrypt
-      - ${HARBOR_DIFY_VOLUMES}/certbot/conf/live:/etc/letsencrypt/live
+      - ${HARBOR_DIFY_WORKSPACE}/certbot/conf:/etc/letsencrypt
+      - ${HARBOR_DIFY_WORKSPACE}/certbot/www:/var/www/html
+      - ${HARBOR_DIFY_WORKSPACE}/certbot/logs:/var/log/letsencrypt
+      - ${HARBOR_DIFY_WORKSPACE}/certbot/conf/live:/etc/letsencrypt/live
       - ./services/dify/certbot/update-cert.template.txt:/update-cert.template.txt
       - ./services/dify/certbot/docker-entrypoint.sh:/docker-entrypoint.sh
     entrypoint: [ "/docker-entrypoint.sh" ]
@@ -132,9 +132,9 @@ services:
       - ./services/dify/nginx/conf.d:/etc/nginx/conf.d
       - ./services/dify/nginx/docker-entrypoint.sh:/docker-entrypoint-mount.sh
       - ./services/dify/nginx/ssl:/etc/ssl
-      - ${HARBOR_DIFY_VOLUMES}/certbot/conf/live:/etc/letsencrypt/live
-      - ${HARBOR_DIFY_VOLUMES}/certbot/conf:/etc/letsencrypt
-      - ${HARBOR_DIFY_VOLUMES}/certbot/www:/var/www/html
+      - ${HARBOR_DIFY_WORKSPACE}/certbot/conf/live:/etc/letsencrypt/live
+      - ${HARBOR_DIFY_WORKSPACE}/certbot/conf:/etc/letsencrypt
+      - ${HARBOR_DIFY_WORKSPACE}/certbot/www:/var/www/html
     entrypoint: [ "sh", "-c", "cp /docker-entrypoint-mount.sh /docker-entrypoint.sh && sed -i 's/\r$$//' /docker-entrypoint.sh && chmod +x /docker-entrypoint.sh && /docker-entrypoint.sh" ]
     env_file:
       - ./.env
@@ -151,7 +151,7 @@ services:
     image: semitechnologies/weaviate:${HARBOR_DIFY_WEAVIATE_VERSION}
     container_name: ${HARBOR_CONTAINER_PREFIX}.dify-weaviate
     volumes:
-      - ${HARBOR_DIFY_VOLUMES}/weaviate:/var/lib/weaviate
+      - ${HARBOR_DIFY_WORKSPACE}/weaviate:/var/lib/weaviate
     env_file:
       - ./.env
       - ./services/dify/override.env

@@ -1,6 +1,6 @@
 services:
   ollama:
-    image: ollama/ollama:${HARBOR_OLLAMA_VERSION}
+    image: ${HARBOR_OLLAMA_IMAGE}:${HARBOR_OLLAMA_VERSION}
     container_name: ${HARBOR_CONTAINER_PREFIX}.ollama
     env_file:
       - ./.env
@@ -30,7 +30,7 @@ services:
     depends_on:
       ollama:
         condition: service_healthy
-    image: ollama/ollama:${HARBOR_OLLAMA_VERSION}
+    image: ${HARBOR_OLLAMA_IMAGE}:${HARBOR_OLLAMA_VERSION}
     env_file:
       - ./.env
       - ./services/ollama/override.env

@@ -3,10 +3,10 @@ services:
     devices:
       - /dev/kfd
       - /dev/dri
-    image: ollama/ollama:rocm
+    image: ${HARBOR_OLLAMA_IMAGE}:rocm
 
   ollama-init:
     devices:
       - /dev/kfd
       - /dev/dri
-    image: ollama/ollama:rocm
+    image: ${HARBOR_OLLAMA_IMAGE}:rocm

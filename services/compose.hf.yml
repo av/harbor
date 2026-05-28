@@ -9,6 +9,9 @@ services:
       - ./services/hf/override.env
     volumes:
       - ${HARBOR_HF_CACHE:-./services/hf/.hf-cache}:/root/.cache/huggingface
+      - ${HARBOR_HF_SSL_CERT_FILE:-/dev/null}:/etc/ssl/certs/custom-ca.pem:ro
     environment:
       - HF_TOKEN=${HARBOR_HF_TOKEN}
+      - SSL_CERT_FILE=${HARBOR_HF_SSL_CERT_FILE:+/etc/ssl/certs/custom-ca.pem}
+      - REQUESTS_CA_BUNDLE=${HARBOR_HF_SSL_CERT_FILE:+/etc/ssl/certs/custom-ca.pem}
     network_mode: host

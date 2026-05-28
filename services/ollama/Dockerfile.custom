@@ -1,0 +1,5 @@
+ARG BASE_IMAGE=ollama/ollama:latest
+FROM ${BASE_IMAGE}
+
+COPY netskope-ca-bundle.pem /usr/local/share/ca-certificates/netskope-ca-bundle.crt
+RUN update-ca-certificates
