@@ -12,7 +12,6 @@ suite_log() { echo "[launch-smoke] $*"; }
 fail() { echo "[launch-smoke] FAIL: $*" >&2; exit 1; }
 
 HARBOR_TEST_REPO="${HARBOR_TEST_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
-HARBOR_BIN="${HARBOR_BIN:-${HARBOR_TEST_REPO}/harbor.sh}"
 launch_repo_slug="$(printf '%s' "$HARBOR_TEST_REPO" | sed 's#[^A-Za-z0-9._-]#-#g; s#--*#-#g; s#^-##; s#-$##')"
 
 tmp_dir="$(mktemp -d -t harbor-launch-smoke.XXXXXX)"
@@ -286,8 +285,8 @@ run_launch() {
     HARBOR_LAUNCH_OPENCLAW_CONFIG="$openclaw_config" \
     HARBOR_LAUNCH_PI_MODELS_CONFIG="$pi_models_config" \
     HARBOR_LAUNCH_PI_SETTINGS_CONFIG="$pi_settings_config" \
-    PATH="$fake_bin:/usr/bin:/bin" \
-    "$HARBOR_BIN" launch "$@" >"$step_out" 2>&1; then
+    PATH="$fake_bin:$PATH" \
+    harbor launch "$@" >"$step_out" 2>&1; then
     cat "$step_out" >&2
     fail "$name exited non-zero"
   fi
@@ -312,8 +311,8 @@ run_parallel_history_smoke() {
     HARBOR_LEGACY_CLI=true \
     HARBOR_CAPABILITIES_AUTODETECT=false \
     HARBOR_HOME="$harbor_home" \
-    PATH="$fake_bin:/usr/bin:/bin" \
-    "$HARBOR_BIN" config set history.size 1 >>"$parallel_out" 2>&1; then
+    PATH="$fake_bin:$PATH" \
+    harbor config set history.size 1 >>"$parallel_out" 2>&1; then
     cat "$parallel_out" >&2
     fail "could not lower temporary history size"
   fi
@@ -329,8 +328,8 @@ run_parallel_history_smoke() {
       HARBOR_HOME="$harbor_home" \
       HARBOR_FAKE_RUNNING_SERVICES="ollama" \
       HARBOR_FAKE_MODELS_SCHEMA="openai-mixed" \
-      PATH="$fake_bin:/usr/bin:/bin" \
-      "$HARBOR_BIN" launch --backend ollama --model "race-$i" --config codex >>"$parallel_out" 2>&1 &
+      PATH="$fake_bin:$PATH" \
+      harbor launch --backend ollama --model "race-$i" --config codex >>"$parallel_out" 2>&1 &
     pids+=("$!")
   done
 
@@ -394,6 +393,8 @@ assert_file_json() {
     fail "$path did not satisfy jq filter: $filter"
   fi
 }
+
+cd "$HARBOR_TEST_REPO"
 
 run_launch "codex uses OpenAI data[] model id and passes Codex provider config" \
   "ollama" "openai-mixed" \
@@ -582,8 +583,8 @@ if ! env \
   HARBOR_LAUNCH_TOOL_LOG="$tool_log" \
   HARBOR_LAUNCH_PI_MODELS_CONFIG="$pi_models_config" \
   HARBOR_LAUNCH_PI_SETTINGS_CONFIG="$pi_settings_config" \
-  PATH="$fake_bin:/usr/bin:/bin" \
-  bash -c 'cd "$1" && "$2" launch --backend ollama --model qwen-chat-model pi -p hello' bash "$launch_workspace" "$HARBOR_BIN" >"$step_out" 2>&1; then
+  PATH="$fake_bin:$PATH" \
+  bash -c 'cd "$1" && harbor launch --backend ollama --model qwen-chat-model pi -p hello' bash "$launch_workspace" >"$step_out" 2>&1; then
   cat "$step_out" >&2
   fail "pi non-Harbor caller workspace launch exited non-zero"
 fi

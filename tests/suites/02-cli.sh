@@ -178,7 +178,7 @@ fi
 
 suite_log "launch opencode missing host tool suggests service mode"
 : >"$fake_docker_log"
-if HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false HARBOR_FAKE_DOCKER_LOG="$fake_docker_log" PATH="$fake_bin:/usr/bin:/bin" ./harbor.sh launch --backend ollama --model test-model opencode >/tmp/cli-step.out 2>&1; then
+if HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false HARBOR_FAKE_DOCKER_LOG="$fake_docker_log" PATH="$fake_bin:$PATH" harbor launch --backend ollama --model test-model opencode >/tmp/cli-step.out 2>&1; then
   cat /tmp/cli-step.out >&2
   fail "launch opencode missing host tool unexpectedly succeeded"
 fi
@@ -199,7 +199,7 @@ fi
 
 suite_log "launch promptfoo propagates startup failure"
 : >"$fake_docker_log"
-if HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false HARBOR_FAKE_DOCKER_LOG="$fake_docker_log" HARBOR_FAKE_PROMPTFOO_UP_EXIT=42 PATH="$fake_bin:$PATH" ./harbor.sh launch promptfoo --version >/tmp/cli-step.out 2>&1; then
+if HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false HARBOR_FAKE_DOCKER_LOG="$fake_docker_log" HARBOR_FAKE_PROMPTFOO_UP_EXIT=42 PATH="$fake_bin:$PATH" harbor launch promptfoo --version >/tmp/cli-step.out 2>&1; then
   cat /tmp/cli-step.out >&2
   fail "launch promptfoo startup failure unexpectedly succeeded"
 fi
@@ -210,7 +210,7 @@ fi
 
 suite_log "launch promptfoo uses noninteractive run flag and propagates CLI failure"
 : >"$fake_docker_log"
-if HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false HARBOR_FAKE_DOCKER_LOG="$fake_docker_log" HARBOR_FAKE_PROMPTFOO_RUN_EXIT=43 PATH="$fake_bin:$PATH" ./harbor.sh launch promptfoo --version >/tmp/cli-step.out 2>&1; then
+if HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false HARBOR_FAKE_DOCKER_LOG="$fake_docker_log" HARBOR_FAKE_PROMPTFOO_RUN_EXIT=43 PATH="$fake_bin:$PATH" harbor launch promptfoo --version >/tmp/cli-step.out 2>&1; then
   cat /tmp/cli-step.out >&2
   fail "launch promptfoo CLI failure unexpectedly succeeded"
 fi
@@ -319,7 +319,7 @@ assert_launch_missing_option() {
 
   suite_log "$name"
   : >"$launch_fake_docker_state"
-  if HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false HARBOR_FAKE_RUNNING_SERVICES=ollama HARBOR_FAKE_DOCKER_STATE="$launch_fake_docker_state" PATH="$launch_fake_bin:/usr/bin:/bin" ./harbor.sh launch "$@" >/tmp/cli-step.out 2>&1; then
+  if HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false HARBOR_FAKE_RUNNING_SERVICES=ollama HARBOR_FAKE_DOCKER_STATE="$launch_fake_docker_state" PATH="$launch_fake_bin:$PATH" harbor launch "$@" >/tmp/cli-step.out 2>&1; then
     cat /tmp/cli-step.out >&2
     fail "$name unexpectedly succeeded"
   fi
@@ -338,7 +338,7 @@ assert_launch_missing_option "launch --model rejects option as value" "Usage: ha
 assert_launch_missing_option "launch --model= rejects empty inline value" "Usage: harbor launch --model <value> <tool> [args]" --model= --backend ollama codex
 
 suite_log "launch --time is not a launch option"
-if HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false HARBOR_FAKE_RUNNING_SERVICES=ollama HARBOR_FAKE_DOCKER_STATE="$launch_fake_docker_state" PATH="$launch_fake_bin:/usr/bin:/bin" ./harbor.sh launch --time codex >/tmp/cli-step.out 2>&1; then
+if HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false HARBOR_FAKE_RUNNING_SERVICES=ollama HARBOR_FAKE_DOCKER_STATE="$launch_fake_docker_state" PATH="$launch_fake_bin:$PATH" harbor launch --time codex >/tmp/cli-step.out 2>&1; then
   cat /tmp/cli-step.out >&2
   fail "launch --time unexpectedly succeeded"
 fi
@@ -349,7 +349,7 @@ fi
 
 suite_log "launch codex starts llamacpp when no backend is running"
 : >"$launch_fake_docker_state"
-if ! HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false HARBOR_FAKE_RUNNING_SERVICES=webui HARBOR_FAKE_DOCKER_STATE="$launch_fake_docker_state" PATH="$launch_fake_bin:/usr/bin:/bin" ./harbor.sh launch --config codex >/tmp/cli-step.out 2>&1; then
+if ! HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false HARBOR_FAKE_RUNNING_SERVICES=webui HARBOR_FAKE_DOCKER_STATE="$launch_fake_docker_state" PATH="$launch_fake_bin:$PATH" harbor launch --config codex >/tmp/cli-step.out 2>&1; then
   cat /tmp/cli-step.out >&2
   fail "launch codex without running backend did not start llamacpp"
 fi
@@ -360,7 +360,7 @@ fi
 
 suite_log "launch codex starts explicit backend when missing"
 : >"$launch_fake_docker_state"
-if ! HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false HARBOR_FAKE_RUNNING_SERVICES=webui HARBOR_FAKE_DOCKER_STATE="$launch_fake_docker_state" PATH="$launch_fake_bin:/usr/bin:/bin" ./harbor.sh launch --backend ollama --config codex >/tmp/cli-step.out 2>&1; then
+if ! HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false HARBOR_FAKE_RUNNING_SERVICES=webui HARBOR_FAKE_DOCKER_STATE="$launch_fake_docker_state" PATH="$launch_fake_bin:$PATH" harbor launch --backend ollama --config codex >/tmp/cli-step.out 2>&1; then
   cat /tmp/cli-step.out >&2
   fail "launch codex with stopped explicit backend did not start it"
 fi
@@ -370,7 +370,7 @@ if ! grep -Eq -- "Backend 'ollama' is not running; starting it" /tmp/cli-step.ou
 fi
 
 suite_log "launch codex reports explicit backend unreachable"
-if HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false HARBOR_FAKE_RUNNING_SERVICES=ollama HARBOR_FAKE_CURL_MODE=fail PATH="$launch_fake_bin:/usr/bin:/bin" ./harbor.sh launch --backend ollama --model test-model --config codex >/tmp/cli-step.out 2>&1; then
+if HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false HARBOR_FAKE_RUNNING_SERVICES=ollama HARBOR_FAKE_CURL_MODE=fail PATH="$launch_fake_bin:$PATH" harbor launch --backend ollama --model test-model --config codex >/tmp/cli-step.out 2>&1; then
   cat /tmp/cli-step.out >&2
   fail "launch codex with unreachable explicit backend unexpectedly succeeded"
 fi
@@ -380,7 +380,7 @@ if ! grep -Eq -- "Backend 'ollama' is running, but its OpenAI-compatible endpoin
 fi
 
 suite_log "launch codex reports empty /v1/models"
-if HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false HARBOR_FAKE_RUNNING_SERVICES=unsloth-studio HARBOR_FAKE_CURL_MODE=empty PATH="$launch_fake_bin:/usr/bin:/bin" ./harbor.sh launch --backend unsloth-studio --config codex >/tmp/cli-step.out 2>&1; then
+if HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false HARBOR_FAKE_RUNNING_SERVICES=unsloth-studio HARBOR_FAKE_CURL_MODE=empty PATH="$launch_fake_bin:$PATH" harbor launch --backend unsloth-studio --config codex >/tmp/cli-step.out 2>&1; then
   cat /tmp/cli-step.out >&2
   fail "launch codex with empty models unexpectedly succeeded"
 fi
@@ -390,7 +390,7 @@ if ! grep -Eq -- "did not advertise any models" /tmp/cli-step.out || ! grep -Eq 
 fi
 
 suite_log "launch codex reports invalid /v1/models"
-if HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false HARBOR_FAKE_RUNNING_SERVICES=unsloth-studio HARBOR_FAKE_CURL_MODE=invalid PATH="$launch_fake_bin:/usr/bin:/bin" ./harbor.sh launch --backend unsloth-studio --config codex >/tmp/cli-step.out 2>&1; then
+if HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false HARBOR_FAKE_RUNNING_SERVICES=unsloth-studio HARBOR_FAKE_CURL_MODE=invalid PATH="$launch_fake_bin:$PATH" harbor launch --backend unsloth-studio --config codex >/tmp/cli-step.out 2>&1; then
   cat /tmp/cli-step.out >&2
   fail "launch codex with invalid models unexpectedly succeeded"
 fi
@@ -401,7 +401,7 @@ fi
 
 suite_log "launch codex --model skips model discovery"
 : >"$launch_fake_curl_log"
-assert_ok "launch codex --model skips model discovery" env HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false HARBOR_FAKE_RUNNING_SERVICES=ollama HARBOR_FAKE_CURL_MODE=invalid HARBOR_FAKE_CURL_LOG="$launch_fake_curl_log" PATH="$launch_fake_bin:/usr/bin:/bin" ./harbor.sh launch --backend ollama --model explicit-model --config codex
+assert_ok "launch codex --model skips model discovery" env HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false HARBOR_FAKE_RUNNING_SERVICES=ollama HARBOR_FAKE_CURL_MODE=invalid HARBOR_FAKE_CURL_LOG="$launch_fake_curl_log" PATH="$launch_fake_bin:$PATH" harbor launch --backend ollama --model explicit-model --config codex
 if ! grep -Eq -- '^model=explicit-model$' /tmp/cli-step.out; then
   cat /tmp/cli-step.out >&2
   fail "launch codex --model did not use the explicit model"
