@@ -2412,7 +2412,7 @@ link_cli() {
     fi
 
     # Create symlink
-    if ln -s "$script_path" "$target_dir/$script_name"; then
+    if ln -sf "$script_path" "$target_dir/$script_name"; then
         log_info "Symlink created: $target_dir/$script_name -> $script_path"
     else
         log_warn "Failed to create symlink. Please check permissions and try again."
@@ -2421,7 +2421,7 @@ link_cli() {
 
     # Create short symlink if "--short" flag is present
     if $create_short_link; then
-        if ln -s "$script_path" "$target_dir/$short_name"; then
+        if ln -sf "$script_path" "$target_dir/$short_name"; then
             log_info "Short symlink created: $target_dir/$short_name -> $script_path"
         else
             log_warn "Failed to create short symlink. Please check permissions and try again."
