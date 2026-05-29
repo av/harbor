@@ -162,14 +162,14 @@ pacman_install() {
 
     if [ ${#missing[@]} -gt 0 ]; then
         log_info "Installing missing tools via pacman: ${missing[*]}"
-        sudo pacman -Sy --noconfirm "${missing[@]}"
+        sudo pacman -S --noconfirm --needed "${missing[@]}"
     else
         log_info "git and curl are already installed"
     fi
 
     if ! check_command docker || ! docker compose version >/dev/null 2>&1; then
         log_info "Installing Docker Engine and Docker Compose plugin via pacman"
-        sudo pacman -Sy --noconfirm docker docker-compose
+        sudo pacman -S --noconfirm --needed docker docker-compose
     else
         log_info "Docker and Docker Compose plugin are already installed"
     fi
@@ -349,6 +349,11 @@ verify_docker_access() {
         log_error "Run: sudo ${add_user_cmd}"
         log_error "Then log out and log back in (or run: newgrp docker)."
     else
+        if [ "$PLATFORM" = "macos" ]; then
+            log_warn "Docker daemon is not running"
+            log_warn "Start Docker Desktop (or an alternative like OrbStack) before using Harbor services"
+            return 0
+        fi
         log_error "Docker daemon is not running or not reachable"
         if [ "$IS_WSL" = true ]; then
             log_error "In WSL, start Docker Desktop and enable WSL integration for this distro."
