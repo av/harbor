@@ -31,7 +31,7 @@ case "$HARBOR_TEST_INSTALL_SOURCE" in
   github)
     suite_log "source=github (curl https://.../install.sh)"
     curl -fsSL https://raw.githubusercontent.com/av/harbor/refs/heads/main/install.sh \
-      | bash -s -- --install-requirements
+      | bash
     ;;
   *)
     echo "[install] ERROR: unknown HARBOR_TEST_INSTALL_SOURCE='${HARBOR_TEST_INSTALL_SOURCE}'" >&2

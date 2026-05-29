@@ -22,7 +22,7 @@ codex "$(curl -fsSL https://raw.githubusercontent.com/av/harbor/refs/heads/main/
 
 - [ ] Detect the operating system and shell environment
 - [ ] Decide whether Harbor's installer should also install optional system requirements
-- [ ] Run `install.sh`, using `--install-requirements` when dependencies are missing or requested
+- [ ] Run `install.sh` (dependencies are installed by default; pass `--skip-requirements` only if the user explicitly asks to skip)
 - [ ] Refresh shell or Docker group membership if the installer asks for it
 - [ ] Verify `harbor --version` and `harbor doctor`
 - [ ] Optionally configure GPU container support when NVIDIA or AMD hardware is present
@@ -43,25 +43,25 @@ HARBOR_REQUIREMENTS_URL="https://raw.githubusercontent.com/av/harbor/refs/heads/
 
 ## Run Installer
 
-If dependencies are missing, Docker access is broken, or the user asked to install optional requirements, run:
-
-```bash
-curl -fsSL "$HARBOR_INSTALL_URL" | bash -s -- --install-requirements
-```
-
-Otherwise run:
+Run:
 
 ```bash
 curl -fsSL "$HARBOR_INSTALL_URL" | bash
 ```
 
+The installer installs dependencies by default. To skip dependency installation (only when all prerequisites are confirmed present), run:
+
+```bash
+curl -fsSL "$HARBOR_INSTALL_URL" | bash -s -- --skip-requirements
+```
+
 The installer is expected to:
 
+- install system dependencies (git, curl, Docker, Docker Compose) via the platform's package manager
 - install or update Harbor in `~/.harbor`
 - resolve the latest GitHub release tag
 - check out that release
 - link the `harbor` command into the user's PATH
-- run `harbor doctor` after requirement installation when `--install-requirements` is used
 
 Then continue with [Verify](#verify).
 
@@ -87,9 +87,9 @@ If this is Windows without WSL2, stop and tell the user to install and enter WSL
 
 ## Dependency Orchestration
 
-Harbor's installer can call the optional requirements installer when invoked with `--install-requirements`. The requirements installer installs or checks Git, curl, Docker, Docker Compose v2, and Docker access. It supports macOS with Homebrew and Linux distributions using apt, dnf, pacman, or apk.
+Harbor's installer runs the requirements installer by default. The requirements installer installs or checks Git, curl, Docker, Docker Compose v2, and Docker access. It supports macOS with Homebrew and Linux distributions using apt, dnf, pacman, or apk.
 
-Prefer `install.sh --install-requirements` over calling `requirements.sh` directly. Call `requirements.sh` directly only when diagnosing a dependency failure separately from Harbor installation:
+Prefer `install.sh` (which runs requirements automatically) over calling `requirements.sh` directly. Call `requirements.sh` directly only when diagnosing a dependency failure separately from Harbor installation:
 
 ```bash
 curl -fsSL "$HARBOR_REQUIREMENTS_URL" | bash
@@ -109,7 +109,7 @@ docker info
 
 ## Optional Preflight Checks
 
-These checks help decide whether to pass `--install-requirements`. Do not stop just because a required dependency is missing; rerun the Harbor installer with `--install-requirements`.
+These checks are optional since the installer handles dependencies by default. If a required dependency is missing and you skipped requirements, rerun the installer without `--skip-requirements`.
 
 ```bash
 git --version
