@@ -1,0 +1,26 @@
+services:
+  bifrost-omlx-bootstrap:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.bifrost-omlx-bootstrap
+    image: ${HARBOR_BIFROST_BOOTSTRAP_IMAGE}:${HARBOR_BIFROST_BOOTSTRAP_VERSION}
+    env_file:
+      - ./.env
+      - ./services/bifrost/override.env
+    environment:
+      BIFROST_URL: http://bifrost:${HARBOR_BIFROST_APP_PORT}
+      BIFROST_PROVIDER: omlx
+      BIFROST_PROVIDER_KIND: custom-openai
+      BIFROST_PROVIDER_BASE_URL: ${HARBOR_BIFROST_OMLX_BASE_URL}
+      BIFROST_PROVIDER_KEY: ${HARBOR_BIFROST_OMLX_API_KEY}
+      BIFROST_KEY_ID: harbor-omlx
+      BIFROST_KEY_NAME: Harbor oMLX
+      BIFROST_MODELS: ${HARBOR_BIFROST_OMLX_MODELS}
+    entrypoint: ["/bin/sh", "/usr/local/bin/bootstrap-provider.sh"]
+    volumes:
+      - ./services/bifrost/bootstrap-provider.sh:/usr/local/bin/bootstrap-provider.sh:ro
+    depends_on:
+      bifrost:
+        condition: service_healthy
+      omlx:
+        condition: service_healthy
+    networks:
+      - harbor-network

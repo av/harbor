@@ -1,0 +1,7 @@
+services:
+  sillytavern:
+    depends_on:
+      omlx:
+        condition: service_healthy
+    environment:
+      - SILLYTAVERN_OMLX_URL=http://omlx:8080

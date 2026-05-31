@@ -1,0 +1,6 @@
+services:
+  cmdh:
+    environment:
+      - LLM_HOST=OpenAI
+      - OPENAI_API_KEY=sk-omlx
+      - OPENAI_BASE_URL=http://omlx:8080/v1

@@ -1,0 +1,8 @@
+envVars:
+  MODELS:
+    - name: omlx
+      id: omlx
+      endpoints:
+        - type: openai
+          baseURL: http://omlx:8080/v1
+          apiKey: sk-omlx

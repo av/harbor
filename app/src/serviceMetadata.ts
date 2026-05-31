@@ -340,10 +340,10 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
     perplexica: {
         name: 'Perplexica',
         tags: [HST.satellite, HST.rag],
-        projectUrl: 'https://github.com/ItzCrazyKns/Perplexica',
+        projectUrl: 'https://github.com/ItzCrazyKns/Vane',
         logo: 'https://github.com/ItzCrazyKns.png?size=200',
         wikiUrl: `${wikiUrl}/2.3.2-Satellite:-Perplexica`,
-        tooltip: 'An AI-powered search engine. It is an Open source alternative to Perplexity AI.',
+        tooltip: 'An AI-powered search engine (project evolved into Vane). Open source alternative to Perplexity AI.',
     },
     perplexideez: {
         name: 'perplexideez',
@@ -388,8 +388,8 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
     speaches: {
         name: 'Speaches',
         tags: [HST.backend, HST.audio],
-        projectUrl: 'https://github.com/fedirz/faster-whisper-server',
-        logo: 'https://github.com/fedirz.png?size=200',
+        projectUrl: 'https://github.com/speaches-ai/speaches',
+        logo: 'https://github.com/speaches-ai.png?size=200',
         wikiUrl: `${wikiUrl}/2.2.14-Backend:-Speaches`,
         tooltip: 'an OpenAI API-compatible speech server (formerly `faster-whisper-server`), both TTS and STT',
     },
@@ -709,10 +709,10 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
     localai: {
         name: 'LocalAI',
         tags: [HST.satellite, HST.image],
-        projectUrl: 'https://github.com/go-skynet/LocalAI',
-        logo: 'https://github.com/go-skynet.png?size=200',
+        projectUrl: 'https://github.com/mudler/LocalAI',
+        logo: 'https://github.com/mudler.png?size=200',
         wikiUrl: `${wikiUrl}/2.3.46-Satellite-LocalAI`,
-        tooltip: 'Complete AI stack for running AI models locally. Allows downloading variety of LLMs, TTS/STT/Image models and running thme locally via Web UI.',
+        tooltip: 'Complete AI stack for running AI models locally. Allows downloading variety of LLMs, TTS/STT/Image models and running them locally via Web UI.',
     },
     agentzero: {
         name: 'Agent Zero',
@@ -725,7 +725,7 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
     modularmax: {
         name: 'Modular MAX',
         tags: [HST.backend],
-        projectUrl: 'https://github.com/modular/max',
+        projectUrl: 'https://github.com/modular/modular',
         logo: 'https://github.com/modular.png?size=200',
         wikiUrl: `${wikiUrl}/2.2.17-Backend-Modular-MAX`,
         tooltip: 'MAX is a platform from Modular (creators of Mojo) for running LLMs.'
@@ -1048,6 +1048,14 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         logo: 'https://github.com/ml-explore.png?size=200',
         wikiUrl: `${wikiUrl}/2.2.23-Backend-MLX`,
         tooltip: 'Host-native Apple Silicon MLX inference managed by Harbor through an OpenAI-compatible proxy.',
+    },
+    omlx: {
+        name: 'oMLX',
+        tags: [HST.backend, HST.api],
+        projectUrl: 'https://github.com/jundot/omlx',
+        logo: 'https://github.com/jundot.png?size=200',
+        wikiUrl: `${wikiUrl}/2.2.24-Backend-oMLX`,
+        tooltip: 'Host-native Apple Silicon oMLX inference with continuous batching, SSD KV cache, and OpenAI-compatible Harbor integrations.',
     },
     facts: {
         name: 'facts',

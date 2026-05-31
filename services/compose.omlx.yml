@@ -1,0 +1,21 @@
+services:
+  omlx:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.omlx
+    image: ${HARBOR_OMLX_IMAGE}:${HARBOR_OMLX_VERSION}
+    env_file:
+      - ./.env
+      - ./services/omlx/override.env
+    ports:
+      - ${HARBOR_OMLX_HOST_PORT}:8080
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./services/omlx/Caddyfile:/etc/caddy/Caddyfile:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    networks:
+      - harbor-network

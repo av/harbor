@@ -1,0 +1,6 @@
+services:
+  hermes:
+    depends_on:
+      - omlx
+    environment:
+      - OPENAI_BASE_URL=http://omlx:8080/v1

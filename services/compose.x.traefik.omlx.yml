@@ -1,0 +1,12 @@
+services:
+  omlx:
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.omlx.rule=Host(`omlx.${HARBOR_TRAEFIK_DOMAIN}`)"
+      - "traefik.http.services.omlx.loadbalancer.server.port=8080"
+      - "traefik.http.routers.omlx.entrypoints=websecure"
+      - "traefik.http.routers.omlx.tls=true"
+      - "traefik.http.routers.omlx.service=omlx"
+
+    networks:
+      - traefik-public

@@ -1,0 +1,9 @@
+services:
+  cognee:
+    depends_on:
+      - omlx
+    environment:
+      - LLM_PROVIDER=openai
+      - LLM_API_KEY=sk-omlx
+      - LLM_MODEL=${HARBOR_OMLX_MODEL}
+      - LLM_ENDPOINT=http://omlx:8080/v1

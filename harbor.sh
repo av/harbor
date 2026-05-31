@@ -49,6 +49,7 @@ show_help() {
     echo "  vllm      - Configure VLLM service"
     echo "  dmr       - Configure Docker Model Runner backend"
     echo "  mlx       - Configure host MLX backend"
+    echo "  omlx      - Configure host oMLX backend"
     echo "  aphrodite - Configure Aphrodite service"
     echo "  tabbyapi  - Configure TabbyAPI service"
     echo "  mistralrs - Configure mistral.rs service"
@@ -102,7 +103,7 @@ show_help() {
     echo "    hf find <query> - Open HF Hub with a query (trending by default)"
     echo "    hf path <spec>  - Print a folder in HF cache for a given model spec"
     echo "    hf *            - Anything else is passed to the official Hugging Face CLI"
-    echo "  models            - Manage models across Ollama, HuggingFace, llama.cpp, DMR, and MLX"
+    echo "  models            - Manage models across Ollama, HuggingFace, llama.cpp, DMR, MLX, and oMLX"
     echo "  k6                - Run K6 CLI"
     echo
     echo "Harbor CLI Commands:"
@@ -703,6 +704,9 @@ run_up() {
         mlx)
             run_mlx_command start
             ;;
+        omlx)
+            run_omlx_command start
+            ;;
         esac
     done
 
@@ -752,6 +756,7 @@ run_down() {
     local requested_services=()
     local stop_dmr=false
     local stop_mlx=false
+    local stop_omlx=false
 
     log_debug "Active services: $services"
 
@@ -767,6 +772,10 @@ run_down() {
             stop_mlx=true
             requested_services+=("$service")
             ;;
+        omlx)
+            stop_omlx=true
+            requested_services+=("$service")
+            ;;
         *)
             requested_services+=("$service")
             ;;
@@ -779,6 +788,9 @@ run_down() {
         fi
         if echo "$services" | grep -q '\bmlx\b'; then
             stop_mlx=true
+        fi
+        if echo "$services" | grep -q '\bomlx\b'; then
+            stop_omlx=true
         fi
     fi
 
@@ -807,6 +819,9 @@ run_down() {
 
     if $stop_mlx; then
         run_mlx_command stop || true
+    fi
+    if $stop_omlx; then
+        run_omlx_command stop || true
     fi
     if $stop_dmr; then
         run_dmr_command stop || true
@@ -1033,7 +1048,7 @@ run_run() {
 
 launch_backend_is_supported() {
     case "$1" in
-    ollama | llamacpp | ikllamacpp | vllm | dmr | mlx | tabbyapi | mistralrs | sglang | lmdeploy | aphrodite | ktransformers | unsloth-studio)
+    ollama | llamacpp | ikllamacpp | vllm | dmr | mlx | omlx | tabbyapi | mistralrs | sglang | lmdeploy | aphrodite | ktransformers | unsloth-studio)
         return 0
         ;;
     *)
@@ -1061,6 +1076,9 @@ launch_backend_model_key() {
         ;;
     mlx)
         echo "mlx.model"
+        ;;
+    omlx)
+        echo "omlx.model"
         ;;
     tabbyapi)
         echo "tabbyapi.model"
@@ -1123,11 +1141,11 @@ launch_start_services() {
     fi
 
     log_info "Starting services: $*"
-    $(compose_with_options --no-defaults "$@") up -d --wait "$@"
+    run_up --no-defaults "$@"
 }
 
 launch_supported_backends() {
-    echo "ollama llamacpp ikllamacpp vllm dmr mlx tabbyapi mistralrs sglang lmdeploy aphrodite ktransformers unsloth-studio"
+    echo "ollama llamacpp ikllamacpp vllm dmr mlx omlx tabbyapi mistralrs sglang lmdeploy aphrodite ktransformers unsloth-studio"
 }
 
 launch_supported_host_tools() {
@@ -4935,7 +4953,7 @@ run_hf_command() {
 }
 
 show_models_help() {
-    echo "Manage models across Ollama, HuggingFace, llama.cpp, DMR, and MLX"
+    echo "Manage models across Ollama, HuggingFace, llama.cpp, DMR, MLX, and oMLX"
     echo ""
     echo "Usage: harbor models <command> [options]"
     echo ""
@@ -4945,7 +4963,7 @@ show_models_help() {
     echo "  rm [--source SOURCE] <model>   Remove a model"
     echo "  <source> <command> ...         Alias for --source SOURCE"
     echo ""
-    echo "Sources: ollama, hf, llamacpp, dmr, mlx"
+    echo "Sources: ollama, hf, llamacpp, dmr, mlx, omlx"
     echo ""
     echo "Examples:"
     echo "  harbor models ls"
@@ -4953,7 +4971,8 @@ show_models_help() {
     echo "  harbor models ls --json"
     echo "  harbor models pull qwen3:8b"
     echo "  harbor models pull --source dmr ai/smollm2"
-    echo "  harbor models pull mlx-community/Qwen3.5-4B-4bit"
+    echo "  harbor models pull --source mlx mlx-community/Qwen3.5-4B-4bit"
+    echo "  harbor models pull --source omlx mlx-community/Qwen3.5-4B-4bit"
     echo "  harbor models pull bartowski/Llama-3.2-1B-Instruct-GGUF"
     echo "  harbor models rm qwen3:8b"
 }
@@ -5171,6 +5190,107 @@ mlx_host_stop() {
     fi
 }
 
+omlx_workspace_path() {
+    harbor_resolve_path "$(env_manager get omlx.workspace)"
+}
+
+omlx_base_path() {
+    harbor_resolve_path "$(env_manager get omlx.base.path)"
+}
+
+omlx_model_dir_path() {
+    harbor_resolve_path "$(env_manager get omlx.model.dir)"
+}
+
+omlx_cache_dir_path() {
+    harbor_resolve_path "$(env_manager get omlx.cache.dir)"
+}
+
+omlx_uv_run() {
+    (cd "$(omlx_workspace_path)" && uv run "$@")
+}
+
+omlx_curl() {
+    local url="$1"
+    shift || true
+    local api_key
+    api_key=$(env_manager get omlx.api.key)
+
+    if [ -n "$api_key" ]; then
+        curl "$@" -H "Authorization: Bearer $api_key" "$url"
+    else
+        curl "$@" "$url"
+    fi
+}
+
+omlx_host_start() {
+    local manage_host workspace base_path model_dir cache_dir
+
+    manage_host=$(env_manager get omlx.manage.host)
+    if ! config_bool_enabled "$manage_host"; then
+        log_info "oMLX host management is disabled; expecting oMLX at $(env_manager get omlx.upstream.url)."
+        return 0
+    fi
+
+    workspace=$(omlx_workspace_path)
+    base_path=$(omlx_base_path)
+    model_dir=$(omlx_model_dir_path)
+    cache_dir=$(omlx_cache_dir_path)
+    mkdir -p "$workspace/logs" "$base_path" "$model_dir" "$cache_dir"
+
+    local runner_port logfile local_url api_key extra_args
+    runner_port=$(env_manager get omlx.runner.port)
+    logfile="$workspace/logs/omlx.log"
+    local_url="http://localhost:$runner_port"
+    api_key=$(env_manager get omlx.api.key)
+    extra_args=$(env_manager get omlx.extra.args)
+
+    if omlx_curl "$local_url/v1/models" -s -o /dev/null -w '' 2>/dev/null; then
+        log_info "oMLX is already running on port $runner_port"
+    else
+        log_info "Starting oMLX from $workspace (models: $model_dir)"
+        local cmd=(uv run omlx serve --model-dir "$model_dir" --host 127.0.0.1 --port "$runner_port" --base-path "$base_path" --paged-ssd-cache-dir "$cache_dir")
+        if [ -n "$api_key" ]; then
+            cmd+=(--api-key "$api_key")
+        fi
+        if [ -n "$extra_args" ]; then
+            local extra_args_array=()
+            read -r -a extra_args_array <<< "$extra_args"
+            cmd+=("${extra_args_array[@]}")
+        fi
+        (cd "$workspace" && nohup "${cmd[@]}" >>"$logfile" 2>&1 & disown)
+
+        local retries=0 max_retries=60
+        while ! omlx_curl "$local_url/v1/models" -s -o /dev/null -w '' 2>/dev/null; do
+            retries=$((retries + 1))
+            if [ "$retries" -ge "$max_retries" ]; then
+                log_error "oMLX failed to start within ${max_retries}s. Check $logfile"
+                return 1
+            fi
+            sleep 1
+        done
+        log_info "oMLX is ready on port $runner_port"
+    fi
+}
+
+omlx_host_stop() {
+    local manage_host runner_port pids
+
+    manage_host=$(env_manager get omlx.manage.host)
+    if ! config_bool_enabled "$manage_host"; then
+        return 0
+    fi
+
+    runner_port=$(env_manager get omlx.runner.port)
+    pids=$(lsof -ti "tcp:$runner_port" 2>/dev/null || true)
+    if [ -n "$pids" ]; then
+        log_info "Stopping oMLX (port $runner_port)"
+        echo "$pids" | xargs kill 2>/dev/null || true
+    else
+        log_debug "No oMLX process found on port $runner_port"
+    fi
+}
+
 run_models_routine() {
     local requested_source=""
     local arg
@@ -5216,6 +5336,12 @@ run_models_routine() {
     elif is_service_running "mlx"; then
         mlx_url="http://mlx:8080"
     fi
+    local omlx_url=""
+    if [ "$requested_source" = "omlx" ]; then
+        omlx_url=$(env_manager get omlx.upstream.url)
+    elif is_service_running "omlx"; then
+        omlx_url="http://omlx:8080"
+    fi
     local dmr_api_key
     dmr_api_key=$(env_manager get dmr.api.key)
 
@@ -5240,6 +5366,7 @@ run_models_routine() {
         -e "HARBOR_LLAMACPP_CACHE=$llamacpp_cache" \
         -e "HARBOR_DMR_URL=$dmr_url" \
         -e "HARBOR_MLX_URL=$mlx_url" \
+        -e "HARBOR_OMLX_URL=$omlx_url" \
         -e "HARBOR_DMR_API_KEY=$dmr_api_key" \
         $default_routine_runtime \
         ./routines/models.ts "$@"
@@ -5262,6 +5389,10 @@ run_models_pull() {
         ;;
     mlx)
         run_mlx_command pull "$model"
+        return
+        ;;
+    omlx)
+        run_omlx_command pull "$model"
         return
         ;;
     ollama)
@@ -5304,7 +5435,7 @@ run_models_pull() {
 
 models_extract_source_subcommand() {
     case "$1" in
-    ollama | hf | llamacpp | dmr | mlx)
+    ollama | hf | llamacpp | dmr | mlx | omlx)
         echo "$1"
         return 0
         ;;
@@ -5342,6 +5473,10 @@ run_models_command() {
                 ;;
             mlx)
                 run_mlx_command rm "$@"
+                return
+                ;;
+            omlx)
+                run_omlx_command rm "$@"
                 return
                 ;;
             *)
@@ -5446,6 +5581,86 @@ run_mlx_command() {
         ;;
     *)
         log_error "Unknown mlx subcommand: $cmd"
+        return 1
+        ;;
+    esac
+}
+
+run_omlx_command() {
+    local cmd="${1:-help}"
+    shift || true
+    local runner_port url
+    runner_port="$(env_manager get omlx.runner.port)"
+    url="http://localhost:$runner_port"
+
+    case "$cmd" in
+    start | serve)
+        omlx_host_start
+        ;;
+    stop)
+        omlx_host_stop
+        ;;
+    status)
+        omlx_curl "$url/v1/models" -fsS
+        ;;
+    logs)
+        local logfile
+        logfile="$(omlx_workspace_path)/logs/omlx.log"
+        if [ -f "$logfile" ]; then
+            cat "$logfile"
+        else
+            log_error "No log file found at $logfile"
+        fi
+        ;;
+    pull)
+        local hf_path="${1:-$(env_manager get omlx.hf.path)}"
+        if [ -z "$hf_path" ]; then
+            log_error "Usage: harbor omlx pull <hf_path>"
+            return 1
+        fi
+        case "$hf_path" in
+        /* | .. | ../* | */../* | */..)
+            log_error "Invalid model path: $hf_path"
+            return 1
+            ;;
+        esac
+        local model_dir target_dir
+        model_dir="$(omlx_model_dir_path)"
+        target_dir="$model_dir/$hf_path"
+        mkdir -p "$(dirname "$target_dir")"
+        omlx_uv_run hf download "$hf_path" --local-dir "$target_dir"
+        ;;
+    rm | remove)
+        local model="$1"
+        if [ -z "$model" ]; then
+            log_error "Usage: harbor omlx rm <model_dir_or_hf_path>"
+            return 1
+        fi
+        case "$model" in
+        /* | .. | ../* | */../* | */..)
+            log_error "Invalid model path: $model"
+            return 1
+            ;;
+        esac
+        local model_dir target_dir
+        model_dir="$(omlx_model_dir_path)"
+        target_dir="$model_dir/$model"
+        if [ ! -d "$target_dir" ]; then
+            log_error "No oMLX model directory found at $target_dir"
+            return 1
+        fi
+        rm -rf "$target_dir"
+        log_info "Removed oMLX model directory: $target_dir"
+        ;;
+    ls | list | models)
+        omlx_curl "$url/v1/models" -fsS
+        ;;
+    help | -h | --help)
+        echo "Usage: harbor omlx <start|stop|status|logs|ls|pull|rm>"
+        echo "Manages host oMLX for the Harbor omlx backend."
+        ;;
+    *)
+        log_error "Unknown omlx subcommand: $cmd"
         return 1
         ;;
     esac
@@ -7667,6 +7882,10 @@ main_entrypoint() {
     mlx)
         shift
         run_mlx_command "$@"
+        ;;
+    omlx)
+        shift
+        run_omlx_command "$@"
         ;;
     aphrodite)
         shift

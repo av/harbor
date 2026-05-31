@@ -1,0 +1,10 @@
+services:
+  ml-intern:
+    depends_on:
+      - omlx
+    environment:
+      - ML_INTERN_MODEL=omlx/${HARBOR_OMLX_MODEL}
+      - OMLX_BASE_URL=http://omlx:8080/v1
+      - OMLX_API_KEY=sk-omlx
+      - LOCAL_LLM_BASE_URL=http://omlx:8080/v1
+      - LOCAL_LLM_API_KEY=sk-omlx

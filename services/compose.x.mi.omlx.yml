@@ -1,0 +1,9 @@
+services:
+  mi:
+    depends_on:
+      omlx:
+        condition: service_healthy
+    environment:
+      - OPENAI_BASE_URL=http://omlx:8080
+      - OPENAI_API_KEY=sk-omlx
+      - MODEL=${HARBOR_OMLX_MODEL}

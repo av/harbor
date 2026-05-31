@@ -1,0 +1,11 @@
+:8080 {
+	handle /health {
+		respond "ok" 200
+	}
+
+	redir / /admin 302
+
+	handle {
+		reverse_proxy {$HARBOR_OMLX_UPSTREAM_URL}
+	}
+}

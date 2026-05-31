@@ -1,0 +1,7 @@
+[project]
+name = "harbor-omlx"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "omlx @ git+https://github.com/jundot/omlx.git@v0.3.12",
+]

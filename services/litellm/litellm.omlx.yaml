@@ -1,0 +1,6 @@
+model_list:
+  - model_name: omlx
+    litellm_params:
+      model: openai/${HARBOR_OMLX_MODEL}
+      api_base: http://omlx:8080/v1
+      api_key: sk-omlx

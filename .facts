@@ -204,6 +204,9 @@
 - label: harbor launch claude honors an explicit non-Boost backend even when Boost is also running
   command: rg -q 'claude explicit non-Boost backend ignores running Boost' tests/suites/05-launch-smoke.sh && bash tests/suites/05-launch-smoke.sh
   tags: [spec, launch-claude-explicit-backend, implemented]
+- label: omlx is registered as an OpenAI-compatible Harbor launch backend with model config key and docs
+  command: rg -q 'omlx' harbor.sh && rg -q 'omlx.model' harbor.sh && rg -q 'harbor launch --backend omlx' docs/3.-Harbor-CLI-Reference.md docs/2.2.24-Backend-oMLX.md
+  tags: [spec, omlx-service, implemented]
 
 ## migrations
 - label: config migrations do not require the JSR package through routines/utils.ts
@@ -214,6 +217,11 @@
 - label: harbor.sh avoids Bash 4 case-conversion parameter expansion so the CLI parses on macOS Bash 3
   command: bash -n harbor.sh && ! rg -q '$\{[^}]+(\^\^|,,)' harbor.sh
   tags: [spec, bash3-compat, implemented]
+
+## models
+- label: harbor models supports source-aware list, pull, and rm operations for omlx without changing the default Ollama/HuggingFace/llama.cpp routing
+  command: rg -q 'omlx' routines/models.ts routines/models/types.ts routines/models/openai.ts && rg -q 'run_omlx_command pull' harbor.sh && rg -q 'harbor models.*omlx' docs/3.-Harbor-CLI-Reference.md docs/2.2.24-Backend-oMLX.md
+  tags: [spec, omlx-service, implemented]
 
 # services
 - label: compose.yml is the base layer, defining only the harbor-network
@@ -353,6 +361,14 @@
 - label: promptfoo runs as the Harbor host user so its bind-mounted workspace remains writable after promptfoo-init prepares it with HARBOR_USER_ID and HARBOR_GROUP_ID ownership
   command: rg -q "user:.*HARBOR_USER_ID.*HARBOR_GROUP_ID" services/compose.promptfoo.yml && rg -q "host user" docs/2.3.28-Satellite\&colon-Promptfoo.md
   tags: [spec, promptfoo-launch, implemented]
+
+## omlx
+- label: omlx is integrated as a Harbor backend service with a proxy container, host-native oMLX lifecycle management, docs, metadata, and OpenAI-compatible cross-service integrations
+  command: test -f services/compose.omlx.yml && test -f services/omlx/Caddyfile && rg -q 'run_omlx_command' harbor.sh && rg -q 'omlx' app/src/serviceMetadata.ts docs/2.2.24-Backend-oMLX.md services/compose.x.webui.omlx.yml
+  tags: [spec, omlx-service, implemented]
+- label: harbor up omlx automatically starts the host-managed oMLX server before starting the Harbor proxy service
+  command: rg -q 'omlx_host_start' harbor.sh && rg -q 'run_omlx_command start' harbor.sh && rg -q 'automatically starts the oMLX server' docs/2.2.24-Backend-oMLX.md
+  tags: [spec, omlx-service, auto-host-bootstrap, implemented]
 
 # app
 - label: the desktop app is built with Tauri 2.x, React 18, Vite, Tailwind CSS, and DaisyUI

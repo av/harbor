@@ -74,6 +74,7 @@ harbor up vllm
 # Host-native Metal/GPU inference on macOS
 harbor up dmr
 harbor up mlx
+harbor up omlx
 
 # Set and remember args for llama.cpp
 harbor llamacpp args -ngl 32
@@ -101,14 +102,14 @@ Supported host tools include `claude`, `codex`, `copilot`, `droid`, `hermes`, `m
 
 ####  Cutting Edge Inference
 
-Harbor supports most of the major inference engines as well as a few of the lesser-known ones. On macOS, [Docker Model Runner](./docs/2.2.22-Backend-Docker-Model-Runner.md) and [MLX](./docs/2.2.23-Backend-MLX.md) run inference on the host with Metal acceleration — no containers needed for the compute.
+Harbor supports most of the major inference engines as well as a few of the lesser-known ones. On macOS, [Docker Model Runner](./docs/2.2.22-Backend-Docker-Model-Runner.md), [MLX](./docs/2.2.23-Backend-MLX.md), and [oMLX](./docs/2.2.24-Backend-oMLX.md) run inference on the host with Metal acceleration — no containers needed for the compute.
 
 ```bash
 # We sincerely hope you'll never try to run all of them at once
 harbor up vllm llamacpp tgi litellm tabbyapi aphrodite sglang ktransformers mistralrs airllm
 
 # Host-native inference (macOS Metal / Linux GPU)
-harbor up dmr mlx
+harbor up dmr mlx omlx
 ```
 
 #### Tool Use
@@ -254,7 +255,7 @@ harbor eject searxng llamacpp > docker-compose.harbor.yml
 [KoboldCpp](https://github.com/av/harbor/wiki/2.2.16-Backend:-KoboldCpp) ⦁︎ [KTransformers](https://github.com/av/harbor/wiki/2.2.13-Backend:-KTransformers) ⦁︎ [Lemonade](https://github.com/av/harbor/wiki/2.2.19-Backend-Lemonade) ⦁︎ [llama.cpp](https://github.com/av/harbor/wiki/2.2.2-Backend:-llama.cpp)
 [lmdeploy](https://github.com/av/harbor/wiki/2.2.10-Backend:-lmdeploy) ⦁︎ [mistral.rs](https://github.com/av/harbor/wiki/2.2.6-Backend:-mistral.rs) ⦁︎ [Modular MAX](https://github.com/av/harbor/wiki/2.2.17-Backend-Modular-MAX) ⦁︎ [Needle](https://github.com/av/harbor/wiki/2.2.20-Backend-Needle)
 [Nexa SDK](https://github.com/av/harbor/wiki/2.2.15-Backend:-Nexa-SDK) ⦁︎ [Ollama](https://github.com/av/harbor/wiki/2.2.1-Backend:-Ollama) ⦁︎ [openedai-speech](https://github.com/av/harbor/wiki/2.2.7-Backend:-openedai-speech) ⦁︎ [Parler](https://github.com/av/harbor/wiki/2.2.8-Backend:-Parler)
-[Docker Model Runner](https://github.com/av/harbor/wiki/2.2.22-Backend-Docker-Model-Runner) ⦁︎ [MLX](https://github.com/av/harbor/wiki/2.2.23-Backend-MLX) ⦁︎ [SGLang](https://github.com/av/harbor/wiki/2.2.12-Backend:-SGLang) ⦁︎ [Speaches](https://github.com/av/harbor/wiki/2.2.14-Backend:-Speaches)
+[Docker Model Runner](https://github.com/av/harbor/wiki/2.2.22-Backend-Docker-Model-Runner) ⦁︎ [MLX](https://github.com/av/harbor/wiki/2.2.23-Backend-MLX) ⦁︎ [oMLX](https://github.com/av/harbor/wiki/2.2.24-Backend-oMLX) ⦁︎ [SGLang](https://github.com/av/harbor/wiki/2.2.12-Backend:-SGLang) ⦁︎ [Speaches](https://github.com/av/harbor/wiki/2.2.14-Backend:-Speaches)
 [TabbyAPI](https://github.com/av/harbor/wiki/2.2.4-Backend:-TabbyAPI) ⦁︎ [Text Generation Inference](https://github.com/av/harbor/wiki/2.2.9-Backend:-text-generation-inference) ⦁︎ [vLLM](https://github.com/av/harbor/wiki/2.2.3-Backend:-vLLM)
 
 ##### Satellites
@@ -306,6 +307,7 @@ harbor up llamacpp tgi litellm vllm tabbyapi aphrodite sglang ktransformers
 # Host-native backends for macOS (Metal acceleration, no containers)
 harbor up dmr
 harbor up mlx
+harbor up omlx
 
 # Run different Frontends
 harbor up librechat chatui bionicgpt hollama
@@ -324,6 +326,7 @@ harbor llamacpp model https://huggingface.co/user/repo/model.gguf
 harbor dmr pull ai/mistral
 harbor dmr ls
 harbor mlx pull mlx-community/Qwen3.5-4B-4bit
+harbor omlx pull mlx-community/Qwen3.5-4B-4bit
 
 # Access service CLIs without installing them
 # Caches are shared between services where possible
