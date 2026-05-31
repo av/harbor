@@ -4246,6 +4246,7 @@ run_migrate_command() {
     *)
         log_debug "Running migration script"
         local target_config_version=$(grep '^HARBOR_CONFIG_VERSION=' "$default_profile" | cut -d '=' -f2-)
+        target_config_version="${target_config_version#\"}"
         target_config_version="${target_config_version%\"}"
 
         if [[ -z "$target_config_version" ]]; then

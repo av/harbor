@@ -212,6 +212,9 @@
 - label: config migrations do not require the JSR package through routines/utils.ts
   command: ! rg -q 'jsr:@std/fmt' routines/utils.ts && target=$(grep '^HARBOR_CONFIG_VERSION=' profiles/default.env | cut -d= -f2- | tr -d '"'); tmp_dir=$(mktemp -d); DENO_DIR="$tmp_dir" deno run --cached-only -A --unstable-sloppy-imports .scripts/migrate.ts --target "$target" --dry-run; status=$?; rm -rf "$tmp_dir"; exit $status
   tags: [spec, fmt-migration, implemented]
+- label: harbor migrate auto-detects the quoted HARBOR_CONFIG_VERSION from profiles/default.env and passes an unquoted semver target to the config migrator
+  command: tmp_lock=$(mktemp); cp .scripts/deno.lock "$tmp_lock"; restore_lock() { cp "$tmp_lock" .scripts/deno.lock; rm -f "$tmp_lock"; }; trap restore_lock EXIT; ./harbor.sh migrate --dry-run
+  tags: [spec, config-migration-version, implemented]
 
 ## bash-compat
 - label: harbor.sh avoids Bash 4 case-conversion parameter expansion so the CLI parses on macOS Bash 3
