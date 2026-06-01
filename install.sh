@@ -123,7 +123,11 @@ install_or_update_project() {
       rm -rf "$HARBOR_INSTALL_PATH"
     fi
     echo "Cloning project repository..."
-    git clone --depth 1 --branch "$HARBOR_VERSION" "$HARBOR_REPO_URL" "$HARBOR_INSTALL_PATH"
+    if ! git clone --depth 1 --branch "$HARBOR_VERSION" "$HARBOR_REPO_URL" "$HARBOR_INSTALL_PATH"; then
+      echo "Error: git clone failed. Cleaning up partial clone."
+      rm -rf "$HARBOR_INSTALL_PATH"
+      exit 1
+    fi
     cd "$HARBOR_INSTALL_PATH"
   fi
 }

@@ -7,6 +7,7 @@ import type { IPty } from "tauri-pty";
 import { useTerminalPanel } from "./TerminalContext";
 import { buildXtermTheme, watchTheme } from "./terminalTheme";
 import { isWindows } from "../utils";
+import { buildWindowsWslArgs } from "../harborCommand";
 import { IconEraser, IconStop, IconX } from "../Icons";
 import { IconButton } from "../IconButton";
 
@@ -100,7 +101,7 @@ export const TerminalPanel = () => {
             // If the component was unmounted while we were awaiting, do nothing
             if (!openedRef.current) return;
             const shellCmd = windows ? "wsl.exe" : "bash";
-            const args: string[] = [];
+            const args = windows ? await buildWindowsWslArgs(["bash", "-l"]) : [];
 
             const pty = spawn(shellCmd, args, {
                 cols: terminal.cols,
@@ -117,7 +118,9 @@ export const TerminalPanel = () => {
             pty.onExit(() => {
                 ptyRef.current = null;
                 if (openedRef.current) {
-                    setTimeout(spawnShell, 100);
+                    setTimeout(() => {
+                        spawnShell().catch(() => {});
+                    }, 100);
                 }
             });
         };
