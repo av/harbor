@@ -35,10 +35,12 @@ export const toasted = async ({
 };
 
 export const once = <T extends unknown>(fn: () => T) => {
+    let called = false;
     let value: T;
 
     return () => {
-        if (value === undefined) {
+        if (!called) {
+            called = true;
             value = fn();
         }
 

@@ -6,8 +6,9 @@ import { Section } from "../Section";
 import { IconButton } from "../IconButton";
 import { IconEraser, IconPlay, IconStop } from "../Icons";
 import { isWindows } from "../utils";
+import { buildNativeHarborArgs, buildWindowsWslHarborArgs } from "../harborCommand";
 
-const converter = new AnsiToHtml({ escapeXML: false });
+const converter = new AnsiToHtml({ escapeXML: true });
 
 interface CliEntry {
     id: number;
@@ -80,8 +81,8 @@ export const CommandRunner = () => {
         try {
             const windows = await isWindows();
             const command = windows
-                ? Command.create("wsl.exe", ["-e", "bash", "-lic", `harbor ${args.join(" ")}`])
-                : Command.create("harbor", args);
+                ? Command.create("wsl.exe", await buildWindowsWslHarborArgs(args))
+                : Command.create("bash", buildNativeHarborArgs(args));
 
             command.stdout.on("data", (line: string) => {
                 const html = converter.toHtml(line);
