@@ -232,8 +232,8 @@ HARBOR_MINIMAX_API_KEY = Config[str](
     description="""
 MiniMax API key. When set, the MiniMax OpenAI-compatible
 endpoint (https://api.minimax.io/v1) is automatically
-registered as a boost backend with MiniMax-M2.7,
-MiniMax-M2.7-highspeed, and previous MiniMax models.
+registered as a boost backend with MiniMax-M3 (default),
+MiniMax-M2.7, and MiniMax-M2.7-highspeed.
 """.strip(),
 )
 
@@ -243,16 +243,10 @@ MINIMAX_BASE_URL = "https://api.minimax.io/v1"
 # expose a /models endpoint.
 MINIMAX_MODELS = (
     [
+        {"id": "MiniMax-M3", "object": "model", "created": 0, "owned_by": "minimax"},
         {"id": "MiniMax-M2.7", "object": "model", "created": 0, "owned_by": "minimax"},
         {
             "id": "MiniMax-M2.7-highspeed",
-            "object": "model",
-            "created": 0,
-            "owned_by": "minimax",
-        },
-        {"id": "MiniMax-M2.5", "object": "model", "created": 0, "owned_by": "minimax"},
-        {
-            "id": "MiniMax-M2.5-highspeed",
             "object": "model",
             "created": 0,
             "owned_by": "minimax",
