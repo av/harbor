@@ -1411,8 +1411,8 @@ home=$(harbor home); config=\"$home/services/webui/config.json\"; \
 test -f \"$config\" || { echo 'HARBOR_SETUP_STAGE=failed'; echo 'WebUI backend config not found (webui-backend-config-failed)'; exit 1; }; \
 grep -Fq 'http://llamacpp:8080/v1' \"$config\" || { echo 'HARBOR_SETUP_STAGE=failed'; echo 'WebUI is not configured with the llama.cpp backend (webui-backend-config-failed)'; exit 1; }; \
 model=$(curl -fsS --max-time 5 \"$llama/v1/models\" | sed -n 's/.*\"id\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p' | head -n1); \
-test -n \"$model\"; \
-curl -fsS --max-time 120 -H 'Content-Type: application/json' -d \"{\\\"model\\\":\\\"$model\\\",\\\"messages\\\":[{\\\"role\\\":\\\"user\\\",\\\"content\\\":\\\"Say ready.\\\"}],\\\"max_tokens\\\":8}\" \"$llama/v1/chat/completions\" | grep -q 'choices'";
+test -n \"$model\" || { echo 'HARBOR_SETUP_STAGE=failed'; echo 'No models found on the llama.cpp server (verifying-inference)'; exit 1; }; \
+curl -fsS --max-time 120 -H 'Content-Type: application/json' -d \"{\\\"model\\\":\\\"$model\\\",\\\"messages\\\":[{\\\"role\\\":\\\"user\\\",\\\"content\\\":\\\"Say ready.\\\"}],\\\"max_tokens\\\":8}\" \"$llama/v1/chat/completions\" | grep -q 'choices' || { echo 'HARBOR_SETUP_STAGE=failed'; echo 'Inference verification failed - llama.cpp did not return a valid response (verifying-inference)'; exit 1; }";
     if platform_name() == "windows" {
         run_logged_wsl_bash(
             app,
