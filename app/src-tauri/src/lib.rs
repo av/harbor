@@ -1,6 +1,7 @@
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Manager, RunEvent};
 use tauri_plugin_autostart::MacosLauncher;
 
+mod setup;
 #[cfg(desktop)]
 mod tray;
 
@@ -49,8 +50,28 @@ pub fn run() {
         ))
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_pty::init())
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .manage(setup::SetupState::default())
+        .invoke_handler(tauri::generate_handler![
+            setup::detect_harbor_setup,
+            setup::get_harbor_wsl_distro,
+            setup::start_harbor_setup,
+            setup::cancel_harbor_setup,
+            setup::write_harbor_setup_input,
+            setup::verify_harbor_cli,
+            setup::configure_first_run_stack,
+            setup::start_first_run_stack,
+            setup::verify_first_run_stack,
+            setup::open_webui,
+        ])
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            if let RunEvent::Exit = event {
+                if let Some(state) = app.try_state::<setup::SetupState>() {
+                    state.kill_running_process();
+                }
+            }
+        });
 }
 
 fn show_window(app: &AppHandle) {
