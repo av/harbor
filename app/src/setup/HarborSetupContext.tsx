@@ -9,6 +9,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -237,48 +238,6 @@ export const HarborSetupProvider: FC<{ children: ReactNode }> = ({ children }) =
   const [terminalOutput, setTerminalOutput] = useState(initialSnapshot.terminalOutput);
   const [error, setError] = useState<string | null>(initialSnapshot.error);
 
-  useEffect(() => {
-    const unlisteners: Array<() => void> = [];
-
-    listen<HarborSetupLogEntry>("harbor-setup-log", (event) => {
-      setLogs((prev) => {
-        const next = [...prev, event.payload];
-        return next.length > MAX_SETUP_LOGS ? next.slice(next.length - MAX_SETUP_LOGS) : next;
-      });
-    }).then((unlisten) => unlisteners.push(unlisten));
-
-    listen<{ data: string }>("harbor-setup-terminal-output", (event) => {
-      setTerminalOutput((prev) => {
-        const next = `${prev}${event.payload.data}`;
-        return next.length > MAX_SETUP_TERMINAL_OUTPUT
-          ? next.slice(next.length - MAX_SETUP_TERMINAL_OUTPUT)
-          : next;
-      });
-    }).then((unlisten) => unlisteners.push(unlisten));
-
-    listen<{ status: HarborSetupStatus }>("harbor-setup-status", (event) => {
-      setDetail((prev) => ({
-        ...(prev ?? CHECKING_DETAIL),
-        status: event.payload.status,
-        running: !isTerminalSetupStatus(event.payload.status),
-      }));
-    }).then((unlisten) => unlisteners.push(unlisten));
-
-    return () => {
-      unlisteners.forEach((unlisten) => unlisten());
-    };
-  }, []);
-
-  useEffect(() => {
-    writeStoredSetupSnapshot({
-      detail,
-      logs,
-      terminalOutput,
-      error,
-      updatedAt: initialSnapshot.updatedAt,
-    });
-  }, [detail, logs, terminalOutput, error, initialSnapshot.updatedAt]);
-
   const redetect = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -296,6 +255,87 @@ export const HarborSetupProvider: FC<{ children: ReactNode }> = ({ children }) =
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const unlisteners: Array<() => void> = [];
+
+    async function registerListeners() {
+      const [unlistenLog, unlistenOutput, unlistenStatus] = await Promise.all([
+        listen<HarborSetupLogEntry>("harbor-setup-log", (event) => {
+          setLogs((prev) => {
+            const next = [...prev, event.payload];
+            return next.length > MAX_SETUP_LOGS ? next.slice(next.length - MAX_SETUP_LOGS) : next;
+          });
+        }),
+        listen<{ data: string }>("harbor-setup-terminal-output", (event) => {
+          setTerminalOutput((prev) => {
+            const next = `${prev}${event.payload.data}`;
+            return next.length > MAX_SETUP_TERMINAL_OUTPUT
+              ? next.slice(next.length - MAX_SETUP_TERMINAL_OUTPUT)
+              : next;
+          });
+        }),
+        listen<{ status: HarborSetupStatus }>("harbor-setup-status", (event) => {
+          setDetail((prev) => ({
+            ...(prev ?? CHECKING_DETAIL),
+            status: event.payload.status,
+            running: !isTerminalSetupStatus(event.payload.status),
+          }));
+        }),
+      ]);
+
+      if (cancelled) {
+        unlistenLog();
+        unlistenOutput();
+        unlistenStatus();
+        return;
+      }
+
+      unlisteners.push(unlistenLog, unlistenOutput, unlistenStatus);
+      redetect();
+    }
+
+    registerListeners();
+
+    return () => {
+      cancelled = true;
+      unlisteners.forEach((unlisten) => unlisten());
+    };
+  }, [redetect]);
+
+  const pendingSnapshotRef = useRef<HarborSetupSnapshot | null>(null);
+  const snapshotTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    pendingSnapshotRef.current = {
+      detail,
+      logs,
+      terminalOutput,
+      error,
+      updatedAt: initialSnapshot.updatedAt,
+    };
+    if (snapshotTimerRef.current === null) {
+      snapshotTimerRef.current = setTimeout(() => {
+        snapshotTimerRef.current = null;
+        if (pendingSnapshotRef.current) {
+          writeStoredSetupSnapshot(pendingSnapshotRef.current);
+        }
+      }, 1500);
+    }
+  }, [detail, logs, terminalOutput, error, initialSnapshot.updatedAt]);
+
+  useEffect(() => {
+    return () => {
+      if (snapshotTimerRef.current !== null) {
+        clearTimeout(snapshotTimerRef.current);
+        snapshotTimerRef.current = null;
+      }
+      if (pendingSnapshotRef.current) {
+        writeStoredSetupSnapshot(pendingSnapshotRef.current);
+      }
+    };
   }, []);
 
   const startSetup = useCallback(async () => {
@@ -411,9 +451,8 @@ export const HarborSetupProvider: FC<{ children: ReactNode }> = ({ children }) =
     return startSetup();
   }, [detail?.remediationKind, detail?.status, redetect, startFirstRunStack, startSetup]);
 
-  useEffect(() => {
-    redetect();
-  }, [redetect]);
+  // redetect() is called inside the listener-registration effect above,
+  // ensuring all event listeners are active before any Tauri commands run.
 
   const value = useMemo<HarborSetupContextValue>(
     () => ({
