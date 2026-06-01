@@ -1192,6 +1192,8 @@ pub fn start_harbor_setup(
         return Err("Harbor setup is already running.".into());
     }
 
+    reset_cancel(&state);
+
     if platform_name() == "windows" {
         let distro = preferred_wsl_distro();
         run_logged_shell(
@@ -1220,11 +1222,11 @@ pub fn start_harbor_setup(
 
 #[tauri::command]
 pub fn cancel_harbor_setup(state: State<'_, SetupState>) -> Result<(), String> {
+    if let Ok(mut cancel_requested) = state.cancel_requested.lock() {
+        *cancel_requested = true;
+    }
     let mut killer = state.current_killer.lock().map_err(|err| err.to_string())?;
     if let Some(killer) = killer.as_mut() {
-        if let Ok(mut cancel_requested) = state.cancel_requested.lock() {
-            *cancel_requested = true;
-        }
         killer.kill().map_err(|err| err.to_string())
     } else {
         Ok(())
@@ -1274,7 +1276,14 @@ pub fn configure_first_run_stack(
     app: AppHandle,
     state: State<'_, SetupState>,
 ) -> Result<(), String> {
+    reset_cancel(&state);
     configure_first_run_stack_inner(&app, &state)
+}
+
+fn reset_cancel(state: &SetupState) {
+    if let Ok(mut cancel_requested) = state.cancel_requested.lock() {
+        *cancel_requested = false;
+    }
 }
 
 fn check_not_running(state: &SetupState) -> Result<(), String> {
@@ -1352,10 +1361,10 @@ fn verify_first_run_stack_inner(app: &AppHandle, state: &SetupState) -> Result<(
     check_not_running(state)?;
     let script = "webui=$(harbor url webui | sed 's#/*$##'); llama=$(harbor url llamacpp | sed 's#/*$##'); \
 for i in $(seq 1 120); do curl -fsS --max-time 5 \"$webui\" >/dev/null && curl -fsS --max-time 5 \"$llama/v1/models\" >/dev/null && break; sleep 5; done; \
-curl -fsS --max-time 5 \"$webui\" >/dev/null && curl -fsS --max-time 5 \"$llama/v1/models\" >/dev/null || { echo 'HARBOR_SETUP_STATUS=failed'; echo 'Services did not start within the expected time'; exit 1; }; \
+curl -fsS --max-time 5 \"$webui\" >/dev/null && curl -fsS --max-time 5 \"$llama/v1/models\" >/dev/null || { echo 'HARBOR_SETUP_STAGE=failed'; echo 'Services did not start within the expected time'; exit 1; }; \
 home=$(harbor home); config=\"$home/services/webui/config.json\"; \
-test -f \"$config\" || { echo webui-backend-config-failed; exit 1; }; \
-grep -Fq 'http://llamacpp:8080/v1' \"$config\" || { echo webui-backend-config-failed; exit 1; }; \
+test -f \"$config\" || { echo 'HARBOR_SETUP_STAGE=failed'; echo 'WebUI backend config not found (webui-backend-config-failed)'; exit 1; }; \
+grep -Fq 'http://llamacpp:8080/v1' \"$config\" || { echo 'HARBOR_SETUP_STAGE=failed'; echo 'WebUI is not configured with the llama.cpp backend (webui-backend-config-failed)'; exit 1; }; \
 model=$(curl -fsS --max-time 5 \"$llama/v1/models\" | sed -n 's/.*\"id\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p' | head -n1); \
 test -n \"$model\"; \
 curl -fsS --max-time 120 -H 'Content-Type: application/json' -d \"{\\\"model\\\":\\\"$model\\\",\\\"messages\\\":[{\\\"role\\\":\\\"user\\\",\\\"content\\\":\\\"Say ready.\\\"}],\\\"max_tokens\\\":8}\" \"$llama/v1/chat/completions\" | grep -q 'choices'";
