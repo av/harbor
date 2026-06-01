@@ -161,7 +161,19 @@ export const HarborSetupGate: FC<{ children: ReactNode }> = ({ children }) => {
               </div>
             </section>
 
-            {(setup.error || detail?.lastError) && (
+            {status === "cancelled" ? (
+              <section className="rounded border border-base-content/20 bg-base-200 p-3">
+                <div className="flex items-start gap-2">
+                  <IconStop className="mt-1 shrink-0 text-base-content/60" />
+                  <div>
+                    <div className="font-semibold">Setup was cancelled</div>
+                    <div className="text-sm text-base-content/60">
+                      Click Retry setup to start again.
+                    </div>
+                  </div>
+                </div>
+              </section>
+            ) : (setup.error || detail?.lastError) && (
               <section className="rounded border border-error/40 bg-error/10 p-3">
                 <div className="flex items-start gap-2">
                   <IconOctagonAlert className="mt-1 shrink-0 text-error" />
