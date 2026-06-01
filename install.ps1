@@ -22,7 +22,7 @@ function Invoke-Wsl {
 }
 
 function Test-WslAvailable {
-  & wsl.exe --status | Out-Host
+  & wsl.exe --status 2>&1 | Write-Output
   return $LASTEXITCODE -eq 0
 }
 
@@ -174,6 +174,10 @@ if (-not (Test-WslAvailable)) {
   Write-SetupStage "installing-prerequisites"
   Write-Output "WSL is not available. Starting the Windows-supported WSL installation flow."
   & wsl.exe --install
+  if ($LASTEXITCODE -ne 0) {
+    Write-SetupStage "failed"
+    throw "WSL installation failed (exit code $LASTEXITCODE). Run 'wsl --install' manually from an elevated PowerShell prompt."
+  }
   Write-SetupStage "refresh-required"
   throw "WSL installation started. Restart Windows or complete distro first-run setup, then retry Harbor setup."
 }
@@ -192,6 +196,10 @@ if ([string]::IsNullOrWhiteSpace($Distro)) {
   Write-SetupStage "installing-prerequisites"
   Write-Output "No WSL2 Ubuntu distro was found. Installing Ubuntu."
   & wsl.exe --install -d Ubuntu
+  if ($LASTEXITCODE -ne 0) {
+    Write-SetupStage "failed"
+    throw "Ubuntu WSL installation failed (exit code $LASTEXITCODE). Run 'wsl --install -d Ubuntu' manually from an elevated PowerShell prompt."
+  }
   Write-SetupStage "refresh-required"
   throw "Ubuntu WSL installation started. Complete first-run account setup, then retry Harbor setup."
 }
@@ -201,7 +209,12 @@ if ($distros -notmatch "(?m)^\s*\*?\s*$([regex]::Escape($Distro))\s+\w+\s+2\s*$"
   throw "Selected distro '$Distro' is not a WSL2 distro. Harbor setup requires WSL2."
 }
 
-Invoke-Wsl @("-d", $Distro, "-e", "bash", "-lic", "uname -s && command -v bash && command -v curl")
+try {
+  Invoke-Wsl @("-d", $Distro, "-e", "bash", "-lic", "uname -s && command -v bash && command -v curl")
+} catch {
+  Write-SetupStage "blocked"
+  throw "WSL distro '$Distro' cannot run basic commands (bash, curl). Complete the distro first-run setup, then retry."
+}
 
 Write-SetupStage "checking-prerequisites"
 if (-not (Test-DockerDesktopInstalled)) {

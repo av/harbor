@@ -31,6 +31,19 @@ pub struct SetupState {
     setup_active: Mutex<bool>,
 }
 
+impl SetupState {
+    /// Kill any running setup child process. Called during app shutdown
+    /// to prevent orphaned processes.
+    pub fn kill_running_process(&self) {
+        if let Ok(mut killer) = self.current_killer.lock() {
+            if let Some(killer) = killer.as_mut() {
+                let _ = killer.kill();
+            }
+            *killer = None;
+        }
+    }
+}
+
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HarborSetupDetail {
