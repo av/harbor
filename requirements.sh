@@ -150,7 +150,7 @@ dnf_install() {
 
     if ! check_command docker || ! docker compose version >/dev/null 2>&1; then
         log_info "Installing Docker Engine and Docker Compose via dnf"
-        sudo dnf install -y moby-engine moby-compose
+        sudo dnf install -y moby-engine docker-compose
     else
         log_info "Docker and Docker Compose are already installed"
     fi
@@ -193,7 +193,7 @@ apk_install() {
 
     if ! check_command docker || ! docker compose version >/dev/null 2>&1; then
         log_info "Installing Docker Engine and Docker Compose plugin via apk"
-        sudo apk add --no-cache docker docker-compose
+        sudo apk add --no-cache docker docker-cli-compose
     else
         log_info "Docker and Docker Compose plugin are already installed"
     fi
