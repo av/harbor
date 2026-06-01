@@ -3,7 +3,7 @@ import AnsiToHtml from "ansi-to-html";
 import { spawnHarborPty } from "../terminal/harborPty";
 import type { IPty } from "../terminal/harborPty";
 
-const converter = new AnsiToHtml({ escapeXML: false });
+const converter = new AnsiToHtml({ escapeXML: true });
 const BUFFER_CAP = 2000;
 const BUFFER_TRIM = 200;
 const FLUSH_INTERVAL_MS = 100;
