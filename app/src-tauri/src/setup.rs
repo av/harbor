@@ -649,17 +649,24 @@ pub fn detect_harbor_setup(state: State<'_, SetupState>) -> HarborSetupDetail {
         .lock()
         .map(|pid| pid.is_some())
         .unwrap_or(false);
+    let platform = platform_name();
     let mut detail = HarborSetupDetail {
         status: "checking-platform".into(),
-        platform: platform_name(),
         architecture: std::env::consts::ARCH.into(),
         app_version: env!("CARGO_PKG_VERSION").into(),
-        command_target: command_target(),
-        install_target: if platform_name() == "windows" {
+        command_target: if platform == "windows" {
+            // Defer full WSL detection to avoid calling wsl.exe before
+            // detect_windows_target() has verified WSL availability.
+            "wsl:pending".into()
+        } else {
+            command_target()
+        },
+        install_target: if platform == "windows" {
             "wsl2".into()
         } else {
             "user-home".into()
         },
+        platform,
         cli_version: None,
         docker_status: None,
         docker_compose_status: None,
@@ -674,11 +681,16 @@ pub fn detect_harbor_setup(state: State<'_, SetupState>) -> HarborSetupDetail {
         running,
     };
 
-    if running
-        || detect_platform_blocker(&mut detail)
-        || detect_windows_target(&mut detail)
-        || !detect_cli(&mut detail)
-    {
+    if running || detect_platform_blocker(&mut detail) || detect_windows_target(&mut detail) {
+        return detail;
+    }
+
+    // Now that WSL availability is confirmed (on Windows), resolve the real command target.
+    if detail.platform == "windows" {
+        detail.command_target = command_target();
+    }
+
+    if !detect_cli(&mut detail) {
         return detail;
     }
 
@@ -915,29 +927,34 @@ fn run_logged(
     });
 
     let started = Instant::now();
-    let status = loop {
+    let wait_result: Result<ExitStatus, String> = loop {
         match child.try_wait() {
-            Ok(Some(status)) => break status,
+            Ok(Some(status)) => break Ok(status),
             Ok(None) => {
                 if timeout
                     .map(|limit| started.elapsed() > limit)
                     .unwrap_or(false)
                 {
                     let _ = child.kill();
-                    clear_running_state(state, true);
-                    return Err(format!("{stage} timed out"));
+                    break Err(format!("{stage} timed out"));
                 }
                 std::thread::sleep(Duration::from_millis(250));
             }
-            Err(err) => {
-                clear_running_state(state, true);
-                return Err(err.to_string());
-            }
+            Err(err) => break Err(err.to_string()),
         }
     };
 
-    clear_running_state(state, false);
+    // Always clean up state and join the reader thread before returning,
+    // regardless of how the process exited (success, timeout, or error).
+    let reset_cancel = wait_result.is_err();
+    clear_running_state(state, reset_cancel);
+    drop(pair);
     let _ = reader_thread.join();
+
+    let status = match wait_result {
+        Ok(status) => status,
+        Err(err) => return Err(err),
+    };
 
     let was_cancelled = state
         .cancel_requested
