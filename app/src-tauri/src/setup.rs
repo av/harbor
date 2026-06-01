@@ -25,6 +25,10 @@ pub struct SetupState {
     current_killer: Mutex<Option<Box<dyn ChildKiller + Send + Sync>>>,
     current_writer: Mutex<Option<Box<dyn Write + Send>>>,
     cancel_requested: Mutex<bool>,
+    /// Guards the entire setup entry point so that overlapping invocations
+    /// (e.g. Cancel then immediate Retry) cannot race through the
+    /// `current_pid` check window between sub-steps.
+    setup_active: Mutex<bool>,
 }
 
 #[derive(Clone, Serialize)]
@@ -1183,14 +1187,7 @@ pub fn start_harbor_setup(
     app: AppHandle,
     state: State<'_, SetupState>,
 ) -> Result<HarborSetupDetail, String> {
-    if state
-        .current_pid
-        .lock()
-        .map(|pid| pid.is_some())
-        .unwrap_or(false)
-    {
-        return Err("Harbor setup is already running.".into());
-    }
+    let _guard = acquire_setup_lock(&state)?;
 
     reset_cancel(&state);
 
@@ -1248,6 +1245,7 @@ pub fn write_harbor_setup_input(state: State<'_, SetupState>, data: String) -> R
 
 #[tauri::command]
 pub fn verify_harbor_cli(app: AppHandle, state: State<'_, SetupState>) -> Result<(), String> {
+    let _guard = acquire_setup_lock(&state)?;
     verify_harbor_cli_inner(&app, &state)
 }
 
@@ -1276,6 +1274,7 @@ pub fn configure_first_run_stack(
     app: AppHandle,
     state: State<'_, SetupState>,
 ) -> Result<(), String> {
+    let _guard = acquire_setup_lock(&state)?;
     reset_cancel(&state);
     configure_first_run_stack_inner(&app, &state)
 }
@@ -1296,6 +1295,37 @@ fn check_not_running(state: &SetupState) -> Result<(), String> {
         return Err("Harbor setup is already running.".into());
     }
     Ok(())
+}
+
+/// Acquire the setup-wide active lock. Returns an error if another
+/// setup chain is already executing. The returned guard must be held
+/// for the duration of the setup function — dropping it releases the
+/// lock even on error/panic paths.
+fn acquire_setup_lock(state: &SetupState) -> Result<SetupActiveGuard<'_>, String> {
+    let mut active = state
+        .setup_active
+        .lock()
+        .map_err(|e| format!("setup lock poisoned: {e}"))?;
+    if *active {
+        return Err("Harbor setup is already in progress.".into());
+    }
+    *active = true;
+    Ok(SetupActiveGuard { state })
+}
+
+/// RAII guard that sets `setup_active` back to `false` on drop,
+/// ensuring the lock is released even when the function returns
+/// early via `?` or panics.
+struct SetupActiveGuard<'a> {
+    state: &'a SetupState,
+}
+
+impl Drop for SetupActiveGuard<'_> {
+    fn drop(&mut self) {
+        if let Ok(mut active) = self.state.setup_active.lock() {
+            *active = false;
+        }
+    }
 }
 
 fn configure_first_run_stack_inner(app: &AppHandle, state: &SetupState) -> Result<(), String> {
@@ -1327,6 +1357,7 @@ fn configure_first_run_stack_inner(app: &AppHandle, state: &SetupState) -> Resul
 
 #[tauri::command]
 pub fn start_first_run_stack(app: AppHandle, state: State<'_, SetupState>) -> Result<(), String> {
+    let _guard = acquire_setup_lock(&state)?;
     start_first_run_stack_inner(&app, &state)
 }
 
@@ -1354,6 +1385,7 @@ fn start_first_run_stack_inner(app: &AppHandle, state: &SetupState) -> Result<()
 
 #[tauri::command]
 pub fn verify_first_run_stack(app: AppHandle, state: State<'_, SetupState>) -> Result<(), String> {
+    let _guard = acquire_setup_lock(&state)?;
     verify_first_run_stack_inner(&app, &state)
 }
 
