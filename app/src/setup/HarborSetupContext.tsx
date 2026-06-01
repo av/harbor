@@ -376,7 +376,6 @@ export const HarborSetupProvider: FC<{ children: ReactNode }> = ({ children }) =
       await invoke("configure_first_run_stack");
       await invoke("start_first_run_stack");
       await invoke("verify_first_run_stack");
-      shouldRedetect = false;
     } catch (e) {
       const rawMessage = asErrorMessage(e);
       const status = setupStatusFromError(rawMessage) ?? "failed";
