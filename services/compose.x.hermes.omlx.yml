@@ -4,3 +4,4 @@ services:
       - omlx
     environment:
       - OPENAI_BASE_URL=http://omlx:8080/v1
+      - OPENAI_API_KEY=${HARBOR_OMLX_API_KEY}

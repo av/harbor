@@ -1101,6 +1101,39 @@ launch_backend_model_key() {
     esac
 }
 
+launch_backend_api_key() {
+    local backend="$1"
+    local key=""
+
+    case "$backend" in
+    omlx)
+        key=$(env_manager --silent get omlx.api.key 2>/dev/null || true)
+        ;;
+    dmr)
+        key=$(env_manager --silent get dmr.api.key 2>/dev/null || true)
+        ;;
+    esac
+
+    if [ -n "$key" ]; then
+        echo "$key"
+        return 0
+    fi
+
+    return 1
+}
+
+launch_curl_with_auth() {
+    local backend="$1"
+    shift
+    local api_key
+
+    if api_key=$(launch_backend_api_key "$backend"); then
+        curl -H "Authorization: Bearer $api_key" "$@"
+    else
+        curl "$@"
+    fi
+}
+
 launch_url_with_v1() {
     local url="${1%/}"
 
@@ -1132,7 +1165,7 @@ launch_backend_is_reachable() {
         return 1
     fi
 
-    curl -fsS --max-time 2 "$(launch_url_with_v1 "$url")/models" >/dev/null 2>&1
+    launch_curl_with_auth "$backend" -fsS --max-time 2 "$(launch_url_with_v1 "$url")/models" >/dev/null 2>&1
 }
 
 launch_start_services() {
@@ -1180,7 +1213,7 @@ launch_detect_backend() {
             return 1
         fi
 
-        if ! curl -fsS --max-time 2 "$(launch_url_with_v1 "$url")/models" >/dev/null 2>&1; then
+        if ! launch_curl_with_auth "$explicit_backend" -fsS --max-time 2 "$(launch_url_with_v1 "$url")/models" >/dev/null 2>&1; then
             log_error "Backend '$explicit_backend' is running, but its OpenAI-compatible endpoint is not reachable at $(launch_url_with_v1 "$url")/models."
             log_info "Wait for the backend to finish loading, check its container health with: harbor ps, then retry."
             return 1
@@ -1306,7 +1339,7 @@ launch_discover_models() {
     local model
     local parse_rc
 
-    if ! response=$(curl -fsS --max-time 3 "$api_url/models" 2>/dev/null); then
+    if ! response=$(launch_curl_with_auth "$backend" -fsS --max-time 3 "$api_url/models" 2>/dev/null); then
         log_error "Could not read models from backend '$backend' at $api_url/models."
         log_info "Wait for the backend to finish loading, or pass a known model explicitly with --model <model>."
         return 1
@@ -1982,6 +2015,11 @@ launch_host_tool_command() {
 
     if ! backend=$(launch_detect_backend "$backend"); then
         return 1
+    fi
+
+    local backend_key
+    if backend_key=$(launch_backend_api_key "$backend"); then
+        api_key="$backend_key"
     fi
 
     if ! backend_url=$(launch_backend_url "$backend"); then
@@ -5125,7 +5163,10 @@ dmr_host_start() {
 }
 
 dmr_host_stop() {
-    log_info "DMR proxy stopped; Docker Model Runner remains managed by Docker Desktop."
+    if docker model ps --format '{{.ModelName}}' 2>/dev/null | grep -q .; then
+        log_info "Unloading running DMR models..."
+        docker model unload --all || true
+    fi
 }
 
 mlx_workspace_path() {
@@ -5343,8 +5384,9 @@ run_models_routine() {
     elif is_service_running "omlx"; then
         omlx_url="http://omlx:8080"
     fi
-    local dmr_api_key
+    local dmr_api_key omlx_api_key
     dmr_api_key=$(env_manager get dmr.api.key)
+    omlx_api_key=$(env_manager get omlx.api.key)
 
     if { [ -z "$requested_source" ] || [ "$requested_source" = "ollama" ]; } && ! is_service_running "ollama"; then
         log_debug "Ollama is not running, launching..."
@@ -5369,6 +5411,7 @@ run_models_routine() {
         -e "HARBOR_MLX_URL=$mlx_url" \
         -e "HARBOR_OMLX_URL=$omlx_url" \
         -e "HARBOR_DMR_API_KEY=$dmr_api_key" \
+        -e "HARBOR_OMLX_API_KEY=$omlx_api_key" \
         $default_routine_runtime \
         ./routines/models.ts "$@"
 }
@@ -5611,6 +5654,7 @@ run_omlx_command() {
             cat "$logfile"
         else
             log_error "No log file found at $logfile"
+            return 1
         fi
         ;;
     pull)

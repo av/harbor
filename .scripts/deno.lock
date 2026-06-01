@@ -16,7 +16,8 @@
     "npm:unified@11": "11.0.5",
     "npm:unist-util-visit@*": "5.0.0",
     "npm:unist-util-visit@5": "5.0.0",
-    "npm:web-resource-inliner@*": "7.0.0"
+    "npm:web-resource-inliner@*": "7.0.0",
+    "npm:yaml@*": "2.9.0"
   },
   "jsr": {
     "@std/collections@1.0.8": {
@@ -447,6 +448,10 @@
         "mime",
         "valid-data-url"
       ]
+    },
+    "yaml@2.9.0": {
+      "integrity": "sha512-2AvhNX3mb8zd6Zy7INTtSpl1F15HW6Wnqj0srWlkKLcpYl/gMIMJiyuGq2KeI2YFxUPjdlB+3Lc10seMLtL4cA==",
+      "bin": true
     },
     "zwitch@2.0.4": {
       "integrity": "sha512-bXE4cR/kVZhKZX/RjPEflHaKVhUVl85noU3v6b8apfQEc1x4A+zBxjZ4lN8LqGd6WZ3dl98pY4o717VFmoPp+A=="

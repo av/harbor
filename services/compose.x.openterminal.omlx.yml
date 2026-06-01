@@ -5,5 +5,5 @@ services:
     environment:
       - HARBOR_OMLX_URL=http://omlx:8080
       - HARBOR_OMLX_OPENAI_URL=http://omlx:8080/v1
-      - HARBOR_OMLX_API_KEY=sk-omlx
+      - HARBOR_OMLX_API_KEY=${HARBOR_OMLX_API_KEY}
       - HARBOR_OMLX_MODEL=${HARBOR_OMLX_MODEL}
