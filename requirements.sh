@@ -8,6 +8,7 @@ YELLOW='\033[1;33m'
 NC='\033[0m'
 
 MIN_COMPOSE_VERSION="2.23.1"
+HOMEBREW_INSTALL_URL="https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh"
 
 PLATFORM=""
 DISTRO_ID=""
@@ -148,10 +149,10 @@ dnf_install() {
     fi
 
     if ! check_command docker || ! docker compose version >/dev/null 2>&1; then
-        log_info "Installing Docker Engine and Docker Compose plugin via dnf"
-        sudo dnf install -y docker docker-compose-plugin
+        log_info "Installing Docker Engine and Docker Compose via dnf"
+        sudo dnf install -y moby-engine moby-compose
     else
-        log_info "Docker and Docker Compose plugin are already installed"
+        log_info "Docker and Docker Compose are already installed"
     fi
 }
 
@@ -198,23 +199,78 @@ apk_install() {
     fi
 }
 
-brew_install() {
-    if ! check_command brew; then
-        log_error "Homebrew is required on macOS but was not found"
-        log_error "Install Homebrew first: https://brew.sh"
+load_homebrew_shellenv() {
+    local brew_path
+
+    if check_command brew; then
+        return 0
+    fi
+
+    for brew_path in /opt/homebrew/bin/brew /usr/local/bin/brew; do
+        if [ -x "$brew_path" ]; then
+            eval "$("$brew_path" shellenv)"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+install_homebrew() {
+    log_info "Homebrew is not installed. Installing Homebrew through the official installer."
+    /bin/bash -c "$(curl -fsSL "$HOMEBREW_INSTALL_URL")" || return 1
+    load_homebrew_shellenv
+}
+
+start_macos_docker_desktop() {
+    if [ "$PLATFORM" != "macos" ] || ! check_command open; then
         return 1
+    fi
+
+    log_info "Starting Docker Desktop"
+    open -g -a Docker >/dev/null 2>&1 || open -g -a "Docker Desktop" >/dev/null 2>&1
+}
+
+wait_for_docker_access() {
+    local timeout_seconds="${1:-180}"
+    local deadline=$((SECONDS + timeout_seconds))
+
+    while [ "$SECONDS" -lt "$deadline" ]; do
+        if docker info >/dev/null 2>&1; then
+            return 0
+        fi
+        log_info "Waiting for Docker daemon"
+        sleep 5
+    done
+
+    return 1
+}
+
+brew_install() {
+    if ! load_homebrew_shellenv; then
+        install_homebrew || {
+            log_error "Homebrew installation did not complete"
+            log_error "Install Homebrew from https://brew.sh, then retry Harbor setup."
+            return 1
+        }
     fi
 
     local missing=()
     check_command git || missing+=("git")
     check_command curl || missing+=("curl")
-    check_command docker || missing+=("docker")
 
     if [ ${#missing[@]} -gt 0 ]; then
         log_info "Installing missing tools via brew: ${missing[*]}"
-        brew install "${missing[@]}"
+        brew install "${missing[@]}" || return 1
     else
-        log_info "git, curl, and docker are already installed"
+        log_info "git and curl are already installed"
+    fi
+
+    if ! check_command docker; then
+        log_info "Installing Docker Desktop via Homebrew cask"
+        brew install --cask docker || return 1
+    else
+        log_info "docker CLI is already installed"
     fi
 
     if ! docker compose version >/dev/null 2>&1; then
@@ -351,6 +407,10 @@ verify_docker_access() {
     else
         if [ "$PLATFORM" = "macos" ]; then
             log_warn "Docker daemon is not running"
+            if start_macos_docker_desktop && wait_for_docker_access 180; then
+                log_info "Docker daemon is reachable"
+                return 0
+            fi
             log_warn "Start Docker Desktop (or an alternative like OrbStack) before using Harbor services"
             return 0
         fi
@@ -449,7 +509,12 @@ install_requirements() {
     esac
 }
 
+setup_stage() {
+    echo "HARBOR_SETUP_STAGE=$1"
+}
+
 main() {
+    setup_stage "checking-platform"
     log_info "Detecting platform and package manager"
     detect_platform
 
@@ -461,9 +526,11 @@ main() {
 
     require_supported_platform || exit 1
 
+    setup_stage "installing-prerequisites"
     install_requirements || exit 1
     ensure_linux_docker_service
 
+    setup_stage "checking-prerequisites"
     verify_required_tools || exit 1
     check_optional_gpu_support
 
@@ -471,6 +538,7 @@ main() {
         log_info "If you were added to the docker group, re-login before running Harbor commands."
     fi
 
+    setup_stage "ready"
     log_info "Dependency setup complete. Run 'harbor doctor' to validate full Harbor readiness."
 }
 
