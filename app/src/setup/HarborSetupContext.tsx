@@ -219,7 +219,7 @@ function remediationKindFromError(message: string): string {
   return "installer-failed";
 }
 
-function isFirstRunStackRemediation(remediationKind?: string | null) {
+export function isFirstRunStackRemediation(remediationKind?: string | null) {
   return (
     remediationKind === "stack-config-failed" ||
     remediationKind === "stack-start-failed" ||

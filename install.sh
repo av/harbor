@@ -112,12 +112,16 @@ install_or_update_project() {
     return 0
   fi
 
-  if [ -d "$HARBOR_INSTALL_PATH" ]; then
+  if [ -d "$HARBOR_INSTALL_PATH" ] && [ -d "$HARBOR_INSTALL_PATH/.git" ]; then
     echo "Existing installation found. Updating..."
     cd "$HARBOR_INSTALL_PATH"
     git fetch --depth 1 origin "+refs/tags/$HARBOR_VERSION:refs/tags/$HARBOR_VERSION"
     git checkout "tags/$HARBOR_VERSION"
   else
+    if [ -d "$HARBOR_INSTALL_PATH" ]; then
+      echo "Existing non-git installation found. Re-cloning..."
+      rm -rf "$HARBOR_INSTALL_PATH"
+    fi
     echo "Cloning project repository..."
     git clone --depth 1 --branch "$HARBOR_VERSION" "$HARBOR_REPO_URL" "$HARBOR_INSTALL_PATH"
     cd "$HARBOR_INSTALL_PATH"

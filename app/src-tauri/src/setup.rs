@@ -1234,7 +1234,7 @@ fn verify_first_run_stack_inner(app: &AppHandle, state: &SetupState) -> Result<(
     check_not_running(state)?;
     let script = "webui=$(harbor url webui | sed 's#/*$##'); llama=$(harbor url llamacpp | sed 's#/*$##'); \
 for i in $(seq 1 120); do curl -fsS --max-time 5 \"$webui\" >/dev/null && curl -fsS --max-time 5 \"$llama/v1/models\" >/dev/null && break; sleep 5; done; \
-curl -fsS --max-time 5 \"$webui\" >/dev/null; \
+curl -fsS --max-time 5 \"$webui\" >/dev/null && curl -fsS --max-time 5 \"$llama/v1/models\" >/dev/null || { echo 'HARBOR_SETUP_STATUS=failed'; echo 'Services did not start within the expected time'; exit 1; }; \
 home=$(harbor home); config=\"$home/services/webui/config.json\"; \
 test -f \"$config\" || { echo webui-backend-config-failed; exit 1; }; \
 grep -Fq 'http://llamacpp:8080/v1' \"$config\" || { echo webui-backend-config-failed; exit 1; }; \
