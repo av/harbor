@@ -1145,7 +1145,7 @@ fn verify_harbor_cli_inner(app: &AppHandle, state: &SetupState) -> Result<(), St
             app,
             state,
             "verifying-cli",
-            "export PATH=\"$HOME/.local/bin:$PATH\"; harbor --version && harbor doctor",
+            &native_harbor_shell("harbor --version && harbor doctor"),
             Some(Duration::from_secs(300)),
         )
     }
@@ -1159,7 +1159,20 @@ pub fn configure_first_run_stack(
     configure_first_run_stack_inner(&app, &state)
 }
 
+fn check_not_running(state: &SetupState) -> Result<(), String> {
+    if state
+        .current_pid
+        .lock()
+        .map(|pid| pid.is_some())
+        .unwrap_or(false)
+    {
+        return Err("Harbor setup is already running.".into());
+    }
+    Ok(())
+}
+
 fn configure_first_run_stack_inner(app: &AppHandle, state: &SetupState) -> Result<(), String> {
+    check_not_running(state)?;
     let script = format!(
         "{} && {}",
         harbor_script(&["llamacpp", "model", FIRST_RUN_MODEL]),
@@ -1191,6 +1204,7 @@ pub fn start_first_run_stack(app: AppHandle, state: State<'_, SetupState>) -> Re
 }
 
 fn start_first_run_stack_inner(app: &AppHandle, state: &SetupState) -> Result<(), String> {
+    check_not_running(state)?;
     let script = harbor_script(&["up", "--no-defaults", "llamacpp", "webui"]);
     if platform_name() == "windows" {
         run_logged_wsl_bash(
@@ -1217,6 +1231,7 @@ pub fn verify_first_run_stack(app: AppHandle, state: State<'_, SetupState>) -> R
 }
 
 fn verify_first_run_stack_inner(app: &AppHandle, state: &SetupState) -> Result<(), String> {
+    check_not_running(state)?;
     let script = "webui=$(harbor url webui | sed 's#/*$##'); llama=$(harbor url llamacpp | sed 's#/*$##'); \
 for i in $(seq 1 120); do curl -fsS --max-time 5 \"$webui\" >/dev/null && curl -fsS --max-time 5 \"$llama/v1/models\" >/dev/null && break; sleep 5; done; \
 curl -fsS --max-time 5 \"$webui\" >/dev/null; \
@@ -1247,7 +1262,6 @@ curl -fsS --max-time 120 -H 'Content-Type: application/json' -d \"{\\\"model\\\"
 
 #[tauri::command]
 pub fn open_webui(app: AppHandle) -> Result<(), String> {
-    emit_stage(&app, "ready");
     let url = run_harbor(&["url", "webui"]);
     if url.code != Some(0) {
         return Err(short_error(&url).unwrap_or_else(|| "Unable to resolve Open WebUI URL.".into()));
@@ -1258,6 +1272,7 @@ pub fn open_webui(app: AppHandle) -> Result<(), String> {
         return Err("Harbor returned an empty Open WebUI URL.".into());
     }
 
+    emit_stage(&app, "ready");
     emit_log(&app, "ready", "stdout", &format!("Opening {url}"));
     let opened = open_host_url(url);
     if opened.code == Some(0) {
