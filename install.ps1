@@ -5,7 +5,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 $InstallUrl = "https://raw.githubusercontent.com/av/harbor/refs/heads/main/install.sh"
-$DockerDesktopInstallerUrl = "https://desktop.docker.com/win/main/amd64/Docker%20Desktop%20Installer.exe"
+$DockerDesktopArch = if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { "arm64" } else { "amd64" }
+$DockerDesktopInstallerUrl = "https://desktop.docker.com/win/main/$DockerDesktopArch/Docker%20Desktop%20Installer.exe"
 
 function Write-SetupStage {
   param([string]$Stage)

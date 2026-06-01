@@ -121,6 +121,10 @@ fn native_harbor_prelude() -> &'static str {
 }
 
 fn run_capture(program: &str, args: &[&str]) -> ProcessOutput {
+    run_capture_timeout(program, args, None)
+}
+
+fn run_capture_timeout(program: &str, args: &[&str], timeout: Option<Duration>) -> ProcessOutput {
     let mut command = Command::new(program);
     command.args(args);
     if platform_name() != "windows" {
@@ -129,23 +133,96 @@ fn run_capture(program: &str, args: &[&str]) -> ProcessOutput {
         }
     }
 
-    match command.output() {
-        Ok(output) => ProcessOutput {
-            code: output.status.code(),
-            stdout: String::from_utf8_lossy(&output.stdout).to_string(),
-            stderr: String::from_utf8_lossy(&output.stderr).to_string(),
-        },
-        Err(err) => ProcessOutput {
-            code: Some(127),
-            stdout: String::new(),
-            stderr: err.to_string(),
-        },
+    if let Some(limit) = timeout {
+        match command
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+        {
+            Ok(mut child) => {
+                let started = Instant::now();
+                loop {
+                    match child.try_wait() {
+                        Ok(Some(status)) => {
+                            let stdout = child
+                                .stdout
+                                .take()
+                                .map(|mut r| {
+                                    let mut s = String::new();
+                                    let _ = r.read_to_string(&mut s);
+                                    s
+                                })
+                                .unwrap_or_default();
+                            let stderr = child
+                                .stderr
+                                .take()
+                                .map(|mut r| {
+                                    let mut s = String::new();
+                                    let _ = r.read_to_string(&mut s);
+                                    s
+                                })
+                                .unwrap_or_default();
+                            return ProcessOutput {
+                                code: status.code(),
+                                stdout,
+                                stderr,
+                            };
+                        }
+                        Ok(None) => {
+                            if started.elapsed() > limit {
+                                let _ = child.kill();
+                                let _ = child.wait();
+                                return ProcessOutput {
+                                    code: Some(124),
+                                    stdout: String::new(),
+                                    stderr: format!(
+                                        "{} timed out after {}s",
+                                        program,
+                                        limit.as_secs()
+                                    ),
+                                };
+                            }
+                            std::thread::sleep(Duration::from_millis(100));
+                        }
+                        Err(err) => {
+                            return ProcessOutput {
+                                code: Some(127),
+                                stdout: String::new(),
+                                stderr: err.to_string(),
+                            };
+                        }
+                    }
+                }
+            }
+            Err(err) => ProcessOutput {
+                code: Some(127),
+                stdout: String::new(),
+                stderr: err.to_string(),
+            },
+        }
+    } else {
+        match command.output() {
+            Ok(output) => ProcessOutput {
+                code: output.status.code(),
+                stdout: String::from_utf8_lossy(&output.stdout).to_string(),
+                stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+            },
+            Err(err) => ProcessOutput {
+                code: Some(127),
+                stdout: String::new(),
+                stderr: err.to_string(),
+            },
+        }
     }
 }
 
 fn run_shell(script: &str) -> ProcessOutput {
+    run_shell_timeout(script, None)
+}
+
+fn run_shell_timeout(script: &str, timeout: Option<Duration>) -> ProcessOutput {
     if platform_name() == "windows" {
-        run_capture(
+        run_capture_timeout(
             "powershell.exe",
             &[
                 "-NoProfile",
@@ -154,9 +231,10 @@ fn run_shell(script: &str) -> ProcessOutput {
                 "-Command",
                 script,
             ],
+            timeout,
         )
     } else {
-        run_capture("bash", &["-lc", script])
+        run_capture_timeout("bash", &["-lc", script], timeout)
     }
 }
 
@@ -280,6 +358,12 @@ fn run_wsl_bash(script: &str) -> ProcessOutput {
     run_capture("wsl.exe", &arg_refs)
 }
 
+fn run_wsl_bash_timeout(script: &str, timeout: Option<Duration>) -> ProcessOutput {
+    let args = wsl_bash_args(script);
+    let arg_refs = args.iter().map(String::as_str).collect::<Vec<_>>();
+    run_capture_timeout("wsl.exe", &arg_refs, timeout)
+}
+
 fn harbor_script(args: &[&str]) -> String {
     let quoted = args.iter().map(|arg| shell_quote(arg)).collect::<Vec<_>>();
     if quoted.is_empty() {
@@ -302,6 +386,14 @@ fn run_harbor(args: &[&str]) -> ProcessOutput {
         run_wsl_bash(&harbor_script(args))
     } else {
         run_shell(&native_harbor_script(args))
+    }
+}
+
+fn run_harbor_timeout(args: &[&str], timeout: Option<Duration>) -> ProcessOutput {
+    if platform_name() == "windows" {
+        run_wsl_bash_timeout(&harbor_script(args), timeout)
+    } else {
+        run_shell_timeout(&native_harbor_script(args), timeout)
     }
 }
 
@@ -366,12 +458,21 @@ fn command_target() -> String {
     }
 }
 
+/// Per-command timeout applied to external processes during detection.
+const DETECT_CMD_TIMEOUT: Duration = Duration::from_secs(15);
+
+/// Timeout for longer detection commands (harbor doctor, harbor ps).
+const DETECT_LONG_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// Timeout for the inference verification step during detection.
+const DETECT_INFERENCE_TIMEOUT: Duration = Duration::from_secs(90);
+
 fn detect_windows_target(detail: &mut HarborSetupDetail) -> bool {
     if detail.platform != "windows" {
         return false;
     }
 
-    let wsl_status = run_capture("wsl.exe", &["--status"]);
+    let wsl_status = run_capture_timeout("wsl.exe", &["--status"], Some(DETECT_CMD_TIMEOUT));
     if wsl_status.code != Some(0) {
         detail.status = "checking-prerequisites".into();
         detail.remediation_kind = Some("missing-wsl".into());
@@ -380,7 +481,7 @@ fn detect_windows_target(detail: &mut HarborSetupDetail) -> bool {
         return true;
     }
 
-    let distros = run_capture("wsl.exe", &["--list", "--verbose"]);
+    let distros = run_capture_timeout("wsl.exe", &["--list", "--verbose"], Some(DETECT_CMD_TIMEOUT));
     if distros.code != Some(0) {
         detail.status = "checking-prerequisites".into();
         detail.remediation_kind = Some("missing-wsl-distro".into());
@@ -412,7 +513,7 @@ fn detect_windows_target(detail: &mut HarborSetupDetail) -> bool {
 fn detect_platform_blocker(detail: &mut HarborSetupDetail) -> bool {
     match detail.platform.as_str() {
         "linux" => {
-            let check = run_shell("command -v apt-get >/dev/null || command -v dnf >/dev/null || command -v pacman >/dev/null || command -v apk >/dev/null");
+            let check = run_shell_timeout("command -v apt-get >/dev/null || command -v dnf >/dev/null || command -v pacman >/dev/null || command -v apk >/dev/null", Some(DETECT_CMD_TIMEOUT));
             if check.code != Some(0) {
                 detail.status = "blocked".into();
                 detail.remediation_kind = Some("unsupported-platform".into());
@@ -438,12 +539,12 @@ fn detect_platform_blocker(detail: &mut HarborSetupDetail) -> bool {
 
 fn detect_cli(detail: &mut HarborSetupDetail) -> bool {
     let detected = if detail.platform == "windows" {
-        run_wsl_bash("command -v harbor >/dev/null && harbor --version")
+        run_wsl_bash_timeout("command -v harbor >/dev/null && harbor --version", Some(DETECT_CMD_TIMEOUT))
     } else {
-        run_shell(&format!(
+        run_shell_timeout(&format!(
             "{}; command -v harbor >/dev/null && harbor --version",
             native_harbor_prelude()
-        ))
+        ), Some(DETECT_CMD_TIMEOUT))
     };
 
     if detected.code == Some(0) {
@@ -466,7 +567,7 @@ fn detect_native_harbor_install(detail: &mut HarborSetupDetail) -> bool {
     }
 
     let installed =
-        run_shell("test -e \"$HOME/.local/bin/harbor\" -o -x \"$HOME/.harbor/harbor.sh\"");
+        run_shell_timeout("test -e \"$HOME/.local/bin/harbor\" -o -x \"$HOME/.harbor/harbor.sh\"", Some(DETECT_CMD_TIMEOUT));
     if installed.code != Some(0) {
         return false;
     }
@@ -481,9 +582,9 @@ fn detect_native_harbor_install(detail: &mut HarborSetupDetail) -> bool {
 
 fn detect_docker(detail: &mut HarborSetupDetail) -> bool {
     let docker = if detail.platform == "windows" {
-        run_wsl_bash("docker info >/dev/null")
+        run_wsl_bash_timeout("docker info >/dev/null", Some(DETECT_LONG_TIMEOUT))
     } else {
-        run_capture("docker", &["info"])
+        run_capture_timeout("docker", &["info"], Some(DETECT_LONG_TIMEOUT))
     };
 
     if docker.code != Some(0) {
@@ -509,9 +610,9 @@ fn detect_docker(detail: &mut HarborSetupDetail) -> bool {
     detail.docker_status = Some("ready".into());
 
     let compose = if detail.platform == "windows" {
-        run_wsl_bash("docker compose version")
+        run_wsl_bash_timeout("docker compose version", Some(DETECT_CMD_TIMEOUT))
     } else {
-        run_capture("docker", &["compose", "version"])
+        run_capture_timeout("docker", &["compose", "version"], Some(DETECT_CMD_TIMEOUT))
     };
     if compose.code != Some(0) {
         detail.status = "checking-prerequisites".into();
@@ -526,7 +627,7 @@ fn detect_docker(detail: &mut HarborSetupDetail) -> bool {
 }
 
 fn detect_doctor(detail: &mut HarborSetupDetail) -> bool {
-    let doctor = run_harbor(&["doctor"]);
+    let doctor = run_harbor_timeout(&["doctor"], Some(DETECT_LONG_TIMEOUT));
     detail.doctor_summary = Some(
         doctor
             .stdout
@@ -552,27 +653,27 @@ fn detect_doctor(detail: &mut HarborSetupDetail) -> bool {
 fn verify_webui_llamacpp_config() -> ProcessOutput {
     let script = "home=$(harbor home); config=\"$home/services/webui/config.json\"; test -f \"$config\" && grep -Fq 'http://llamacpp:8080/v1' \"$config\"";
     if platform_name() == "windows" {
-        run_wsl_bash(script)
+        run_wsl_bash_timeout(script, Some(DETECT_CMD_TIMEOUT))
     } else {
-        run_shell(&native_harbor_shell(script))
+        run_shell_timeout(&native_harbor_shell(script), Some(DETECT_CMD_TIMEOUT))
     }
 }
 
 fn target_curl_url(url: &str) -> ProcessOutput {
     if platform_name() == "windows" {
-        run_wsl_bash(&format!(
+        run_wsl_bash_timeout(&format!(
             "curl -fsS --max-time 5 {} >/dev/null",
             shell_quote(url)
-        ))
+        ), Some(DETECT_CMD_TIMEOUT))
     } else {
-        run_capture("curl", &["-fsS", "--max-time", "5", url])
+        run_capture_timeout("curl", &["-fsS", "--max-time", "5", url], Some(DETECT_CMD_TIMEOUT))
     }
 }
 
 fn detect_first_run_stack(detail: &mut HarborSetupDetail) {
     detail.first_run_stack_service_list = vec!["llamacpp".into(), "webui".into()];
 
-    let ps = run_harbor(&["ps"]);
+    let ps = run_harbor_timeout(&["ps"], Some(DETECT_LONG_TIMEOUT));
     if ps.code == Some(0) {
         detail.running_service_list = ps
             .stdout
@@ -582,12 +683,12 @@ fn detect_first_run_stack(detail: &mut HarborSetupDetail) {
             .collect();
     }
 
-    let webui_url = run_harbor(&["url", "webui"]);
+    let webui_url = run_harbor_timeout(&["url", "webui"], Some(DETECT_CMD_TIMEOUT));
     if webui_url.code == Some(0) {
         detail.open_webui_url = Some(webui_url.stdout.trim().to_string());
     }
 
-    let llamacpp_url = run_harbor(&["url", "llamacpp"]);
+    let llamacpp_url = run_harbor_timeout(&["url", "llamacpp"], Some(DETECT_CMD_TIMEOUT));
     let webui_ok = detail
         .open_webui_url
         .as_deref()
@@ -624,9 +725,9 @@ fn detect_first_run_stack(detail: &mut HarborSetupDetail) {
     }
 
     let inference = if detail.platform == "windows" {
-        run_wsl_bash("url=$(harbor url llamacpp | sed 's#/*$##'); model=$(curl -fsS --max-time 5 \"$url/v1/models\" | sed -n 's/.*\"id\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p' | head -n1); test -n \"$model\" && curl -fsS --max-time 60 -H 'Content-Type: application/json' -d \"{\\\"model\\\":\\\"$model\\\",\\\"messages\\\":[{\\\"role\\\":\\\"user\\\",\\\"content\\\":\\\"Say ready.\\\"}],\\\"max_tokens\\\":8}\" \"$url/v1/chat/completions\" | grep -q 'choices'")
+        run_wsl_bash_timeout("url=$(harbor url llamacpp | sed 's#/*$##'); model=$(curl -fsS --max-time 5 \"$url/v1/models\" | sed -n 's/.*\"id\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p' | head -n1); test -n \"$model\" && curl -fsS --max-time 60 -H 'Content-Type: application/json' -d \"{\\\"model\\\":\\\"$model\\\",\\\"messages\\\":[{\\\"role\\\":\\\"user\\\",\\\"content\\\":\\\"Say ready.\\\"}],\\\"max_tokens\\\":8}\" \"$url/v1/chat/completions\" | grep -q 'choices'", Some(DETECT_INFERENCE_TIMEOUT))
     } else {
-        run_shell(&native_harbor_shell("url=$(harbor url llamacpp | sed 's#/*$##'); model=$(curl -fsS --max-time 5 \"$url/v1/models\" | sed -n 's/.*\"id\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p' | head -n1); test -n \"$model\" && curl -fsS --max-time 60 -H 'Content-Type: application/json' -d \"{\\\"model\\\":\\\"$model\\\",\\\"messages\\\":[{\\\"role\\\":\\\"user\\\",\\\"content\\\":\\\"Say ready.\\\"}],\\\"max_tokens\\\":8}\" \"$url/v1/chat/completions\" | grep -q 'choices'"))
+        run_shell_timeout(&native_harbor_shell("url=$(harbor url llamacpp | sed 's#/*$##'); model=$(curl -fsS --max-time 5 \"$url/v1/models\" | sed -n 's/.*\"id\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p' | head -n1); test -n \"$model\" && curl -fsS --max-time 60 -H 'Content-Type: application/json' -d \"{\\\"model\\\":\\\"$model\\\",\\\"messages\\\":[{\\\"role\\\":\\\"user\\\",\\\"content\\\":\\\"Say ready.\\\"}],\\\"max_tokens\\\":8}\" \"$url/v1/chat/completions\" | grep -q 'choices'"), Some(DETECT_INFERENCE_TIMEOUT))
     };
 
     if inference.code == Some(0) {
