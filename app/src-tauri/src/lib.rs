@@ -33,12 +33,12 @@ pub fn run() {
             tauri::WindowEvent::CloseRequested { api, .. } => {
                 #[cfg(not(target_os = "macos"))]
                 {
-                    window.hide().unwrap();
+                    let _ = window.hide();
                 }
 
                 #[cfg(target_os = "macos")]
                 {
-                    tauri::AppHandle::hide(&window.app_handle()).unwrap();
+                    let _ = tauri::AppHandle::hide(&window.app_handle());
                 }
                 api.prevent_close();
             }
