@@ -590,7 +590,7 @@ fn detect_native_harbor_install(detail: &mut HarborSetupDetail) -> bool {
     }
 
     detail.status = "refresh-required".into();
-    detail.remediation_kind = Some("docker-permission-refresh".into());
+    detail.remediation_kind = Some("cli-path-refresh".into());
     detail.last_error = Some(
         "Harbor appears to be installed at ~/.local/bin/harbor or ~/.harbor/harbor.sh, but the app could not verify the CLI command. Relaunch Harbor App or refresh the shell session, then retry setup.".into(),
     );
@@ -647,7 +647,7 @@ fn detect_doctor(detail: &mut HarborSetupDetail) -> bool {
     let doctor = run_harbor_timeout(&["doctor"], Some(DETECT_LONG_TIMEOUT));
     detail.doctor_summary = Some(
         doctor
-            .stdout
+            .stderr
             .lines()
             .rev()
             .find(|line| !line.trim().is_empty())
