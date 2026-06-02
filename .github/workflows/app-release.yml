@@ -46,7 +46,7 @@ jobs:
       - name: setup bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: 1.3.9
 
       - name: install Rust stable
         uses: dtolnay/rust-toolchain@stable

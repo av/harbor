@@ -212,6 +212,7 @@ function remediationKindFromError(message: string): string {
   if (message.includes("webui-backend-config-failed")) {
     return "webui-backend-config-failed";
   }
+  if (message.includes("Services did not start")) return "stack-start-failed";
   if (message.includes("configuring-first-run-stack")) return "stack-config-failed";
   if (message.includes("starting-first-run-stack")) return "stack-start-failed";
   if (message.includes("verifying-inference")) return "llamacpp-inference-failed";

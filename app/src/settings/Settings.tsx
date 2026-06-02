@@ -1,12 +1,14 @@
 import { Section } from "../Section";
-import { IconChevronDown } from "../Icons";
+import { IconChevronDown, IconPlay, IconWiRefreshAlt } from "../Icons";
 import { THEMES, useTheme } from "../theme";
 import { useAutostart } from "../useAutostart";
 import { Slider } from "../Slider";
+import { useHarborSetup } from "../setup/HarborSetupContext";
 
 export const Settings = () => {
   const theme = useTheme();
   const autostart = useAutostart();
+  const setup = useHarborSetup();
 
   const handleAutostartChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     autostart.setAutostart(e.target.checked);
@@ -35,6 +37,31 @@ export const Settings = () => {
                     onChange={handleAutostartChange}
                   />
                 </label>
+              </div>
+            </div>
+
+            <div className="max-w-xl">
+              <h2 className="text-2xl font-bold">Setup</h2>
+              <p className="text-base-content/50 mb-3">
+                Check or repair Harbor CLI, Docker readiness, and the first-run stack.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  className="btn btn-sm btn-outline"
+                  onClick={setup.redetect}
+                  disabled={setup.loading || setup.running}
+                >
+                  <IconWiRefreshAlt />
+                  Check
+                </button>
+                <button
+                  className="btn btn-sm btn-primary"
+                  onClick={setup.runRecommendedSetupAction}
+                  disabled={setup.loading || setup.running}
+                >
+                  <IconPlay />
+                  Repair setup
+                </button>
               </div>
             </div>
 

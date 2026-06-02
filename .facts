@@ -86,6 +86,27 @@
 - label: services > dmr/mlx > harbor up dmr and harbor up mlx automatically bootstrap missing host-managed backend components before starting their Harbor proxy services
   command: rg -q 'dmr_install_components' harbor.sh && rg -q 'mlx_install_components' harbor.sh && rg -q 'automatic.*install|automatically install|auto-installs' docs/2.2.22-Backend-Docker-Model-Runner.md docs/2.2.23-Backend-MLX.md
   tags: [spec, auto-host-bootstrap, implemented]
+- label: app > setup > Harbor App setup runner uses a backend-owned PTY for setup-critical commands and exposes input forwarding so interactive installer prompts can be answered from the setup screen
+  command: rg -q "portable-pty|portable_pty" app/src-tauri/Cargo.toml app/src-tauri/src/setup.rs && rg -q "write_harbor_setup_input" app/src-tauri/src/setup.rs app/src-tauri/src/lib.rs app/src/setup/HarborSetupContext.tsx app/src/setup/HarborSetupGate.tsx && rg -q "harbor-setup-terminal-output" app/src-tauri/src/setup.rs app/src/setup/HarborSetupContext.tsx
+  tags: [spec, app-install, implemented]
+- label: app > setup > install.ps1 installs missing Docker Desktop on Windows through winget when available or the official Docker Desktop installer path otherwise, then reports refresh-required for Docker Desktop first-run startup
+  command: rg -q "Install-DockerDesktop|Docker.DockerDesktop|Docker Desktop Installer.exe|Start-DockerDesktop" install.ps1 && rg -q "refresh-required.*Docker Desktop|Docker Desktop installation" install.ps1
+  tags: [spec, app-install, implemented]
+- label: app > setup > Harbor App maps WSL and Docker Desktop prerequisite failures to platform-specific remediation kinds instead of generic installer-failed
+  command: rg -q "missing-wsl|missing-wsl-distro|missing-docker-desktop|wsl-docker-integration|restart-required" app/src/setup/HarborSetupContext.tsx
+  tags: [spec, app-install, implemented]
+- label: app > setup > Harbor App setup persists capped raw PTY terminal output alongside parsed setup logs so the visible setup transcript survives remounts and restarts
+  command: rg -q "terminalOutput" app/src/setup/HarborSetupContext.tsx && rg -q "MAX_SETUP_TERMINAL_OUTPUT" app/src/setup/HarborSetupContext.tsx && rg -q "snapshot.terminalOutput|terminalOutput: snapshot" app/src/setup/HarborSetupContext.tsx
+  tags: [spec, app-install, implemented]
+- label: app > setup > Harbor App setup detail includes the app version and the setup gate displays it with the other detected environment fields
+  command: rg -q "app_version|CARGO_PKG_VERSION" app/src-tauri/src/setup.rs && rg -q "appVersion" app/src/setup/HarborSetupContext.tsx app/src/setup/HarborSetupGate.tsx
+  tags: [spec, app-install, implemented]
+- label: app > setup > Harbor App treats a missing Docker CLI during detection as checking-prerequisites so setup can install prerequisites, while an installed but unreachable Docker daemon remains blocked
+  command: rg -q "process_indicates_missing_command|Docker CLI is not installed" app/src-tauri/src/setup.rs && rg -q "docker-daemon-unreachable" app/src-tauri/src/setup.rs
+  tags: [spec, app-install, implemented]
+- label: app > setup > open_webui resolves the Harbor WebUI URL from the setup target and opens that URL on the host OS instead of running harbor open inside WSL
+  command: rg -q "open_host_url|Start-Process|xdg-open|harbor url webui" app/src-tauri/src/setup.rs && ! rg -q "harbor open webui" app/src-tauri/src/setup.rs
+  tags: [spec, app-install, implemented]
 # project
 - Harbor is a containerized LLM toolkit distributed as a Docker Compose project with a CLI and Tauri desktop app
 - label: the project is licensed under Apache 2.0
@@ -225,6 +246,9 @@
 - label: harbor models supports source-aware list, pull, and rm operations for omlx without changing the default Ollama/HuggingFace/llama.cpp routing
   command: rg -q 'omlx' routines/models.ts routines/models/types.ts routines/models/openai.ts && rg -q 'run_omlx_command pull' harbor.sh && rg -q 'harbor models.*omlx' docs/3.-Harbor-CLI-Reference.md docs/2.2.24-Backend-oMLX.md
   tags: [spec, omlx-service, implemented]
+- label: llama.cpp model pull accepts the pinned Hugging Face blob URL by converting it to explicit --hf-repo and --hf-file llama-server arguments
+  command: rg -q 'llamacpp_pull_model_args' harbor.sh && rg -q -- '--hf-repo.*--hf-file' harbor.sh
+  tags: [spec, app-install, implemented]
 
 # services
 - label: compose.yml is the base layer, defining only the harbor-network
@@ -468,6 +492,184 @@
 ## nav
 - label: running services appear in the sidebar with a green dot and link to their detail page
   command: grep -q 'isRunning\|running' app/src/AppSidebar.tsx && grep -q '/services/' app/src/AppSidebar.tsx
+
+## specs
+- label: app install spec documents missing Harbor CLI detection and official installer flow
+  command: test -f scripts/specs/app-install.md && rg -q 'official installer' scripts/specs/app-install.md && rg -q 'Windows host prerequisite' scripts/specs/app-install.md
+  tags: [spec, app-install, implemented]
+- label: app install spec covers a zero-to-running flow where a user can install the Harbor App, install Harbor CLI and platform dependencies, configure Open WebUI plus llama.cpp, verify inference with a small model, and open Open WebUI from a clean machine
+  command: rg -q 'Zero-to-Running Scope' scripts/specs/app-install.md && rg -q 'harbor up --no-defaults llamacpp webui' scripts/specs/app-install.md && rg -q 'Open WebUI' scripts/specs/app-install.md && rg -q 'inference' scripts/specs/app-install.md
+  tags: [spec, app-install]
+- label: app install spec requires install.sh and install.ps1 to own platform prerequisite installation, conditional branching, and Windows interop while the app orchestrates setup state
+  command: rg -q 'install.sh' scripts/specs/app-install.md && rg -q 'install.ps1' scripts/specs/app-install.md && rg -q 'platform conditionals' scripts/specs/app-install.md
+  tags: [spec, app-install]
+- label: app install spec defines zero-to-running readiness as Open WebUI plus llama.cpp running and completing inference with a small model
+  command: rg -q 'Open WebUI' scripts/specs/app-install.md && rg -q 'llama.cpp' scripts/specs/app-install.md && rg -q 'small model' scripts/specs/app-install.md && rg -q 'inference' scripts/specs/app-install.md
+  tags: [spec, app-install]
+- label: app install spec pins the first-run llama.cpp smoke model to unsloth/Qwen3.5-0.8B-GGUF Q4_K_M unless replaced by a verified Harbor-owned pointer
+  command: rg -q 'unsloth/Qwen3.5-0.8B-GGUF' scripts/specs/app-install.md && rg -q 'Qwen3.5-0.8B-Q4_K_M.gguf' scripts/specs/app-install.md
+  tags: [spec, app-install]
+- label: Harbor App Windows WSL distro lookup caches only successful distro names so transient setup-state misses cannot pin later app commands to the default WSL distro
+  command: node -e 'const fs=require("fs"); const src=fs.readFileSync("app/src/harborCommand.ts","utf8"); if (!src.includes("cachedWindowsWslDistro = distro")) process.exit(1); if (src.includes("cachedWindowsWslDistro = null")) process.exit(1); if (!/if \(distro\) \{\s*cachedWindowsWslDistro = distro;\s*\}/s.test(src)) process.exit(1);'
+  tags: [spec, app-install, implemented]
+- label: Harbor App full setup releases the setup-active lock before returning final detection so a successful first-run install can return ready instead of a stale running stage
+  command: node -e 'const fs=require("fs"); const src=fs.readFileSync("app/src-tauri/src/setup.rs","utf8"); const start=src.indexOf("pub fn start_harbor_setup"); const end=src.indexOf("#[tauri::command]", start + 1); const body=src.slice(start,end); const guard=body.indexOf("let guard = acquire_setup_lock(&state)?"); const drop=body.indexOf("drop(guard)"); const detect=body.indexOf("Ok(detect_harbor_setup(state))"); if (guard < 0 || drop < guard || detect < drop) process.exit(1);'
+  tags: [spec, app-install]
+- label: Harbor App setup detection preserves the current setup stage while setup is active so redetect or remount cannot reset an in-progress setup screen to checking-platform
+  command: node -e 'const fs=require("fs"); const src=fs.readFileSync("app/src-tauri/src/setup.rs","utf8"); if (!src.includes("current_stage: Arc<Mutex<Option<String>>>") || !src.includes("fn set_current_stage") || !src.includes("fn current_setup_stage")) process.exit(1); const detectStart=src.indexOf("pub fn detect_harbor_setup"); const detectEnd=src.indexOf("#[tauri::command]", detectStart + 1); const detect=src.slice(detectStart, detectEnd); if (!/if running\s*\{[\s\S]*detail\.status = current_setup_stage\(&state\);[\s\S]*return detail;/.test(detect)) process.exit(1); const runStart=src.indexOf("fn run_logged("); const runEnd=src.indexOf("fn run_logged_shell", runStart); const run=src.slice(runStart, runEnd); if (!run.includes("set_current_stage(state, stage)") || !run.includes("reader_current_stage")) process.exit(1); const lineStart=src.indexOf("fn emit_process_line"); const lineEnd=src.indexOf("fn emit_process_chunk", lineStart); const line=src.slice(lineStart,lineEnd); if (!line.includes("current_stage_state") || !line.includes("Some(marker.clone())")) process.exit(1);'
+  tags: [spec, app-install]
+- label: Harbor App release packaging uses a pinned Bun version instead of latest so macOS and Windows app builds are reproducible across runner image updates
+  command: node -e 'const fs=require("fs"); const src=fs.readFileSync(".github/workflows/app-release.yml","utf8"); if (!src.includes("oven-sh/setup-bun@v2")) process.exit(1); if (!/bun-version:\s*1\.3\.9/.test(src)) process.exit(1); if (/bun-version:\s*latest/.test(src)) process.exit(1);'
+  tags: [spec, app-install]
+
+## setup
+- label: Harbor App exposes a centralized setup gate backed by typed Tauri setup commands before Harbor-dependent providers mount
+  command: rg -q 'detect_harbor_setup|start_harbor_setup|cancel_harbor_setup|verify_harbor_cli|configure_first_run_stack|start_first_run_stack|verify_first_run_stack|open_webui' app/src-tauri/src && rg -q 'HarborSetupProvider' app/src
+  tags: [spec, app-install, implemented]
+- label: Harbor App setup installs the CLI through the official install.sh path and setup logs include structured Harbor setup stage markers
+  command: rg -q 'raw.githubusercontent.com/av/harbor/refs/heads/main/install.sh' app/src-tauri/src install.sh && rg -q 'HARBOR_SETUP_STAGE' install.sh requirements.sh
+  tags: [spec, app-install, implemented]
+- label: Harbor App setup pulls the first-run llama.cpp smoke model through 'harbor models pull --source llamacpp' instead of the service-oriented 'harbor pull --source' path
+  command: grep -Fq 'harbor_script(&["models", "pull", "--source", "llamacpp", FIRST_RUN_MODEL])' app/src-tauri/src/setup.rs && ! grep -Fq 'harbor_script(&["pull", "--source", "llamacpp", FIRST_RUN_MODEL])' app/src-tauri/src/setup.rs
+  tags: [spec, app-install, implemented]
+- label: Harbor App Windows setup runs Harbor detection, verification, first-run stack, and Open WebUI commands through a shared WSL bash helper that honors HARBOR_WSL_DISTRO
+  command: rg -q 'wsl_bash_args|HARBOR_WSL_DISTRO' app/src-tauri/src/setup.rs && rg -q 'run_logged_wsl_bash' app/src-tauri/src/setup.rs
+  tags: [spec, app-install, implemented]
+- label: install.ps1 and the Tauri setup backend both expose local script override hooks so app installer paths can be exercised before publishing to main
+  command: rg -q 'HARBOR_APP_INSTALL_SCRIPT' app/src-tauri/src/setup.rs && rg -q 'HARBOR_APP_WINDOWS_INSTALL_SCRIPT' app/src-tauri/src/setup.rs && rg -q 'HARBOR_INSTALL_SOURCE_PATH' install.sh install.ps1 tests/suites/01-install.sh
+  tags: [spec, app-install, implemented]
+- label: Harbor App Windows setup quotes PowerShell installer commands with PowerShell escaping instead of POSIX shell escaping
+  command: rg -q 'powershell_quote' app/src-tauri/src/setup.rs && rg -q 'HARBOR_APP_WINDOWS_INSTALL_SCRIPT' app/src-tauri/src/setup.rs
+  tags: [spec, app-install, implemented]
+- label: Harbor App setup parses HARBOR_SETUP_STAGE markers from installer stdout and stderr into live setup status events instead of treating them as plain log text
+  command: rg -q 'parse_setup_stage_marker|HARBOR_SETUP_STAGE=' app/src-tauri/src/setup.rs && rg -q 'emit_stage\(.*marker' app/src-tauri/src/setup.rs
+  tags: [spec, app-install, implemented]
+- label: Harbor App setup preserves installer refresh-required and blocked statuses when an installer exits non-zero after emitting those stage markers
+  command: rg -q 'setup_status_from_error|HARBOR_SETUP_STATUS=' app/src/setup/HarborSetupContext.tsx app/src-tauri/src/setup.rs
+  tags: [spec, app-install, implemented]
+- label: install.sh emits refresh-required when post-install harbor doctor indicates Docker group membership or session refresh is needed
+  command: rg -q 'doctor_requires_refresh|refresh-required' install.sh && rg -q 'Docker.*group|newgrp docker|re-login' install.sh
+  tags: [spec, app-install, implemented]
+- label: Harbor App Windows setup discovers the preferred WSL2 Ubuntu distro in the Tauri backend and passes that same distro into install.ps1 and every WSL Harbor command
+  command: rg -q 'preferred_wsl_distro|windows_install_script.*distro|wsl_bash_args' app/src-tauri/src/setup.rs && rg -q -- '-Distro' app/src-tauri/src/setup.rs
+  tags: [spec, app-install, implemented]
+- label: Harbor App setup persists setup detail, current status, logs, and last error in localStorage so a remount or restart can resume with the previous setup context
+  command: rg -q 'SETUP_STORAGE_KEY|readStoredSetupSnapshot|writeStoredSetupSnapshot' app/src/setup/HarborSetupContext.tsx && rg -q 'localStorage' app/src/setup/HarborSetupContext.tsx
+  tags: [spec, app-install, implemented]
+- label: install.ps1 normalizes NUL-padded WSL list output before parsing distro names so Windows setup can select or validate the intended WSL2 Ubuntu distro
+  command: rg -q 'function Normalize-WslOutput' install.ps1 && rg -Fq '$Text -replace' install.ps1 && rg -Fq '$distros = Normalize-WslOutput' install.ps1
+  tags: [spec, app-install, implemented]
+- label: requirements.sh macOS setup installs missing Homebrew through the official Homebrew installer and uses the Homebrew Docker Desktop cask when Docker is missing
+  command: rg -q 'HOMEBREW_INSTALL_URL|install_homebrew|load_homebrew_shellenv' requirements.sh && rg -q 'brew install --cask docker' requirements.sh
+  tags: [spec, app-install, implemented]
+- label: Harbor App setup screen shows a copyable manual installer command for advanced recovery on Linux, macOS, and Windows
+  command: rg -q 'manualSetupCommand|IconCopy|navigator.clipboard.writeText' app/src/setup/HarborSetupGate.tsx
+  tags: [spec, app-install, implemented]
+- label: install.sh emits a blocked setup stage when post-install harbor doctor reports Docker daemon or Docker Desktop is not running or reachable
+  command: rg -q 'doctor_requires_blocked|Docker daemon is not running|Please start Docker|setup_stage "blocked"' install.sh
+  tags: [spec, app-install, implemented]
+- label: Harbor App setup maps first-run stack configuration, startup, and inference command failures to stage-specific remediation kinds instead of a generic setup failure
+  command: rg -q 'remediationKindFromError|stack-config-failed|stack-start-failed|llamacpp-inference-failed' app/src/setup/HarborSetupContext.tsx
+  tags: [spec, app-install, implemented]
+- label: Harbor App Windows setup persists the selected WSL distro in app-local setup state and reuses it only while it still exists as a WSL2 distro
+  command: rg -q 'stored_wsl_distro_path|read_stored_wsl_distro|persist_wsl_distro' app/src-tauri/src/setup.rs && rg -q 'parse_wsl_distro_exists' app/src-tauri/src/setup.rs
+  tags: [spec, app-install, implemented]
+- label: Harbor App setup cancellation is tracked in the Tauri backend so a killed installer reports cancelled instead of being overwritten as a generic failed process
+  command: rg -q 'cancel_requested|HARBOR_SETUP_STATUS=cancelled|cancelled;.*cancelled' app/src-tauri/src/setup.rs
+  tags: [spec, app-install, implemented]
+- label: install.ps1 uses a local Harbor source override by converting the host path to the WSL path and invoking that repo's install.sh with local source and requirements arguments
+  command: grep -Fq 'wslpath -a' install.ps1 && grep -Fq -- '--source-path' install.ps1 && grep -Fq -- '--requirements-path' install.ps1 && grep -Fq 'install.sh' install.ps1
+  tags: [spec, app-install, implemented]
+- label: Harbor App normalizes persisted setup snapshots so missing fields from older setup state are restored from the checking defaults before rendering
+  command: rg -q 'normalizeSetupDetail' app/src/setup/HarborSetupContext.tsx && rg -q '\.\.\.CHECKING_DETAIL, \.\.\.detail' app/src/setup/HarborSetupContext.tsx && rg -q 'appVersion' app/src/setup/HarborSetupContext.tsx
+  tags: [spec, app-install, implemented]
+- label: Harbor App missing-command detection compares process output case-insensitively across stdout and stderr before classifying Docker CLI as missing
+  command: rg -q 'to_lowercase|to_ascii_lowercase' app/src-tauri/src/setup.rs && rg -q 'combined_output' app/src-tauri/src/setup.rs && rg -q 'Docker CLI is not installed' app/src-tauri/src/setup.rs
+  tags: [spec, app-install, implemented]
+- label: Harbor App setup detection stops after a non-zero harbor doctor result and reports a verifying-cli remediation instead of continuing into first-run stack detection
+  command: rg -q 'fn detect_doctor\(detail: &mut HarborSetupDetail\) -> bool' app/src-tauri/src/setup.rs && rg -q 'verification-failed' app/src-tauri/src/setup.rs && rg -q '!detect_doctor\(&mut detail\)' app/src-tauri/src/setup.rs
+  tags: [spec, app-install, implemented]
+- label: Harbor App setup status events mark detail.running false for terminal statuses so ready, blocked, refresh-required, failed, and cancelled snapshots cannot remain running
+  command: rg -q 'isTerminalSetupStatus' app/src/setup/HarborSetupContext.tsx && rg -q 'ready.*blocked.*failed.*cancelled|refresh-required' app/src/setup/HarborSetupContext.tsx && rg -q 'running: !isTerminalSetupStatus' app/src/setup/HarborSetupContext.tsx
+  tags: [spec, app-install, implemented]
+- label: install.ps1 checks WSL availability through an explicit wsl.exe --status exit-code helper before selecting or installing a WSL distro
+  command: rg -q 'function Test-WslAvailable' install.ps1 && rg -Fq '$LASTEXITCODE -eq 0' install.ps1 && rg -q 'if \(-not \(Test-WslAvailable\)\)' install.ps1
+  tags: [spec, app-install, implemented]
+- label: Harbor App Settings repair setup action uses the shared stage-aware setup action instead of always rerunning the full installer
+  command: node -e 'const fs=require("fs"); const ctx=fs.readFileSync("app/src/setup/HarborSetupContext.tsx","utf8"); const settings=fs.readFileSync("app/src/settings/Settings.tsx","utf8"); if (!ctx.includes("runRecommendedSetupAction") || !ctx.includes("status === \"blocked\"") || !ctx.includes("status === \"refresh-required\"") || !ctx.includes("startFirstRunStack")) process.exit(1); if (!settings.includes("onClick={setup.runRecommendedSetupAction}")) process.exit(1); if (settings.includes("onClick={setup.startSetup}")) process.exit(1);'
+  tags: [spec, app-install, implemented]
+- label: Harbor App Windows WSL Harbor commands shell-quote argv arguments before passing them through bash -lic
+  command: test -f app/src/harborCommand.ts && rg -q buildWindowsHarborCommand app/src/harborCommand.ts app/src/useHarbor.tsx app/src/cli/CommandRunner.tsx app/src/terminal/harborPty.ts && rg -q shellQuote app/src/harborCommand.ts
+  tags: [spec, app-install, implemented]
+- label: Harbor App Windows post-setup Harbor command paths reuse the backend-selected WSL distro by passing -d before bash -lic
+  command: rg -q 'get_harbor_wsl_distro' app/src-tauri/src/setup.rs app/src-tauri/src/lib.rs app/src/harborCommand.ts && rg -q 'buildWindowsWslHarborArgs' app/src/harborCommand.ts app/src/useHarbor.tsx app/src/cli/CommandRunner.tsx app/src/terminal/harborPty.ts && rg -q 'args.push\("-d"' app/src/harborCommand.ts
+  tags: [spec, app-install, implemented]
+- label: Harbor App Windows terminal panel opens the backend-selected WSL distro instead of the WSL default distro
+  command: rg -q 'buildWindowsWslArgs' app/src/terminal/TerminalPanel.tsx app/src/harborCommand.ts && rg -Fq 'buildWindowsWslArgs(["bash", "-l"])' app/src/terminal/TerminalPanel.tsx && ! rg -q 'const args: string\[\] = \[\]' app/src/terminal/TerminalPanel.tsx
+  tags: [spec, app-install, implemented]
+- label: Harbor App first-run verification checks the rendered Open WebUI config contains the llama.cpp OpenAI backend URL
+  command: rg -q 'verify_webui_llamacpp_config' app/src-tauri/src/setup.rs && rg -q 'http://llamacpp:8080/v1' app/src-tauri/src/setup.rs services/webui/configs/config.llamacpp.json && rg -q 'webui-backend-config-failed' app/src-tauri/src/setup.rs app/src/setup/HarborSetupContext.tsx
+  tags: [spec, app-install, implemented]
+- label: Harbor App blocked Docker daemon remediation runs the setup repair path instead of only redetecting so install scripts can start or repair Docker
+  command: node -e 'const fs=require("fs"); const src=fs.readFileSync("app/src/setup/HarborSetupContext.tsx","utf8"); if (!src.includes("remediationKind === \"docker-daemon-unreachable\"")) process.exit(1); if (!/status === \"blocked\"[\s\S]*docker-daemon-unreachable[\s\S]*return startSetup\(\)/.test(src)) process.exit(1);'
+  tags: [spec, app-install, implemented]
+- label: install.ps1 waits for Docker Desktop to become reachable inside the selected WSL distro after starting it before reporting WSL integration blocked
+  command: rg -q 'Wait-WslDockerReady' install.ps1 && rg -q 'Start-DockerDesktop' install.ps1 && rg -q 'Start-Sleep -Seconds' install.ps1 && rg -q 'Docker Desktop did not become reachable inside WSL distro' install.ps1
+  tags: [spec, app-install, implemented]
+- label: requirements.sh starts Docker Desktop on macOS and waits for docker info when the Docker daemon is stopped
+  command: rg -q 'start_macos_docker_desktop' requirements.sh && rg -q 'wait_for_docker_access' requirements.sh && rg -q 'open -g -a Docker' requirements.sh && rg -q 'Waiting for Docker daemon' requirements.sh
+  tags: [spec, app-install, implemented]
+- label: Harbor App labels blocked Docker daemon remediation as a Docker setup repair action
+  command: node -e 'const fs=require("fs"); const src=fs.readFileSync("app/src/setup/HarborSetupGate.tsx","utf8"); if (!src.includes("remediationKind === \"docker-daemon-unreachable\"")) process.exit(1); if (!src.includes("Repair Docker setup")) process.exit(1); if (!src.includes("setupActionLabel(status, detail?.remediationKind)")) process.exit(1);'
+  tags: [spec, app-install, implemented]
+- label: Harbor App setup backend includes the last PTY output line when a terminal setup marker causes a process failure so UI remediation can classify the real blocker
+  command: node -e 'const fs=require("fs"); const src=fs.readFileSync("app/src-tauri/src/setup.rs","utf8"); if (!src.includes("last_line_state") || !src.includes("last_output_line")) process.exit(1); if (!src.includes("HARBOR_SETUP_STATUS={marker}") || !src.includes("{detail}")) process.exit(1); if (!src.includes("parse_setup_stage_marker(line)")) process.exit(1);'
+  tags: [spec, app-install, implemented]
+- label: Harbor App setup remediation classification recognizes blocked Docker Desktop and WSL integration installer messages from preserved terminal output
+  command: node -e 'const fs=require("fs"); const src=fs.readFileSync("app/src/setup/HarborSetupContext.tsx","utf8"); if (!src.includes("Docker Desktop did not become reachable")) process.exit(1); if (!src.includes("Docker is not reachable")) process.exit(1); if (!src.includes("Start Docker Desktop")) process.exit(1);'
+  tags: [spec, app-install, implemented]
+- label: Harbor App recommended setup action resumes starting-first-run-stack with the first-run stack flow instead of rerunning the full installer
+  command: node -e 'const fs=require("fs"); const ctx=fs.readFileSync("app/src/setup/HarborSetupContext.tsx","utf8"); const gate=fs.readFileSync("app/src/setup/HarborSetupGate.tsx","utf8"); if (!ctx.includes("status === \"starting-first-run-stack\"")) process.exit(1); if (!/status === \"configuring-first-run-stack\"[\s\S]*status === \"starting-first-run-stack\"[\s\S]*status === \"verifying-inference\"[\s\S]*return startFirstRunStack\(\)/.test(ctx)) process.exit(1); if (!gate.includes("status === \"starting-first-run-stack\"") || !gate.includes("Start first-run stack")) process.exit(1);'
+  tags: [spec, app-install, implemented]
+- label: Harbor App first-run detection performs service health probes in the setup target, using WSL curl on Windows instead of host curl
+  command: rg -q 'fn target_curl_url' app/src-tauri/src/setup.rs && rg -q 'run_wsl_bash_timeout' app/src-tauri/src/setup.rs && rg -Fq 'shell_quote(url)' app/src-tauri/src/setup.rs && node -e 'const fs=require("fs"); const src=fs.readFileSync("app/src-tauri/src/setup.rs","utf8"); const helperStart=src.indexOf("fn target_curl_url"); const helperEnd=src.indexOf("fn detect_first_run_stack", helperStart); const helper=src.slice(helperStart, helperEnd); if (!helper.includes("run_wsl_bash_timeout") || !helper.includes("shell_quote(url)")) process.exit(1); const start=src.indexOf("fn detect_first_run_stack"); const end=src.indexOf("#[tauri::command]", start); if (start < 0 || end < 0) process.exit(1); const body=src.slice(start,end); if (body.includes("run_capture(\"curl\"")) process.exit(1); if (!body.includes("target_curl_url")) process.exit(1);'
+  tags: [spec, app-install, implemented]
+- label: Harbor App Windows setup detection classifies missing WSL or missing WSL2 Ubuntu as a prerequisite remediation before probing the Harbor CLI inside WSL
+  command: node -e 'const fs=require("fs"); const src=fs.readFileSync("app/src-tauri/src/setup.rs","utf8"); if (!src.includes("fn detect_windows_target")) process.exit(1); const fnStart=src.indexOf("fn detect_windows_target"); const fnEnd=src.indexOf("fn detect_platform_blocker", fnStart); const body=src.slice(fnStart, fnEnd); if (!body.includes("wsl.exe") || !body.includes("--status") || !body.includes("--list") || !body.includes("--verbose")) process.exit(1); if (!body.includes("missing-wsl") || !body.includes("missing-wsl-distro") || !body.includes("checking-prerequisites")) process.exit(1); const detectStart=src.indexOf("pub fn detect_harbor_setup"); const detectEnd=src.indexOf("#[tauri::command]", detectStart + 1); const detectBody=src.slice(detectStart, detectEnd); for (const needle of ["detect_platform_blocker(&mut detail)", "detect_windows_target(&mut detail)", "!detect_cli(&mut detail)"]) if (!detectBody.includes(needle)) process.exit(1); if (!(detectBody.indexOf("detect_windows_target(&mut detail)") < detectBody.indexOf("!detect_cli(&mut detail)"))) process.exit(1);'
+  tags: [spec, app-install, implemented]
+- label: requirements.sh macOS setup loads an existing Homebrew shellenv from standard install locations before running the Homebrew installer
+  command: node -e 'const fs=require("fs"); const src=fs.readFileSync("requirements.sh","utf8"); const fnStart=src.indexOf("brew_install()"); const fnEnd=src.indexOf("ensure_linux_docker_service()", fnStart); const body=src.slice(fnStart, fnEnd); if (!body.includes("load_homebrew_shellenv")) process.exit(1); if (!/if ! load_homebrew_shellenv; then[\s\S]*install_homebrew/.test(body)) process.exit(1);'
+  tags: [spec, app-install, implemented]
+- label: Harbor App native post-setup Harbor command paths run through a fixed bash wrapper that includes ~/.local/bin and common package-manager bin directories so GUI-launched Linux and macOS apps can find the installed CLI
+  command: node -e 'const fs=require("fs"); const command=fs.readFileSync("app/src/harborCommand.ts","utf8"); const useHarbor=fs.readFileSync("app/src/useHarbor.tsx","utf8"); const runner=fs.readFileSync("app/src/cli/CommandRunner.tsx","utf8"); const pty=fs.readFileSync("app/src/terminal/harborPty.ts","utf8"); const caps=fs.readFileSync("app/src-tauri/capabilities/default.json","utf8"); if (!command.includes("buildNativeHarborCommand") || !command.includes(".local/bin") || !command.includes("/opt/homebrew/bin") || !command.includes("/usr/local/bin") || !command.includes("export PATH=\"")) process.exit(1); if (!useHarbor.includes("Command.create(\"bash\", buildNativeHarborArgs(args))")) process.exit(1); if (!runner.includes("Command.create(\"bash\", buildNativeHarborArgs(args))")) process.exit(1); if (!pty.includes("spawn(\"bash\", buildNativeHarborArgs(args)")) process.exit(1); if (!caps.includes("\"name\": \"bash\"") || !caps.includes("\"cmd\": \"bash\"")) process.exit(1);'
+  tags: [spec, app-install, implemented]
+- label: Harbor App native setup backend runs command probes with a standard GUI-safe PATH that includes ~/.local/bin, Homebrew, and common system bin directories
+  command: node -e 'const fs=require("fs"); const src=fs.readFileSync("app/src-tauri/src/setup.rs","utf8"); if (!src.includes("fn native_command_path") || !src.includes(".local/bin") || !src.includes("/opt/homebrew/bin") || !src.includes("/usr/local/bin")) process.exit(1); const start=src.indexOf("fn run_capture"); const end=src.indexOf("fn run_shell", start); const body=src.slice(start,end); if (!body.includes("command.env(\"PATH\", path)") || !body.includes("platform_name() != \"windows\"")) process.exit(1);'
+  tags: [spec, app-install, implemented]
+- label: Harbor App native setup detection checks the expected ~/.local/bin/harbor symlink and ~/.harbor/harbor.sh installation before reporting a missing CLI so a completed installer with a stale GUI PATH becomes refresh-required instead of generic missing-cli
+  command: node -e 'const fs=require("fs"); const src=fs.readFileSync("app/src-tauri/src/setup.rs","utf8"); if (!src.includes("fn detect_native_harbor_install") || !src.includes(".local/bin/harbor") || !src.includes(".harbor/harbor.sh")) process.exit(1); const start=src.indexOf("fn detect_cli"); const end=src.indexOf("fn detect_docker", start); const body=src.slice(start,end); if (!body.includes("detect_native_harbor_install(detail)") || !body.includes("refresh-required") || !body.includes("cli-path-refresh")) process.exit(1);'
+  tags: [spec, app-install, implemented]
+- label: Harbor App native post-setup Harbor command paths fall back to ~/.harbor/harbor.sh when the harbor symlink is absent so a valid official install remains usable after setup
+  command: node -e 'const fs=require("fs"); const command=fs.readFileSync("app/src/harborCommand.ts","utf8"); const setup=fs.readFileSync("app/src-tauri/src/setup.rs","utf8"); if (!command.includes("function harbor()") || !command.includes("$HOME/.harbor/harbor.sh") || !command.includes("command -v harbor")) process.exit(1); if (!setup.includes("fn native_harbor_shell") || !setup.includes("function harbor()") || !setup.includes("$HOME/.harbor/harbor.sh")) process.exit(1);'
+  tags: [spec, app-install, implemented]
+- label: Harbor App setup preserves failed terminal setup statuses after installer or stack process errors instead of immediately redetecting and overwriting the failure details
+  command: node -e 'const fs=require("fs"); const src=fs.readFileSync("app/src/setup/HarborSetupContext.tsx","utf8"); const start=src.indexOf("function shouldPreserveErrorStatus"); const end=src.indexOf("function isTerminalSetupStatus", start); const body=src.slice(start,end); if (!body.includes("status === \"failed\"")) process.exit(1); if (!body.includes("status === \"blocked\"") || !body.includes("status === \"refresh-required\"")) process.exit(1);'
+  tags: [spec, app-install, implemented]
+- label: Harbor App setup retry action routes failed first-run stack remediations back to the first-run stack flow instead of rerunning full Harbor CLI installation
+  command: node -e 'const fs=require("fs"); const ctx=fs.readFileSync("app/src/setup/HarborSetupContext.tsx","utf8"); const gate=fs.readFileSync("app/src/setup/HarborSetupGate.tsx","utf8"); if (!ctx.includes("isFirstRunStackRemediation") || !ctx.includes("return startFirstRunStack()")) process.exit(1); if (!gate.includes("isFirstRunStackRemediation") || !gate.includes("Start first-run stack")) process.exit(1); if (!ctx.includes("stack-config-failed") || !ctx.includes("stack-start-failed") || !ctx.includes("llamacpp-inference-failed")) process.exit(1);'
+  tags: [spec, app-install, implemented]
+- label: Harbor App setup timed command capture drains stdout and stderr while the child is still running so verbose detection commands cannot deadlock on full pipes and report false timeouts
+  command: node -e 'const fs=require("fs"); const src=fs.readFileSync("app/src-tauri/src/setup.rs","utf8"); if (!src.includes("fn spawn_output_reader") || !src.includes("read_to_string") || !src.includes("stdout_reader") || !src.includes("stderr_reader")) process.exit(1); const start=src.indexOf("fn run_capture_timeout"); const end=src.indexOf("fn run_shell", start); const body=src.slice(start,end); if (!body.includes("spawn_output_reader") || !body.includes("reader.join().ok()") || !body.includes("child.kill()") || !body.includes("child.wait()")) process.exit(1);'
+  tags: [spec, app-install, implemented]
+- label: Harbor App setup classifies first-run service readiness timeouts as stack-start-failed rather than llama.cpp inference failures so retry messaging points at stack startup
+  command: node -e 'const fs=require("fs"); const ctx=fs.readFileSync("app/src/setup/HarborSetupContext.tsx","utf8"); const setup=fs.readFileSync("app/src-tauri/src/setup.rs","utf8"); if (!ctx.includes("Services did not start") || !ctx.includes("stack-start-failed")) process.exit(1); const start=ctx.indexOf("function remediationKindFromError"); const end=ctx.indexOf("export function isFirstRunStackRemediation", start); const body=ctx.slice(start,end); if (!(body.indexOf("Services did not start") < body.indexOf("verifying-inference"))) process.exit(1); if (!setup.includes("Services did not start within the expected time (stack-start-failed)")) process.exit(1);'
+  tags: [spec, app-install, implemented]
+- label: Harbor App setup detection classifies first-run Open WebUI or llama.cpp service health failures as stack-start-failed instead of llama.cpp inference failures because inference has not run yet
+  command: node -e 'const fs=require("fs"); const src=fs.readFileSync("app/src-tauri/src/setup.rs","utf8"); const start=src.indexOf("if !webui_ok || !llamacpp_ok"); const end=src.indexOf("let webui_backend", start); if (start < 0 || end < 0) process.exit(1); const body=src.slice(start,end); if (!body.includes("stack-start-failed")) process.exit(1); if (body.includes("llamacpp-inference-failed")) process.exit(1);'
+  tags: [spec, app-install, implemented]
+- label: Harbor App setup detection reports setup as running while the setup-wide active lock is held, even between child processes, so redetect cannot overwrite an in-progress install or first-run stack chain
+  command: node -e 'const fs=require("fs"); const src=fs.readFileSync("app/src-tauri/src/setup.rs","utf8"); if (!src.includes("fn setup_is_active") || !src.includes("setup_active")) process.exit(1); const start=src.indexOf("pub fn detect_harbor_setup"); const end=src.indexOf("#[tauri::command]", start + 1); const body=src.slice(start,end); if (!body.includes("setup_is_active(&state)") || !/let running =[\s\S]*child_running[\s\S]*\|\|[\s\S]*setup_is_active\(&state\)/.test(body)) process.exit(1);'
+  tags: [spec, app-install, implemented]
 
 # boost
 - label: Boost is an LLM proxy built with Python/FastAPI that transforms chat completions via pluggable modules
@@ -932,3 +1134,10 @@
 - label: harbor dev lint and harbor dev lint-self-test dispatch directly to .scripts/lint implementations
   command: grep -q './lint/run.ts' .scripts/lint.ts && grep -q './lint/self-test.ts' .scripts/lint-self-test.ts && ! grep -R -q '../scripts/lint' .scripts/lint.ts .scripts/lint-self-test.ts
   tags: [spec, lint-migration, implemented]
+
+# tests
+
+## app-install
+- label: The integration VM install suite runs the programmatic app installer path and verifies first-run Open WebUI plus llama.cpp commands are wired
+  command: rg -q 'HARBOR_INSTALL_SOURCE_PATH' tests/suites/01-install.sh && rg -q 'install.sh' tests/suites/01-install.sh && rg -q 'harbor up --no-defaults llamacpp webui' tests/suites/01-install.sh && rg -q 'models.*pull.*--source.*llamacpp' tests/suites/01-install.sh
+  tags: [spec, app-install, implemented]

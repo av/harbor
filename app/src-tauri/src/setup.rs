@@ -6,7 +6,7 @@ use std::{
     fs,
     io::{Read, Write},
     path::PathBuf,
-    process::Command,
+    process::{ChildStderr, ChildStdout, Command},
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
@@ -141,6 +141,17 @@ fn run_capture(program: &str, args: &[&str]) -> ProcessOutput {
     run_capture_timeout(program, args, None)
 }
 
+fn spawn_output_reader<R>(mut reader: R) -> std::thread::JoinHandle<String>
+where
+    R: Read + Send + 'static,
+{
+    std::thread::spawn(move || {
+        let mut output = String::new();
+        let _ = reader.read_to_string(&mut output);
+        output
+    })
+}
+
 fn run_capture_timeout(program: &str, args: &[&str], timeout: Option<Duration>) -> ProcessOutput {
     let mut command = Command::new(program);
     command.args(args);
@@ -157,27 +168,23 @@ fn run_capture_timeout(program: &str, args: &[&str], timeout: Option<Duration>) 
             .spawn()
         {
             Ok(mut child) => {
+                let stdout_reader: Option<std::thread::JoinHandle<String>> = child
+                    .stdout
+                    .take()
+                    .map(|reader: ChildStdout| spawn_output_reader(reader));
+                let stderr_reader: Option<std::thread::JoinHandle<String>> = child
+                    .stderr
+                    .take()
+                    .map(|reader: ChildStderr| spawn_output_reader(reader));
                 let started = Instant::now();
                 loop {
                     match child.try_wait() {
                         Ok(Some(status)) => {
-                            let stdout = child
-                                .stdout
-                                .take()
-                                .map(|mut r| {
-                                    let mut buf = Vec::new();
-                                    let _ = r.read_to_end(&mut buf);
-                                    String::from_utf8_lossy(&buf).to_string()
-                                })
+                            let stdout = stdout_reader
+                                .and_then(|reader| reader.join().ok())
                                 .unwrap_or_default();
-                            let stderr = child
-                                .stderr
-                                .take()
-                                .map(|mut r| {
-                                    let mut buf = Vec::new();
-                                    let _ = r.read_to_end(&mut buf);
-                                    String::from_utf8_lossy(&buf).to_string()
-                                })
+                            let stderr = stderr_reader
+                                .and_then(|reader| reader.join().ok())
                                 .unwrap_or_default();
                             return ProcessOutput {
                                 code: status.code(),
@@ -189,12 +196,19 @@ fn run_capture_timeout(program: &str, args: &[&str], timeout: Option<Duration>) 
                             if started.elapsed() > limit {
                                 let _ = child.kill();
                                 let _ = child.wait();
+                                let stdout = stdout_reader
+                                    .and_then(|reader| reader.join().ok())
+                                    .unwrap_or_default();
+                                let stderr = stderr_reader
+                                    .and_then(|reader| reader.join().ok())
+                                    .unwrap_or_default();
                                 return ProcessOutput {
                                     code: Some(124),
-                                    stdout: String::new(),
+                                    stdout,
                                     stderr: format!(
-                                        "{} timed out after {}s",
-                                        program,
+                                        "{}{} timed out after {}s",
+                                        stderr,
+                                        if stderr.is_empty() { "" } else { "\n" },
                                         limit.as_secs()
                                     ),
                                 };
@@ -498,7 +512,11 @@ fn detect_windows_target(detail: &mut HarborSetupDetail) -> bool {
         return true;
     }
 
-    let distros = run_capture_timeout("wsl.exe", &["--list", "--verbose"], Some(DETECT_CMD_TIMEOUT));
+    let distros = run_capture_timeout(
+        "wsl.exe",
+        &["--list", "--verbose"],
+        Some(DETECT_CMD_TIMEOUT),
+    );
     if distros.code != Some(0) {
         detail.status = "checking-prerequisites".into();
         detail.remediation_kind = Some("missing-wsl-distro".into());
@@ -556,12 +574,18 @@ fn detect_platform_blocker(detail: &mut HarborSetupDetail) -> bool {
 
 fn detect_cli(detail: &mut HarborSetupDetail) -> bool {
     let detected = if detail.platform == "windows" {
-        run_wsl_bash_timeout("command -v harbor >/dev/null && harbor --version", Some(DETECT_CMD_TIMEOUT))
+        run_wsl_bash_timeout(
+            "command -v harbor >/dev/null && harbor --version",
+            Some(DETECT_CMD_TIMEOUT),
+        )
     } else {
-        run_shell_timeout(&format!(
-            "{}; command -v harbor >/dev/null && harbor --version",
-            native_harbor_prelude()
-        ), Some(DETECT_CMD_TIMEOUT))
+        run_shell_timeout(
+            &format!(
+                "{}; command -v harbor >/dev/null && harbor --version",
+                native_harbor_prelude()
+            ),
+            Some(DETECT_CMD_TIMEOUT),
+        )
     };
 
     if detected.code == Some(0) {
@@ -583,8 +607,10 @@ fn detect_native_harbor_install(detail: &mut HarborSetupDetail) -> bool {
         return false;
     }
 
-    let installed =
-        run_shell_timeout("test -e \"$HOME/.local/bin/harbor\" -o -x \"$HOME/.harbor/harbor.sh\"", Some(DETECT_CMD_TIMEOUT));
+    let installed = run_shell_timeout(
+        "test -e \"$HOME/.local/bin/harbor\" -o -x \"$HOME/.harbor/harbor.sh\"",
+        Some(DETECT_CMD_TIMEOUT),
+    );
     if installed.code != Some(0) {
         return false;
     }
@@ -678,12 +704,16 @@ fn verify_webui_llamacpp_config() -> ProcessOutput {
 
 fn target_curl_url(url: &str) -> ProcessOutput {
     if platform_name() == "windows" {
-        run_wsl_bash_timeout(&format!(
-            "curl -fsS --max-time 5 {} >/dev/null",
-            shell_quote(url)
-        ), Some(DETECT_CMD_TIMEOUT))
+        run_wsl_bash_timeout(
+            &format!("curl -fsS --max-time 5 {} >/dev/null", shell_quote(url)),
+            Some(DETECT_CMD_TIMEOUT),
+        )
     } else {
-        run_capture_timeout("curl", &["-fsS", "--max-time", "5", url], Some(DETECT_CMD_TIMEOUT))
+        run_capture_timeout(
+            "curl",
+            &["-fsS", "--max-time", "5", url],
+            Some(DETECT_CMD_TIMEOUT),
+        )
     }
 }
 
@@ -723,11 +753,7 @@ fn detect_first_run_stack(detail: &mut HarborSetupDetail) {
 
     if !webui_ok || !llamacpp_ok {
         detail.status = "configuring-first-run-stack".into();
-        detail.remediation_kind = Some(if !webui_ok {
-            "webui-health-failed".into()
-        } else {
-            "llamacpp-inference-failed".into()
-        });
+        detail.remediation_kind = Some("stack-start-failed".into());
         detail.last_error = Some("Open WebUI plus llama.cpp is not fully reachable yet.".into());
         return;
     }
@@ -760,13 +786,22 @@ fn detect_first_run_stack(detail: &mut HarborSetupDetail) {
     }
 }
 
+fn setup_is_active(state: &SetupState) -> bool {
+    state
+        .setup_active
+        .lock()
+        .map(|active| *active)
+        .unwrap_or(false)
+}
+
 #[tauri::command]
 pub fn detect_harbor_setup(state: State<'_, SetupState>) -> HarborSetupDetail {
-    let running = state
+    let child_running = state
         .current_pid
         .lock()
         .map(|pid| pid.is_some())
         .unwrap_or(false);
+    let running = child_running || setup_is_active(&state);
     let platform = platform_name();
     let mut detail = HarborSetupDetail {
         status: "checking-platform".into(),
@@ -983,12 +1018,7 @@ fn run_logged(
         .spawn_command(command)
         .map_err(|err| err.to_string())?;
 
-    if state
-        .cancel_requested
-        .lock()
-        .map(|c| *c)
-        .unwrap_or(false)
-    {
+    if state.cancel_requested.lock().map(|c| *c).unwrap_or(false) {
         let _ = child.kill();
         clear_running_state(state, true);
         emit_stage(app, "cancelled");
@@ -1046,8 +1076,7 @@ fn run_logged(
                     };
 
                     if valid_end > 0 {
-                        let chunk =
-                            String::from_utf8_lossy(&utf8_carry[..valid_end]).to_string();
+                        let chunk = String::from_utf8_lossy(&utf8_carry[..valid_end]).to_string();
                         emit_process_chunk(
                             &reader_app,
                             &reader_stage,
@@ -1457,7 +1486,7 @@ fn verify_first_run_stack_inner(app: &AppHandle, state: &SetupState) -> Result<(
     check_not_running(state)?;
     let script = "webui=$(harbor url webui | sed 's#/*$##'); llama=$(harbor url llamacpp | sed 's#/*$##'); \
 for i in $(seq 1 120); do curl -fsS --max-time 5 \"$webui\" >/dev/null && curl -fsS --max-time 5 \"$llama/v1/models\" >/dev/null && break; sleep 5; done; \
-curl -fsS --max-time 5 \"$webui\" >/dev/null && curl -fsS --max-time 5 \"$llama/v1/models\" >/dev/null || { echo 'HARBOR_SETUP_STAGE=failed'; echo 'Services did not start within the expected time'; exit 1; }; \
+curl -fsS --max-time 5 \"$webui\" >/dev/null && curl -fsS --max-time 5 \"$llama/v1/models\" >/dev/null || { echo 'HARBOR_SETUP_STAGE=failed'; echo 'Services did not start within the expected time (stack-start-failed)'; exit 1; }; \
 home=$(harbor home); config=\"$home/services/webui/config.json\"; \
 test -f \"$config\" || { echo 'HARBOR_SETUP_STAGE=failed'; echo 'WebUI backend config not found (webui-backend-config-failed)'; exit 1; }; \
 grep -Fq 'http://llamacpp:8080/v1' \"$config\" || { echo 'HARBOR_SETUP_STAGE=failed'; echo 'WebUI is not configured with the llama.cpp backend (webui-backend-config-failed)'; exit 1; }; \
