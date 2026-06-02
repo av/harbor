@@ -165,18 +165,18 @@ fn run_capture_timeout(program: &str, args: &[&str], timeout: Option<Duration>) 
                                 .stdout
                                 .take()
                                 .map(|mut r| {
-                                    let mut s = String::new();
-                                    let _ = r.read_to_string(&mut s);
-                                    s
+                                    let mut buf = Vec::new();
+                                    let _ = r.read_to_end(&mut buf);
+                                    String::from_utf8_lossy(&buf).to_string()
                                 })
                                 .unwrap_or_default();
                             let stderr = child
                                 .stderr
                                 .take()
                                 .map(|mut r| {
-                                    let mut s = String::new();
-                                    let _ = r.read_to_string(&mut s);
-                                    s
+                                    let mut buf = Vec::new();
+                                    let _ = r.read_to_end(&mut buf);
+                                    String::from_utf8_lossy(&buf).to_string()
                                 })
                                 .unwrap_or_default();
                             return ProcessOutput {
