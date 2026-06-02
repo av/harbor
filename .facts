@@ -521,6 +521,15 @@
 - label: Harbor App release packaging uses a pinned Bun version instead of latest so macOS and Windows app builds are reproducible across runner image updates
   command: node -e 'const fs=require("fs"); const src=fs.readFileSync(".github/workflows/app-release.yml","utf8"); if (!src.includes("oven-sh/setup-bun@v2")) process.exit(1); if (!/bun-version:\s*1\.3\.9/.test(src)) process.exit(1); if (/bun-version:\s*latest/.test(src)) process.exit(1);'
   tags: [spec, app-install]
+- label: Harbor App Bun lock resolves the same Vite and Tauri frontend build tool versions as package-lock so release packaging does not run stale cross-platform build tooling
+  command: cd app && bun pm ls | rg -q 'vite@5\.4\.21' && bun pm ls | rg -q '@vitejs/plugin-react@4\.7\.0' && bun pm ls | rg -q '@tauri-apps/cli@2\.11\.2'
+  tags: [spec, app-install]
+- label: Harbor App disables DaisyUI build logs so release packaging does not emit wide Unicode output from Tailwind generation
+  command: node -e 'const fs=require("fs"); const src=fs.readFileSync("app/tailwind.config.js","utf8"); if (!/logs:\s*false/.test(src) || /logs:\s*true/.test(src)) process.exit(1);'
+  tags: [spec, app-install]
+- label: Harbor App service docs raw-import only text documentation files so release builds do not parse binary docs assets as raw modules
+  command: node -e 'const fs=require("fs"); const src=fs.readFileSync("app/src/service/ServiceDocs.tsx","utf8"); if (!src.includes("import.meta.glob(\"/src/docs/*.{md,yml,yaml}\"") || src.includes("import.meta.glob(\"/src/docs/*\"")) process.exit(1);'
+  tags: [spec, app-install]
 
 ## setup
 - label: Harbor App exposes a centralized setup gate backed by typed Tauri setup commands before Harbor-dependent providers mount
