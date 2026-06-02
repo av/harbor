@@ -24,7 +24,7 @@ pub fn run() {
                 let handle = app.handle();
                 tray::create_tray(handle)?;
             }
-            if std::env::var("HARBOR_APP_SETUP_SMOKE").as_deref() == Ok("1") {
+            if std::env::var("HARBOR_APP_SETUP_SMOKE").ok().as_deref() == Some("1") {
                 setup::spawn_setup_smoke(app.handle().clone());
             }
             Ok(())
