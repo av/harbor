@@ -17,11 +17,15 @@ pub fn run() {
     }
 
     builder
+        .manage(setup::SetupState::default())
         .setup(|app| {
             #[cfg(all(desktop))]
             {
                 let handle = app.handle();
                 tray::create_tray(handle)?;
+            }
+            if std::env::var("HARBOR_APP_SETUP_SMOKE").as_deref() == Ok("1") {
+                setup::spawn_setup_smoke(app.handle().clone());
             }
             Ok(())
         })
@@ -50,7 +54,6 @@ pub fn run() {
         ))
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_pty::init())
-        .manage(setup::SetupState::default())
         .invoke_handler(tauri::generate_handler![
             setup::detect_harbor_setup,
             setup::get_harbor_wsl_distro,

@@ -499,21 +499,21 @@
   tags: [spec, app-install, implemented]
 - label: app install spec covers a zero-to-running flow where a user can install the Harbor App, install Harbor CLI and platform dependencies, configure Open WebUI plus llama.cpp, verify inference with a small model, and open Open WebUI from a clean machine
   command: rg -q 'Zero-to-Running Scope' scripts/specs/app-install.md && rg -q 'harbor up --no-defaults llamacpp webui' scripts/specs/app-install.md && rg -q 'Open WebUI' scripts/specs/app-install.md && rg -q 'inference' scripts/specs/app-install.md
-  tags: [spec, app-install]
+  tags: [spec, app-install, implemented]
 - label: app install spec requires install.sh and install.ps1 to own platform prerequisite installation, conditional branching, and Windows interop while the app orchestrates setup state
   command: rg -q 'install.sh' scripts/specs/app-install.md && rg -q 'install.ps1' scripts/specs/app-install.md && rg -q 'platform conditionals' scripts/specs/app-install.md
-  tags: [spec, app-install]
+  tags: [spec, app-install, implemented]
 - label: app install spec defines zero-to-running readiness as Open WebUI plus llama.cpp running and completing inference with a small model
   command: rg -q 'Open WebUI' scripts/specs/app-install.md && rg -q 'llama.cpp' scripts/specs/app-install.md && rg -q 'small model' scripts/specs/app-install.md && rg -q 'inference' scripts/specs/app-install.md
-  tags: [spec, app-install]
+  tags: [spec, app-install, implemented]
 - label: app install spec pins the first-run llama.cpp smoke model to unsloth/Qwen3.5-0.8B-GGUF Q4_K_M unless replaced by a verified Harbor-owned pointer
   command: rg -q 'unsloth/Qwen3.5-0.8B-GGUF' scripts/specs/app-install.md && rg -q 'Qwen3.5-0.8B-Q4_K_M.gguf' scripts/specs/app-install.md
-  tags: [spec, app-install]
+  tags: [spec, app-install, implemented]
 - label: Harbor App Windows WSL distro lookup caches only successful distro names so transient setup-state misses cannot pin later app commands to the default WSL distro
   command: node -e 'const fs=require("fs"); const src=fs.readFileSync("app/src/harborCommand.ts","utf8"); if (!src.includes("cachedWindowsWslDistro = distro")) process.exit(1); if (src.includes("cachedWindowsWslDistro = null")) process.exit(1); if (!/if \(distro\) \{\s*cachedWindowsWslDistro = distro;\s*\}/s.test(src)) process.exit(1);'
   tags: [spec, app-install, implemented]
 - label: Harbor App full setup releases the setup-active lock before returning final detection so a successful first-run install can return ready instead of a stale running stage
-  command: node -e 'const fs=require("fs"); const src=fs.readFileSync("app/src-tauri/src/setup.rs","utf8"); const start=src.indexOf("pub fn start_harbor_setup"); const end=src.indexOf("#[tauri::command]", start + 1); const body=src.slice(start,end); const guard=body.indexOf("let guard = acquire_setup_lock(&state)?"); const drop=body.indexOf("drop(guard)"); const detect=body.indexOf("Ok(detect_harbor_setup(state))"); if (guard < 0 || drop < guard || detect < drop) process.exit(1);'
+  command: node -e 'const fs=require("fs"); const src=fs.readFileSync("app/src-tauri/src/setup.rs","utf8"); const start=src.indexOf("fn start_harbor_setup_inner"); const end=src.indexOf("pub fn run_setup_smoke", start); const body=src.slice(start,end); const guard=body.indexOf("let guard = acquire_setup_lock(state)?"); const drop=body.indexOf("drop(guard)"); const detect=body.indexOf("Ok(detect_harbor_setup_inner(state))"); if (guard < 0 || drop < guard || detect < drop) process.exit(1);'
   tags: [spec, app-install, implemented]
 - label: Harbor App setup detection preserves the current setup stage while setup is active so redetect or remount cannot reset an in-progress setup screen to checking-platform
   command: node -e 'const fs=require("fs"); const src=fs.readFileSync("app/src-tauri/src/setup.rs","utf8"); if (!src.includes("current_stage: Arc<Mutex<Option<String>>>") || !src.includes("fn set_current_stage") || !src.includes("fn current_setup_stage")) process.exit(1); const detectStart=src.indexOf("pub fn detect_harbor_setup"); const detectEnd=src.indexOf("#[tauri::command]", detectStart + 1); const detect=src.slice(detectStart, detectEnd); if (!/if running\s*\{[\s\S]*detail\.status = current_setup_stage\(&state\);[\s\S]*return detail;/.test(detect)) process.exit(1); const runStart=src.indexOf("fn run_logged("); const runEnd=src.indexOf("fn run_logged_shell", runStart); const run=src.slice(runStart, runEnd); if (!run.includes("set_current_stage(state, stage)") || !run.includes("reader_current_stage")) process.exit(1); const lineStart=src.indexOf("fn emit_process_line"); const lineEnd=src.indexOf("fn emit_process_chunk", lineStart); const line=src.slice(lineStart,lineEnd); if (!line.includes("current_stage_state") || !line.includes("Some(marker.clone())")) process.exit(1);'
@@ -530,6 +530,9 @@
 - label: Harbor App service docs raw-import only text documentation files so release builds do not parse binary docs assets as raw modules
   command: node -e 'const fs=require("fs"); const src=fs.readFileSync("app/src/service/ServiceDocs.tsx","utf8"); if (!src.includes("import.meta.glob(\"/src/docs/*.{md,yml,yaml}\"") || src.includes("import.meta.glob(\"/src/docs/*\"")) process.exit(1);'
   tags: [spec, app-install, implemented]
+- label: Harbor App exposes a native setup smoke mode that runs the same full Tauri setup backend and writes a JSON result for host validation
+  command: node -e 'const fs=require("fs"); const lib=fs.readFileSync("app/src-tauri/src/lib.rs","utf8"); const setup=fs.readFileSync("app/src-tauri/src/setup.rs","utf8"); if (!lib.includes("HARBOR_APP_SETUP_SMOKE") || !lib.includes("spawn_setup_smoke")) process.exit(1); if (!setup.includes("run_setup_smoke") || !setup.includes("HARBOR_APP_SETUP_SMOKE_OUTPUT") || !setup.includes("start_harbor_setup_inner")) process.exit(1);'
+  tags: [spec, app-install]
 
 ## setup
 - label: Harbor App exposes a centralized setup gate backed by typed Tauri setup commands before Harbor-dependent providers mount
@@ -1150,3 +1153,6 @@
 - label: The integration VM install suite runs the programmatic app installer path and verifies first-run Open WebUI plus llama.cpp commands are wired
   command: rg -q 'HARBOR_INSTALL_SOURCE_PATH' tests/suites/01-install.sh && rg -q 'install.sh' tests/suites/01-install.sh && rg -q 'harbor up --no-defaults llamacpp webui' tests/suites/01-install.sh && rg -q 'models.*pull.*--source.*llamacpp' tests/suites/01-install.sh
   tags: [spec, app-install, implemented]
+- label: Harbor native setup integration spec documents verifiable Linux macOS and Windows first-run setup tests with host prerequisites and machine-checkable expectations
+  command: test -f tests/app-native-setup.md && rg -q '## Prerequisites' tests/app-native-setup.md && rg -q 'macOS Ready Path' tests/app-native-setup.md && rg -q 'Windows Ready Path' tests/app-native-setup.md && rg -q 'HARBOR_APP_SETUP_SMOKE_OUTPUT' tests/app-native-setup.md
+  tags: [spec, app-install]

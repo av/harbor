@@ -10,7 +10,7 @@ use std::{
     sync::{Arc, Mutex, OnceLock},
     time::{Duration, Instant},
 };
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 const HARBOR_INSTALL_URL: &str =
     "https://raw.githubusercontent.com/av/harbor/refs/heads/main/install.sh";
@@ -66,6 +66,14 @@ pub struct HarborSetupDetail {
     pub last_error: Option<String>,
     pub remediation_kind: Option<String>,
     pub running: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SetupSmokeResult {
+    ok: bool,
+    detail: Option<HarborSetupDetail>,
+    error: Option<String>,
 }
 
 #[derive(Clone, Serialize)]
@@ -841,6 +849,10 @@ fn current_setup_stage(state: &SetupState) -> String {
 #[tauri::command]
 pub fn detect_harbor_setup(state: State<'_, SetupState>) -> HarborSetupDetail {
     clear_wsl_distro_cache();
+    detect_harbor_setup_inner(&state)
+}
+
+fn detect_harbor_setup_inner(state: &SetupState) -> HarborSetupDetail {
     let child_running = state
         .current_pid
         .lock()
@@ -1348,35 +1360,74 @@ pub fn start_harbor_setup(
     app: AppHandle,
     state: State<'_, SetupState>,
 ) -> Result<HarborSetupDetail, String> {
-    let guard = acquire_setup_lock(&state)?;
+    start_harbor_setup_inner(&app, &state)
+}
 
-    reset_cancel(&state);
+fn start_harbor_setup_inner(
+    app: &AppHandle,
+    state: &SetupState,
+) -> Result<HarborSetupDetail, String> {
+    let guard = acquire_setup_lock(state)?;
+
+    reset_cancel(state);
 
     if platform_name() == "windows" {
         let distro = preferred_wsl_distro();
         run_logged_shell(
-            &app,
-            &state,
+            app,
+            state,
             "installing-cli",
             &windows_install_script(distro.as_deref()),
             Some(Duration::from_secs(1800)),
         )?;
     } else {
         run_logged_shell(
-            &app,
-            &state,
+            app,
+            state,
             "installing-cli",
             &install_script(),
             Some(Duration::from_secs(1800)),
         )?;
     }
 
-    verify_harbor_cli_inner(&app, &state)?;
-    configure_first_run_stack_inner(&app, &state)?;
-    start_first_run_stack_inner(&app, &state)?;
-    verify_first_run_stack_inner(&app, &state)?;
+    verify_harbor_cli_inner(app, state)?;
+    configure_first_run_stack_inner(app, state)?;
+    start_first_run_stack_inner(app, state)?;
+    verify_first_run_stack_inner(app, state)?;
     drop(guard);
-    Ok(detect_harbor_setup(state))
+    Ok(detect_harbor_setup_inner(state))
+}
+
+pub fn run_setup_smoke(app: AppHandle) -> Result<HarborSetupDetail, String> {
+    let state = app.state::<SetupState>();
+    start_harbor_setup_inner(&app, &state)
+}
+
+pub fn spawn_setup_smoke(app: AppHandle) {
+    std::thread::spawn(move || {
+        let result = run_setup_smoke(app.clone());
+        let exit_code = if result.is_ok() { 0 } else { 1 };
+        let smoke_result = match result {
+            Ok(detail) => SetupSmokeResult {
+                ok: true,
+                detail: Some(detail),
+                error: None,
+            },
+            Err(error) => SetupSmokeResult {
+                ok: false,
+                detail: None,
+                error: Some(error),
+            },
+        };
+
+        if let Ok(output_path) = std::env::var("HARBOR_APP_SETUP_SMOKE_OUTPUT") {
+            if let Ok(json) = serde_json::to_string_pretty(&smoke_result) {
+                let _ = fs::write(output_path, json);
+            }
+        }
+
+        app.exit(exit_code);
+    });
 }
 
 #[tauri::command]
