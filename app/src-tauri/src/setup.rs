@@ -1406,12 +1406,20 @@ pub fn run_setup_smoke(app: AppHandle) -> Result<HarborSetupDetail, String> {
 pub fn spawn_setup_smoke(app: AppHandle) {
     std::thread::spawn(move || {
         let result = run_setup_smoke(app.clone());
-        let exit_code = if result.is_ok() { 0 } else { 1 };
+        let ready = result
+            .as_ref()
+            .map(|detail| detail.status == "ready")
+            .unwrap_or(false);
+        let exit_code = if ready { 0 } else { 1 };
         let smoke_result = match result {
             Ok(detail) => SetupSmokeResult {
-                ok: true,
+                ok: ready,
+                error: if ready {
+                    None
+                } else {
+                    Some(format!("Setup ended with status {}", detail.status))
+                },
                 detail: Some(detail),
-                error: None,
             },
             Err(error) => SetupSmokeResult {
                 ok: false,

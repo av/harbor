@@ -533,6 +533,9 @@
 - label: Harbor App exposes a native setup smoke mode that runs the same full Tauri setup backend and writes a JSON result for host validation
   command: node -e 'const fs=require("fs"); const lib=fs.readFileSync("app/src-tauri/src/lib.rs","utf8"); const setup=fs.readFileSync("app/src-tauri/src/setup.rs","utf8"); if (!lib.includes("HARBOR_APP_SETUP_SMOKE") || !lib.includes("spawn_setup_smoke")) process.exit(1); if (!setup.includes("run_setup_smoke") || !setup.includes("HARBOR_APP_SETUP_SMOKE_OUTPUT") || !setup.includes("start_harbor_setup_inner")) process.exit(1);'
   tags: [spec, app-install]
+- label: Harbor App native setup smoke mode only exits successfully when the final setup detail status is ready
+  command: node -e 'const fs=require("fs"); const src=fs.readFileSync("app/src-tauri/src/setup.rs","utf8"); const start=src.indexOf("pub fn spawn_setup_smoke"); const body=src.slice(start); if (!body.includes("detail.status == \"ready\"") || !body.includes("ok: ready") || !body.includes("if ready { 0 } else { 1 }")) process.exit(1);'
+  tags: [spec, app-install]
 
 ## setup
 - label: Harbor App exposes a centralized setup gate backed by typed Tauri setup commands before Harbor-dependent providers mount
