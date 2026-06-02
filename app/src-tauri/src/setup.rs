@@ -1014,23 +1014,74 @@ fn run_logged(
     let reader_thread = std::thread::spawn(move || {
         let mut buffer = [0_u8; 4096];
         let mut line_buffer = String::new();
+        // Carry-over buffer for incomplete multi-byte UTF-8 sequences
+        // split across read boundaries. At most 3 bytes (max UTF-8 char
+        // is 4 bytes, so at most 3 leading bytes can be left over).
+        let mut utf8_carry: Vec<u8> = Vec::new();
         loop {
             match reader.read(&mut buffer) {
                 Ok(0) => break,
                 Ok(size) => {
-                    let chunk = String::from_utf8_lossy(&buffer[..size]).to_string();
-                    emit_process_chunk(
-                        &reader_app,
-                        &reader_stage,
-                        "pty",
-                        &chunk,
-                        &reader_marker_state,
-                        &reader_last_line_state,
-                        &mut line_buffer,
-                    );
+                    // Combine any carry-over bytes with the new read
+                    // into a single contiguous slice for UTF-8 validation.
+                    utf8_carry.extend_from_slice(&buffer[..size]);
+
+                    // Find the last complete UTF-8 boundary. If the tail
+                    // bytes form an incomplete character, carry them over
+                    // to the next read instead of replacing them with U+FFFD.
+                    let valid_end = match std::str::from_utf8(&utf8_carry) {
+                        Ok(_) => utf8_carry.len(),
+                        Err(e) => {
+                            let valid = e.valid_up_to();
+                            // If there's an error_len, the bytes are truly
+                            // invalid (not just incomplete). Include them so
+                            // from_utf8_lossy can replace them.
+                            if let Some(len) = e.error_len() {
+                                valid + len
+                            } else {
+                                // Incomplete sequence at the end -- carry over.
+                                valid
+                            }
+                        }
+                    };
+
+                    if valid_end > 0 {
+                        let chunk =
+                            String::from_utf8_lossy(&utf8_carry[..valid_end]).to_string();
+                        emit_process_chunk(
+                            &reader_app,
+                            &reader_stage,
+                            "pty",
+                            &chunk,
+                            &reader_marker_state,
+                            &reader_last_line_state,
+                            &mut line_buffer,
+                        );
+                    }
+
+                    // Keep only the incomplete trailing bytes for next iteration.
+                    if valid_end < utf8_carry.len() {
+                        let remaining = utf8_carry[valid_end..].to_vec();
+                        utf8_carry = remaining;
+                    } else {
+                        utf8_carry.clear();
+                    }
                 }
                 Err(_) => break,
             }
+        }
+        // Flush any remaining bytes (incomplete UTF-8 at EOF).
+        if !utf8_carry.is_empty() {
+            let chunk = String::from_utf8_lossy(&utf8_carry).to_string();
+            emit_process_chunk(
+                &reader_app,
+                &reader_stage,
+                "pty",
+                &chunk,
+                &reader_marker_state,
+                &reader_last_line_state,
+                &mut line_buffer,
+            );
         }
         if !line_buffer.trim().is_empty() {
             emit_process_line(
