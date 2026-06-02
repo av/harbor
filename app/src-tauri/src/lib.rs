@@ -77,10 +77,8 @@ pub fn run() {
 fn show_window(app: &AppHandle) {
     let windows = app.webview_windows();
 
-    windows
-        .values()
-        .next()
-        .expect("No app windows found")
-        .set_focus()
-        .expect("Unable to focus the window");
+    if let Some(window) = windows.values().next() {
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
 }
