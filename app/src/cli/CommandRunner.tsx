@@ -10,6 +10,18 @@ import { buildNativeHarborArgs, buildWindowsWslHarborArgs } from "../harborComma
 
 const converter = new AnsiToHtml({ escapeXML: true });
 
+function parseArgs(input: string): string[] {
+    const matches = input.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g);
+    if (!matches) return [];
+    return matches.map((m) =>
+        m.startsWith('"') && m.endsWith('"')
+            ? m.slice(1, -1)
+            : m.startsWith("'") && m.endsWith("'")
+              ? m.slice(1, -1)
+              : m,
+    );
+}
+
 interface CliEntry {
     id: number;
     args: string[];
@@ -50,7 +62,7 @@ export const CommandRunner = () => {
         const trimmed = input.trim();
         if (!trimmed || running) return;
 
-        const args = trimmed.split(/\s+/);
+        const args = parseArgs(trimmed);
         const id = ++idCounter.current;
 
         stdoutBuf.current = "";
