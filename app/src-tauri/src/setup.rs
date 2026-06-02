@@ -7,7 +7,7 @@ use std::{
     io::{Read, Write},
     path::PathBuf,
     process::{ChildStderr, ChildStdout, Command},
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, OnceLock},
     time::{Duration, Instant},
 };
 use tauri::{AppHandle, Emitter, State};
@@ -29,6 +29,7 @@ pub struct SetupState {
     /// (e.g. Cancel then immediate Retry) cannot race through the
     /// `current_pid` check window between sub-steps.
     setup_active: Mutex<bool>,
+    current_stage: Arc<Mutex<Option<String>>>,
 }
 
 impl SetupState {
@@ -133,6 +134,7 @@ fn native_command_path() -> Option<OsString> {
     env::join_paths(paths).ok()
 }
 
+// Keep in sync with buildNativeHarborCommand in app/src/harborCommand.ts
 fn native_harbor_prelude() -> &'static str {
     "export PATH=\"$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH\"; if ! command -v harbor >/dev/null 2>&1 && test -x \"$HOME/.harbor/harbor.sh\"; then function harbor() { \"$HOME/.harbor/harbor.sh\" \"$@\"; }; fi"
 }
@@ -146,9 +148,9 @@ where
     R: Read + Send + 'static,
 {
     std::thread::spawn(move || {
-        let mut output = String::new();
-        let _ = reader.read_to_string(&mut output);
-        output
+        let mut buf = Vec::new();
+        let _ = reader.read_to_end(&mut buf);
+        String::from_utf8_lossy(&buf).to_string()
     })
 }
 
@@ -206,9 +208,10 @@ fn run_capture_timeout(program: &str, args: &[&str], timeout: Option<Duration>) 
                                     code: Some(124),
                                     stdout,
                                     stderr: format!(
-                                        "{}{} timed out after {}s",
+                                        "{}{}{} timed out after {}s",
                                         stderr,
                                         if stderr.is_empty() { "" } else { "\n" },
+                                        program,
                                         limit.as_secs()
                                     ),
                                 };
@@ -348,7 +351,33 @@ fn parse_wsl_distro_exists(output: &str, distro: &str) -> bool {
     })
 }
 
+static WSL_DISTRO_CACHE: OnceLock<Mutex<Option<String>>> = OnceLock::new();
+
+fn wsl_distro_cache() -> &'static Mutex<Option<String>> {
+    WSL_DISTRO_CACHE.get_or_init(|| Mutex::new(None))
+}
+
+fn clear_wsl_distro_cache() {
+    if let Ok(mut cached) = wsl_distro_cache().lock() {
+        *cached = None;
+    }
+}
+
 fn preferred_wsl_distro() -> Option<String> {
+    if let Ok(cached) = wsl_distro_cache().lock() {
+        if let Some(distro) = cached.as_ref() {
+            return Some(distro.clone());
+        }
+    }
+
+    let result = resolve_wsl_distro();
+    if let Ok(mut cached) = wsl_distro_cache().lock() {
+        *cached = result.clone();
+    }
+    result
+}
+
+fn resolve_wsl_distro() -> Option<String> {
     if let Some(distro) = selected_wsl_distro() {
         persist_wsl_distro(&distro);
         return Some(distro);
@@ -794,8 +823,24 @@ fn setup_is_active(state: &SetupState) -> bool {
         .unwrap_or(false)
 }
 
+fn set_current_stage(state: &SetupState, stage: &str) {
+    if let Ok(mut current_stage) = state.current_stage.lock() {
+        *current_stage = Some(stage.to_string());
+    }
+}
+
+fn current_setup_stage(state: &SetupState) -> String {
+    state
+        .current_stage
+        .lock()
+        .ok()
+        .and_then(|stage| stage.clone())
+        .unwrap_or_else(|| "checking-platform".into())
+}
+
 #[tauri::command]
 pub fn detect_harbor_setup(state: State<'_, SetupState>) -> HarborSetupDetail {
+    clear_wsl_distro_cache();
     let child_running = state
         .current_pid
         .lock()
@@ -834,7 +879,12 @@ pub fn detect_harbor_setup(state: State<'_, SetupState>) -> HarborSetupDetail {
         running,
     };
 
-    if running || detect_platform_blocker(&mut detail) || detect_windows_target(&mut detail) {
+    if running {
+        detail.status = current_setup_stage(&state);
+        return detail;
+    }
+
+    if detect_platform_blocker(&mut detail) || detect_windows_target(&mut detail) {
         return detail;
     }
 
@@ -911,6 +961,7 @@ fn emit_process_line(
     stream: &str,
     line: &str,
     marker_state: &Arc<Mutex<Option<String>>>,
+    current_stage_state: &Arc<Mutex<Option<String>>>,
     last_line_state: &Arc<Mutex<Option<String>>>,
 ) {
     if let Ok(mut last_line) = last_line_state.lock() {
@@ -920,6 +971,9 @@ fn emit_process_line(
     if let Some(marker) = parse_setup_stage_marker(line) {
         if let Ok(mut current) = marker_state.lock() {
             *current = Some(marker.clone());
+        }
+        if let Ok(mut current_stage) = current_stage_state.lock() {
+            *current_stage = Some(marker.clone());
         }
         emit_stage(app, &marker);
     }
@@ -933,6 +987,7 @@ fn emit_process_chunk(
     stream: &str,
     chunk: &str,
     marker_state: &Arc<Mutex<Option<String>>>,
+    current_stage_state: &Arc<Mutex<Option<String>>>,
     last_line_state: &Arc<Mutex<Option<String>>>,
     line_buffer: &mut String,
 ) {
@@ -942,7 +997,15 @@ fn emit_process_chunk(
         if ch == '\n' || ch == '\r' {
             let line = line_buffer.trim_end_matches('\r');
             if !line.trim().is_empty() {
-                emit_process_line(app, stage, stream, line, marker_state, last_line_state);
+                emit_process_line(
+                    app,
+                    stage,
+                    stream,
+                    line,
+                    marker_state,
+                    current_stage_state,
+                    last_line_state,
+                );
             }
             line_buffer.clear();
         } else {
@@ -991,6 +1054,7 @@ fn run_logged(
     args: &[&str],
     timeout: Option<Duration>,
 ) -> Result<(), String> {
+    set_current_stage(state, stage);
     emit_stage(app, stage);
     let command_line = format!("$ {} {}", program, args.join(" "));
     emit_log(app, stage, "stdout", &command_line);
@@ -1040,6 +1104,7 @@ fn run_logged(
     let reader_app = app.clone();
     let reader_stage = stage.to_string();
     let reader_marker_state = marker_state.clone();
+    let reader_current_stage = state.current_stage.clone();
     let reader_last_line_state = last_line_state.clone();
     let reader_thread = std::thread::spawn(move || {
         let mut buffer = [0_u8; 4096];
@@ -1083,6 +1148,7 @@ fn run_logged(
                             "pty",
                             &chunk,
                             &reader_marker_state,
+                            &reader_current_stage,
                             &reader_last_line_state,
                             &mut line_buffer,
                         );
@@ -1108,6 +1174,7 @@ fn run_logged(
                 "pty",
                 &chunk,
                 &reader_marker_state,
+                &reader_current_stage,
                 &reader_last_line_state,
                 &mut line_buffer,
             );
@@ -1119,6 +1186,7 @@ fn run_logged(
                 "pty",
                 &line_buffer,
                 &reader_marker_state,
+                &reader_current_stage,
                 &reader_last_line_state,
             );
         }
@@ -1280,7 +1348,7 @@ pub fn start_harbor_setup(
     app: AppHandle,
     state: State<'_, SetupState>,
 ) -> Result<HarborSetupDetail, String> {
-    let _guard = acquire_setup_lock(&state)?;
+    let guard = acquire_setup_lock(&state)?;
 
     reset_cancel(&state);
 
@@ -1307,6 +1375,7 @@ pub fn start_harbor_setup(
     configure_first_run_stack_inner(&app, &state)?;
     start_first_run_stack_inner(&app, &state)?;
     verify_first_run_stack_inner(&app, &state)?;
+    drop(guard);
     Ok(detect_harbor_setup(state))
 }
 

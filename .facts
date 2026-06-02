@@ -514,22 +514,22 @@
   tags: [spec, app-install, implemented]
 - label: Harbor App full setup releases the setup-active lock before returning final detection so a successful first-run install can return ready instead of a stale running stage
   command: node -e 'const fs=require("fs"); const src=fs.readFileSync("app/src-tauri/src/setup.rs","utf8"); const start=src.indexOf("pub fn start_harbor_setup"); const end=src.indexOf("#[tauri::command]", start + 1); const body=src.slice(start,end); const guard=body.indexOf("let guard = acquire_setup_lock(&state)?"); const drop=body.indexOf("drop(guard)"); const detect=body.indexOf("Ok(detect_harbor_setup(state))"); if (guard < 0 || drop < guard || detect < drop) process.exit(1);'
-  tags: [spec, app-install]
+  tags: [spec, app-install, implemented]
 - label: Harbor App setup detection preserves the current setup stage while setup is active so redetect or remount cannot reset an in-progress setup screen to checking-platform
   command: node -e 'const fs=require("fs"); const src=fs.readFileSync("app/src-tauri/src/setup.rs","utf8"); if (!src.includes("current_stage: Arc<Mutex<Option<String>>>") || !src.includes("fn set_current_stage") || !src.includes("fn current_setup_stage")) process.exit(1); const detectStart=src.indexOf("pub fn detect_harbor_setup"); const detectEnd=src.indexOf("#[tauri::command]", detectStart + 1); const detect=src.slice(detectStart, detectEnd); if (!/if running\s*\{[\s\S]*detail\.status = current_setup_stage\(&state\);[\s\S]*return detail;/.test(detect)) process.exit(1); const runStart=src.indexOf("fn run_logged("); const runEnd=src.indexOf("fn run_logged_shell", runStart); const run=src.slice(runStart, runEnd); if (!run.includes("set_current_stage(state, stage)") || !run.includes("reader_current_stage")) process.exit(1); const lineStart=src.indexOf("fn emit_process_line"); const lineEnd=src.indexOf("fn emit_process_chunk", lineStart); const line=src.slice(lineStart,lineEnd); if (!line.includes("current_stage_state") || !line.includes("Some(marker.clone())")) process.exit(1);'
-  tags: [spec, app-install]
+  tags: [spec, app-install, implemented]
 - label: Harbor App release packaging uses a pinned Bun version instead of latest so macOS and Windows app builds are reproducible across runner image updates
   command: node -e 'const fs=require("fs"); const src=fs.readFileSync(".github/workflows/app-release.yml","utf8"); if (!src.includes("oven-sh/setup-bun@v2")) process.exit(1); if (!/bun-version:\s*1\.3\.9/.test(src)) process.exit(1); if (/bun-version:\s*latest/.test(src)) process.exit(1);'
-  tags: [spec, app-install]
+  tags: [spec, app-install, implemented]
 - label: Harbor App Bun lock resolves the same Vite and Tauri frontend build tool versions as package-lock so release packaging does not run stale cross-platform build tooling
   command: cd app && bun pm ls | rg -q 'vite@5\.4\.21' && bun pm ls | rg -q '@vitejs/plugin-react@4\.7\.0' && bun pm ls | rg -q '@tauri-apps/cli@2\.11\.2'
-  tags: [spec, app-install]
+  tags: [spec, app-install, implemented]
 - label: Harbor App disables DaisyUI build logs so release packaging does not emit wide Unicode output from Tailwind generation
   command: node -e 'const fs=require("fs"); const src=fs.readFileSync("app/tailwind.config.js","utf8"); if (!/logs:\s*false/.test(src) || /logs:\s*true/.test(src)) process.exit(1);'
-  tags: [spec, app-install]
+  tags: [spec, app-install, implemented]
 - label: Harbor App service docs raw-import only text documentation files so release builds do not parse binary docs assets as raw modules
   command: node -e 'const fs=require("fs"); const src=fs.readFileSync("app/src/service/ServiceDocs.tsx","utf8"); if (!src.includes("import.meta.glob(\"/src/docs/*.{md,yml,yaml}\"") || src.includes("import.meta.glob(\"/src/docs/*\"")) process.exit(1);'
-  tags: [spec, app-install]
+  tags: [spec, app-install, implemented]
 
 ## setup
 - label: Harbor App exposes a centralized setup gate backed by typed Tauri setup commands before Harbor-dependent providers mount
