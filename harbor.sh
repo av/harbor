@@ -14,6 +14,18 @@ show_help() {
     show_version
     echo "Usage: $0 <command> [options]"
     echo
+    echo "Start here (for AI agents):"
+    echo "  harbor skills get harbor"
+    echo
+    echo "  Skills ship with the CLI (always version-matched) and include"
+    echo "  workflow patterns, service guides, and copy-paste examples."
+    echo "  Prefer this over guessing commands from flag docs alone."
+    echo
+    echo "  skills [list]            List available skills"
+    echo "  skills get harbor        Core CLI usage guide"
+    echo "  skills get <name>        Load a specialized skill"
+    echo "  skills path [name]       Print skill directory path"
+    echo
     echo "Compose Setup Commands:"
     echo "  up|u|start|s [handle(s)] - Start the service(s)"
     echo "    up --tail             - Start and tail the logs"
@@ -184,6 +196,7 @@ show_help() {
     echo "  size                  - Print the size of caches Harbor is aware of"
     echo "  eval                  - Run promptfoo evaluation"
     echo "  routine               - Run internal Harbor routines"
+    echo "  skills [list|get|path]- Agent-readable skill docs shipped with the CLI"
     echo "  dev <script>          - Run Harbor development scripts"
     echo "  tools                 - Run Harbor development tools"
     echo
@@ -7806,6 +7819,183 @@ run_volumes_command() {
     esac
 }
 
+run_skills_command() {
+    local skills_dir="$harbor_home/skills"
+
+    # Extract description from SKILL.md frontmatter.
+    # Handles ```skill wrapper, single-line and multi-line YAML descriptions.
+    _skill_description() {
+        local file="$1"
+        local max_chars="${2:-80}"
+        local found_start=false
+        local in_description=false
+        local desc=""
+
+        while IFS= read -r line; do
+            # Skip ```skill wrapper lines
+            [[ "$line" =~ ^\`\`\` ]] && continue
+
+            if [[ "$found_start" == false ]]; then
+                [[ "$line" == "---" ]] && found_start=true
+                continue
+            fi
+
+            # Second --- closes frontmatter
+            [[ "$line" == "---" ]] && break
+
+            # Parse description field
+            if [[ "$line" =~ ^description:\ *\>\ *$ ]]; then
+                in_description=true
+                continue
+            elif [[ "$line" =~ ^description:\ +(.*) ]]; then
+                desc="${BASH_REMATCH[1]}"
+                break
+            elif [[ "$in_description" == true ]]; then
+                if [[ "$line" =~ ^[a-zA-Z] ]]; then
+                    break
+                fi
+                local trimmed="${line#"${line%%[![:space:]]*}"}"
+                if [ -n "$trimmed" ]; then
+                    desc="${desc:+$desc }$trimmed"
+                fi
+            fi
+        done < "$file"
+
+        if [ ${#desc} -gt "$max_chars" ]; then
+            echo "${desc:0:$max_chars}..."
+        else
+            echo "$desc"
+        fi
+    }
+
+    # Strip frontmatter and output content
+    _skill_content() {
+        local file="$1"
+        local found_start=false
+        local frontmatter_ended=false
+
+        while IFS= read -r line; do
+            if [[ "$frontmatter_ended" == true ]]; then
+                echo "$line"
+                continue
+            fi
+
+            # Skip ```skill wrapper lines
+            [[ "$line" =~ ^\`\`\` ]] && continue
+
+            if [[ "$found_start" == false ]]; then
+                [[ "$line" == "---" ]] && found_start=true
+                continue
+            fi
+
+            # Second --- closes frontmatter
+            if [[ "$line" == "---" ]]; then
+                frontmatter_ended=true
+                continue
+            fi
+        done < "$file"
+    }
+
+    case "${1:-list}" in
+    --help | -h)
+        echo "Harbor skills"
+        echo
+        echo "Skills ship with the CLI and contain agent-ready documentation:"
+        echo "workflow guides, command references, and copy-paste examples."
+        echo
+        echo "Usage:"
+        echo "  harbor skills                    - List available skills"
+        echo "  harbor skills list               - List available skills"
+        echo "  harbor skills get <name>         - Show a skill"
+        echo "  harbor skills get <name> --full  - Show a skill with all reference docs"
+        echo "  harbor skills path [name]        - Print skill directory path"
+        echo
+        echo "Start here (for AI agents):"
+        echo "  harbor skills get harbor"
+        return 0
+        ;;
+    list | ls)
+        if [ ! -d "$skills_dir" ]; then
+            log_error "No skills directory found at $skills_dir"
+            return 1
+        fi
+
+        local found=false
+        for skill_file in "$skills_dir"/*/SKILL.md; do
+            [ -f "$skill_file" ] || continue
+            found=true
+            local skill_name
+            skill_name=$(basename "$(dirname "$skill_file")")
+            local desc
+            desc=$(_skill_description "$skill_file" 75)
+            printf "  %-20s %s\n" "$skill_name" "$desc"
+        done
+
+        if [ "$found" = false ]; then
+            log_info "No skills found in $skills_dir"
+        fi
+        ;;
+    get)
+        local skill_name="$2"
+        if [ -z "$skill_name" ]; then
+            log_error "Usage: harbor skills get <name>"
+            return 1
+        fi
+
+        local skill_file="$skills_dir/$skill_name/SKILL.md"
+        if [ ! -f "$skill_file" ]; then
+            log_error "Skill not found: $skill_name"
+            echo "Available skills:"
+            run_skills_command list
+            return 1
+        fi
+
+        _skill_content "$skill_file"
+
+        # --full: append references and templates
+        if [[ "${3:-}" == "--full" ]]; then
+            local refs_dir="$skills_dir/$skill_name/references"
+            if [ -d "$refs_dir" ]; then
+                for ref_file in "$refs_dir"/*.md; do
+                    [ -f "$ref_file" ] || continue
+                    echo
+                    echo "---"
+                    echo
+                    cat "$ref_file"
+                done
+            fi
+
+            local templates_dir="$skills_dir/$skill_name/templates"
+            if [ -d "$templates_dir" ]; then
+                for tmpl_file in "$templates_dir"/*; do
+                    [ -f "$tmpl_file" ] || continue
+                    echo
+                    echo "---"
+                    echo
+                    cat "$tmpl_file"
+                done
+            fi
+        fi
+        ;;
+    path)
+        local skill_name="$2"
+        if [ -z "$skill_name" ]; then
+            echo "$skills_dir"
+        else
+            local skill_path="$skills_dir/$skill_name"
+            if [ ! -d "$skill_path" ]; then
+                log_error "Skill not found: $skill_name"
+                return 1
+            fi
+            echo "$skill_path"
+        fi
+        ;;
+    *)
+        run_skills_command --help
+        ;;
+    esac
+}
+
 main_entrypoint() {
     case "$1" in
     up | u | start | s)
@@ -8250,6 +8440,10 @@ main_entrypoint() {
     volumes)
         shift
         run_volumes_command "$@"
+        ;;
+    skills)
+        shift
+        run_skills_command "$@"
         ;;
     *)
         return $scramble_exit_code

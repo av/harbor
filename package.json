@@ -9,6 +9,10 @@
   },
   "homepage": "https://github.com/av/harbor",
   "license": "Apache-2.0",
+  "files": [
+    "harbor.sh",
+    "skills"
+  ],
   "devDependencies": {
     "@parcel/transformer-pug": "2.15.2"
   }

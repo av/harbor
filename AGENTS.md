@@ -14,6 +14,7 @@ Harbor is a containerized LLM toolkit — a large Docker Compose project with a 
 - `tests/` — container-based test runner (suites, rows, orchestrator); see `tests/README.md`
 - `.scripts/lint/` — bash-compat lint rules (`HARBORxxx`), fixtures, and 3-pass orchestrator
 - `profiles/default.env` — default config distributed to users
+- `skills/harbor/SKILL.md` — agent-facing CLI skill (shipped via npm for Claude Code discovery)
 
 ### CLI Reference
 
@@ -59,6 +60,13 @@ Dev scripts live in `.scripts/` and must be run via `harbor dev`, not `deno run`
 
 ```bash
 harbor routine <name>            # run internal Deno routines (routines/)
+```
+
+```bash
+harbor skills                    # list available agent skills
+harbor skills get <name>         # show a skill's content
+harbor skills get <name> --full  # show skill + references and templates
+harbor skills path [name]        # print skill directory path
 ```
 
 ### Adding a New Service
