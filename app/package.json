@@ -36,9 +36,9 @@
   "devDependencies": {
     "@types/react": "^18.3.19",
     "@types/react-dom": "^18.3.5",
-    "@vitejs/plugin-react": "^4.3.4",
+    "@vitejs/plugin-react": "^4.7.0",
     "typescript": "^5.8.2",
-    "vite": "^5.4.14",
-    "@tauri-apps/cli": "^2.4.0"
+    "vite": "^5.4.21",
+    "@tauri-apps/cli": "^2.11.2"
   }
 }

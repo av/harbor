@@ -11,12 +11,12 @@ import { buildNativeHarborArgs, buildWindowsWslHarborArgs } from "../harborComma
 const converter = new AnsiToHtml({ escapeXML: true });
 
 function parseArgs(input: string): string[] {
-    const matches = input.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g);
+    const matches = input.match(/(?:[^\s"']+|"[^"]*"|'[^']*'|["'])+/g);
     if (!matches) return [];
     return matches.map((m) =>
-        m.startsWith('"') && m.endsWith('"')
+        m.startsWith('"') && m.endsWith('"') && m.length >= 2
             ? m.slice(1, -1)
-            : m.startsWith("'") && m.endsWith("'")
+            : m.startsWith("'") && m.endsWith("'") && m.length >= 2
               ? m.slice(1, -1)
               : m,
     );

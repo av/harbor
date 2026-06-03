@@ -2,6 +2,23 @@
 
 Companion app for Harbor.
 
+## First-run setup
+
+Install a Harbor App package for your platform, then launch the app. On first
+run the app checks whether the Harbor CLI is installed and reachable. If not, the
+setup screen runs the official Harbor installer (`install.sh` on Linux/macOS,
+`install.ps1` on Windows) with live terminal output. After setup reports
+**ready**, start services from the app Home screen or with `harbor up`.
+
+Linux and macOS setup uses:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/av/harbor/refs/heads/main/install.sh | bash
+```
+
+Windows setup installs Harbor inside WSL2 through `install.ps1`; Harbor commands
+continue to run through WSL from the app.
+
 ## Development
 
 This project uses [bun](https://github.com/oven-sh/bun#install) package manager.
@@ -38,3 +55,18 @@ bun tauri dev
 # For the current targets
 bun tauri build
 ```
+
+### Native setup smoke
+
+Native setup validation can run the app's Tauri setup backend directly from the
+app process:
+
+```bash
+HARBOR_APP_SETUP_SMOKE=1 \
+HARBOR_APP_SETUP_SMOKE_OUTPUT="$PWD/harbor-app-setup.json" \
+./path/to/Harbor
+```
+
+The process exits `0` when setup reaches `ready`, exits non-zero on setup
+failure, and writes JSON with `ok`, `detail`, and `error` fields. The detailed
+host scenarios live in `../tests/app-native-setup.md`.

@@ -93,7 +93,19 @@
       "identifier": "fs:scope",
       "allow": [
         {
-          "path": "$HOME/.harbor/**"
+          "path": "$HOME/**"
+        },
+        {
+          "path": "**"
+        },
+        {
+          "path": "*/**"
+        },
+        {
+          "path": "**/*"
+        },
+        {
+          "path": "**/.env"
         }
       ]
     },
@@ -101,7 +113,16 @@
       "identifier": "fs:write-all",
       "allow": [
         {
-          "path": "$HOME/.harbor/**"
+          "path": "$HOME/**"
+        },
+        {
+          "path": "**"
+        },
+        {
+          "path": "*/**"
+        },
+        {
+          "path": "**/*"
         }
       ]
     }

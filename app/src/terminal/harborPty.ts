@@ -1,6 +1,7 @@
 import { spawn } from "tauri-pty";
 import type { IPty } from "tauri-pty";
 import { isWindows } from "../utils";
+import { buildNativeHarborArgs, buildWindowsWslHarborArgs } from "../harborCommand";
 
 const DEFAULT_PTY_COLS = 80;
 const DEFAULT_PTY_ROWS = 24;
@@ -11,18 +12,6 @@ interface HarborPtyOptions {
     name?: string;
     cwd?: string;
     env?: Record<string, string>;
-}
-
-function shellQuote(value: string) {
-    return `'${value.replace(/'/g, `'\\''`)}'`;
-}
-
-function buildWindowsHarborCommand(args: string[]) {
-    if (args.length === 0) {
-        return "harbor";
-    }
-
-    return `harbor ${args.map(shellQuote).join(" ")}`;
 }
 
 export async function spawnHarborPty(args: string[], options: HarborPtyOptions = {}): Promise<IPty> {
@@ -37,12 +26,12 @@ export async function spawnHarborPty(args: string[], options: HarborPtyOptions =
     if (await isWindows()) {
         return spawn(
             "wsl.exe",
-            ["-e", "bash", "-lic", buildWindowsHarborCommand(args)],
+            await buildWindowsWslHarborArgs(args),
             ptyOptions,
         );
     }
 
-    return spawn("harbor", args, ptyOptions);
+    return spawn("bash", buildNativeHarborArgs(args), ptyOptions);
 }
 
 export type { IPty };

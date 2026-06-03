@@ -17,6 +17,7 @@ pub fn run() {
     }
 
     builder
+        .manage(setup::SetupState::default())
         .setup(|app| {
             #[cfg(all(desktop))]
             {
@@ -50,18 +51,12 @@ pub fn run() {
         ))
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_pty::init())
-        .manage(setup::SetupState::default())
         .invoke_handler(tauri::generate_handler![
             setup::detect_harbor_setup,
             setup::get_harbor_wsl_distro,
             setup::start_harbor_setup,
             setup::cancel_harbor_setup,
             setup::write_harbor_setup_input,
-            setup::verify_harbor_cli,
-            setup::configure_first_run_stack,
-            setup::start_first_run_stack,
-            setup::verify_first_run_stack,
-            setup::open_webui,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

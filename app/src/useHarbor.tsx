@@ -4,6 +4,7 @@ import { join } from "@tauri-apps/api/path";
 
 import { isWindows, once, resolveResultLines } from "./utils";
 import { PROFILES_DIR } from "./configMetadata";
+import { buildNativeHarborArgs, buildWindowsWslArgs, buildWindowsWslHarborArgs } from "./harborCommand";
 
 export const resolveHarborHome = once(async function __resolveHarborHome() {
     const result = await runHarbor(["home"]);
@@ -11,7 +12,7 @@ export const resolveHarborHome = once(async function __resolveHarborHome() {
 
     if (await isWindows()) {
         // On windows, we need to resolve the path first via WSL
-        const wslResult = await Command.create("wsl.exe", ["-e", "wslpath", "-w", path]).execute();
+        const wslResult = await Command.create("wsl.exe", await buildWindowsWslArgs(["wslpath", "-w", path])).execute();
         return resolveResultLines(wslResult).join('\n');
     }
 
@@ -25,9 +26,9 @@ export const resolveProfilesDir = once(async function __resolveProfilesDir() {
 
 export async function runHarbor(args: string[]) {
     if (await isWindows()) {
-        return await Command.create("wsl.exe", ["-e", "bash", "-lic", `harbor ${args.join(' ')}`]).execute();
+        return await Command.create("wsl.exe", await buildWindowsWslHarborArgs(args)).execute();
     } else {
-        return await Command.create("harbor", args).execute();
+        return await Command.create("bash", buildNativeHarborArgs(args)).execute();
     }
 }
 

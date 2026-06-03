@@ -2,7 +2,7 @@ import Markdown from "@uiw/react-markdown-preview";
 import { HarborService } from "../serviceMetadata";
 import { useEffect, useState } from "react";
 
-const docsFiles = import.meta.glob("/src/docs/*", { query: "?raw" });
+const docsFiles = import.meta.glob("/src/docs/*.{md,yml,yaml}", { query: "?raw" });
 
 const transformUrl = (url: string) => {
   if (url.startsWith(".")) {

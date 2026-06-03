@@ -36,7 +36,7 @@ export const HarborConfigSectionEditor = (
     }, [isDeepLinked]);
 
     const filteredEntries = section.entries.filter((entry) => {
-        return search.matches(entry.id);
+        return search.matches(entry.id) || search.matches(entry.value);
     });
 
     // Keep sections open when searching
