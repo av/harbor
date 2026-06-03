@@ -244,7 +244,7 @@ run_harbor_doctor() {
     fi
 
     # Check if the default profile file exists and is readable
-    if [ -f $default_profile ] && [ -r $default_profile ]; then
+    if [ -f "$default_profile" ] && [ -r "$default_profile" ]; then
         log_info "${ok} Default profile exists and is readable"
     else
         log_error "${nok} Default profile is missing or not readable. Please ensure it exists and has the correct permissions."
@@ -948,10 +948,45 @@ run_pull() {
     $(compose_with_options "$@") pull
 }
 
+shell_single_quote() {
+    printf "'%s'" "$(printf "%s" "$1" | sed "s/'/'\\\\''/g")"
+}
+
+llamacpp_pull_model_args() {
+    local model="$1"
+
+    case "$model" in
+    https://huggingface.co/*/blob/main/*.gguf)
+        local decomposed
+        local repo_name
+        local file_specifier
+
+        decomposed=$(parse_hf_url "$model")
+        repo_name=$(echo "$decomposed" | cut -d"$delimiter" -f1)
+        file_specifier=$(echo "$decomposed" | cut -d"$delimiter" -f2)
+
+        if [ -z "$repo_name" ] || [ -z "$file_specifier" ] || [ "$repo_name" = "$model" ]; then
+            log_error "Unable to parse Hugging Face GGUF URL: $model"
+            return 1
+        fi
+
+        printf -- "--hf-repo %s --hf-file %s" \
+            "$(shell_single_quote "$repo_name")" \
+            "$(shell_single_quote "$file_specifier")"
+        ;;
+    *)
+        printf -- "-hf %s" "$(shell_single_quote "$model")"
+        ;;
+    esac
+}
+
 run_llamacpp_pull() {
     local model="$1"
     log_info "Detected Llama.cpp target: $model"
     log_info "Starting ephemeral llama-server to pull model to cache..."
+
+    local model_args
+    model_args=$(llamacpp_pull_model_args "$model") || return 1
 
     local safe_model_name=$(echo "$model" | sed 's/[^a-zA-Z0-9._-]/-/g')
     local c_log="/tmp/pull-${safe_model_name}.log"
@@ -979,7 +1014,7 @@ run_llamacpp_pull() {
 
     log_info 'Starting download process for $model...' >> \"$c_log\"
 
-    /app/llama-server -hf '$model' --port 8080 --host 0.0.0.0 --n-gpu-layers 0 -c 128 >> \"$c_log\" 2>&1 &
+    /app/llama-server $model_args --port 8080 --host 0.0.0.0 --n-gpu-layers 0 -c 128 >> \"$c_log\" 2>&1 &
     SRV_PID=\$!
 
     while true; do

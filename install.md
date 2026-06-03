@@ -21,7 +21,7 @@ codex "$(curl -fsSL https://raw.githubusercontent.com/av/harbor/refs/heads/main/
 ## TODO
 
 - [ ] Detect the operating system and shell environment
-- [ ] Decide whether Harbor's installer should also install optional system requirements
+- [ ] Use default dependency installation unless the user explicitly asks to skip it (`--skip-requirements`)
 - [ ] Run `install.sh` (dependencies are installed by default; pass `--skip-requirements` only if the user explicitly asks to skip)
 - [ ] Refresh shell or Docker group membership if the installer asks for it
 - [ ] Verify `harbor --version` and `harbor doctor`

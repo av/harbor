@@ -150,7 +150,7 @@ dnf_install() {
 
     if ! check_command docker || ! docker compose version >/dev/null 2>&1; then
         log_info "Installing Docker Engine and Docker Compose via dnf"
-        sudo dnf install -y moby-engine docker-compose
+        sudo dnf install -y moby-engine docker-compose-plugin
     else
         log_info "Docker and Docker Compose are already installed"
     fi
