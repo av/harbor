@@ -129,6 +129,8 @@ Step 4 only works if step 2 happened. If you skipped step 2, go back now — you
 
 **Lifecycle:** `@draft` → `@spec` → `@implemented`
 
+**Domain:** the `## domain` section in `.facts` defines the project's entities and relations — read it first to learn the vocabulary.
+
 **Skills** (invoke via `facts skills show <name>`):
 - `facts-refine` — sharpen `@draft` facts into `@spec` with the user
 - `facts-discover` — scan the codebase and sync facts to reality (only when explicitly asked)

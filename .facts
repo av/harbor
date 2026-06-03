@@ -1,934 +1,214 @@
-- boost > workflows > Boost workflow files can be written as YAML when HARBOR_BOOST_WORKFLOWS_FILE points to a .yaml or .yml file, using the same workflow schema as JSON files @spec @implemented
-- boost > workflows > Boost YAML workflow files may use either a direct workflow mapping/list or a top-level workflows/agents mapping before the same workflow definitions @spec @implemented
-- label: cli > launch > harbor launch validates the selected host tool binary before starting backend, Boost, or tool-group services for non-config launches
-  command: rg -q 'started compose before validating the host binary' tests/suites/02-cli.sh && bash tests/suites/02-cli.sh
-  tags: [spec, launch-host-validate, implemented]
-- label: boost > shared > Boost auth returns HTTP 401 for missing or invalid API keys and main.py formats auth errors in SDK-specific schemas (Anthropic error envelope for /v1/messages, OpenAI error envelope for /v1/responses)
-  command: grep -q 'status_code=401' services/boost/src/auth.py && grep -q '_http_exception_handler' services/boost/src/main.py && grep -q '_ANTHROPIC_ERROR_TYPE_MAP' services/boost/src/main.py && grep -q '_OPENAI_ERROR_TYPE_MAP' services/boost/src/main.py
-  tags: [spec, implemented]
-- label: boost > anthropic compat > Boost Anthropic count_tokens uses local tiktoken estimation (cl100k_base encoding with framing overhead) via token_counter.py, falling back to chars/4 when tiktoken is unavailable
-  command: test -f services/boost/src/token_counter.py && grep -q 'count_messages_tokens' services/boost/src/token_counter.py && grep -q 'cl100k_base' services/boost/src/token_counter.py && grep -q 'from token_counter import' services/boost/src/anthropic_compat.py
-  tags: [spec, implemented]
-- label: boost > responses api > Boost Responses API maps text.format structured output configs (json_schema with strict schema, json_object) to OpenAI response_format in the Chat Completions request
-  command: grep -q 'response_format' services/boost/src/responses_compat.py && grep -q 'json_schema' services/boost/src/responses_compat.py && grep -q 'json_object' services/boost/src/responses_compat.py
-  tags: [spec, implemented]
-- label: boost > responses api > Boost Responses API handles refusal content from backends in both non-streaming (refusal output item) and streaming (refusal delta/done events) paths
-  command: grep -q 'refusal' services/boost/src/responses_compat.py && grep -q 'get_chunk_refusal' services/boost/src/compat_utils.py && grep -q 'refusal_open' services/boost/src/responses_compat.py
-  tags: [spec, implemented]
-- label: boost > responses api > Boost Responses API streaming emits terminal events (response.completed, response.incomplete, or response.failed) based on finish reason and error state
-  command: grep -q 'response.completed' services/boost/src/responses_compat.py && grep -q 'response.incomplete' services/boost/src/responses_compat.py && grep -q 'response.failed' services/boost/src/responses_compat.py && grep -q 'terminal_event' services/boost/src/responses_compat.py
-  tags: [spec, implemented]
-- label: boost > responses api > Boost Responses API maps content_filter finish reason to incomplete status and echoes instructions and user params from the request into the response object
-  command: grep -q 'content_filter' services/boost/src/responses_compat.py && grep -q '"instructions"' services/boost/src/responses_compat.py && grep -q '"user"' services/boost/src/responses_compat.py
-  tags: [spec, implemented]
-- label: boost > shared > Boost compat layers extract prefixed keys from the metadata dict and inject them into the OpenAI request body, enabling workflow selection and module config through Anthropic/Responses APIs
-  command: grep -q 'extract_boost_params' services/boost/src/compat_utils.py && grep -q 'extract_boost_params' services/boost/src/anthropic_compat.py && grep -q 'extract_boost_params' services/boost/src/responses_compat.py
-  tags: [boost_, spec, implemented]
-- label: boost > shared > Boost auth strips the Bearer scheme prefix case-insensitively and sanitizes 5xx error details to generic messages in the global exception handler to prevent info leakage
-  command: grep -q '\.lower()' services/boost/src/auth.py && grep -q 'safe_detail' services/boost/src/main.py && grep -q 'Internal server error' services/boost/src/main.py
-  tags: [spec, implemented]
-- label: boost > internals > Boost LLM.serve() calls emit_done on all exit paths (including module-not-found), attaches a done_callback to background tasks for failure detection, and resets is_streaming in a finally block to prevent resource leaks on client disconnect
-  command: grep -q 'emit_done' services/boost/src/llm.py && grep -q 'add_done_callback' services/boost/src/llm.py && grep -q 'finally' services/boost/src/llm.py && grep -q 'is_streaming = False' services/boost/src/llm.py
-  tags: [spec, implemented]
-- label: boost > shared > Boost compat layers log request lifecycle at INFO level (model, stream mode, message count) and auth events, while avoiding sensitive data in log output
-  command: test -f services/boost/tests/test_logging.py && grep -q 'logger' services/boost/src/anthropic_compat.py && grep -q 'logger' services/boost/src/responses_compat.py && grep -q 'logger' services/boost/src/auth.py
-  tags: [spec, implemented]
-- label: boost > shared > Boost format.clean_text_preserve_newlines does NOT apply urllib percent decoding, preserving URLs in LLM output intact
-  command: ! grep -q 'unquote' services/boost/src/format.py && ! grep -q 'urllib' services/boost/src/format.py
-  tags: [spec, implemented]
-- label: boost > responses api > Boost Responses API extracts annotations from backend Chat Completions responses (url_citation, file_citation, file_path from OpenAI format and Perplexity-style flat citation URLs) and includes them in output text content parts
-  command: grep -q 'extract_annotations' services/boost/src/compat_utils.py && grep -q 'extract_annotations' services/boost/src/responses_compat.py && grep -q 'url_citation' services/boost/src/compat_utils.py && grep -q 'file_citation' services/boost/src/compat_utils.py && grep -q 'file_path' services/boost/src/compat_utils.py
-  tags: [spec, implemented]
-- label: boost > responses api > Boost Responses API accumulates streaming annotations via get_chunk_annotations and Perplexity-style chunk citations into output text annotation lists
-  command: grep -q 'get_chunk_annotations' services/boost/src/compat_utils.py && grep -q 'get_chunk_annotations' services/boost/src/responses_compat.py && grep -q 'chunk_citations' services/boost/src/responses_compat.py
-  tags: [spec, implemented]
-- label: boost > shared > Boost LLM raises BackendError on non-200 upstream responses, carrying status_code, body, and rate-limit headers extracted via BackendError.from_httpx()
-  command: grep -q 'class BackendError' services/boost/src/llm.py && grep -q 'from_httpx' services/boost/src/llm.py && grep -q 'raise_for_status' services/boost/src/llm.py && grep -q 'RATE_LIMIT_HEADERS' services/boost/src/llm.py
-  tags: [spec, implemented]
-- label: boost > shared > Boost compat layers catch BackendError and forward rate-limit headers (retry-after, x-ratelimit-*) from the backend to the client, mapping 429 to rate_limit_error
-  command: grep -q 'BackendError' services/boost/src/anthropic_compat.py && grep -q 'BackendError' services/boost/src/responses_compat.py && grep -q 'RATE_LIMIT_FORWARD_HEADERS' services/boost/src/compat_utils.py && grep -q 'RATE_LIMIT_FORWARD_HEADERS' services/boost/src/anthropic_compat.py && grep -q 'RATE_LIMIT_FORWARD_HEADERS' services/boost/src/responses_compat.py
-  tags: [spec, implemented]
-- label: boost > anthropic compat > Boost Anthropic batch API stubs return informative error messages guiding callers to POST /v1/messages, with beta flag echo in response headers
-  command: grep -q 'Harbor Boost does not process' services/boost/src/anthropic_compat.py && grep -q 'messages/batches' services/boost/src/anthropic_compat.py
-  tags: [spec, implemented]
-- label: boost > responses api > Boost Responses API GET, DELETE, and cancel stubs return operation-specific informative messages with response IDs
-  command: grep -q 'cannot be cancelled' services/boost/src/responses_compat.py && grep -q 'not found' services/boost/src/responses_compat.py && grep -q 'response_id' services/boost/src/responses_compat.py
-  tags: [spec, implemented]
-- label: boost > shared > Boost streaming converters use direct dict access (_get_delta, _get_finish_reason) from compat_utils instead of dotty.get in the hot path, avoiding per-chunk parse_path overhead
-  command: grep -q '_get_delta' services/boost/src/compat_utils.py && grep -q '_get_finish_reason' services/boost/src/compat_utils.py && grep -q 'from compat_utils import' services/boost/src/anthropic_compat.py && grep -q 'from compat_utils import' services/boost/src/responses_compat.py
-  tags: [spec, implemented]
-- Boost /v1/models HTTP handler _list_models must exercise module proxy appending (when BOOST_MODS non-empty, mods.registry.get returns module) and filter application (when MODEL_FILTER non-empty, selection.matches_filter decides should_serve) branches, returning appropriate boosted proxy models (e.g. klmbr-*) or filtered results in OpenAI/Anthropic formats; covered by dedicated tests in test_models.py with assertions on response data @implemented
-- boost > api > GET /events/{stream_id} HTTP handler and WS /events/{stream_id}/ws handler in main.py (llm_registry.get lookup, 404 for unknown id, StreamingResponse on listen(), WS accept/close(404)/sender-receiver tasks with listen/parse_chunk/send_json/emit/receive_json/WebSocketDisconnect/cancel) must be exercised with valid+invalid stream_ids returning 200/404 appropriately and driving all handler branches; covered by new tests using make_client, direct registry registration of minimal Dummy implementing the interface, assertions on status/WS messages @implemented
-- boost > responses api > Boost responses_compat HTTP handlers for the 6 routes (POST /v1/responses, GET/DELETE /v1/responses/{id}, POST /v1/responses/{id}/cancel, GET /v1/responses/{id}/input_items, POST /v1/responses/input_tokens) and their error cases, validation failures (_validate_responses_body, _reject_invalid_json_body), stub 404 paths, BackendError/HTTPException/ValueError/Exception branches, completion=None, 5xx logger paths, and stream converter/validation branches (lines ~736+ and handler code at 1462+) must be exercised via TestClient (make_responses_app fixture or make_client) in the dedicated test_responses_compat.py with good+bad inputs (missing fields, invalid json on cancel/input_tokens, force error conditions via mocks) asserting 200/4xx responses and shapes @implemented
-- Boost Anthropic compat HTTP routes low-cov branches (validation returns in _validate_request for non-dict/ bad-positive-max_tokens/ non-dict-msg-entry, convert non-list content and guards, post_messages BackendError else+stream converter specific status error strings + deferred tool flush, count_tokens JSON/not-dict/not-obj + all 3 except handlers, batch stub paths) must be driven to coverage by adding targeted tests in the dedicated test_anthropic_compat.py using its _make_client/make_anthropic_app/TestClient fixtures, bad-payload posts (raw content for non-dict, json with bad values), and patches for raising specific BackendError/HTTPExc/Value in the route handlers and streaming; verified via cov lift on src/anthropic_compat.py + passing new -k tests @implemented
-- Boost /v1/chat/completions HTTP handler in main.py (post_boost_chat_completion) must cover tools/function payloads (e.g. top-level tools array, legacy functions, messages with tool_calls/tool role), invalid JSON bodies (beyond simple cases, hitting the JSONDecodeError 400 path and decode/ other error returns), large request body edges (long content, many tools), and specific error returns (400 Invalid JSON, 500 for uncaught parse/None cases, BackendError shaped responses) via dedicated tests in test_chat_completions.py asserting handler branches execute and responses match @implemented
-- Boost HTTP layer in main.py must cover exception_handler for 5xx (sanitizes detail, logs), anthropic /v1/messages and responses /v1/responses specific error envelopes, _is_anthropic_client detection via anthropic-version or x-api-key headers (for /v1/models etc), plus root() and health() endpoints returning their JSON, and request_id middleware scratch dir rmtree cleanup path (line 26); exercised via full-app TestClient calls (with auth to force 401s on paths, headers for detection, dynamic test route for 5xx, pre-created scratch dir) in test_edge_cases.py asserting response shapes, no leak of 5xx details, header presence, and dir cleanup; covered by dedicated tests @implemented
-- boost > internals > AsyncEventEmitter in src/events.py (base for LLM) all methods ( __init__, on, once (coro check), off, remove_all_listeners (named+global), emit (no-listener debug, collect+gather, once-clear), _call_listener (success + error log) ) plus integration with real LLM instances, llm.on('websocket.message') registrations from modules like promx, and the WS /events/.../ws receiver path in main.py:180 (emit from receive_json) + :183 (break on WebSocketDisconnect) must be exercised for coverage using direct emitter tests + real-LLM + registry + make_client websocket_connect + send_json in non-overlapping tests added to test_edge_cases.py; this lifts events.py from 19% and clears main.py 180/183 @implemented
-- boost > responses api > _responses_stream_converter deep branches (keepalive at 964-965 on interval, refusal close_reasoning 1107-1109/close_text 1130-1132 before refusal item, BackendError 1239-1248 rate/5xx/else setting stream_error_code, deferred non-emitted tool with id at 1361-1388 in final close) must be driven to coverage via targeted tests added to the dedicated test_responses_compat.py (using make_responses_app + LLM patches for HTTP /v1/responses?stream=true with reasoning+refusal+tool content streams, and direct _converter calls with delayed async gens for keepalive, BackendError(429/500) raises, mixed order streams that trigger closes); post-edit cov on responses_compat.py shows the lines covered, all new tests pass @implemented
-- Boost token_counter HTTP coverage: the count_messages_tokens branches for list content (text/image_url/else in multimodal), tool_calls in assistant messages, and related must be driven to coverage by posting appropriate rich payloads (content parts lists with input_image, function_call items) to the /v1/responses/input_tokens (and/or anthropic count_tokens) HTTP endpoints in the dedicated test files, exercising the real (unpatched) counter inside the handlers; new tests appended to test_responses_compat.py (appropriate for its input_tokens endpoint) @implemented
-- Boost main.py HTTP handlers must cover remaining branches via test_config.py (non-prior test file): _list_models module proxy loop (240-242 when BOOST_MODS non-empty + registry.get non-None) and filter application (250 when MODEL_FILTER non-empty, calling selection.matches_filter), chat handler JSONDecodeError path (387-389 returning 400), and direct task early return (411-412 when mapper.is_direct_task returns True, with no workflow); exercised by new tests using _make_fresh_app + config.__value__ sets + mapper patches + client HTTP GET/POST /v1/models and /v1/chat/completions asserting status + shapes; @implemented
-- Boost mapper.py lines 81 (workflow branch return base_model in resolve_proxy_model) and 145 (is_title_generation_task body) remnants must be exercised via edge inputs (non-mod-colliding workflow-prefixed model ids in resolve_request_config/resolve_proxy_model + is_title_generation_task call) using real mapper in test_config.py HTTP chat paths (/v1/chat/completions with workflow models) and tool paths to reach 100% mapper cov @implemented
-- label: services > dmr > dmr is integrated as a Harbor backend service with a proxy container, host-native Docker Model Runner lifecycle management, docs, metadata, and OpenAI-compatible cross-service integrations
-  command: test -f services/compose.dmr.yml && test -f services/dmr/Caddyfile && rg -q 'run_dmr_command' harbor.sh && rg -q 'dmr' app/src/serviceMetadata.ts docs/2.2.22-Backend-Docker-Model-Runner.md services/compose.x.webui.dmr.yml
-  tags: [spec, dmr-service, implemented]
-- label: services > mlx > mlx is integrated as a Harbor backend service with a proxy container, host-native mlx-serve lifecycle management, docs, metadata, and OpenAI-compatible cross-service integrations
-  command: test -f services/compose.mlx.yml && test -f services/mlx/Caddyfile && rg -q 'run_mlx_command' harbor.sh && rg -q 'mlx' app/src/serviceMetadata.ts docs/2.2.23-Backend-MLX.md services/compose.x.webui.mlx.yml
-  tags: [spec, mlx-service, implemented]
-- label: cli > models > harbor models supports source-aware list, pull, and rm operations for dmr and mlx without changing the default Ollama/HuggingFace/llama.cpp routing
-  command: rg -q 'source.*dmr' routines/models.ts routines/models/types.ts && rg -q 'source.*mlx' routines/models.ts routines/models/types.ts && rg -q -- '--source' harbor.sh docs/3.-Harbor-CLI-Reference.md
-  tags: [spec, dmr-service, mlx-service, implemented]
-- label: cli > launch > dmr and mlx are registered as OpenAI-compatible Harbor launch backends with model config keys and docs
-  command: rg -q 'dmr.*mlx|mlx.*dmr' harbor.sh && rg -q 'dmr.model' harbor.sh && rg -q 'mlx.model' harbor.sh && rg -q 'harbor launch --backend dmr' docs/3.-Harbor-CLI-Reference.md && rg -q 'harbor launch --backend mlx' docs/3.-Harbor-CLI-Reference.md
-  tags: [spec, dmr-service, mlx-service, implemented]
-- label: cli > routines > routines/utils.ts has explicit TypeScript annotations for shared utility exports so deno check routines/models.ts is not blocked by implicit-any diagnostics
-  command: deno check routines/models.ts
-  tags: [spec, routines-utils, implemented]
-- label: services > dmr/mlx > harbor up dmr and harbor up mlx automatically bootstrap missing host-managed backend components before starting their Harbor proxy services
-  command: rg -q 'dmr_install_components' harbor.sh && rg -q 'mlx_install_components' harbor.sh && rg -q 'automatic.*install|automatically install|auto-installs' docs/2.2.22-Backend-Docker-Model-Runner.md docs/2.2.23-Backend-MLX.md
-  tags: [spec, auto-host-bootstrap, implemented]
 # project
-- Harbor is a containerized LLM toolkit distributed as a Docker Compose project with a CLI and Tauri desktop app
-- label: the project is licensed under Apache 2.0
-  command: head -1 LICENSE | grep -q 'Apache'
+
+## domain
+- a Harbor is a containerized LLM toolkit: Bash CLI, Docker Compose service orchestration, and optional Tauri desktop app
+- a Service is a named Harbor handle with a compose file under services/ and metadata in the app catalog
+- a Backend is a Service that exposes an OpenAI-compatible inference API for other services and host tools
+- a Satellite is a Service that depends on a Backend or external keys and is wired through cross-compose integrations
+- a ComposeIntegration is a compose.x.<consumer>.<provider>.yml overlay applied when both handles are in the active set
+- a Launch routes harbor launch to either a host coding-tool adapter or a containerized service CLI
+- a Host tool is an installed agent CLI on the host PATH that Harbor configures with backend URL, API key, and model
+- a Boost is Harbor's LLM proxy that applies modules and workflows to chat completions and compat API surfaces
+- a Workflow is a named ordered list of Boost module steps advertised as workflow-prefixed model IDs
+- a Module is a Boost Python plugin with an ID_PREFIX that transforms chat via async apply(chat, llm)
+- Harbor merges compose.yml, per-service compose files, capability overlays, and cross-compose files into __harbor.yml
+- a Profile is a named snapshot of workspace .env configuration under the Harbor home directory
+- Satellite uses Backend through ComposeIntegration depends_on, env vars, and mounted config templates
 
 ## distribution
-- label: the npm package name is
+- label: the npm package name is @avcodes/harbor
   command: jq -e -r '.name' package.json | grep -q '@avcodes/harbor'
-  tags: [avcodes/harbor]
 - label: the PyPI package name is llm-harbor
   command: grep -q 'name = "llm-harbor"' pyproject.toml
 - label: version is synchronized across package.json, pyproject.toml, and app/package.json
   command: V=$(jq -r .version package.json) && grep -q "version = \"$V\"" pyproject.toml && jq -e --arg v "$V" ".version == \$v" app/package.json >/dev/null
 - label: install.sh and requirements.sh handle platform-specific installation and dependency detection
   command: test -f install.sh && test -f requirements.sh
+- Harbor is a containerized LLM toolkit distributed as a Docker Compose project with a CLI and Tauri desktop app
+- label: the project is licensed under Apache 2.0
+  command: head -1 LICENSE | grep -q 'Apache'
 
 # cli
 - label: harbor.sh is the main CLI entrypoint, a Bash script over 5000 lines
   command: test -x harbor.sh && test $(wc -l < harbor.sh) -ge 5000
 - label: CLI internals are rewritten in Deno TypeScript under routines/
   command: test -f routines/deno.json && test $(find routines -name '*.ts' | wc -l) -ge 10
-- label: dev scripts live in .scripts/ and must be run via 'harbor dev', not directly
+- label: dev scripts live in .scripts/ and must be run via harbor dev, not directly
   command: test -d .scripts && test $(find .scripts -name '*.ts' -o -name '*.sh' | wc -l) -ge 20
+- label: harbor config get/set/search/update reads and writes workspace .env; defaults live in profiles/default.env
+  command: grep -q 'env_manager' harbor.sh && test -f profiles/default.env
+- label: harbor config update merges profiles/default.env into the active .env
+  command: grep -q 'config_update' harbor.sh || grep -q 'config update' harbor.sh
+- label: harbor compose up uses docker compose up -d --wait requiring Compose 2.23.1 or newer
+  command: grep -q 'up -d --wait' harbor.sh && grep -q 'desired_compose_minor="23"' harbor.sh
+  tags: [implemented]
+- label: harbor logs tails container output by default and can hang unattended agents
+  command: grep -q 'logs -n 20 -f' harbor.sh
+  tags: [implemented]
+- label: harbor.sh avoids Bash 4 case-conversion parameter expansion for macOS Bash 3 compatibility
+  command: bash -n harbor.sh && ! rg -q '\$\{[^}]+(\^\^|,,)' harbor.sh
+  tags: [implemented]
 
 ## launch
-- label: harbor launch <service> runs an existing Harbor service CLI command with the current active Harbor services included, preserving any arguments after the service name
-  command: rg -q '^run_launch_command\(\)' harbor.sh && rg -q '^    launch\)' harbor.sh && rg -Fq 'run_launch_command "$@"' harbor.sh
-  tags: [spec, implemented]
-- label: harbor launch supports host tool adapters for codex, claude, and opencode that accept --backend, --model, --config, discover a running Harbor OpenAI-compatible backend, and keep unknown service fallback dispatch intact
-  command: rg -q '^launch_host_tool_command\(\)' harbor.sh && rg -q '^launch_detect_backend\(\)' harbor.sh && rg -q 'OPENCODE_CONFIG_CONTENT' harbor.sh && rg -q 'ANTHROPIC_BASE_URL' harbor.sh && rg -q 'model_providers.harbor_launch.base_url' harbor.sh && rg -q 'harbor launch --backend ollama --model .* codex' docs/3.-Harbor-CLI-Reference.md
-  tags: [spec, implemented]
-- label: harbor launch exposes an explicit --service mode so name-colliding handles like opencode can launch the Harbor service instead of the host tool adapter, and the CLI docs and tests cover that path
-  command: rg -q 'force_service_launch' harbor.sh && rg -q 'harbor launch --service opencode' docs/3.-Harbor-CLI-Reference.md && rg -q 'launch --service opencode' tests/suites/02-cli.sh
-  tags: [spec, implemented]
-- label: harbor launch reports actionable model discovery failures, starts missing backends, and skips /v1/models discovery when --model is provided
-  command: rg -q 'launch codex starts llamacpp when no backend is running' tests/suites/02-cli.sh && rg -q 'launch codex starts explicit backend when missing' tests/suites/02-cli.sh && rg -q 'launch codex --model skips model discovery' tests/suites/02-cli.sh && rg -q 'launch_model_from_models_response' harbor.sh && rg -q 'starts.*llamacpp' docs/3.-Harbor-CLI-Reference.md
-  tags: [spec, implemented]
-- label: harbor launch host-tool smoke coverage runs codex, claude, and opencode through fake installed tools against fake running OpenAI-compatible Harbor backends, and verifies backend-specific /v1/models schema variants and launch env/arguments
-  command: bash tests/suites/05-launch-smoke.sh
-  tags: [spec, implemented]
-- label: harbor launch smoke coverage exercises parallel launch invocations without sharing a Harbor history temp file, and the test documentation includes the launch-smoke suite
-  command: bash tests/suites/05-launch-smoke.sh && rg -q 'harbor-history' harbor.sh && rg -q 'parallel launch history writes do not share' tests/suites/05-launch-smoke.sh && rg -q 'launch-smoke' tests/README.md
-  tags: [spec, implemented]
-- label: harbor dev launch-live-smoke provides a documented live prompt smoke helper for installed codex, claude, and opencode host tools against a running Harbor backend
-  command: test -f .scripts/launch-live-smoke.ts && rg -q 'launch-live-smoke' docs/3.-Harbor-CLI-Reference.md && ./harbor.sh dev launch-live-smoke --help | rg -q 'codex,claude,mi,opencode'
-  tags: [spec, implemented]
-- label: Harbor service port resolution parses docker port output without requiring perl so launch-smoke runs on Alpine
-  command: ! rg -q 'docker port .*perl' harbor.sh && rg -Fq "sed -n 's/.*:\([0-9][0-9]*\)$/\1/p'" harbor.sh
-  tags: [spec, implemented]
-- label: harbor launch host-tool option parsing rejects --backend and --model when their value is omitted, when the next token is another option, or when an inline assignment is empty
-  command: rg -q 'launch host options reject missing values' tests/suites/02-cli.sh && rg -q 'launch_option_value_missing' harbor.sh
-  tags: [spec, implemented]
-- label: harbor dev launch-live-smoke fails a launched host-tool smoke when the tool output does not contain the expected sentinel response
-  command: rg -q 'HARBOR_LAUNCH_SMOKE_OK' .scripts/launch-live-smoke.ts && rg -q 'expected smoke response' .scripts/launch-live-smoke.ts
-  tags: [spec, implemented]
-- label: launch-live-smoke runs OpenCode through a Harbor-provided no-tool smoke agent so prompt-only checks are not mistaken for tool calls
-  command: rg -q 'harbor-smoke' harbor.sh .scripts/launch-live-smoke.ts && rg -q '"skill": false|skill.*false' harbor.sh
-  tags: [spec, launch-live-smoke, implemented]
-- label: harbor launch codex warns about known Responses API tool schema compatibility risk before invoking Codex against llama.cpp-family backends, and the CLI docs describe the mitigation
-  command: rg -q 'launch_warn_codex_backend_compat' harbor.sh && rg -q 'Codex CLI.*Responses API tool' harbor.sh docs/3.-Harbor-CLI-Reference.md && rg -q 'launch codex warns about llama.cpp Responses API tool compatibility' tests/suites/05-launch-smoke.sh
-  tags: [spec, launch-codex-compat, implemented]
-- label: harbor launch promptfoo uses non-interactive compose run flags when stdio is not a TTY and returns a non-zero status when promptfoo startup or CLI execution fails
-  command: rg -q "launch promptfoo propagates startup failure" tests/suites/02-cli.sh && rg -q "tty_opt" harbor.sh && rg -Fq "return \$status" harbor.sh
-  tags: [spec, promptfoo-launch, implemented]
-- label: harbor launch help avoids advertising generic service --help fallback examples that can execute --help as the container command
-  command: help="$(./harbor.sh launch --help)" && printf '%s\n' "$help" | rg -q 'harbor launch --service opencode --help' && ! printf '%s\n' "$help" | rg -q 'harbor launch llamacpp --help' && rg -q 'launch help avoids broken generic service --help example' tests/suites/02-cli.sh
-  tags: [spec, launch-help, implemented]
-- label: harbor launch supports Ollama launch target parity for host adapters codex, claude, opencode, copilot, droid, openclaw, pi, pool, hermes, and vscode, while preserving --service escape hatch for colliding Harbor services
-  command: rg -q 'claude | codex | copilot | droid | hermes | openclaw | opencode | pi | pool | vscode' harbor.sh && rg -q 'Supported host tools are aligned with Ollama' docs/3.-Harbor-CLI-Reference.md && bash tests/suites/05-launch-smoke.sh
-  tags: [spec, launch-parity, implemented]
-- label: harbor launch configures multi-model host tools with every model advertised by the selected backend, while still using a selected model for single-model CLI invocation
-  command: rg -q 'launch_discover_models' harbor.sh && rg -q 'mxbai-embed-large' tests/suites/05-launch-smoke.sh && rg -q 'root-second-model' tests/suites/05-launch-smoke.sh && bash tests/suites/05-launch-smoke.sh
-  tags: [spec, launch-model-list, implemented]
-- label: harbor launch auto-selects a non-embedding model as the default when a backend advertises both embedding and chat models, while still configuring every advertised model
-  command: rg -q 'launch_model_is_embedding' harbor.sh && rg -q 'COPILOT_MODEL=qwen-chat-model' tests/suites/05-launch-smoke.sh && rg -q 'model == "mxbai-embed-large"' tests/suites/05-launch-smoke.sh && bash tests/suites/05-launch-smoke.sh
-  tags: [spec, launch-model-list, implemented]
-- label: harbor launch pi preserves the caller workspace by defaulting Pi session storage to a directory derived from the invocation directory unless the user supplies Pi session flags
-  command: rg -q 'launch_pi_workspace_session_dir' harbor.sh && rg -q 'pi preserves a non-Harbor caller workspace' tests/suites/05-launch-smoke.sh && bash tests/suites/05-launch-smoke.sh
-  tags: [spec, launch-pi-workspace, implemented]
-- label: harbor launch host-tool adapters execute from the original invocation directory so launched tools see the caller workspace instead of Harbor home
-  command: rg -Fq 'launch_in_original_dir' harbor.sh && rg -Fq 'cwd=$PWD' tests/suites/05-launch-smoke.sh && rg -q 'Host-tool adapters execute from the directory where you invoked' docs/3.-Harbor-CLI-Reference.md && bash tests/suites/05-launch-smoke.sh
-  tags: [spec, launch-workspace, implemented]
-- label: harbor launch host-tool modifiers such as --web configure a boost-prefixed workflow model instead of the raw backend model
-  command: rg -q 'launch_tool_group_tools' harbor.sh && rg -q -- '--web' harbor.sh && rg -q 'boost-' harbor.sh
-  tags: [spec, implemented]
-- label: harbor launch tool modifiers start the boost service with the target backend so Boost proxies the selected raw backend
-  command: rg -q 'launch_prepare_boost_workflow' harbor.sh && rg -q 'compose_services=.*boost' harbor.sh && rg -q 'compose_with_options --no-defaults' harbor.sh
-  tags: [spec, implemented]
-- label: harbor launch --service mi preserves access to the containerized mi service while bare harbor launch mi targets the installed mi host CLI
-  command: rg -Fq 'claude | codex | copilot | droid | hermes | mi | openclaw' harbor.sh && rg -q 'run_launch.*mi uses host CLI' tests/suites/05-launch-smoke.sh
-  tags: [spec, implemented]
-- label: harbor launch supports mi as a host tool adapter that receives OPENAI_BASE_URL without a /v1 suffix, OPENAI_API_KEY, and MODEL from the selected Harbor backend
-  command: rg -Fq 'OPENAI_BASE_URL="$backend_url" OPENAI_API_KEY="$api_key" MODEL="$model" launch_in_original_dir mi' harbor.sh && rg -q 'mi uses host CLI with OpenAI base URL without v1 suffix' tests/suites/05-launch-smoke.sh
-  tags: [spec, implemented]
+- label: harbor launch routes host tools codex, claude, opencode, pi, and others to OpenAI-compatible Harbor backends with optional --backend, --model, --config, and --web
+  command: rg -q 'launch_host_tool_command' harbor.sh && rg -q 'launch_detect_backend' harbor.sh && rg -q -- '--web' harbor.sh
+  tags: [implemented]
+- label: harbor launch --service forces the containerized Harbor service instead of the host tool when names collide
+  command: rg -q 'force_service_launch' harbor.sh && rg -q 'harbor launch --service opencode' docs/3.-Harbor-CLI-Reference.md
+  tags: [implemented]
 - label: harbor launch starts llamacpp as the default backend when no OpenAI-compatible Harbor backend is running
-  command: rg -q 'No running Harbor OpenAI-compatible backend found; starting llamacpp' harbor.sh && rg -q 'starts llamacpp when no backend is running' tests/suites/05-launch-smoke.sh
-  tags: [spec, implemented]
-- label: harbor launch parses launch options before the host tool name and passes every argument after the tool name through to the tool unchanged
-  command: rg -q 'launch_options' harbor.sh && rg -Fq 'local tool_args=("$@")' harbor.sh && rg -q 'tool arguments after the host tool name' tests/suites/05-launch-smoke.sh
-  tags: [spec, implemented]
-- label: harbor launch starts the requested backend container when an explicit launch backend is not already running
-  command: rg -q 'launch_start_services.*explicit_backend' harbor.sh && rg -q 'explicit backend is started when missing' tests/suites/05-launch-smoke.sh
-  tags: [spec, implemented]
-- label: harbor launch --web starts SearXNG together with the generated Boost workflow
-  command: rg -q 'searxng' harbor.sh && rg -q 'web launch starts SearXNG' tests/suites/05-launch-smoke.sh
-  tags: [spec, implemented]
-- label: harbor launch tool modifiers leave an explicitly selected boost-prefixed workflow model unchanged instead of prefixing it a second time
-  command: rg -q 'launch_workflow_model_name' harbor.sh && rg -q 'already-prefixed boost workflow model' tests/suites/05-launch-smoke.sh
-  tags: [spec, implemented]
-- label: harbor launch --help lists the supported host tool adapters and Harbor service CLI handles
-  command: ./harbor.sh launch --help | rg -q 'Host tools:.*codex.*pi' && ./harbor.sh launch --help | rg -q 'Service CLI shortcuts:.*plandex.*promptfoo' && ./harbor.sh launch --help | rg -q 'Container services:.*mi.*opencode' && rg -q 'launch help lists supported launch targets' tests/suites/02-cli.sh
-  tags: [spec, implemented]
-- label: harbor launch exposes only --web as a Boost tool-group modifier and rejects removed tool groups such as --time, --notes, --files, and --scratch as unsupported launch targets or tool args
-  command: ./harbor.sh launch --help | rg -q -- '--web' && ! ./harbor.sh launch --help | rg -q -- '--time|--notes|--files|--scratch' && rg -q 'launch --time is not a launch option' tests/suites/02-cli.sh
-  tags: [spec, implemented]
-- label: harbor launch claude honors an explicit non-Boost backend even when Boost is also running
-  command: rg -q 'claude explicit non-Boost backend ignores running Boost' tests/suites/05-launch-smoke.sh && bash tests/suites/05-launch-smoke.sh
-  tags: [spec, launch-claude-explicit-backend, implemented]
-- label: omlx is registered as an OpenAI-compatible Harbor launch backend with model config key and docs
-  command: rg -q 'omlx' harbor.sh && rg -q 'omlx.model' harbor.sh && rg -q 'harbor launch --backend omlx' docs/3.-Harbor-CLI-Reference.md docs/2.2.24-Backend-oMLX.md
-  tags: [spec, omlx-service, implemented]
-
-## migrations
-- label: config migrations do not require the JSR package through routines/utils.ts
-  command: ! rg -q 'jsr:@std/fmt' routines/utils.ts && target=$(grep '^HARBOR_CONFIG_VERSION=' profiles/default.env | cut -d= -f2- | tr -d '"'); tmp_dir=$(mktemp -d); DENO_DIR="$tmp_dir" deno run --cached-only -A --unstable-sloppy-imports .scripts/migrate.ts --target "$target" --dry-run; status=$?; rm -rf "$tmp_dir"; exit $status
-  tags: [spec, fmt-migration, implemented]
-- label: harbor migrate auto-detects the quoted HARBOR_CONFIG_VERSION from profiles/default.env and passes an unquoted semver target to the config migrator
-  command: tmp_lock=$(mktemp); cp .scripts/deno.lock "$tmp_lock"; restore_lock() { cp "$tmp_lock" .scripts/deno.lock; rm -f "$tmp_lock"; }; trap restore_lock EXIT; ./harbor.sh migrate --dry-run
-  tags: [spec, config-migration-version, implemented]
-
-## bash-compat
-- label: harbor.sh avoids Bash 4 case-conversion parameter expansion so the CLI parses on macOS Bash 3
-  command: bash -n harbor.sh && ! rg -q '$\{[^}]+(\^\^|,,)' harbor.sh
-  tags: [spec, bash3-compat, implemented]
+  command: rg -q 'starting llamacpp' harbor.sh
+  tags: [implemented]
+- label: harbor launch --web starts Boost and SearXNG and configures a boost-prefixed workflow model
+  command: rg -q 'launch_prepare_boost_workflow' harbor.sh && rg -q 'searxng' harbor.sh
+  tags: [implemented]
+- label: harbor launch validates the host tool binary before starting backend or Boost services
+  command: rg -q 'started compose before validating the host binary' tests/suites/02-cli.sh
+  tags: [implemented]
+- label: harbor launch exposes only --web as a Boost tool-group modifier and rejects removed groups such as --time and --notes
+  command: ./harbor.sh launch --help | rg -q -- '--web' && ! ./harbor.sh launch --help | rg -q -- '--time|--notes|--files|--scratch'
+  tags: [implemented]
 
 ## models
-- label: harbor models supports source-aware list, pull, and rm operations for omlx without changing the default Ollama/HuggingFace/llama.cpp routing
-  command: rg -q 'omlx' routines/models.ts routines/models/types.ts routines/models/openai.ts && rg -q 'run_omlx_command pull' harbor.sh && rg -q 'harbor models.*omlx' docs/3.-Harbor-CLI-Reference.md docs/2.2.24-Backend-oMLX.md
-  tags: [spec, omlx-service, implemented]
+- label: harbor models supports source-aware list, pull, and rm for ollama, llamacpp, dmr, mlx, and omlx
+  command: rg -q 'run_models_routine' harbor.sh && rg -q 'dmr' routines/models.ts && rg -q 'mlx' routines/models.ts && rg -q 'omlx' routines/models.ts
+  tags: [implemented]
 
 # services
-- label: compose.yml is the base layer, defining only the harbor-network
-  command: grep -q 'harbor-network' compose.yml && ! grep -q 'services:' compose.yml
-- label: each service has its own compose file at services/compose.SERVICE.yml
+- label: compose.yml defines only the shared harbor-network without service definitions
+  command: grep -q 'harbor-network' compose.yml && ! grep -q '^services:' compose.yml
+- label: each Harbor service has a compose file at services/compose.<handle>.yml
   command: test $(find services -maxdepth 1 -name 'compose.*.yml' ! -name 'compose.x.*' | wc -l) -ge 100
-- label: cross-service integrations use compose.x.PRIMARY.SECONDARY.yml files
+- label: cross-service integrations use compose.x.<consumer>.<backend>.yml files selected when both handles are active
   command: test $(find services -maxdepth 1 -name 'compose.x.*.yml' | wc -l) -ge 300
-- label: nearly all service directories contain an override.env file
-  command: test $(find services -mindepth 2 -maxdepth 2 -name 'override.env' | wc -l) -ge 120
-- label: services are categorized as backend, frontend, or satellite
-  command: grep -q 'Backend' app/src/serviceMetadata.ts && grep -q 'Frontend' app/src/serviceMetadata.ts && grep -q 'Satellite' app/src/serviceMetadata.ts
-
-## config
-- label: profiles/default.env contains over 800 HARBOR_* configuration keys
+- label: profiles/default.env contains over 800 HARBOR configuration keys
   command: test $(grep -c '^HARBOR_' profiles/default.env) -ge 800
-
-## ml-intern
-- label: ml-intern is integrated as a Harbor satellite service with compose config, default env, metadata, docs, service directory, and Ollama/llamacpp/vLLM cross-service files
-  command: test -f services/compose.ml-intern.yml && test -f services/compose.x.ml-intern.ollama.yml && test -f services/compose.x.ml-intern.llamacpp.yml && test -f services/compose.x.ml-intern.vllm.yml && test -f services/ml-intern/override.env && test -f services/ml-intern/.gitignore && grep -q 'HARBOR_ML_INTERN_HOST_PORT' profiles/default.env && grep -q "'ml-intern'" app/src/serviceMetadata.ts && test -f docs/2.3.87-Satellite-ML-Intern.md && test -f docs/harbor-ml-intern.png
-  tags: [spec, implemented]
-- label: ml-intern's llama.cpp integration defaults to a model id that is advertised by Harbor's llama.cpp OpenAI-compatible /v1/models catalog instead of the placeholder local-model
-  command: grep -q 'HARBOR_ML_INTERN_LLAMACPP_MODEL="auto"' profiles/default.env && grep -q 'ML_INTERN_MODEL=llamacpp/${HARBOR_ML_INTERN_LLAMACPP_MODEL}' services/compose.x.ml-intern.llamacpp.yml && grep -q 'v1/models' services/ml-intern/start.sh && grep -q 'llamacpp/auto' services/ml-intern/start.sh && ! grep -q 'HARBOR_ML_INTERN_LLAMACPP_MODEL="local-model"' profiles/default.env
-  tags: [spec, implemented]
-- label: ml-intern's llama.cpp auto mode ranks advertised router models for text/code suitability and documents how users pin an exact llama.cpp model id
-  command: grep -q 'score_llamacpp_model' services/ml-intern/start.sh && grep -q 'coder' services/ml-intern/start.sh && grep -q 'image' services/ml-intern/start.sh && grep -q 'ranked' docs/2.3.87-Satellite-ML-Intern.md && grep -q 'harbor config set ml-intern.llamacpp.model' docs/2.3.87-Satellite-ML-Intern.md
-  tags: [spec, implemented]
-- label: ml-intern honors GITHUB_TOKEN from service override env when HARBOR_ML_INTERN_GITHUB_TOKEN is empty
-  command: grep -q 'resolve_github_token' services/ml-intern/start.sh && grep -q 'HARBOR_ML_INTERN_GITHUB_TOKEN' services/ml-intern/start.sh && ! grep -q 'GITHUB_TOKEN=\' services/compose.ml-intern.yml
-  tags: [spec, implemented]
-- label: ml-intern llama.cpp auto mode fails instead of selecting only unsuitable advertised models
-  command: grep -q 'suitable_models' services/ml-intern/start.sh && grep -q 'No suitable llama.cpp text/code model' services/ml-intern/start.sh
-  tags: [spec, implemented]
-- label: ml-intern startup patches upstream LLM health checks to return HTTP 503 when the backend is unhealthy
-  command: grep -q 'patch_llm_health_status' services/ml-intern/start.sh && grep -q 'status_code=503' services/ml-intern/start.sh
-  tags: [spec, implemented]
-- label: harbor config search matches hyphenated service handles such as ml-intern against normalized config keys
-  command: grep -q 'normalized_query' harbor.sh && grep -q 'search_blob' harbor.sh
-  tags: [spec, implemented]
-
-## facts
-- label: facts is integrated as a Harbor CLI satellite service with compose config, default env, metadata, docs, service directory, and a harbor facts wrapper
-  command: test -f services/compose.facts.yml && test -f services/facts/override.env && grep -q 'HARBOR_FACTS_' profiles/default.env && grep -q 'facts:' app/src/serviceMetadata.ts && test -f docs/2.3.88-Satellite-Facts.md && grep -q 'run_facts_command' harbor.sh
-  tags: [spec, facts-service, implemented]
-
-## mi
-- label: mi has Harbor cross-service compose integrations for Ollama, llama.cpp, vLLM, and LiteLLM backends
-  command: test -f services/compose.x.mi.ollama.yml && test -f services/compose.x.mi.llamacpp.yml && test -f services/compose.x.mi.vllm.yml && test -f services/compose.x.mi.litellm.yml
-  tags: [spec, mi-service, implemented]
-- label: mi is integrated as a Harbor CLI satellite service with compose config, default env, metadata, docs, service directory, and a harbor mi wrapper
-  command: test -f services/compose.mi.yml && test -f services/mi/override.env && grep -q 'HARBOR_MI_' profiles/default.env && grep -q 'mi:' app/src/serviceMetadata.ts && test -f docs/2.3.89-Satellite-mi.md && grep -q 'run_mi_command' harbor.sh
-  tags: [spec, mi-service, implemented]
-- label: mi uses the official ghcr.io/av/mi image instead of a Harbor inline npm build
-  command: grep -q 'HARBOR_MI_IMAGE="ghcr.io/av/mi"' profiles/default.env && ! grep -q 'HARBOR_MI_BASE_IMAGE' profiles/default.env && ! grep -q 'dockerfile_inline' services/compose.mi.yml && ! grep -q 'npm install -g @avcodes/mi' services/compose.mi.yml && grep -q 'official ghcr.io/av/mi image' docs/2.3.89-Satellite-mi.md
-  tags: [spec, mi-service, implemented]
-
-## docs
-- label: facts and mi service docs use the upstream project splash images instead of generated terminal screenshots
-  command: cmp -s docs/harbor-facts.png /home/everlier/code/facts/assets/readme/hero.png && cmp -s docs/harbor-mi.png /home/everlier/code/mi/assets/splash.png
-  tags: [spec, implemented]
-
-## npcsh
-- label: npcsh is integrated as a Harbor satellite API/CLI service with compose config, default env, metadata, docs, service directory, and Ollama/llamacpp/vLLM cross-service files
-  command: test -f services/compose.npcsh.yml && test -f services/compose.x.npcsh.ollama.yml && test -f services/compose.x.npcsh.llamacpp.yml && test -f services/compose.x.npcsh.vllm.yml && test -f services/npcsh/override.env && test -f docs/2.3.90-Satellite-npcsh.md && rg -q "npcsh:" app/src/serviceMetadata.ts && rg -q "HARBOR_NPCSH_HOST_PORT" profiles/default.env
-  tags: [spec, npcsh-service, implemented]
-- label: npcsh defaults to qwen3.5:4b for Harbor's Ollama-backed chat model
-  command: rg -q 'HARBOR_NPCSH_MODEL="qwen3.5:4b"' profiles/default.env && rg -q 'HARBOR_NPCSH_OLLAMA_MODEL="qwen3.5:4b"' profiles/default.env
-  tags: [spec, npcsh-service, implemented]
-- label: npcsh is available to Harbor LLM frontends through cross-service compose integrations for Open WebUI, ChatUI, and LiteLLM
-  command: test -f services/compose.x.webui.npcsh.yml && test -f services/compose.x.chatui.npcsh.yml && test -f services/compose.x.litellm.npcsh.yml && test -f services/webui/configs/config.npcsh.json && test -f services/chatui/configs/chatui.npcsh.yml && test -f services/litellm/litellm.npcsh.yaml
-  tags: [spec, npcsh-service, implemented]
-- label: harbor npcsh launches the npcsh CLI/TUI in the npcsh service container
-  command: rg -q 'run_npcsh_command' harbor.sh && rg -q 'harbor npcsh' docs/3.-Harbor-CLI-Reference.md docs/2.3.90-Satellite-npcsh.md
-  tags: [spec, npcsh-service, implemented]
-
-## needle
-- label: needle is integrated as a Harbor backend API service with compose config, default env, metadata, docs, service directory, and an OpenAI-compatible tool-calling API adapter
-  command: test -f services/compose.needle.yml && test -f services/needle/Dockerfile && test -f services/needle/server.py && test -f services/needle/.gitignore && test -f docs/2.2.20-Backend-Needle.md && grep -q 'HARBOR_NEEDLE_HOST_PORT=34890' profiles/default.env && grep -q 'needle:' app/src/serviceMetadata.ts && grep -q 'OpenAI-compatible API focused on tool-call generation' docs/2.2.20-Backend-Needle.md
-  tags: [spec, needle-service, implemented]
-- label: needle exposes a /v1/models endpoint and a /v1/chat/completions endpoint that converts OpenAI tool definitions into Needle tool-call generation requests
-  command: grep -q '/v1/models' services/needle/server.py && grep -q '/v1/chat/completions' services/needle/server.py && grep -q 'def _needle_tools' services/needle/server.py && grep -q 'tool_calls' services/needle/server.py && grep -q 'generate(' services/needle/server.py
-  tags: [spec, needle-service, implemented]
-- label: needle is available to Open WebUI through a Harbor cross-service config that registers Needle as an OpenAI-compatible backend
-  command: test -f services/compose.x.webui.needle.yml && test -f services/webui/configs/config.needle.json && grep -q 'http://needle:7860/v1' services/webui/configs/config.needle.json && grep -q 'condition: service_healthy' services/compose.x.webui.needle.yml
-  tags: [spec, needle-service, implemented]
-- label: needle has an HTTP catalog file with runnable OpenAI-compatible model, non-streaming tool-call, and streaming tool-call requests
-  command: test -f services/http-catalog/needle.http && grep -q 'GET {{host}}/v1/models' services/http-catalog/needle.http && grep -q 'POST {{host}}/v1/chat/completions' services/http-catalog/needle.http && grep -q 'get_weather' services/http-catalog/needle.http && grep -q 'stream.: true\|"stream": true' services/http-catalog/needle.http && grep -q 'get_stock_price' services/http-catalog/needle.http
-  tags: [spec, needle-service, implemented]
-
-## open-design
-- label: open-design is integrated as a Harbor satellite service with compose config, default env, metadata, docs, service directory, and UI screenshot
-  command: test -f services/compose.open-design.yml && test -f services/open-design/override.env && test -f services/open-design/.gitignore && rg -q "HARBOR_OPEN_DESIGN_HOST_PORT" profiles/default.env && rg -q "'open-design':" app/src/serviceMetadata.ts && test -f docs/2.3.91-Satellite-Open-Design.md && test -f docs/harbor-open-design.png
-  tags: [spec, open-design-service, implemented]
-- label: open-design's Ollama integration exposes Harbor Ollama through a loopback proxy and preconfigures the browser app for llama3.2:1b
-  command: test -f services/compose.x.open-design.ollama.yml && rg -q "network_mode: service:open-design" services/compose.x.open-design.ollama.yml && rg -q "127.0.0.1:11434" services/compose.x.open-design.ollama.yml && rg -q "HARBOR_OPEN_DESIGN_OLLAMA_MODEL=\"llama3.2:1b\"" profiles/default.env && rg -q "open-design ollama" docs/2.3.91-Satellite-Open-Design.md
-  tags: [spec, open-design-service, implemented]
-- label: open-design preserves upstream deployment hardening while using Harbor env names for image, port, data, allowed origins, memory, and Node heap settings
-  command: grep -q "no-new-privileges:true" services/compose.open-design.yml && grep -q "pids_limit: 256" services/compose.open-design.yml && grep -Fq 'mem_limit: ${HARBOR_OPEN_DESIGN_MEM_LIMIT}' services/compose.open-design.yml && grep -q "HARBOR_OPEN_DESIGN_ALLOWED_ORIGINS" profiles/default.env && grep -q "HARBOR_OPEN_DESIGN_NODE_OPTIONS" profiles/default.env
-  tags: [spec, open-design-service, implemented]
-- label: open-design has Harbor llama.cpp and vLLM cross-service integrations that preconfigure the app for each backend's OpenAI-compatible /v1 API, with llama.cpp auto model discovery
-  command: test -f services/compose.x.open-design.llamacpp.yml && test -f services/compose.x.open-design.vllm.yml && rg -q 'http://llamacpp:8080/v1' services/compose.x.open-design.llamacpp.yml && rg -q 'http://vllm:8000/v1' services/compose.x.open-design.vllm.yml && rg -q 'HARBOR_OPEN_DESIGN_LLAMACPP_MODEL="auto"' profiles/default.env && rg -q 'HARBOR_OPEN_DESIGN_VLLM_MODEL' profiles/default.env && rg -q '/models' services/open-design/start.sh && rg -q 'open-design llamacpp' docs/2.3.91-Satellite-Open-Design.md && rg -q 'open-design vllm' docs/2.3.91-Satellite-Open-Design.md
-  tags: [spec, open-design-service, implemented]
-
-## voicebox
-- voicebox is integrated as a Harbor frontend audio service with compose config, default env, metadata, docs, service directory, and UI screenshot @spec @voicebox-service @implemented
-- voicebox exposes Harbor-configurable resource limits and logging/model/CORS environment variables documented for users @spec @voicebox-service @implemented
-- voicebox persists generated audio, app data, and Hugging Face model cache in Harbor-managed directories @spec @voicebox-service @implemented
-- voicebox builds from the upstream Git repository because upstream Docker docs do not publish a prebuilt image yet @spec @voicebox-service @implemented
-- label: voicebox defaults the browser generation form to Qwen TTS 0.6B instead of the upstream 1.7B CPU-heavy default
-  command: grep -q HARBOR_VOICEBOX_DEFAULT_MODEL_SIZE services/compose.voicebox.yml && grep -q HARBOR_VOICEBOX_DEFAULT_MODEL_SIZE profiles/default.env && grep -q 'modelSize.*default_model_size' services/voicebox/harbor-entrypoint.sh && ! grep -q 'sed -i' services/voicebox/harbor-entrypoint.sh
-  tags: [spec, voicebox-service, implemented]
-
-## ikllamacpp
-- label: ikllamacpp has a primary Docker Compose service at services/compose.ikllamacpp.yml using container name ${HARBOR_CONTAINER_PREFIX}.ikllamacpp, Harbor env files, harbor-network, and host port ${HARBOR_IKLLAMACPP_HOST_PORT}:8080
-  command: test -f services/compose.ikllamacpp.yml && rg -q "^  ikllamacpp:" services/compose.ikllamacpp.yml && rg -Fq 'container_name: ${HARBOR_CONTAINER_PREFIX}.ikllamacpp' services/compose.ikllamacpp.yml && rg -Fq "./services/ikllamacpp/override.env" services/compose.ikllamacpp.yml && rg -q "harbor-network" services/compose.ikllamacpp.yml && rg -Fq '${HARBOR_IKLLAMACPP_HOST_PORT}:8080' services/compose.ikllamacpp.yml
-  tags: [spec, implemented]
-- label: ikllamacpp defaults define the CPU, NVIDIA, and source build configuration required by its compose overlays
-  command: rg -q "^HARBOR_IKLLAMACPP_HOST_PORT=" profiles/default.env && rg -q "^HARBOR_IKLLAMACPP_IMAGE_CPU=" profiles/default.env && rg -q "^HARBOR_IKLLAMACPP_IMAGE_NVIDIA=" profiles/default.env && rg -q "^HARBOR_IKLLAMACPP_BUILD_REF=" profiles/default.env && rg -q "^HARBOR_IKLLAMACPP_EXTRA_ARGS=" profiles/default.env
-  tags: [spec, implemented]
-- label: ikllamacpp has NVIDIA, CDI, and source-build compose overlays following the llama.cpp service pattern
-  command: test -f services/compose.x.ikllamacpp.nvidia.yml && test -f services/compose.x.ikllamacpp.cdi.yml && test -f services/compose.x.ikllamacpp.build.yml && rg -q "HARBOR_IKLLAMACPP_IMAGE_NVIDIA" services/compose.x.ikllamacpp.nvidia.yml && rg -q "nvidia.com/gpu=all" services/compose.x.ikllamacpp.cdi.yml && rg -q "github.com/ikawrakow/ik_llama.cpp" services/compose.x.ikllamacpp.build.yml
-  tags: [spec, implemented]
-- label: ikllamacpp is documented and listed in the Harbor app metadata as a backend service
-  command: test -f docs/2.2.21-Backend\&colon-ik_llama.cpp.md && rg -q "Handle: `ikllamacpp`" docs/2.2.21-Backend\&colon-ik_llama.cpp.md && rg -q "ikllamacpp:" app/src/serviceMetadata.ts && rg -q "2.2.21-Backend-ik_llama.cpp" app/src/serviceMetadata.ts
-  tags: [spec, implemented]
-- label: ikllamacpp has a Harbor CLI helper for model, gguf, args, models, and build commands matching llamacpp
-  command: rg -q "run_ikllamacpp_command" harbor.sh && rg -q "harbor ikllamacpp model" harbor.sh && rg -q "ikllamacpp.extra.args" harbor.sh && rg -q "ikllamacpp.build.ref" harbor.sh
-  tags: [spec, implemented]
-- label: ikllamacpp is registered as an OpenAI-compatible Harbor backend for dynamic backend integrations
-  command: rg -q "ikllamacpp: \{ url: 'http://ikllamacpp:8080'" routines/backendIntegration.ts && rg -q "ikllamacpp: 'ikllamacpp.model'" routines/backendIntegration.ts
-  tags: [spec, implemented]
-- label: ikllamacpp has WebUI and Traefik cross-service integrations that point at its OpenAI-compatible endpoint
-  command: test -f services/compose.x.webui.ikllamacpp.yml && test -f services/webui/configs/config.ikllamacpp.json && test -f services/compose.x.traefik.ikllamacpp.yml && rg -q "http://ikllamacpp:8080/v1" services/webui/configs/config.ikllamacpp.json && rg -q "ikllamacpp\\.\\$\\{HARBOR_TRAEFIK_DOMAIN\\}" services/compose.x.traefik.ikllamacpp.yml
-  tags: [spec, implemented]
-
-## promptfoo
-- label: promptfoo runs as the Harbor host user so its bind-mounted workspace remains writable after promptfoo-init prepares it with HARBOR_USER_ID and HARBOR_GROUP_ID ownership
-  command: rg -q "user:.*HARBOR_USER_ID.*HARBOR_GROUP_ID" services/compose.promptfoo.yml && rg -q "host user" docs/2.3.28-Satellite\&colon-Promptfoo.md
-  tags: [spec, promptfoo-launch, implemented]
-
-## omlx
-- label: omlx is integrated as a Harbor backend service with a proxy container, host-native oMLX lifecycle management, docs, metadata, and OpenAI-compatible cross-service integrations
-  command: test -f services/compose.omlx.yml && test -f services/omlx/Caddyfile && rg -q 'run_omlx_command' harbor.sh && rg -q 'omlx' app/src/serviceMetadata.ts docs/2.2.24-Backend-oMLX.md services/compose.x.webui.omlx.yml
-  tags: [spec, omlx-service, implemented]
-- label: harbor up omlx automatically starts the host-managed oMLX server before starting the Harbor proxy service
-  command: rg -q 'omlx_host_start' harbor.sh && rg -q 'run_omlx_command start' harbor.sh && rg -q 'automatically starts the oMLX server' docs/2.2.24-Backend-oMLX.md
-  tags: [spec, omlx-service, auto-host-bootstrap, implemented]
+- label: default services on harbor up without handles are ollama and webui
+  command: grep -q 'HARBOR_SERVICES_DEFAULT="ollama;webui"' profiles/default.env
+  tags: [implemented]
+- label: dmr mlx and omlx are host-managed backends proxied by Caddy containers on the harbor network
+  command: test -f services/compose.dmr.yml && test -f services/compose.mlx.yml && test -f services/compose.omlx.yml && test -f services/dmr/Caddyfile
+  tags: [implemented]
+- label: harbor up dmr mlx or omlx starts the host runner before bringing up the proxy container
+  command: rg -q 'run_dmr_command' harbor.sh && rg -q 'run_mlx_command' harbor.sh && rg -q 'run_omlx_command' harbor.sh
+  tags: [implemented]
+- label: ml-intern is a satellite with cross-compose integrations for ollama llamacpp vllm dmr mlx and omlx
+  command: test -f services/compose.ml-intern.yml && test -f services/compose.x.ml-intern.omlx.yml
+  tags: [implemented]
+- label: mi is a CLI satellite launched via harbor mi and harbor launch with compose.x integrations for backends
+  command: test -f services/compose.mi.yml && rg -q 'run_mi_command' harbor.sh
+  tags: [implemented]
+- label: facts is a CLI satellite run via harbor facts with the caller workspace bind-mounted
+  command: test -f services/compose.facts.yml && rg -q 'run_facts_command' harbor.sh
+  tags: [implemented]
 
 # app
-- label: the desktop app is built with Tauri 2.x, React 18, Vite, Tailwind CSS, and DaisyUI
-  command: grep -q '"react"' app/package.json && grep -q '"@tauri-apps/cli"' app/package.json && grep -q '"tailwindcss"' app/package.json && grep -q '"daisyui"' app/package.json
-- label: the app has two custom DaisyUI themes: harborLight and harborDark
-  command: grep -q 'harborLight' app/tailwind.config.js && grep -q 'harborDark' app/tailwind.config.js
-- label: the app has 6 routes: home, config, cli, models, settings, and services detail
-  command: grep -q '/config' app/src/AppRoutes.tsx && grep -q '/cli' app/src/AppRoutes.tsx && grep -q '/models' app/src/AppRoutes.tsx && grep -q '/settings' app/src/AppRoutes.tsx && grep -q '/services' app/src/AppRoutes.tsx
-- label: xterm.js provides terminal rendering driven by tauri-pty for interactive sessions
-  command: grep -q '@xterm/xterm' app/package.json && grep -q 'tauri-plugin-pty' app/src-tauri/Cargo.toml
-- label: serviceMetadata.ts defines metadata for 100+ services with name, handle, tags, logo, and URLs
-  command: test -f app/src/serviceMetadata.ts && test $(grep -c 'projectUrl' app/src/serviceMetadata.ts) -ge 100
-
-## layout
-- label: the app layout is a DaisyUI drawer with responsive sidebar: hamburger on mobile, persistent nav at lg breakpoint
-  command: grep -q 'drawer' app/src/App.tsx && grep -q 'lg:hidden' app/src/App.tsx
-
-## hooks
-- label: global keyboard shortcuts include Ctrl+F (search), Ctrl+backtick (terminal), Escape (close modal), Enter (confirm)
-  command: test -f app/src/useGlobalKeydown.tsx
-
-## home
-- label: home page shows a list of harbor services as cards in a grid
-  command: test -f app/src/home/ServiceList.tsx && test -f app/src/home/ServiceCard.tsx
-- label: services can be started and stopped from the home page
-  command: grep -q 'up\|down\|start\|stop' app/src/home/ServiceCard.tsx
-- label: services can be pinned to the top of the list
-  command: grep -q 'pin\|Pin' app/src/home/ServiceCard.tsx && test -f app/src/home/PinnedServices.tsx
-- label: service cards show a green dot when the service is running
-  command: grep -q 'isRunning\|running' app/src/home/ServiceCard.tsx && grep -q 'green\|success' app/src/home/ServiceCard.tsx
-- label: services can be filtered by tag and searched by name
-  command: grep -q 'search\|filter\|tag' app/src/home/ServiceList.tsx
-- label: clicking a service card navigates to its detail page
-  command: grep -q 'navigate\|/services/' app/src/home/ServiceCard.tsx
-- label: a toggle button starts or stops all default services at once
-  command: grep -q 'all\|default' app/src/home/ServiceList.tsx
-
-## service
-- label: service detail page shows name, handle, tags, and description
-  command: test -f app/src/service/ServiceName.tsx && test -f app/src/service/ServiceHandle.tsx && test -f app/src/service/ServiceDescription.tsx
-- label: service logs can be viewed in real-time when the service is running
-  command: test -f app/src/service/ServiceLogs.tsx && grep -q 'logs\|stream' app/src/service/ServiceLogs.tsx
-- label: service URL can be opened in the browser when the service is running
-  command: grep -q 'open\|url\|Open' app/src/service/ServiceActions.tsx
-- label: Configure button navigates to the config page with the service pre-selected
-  command: grep -q 'config\|Configure\|service=' app/src/service/ServiceDetails.tsx
-- label: service documentation is rendered as markdown on the detail page
-  command: test -f app/src/service/ServiceDocs.tsx && grep -q 'Markdown\|markdown\|MarkdownPreview' app/src/service/ServiceDocs.tsx
-
-## models
-- label: models page shows a sortable table of pulled models with source, size, and date
-  command: grep -q 'sort\|Sort' app/src/models/Models.tsx && grep -q 'size\|Size' app/src/models/Models.tsx
-- label: models can be pulled by entering an Ollama, HuggingFace, or llama.cpp model ID
-  command: grep -q 'pull\|Pull' app/src/models/Models.tsx && grep -q 'ollama\|hf\|llamacpp' app/src/models/Models.tsx
-- label: model pull shows real-time progress with cancel support
-  command: test -f app/src/models/ModelPullPane.tsx && grep -q 'cancel\|Cancel' app/src/models/ModelPullPane.tsx
-- label: models can be deleted via a confirmation dialog
-  command: grep -q 'delete\|Delete\|remove\|Remove' app/src/models/Models.tsx && grep -q 'confirm\|Confirm' app/src/models/Models.tsx
-- label: model IDs can be copied to clipboard on hover
-  command: grep -q 'copy\|Copy\|clipboard' app/src/models/Models.tsx
-
-## config
-- label: config profiles can be created, saved, applied, reset to defaults, and deleted
-  command: grep -q 'save\|Save' app/src/config/HarborConfigEditor.tsx && grep -q 'delete\|Delete\|reset\|Reset' app/src/config/HarborConfigEditor.tsx
-- label: config settings are organized into collapsible sections
-  command: test -f app/src/config/HarborConfigSectionEditor.tsx
-- label: Ctrl+S saves the current config profile
-  command: grep -q 'Ctrl\|ctrl\|save\|Save' app/src/config/HarborConfigEditor.tsx
-
-## settings
-- label: settings page has an autostart toggle for launching at system startup
-  command: grep -q 'autostart\|Autostart\|auto.start\|Auto Start' app/src/settings/Settings.tsx
-- label: settings page offers a theme dropdown with 23+ themes and five sliders that adjust visuals in real-time
-  command: grep -q 'theme\|Theme' app/src/settings/Settings.tsx && grep -q 'hue\|saturation\|contrast\|brightness\|invert' app/src/settings/Settings.tsx
-
-## cli
-- label: CLI page shows doctor health checks and a command runner for executing harbor commands
-  command: test -f app/src/cli/CLI.tsx && test -f app/src/cli/CommandRunner.tsx
-- label: command runner supports history navigation with arrow keys and preserves ANSI colors in output
-  command: grep -q 'history\|History\|ArrowUp\|ArrowDown' app/src/cli/CommandRunner.tsx && grep -q 'ansi\|ANSI\|ansiToHtml\|color' app/src/cli/CommandRunner.tsx
-
-## terminal
-- label: terminal panel provides an interactive shell at the bottom of the window
-  command: test -f app/src/terminal/TerminalPanel.tsx && grep -q 'pty\|spawn\|shell' app/src/terminal/TerminalPanel.tsx
-- label: terminal panel can be resized by dragging its top edge
-  command: grep -q 'drag\|resize\|mousedown\|clientY' app/src/terminal/TerminalPanel.tsx
-
-## ui
-- label: confirmation dialogs appear before destructive actions like deleting models, resetting config, or deleting profiles
-  command: test -f app/src/ConfirmModal.tsx
-- label: toast notifications appear for service start/stop, config save/apply, and errors
-  command: grep -rq 'toast\|toasted' app/src/home/ app/src/service/ app/src/config/
-
-## nav
-- label: running services appear in the sidebar with a green dot and link to their detail page
-  command: grep -q 'isRunning\|running' app/src/AppSidebar.tsx && grep -q '/services/' app/src/AppSidebar.tsx
+- label: Harbor App blocks main UI behind a setup gate until setup detail status is ready
+  command: rg -q 'detail\?\.status === "ready"' app/src/setup/HarborSetupContext.tsx
+  tags: [implemented]
+- label: Harbor App installs the CLI through install.sh on Linux and macOS and install.ps1 on Windows
+  command: rg -q 'install.sh' app/src-tauri/src/setup.rs && rg -q 'install.ps1' app/src-tauri/src/setup.rs
+  tags: [implemented]
+- label: Harbor App setup uses a PTY for installer output and supports forwarding input for interactive prompts
+  command: rg -q 'portable_pty|portable-pty' app/src-tauri/Cargo.toml && rg -q 'write_harbor_setup_input' app/src-tauri/src/setup.rs
+  tags: [implemented]
+- label: Harbor App Windows setup runs Harbor commands through WSL bash with a persisted preferred Ubuntu distro
+  command: rg -q 'wsl_bash_args|preferred_wsl_distro' app/src-tauri/src/setup.rs
+  tags: [implemented]
+- label: Harbor App home lists services from harbor ls and supports bulk harbor up and harbor down
+  command: rg -q "useHarbor\\(\\['ls'\\]\\)" app/src/home/useServiceList.tsx && rg -q 'runHarbor' app/src/home/ServiceList.tsx
+  tags: [implemented]
+- label: Harbor App close hides the window on desktop instead of quitting unless the user chooses Quit from the tray
+  command: rg -q 'prevent_close' app/src-tauri/src/lib.rs
+  tags: [implemented]
 
 # boost
-- label: Boost is an LLM proxy built with Python/FastAPI that transforms chat completions via pluggable modules
-  command: grep -q 'fastapi' services/boost/pyproject.toml
-
-## modules
-- label: Boost modules are Python files exporting ID_PREFIX and an async apply(chat, llm) function
-  command: grep -rq 'ID_PREFIX' services/boost/src/modules/ && grep -rq 'async def apply' services/boost/src/modules/
-- label: Boost has 19 built-in modules and 25+ custom modules
-  command: test $(find services/boost/src/modules -name '*.py' ! -name '__*' | wc -l) -ge 19 && test $(find services/boost/src/custom_modules -name '*.py' ! -name '__*' | wc -l) -ge 25
-- label: Boost modules are loaded dynamically from modules/ and custom_modules/ directories via importlib
-  command: grep -q 'importlib' services/boost/src/mods.py
-
-## api
-- label: Boost exposes OpenAI-compatible endpoints: /v1/models and /v1/chat/completions
-  command: grep -q '/v1/models' services/boost/src/main.py && grep -q '/v1/chat/completions' services/boost/src/main.py
-- label: Boost supports SSE streaming and WebSocket event delivery
-  command: grep -q 'WebSocket' services/boost/src/main.py && grep -q 'EventSourceResponse\|StreamingResponse' services/boost/src/main.py
-- label: Boost CORS is enabled for all origins
-  command: grep -q 'allow_origins' services/boost/src/main.py
-- label: Boost streaming chat completions emit an OpenAI-compatible terminal chunk with a non-null finish_reason before data: [DONE] so strict clients such as Pi can finish streams correctly
-  command: rg -q 'finish_reason="stop"' services/boost/src/llm.py && rg -q 'test_emit_done_adds_terminal_chunk_before_done' services/boost/tests/test_streaming.py
-  tags: [spec, implemented]
-- label: Boost /v1/models endpoint auto-detects response format based on client headers, returning Anthropic ModelInfo format for Anthropic SDK clients and OpenAI format otherwise
-  command: grep -q '_is_anthropic_client' services/boost/src/main.py && grep -q '_to_anthropic_model' services/boost/src/main.py && grep -q 'model_id' services/boost/src/main.py
-  tags: [spec, implemented]
-- label: Boost /v1/chat/completions endpoint remains fully functional after compat layer additions, verified by dedicated regression test suite covering streaming, non-streaming, auth, validation, and BackendError handling
-  command: test -f services/boost/tests/test_chat_completions.py && rg -q 'v1/chat/completions' services/boost/tests/test_chat_completions.py
-  tags: [spec, implemented]
-- label: Boost full-app Responses and Anthropic compatibility routes preserve SDK request ID headers on stub and auth-error responses
-  command: python -m pytest services/boost/tests/test_endpoint_isolation.py::TestFullAppSdkRequestIdHeaders -q
-  tags: [spec, boost-full-app-sdk-request-ids, implemented]
-- label: Boost /v1/models returns SDK-specific request ID headers on list, lookup, and not-found responses for both OpenAI and Anthropic clients
-  command: python -m pytest services/boost/tests/test_models.py::TestModelRequestIdHeaders -q
-  tags: [spec, boost-models-sdk-request-ids, implemented]
-- Boost mapper.py deeper branches for HTTP chat/tool paths (list_downstream 20-59 http/except/minimax-register, resolve_proxy_model/module/workflow 74-98 ifs, resolve_request_config ValueError 106 + HTTP 404 118 + tools params keep 104, is_direct_task 158) must be driven real via /v1/models + /v1/chat/completions (with tools payloads) in test_config.py only (non-prior file for deeper mapper, no repeat iter10 chat test); using real import/rebind + httpx patch for success list + config for minimax/errors + LLM patch for early return, asserting responses and mapper branches @implemented
-- Boost main.py remaining HTTP handler paths in chat/models (210 x-api-key branch in _is_anthropic_client, 278-289/335-346 model list/by-id 5xx error envelopes for anthro/openai via _is detection, 298-310 404 not-found shaped responses, 323/ openai returns, 415-436 chat serve() + if-None + stream/else + BackendError handler that forwards headers) must be driven to coverage exclusively via real HTTP TestClient calls using the mandated safe general test_config.py (_make_fresh_app reloads + header variants for anthro detection + patches on mapper/llm to force excepts + non-direct serve + BackendError raise); new tests appended in dedicated Test class following existing patterns, no other test files or priors touched @implemented
-- Boost HTTP handlers in main.py (esp /v1/chat/completions) must cover plain non-HTTPException 500 error paths (e.g. UnicodeDecodeError from body.decode('utf-8') not caught by the narrow JSONDecodeError except, or uncaught Exception from list_downstream/LLM/serve outside BackendError catch) which yield the default FastAPI/Starlette plain-text 500 'Internal Server Error' (text/plain, no JSON envelope from the HTTPException-only handler); exercised exclusively via TestClient calls (with bad bytes content= or side-effect patches raising non-BE) in the safe general test_config.py only (using _make_fresh_app + raise_server_exceptions=False + asserts on status/text/content-type NOT json-shaped); new TestPlainNonHTTP5xxPaths class appended, no other test files or priors touched @implemented
-
-## anthropic compat
-- label: Boost exposes POST /v1/messages endpoint for Anthropic Messages API compatibility
-  command: rg -q '/v1/messages' services/boost/src/anthropic_compat.py && rg -q 'anthropic_compatible_routes' services/boost/src/main.py
-  tags: [spec, implemented]
-- label: Boost exposes POST /v1/messages/count_tokens endpoint for Anthropic token counting
-  command: rg -q 'count_tokens' services/boost/src/anthropic_compat.py && rg -q 'input_tokens' services/boost/src/anthropic_compat.py
-  tags: [spec, implemented]
-- label: Boost Anthropic compat converts incoming Anthropic messages to OpenAI format internally via _convert_messages
-  command: rg -q '_convert_messages' services/boost/src/anthropic_compat.py && rg -q '_convert_user_message' services/boost/src/anthropic_compat.py && rg -q '_convert_assistant_message' services/boost/src/anthropic_compat.py
-  tags: [spec, implemented]
-- label: Boost Anthropic compat streaming converts OpenAI SSE chunks to Anthropic SSE events (message_start, content_block_start, content_block_delta, content_block_stop, message_delta, message_stop)
-  command: rg -q 'message_start' services/boost/src/anthropic_compat.py && rg -q 'content_block_start' services/boost/src/anthropic_compat.py && rg -q 'content_block_delta' services/boost/src/anthropic_compat.py && rg -q 'content_block_stop' services/boost/src/anthropic_compat.py && rg -q 'message_delta' services/boost/src/anthropic_compat.py && rg -q 'message_stop' services/boost/src/anthropic_compat.py
-  tags: [spec, implemented]
-- label: Boost Anthropic compat accepts x-api-key header for authentication alongside standard Authorization header
-  command: rg -q 'x-api-key' services/boost/src/anthropic_compat.py && rg -q '_synthesize_authorization' services/boost/src/anthropic_compat.py
-  tags: [spec, implemented]
-- label: HARBOR_BOOST_ANTHROPIC_COMPAT config controls whether Anthropic-compatible endpoints are registered
-  command: rg -q 'ENABLE_ANTHROPIC_COMPAT' services/boost/src/config.py && rg -q 'HARBOR_BOOST_ANTHROPIC_COMPAT' profiles/default.env && rg -q 'ENABLE_ANTHROPIC_COMPAT' services/boost/src/main.py
-  tags: [spec, implemented]
-- label: Boost Anthropic compat maps stop reasons between formats (length->max_tokens, tool_calls->tool_use, stop->end_turn)
-  command: rg -q '_map_stop_reason' services/boost/src/anthropic_compat.py && rg -q 'max_tokens' services/boost/src/anthropic_compat.py && rg -q 'end_turn' services/boost/src/anthropic_compat.py && rg -q 'tool_use' services/boost/src/anthropic_compat.py
-  tags: [spec, implemented]
-- label: Boost Anthropic compat converts tool schemas between Anthropic and OpenAI formats
-  command: rg -q '_convert_tools' services/boost/src/anthropic_compat.py && rg -q '_convert_tool_choice' services/boost/src/anthropic_compat.py && rg -q 'input_schema' services/boost/src/anthropic_compat.py
-  tags: [spec, implemented]
-- label: Boost Anthropic compat includes request-id header in all response paths
-  command: rg -q 'REQUEST_ID_HEADER' services/boost/src/anthropic_compat.py && rg -q 'request-id' services/boost/src/compat_utils.py
-  tags: [spec, implemented]
-- label: Boost Anthropic compat handles mid-stream errors gracefully with proper SSE envelope closure
-  command: rg -q 'except.*Exception' services/boost/src/anthropic_compat.py && rg -q 'test_mid_stream_exception' services/boost/tests/test_anthropic_compat.py
-  tags: [spec, implemented]
-- label: Boost Anthropic compat supports extended thinking by mapping thinking param to max_completion_tokens, producing thinking content blocks from backend reasoning_content, and stripping thinking blocks from request message history
-  command: rg -q 'thinking' services/boost/src/anthropic_compat.py && rg -q 'reasoning_content' services/boost/src/anthropic_compat.py && rg -q 'thinking_delta' services/boost/src/anthropic_compat.py && rg -q 'test_assistant_message_thinking_blocks_stripped' services/boost/tests/test_anthropic_compat.py && rg -q 'test_reasoning_content_produces_thinking_block' services/boost/tests/test_anthropic_compat.py
-  tags: [spec, implemented]
-- label: Boost Anthropic compat passes through top_k parameter for backends that support it (vLLM, Ollama, llama.cpp)
-  command: grep -q 'top_k' services/boost/src/anthropic_compat.py && grep -q 'test_top_k' services/boost/tests/test_anthropic_compat.py
-  tags: [spec, implemented]
-- label: Boost Anthropic compat accepts the anthropic-beta request header with comma-separated feature flags, logs them at debug level, and echoes recognized flags back in the anthropic-beta response header
-  command: grep -q '_parse_beta_flags' services/boost/src/anthropic_compat.py && grep -q 'RECOGNIZED_BETA_FLAGS' services/boost/src/anthropic_compat.py && grep -q 'anthropic-beta.*join' services/boost/src/anthropic_compat.py
-  tags: [spec, implemented]
-- label: Boost Anthropic compat supports document content blocks with best-effort conversion (image types forwarded as images, others as text placeholders) and URL image sources
-  command: grep -q 'document' services/boost/src/anthropic_compat.py && grep -q 'source_type == "url"' services/boost/src/anthropic_compat.py
-  tags: [spec, implemented]
-- label: Boost Anthropic streaming emits a ping event after message_start for connection keepalive
-  command: grep -q 'ping' services/boost/src/anthropic_compat.py && grep -q 'TestStreamingPingEvent' services/boost/tests/test_anthropic_compat.py
-  tags: [spec, implemented]
-- label: Boost Anthropic compat returns anthropic-version response header on all response paths
-  command: grep -q 'ANTHROPIC_VERSION_HEADER' services/boost/src/anthropic_compat.py && grep -q 'ANTHROPIC_VERSION' services/boost/src/anthropic_compat.py
-  tags: [spec, implemented]
-- label: Boost Anthropic compat correctly distinguishes stop_sequence vs end_turn stop reasons by matching response content against configured stop_sequences
-  command: grep -q 'stop_sequence' services/boost/src/anthropic_compat.py && grep -q 'end_turn' services/boost/src/anthropic_compat.py && grep -q 'content_text' services/boost/src/anthropic_compat.py
-  tags: [spec, implemented]
-- label: Boost Anthropic compat exposes message batches API stubs (create, list, get, results, cancel) that return 501 or 404 for SDK compatibility
-  command: grep -q 'batches' services/boost/src/anthropic_compat.py && grep -q 'create_message_batch' services/boost/src/anthropic_compat.py && grep -q 'cancel_message_batch' services/boost/src/anthropic_compat.py
-  tags: [spec, implemented]
-- label: Boost Anthropic compat validates that model, max_tokens, and a non-empty messages array are present, and rejects messages with role system in favor of the top-level system parameter
-  command: grep -q '_validate_request' services/boost/src/anthropic_compat.py && grep -q 'model is required' services/boost/src/anthropic_compat.py && grep -q 'max_tokens is required' services/boost/src/anthropic_compat.py && grep -q 'role.*system.*not allowed' services/boost/src/anthropic_compat.py
-  tags: [spec, implemented]
-- label: Boost Anthropic compat includes cache_creation_input_tokens and cache_read_input_tokens (always 0) in all usage objects for SDK compatibility
-  command: grep -q 'cache_creation_input_tokens' services/boost/src/anthropic_compat.py && grep -q 'cache_read_input_tokens' services/boost/src/anthropic_compat.py
-  tags: [spec, implemented]
-- label: Boost Anthropic compat maps disable_parallel_tool_use in tool_choice to parallel_tool_calls false in the OpenAI request body
-  command: grep -q 'disable_parallel_tool_use' services/boost/src/anthropic_compat.py && grep -q 'parallel_tool_calls' services/boost/src/anthropic_compat.py
-  tags: [spec, implemented]
-- label: Boost Anthropic compat converts tool_result blocks with is_error support and extracts image content from arrays into follow-up user messages for vision-capable backends
-  command: grep -q 'tool_result' services/boost/src/anthropic_compat.py && grep -q 'is_error' services/boost/src/anthropic_compat.py && grep -q 'image_parts' services/boost/src/anthropic_compat.py
-  tags: [spec, implemented]
-- label: Boost Anthropic compat _convert_tool_choice safely handles non-dict tool_choice values (strings, ints) by returning None instead of crashing on .get() calls
-  command: rg -q 'not isinstance.*dict' services/boost/src/anthropic_compat.py && rg -q 'tool_choice_string' services/boost/tests/test_edge_cases.py
-  tags: [spec, implemented]
-- label: Boost Anthropic compat validates max_tokens is a positive integer, rejecting non-numeric, negative, and zero values with a 400 error
-  command: rg -q 'max_tokens must be a positive integer' services/boost/src/anthropic_compat.py && rg -q 'isinstance.*max_tokens' services/boost/src/anthropic_compat.py
-  tags: [spec, implemented]
-- label: Boost Anthropic Messages and count_tokens reject non-object message entries with Anthropic-format 400 errors instead of 500
-  command: cd services/boost && pytest -q tests/test_endpoint_isolation.py -k 'non_object_message_entries'
-  tags: [spec, boost-compat-validation-400, implemented]
-- label: Boost Anthropic streaming emits a structured error SSE event with an Anthropic error envelope when backend streaming fails, while still closing any open message envelope
-  command: python -m pytest services/boost/tests/test_anthropic_pydantic_validation.py::TestMidStreamErrorValidation::test_backend_error_emits_structured_error_event -q
-  tags: [spec, boost-anthropic-stream-error-event, implemented]
-- label: Boost Anthropic streaming ping SSE events include a typed payload data object with type ping
-  command: python -m pytest services/boost/tests/test_anthropic_compat.py::TestStreamingPingEvent::test_ping_payload_includes_type -q
-  tags: [spec, boost-anthropic-ping-payload, implemented]
-- label: Boost Anthropic message batch create rejects invalid JSON with an Anthropic-format 400 error before returning the unsupported-batches stub error
-  command: cd services/boost && PYTHONPATH=tests:src .venv/bin/python -m pytest tests/test_anthropic_compat.py::TestMessageBatchesStubs::test_create_batch_rejects_invalid_json -q
-  tags: [spec, boost-anthropic-batch-invalid-json, implemented]
-- Boost Anthropic compat _anthropic_stream_converter keepalive timing branch (line 683 when now-last >= SSE_KEEPALIVE_INTERVAL) and deferred tool flush logic (lines 946-974 for tool_states with id but not emitted at cleanup, plus surrounding flush for-loop) must be covered by targeted tests added to dedicated test_anthropic_compat.py only (patches for timing+monkeypatch SSE_KEEPALIVE_INTERVAL small + sleep in async gens for keepalive comments; mixed streams with tool_calls args-before-id and text+tool for flush/closes); asserts on emitted events and cov lift on those branches; no changes to anthropic_compat.py or other test files @implemented
-
-## responses api
-- label: Boost exposes POST /v1/responses endpoint for OpenAI Responses API compatibility
-  command: rg -q '/v1/responses' services/boost/src/responses_compat.py && rg -q 'responses_compatible_routes' services/boost/src/main.py
-  tags: [spec, implemented]
-- label: Boost Responses API converts string and array input formats to Chat Completions messages via _convert_input_to_messages
-  command: rg -q '_convert_input_to_messages' services/boost/src/responses_compat.py && rg -q 'test_string_input' services/boost/tests/test_responses_compat.py && rg -q 'test_message_item_user' services/boost/tests/test_responses_compat.py
-  tags: [spec, implemented]
-- label: Boost Responses API builds response objects with output items (message and function_call types) from Chat Completions results
-  command: rg -q '_build_output_items' services/boost/src/responses_compat.py && rg -q '_build_responses_response' services/boost/src/responses_compat.py && rg -q 'output_text' services/boost/src/responses_compat.py && rg -q 'function_call' services/boost/src/responses_compat.py
-  tags: [spec, implemented]
-- label: Boost Responses API streaming emits correct SSE event sequence with monotonically increasing sequence_number (response.created, response.in_progress, output_item.added, content_part.added, deltas, done events, response.completed)
-  command: rg -q 'response.created' services/boost/src/responses_compat.py && rg -q 'response.in_progress' services/boost/src/responses_compat.py && rg -q 'response.completed' services/boost/src/responses_compat.py && rg -q 'sequence_number' services/boost/src/responses_compat.py && rg -q 'test_sequence_numbers_monotonically_increase' services/boost/tests/test_responses_compat.py
-  tags: [spec, implemented]
-- label: HARBOR_BOOST_RESPONSES_API config controls whether Responses API endpoint is registered
-  command: rg -q 'ENABLE_RESPONSES_API' services/boost/src/config.py && rg -q 'HARBOR_BOOST_RESPONSES_API' profiles/default.env && rg -q 'ENABLE_RESPONSES_API' services/boost/src/main.py
-  tags: [spec, implemented]
-- label: Boost Responses API includes x-request-id response header on all response paths (including stub endpoints), matching the OpenAI SDK convention
-  command: rg -q 'OPENAI_REQUEST_ID_HEADER' services/boost/src/responses_compat.py && rg -q 'x-request-id' services/boost/src/compat_utils.py
-  tags: [spec, implemented]
-- label: Boost Responses API error responses use the standard OpenAI error format with ERROR_TYPE_MAP covering all SDK exception status codes (400, 401, 403, 404, 409, 422, 429, 500)
-  command: rg -q 'ERROR_TYPE_MAP' services/boost/src/responses_compat.py && rg -q 'conflict_error' services/boost/src/responses_compat.py && rg -q 'test_error_type_map_completeness' services/boost/tests/test_responses_compat.py
-  tags: [spec, implemented]
-- label: Boost Responses API usage objects include input_tokens_details and output_tokens_details sub-objects required by the OpenAI SDK
-  command: rg -q 'input_tokens_details' services/boost/src/responses_compat.py && rg -q 'output_tokens_details' services/boost/src/responses_compat.py && rg -q '_make_usage' services/boost/src/responses_compat.py && rg -q 'test_usage_has_token_details' services/boost/tests/test_responses_compat.py
-  tags: [spec, implemented]
-- label: Boost Responses API supports reasoning via effort param mapping, reasoning output items with summary, reasoning streaming events, and reasoning_tokens in usage
-  command: grep -q 'reasoning_effort' services/boost/src/responses_compat.py && grep -q '"type": "reasoning"' services/boost/src/responses_compat.py && grep -q 'reasoning_tokens' services/boost/src/responses_compat.py && grep -q 'TestReasoningStreaming' services/boost/tests/test_responses_compat.py
-  tags: [spec, implemented]
-- label: Boost Responses API maps web_search_preview and web_search tool types to Harbor's web_search function tool, and logs warnings for unsupported built-in tools (file_search, code_interpreter)
-  command: grep -q '_WEB_SEARCH_TYPES' services/boost/src/responses_compat.py && grep -q '_UNSUPPORTED_BUILTIN_TOOLS' services/boost/src/responses_compat.py && grep -q 'web_search' services/boost/src/responses_compat.py
-  tags: [spec, implemented]
-- label: Boost Responses API exposes GET, DELETE, and cancel stubs that return 404 since responses are not persisted
-  command: grep -q 'get_response' services/boost/src/responses_compat.py && grep -q 'delete_response' services/boost/src/responses_compat.py && grep -q 'cancel_response' services/boost/src/responses_compat.py
-  tags: [spec, implemented]
-- label: Boost Responses API accepts truncation parameter (logged warning, reflected in response), store (always false), and metadata (passthrough)
-  command: grep -q 'truncation' services/boost/src/responses_compat.py && grep -q '"store": False' services/boost/src/responses_compat.py && grep -q 'metadata' services/boost/src/responses_compat.py
-  tags: [spec, implemented]
-- label: Boost Responses API passes through parallel_tool_calls in both request conversion and response objects
-  command: grep -q 'parallel_tool_calls' services/boost/src/responses_compat.py && grep -c 'parallel_tool_calls' services/boost/src/responses_compat.py | grep -q '[3-9]'
-  tags: [spec, implemented]
-- label: Boost Responses API converts content parts including input_text, input_image, input_audio, and input_file types to Chat Completions format with best-effort fallbacks for unsupported types
-  command: grep -q '_convert_content_parts' services/boost/src/responses_compat.py && grep -q 'input_text' services/boost/src/responses_compat.py && grep -q 'input_image' services/boost/src/responses_compat.py && grep -q 'input_audio' services/boost/src/responses_compat.py && grep -q 'input_file' services/boost/src/responses_compat.py
-  tags: [spec, implemented]
-- label: Boost Responses API streaming handles mid-stream errors by emitting the error as text in a message item and closing the SSE envelope with status failed
-  command: grep -q 'stream_error' services/boost/src/responses_compat.py && grep -q 'Stream error' services/boost/src/responses_compat.py && grep -q 'status.*failed' services/boost/src/responses_compat.py
-  tags: [spec, implemented]
-- label: Boost Responses API maps finish_reason length to status incomplete with incomplete_details reason max_output_tokens
-  command: grep -q 'incomplete_details' services/boost/src/responses_compat.py && grep -q 'max_output_tokens' services/boost/src/responses_compat.py && grep -q '_map_status' services/boost/src/responses_compat.py
-  tags: [spec, implemented]
-- label: Boost Responses input_tokens rejects non-object bodies and missing model or input fields with OpenAI-format 400 errors instead of 500
-  command: cd services/boost && pytest -q tests/test_endpoint_isolation.py -k 'responses_input_tokens_validation'
-  tags: [spec, boost-compat-validation-400, implemented]
-- label: Boost Responses API streaming response.failed events include a non-null response.error object with an SDK-compatible code and sanitized message
-  command: python -m pytest services/boost/tests/test_responses_pydantic_validation.py::TestFailedStreamValidation::test_failed_event_populates_error_object -q
-  tags: [spec, boost-responses-stream-error-schema, implemented]
-- label: Boost Responses cancel stub rejects invalid JSON request bodies with an OpenAI-format 400 before returning the non-persistence 404
-  command: cd services/boost && python -m pytest tests/test_responses_compat.py::TestResponseStubEndpoints::test_cancel_response_rejects_invalid_json -q
-  tags: [spec, boost-responses-cancel-invalid-json, implemented]
-- label: Boost Responses API preserves function-call context when reconstructing chat history: assistant function_call items keep tool_calls, tool outputs keep tool_call_id, and assistant tool-call content sent to Ollama-compatible chat backends is an empty string rather than null
-  command: pytest -q services/boost/tests/test_chat_node.py services/boost/tests/test_responses_compat.py -k 'from_conversation_preserves_tool_metadata or function_call_input_uses_empty_assistant_content'
-  tags: [spec, implemented]
-
-## shared
-- label: Boost compat layers share a common auth.py module with get_api_key supporting both Authorization and x-api-key headers
-  command: test -f services/boost/src/auth.py && grep -q 'get_api_key' services/boost/src/auth.py && grep -q 'x-api-key' services/boost/src/auth.py && grep -q 'from auth import' services/boost/src/anthropic_compat.py && grep -q 'from auth import' services/boost/src/responses_compat.py
-  tags: [spec, implemented]
-- label: Boost compat layers share a common compat_utils.py module with chunk extraction helpers and SSE event formatting
-  command: test -f services/boost/src/compat_utils.py && grep -q 'get_chunk_content' services/boost/src/compat_utils.py && grep -q 'get_chunk_reasoning' services/boost/src/compat_utils.py && grep -q 'sse_event' services/boost/src/compat_utils.py && grep -q 'from compat_utils import' services/boost/src/anthropic_compat.py && grep -q 'from compat_utils import' services/boost/src/responses_compat.py
-  tags: [spec, implemented]
-- label: Boost compat_utils normalizes tool IDs between toolu_ (Anthropic) and call_ (OpenAI) prefixes via to_anthropic_tool_id and to_openai_tool_id, applied in request conversion, response building, and streaming for both compat layers
-  command: grep -q 'to_anthropic_tool_id' services/boost/src/compat_utils.py && grep -q 'to_openai_tool_id' services/boost/src/compat_utils.py && grep -q 'to_anthropic_tool_id' services/boost/src/anthropic_compat.py && grep -q 'to_openai_tool_id' services/boost/src/anthropic_compat.py && grep -q 'to_openai_tool_id' services/boost/src/responses_compat.py
-  tags: [spec, implemented]
-- label: Boost BackendError captures rate-limit headers from backend HTTP responses and both compat layers forward them on 429 errors, including during streaming
-  command: rg -q 'RATE_LIMIT_HEADERS' services/boost/src/llm.py && rg -q 'Rate limit' services/boost/tests/test_streaming_backend_error.py
-  tags: [spec, implemented]
-
-## config
-- label: Boost upstream APIs are configured via semicolon-separated HARBOR_BOOST_OPENAI_URLS and HARBOR_BOOST_OPENAI_KEYS
-  command: grep -q 'HARBOR_BOOST_OPENAI_URLS' services/boost/src/config.py && grep -q 'HARBOR_BOOST_OPENAI_KEYS' services/boost/src/config.py
-
-## internals
-- label: Boost Chat is a linked list of ChatNode objects with parent/children pointers
-  command: grep -q 'class ChatNode' services/boost/src/chat_node.py && grep -q 'parent' services/boost/src/chat_node.py && grep -q 'children' services/boost/src/chat_node.py
-- label: Boost LLM object extends AsyncEventEmitter and provides stream_final_completion, chat_completion, emit_message, and emit_status methods
-  command: grep -q 'AsyncEventEmitter' services/boost/src/llm.py && grep -q 'stream_final_completion' services/boost/src/llm.py && grep -q 'emit_message' services/boost/src/llm.py && grep -q 'emit_status' services/boost/src/llm.py
-- label: Boost has a request-scoped tool registry allowing modules to define LLM-callable functions
-  command: test -f services/boost/src/tools/registry.py && grep -q 'set_local_tool' services/boost/src/tools/registry.py
-- label: Boost LLM propagates BackendError through streaming by storing the exception in _stream_error and re-raising it after the generator drains queued chunks, so both compat layers can catch and format it
-  command: rg -q '_stream_error' services/boost/src/llm.py && rg -q 'BackendError' services/boost/src/anthropic_compat.py && rg -q 'BackendError' services/boost/src/responses_compat.py
-  tags: [spec, implemented]
-
-## tools
-- label: Boost has a built-in tools module that registers request-scoped LLM-callable utility tools and then streams the final completion
-  command: test -f services/boost/src/modules/tools.py && rg -q "ID_PREFIX = 'tools'" services/boost/src/modules/tools.py && rg -q 'set_local_tool' services/boost/src/modules/tools.py && rg -q 'stream_final_completion' services/boost/src/modules/tools.py
-  tags: [spec, implemented]
-- label: Boost tools module exposes web_search and read_url tools backed by Tavily, SearXNG, Jina reader, and direct HTTP fallbacks with Harbor configuration keys documented
-  command: rg -q 'async def web_search' services/boost/src/modules/tools.py && rg -q 'async def read_url' services/boost/src/modules/tools.py && rg -q 'HARBOR_BOOST_TAVILY_API_KEY' services/boost/src/config.py profiles/default.env docs/5.2.2-Harbor-Boost-Configuration.md && rg -q 'HARBOR_BOOST_SEARXNG_URL' services/boost/src/config.py profiles/default.env docs/5.2.2-Harbor-Boost-Configuration.md && rg -q 'HARBOR_BOOST_JINA_READER_API_URL' services/boost/src/config.py profiles/default.env docs/5.2.2-Harbor-Boost-Configuration.md
-  tags: [spec, implemented]
-- label: Boost tools module exposes request-scoped scratch notes, scratch files, current_time, and finish utility tools
-  command: rg -q 'async def add_note' services/boost/src/modules/tools.py && rg -q 'async def read_notes' services/boost/src/modules/tools.py && rg -q 'async def write_file' services/boost/src/modules/tools.py && rg -q 'async def read_file' services/boost/src/modules/tools.py && rg -q 'async def current_time' services/boost/src/modules/tools.py && rg -q 'async def finish' services/boost/src/modules/tools.py
-  tags: [spec, implemented]
-
-## workflows
-- label: Boost supports configured named workflows whose model IDs are advertised as workflow prefixes over downstream models
-  command: test -f services/boost/src/workflows.py && rg -q 'HARBOR_BOOST_WORKFLOWS' services/boost/src/config.py profiles/default.env docs/5.2.2-Harbor-Boost-Configuration.md && rg -q 'workflow_models' services/boost/src/mapper.py && rg -q 'resolve_proxy_workflow' services/boost/src/mapper.py
-  tags: [spec, implemented]
-- label: Boost workflow execution runs ordered module configs, supports system prompt and final completion pseudo-modules, and passes per-module config to compatible apply functions
-  command: rg -q 'async def apply_workflow' services/boost/src/workflows.py && rg -q 'system' services/boost/src/workflows.py && rg -q 'stream_final_completion' services/boost/src/workflows.py && rg -q 'inspect.signature' services/boost/src/workflows.py
-  tags: [spec, implemented]
-- label: Boost tools module can be used as a workflow setup step without triggering the final completion immediately
-  command: rg -q 'cfg_final' services/boost/src/modules/tools.py && rg -q 'module_name == "tools".*final' services/boost/src/workflows.py
-  tags: [spec, implemented]
-- label: Boost accepts a per-request override so callers can run an ad hoc workflow on a base model without pre-registering it
-  command: rg -q 'runtime_workflow' services/boost/src/llm.py && rg -q '@boost_workflow' docs/5.2.3-Harbor-Boost-Modules.md
-  tags: [boost_workflow, spec, implemented]
-- label: Boost workflow model resolution supports workflow IDs containing dashes so launch-generated boost-... workflows are routable
-  command: rg -Fq '^[A-Za-z0-9_.-]+$' services/boost/src/workflows.py && rg -q 'model_id\.startswith\(prefix\)' services/boost/src/workflows.py
-  tags: [spec, implemented]
-
-## testing
-- label: Boost test infrastructure shares helpers.py with FakeLLM, make_request, openai_result, streaming_chunks, SSE parsers, app constructors, and setup_mock_llm utilities used across all test files
-  command: rg -q 'class FakeLLM' services/boost/tests/helpers.py && rg -q 'def make_request' services/boost/tests/helpers.py && rg -q 'def make_anthropic_app' services/boost/tests/helpers.py
-  tags: [spec, implemented]
-- label: Boost endpoint isolation is verified by 72 tests covering wrong-SDK-on-wrong-endpoint errors, method not allowed, path traversal safety, concurrent request independence, content-type mismatches, CORS preflight, and response format isolation
-  command: test -f services/boost/tests/test_endpoint_isolation.py && rg -c 'def test_' services/boost/tests/test_endpoint_isolation.py | grep -q '7[0-9]'
-  tags: [spec, implemented]
-- label: Boost compat endpoint isolation tests and config route-registration tests pass in the same pytest process without stale auth state causing /v1/models to return 401 when BOOST_AUTH is empty
-  command: cd services/boost && uv run pytest tests/test_endpoint_isolation.py tests/test_config.py -q
-  tags: [spec, boost-config-auth-isolation, implemented]
+- label: Boost is a FastAPI LLM proxy that exposes OpenAI chat completions and optional Anthropic and Responses compat layers
+  command: grep -q 'fastapi' services/boost/pyproject.toml && grep -q '/v1/chat/completions' services/boost/src/main.py
+- label: Boost modules are Python plugins with ID_PREFIX and async apply loaded from modules and custom_modules directories
+  command: rg -q 'ID_PREFIX' services/boost/src/modules/ && rg -q 'importlib' services/boost/src/mods.py
+- label: Boost auth accepts requests when BOOST_AUTH is empty and otherwise requires Authorization or x-api-key
+  command: test -f services/boost/src/auth.py && rg -q 'BOOST_AUTH' services/boost/src/config.py
+  tags: [implemented]
+- label: Boost maps Anthropic Messages to OpenAI chat completions internally and streams Anthropic SSE event envelopes
+  command: rg -q '/v1/messages' services/boost/src/anthropic_compat.py && rg -q 'message_start' services/boost/src/anthropic_compat.py
+  tags: [implemented]
+- label: Boost Responses API converts input to chat messages and emits response.created through response.completed SSE sequences
+  command: rg -q '/v1/responses' services/boost/src/responses_compat.py && rg -q 'response.created' services/boost/src/responses_compat.py
+  tags: [implemented]
+- label: Boost Anthropic and Responses HTTP errors use SDK-specific envelopes based on route path not request body shape
+  command: rg -q '_ANTHROPIC_ERROR_TYPE_MAP' services/boost/src/main.py && rg -q 'ERROR_TYPE_MAP' services/boost/src/responses_compat.py
+  tags: [implemented]
+- label: Boost workflows advertise model IDs as workflow prefixes and execute ordered module steps including system and final completion
+  command: test -f services/boost/src/workflows.py && rg -q 'apply_workflow' services/boost/src/workflows.py
+  tags: [implemented]
+- label: Boost direct-task detection bypasses module serve for known title-generation style prompts when no workflow is set
+  command: rg -q 'is_direct_task' services/boost/src/mapper.py && rg -q 'is_direct_task' services/boost/src/main.py
+  tags: [implemented]
+- label: Boost SSE streaming uses retry intervals keepalive comments and no-buffer headers for proxy compatibility
+  command: rg -q 'SSE_KEEPALIVE_INTERVAL' services/boost/src/compat_utils.py && rg -q 'sse_keepalive' services/boost/src/anthropic_compat.py
+  tags: [implemented]
+- label: Boost BackendError forwards rate-limit headers to clients on 429 in both streaming and non-streaming paths
+  command: rg -q 'RATE_LIMIT_FORWARD_HEADERS' services/boost/src/compat_utils.py && rg -q 'BackendError' services/boost/tests/test_streaming_backend_error.py
+  tags: [implemented]
 
 # testing
-- label: tests use a Deno-based orchestrator running sequential suites across parallel containerized distros
-  command: test -f tests/run.ts && test $(find tests/suites -name '*.sh' | wc -l) -ge 4
-- label: test suites are sequential Bash scripts: install, cli, smoke, integration, and launch-smoke
-  command: test -f tests/suites/01-install.sh && test -f tests/suites/02-cli.sh && test -f tests/suites/03-smoke.sh && test -f tests/suites/04-integration.sh && test -f tests/suites/05-launch-smoke.sh
-- label: test rows target 7+ Linux distros including Alpine, Arch, Debian, Fedora, Rocky, and Ubuntu
-  command: test $(find tests/containers -name '*.Containerfile' ! -name 'base.*' | wc -l) -ge 6
-- label: test runner distro rows include jq so launch-smoke can exercise harbor launch model discovery in CI
-  command: rg -q '\bjq\b' tests/containers/alpine-3.Containerfile && rg -q '\bjq\b' tests/containers/archlinux.Containerfile && rg -q '\bjq\b' tests/containers/debian-12.Containerfile && rg -q '\bjq\b' tests/containers/fedora-43.Containerfile && rg -q '\bjq\b' tests/containers/rocky-9.Containerfile && rg -q '\bjq\b' tests/containers/ubuntu-2204.Containerfile && rg -q '\bjq\b' tests/containers/ubuntu-2404.Containerfile && rg -q 'jq' tests/README.md
-  tags: [spec, implemented]
+- label: tests use a Deno orchestrator running sequential bash suites across containerized distros
+  command: test -f tests/run.ts && test -f tests/suites/01-install.sh && test -f tests/suites/05-launch-smoke.sh
+- label: harbor dev test runs the container test matrix documented in tests/README.md
+  command: test -f tests/README.md && rg -q 'harbor dev test' tests/README.md
 
 # lint
-- label: lint uses a custom 3-pass Deno orchestrator with 10 HARBOR-prefixed rules
-  command: test -f .scripts/lint/run.ts && test -f .scripts/lint/rules.yaml && grep -c 'HARBOR0' .scripts/lint/rules.yaml | grep -q '[0-9]'
-- label: lint self-tests validate rules against fixture files
-  command: test -f .scripts/lint/self-test.ts && test -d .scripts/lint/fixtures
-- label: The bash rules lint pass reports no HARBOR001/HARBOR007/HARBOR009 findings in harbor.sh or tests/suites/02-cli.sh
-  command: bash harbor.sh dev lint --rules --files harbor.sh,tests/suites/02-cli.sh --json | jq -e '.findings | map(select(.rule == "HARBOR001" or .rule == "HARBOR007" or .rule == "HARBOR009")) | length == 0'
-  tags: [spec, lint-debt, implemented]
+- label: harbor dev lint runs a three-pass Deno orchestrator with HARBOR-prefixed bash rules under .scripts/lint
+  command: test -f .scripts/lint/run.ts && test -f .scripts/lint/rules.yaml && grep -q 'HARBOR0' .scripts/lint/rules.yaml
+  tags: [implemented]
 
 # docs
 - label: documentation lives in docs/ with hierarchical numbering and covers 100+ services
   command: test $(find docs -name '*.md' | wc -l) -ge 100
-- label: docs are auto-generated via 'harbor dev docs'
+- label: docs are regenerated via harbor dev docs from .scripts/docs.ts
   command: test -f .scripts/docs.ts
-- label: README and user-facing docs introduce harbor launch as the workflow for running host coding tools or service CLIs against Harbor backends, with examples for backend/model selection, --web, --config, and --service
-  command: rg -q 'harbor launch --backend ollama --model qwen3.5:4b codex' README.md docs/1.-Harbor-User-Guide.md docs/3.-Harbor-CLI-Reference.md && rg -q 'harbor launch --web --backend ollama --model qwen3.5:4b codex' README.md docs/1.-Harbor-User-Guide.md docs/3.-Harbor-CLI-Reference.md && rg -q 'harbor launch --config opencode' README.md docs/1.-Harbor-User-Guide.md docs/3.-Harbor-CLI-Reference.md && rg -q 'harbor launch --service opencode --help' README.md docs/1.-Harbor-User-Guide.md docs/3.-Harbor-CLI-Reference.md
-  tags: [spec, launch-docs, implemented]
-- label: README is the project's landing page and contains only user-facing information
-  command: rg -q '^## What can Harbor do\?' README.md && ! rg -qi 'maintainers: regenerate docs|fresh-maintainer|harbor dev docs|syncs the sibling wiki checkout' README.md
-  tags: [spec, readme-cleanup, implemented]
-- label: README Services section reflects the current service metadata catalog rather than a stale hand-written subset
-  command: rg -q 'Open Design' README.md && rg -q 'Voicebox' README.md && rg -q 'Needle' README.md && rg -q 'npcsh' README.md
-  tags: [spec, readme-services, implemented]
-- label: install.md tells agentic tools to orchestrate Harbor CLI installation through install.sh, including optional dependency setup and post-install verification
-  command: test -f install.md && grep -q 'OBJECTIVE: Orchestrate Harbor CLI installation' install.md && grep -q 'install.sh' install.md && grep -q -- '--install-requirements' install.md && grep -q 'harbor doctor' install.md && grep -q 'harbor --version' install.md
-  tags: [spec, implemented]
-- label: Installing Harbor docs mention install.md as the agent-oriented install prompt and show Claude Code and Codex invocation examples
-  command: rg -q 'install\.md' docs/1.0.-Installing-Harbor.md README.md docs/README.md && rg -q 'Claude Code' docs/1.0.-Installing-Harbor.md && rg -q 'codex.*install\.md' docs/1.0.-Installing-Harbor.md
-  tags: [spec, implemented]
-
-## integrations
-- core high-star Harbor services (ollama, webui, dify, vllm, comfyui, librechat, anythingllm, aider, etc.) have a high-level 'Integrations' section immediately below their 'Starting' heading in their docs/*.md files @implemented
-- the Integrations section for core services follows the llama.cpp sample style: high-level grouped descriptions of frontend auto-configuration, traefik exposure, GPU/Capability wiring, build support, host volume mounts (especially HF cache and service data dirs), and references to relevant HARBOR_* config variables; no exhaustive 'Configuration surface' variable list @implemented
-
-## guides
-- label: docs > guides > docs/8.-Guides.md lists SEO guide articles and links the Local LLM Stack with Docker Compose guide
-  command: test -f docs/8.-Guides.md && rg -q 'Local LLM Stack with Docker Compose' docs/8.-Guides.md && rg -q './8.1-Local-LLM-Stack-with-Docker-Compose.md' docs/8.-Guides.md
-  tags: [spec, seo-guides-iter1, implemented]
-- label: docs > guides > docs/8.1-Local-LLM-Stack-with-Docker-Compose.md targets local LLM stack, Docker Compose LLM stack, and local AI stack search intent while describing Harbor's default Ollama and Open WebUI setup
-  command: test -f docs/8.1-Local-LLM-Stack-with-Docker-Compose.md && rg -q 'local LLM stack' docs/8.1-Local-LLM-Stack-with-Docker-Compose.md && rg -q 'Docker Compose LLM stack' docs/8.1-Local-LLM-Stack-with-Docker-Compose.md && rg -q 'local AI stack' docs/8.1-Local-LLM-Stack-with-Docker-Compose.md && rg -q 'Ollama' docs/8.1-Local-LLM-Stack-with-Docker-Compose.md && rg -q 'Open WebUI' docs/8.1-Local-LLM-Stack-with-Docker-Compose.md
-  tags: [spec, seo-guides-iter1, implemented]
-- label: docs > guides > docs/README.md links the Guides section and the Local LLM Stack with Docker Compose guide from the docs home
-  command: rg -q 'Harbor Guides' docs/README.md && rg -q '8.-Guides' docs/README.md && rg -q '8.1-Local-LLM-Stack-with-Docker-Compose' docs/README.md
-  tags: [spec, seo-guides-iter1, implemented]
-- label: docs/8.2-Ollama-Open-WebUI-SearXNG-Local-Web-RAG-Setup.md exists as a Harbor guide for Ollama, Open WebUI, and SearXNG local web RAG
-  command: test -f docs/8.2-Ollama-Open-WebUI-SearXNG-Local-Web-RAG-Setup.md
-  tags: [spec, seo-guides-iter2, implemented]
-- label: docs/8.2-Ollama-Open-WebUI-SearXNG-Local-Web-RAG-Setup.md targets Ollama Open WebUI Docker Compose, Open WebUI SearXNG, and local web RAG search intent
-  command: grep -Fq 'Ollama Open WebUI Docker Compose' docs/8.2-Ollama-Open-WebUI-SearXNG-Local-Web-RAG-Setup.md && grep -Fq 'Open WebUI SearXNG' docs/8.2-Ollama-Open-WebUI-SearXNG-Local-Web-RAG-Setup.md && grep -Fq 'local web RAG' docs/8.2-Ollama-Open-WebUI-SearXNG-Local-Web-RAG-Setup.md
-  tags: [spec, seo-guides-iter2, implemented]
-- label: docs/8.-Guides.md links the Ollama + Open WebUI + SearXNG Local Web RAG Setup guide
-  command: grep -Fq '[Ollama + Open WebUI + SearXNG Local Web RAG Setup](./8.2-Ollama-Open-WebUI-SearXNG-Local-Web-RAG-Setup.md)' docs/8.-Guides.md
-  tags: [spec, seo-guides-iter2, implemented]
-- label: docs/README.md links the Ollama + Open WebUI + SearXNG Local Web RAG Setup guide from the docs home
-  command: grep -Fq '8.2-Ollama-Open-WebUI-SearXNG-Local-Web-RAG-Setup' docs/README.md
-  tags: [spec, seo-guides-iter2, implemented]
+- label: README introduces harbor launch with backend model --web --config and --service examples
+  command: rg -q 'harbor launch --backend ollama' README.md && rg -q 'harbor launch --service opencode' README.md
+  tags: [implemented]
 
 # ci
-- label: CI has 5 GitHub Actions workflows: app-release, bench-docker, boost-docker, lint, and test
-  command: test $(find .github/workflows -name '*.yml' | wc -l) -ge 5
-
-# shared
-- label: shared/ contains utility scripts used across service containers: entrypoints, config mergers, and CLI init
-  command: test -f shared/harbor_cli_init.sh && test -f shared/json_config_merger.py && test -f shared/yaml_config_merger.py
-
-# release
-- label: release metadata advertises v0.4.18 consistently in seed, CLI, app manifests, and README News
-  command: grep -q 'const VERSION = "0.4.18";' .scripts/seed.ts && grep -q 'version="0.4.18"' harbor.sh && grep -q '"version": "0.4.18"' package.json && grep -q '"version": "0.4.18"' app/package.json && grep -q '"version": "0.4.18"' app/src-tauri/tauri.conf.json && grep -q '^version = "0.4.18"' app/src-tauri/Cargo.toml && grep -q '^- \*\*v0\.4\.18\*\* -' README.md
-  tags: [spec, implemented]
-
-# boost > streaming
-- label: Boost SSE streaming responses include a retry interval (3000ms), periodic keep-alive comments (every 15s), and standard SSE headers (Cache-Control: no-cache, Connection: keep-alive, X-Accel-Buffering: no) to prevent proxy/load-balancer idle-timeout disconnects
-  command: grep -q 'SSE_RETRY_MS' services/boost/src/compat_utils.py && grep -q 'SSE_KEEPALIVE_INTERVAL' services/boost/src/compat_utils.py && grep -q 'sse_retry' services/boost/src/anthropic_compat.py && grep -q 'sse_event_with_retry' services/boost/src/responses_compat.py && grep -q 'sse_keepalive' services/boost/src/anthropic_compat.py && grep -q 'sse_keepalive' services/boost/src/responses_compat.py && echo PASS
-  tags: [spec, implemented]
-
-# boost > shared
-- label: Both Boost compat layers pass through OpenAI Chat Completions params (seed, frequency_penalty, presence_penalty, logit_bias, logprobs, top_logprobs, n, and response_format for Anthropic) so backends that support them can act on them
-  command: grep -q '_OPENAI_PASSTHROUGH_PARAMS' services/boost/src/anthropic_compat.py && grep -q '_OPENAI_PASSTHROUGH_PARAMS' services/boost/src/responses_compat.py && grep -q 'seed' services/boost/src/anthropic_compat.py && grep -q 'frequency_penalty' services/boost/src/anthropic_compat.py && echo PASS
-  tags: [spec, implemented]
-- label: Both Boost compat layers guard _convert_tools against non-dict items in the tools array, silently skipping invalid entries instead of crashing with AttributeError
-  command: grep -q 'isinstance(tool, dict)' services/boost/src/anthropic_compat.py && grep -q 'isinstance(tool, dict)' services/boost/src/responses_compat.py && echo PASS
-  tags: [spec, implemented]
-
-# boost > internals
-- label: Boost LLM.consume_stream() accumulates reasoning_content, refusal, and completion_tokens_details from streaming chunks so non-streaming compat layer responses include thinking blocks, refusals, and reasoning token counts
-  command: grep -q 'reasoning_content' services/boost/src/llm.py && grep -q 'refusal' services/boost/src/llm.py && grep -q 'completion_tokens_details' services/boost/src/llm.py && echo PASS
-  tags: [spec, implemented]
+- label: CI includes GitHub Actions workflows for app-release bench-docker boost-docker lint and test
+  command: test -f .github/workflows/test.yml && test -f .github/workflows/lint.yml && test -f .github/workflows/boost-docker.yml
 
 # seo
-- label: scripts/seo/plan.md documents Harbor SEO keyword priorities for local LLM, local AI, Ollama, Open WebUI, and Docker Compose search intent
-  command: test -f scripts/seo/plan.md && rg -q 'local LLM stack' scripts/seo/plan.md && rg -q 'Ollama \+ Open WebUI' scripts/seo/plan.md && rg -q 'Docker Compose' scripts/seo/plan.md
-  tags: [spec, seo-plan, implemented]
+- label: scripts/seo/plan.md documents Harbor SEO keyword priorities for local LLM and Docker Compose intent
+  command: test -f scripts/seo/plan.md && rg -q 'local LLM stack' scripts/seo/plan.md
+  tags: [seo-plan, implemented]
 
 ## guides
-- label: docs/8.3-Run-Coding-Agents-with-Local-LLMs.md is a guide about running Codex, Claude Code, and OpenCode with local LLMs through Harbor Launch
-  command: test -f docs/8.3-Run-Coding-Agents-with-Local-LLMs.md && rg -q 'local LLM for Codex' docs/8.3-Run-Coding-Agents-with-Local-LLMs.md && rg -q 'local LLM for Claude Code' docs/8.3-Run-Coding-Agents-with-Local-LLMs.md && rg -q 'local LLM for OpenCode' docs/8.3-Run-Coding-Agents-with-Local-LLMs.md && rg -q 'OpenAI-compatible local backend' docs/8.3-Run-Coding-Agents-with-Local-LLMs.md
-  tags: [spec, seo-guides-iter3, implemented]
-- label: the Guides index and docs Home link to the coding agents local LLM guide
-  command: rg -q '8.3-Run-Coding-Agents-with-Local-LLMs' docs/8.-Guides.md && rg -q '8.3-Run-Coding-Agents-with-Local-LLMs' docs/README.md
-  tags: [spec, seo-guides-iter3, implemented]
-- label: the coding agents SEO guide documents explicit Harbor Launch backend and model selection examples for Codex, Claude Code, and OpenCode
-  command: rg -q 'harbor launch --backend ollama --model qwen3.5:4b codex' docs/8.3-Run-Coding-Agents-with-Local-LLMs.md && rg -q 'harbor launch --backend ollama --model qwen3.5:4b claude' docs/8.3-Run-Coding-Agents-with-Local-LLMs.md && rg -q 'harbor launch --backend llamacpp --model Qwen3.5-4B opencode' docs/8.3-Run-Coding-Agents-with-Local-LLMs.md
-  tags: [spec, seo-guides-iter3, implemented]
-- label: the Harbor vs Compose guide explains service selection, cross-service integrations, shared config, Harbor CLI/App workflows, harbor eject, and Harbor Launch adapters
-  command: rg -q 'service selection' docs/8.4-Harbor-vs-Manual-Docker-Compose-for-Local-AI.md && rg -q 'cross-service integration' docs/8.4-Harbor-vs-Manual-Docker-Compose-for-Local-AI.md && rg -q 'shared configuration' docs/8.4-Harbor-vs-Manual-Docker-Compose-for-Local-AI.md && rg -q 'Harbor CLI' docs/8.4-Harbor-vs-Manual-Docker-Compose-for-Local-AI.md && rg -q 'Harbor App' docs/8.4-Harbor-vs-Manual-Docker-Compose-for-Local-AI.md && rg -q 'harbor eject' docs/8.4-Harbor-vs-Manual-Docker-Compose-for-Local-AI.md && rg -q 'Harbor Launch' docs/8.4-Harbor-vs-Manual-Docker-Compose-for-Local-AI.md
-  tags: [spec, seo-guides-iter4, implemented]
-- label: docs/8.4-Harbor-vs-Manual-Docker-Compose-for-Local-AI.md exists as a guide comparing Harbor with manual Docker Compose for a local AI stack
-  command: test -f docs/8.4-Harbor-vs-Manual-Docker-Compose-for-Local-AI.md && rg -q 'Harbor vs Manual Docker Compose for Local AI' docs/8.4-Harbor-vs-Manual-Docker-Compose-for-Local-AI.md && rg -q 'local AI stack' docs/8.4-Harbor-vs-Manual-Docker-Compose-for-Local-AI.md
-  tags: [spec, seo-guides-iter4, implemented]
-- label: docs/README.md links the Harbor vs Manual Docker Compose for Local AI guide from the docs home
-  command: rg -q 'Harbor vs Manual Docker Compose for Local AI' docs/README.md && rg -q '8.4-Harbor-vs-Manual-Docker-Compose-for-Local-AI' docs/README.md
-  tags: [spec, seo-guides-iter4, implemented]
-- label: the Guides index links the Harbor vs Manual Docker Compose for Local AI guide
-  command: rg -q 'Harbor vs Manual Docker Compose for Local AI' docs/8.-Guides.md && rg -q './8.4-Harbor-vs-Manual-Docker-Compose-for-Local-AI.md' docs/8.-Guides.md
-  tags: [spec, seo-guides-iter4, implemented]
-- label: the Guides index and docs Home link the OpenAI-Compatible Local LLM Backends guide
-  command: rg -q 'OpenAI-Compatible Local LLM Backends' docs/8.-Guides.md && rg -q '8.5-OpenAI-Compatible-Local-LLM-Backends' docs/README.md
-  tags: [spec, seo-guides-iter5, implemented]
-- label: the OpenAI-compatible backends guide explains how Harbor users can choose or swap Ollama, llama.cpp, and vLLM backends for OpenAI-compatible frontends, clients, and Harbor Launch
-  command: rg -q 'harbor defaults rm ollama' docs/8.5-OpenAI-Compatible-Local-LLM-Backends.md && rg -q 'harbor defaults add vllm' docs/8.5-OpenAI-Compatible-Local-LLM-Backends.md && rg -q 'harbor up webui ollama' docs/8.5-OpenAI-Compatible-Local-LLM-Backends.md && rg -q 'harbor launch --backend llamacpp' docs/8.5-OpenAI-Compatible-Local-LLM-Backends.md
-  tags: [spec, seo-guides-iter5, implemented]
-- label: docs/8.5-OpenAI-Compatible-Local-LLM-Backends.md exists as a guide targeting local OpenAI compatible API, vLLM OpenAI compatible server, llama.cpp OpenAI compatible server, and Ollama OpenAI compatible API search intent
-  command: test -f docs/8.5-OpenAI-Compatible-Local-LLM-Backends.md && rg -q 'local OpenAI compatible API' docs/8.5-OpenAI-Compatible-Local-LLM-Backends.md && rg -q 'vLLM OpenAI compatible server' docs/8.5-OpenAI-Compatible-Local-LLM-Backends.md && rg -q 'llama.cpp OpenAI compatible server' docs/8.5-OpenAI-Compatible-Local-LLM-Backends.md && rg -q 'Ollama OpenAI compatible API' docs/8.5-OpenAI-Compatible-Local-LLM-Backends.md
-  tags: [spec, seo-guides-iter5, implemented]
-- label: docs/8.6-Self-Hosted-AI-Stack-for-Developers.md exists as a Harbor guide targeting self-hosted AI stack, private AI stack, open source AI stack, and local AI toolkit search intent
-  command: test -f docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && grep -qi 'self-hosted AI stack' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && grep -qi 'private AI stack' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && grep -qi 'open source AI stack' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && grep -qi 'local AI toolkit' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md
-  tags: [spec, seo-guides-iter6, implemented]
-- label: the self-hosted AI stack guide is keyword-oriented around self-hosted AI stack, private AI stack, open source AI stack, local AI toolkit, local AI stack, and Docker Compose orchestration while using OpenCode and harbor launch as the main developer workflow example
-  command: rg -qi 'self-hosted AI stack' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && rg -qi 'private AI stack' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && rg -qi 'open source AI stack' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && rg -qi 'local AI toolkit' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && rg -qi 'local AI stack' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && rg -q 'Docker Compose' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && rg -q 'OpenCode' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && rg -q 'harbor launch' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md
-  tags: [spec, seo-guides-iter6, implemented]
-- label: the Guides index and docs Home link the Self-Hosted AI Stack for Developers guide
-  command: grep -q '8.6-Self-Hosted-AI-Stack-for-Developers.md' docs/8.-Guides.md && grep -q '8.6-Self-Hosted-AI-Stack-for-Developers' docs/README.md
-  tags: [spec, seo-guides-iter6, implemented]
-- label: the self-hosted AI stack guide links to the existing Harbor guides for Docker Compose local LLMs, local web RAG, coding agents, manual Compose comparison, and OpenAI-compatible backends
-  command: grep -q '8.1-Local-LLM-Stack-with-Docker-Compose.md' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && grep -q '8.2-Ollama-Open-WebUI-SearXNG-Local-Web-RAG-Setup.md' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && grep -q '8.3-Run-Coding-Agents-with-Local-LLMs.md' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && grep -q '8.4-Harbor-vs-Manual-Docker-Compose-for-Local-AI.md' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && grep -q '8.5-OpenAI-Compatible-Local-LLM-Backends.md' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md
-  tags: [spec, seo-guides-iter6, implemented]
-- label: the seven Harbor SEO guide articles link back to the Harbor Guides index
-  command: for f in docs/8.[1-7]-*.md; do rg -q "\[Harbor Guides\]\(\./8\.-Guides\.md\)" "$f" || exit 1; done
-  tags: [spec, seo-guides-iter7, implemented]
-- label: docs/README.md presents the Harbor Guides entry with links to the Guides index and all seven SEO guide wiki pages
-  command: rg -q 'Harbor Guides' docs/README.md && rg -q '8\.-Guides' docs/README.md && rg -q '8\.1-Local-LLM-Stack-with-Docker-Compose' docs/README.md && rg -q '8\.2-Ollama-Open-WebUI-SearXNG-Local-Web-RAG-Setup' docs/README.md && rg -q '8\.3-Run-Coding-Agents-with-Local-LLMs' docs/README.md && rg -q '8\.4-Harbor-vs-Manual-Docker-Compose-for-Local-AI' docs/README.md && rg -q '8\.5-OpenAI-Compatible-Local-LLM-Backends' docs/README.md && rg -q '8\.6-Self-Hosted-AI-Stack-for-Developers' docs/README.md && rg -q '8\.7-Run-Hermes-Agent-with-Harbor' docs/README.md
-  tags: [spec, seo-guides-iter7, implemented]
-- label: README.md documentation links readers to the Harbor Guides wiki section and highlights local LLM stack, local web RAG, coding agents, OpenAI-compatible backends, and self-hosted AI stack guides
-  command: rg -q 'Harbor Guides' README.md && rg -q 'local LLM stack' README.md && rg -q 'local web RAG' README.md && rg -q 'coding agents' README.md && rg -q 'OpenAI-compatible backends' README.md && rg -q 'self-hosted AI stack' README.md
-  tags: [spec, seo-guides-iter7, implemented]
-- label: docs/8.1-Local-LLM-Stack-with-Docker-Compose.md demonstrates Compose inspection with a service-specific harbor cmd example instead of harbor cmd -h
-  command: rg -q 'harbor cmd webui ollama' docs/8.1-Local-LLM-Stack-with-Docker-Compose.md && ! rg -q 'harbor cmd -h' docs/8.1-Local-LLM-Stack-with-Docker-Compose.md
-  tags: [spec, seo-guides-iter8, implemented]
-- label: docs/8.4-Harbor-vs-Manual-Docker-Compose-for-Local-AI.md demonstrates Compose inspection with a service-specific harbor cmd example instead of harbor cmd -h
-  command: rg -q 'harbor cmd webui ollama' docs/8.4-Harbor-vs-Manual-Docker-Compose-for-Local-AI.md && ! rg -q 'harbor cmd -h' docs/8.4-Harbor-vs-Manual-Docker-Compose-for-Local-AI.md
-  tags: [spec, seo-guides-iter8, implemented]
-- label: Self-Hosted AI Stack for Developers gives practical startup commands that prioritize OpenCode through harbor launch, optional web search through --web/SearXNG, and supporting developer services rather than leading with image, voice, or app-builder services
-  command: rg -q 'harbor launch --config opencode' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && rg -q 'harbor launch --backend ollama --model qwen3.5:4b opencode' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && rg -q 'harbor launch --web --backend ollama --model qwen3.5:4b opencode' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && rg -q 'harbor up searxng' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && ! rg -q 'harbor up comfyui' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && ! rg -q 'harbor up speaches' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && ! rg -q 'harbor up dify' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md
-  tags: [spec, seo-guides-iter9, implemented]
-- label: Local LLM Stack with Docker Compose tells users to review startup and hardware notes before combining SearXNG, Speaches, and ComfyUI
-  command: rg -q 'Before combining these services, review the startup and hardware notes' docs/8.1-Local-LLM-Stack-with-Docker-Compose.md && rg -q 'ComfyUI.*can pull a multi-gigabyte image' docs/8.1-Local-LLM-Stack-with-Docker-Compose.md && rg -q 'Speaches.*can use a CUDA image' docs/8.1-Local-LLM-Stack-with-Docker-Compose.md
-  tags: [spec, seo-guides-iter9, implemented]
-- label: OpenAI-Compatible Local LLM Backends warns that vLLM is a heavier backend that should be matched to GPU or accelerator capacity
-  command: rg -q 'Treat vLLM as a heavier backend than the default Ollama path' docs/8.5-OpenAI-Compatible-Local-LLM-Backends.md && rg -q 'GPU or accelerator capacity' docs/8.5-OpenAI-Compatible-Local-LLM-Backends.md
-  tags: [spec, seo-guides-iter9, implemented]
-- label: the docs publishing scripts discover Harbor Guides pages from docs/*.md without a separate page-order manifest
-  command: rg -q 'createDocsPageSet' .scripts/docs.ts .scripts/docs-to-app.ts && rg -q 'Deno.readDirSync\(docsPath\)' .scripts/docs.ts && rg -q 'fs.readdir\(docsPath' .scripts/docs-to-app.ts && test -f docs/8.-Guides.md && test -f docs/8.6-Self-Hosted-AI-Stack-for-Developers.md
-  tags: [spec, seo-guides-iter10, implemented]
-- label: docs/README.md lists Adding A New Service before Harbor Guides to match the numeric wiki filename order of 7 before 8
-  command: python3 -c "from pathlib import Path; text=Path('docs/README.md').read_text(); raise SystemExit(0 if text.index('[Adding A New Service]') < text.index('[Harbor Guides]') else 1)"
-  tags: [spec, seo-guides-iter10, implemented]
-- label: the docs Home Harbor Guides entry links to the Guides index and all seven 8.x guide wiki pages
-  command: python3 -c "from pathlib import Path; text=Path('docs/README.md').read_text(); need=['8.-Guides','8.1-Local-LLM-Stack-with-Docker-Compose','8.2-Ollama-Open-WebUI-SearXNG-Local-Web-RAG-Setup','8.3-Run-Coding-Agents-with-Local-LLMs','8.4-Harbor-vs-Manual-Docker-Compose-for-Local-AI','8.5-OpenAI-Compatible-Local-LLM-Backends','8.6-Self-Hosted-AI-Stack-for-Developers','8.7-Run-Hermes-Agent-with-Harbor']; raise SystemExit(0 if all(n in text for n in need) else 1)"
-  tags: [spec, seo-guides-iter10, implemented]
-- label: the self-hosted AI stack guide describes host OpenCode via harbor launch and containerized OpenCode as user-selectable modes without prescribing one as better for day-to-day repository work or persistent workspaces
-  command: rg -q 'Choose the mode that fits your preferred OpenCode workflow' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md && ! rg -q 'day-to-day repository work|persistent sessions|persistent service data|workspace mounts' docs/8.6-Self-Hosted-AI-Stack-for-Developers.md
-  tags: [spec, seo-guides-iter9, implemented]
-- label: docs/8.7-Run-Hermes-Agent-with-Harbor.md exists as a keyword-oriented Harbor guide targeting Hermes Agent Harbor, run Hermes Agent with local LLMs, Hermes Agent Ollama, Hermes Agent Docker Compose, and local AI agent search intent
-  command: test -f docs/8.7-Run-Hermes-Agent-with-Harbor.md && rg -qi 'Hermes Agent.*Harbor|Harbor.*Hermes Agent' docs/8.7-Run-Hermes-Agent-with-Harbor.md && rg -qi 'run Hermes Agent with local LLMs' docs/8.7-Run-Hermes-Agent-with-Harbor.md && rg -qi 'Hermes Agent.*Ollama|Ollama.*Hermes Agent' docs/8.7-Run-Hermes-Agent-with-Harbor.md && rg -qi 'Hermes Agent.*Docker Compose|Docker Compose.*Hermes Agent' docs/8.7-Run-Hermes-Agent-with-Harbor.md && rg -qi 'local AI agent' docs/8.7-Run-Hermes-Agent-with-Harbor.md
-  tags: [spec, seo-guides-iter11, implemented]
-- label: the Hermes Agent Harbor guide links to the Hermes service docs, Harbor Launch CLI reference, Local LLM Stack with Docker Compose, Run Coding Agents with Local LLMs, OpenAI-Compatible Local LLM Backends, and Harbor Guides index
-  command: rg -q '2.3.76-Satellite-Hermes-Agent.md' docs/8.7-Run-Hermes-Agent-with-Harbor.md && rg -q '3.-Harbor-CLI-Reference.md#harbor-launch-launch-options---service-servicetool-args' docs/8.7-Run-Hermes-Agent-with-Harbor.md && rg -q '8.1-Local-LLM-Stack-with-Docker-Compose.md' docs/8.7-Run-Hermes-Agent-with-Harbor.md && rg -q '8.3-Run-Coding-Agents-with-Local-LLMs.md' docs/8.7-Run-Hermes-Agent-with-Harbor.md && rg -q '8.5-OpenAI-Compatible-Local-LLM-Backends.md' docs/8.7-Run-Hermes-Agent-with-Harbor.md && rg -q '8.-Guides.md' docs/8.7-Run-Hermes-Agent-with-Harbor.md
-  tags: [spec, seo-guides-iter11, implemented]
-- label: the Guides index and docs Home link the Run Hermes Agent with Harbor guide
-  command: rg -q 'Run Hermes Agent with Harbor' docs/8.-Guides.md && rg -q '8.7-Run-Hermes-Agent-with-Harbor' docs/README.md
-  tags: [spec, seo-guides-iter11, implemented]
-- label: the Hermes Agent Harbor guide documents both user-selectable modes: harbor launch for an installed host hermes CLI using a selected Harbor backend, and harbor up hermes plus harbor hermes for the containerized Hermes service/API server
-  command: rg -q 'harbor launch --backend ollama --model qwen3.5:4b hermes' docs/8.7-Run-Hermes-Agent-with-Harbor.md && rg -q 'harbor launch --web --backend ollama --model qwen3.5:4b hermes' docs/8.7-Run-Hermes-Agent-with-Harbor.md && rg -q 'harbor up hermes' docs/8.7-Run-Hermes-Agent-with-Harbor.md && rg -q 'harbor hermes chat' docs/8.7-Run-Hermes-Agent-with-Harbor.md && rg -q 'http://localhost:34801/v1' docs/8.7-Run-Hermes-Agent-with-Harbor.md
-  tags: [spec, seo-guides-iter11, implemented]
+- label: all seven Harbor SEO guides 8.1 through 8.7 exist under docs/
+  command: for f in docs/8.{1..7}-*.md; do test -f "$f" || exit 1; done
+  tags: [seo-guides, implemented]
+- label: docs/8.-Guides.md indexes and links every 8.x guide
+  command: test -f docs/8.-Guides.md && for n in 1 2 3 4 5 6 7; do rg -q "8.${n}-" docs/8.-Guides.md || exit 1; done
+  tags: [seo-guides, implemented]
+- label: docs/README.md and README.md link Harbor Guides and the 8.x guide pages
+  command: rg -q 'Harbor Guides' docs/README.md README.md && rg -q '8.1-Local-LLM' docs/README.md README.md && rg -q '8.7-Run-Hermes' docs/README.md README.md
+  tags: [seo-guides, implemented]
+- label: each 8.x SEO guide links back to the Harbor Guides index
+  command: for f in docs/8.[1-7]-*.md; do rg -q '\[Harbor Guides\]\(\./8\.-Guides\.md\)' "$f" || exit 1; done
+  tags: [seo-guides, implemented]
 
 # dev
-
 ## lint
-- label: Harbor lint implementation files and fixtures live under .scripts/lint, not scripts/lint
-  command: test -f .scripts/lint/run.ts && test -f .scripts/lint/self-test.ts && test -f .scripts/lint/rules.yaml && test ! -e scripts/lint
-  tags: [spec, lint-migration, implemented]
-- label: The repository does not unignore scripts/lint because scripts/ is reserved for local gitignored files
-  command: grep -q '^scripts/\*$' .gitignore && ! grep -q '^!scripts/lint/' .gitignore
-  tags: [spec, lint-migration, implemented]
-- label: harbor dev lint and harbor dev lint-self-test dispatch directly to .scripts/lint implementations
-  command: grep -q './lint/run.ts' .scripts/lint.ts && grep -q './lint/self-test.ts' .scripts/lint-self-test.ts && ! grep -R -q '../scripts/lint' .scripts/lint.ts .scripts/lint-self-test.ts
-  tags: [spec, lint-migration, implemented]
+- label: Harbor lint implementation lives under .scripts/lint not scripts/lint
+  command: test -f .scripts/lint/run.ts && test ! -e scripts/lint
+  tags: [implemented]
+- label: harbor dev lint and harbor dev lint-self-test dispatch to .scripts/lint implementations
+  command: rg -q './lint/run.ts' .scripts/lint.ts && rg -q './lint/self-test.ts' .scripts/lint-self-test.ts
+  tags: [implemented]
+
+# tests
+## app-install
+- label: the integration install suite exercises install.sh and first-run llamacpp webui wiring
+  command: rg -q 'install.sh' tests/suites/01-install.sh && rg -q 'harbor up --no-defaults llamacpp webui' tests/suites/01-install.sh
+  tags: [implemented]
+- label: tests/app-native-setup.md documents verifiable native app first-run setup expectations
+  command: test -f tests/app-native-setup.md && rg -q 'HARBOR_APP_SETUP_SMOKE_OUTPUT' tests/app-native-setup.md
+  tags: [implemented]

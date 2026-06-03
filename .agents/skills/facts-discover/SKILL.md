@@ -13,6 +13,8 @@ description: >
 
 You are a fact sheet maintainer. Your job is to scan the codebase, classify every fact by lifecycle stage, and add missing truths — in a single session.
 
+**Tip:** Short CLI aliases are available and recommended for high-frequency operations: `ll` (list --light), `at <id> <tag>` (quick --add-tag), `rt <id> <tag>` (quick --remove-tag), `rm`, and `ls`. All extra arguments are forwarded. See `facts --help` or `facts skills show facts`.
+
 ## When to use this skill
 
 This skill classifies facts and syncs the fact sheet with reality. **Only use when the user explicitly asks to discover, audit, or sync facts.** If the user says "work on facts" or "add facts", they want to define spec — use the `facts` skill instead, not this one.
@@ -38,18 +40,67 @@ Run `facts list` to see all current facts. Note which sections exist and what th
 
 Run `facts check` to see which command-facts pass and which fail. Failing facts are candidates for removal or correction.
 
+For each manual fact (`?` in the output): read what it claims, check the relevant code, and classify it based on what you actually find — not on the label alone. Manual facts are often the most important ones because they describe behavior that resists simple command validation.
+
 ### 2. Scan the codebase
 
-Build a comprehensive mental model of the project. Use subagents to scan different areas in parallel for large codebases:
+Build a mental model of the project by tracing what it **does**, not just how it's structured. Focus on end-user-visible behavior — the features, workflows, and contracts that someone using or integrating with this project would care about.
 
-- Project structure, languages, frameworks, build system
-- Main components, modules, and their relationships
-- Public APIs, interfaces, and contracts
-- Testing, CI, and deploy tooling
-- Dependencies and their roles
-- Conventions and patterns
+Use subagents to scan different areas in parallel for large codebases. Assign each subagent a **feature area or module**, not a structural category like "dependencies" or "build system." For each area, the subagent should answer:
 
-Each subagent should report back a list of factual observations about its area — not opinions, not aspirations, just what is true now.
+- **What does this do?** — describe the behavior from the user's perspective
+- **What are the inputs and outputs?** — API contracts, CLI flags, file formats, event shapes
+- **What are the edge cases?** — error handling, boundary conditions, fallback behavior
+- **What would break if this were reimplemented naively?** — non-obvious invariants, ordering dependencies, timing constraints, implicit contracts between components
+- **What are the key concepts?** — named types, domain abstractions, data structures. What does this module call things, and how do those names relate to concepts in other modules?
+
+Each subagent should report back **behavioral observations** — not "this file exists" or "this uses library X", but "when X happens, Y results" and "if X fails, the system does Y."
+
+Do not waste facts on structural trivia. "The project has a src/auth.rs file" is not a useful fact. "Expired tokens are rejected with 401 and the response includes a `reason` field" is.
+
+### 2b. Build the project ontology
+
+Before classifying or writing facts, establish the project's key entities and relationships as facts in a `## domain` section of the main `.facts` file. This vocabulary becomes the canonical naming for all other facts in the sheet.
+
+1. From the subagent scan results, identify the named concepts that appear across multiple parts of the codebase — these are the project's entities.
+2. For each entity, write a definition fact using the pattern `a <Name> is <definition>`. Use the name the codebase actually uses (the struct name, the type name, the term in the docs), not an invented abstraction.
+3. Identify the important relationships between entities — what contains what, what produces or consumes what, what validates or transforms what. Write these as relation facts using the defined entity names in natural declarative statements. There is no rigid grammar — the connection should be specific and use entity names consistently.
+4. Check the existing fact sheet for inconsistent terminology. If the same concept is called "sheet" in one fact and "fact file" in another, standardize on one term and edit the inconsistent facts.
+
+If a `## domain` section already exists, update it — add missing entities, remove obsolete ones, correct inaccurate definitions. The domain section evolves with the codebase.
+
+**Quality filters:**
+
+- Only define entities that appear as concepts across multiple areas of the codebase. If a concept is confined to a single function and won't appear in other facts, it doesn't need a domain definition. After writing behavioral facts in Steps 3–4, prune any domain entity that turned out to be unreferenced.
+- Relations capture the topology — the wiring diagram between entities that you can't see from individual behavioral facts. A domain section with only entity definitions and zero relations is a parts list without assembly instructions. If you defined entities, ask: how do they connect? What produces, consumes, contains, or transforms what?
+- Use the actual names from the code. If the codebase calls it `FactSheet`, the fact uses `FactSheet`. Do not normalize to "Fact Sheet" unless the project's own documentation does.
+- A domain section typically has 5–15 entities and a handful of relations. If you're defining 20+ entities, you are likely including implementation details rather than domain concepts. If no concepts pass the cross-cutting threshold, skip the domain section entirely — not every project needs one.
+
+For projects that split facts across multiple files (`cli.facts`, `api.facts`), the `## domain` section goes in the main `.facts` file since it applies project-wide.
+
+**Example** (for a payment processing project):
+
+```
+## domain
+- a PaymentIntent is a Stripe object representing a single charge attempt
+- a Webhook is an incoming HTTP POST from Stripe reporting a payment event
+- a DeadLetter is a Webhook that exhausted all retry attempts without acknowledgement
+- a Merchant is a registered business account that receives payments
+- a PaymentIntent produces Webhooks on status changes
+- a Webhook becomes a DeadLetter after 3 failed delivery attempts
+- a Merchant owns PaymentIntents
+```
+
+**Anti-example** (what not to write):
+
+```
+## domain
+- a Rust source file contains module definitions
+- parser.rs is responsible for parsing
+- the project has a CLI that accepts commands
+```
+
+These are structural trivia that restate file existence, not domain concepts.
 
 ### 3. Classify facts by lifecycle stage
 
@@ -65,6 +116,8 @@ For each existing fact, check it against the codebase and assign the correct lif
 When a fact already has a lifecycle tag, verify it's still correct. An `@implemented` fact whose code was removed should be reclassified to `@spec`. A `@draft` fact that was refined elsewhere should be updated.
 
 When removing facts, check if the concept has evolved rather than disappeared — edit instead of remove+add when the same idea persists in a new form.
+
+When editing fact labels, use the vocabulary established in `## domain`. If a fact says "file" but the domain section defines the concept as "FactSheet", update the label to use "FactSheet" for consistency.
 
 ### 3b. Add commands to manual facts
 
@@ -160,21 +213,34 @@ A fact sheet with 30 genuinely validated facts and 20 honest manual facts is far
 
 ### 4. Add missing facts
 
-Identify important truths not yet in the fact sheet. Add them with `facts add`:
+Identify important behaviors and features not yet captured. Prioritize in this order:
+
+1. **User-facing behaviors** — what can someone do with this project? What happens when they do it? What happens when they do it wrong?
+2. **Contracts between components** — how do modules communicate? What does each one promise to the others?
+3. **Edge cases and error handling** — what breaks, how, and what does the user see?
+4. **Structural/architectural facts** — only when they constrain behavior (e.g. "single-threaded, so handlers cannot block" matters; "uses the clap crate" rarely does)
 
 ```
-facts add "the project uses PostgreSQL for persistence" --section architecture \
-  --command "grep -q 'postgres' docker-compose.yml"
-facts add "project builds successfully" --command "cargo build --quiet" --section ci
+# Good — captures behavior a rewrite must preserve
+facts add "uploading a file larger than 10MB returns 413 with a human-readable error" --section api/upload
+facts add "duplicate messages within the 5-minute dedup window are silently dropped; the first is kept" --section processing/dedup
+facts add "when the database is unreachable, queued writes retry 3 times with exponential backoff" --section resilience
+
+# Bad — structural trivia that wastes space and tells an agent nothing useful
+facts add "the project uses PostgreSQL for persistence" --section architecture
+facts add "tests are in the tests/ directory"
+facts add "the CLI is written in Rust"
 ```
 
 Prefer facts that are:
+- **Behavioral** — describes what happens, not what exists
 - **Atomic** — one truth per fact
-- **Verifiable** — include a check command when one can meaningfully validate the claim
-- **Stable** — unlikely to change with every commit
-- **Useful** — helps an agent understand or validate the project
+- **Falsifiable** — you could imagine a broken implementation where this fact would not hold
+- **Worth preserving** — if someone rewrote this project from scratch using only the fact sheet, would this fact help them get the behavior right?
 
-Do not add trivially obvious facts ("the project has files") or volatile ones ("there are 47 tests").
+A fact sheet with 40 precise behavioral facts is more useful than one with 200 structural observations. If your fact sheet is growing past ~80 facts in a single file, split into focused files (`api.facts`, `cli.facts`) and prune structural filler.
+
+When writing new facts, use the entity names from the `## domain` section. Consistent vocabulary across the fact sheet helps agents build an accurate mental model. If you find yourself using a term that does not appear in `## domain`, either add it there first or use the existing term instead.
 
 ### 5. Organize
 
@@ -195,6 +261,8 @@ Report what changed: facts added, edited, removed, commands added. If any areas 
 - Sections with no remaining facts are cleaned up automatically by the CLI.
 - **Lifecycle classification is the primary job.** Every fact should end up with the right lifecycle tag (`@draft`, `@spec`, `@implemented`) or no tag (ground truth). Do not remove `@draft` or `@spec` facts — classify them, don't delete aspirational work.
 - When adding new facts you discovered from the codebase, leave them untagged — they are already true by observation.
+- **Behavioral facts over structural ones.** When choosing what to add, ask: "would an agent reimplementing this project need to know this to get the behavior right?" File existence and dependency names are in the manifest. Deduplication logic, error responses, retry semantics, and edge cases are the things that get silently dropped in a rewrite — those are the facts worth writing.
+- **Establish vocabulary before writing facts.** The `## domain` section defines the project's key entities and relations. Use those names consistently throughout the fact sheet. If you find yourself using a new term that does not appear in `## domain`, either add it there or use the existing term instead.
 
 ## Example session
 
@@ -203,12 +271,20 @@ Report what changed: facts added, edited, removed, commands added. If any areas 
 facts list
 facts check
 
-# Spawn subagents to scan the codebase:
-# Subagent 1: project structure, build system, dependencies
-# Subagent 2: API surface, routes, contracts
-# Subagent 3: testing, CI, deploy
+# Spawn subagents to scan the codebase by feature area:
+# Subagent 1: user authentication — login, signup, session handling, token lifecycle
+# Subagent 2: payment processing — charge flow, refunds, webhook handling, error cases
+# Subagent 3: notification system — delivery channels, retry logic, dedup, rate limits
 
-# Classify existing facts by lifecycle stage:
+# Build the project ontology from scan results:
+facts add "a PaymentIntent is a Stripe object representing a single charge attempt" --section domain
+facts add "a Webhook is an incoming HTTP POST from Stripe reporting a payment event" --section domain
+facts add "a DeadLetter is a Webhook that exhausted all retry attempts" --section domain
+facts add "a Session is a server-side auth record tied to a refresh token" --section domain
+facts add "a PaymentIntent produces Webhooks on status changes" --section domain
+facts add "failed Webhooks become DeadLetters after 3 retries" --section domain
+
+# Classify existing facts by lifecycle stage (using domain vocabulary):
 
 # This fact is true — code proves it
 facts edit x1z --add-tag "implemented"
@@ -222,12 +298,14 @@ facts edit c3d --add-tag "draft"
 # An old fact about Python is no longer true — project migrated to Rust
 facts remove p2q
 
-# Found a new truth while reading code — add untagged (ground truth)
-facts add "API rate limits to 100 req/min per key" --section api/limits \
-  --command "grep -q 'rate_limit.*100' src/middleware.rs"
+# Found behavioral truths while reading code — add untagged (ground truth)
+facts add "failed payment webhooks retry 3 times with exponential backoff, then dead-letter" \
+  --section payments/webhooks
+facts add "API rate limits to 100 req/min per key; exceeded requests get 429 with Retry-After header" \
+  --section api/limits
 
 # Verify everything
 facts check
 
-# Report: 5 classified (@implemented: 3, @spec: 1, @draft: 1), 1 added, 1 removed
+# Report: 6 domain facts added, 5 classified (@implemented: 3, @spec: 1, @draft: 1), 1 added, 1 removed
 ```
