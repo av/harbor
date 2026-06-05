@@ -112,6 +112,48 @@ parse_args() {
   done
 }
 
+backup_user_configs() {
+  local backup_dir="$1"
+  mkdir -p "$backup_dir"
+  if [ -f "$HARBOR_INSTALL_PATH/.env" ]; then
+    cp "$HARBOR_INSTALL_PATH/.env" "$backup_dir/.env"
+  fi
+  # Preserve per-service override.env files (user customizations via harbor env)
+  if [ -d "$HARBOR_INSTALL_PATH/services" ]; then
+    local svc_env
+    while IFS= read -r svc_env; do
+      # Only back up files that differ from the default (have user content)
+      local rel="${svc_env#"$HARBOR_INSTALL_PATH/"}"
+      local dir
+      dir=$(dirname "$rel")
+      mkdir -p "$backup_dir/$dir"
+      cp "$svc_env" "$backup_dir/$rel"
+    done < <(find "$HARBOR_INSTALL_PATH/services" -maxdepth 2 -name 'override.env' -type f 2>/dev/null)
+  fi
+}
+
+restore_user_configs() {
+  local backup_dir="$1"
+  if [ ! -d "$backup_dir" ]; then
+    return 0
+  fi
+  if [ -f "$backup_dir/.env" ]; then
+    cp "$backup_dir/.env" "$HARBOR_INSTALL_PATH/.env"
+  fi
+  if [ -d "$backup_dir/services" ]; then
+    local svc_env
+    while IFS= read -r svc_env; do
+      local rel="${svc_env#"$backup_dir/"}"
+      local target="$HARBOR_INSTALL_PATH/$rel"
+      local dir
+      dir=$(dirname "$target")
+      mkdir -p "$dir"
+      cp "$svc_env" "$target"
+    done < <(find "$backup_dir/services" -maxdepth 2 -name 'override.env' -type f 2>/dev/null)
+  fi
+  rm -rf "$backup_dir"
+}
+
 install_or_update_project() {
   if [ -n "$HARBOR_INSTALL_SOURCE_PATH" ]; then
     if [ ! -d "$HARBOR_INSTALL_SOURCE_PATH" ]; then
@@ -120,11 +162,10 @@ install_or_update_project() {
     fi
 
     echo "Installing from local source path: $HARBOR_INSTALL_SOURCE_PATH"
-    # Preserve user config across reinstall
-    local saved_env=""
-    if [ -f "$HARBOR_INSTALL_PATH/.env" ]; then
-      saved_env=$(mktemp)
-      cp "$HARBOR_INSTALL_PATH/.env" "$saved_env"
+    local backup_dir=""
+    if [ -d "$HARBOR_INSTALL_PATH" ]; then
+      backup_dir=$(mktemp -d)
+      backup_user_configs "$backup_dir"
     fi
     rm -rf "$HARBOR_INSTALL_PATH"
     mkdir -p "$HARBOR_INSTALL_PATH"
@@ -136,9 +177,8 @@ install_or_update_project() {
         --exclude='./tests/artifacts' \
         -cf - .
     ) | tar -C "$HARBOR_INSTALL_PATH" -xf -
-    if [ -n "$saved_env" ]; then
-      cp "$saved_env" "$HARBOR_INSTALL_PATH/.env"
-      rm -f "$saved_env"
+    if [ -n "$backup_dir" ]; then
+      restore_user_configs "$backup_dir"
     fi
     cd "$HARBOR_INSTALL_PATH"
     return 0
@@ -147,11 +187,25 @@ install_or_update_project() {
   if [ -d "$HARBOR_INSTALL_PATH" ] && [ -d "$HARBOR_INSTALL_PATH/.git" ]; then
     echo "Existing installation found. Updating..."
     cd "$HARBOR_INSTALL_PATH"
+    # Stash user-modified tracked files (override.env) so checkout succeeds
+    local had_stash=false
+    if ! git diff --quiet -- 'services/*/override.env' 2>/dev/null; then
+      git stash push --quiet -- 'services/*/override.env' 2>/dev/null && had_stash=true
+    fi
     git fetch --depth 1 origin "+refs/tags/$HARBOR_VERSION:refs/tags/$HARBOR_VERSION"
     git checkout "tags/$HARBOR_VERSION"
+    if [ "$had_stash" = true ]; then
+      git stash pop --quiet 2>/dev/null || {
+        echo "Warning: Could not auto-restore override.env changes (merge conflict)."
+        echo "Your overrides are saved in 'git stash'. Run 'cd $HARBOR_INSTALL_PATH && git stash pop' to recover."
+      }
+    fi
   else
+    local backup_dir=""
     if [ -d "$HARBOR_INSTALL_PATH" ]; then
       echo "Existing non-git installation found. Re-cloning..."
+      backup_dir=$(mktemp -d)
+      backup_user_configs "$backup_dir"
       rm -rf "$HARBOR_INSTALL_PATH"
     fi
     echo "Cloning project repository..."
@@ -168,8 +222,14 @@ install_or_update_project() {
       fi
     done
     if [ "$clone_ok" = false ]; then
+      if [ -n "$backup_dir" ]; then
+        rm -rf "$backup_dir"
+      fi
       echo "Error: git clone failed after 2 attempts."
       exit 1
+    fi
+    if [ -n "$backup_dir" ]; then
+      restore_user_configs "$backup_dir"
     fi
     cd "$HARBOR_INSTALL_PATH"
   fi
@@ -185,9 +245,33 @@ doctor_requires_blocked() {
     "Docker daemon is not running\|Docker daemon is not.*reachable\|Please start Docker\|Cannot connect to the Docker daemon\|Start Docker Desktop"
 }
 
+acquire_install_lock() {
+  HARBOR_LOCK_FILE="${HARBOR_INSTALL_PATH}.lock"
+  if command -v flock >/dev/null 2>&1; then
+    # Open the lock file on fd 9
+    exec 9>"$HARBOR_LOCK_FILE"
+    if ! flock -n 9 2>/dev/null; then
+      echo "Error: Another Harbor install is already running."
+      echo "If this is incorrect, remove $HARBOR_LOCK_FILE and retry."
+      exit 1
+    fi
+  else
+    # macOS fallback: mkdir is atomic
+    if ! mkdir "$HARBOR_LOCK_FILE.d" 2>/dev/null; then
+      echo "Error: Another Harbor install is already running."
+      echo "If this is incorrect, remove $HARBOR_LOCK_FILE.d and retry."
+      exit 1
+    fi
+    HARBOR_LOCK_FILE="$HARBOR_LOCK_FILE.d"
+  fi
+  trap 'rm -rf "$HARBOR_LOCK_FILE" 2>/dev/null' EXIT
+}
+
 main() {
   parse_args "$@"
-  trap 'ec=$?; if [ $ec -ne 0 ]; then case "$_LAST_SETUP_STAGE" in failed|blocked|refresh-required|ready) ;; *) echo "HARBOR_SETUP_STAGE=failed" ;; esac; fi' EXIT
+  acquire_install_lock
+  # Override the lock-cleanup trap with one that also handles setup stage
+  trap 'ec=$?; rm -rf "$HARBOR_LOCK_FILE" 2>/dev/null; if [ $ec -ne 0 ]; then case "$_LAST_SETUP_STAGE" in failed|blocked|refresh-required|ready) ;; *) echo "HARBOR_SETUP_STAGE=failed" ;; esac; fi' EXIT
 
   setup_stage "checking-platform"
   echo "Installing Harbor."
@@ -227,6 +311,13 @@ main() {
 
   echo "Starting installation..."
   install_or_update_project
+
+  # Merge new config keys from default.env into existing .env
+  # (harbor update does this, but install.sh didn't — new keys were missing after upgrade)
+  if [ -f "$HARBOR_INSTALL_PATH/.env" ] && [ -f "$HARBOR_INSTALL_PATH/profiles/default.env" ]; then
+    echo "Merging configuration..."
+    ./harbor.sh config update
+  fi
 
   ./harbor.sh -v
   ./harbor.sh ln

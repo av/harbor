@@ -2478,7 +2478,9 @@ run_hf_open() {
 }
 
 link_cli() {
-    local target_dir=$(eval echo "$(env_manager get cli.path)")
+    local target_dir
+    target_dir=$(env_manager get cli.path)
+    target_dir="${target_dir/#\~/$HOME}"
     local script_name=$(env_manager get cli.name)
     local short_name=$(env_manager get cli.short)
     local script_path="$harbor_home/harbor.sh"
@@ -2574,7 +2576,9 @@ link_cli() {
 }
 
 unlink_cli() {
-    local target_dir=$(eval echo "$(env_manager get cli.path)")
+    local target_dir
+    target_dir=$(env_manager get cli.path)
+    target_dir="${target_dir/#\~/$HOME}"
     local script_name=$(env_manager get cli.name)
     local short_name=$(env_manager get cli.short)
 
@@ -4321,7 +4325,7 @@ unsafe_update() {
 }
 
 resolve_harbor_version() {
-    curl -s "$harbor_release_url" | sed -n 's/.*"tag_name": "\(.*\)".*/\1/p'
+    curl -fsSL "$harbor_release_url" 2>/dev/null | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -n1
 }
 
 update_harbor() {
@@ -4333,6 +4337,12 @@ update_harbor() {
         ;;
     esac
 
+    # Stash user-modified override.env files so checkout/reset doesn't fail or destroy them
+    local had_stash=false
+    if ! git diff --quiet -- 'services/*/override.env' 2>/dev/null; then
+        git stash push --quiet -- 'services/*/override.env' 2>/dev/null && had_stash=true
+    fi
+
     if $is_latest; then
         log_info "Updating to the latest dev version..."
         unsafe_update
@@ -4341,6 +4351,13 @@ update_harbor() {
         log_info "Updating to version $harbor_version..."
         git fetch --all --tags
         git checkout tags/$harbor_version
+    fi
+
+    if [ "$had_stash" = true ]; then
+        git stash pop --quiet 2>/dev/null || {
+            log_warn "Could not auto-restore override.env changes (merge conflict)."
+            log_warn "Your overrides are saved in 'git stash'. Run 'git stash pop' in $harbor_home to recover."
+        }
     fi
 
     log_info "Merging .env files..."
