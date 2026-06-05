@@ -26,10 +26,12 @@ interface HarborSetupContextValue {
   terminalOutput: string;
   error: string | null;
   ready: boolean;
+  justInstalled: boolean;
   redetect: () => Promise<void>;
   startSetup: () => Promise<void>;
   writeSetupInput: (data: string) => Promise<void>;
   cancelSetup: () => Promise<void>;
+  dismissSuccess: () => void;
 }
 
 const HarborSetupContext = createContext<HarborSetupContextValue | null>(null);
@@ -58,12 +60,16 @@ export const HarborSetupProvider: FC<{ children: ReactNode }> = ({ children }) =
   const [running, setRunning] = useState(false);
   const [terminalOutput, setTerminalOutput] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [justInstalled, setJustInstalled] = useState(false);
 
   const redetect = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const next = await invoke<HarborSetupDetail>("detect_harbor_setup");
+      if (import.meta.env.VITE_FORCE_SETUP && next.status === "ready") {
+        next.status = "not-installed";
+      }
       setDetail(next);
       setRunning(next.running);
     } catch (e) {
@@ -78,7 +84,7 @@ export const HarborSetupProvider: FC<{ children: ReactNode }> = ({ children }) =
     const unlisteners: Array<() => void> = [];
 
     async function init() {
-      const [unlistenOutput, unlistenStatus] = await Promise.all([
+      const [unlistenOutput, unlistenStatus, unlistenComplete] = await Promise.all([
         listen<{ data: string }>("harbor-setup-terminal-output", (event) => {
           setTerminalOutput((prev) => {
             const next = prev + event.payload.data;
@@ -88,21 +94,44 @@ export const HarborSetupProvider: FC<{ children: ReactNode }> = ({ children }) =
           });
         }),
         listen<{ status: string }>("harbor-setup-status", (event) => {
+          const isTerminal = TERMINAL_STATUSES.has(event.payload.status);
           setDetail((prev) => ({
             ...(prev ?? DEFAULT_DETAIL),
             status: event.payload.status,
-            running: !TERMINAL_STATUSES.has(event.payload.status),
+            running: !isTerminal,
           }));
+          // Keep the top-level running state in sync with detail.running.
+          // Without this, a redetect() during install that returns running:true
+          // would not be reflected in the component-level `running` state.
+          setRunning(!isTerminal);
         }),
+        listen<{ detail: HarborSetupDetail; error: string | null }>(
+          "harbor-setup-complete",
+          (event) => {
+            setDetail(event.payload.detail);
+            setRunning(false);
+            if (event.payload.error) {
+              const raw = event.payload.error;
+              const message = raw.replace(/^HARBOR_SETUP_STATUS=[^;]+;\s*/, "");
+              setError(message);
+            }
+            if (event.payload.detail.status === "ready") {
+              setJustInstalled(true);
+            } else {
+              redetect();
+            }
+          },
+        ),
       ]);
 
       if (cancelled) {
         unlistenOutput();
         unlistenStatus();
+        unlistenComplete();
         return;
       }
 
-      unlisteners.push(unlistenOutput, unlistenStatus);
+      unlisteners.push(unlistenOutput, unlistenStatus, unlistenComplete);
       redetect();
     }
 
@@ -117,26 +146,25 @@ export const HarborSetupProvider: FC<{ children: ReactNode }> = ({ children }) =
     setRunning(true);
     setError(null);
     setTerminalOutput("");
-    let shouldRedetect = true;
+    setDetail((prev) => ({
+      ...(prev ?? DEFAULT_DETAIL),
+      status: "starting",
+      running: true,
+      lastError: null,
+    }));
     try {
-      const next = await invoke<HarborSetupDetail>("start_harbor_setup");
-      setDetail(next);
-      shouldRedetect = false;
+      await invoke("start_harbor_setup");
     } catch (e) {
       const rawMessage = e instanceof Error ? e.message : String(e);
-      const message = rawMessage.replace(/^HARBOR_SETUP_STATUS=[^;]+;\s*/, "");
-      const statusMatch = rawMessage.match(/HARBOR_SETUP_STATUS=([a-z-]+)/);
-      setError(message);
+      setError(rawMessage);
+      setRunning(false);
       setDetail((prev) => ({
         ...(prev ?? DEFAULT_DETAIL),
-        status: statusMatch?.[1] ?? "failed",
-        lastError: message,
+        status: "failed",
+        lastError: rawMessage,
       }));
-    } finally {
-      setRunning(false);
-      if (shouldRedetect) redetect();
     }
-  }, [redetect]);
+  }, []);
 
   const writeSetupInput = useCallback(async (data: string) => {
     try {
@@ -149,17 +177,30 @@ export const HarborSetupProvider: FC<{ children: ReactNode }> = ({ children }) =
   const cancelSetup = useCallback(async () => {
     try {
       await invoke("cancel_harbor_setup");
-      setDetail((prev) => ({
-        ...(prev ?? DEFAULT_DETAIL),
-        status: "cancelled",
-        running: false,
-      }));
+      // Don't optimistically set status to "cancelled" here.
+      // The backend will emit "harbour-setup-complete" with the actual
+      // terminal status once the process is killed.  Setting it prematurely
+      // causes a race where the complete event (which may carry "ready" if the
+      // process finished between kill and status check) overwrites the
+      // optimistic state.
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
-    } finally {
       setRunning(false);
     }
   }, []);
+
+  const dismissSuccess = useCallback(() => {
+    setJustInstalled(false);
+  }, []);
+
+  useEffect(() => {
+    if (!justInstalled) return;
+    // Give users enough time to read the success screen and CLI version.
+    // The "Get Started" button provides explicit dismissal; this is a fallback
+    // for users who don't interact.
+    const timer = setTimeout(() => setJustInstalled(false), 8000);
+    return () => clearTimeout(timer);
+  }, [justInstalled]);
 
   const value = useMemo<HarborSetupContextValue>(
     () => ({
@@ -168,13 +209,17 @@ export const HarborSetupProvider: FC<{ children: ReactNode }> = ({ children }) =
       running,
       terminalOutput,
       error,
-      ready: !loading && detail?.status === "ready",
+      ready: import.meta.env.VITE_FORCE_SETUP
+        ? false
+        : !loading && detail?.status === "ready" && !justInstalled,
+      justInstalled,
       redetect,
       startSetup,
       writeSetupInput,
       cancelSetup,
+      dismissSuccess,
     }),
-    [detail, loading, running, terminalOutput, error, redetect, startSetup, writeSetupInput, cancelSetup],
+    [detail, loading, running, terminalOutput, error, justInstalled, redetect, startSetup, writeSetupInput, cancelSetup, dismissSuccess],
   );
 
   return (

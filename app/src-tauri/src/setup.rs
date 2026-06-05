@@ -10,7 +10,7 @@ use std::{
     sync::{Arc, Mutex, OnceLock},
     time::{Duration, Instant},
 };
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 const HARBOR_INSTALL_URL: &str =
     "https://raw.githubusercontent.com/av/harbor/refs/heads/main/install.sh";
@@ -67,6 +67,13 @@ struct SetupStageEvent {
 #[serde(rename_all = "camelCase")]
 struct SetupTerminalOutputEvent {
     data: String,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SetupCompleteEvent {
+    detail: HarborSetupDetail,
+    error: Option<String>,
 }
 
 #[allow(dead_code)]
@@ -589,6 +596,7 @@ fn run_logged(
     let mut command = CommandBuilder::new(program);
     command.args(args);
     command.env("TERM", "xterm-256color");
+    command.env("HARBOR_APP", "1");
     let mut reader = pair
         .master
         .try_clone_reader()
@@ -880,6 +888,21 @@ fn detect_windows_blocker(detail: &mut HarborSetupDetail) -> bool {
     false
 }
 
+/// Run the full detection logic, ignoring whether setup is active.
+/// Used internally after a successful install to verify the CLI is available.
+fn detect_harbor_status() -> HarborSetupDetail {
+    let platform = platform_name();
+    let mut detail = HarborSetupDetail {
+        status: "checking".into(),
+        platform: platform.clone(),
+        cli_version: None,
+        last_error: None,
+        running: false,
+    };
+    detect_harbor_status_core(&platform, &mut detail);
+    detail
+}
+
 fn detect_harbor_setup_inner(state: &SetupState) -> HarborSetupDetail {
     let running = setup_is_active(state)
         || state
@@ -902,7 +925,12 @@ fn detect_harbor_setup_inner(state: &SetupState) -> HarborSetupDetail {
         return detail;
     }
 
-    match platform.as_str() {
+    detect_harbor_status_core(&platform, &mut detail);
+    detail
+}
+
+fn detect_harbor_status_core(platform: &str, detail: &mut HarborSetupDetail) {
+    match platform {
         "linux" => {
             let check = run_shell_timeout(
                 "command -v apt-get >/dev/null || command -v dnf >/dev/null || command -v pacman >/dev/null || command -v apk >/dev/null",
@@ -913,19 +941,35 @@ fn detect_harbor_setup_inner(state: &SetupState) -> HarborSetupDetail {
                 detail.last_error = Some(
                     "No supported package manager found (apt, dnf, pacman, or apk).".into(),
                 );
-                return detail;
+                return;
             }
         }
-        "macos" | "windows" => {}
+        "macos" => {
+            // On macOS, Docker Desktop must be installed separately (the install
+            // script cannot install it non-interactively). Detect early so users
+            // get actionable guidance instead of a cryptic install failure.
+            let docker_check = run_shell_timeout(
+                "command -v docker >/dev/null 2>&1",
+                Some(DETECT_TIMEOUT),
+            );
+            if docker_check.code != Some(0) {
+                detail.status = "blocked".into();
+                detail.last_error = Some(
+                    "Docker is not installed. Please install Docker Desktop for Mac from https://docker.com/products/docker-desktop before setting up Harbor.".into(),
+                );
+                return;
+            }
+        }
+        "windows" => {}
         _ => {
             detail.status = "blocked".into();
             detail.last_error = Some(format!("Unsupported platform: {platform}"));
-            return detail;
+            return;
         }
     }
 
-    if platform == "windows" && detect_windows_blocker(&mut detail) {
-        return detail;
+    if platform == "windows" && detect_windows_blocker(detail) {
+        return;
     }
 
     let version = if platform == "windows" {
@@ -946,7 +990,7 @@ fn detect_harbor_setup_inner(state: &SetupState) -> HarborSetupDetail {
     if version.code == Some(0) {
         detail.status = "ready".into();
         detail.cli_version = Some(version.stdout.trim().to_string());
-        return detail;
+        return;
     }
 
     if platform != "windows" {
@@ -959,12 +1003,11 @@ fn detect_harbor_setup_inner(state: &SetupState) -> HarborSetupDetail {
             detail.last_error = Some(
                 "Harbor is installed but not in PATH. Restart the app to pick up the new installation.".into(),
             );
-            return detail;
+            return;
         }
     }
 
     detail.status = "not-installed".into();
-    detail
 }
 
 // ── Tauri commands ─────────────────────────────────────
@@ -988,35 +1031,127 @@ pub fn get_harbor_wsl_distro() -> Option<String> {
 pub fn start_harbor_setup(
     app: AppHandle,
     state: State<'_, SetupState>,
-) -> Result<HarborSetupDetail, String> {
-    let guard = acquire_setup_lock(&state)?;
+) -> Result<(), String> {
+    {
+        let mut active = state
+            .setup_active
+            .lock()
+            .map_err(|e| format!("setup lock poisoned: {e}"))?;
+        if *active {
+            return Err("Harbor setup is already in progress.".into());
+        }
+        *active = true;
+    }
     reset_cancel(&state);
 
-    if platform_name() == "windows" {
-        let distro = preferred_wsl_distro();
-        run_logged_shell(
-            &app,
-            &state,
-            "installing-cli",
-            &windows_install_script(distro.as_deref()),
-            Some(Duration::from_secs(1800)),
-        )?;
-    } else {
-        run_logged_shell(
-            &app,
-            &state,
-            "installing-cli",
-            &install_script(),
-            Some(Duration::from_secs(1800)),
-        )?;
-    }
+    // Set initial stage so that redetect() during thread startup
+    // returns a meaningful status instead of stale "checking".
+    set_current_stage(&state, "starting");
 
-    drop(guard);
-    Ok(detect_harbor_setup_inner(&state))
+    std::thread::spawn(move || {
+        let state: State<'_, SetupState> = app.state();
+
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            if platform_name() == "windows" {
+                let distro = preferred_wsl_distro();
+                run_logged_shell(
+                    &app,
+                    &state,
+                    "installing-cli",
+                    &windows_install_script(distro.as_deref()),
+                    Some(Duration::from_secs(1800)),
+                )
+            } else {
+                run_logged_shell(
+                    &app,
+                    &state,
+                    "installing-cli",
+                    &install_script(),
+                    Some(Duration::from_secs(1800)),
+                )
+            }
+        }));
+
+        // Emit the complete event BEFORE releasing setup_active, so that
+        // any concurrent redetect() still sees the process as running and
+        // doesn't report a stale intermediate state.
+        match result {
+            Ok(Ok(())) => {
+                // Use detect_harbor_status() which skips the setup_active
+                // check (still true at this point) and runs full detection.
+                let detail = detect_harbor_status();
+                emit_stage(&app, &detail.status);
+                let _ = app.emit(
+                    "harbor-setup-complete",
+                    SetupCompleteEvent {
+                        detail,
+                        error: None,
+                    },
+                );
+            }
+            Ok(Err(e)) => {
+                let status_match = e
+                    .strip_prefix("HARBOR_SETUP_STATUS=")
+                    .and_then(|rest| rest.split_once(';').map(|(s, _)| s.to_string()));
+                let status = status_match.unwrap_or_else(|| "failed".to_string());
+                let message = if let Some(rest) =
+                    e.strip_prefix(&format!("HARBOR_SETUP_STATUS={status}; "))
+                {
+                    rest.to_string()
+                } else {
+                    e.clone()
+                };
+                emit_stage(&app, &status);
+                let _ = app.emit(
+                    "harbor-setup-complete",
+                    SetupCompleteEvent {
+                        detail: HarborSetupDetail {
+                            status,
+                            platform: platform_name(),
+                            cli_version: None,
+                            last_error: Some(message.clone()),
+                            running: false,
+                        },
+                        error: Some(message),
+                    },
+                );
+            }
+            Err(_panic) => {
+                emit_stage(&app, "failed");
+                let _ = app.emit(
+                    "harbor-setup-complete",
+                    SetupCompleteEvent {
+                        detail: HarborSetupDetail {
+                            status: "failed".into(),
+                            platform: platform_name(),
+                            cli_version: None,
+                            last_error: Some("Internal error during setup".into()),
+                            running: false,
+                        },
+                        error: Some("Internal error during setup".into()),
+                    },
+                );
+            }
+        }
+
+        // Release the lock after emitting complete event.
+        // The guard must be dropped before `state` (which borrows `app`).
+        let _ = match state.setup_active.lock() {
+            Ok(mut active) => { *active = false; }
+            Err(_) => {}
+        };
+    });
+
+    Ok(())
 }
 
 #[tauri::command]
 pub fn cancel_harbor_setup(state: State<'_, SetupState>) -> Result<(), String> {
+    // Only set cancel_requested if setup is actually active.
+    // Otherwise a stray cancel could poison the next start_harbor_setup call.
+    if !setup_is_active(&state) {
+        return Ok(());
+    }
     if let Ok(mut cancel) = state.cancel_requested.lock() {
         *cancel = true;
     }

@@ -1,21 +1,106 @@
 import { FC, FormEvent, ReactNode, useEffect, useRef, useState } from "react";
-import { IconPlay, IconStop, IconWiRefreshAlt } from "../Icons";
-import { HarborLogo } from "../HarborLogo";
+import {
+  IconBadgeCheck,
+  IconExternalLink,
+  IconOctagonAlert,
+  IconPlay,
+  IconRotateCW,
+  IconStop,
+} from "../Icons";
+import { runOpen } from "../useOpen";
 import { useHarborSetup } from "./HarborSetupContext";
 
-const stageLabels: Record<string, string> = {
-  checking: "Checking",
-  "not-installed": "Harbor CLI not installed",
-  "checking-platform": "Checking platform",
-  "installing-prerequisites": "Installing prerequisites",
-  "installing-cli": "Installing Harbor CLI",
-  "verifying-cli": "Verifying installation",
-  ready: "Ready",
-  blocked: "Blocked",
-  failed: "Setup failed",
-  cancelled: "Cancelled",
-  "refresh-required": "Restart required",
+const DOCS_URL = "https://github.com/av/harbor";
+
+const SETUP_STEPS = [
+  { key: "checking-platform", label: "Check" },
+  { key: "installing-prerequisites", label: "Prerequisites" },
+  { key: "installing-cli", label: "Install CLI" },
+  { key: "verifying-cli", label: "Verify" },
+] as const;
+
+const STEP_ORDER = SETUP_STEPS.map((s) => s.key);
+
+type GuidanceLevel = "warning" | "info" | "error";
+
+interface StateGuidance {
+  title: string;
+  message: string;
+  actions: string[];
+  level: GuidanceLevel;
+}
+
+const stateGuidance: Record<string, StateGuidance> = {
+  blocked: {
+    title: "Installation blocked",
+    message:
+      "Something on your system prevented Harbor from completing setup.",
+    actions: [
+      "Check the error details below",
+      "The most common cause is Docker not being installed or running",
+      "On macOS, install Docker Desktop from docker.com before proceeding",
+      "On Linux, ensure a supported package manager is available (apt, dnf, pacman, or apk)",
+    ],
+    level: "warning",
+  },
+  "refresh-required": {
+    title: "Almost there — restart needed",
+    message:
+      "Harbor CLI is installed, but your session needs refreshing to access Docker.",
+    actions: [
+      "Close and reopen the Harbor app",
+      "On Linux, you may need to log out and back in to pick up docker group membership",
+    ],
+    level: "info",
+  },
+  failed: {
+    title: "Installation failed",
+    message: "The setup process encountered an error.",
+    actions: [
+      "Review the terminal output for details",
+      "Check your internet connection",
+      "Try running the installation again",
+    ],
+    level: "error",
+  },
+  cancelled: {
+    title: "Installation cancelled",
+    message: "You stopped the installation before it completed.",
+    actions: ["Click Retry to start again when you're ready"],
+    level: "info",
+  },
 };
+
+const alertClass: Record<GuidanceLevel, string> = {
+  warning: "alert-warning",
+  info: "alert-info",
+  error: "alert-error",
+};
+
+function stepState(
+  stepKey: string,
+  currentStatus: string,
+): "done" | "active" | "pending" {
+  // Terminal success — all steps completed.
+  if (currentStatus === "ready") return "done";
+  const currentIndex = STEP_ORDER.indexOf(currentStatus as (typeof STEP_ORDER)[number]);
+  const stepIndex = STEP_ORDER.indexOf(stepKey as (typeof STEP_ORDER)[number]);
+  // For statuses not in STEP_ORDER (failed, blocked, cancelled, etc.),
+  // show steps as pending so the indicator doesn't misleadingly advance.
+  if (currentIndex < 0) return "pending";
+  if (stepIndex < currentIndex) return "done";
+  if (stepIndex === currentIndex) return "active";
+  return "pending";
+}
+
+const DocsLink: FC = () => (
+  <button
+    className="link link-hover inline-flex items-center gap-1 text-sm text-base-content/50"
+    onClick={() => runOpen([DOCS_URL])}
+  >
+    Documentation <IconExternalLink className="h-3 w-3" />
+  </button>
+);
 
 export const HarborSetupGate: FC<{ children: ReactNode }> = ({ children }) => {
   const setup = useHarborSetup();
@@ -30,12 +115,36 @@ export const HarborSetupGate: FC<{ children: ReactNode }> = ({ children }) => {
 
   if (setup.ready) return <>{children}</>;
 
+  // ── Success screen ────────────────────────────────
+  if (setup.justInstalled) {
+    return (
+      <div className="flex h-screen flex-col items-center justify-center gap-4 bg-base-100 text-base-content">
+        <IconBadgeCheck className="h-16 w-16 text-success" />
+        <h2 className="text-2xl font-bold">Harbor is ready</h2>
+        {setup.detail?.cliVersion && (
+          <p className="text-base-content/60 text-sm">
+            CLI version: {setup.detail.cliVersion}
+          </p>
+        )}
+        <button
+          className="btn btn-primary"
+          onClick={setup.dismissSuccess}
+        >
+          Get Started
+        </button>
+      </div>
+    );
+  }
+
   const status = setup.detail?.status ?? "checking";
-  const label = stageLabels[status] ?? status;
   const canInstall =
     !setup.loading &&
     !setup.running &&
-    (status === "not-installed" || status === "failed" || status === "cancelled");
+    (status === "not-installed" ||
+      status === "failed" ||
+      status === "cancelled");
+  const isIdle = !setup.running && !setup.terminalOutput;
+  const guidance = stateGuidance[status];
 
   const sendInput = async (e: FormEvent) => {
     e.preventDefault();
@@ -48,92 +157,255 @@ export const HarborSetupGate: FC<{ children: ReactNode }> = ({ children }) => {
     }
   };
 
+  // ── Pre-install welcome screen ────────────────────
+  if (isIdle) {
+    return (
+      <div className="flex h-screen flex-col items-center justify-center gap-6 bg-base-100 px-6 text-base-content">
+        {setup.loading ? (
+          <span className="loading loading-spinner loading-lg" />
+        ) : (
+          <>
+            <h1 className="text-5xl font-bold tracking-tight">Harbor</h1>
+
+            {!guidance && (
+              <p className="max-w-sm text-center text-base-content/60">
+                Harbor manages AI services through Docker.
+                <br />
+                The CLI is needed to control services locally.
+              </p>
+            )}
+
+            {guidance && (
+              <div
+                className={`alert ${alertClass[guidance.level]} max-w-lg text-left`}
+              >
+                <IconOctagonAlert className="h-5 w-5 shrink-0" />
+                <div>
+                  <h3 className="font-bold">{guidance.title}</h3>
+                  <p className="text-sm">{guidance.message}</p>
+                  <ul className="mt-2 list-disc pl-4 text-sm">
+                    {guidance.actions.map((a) => (
+                      <li key={a}>{a}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            )}
+
+            {(setup.error || setup.detail?.lastError) && (
+              <p className="max-w-md text-center text-sm text-error">
+                {setup.error ?? setup.detail?.lastError}
+              </p>
+            )}
+
+            {canInstall && !guidance && (
+              <div className="collapse collapse-arrow max-w-lg bg-base-200">
+                <input type="checkbox" />
+                <div className="collapse-title text-sm font-medium">
+                  What will be installed?
+                </div>
+                <div className="collapse-content text-sm text-base-content/70">
+                  <ul className="list-disc space-y-1 pl-4">
+                    <li>
+                      Check and install prerequisites (Docker, git, curl) via
+                      your system package manager
+                    </li>
+                    <li>
+                      May prompt for your system password (sudo) to install
+                      packages
+                    </li>
+                    <li>Clone the Harbor repository (~50 MB)</li>
+                    <li>
+                      Link the <code>harbor</code> command to your PATH
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-3">
+              {canInstall && (
+                <button
+                  className="btn btn-primary"
+                  onClick={setup.startSetup}
+                >
+                  {status === "failed" || status === "cancelled"
+                    ? "Retry Installation"
+                    : "Install Harbor"}
+                </button>
+              )}
+              {(guidance || status === "not-installed") && (
+                <button
+                  className="btn btn-ghost btn-sm self-center"
+                  onClick={setup.redetect}
+                >
+                  <IconRotateCW className="h-4 w-4" /> Redetect
+                </button>
+              )}
+            </div>
+
+            <div className="flex flex-col items-center gap-2 pt-4 text-base-content/40">
+              {status === "not-installed" && (
+                <span className="text-xs">
+                  Already have Harbor installed? Click Redetect above.
+                </span>
+              )}
+              <DocsLink />
+            </div>
+          </>
+        )}
+      </div>
+    );
+  }
+
+  // ── During-install / post-install with output ─────
   return (
     <div className="flex h-screen flex-col bg-base-100 text-base-content">
-      <div className="flex items-center justify-between border-b-2 border-base-content/10 px-6 py-4">
-        <HarborLogo />
-        <button
-          className="btn btn-sm btn-ghost"
-          onClick={setup.redetect}
-          disabled={setup.loading || setup.running}
-        >
-          <IconWiRefreshAlt /> Check
-        </button>
-      </div>
+      <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-4 overflow-hidden px-4 py-6">
+        {/* Step indicator */}
+        <ul className="steps steps-horizontal w-full text-xs">
+          {SETUP_STEPS.map((step) => {
+            const state = stepState(step.key, status);
+            return (
+              <li
+                key={step.key}
+                className={`step ${state !== "pending" ? "step-primary" : ""}`}
+              >
+                {step.label}
+              </li>
+            );
+          })}
+        </ul>
 
-      <div className="flex flex-1 flex-col gap-4 overflow-hidden px-6 py-4">
-        <div className="flex items-center gap-3">
-          <h1 className="text-xl font-semibold">{label}</h1>
-          {(setup.loading || setup.running) && (
-            <span className="loading loading-spinner loading-sm" />
+        {/* Status + progress */}
+        <div className="flex flex-col items-center gap-2">
+          <div className="flex items-center gap-2 text-sm text-base-content/60">
+            {setup.running && (
+              <span className="loading loading-spinner loading-xs" />
+            )}
+            <span>
+              {(() => {
+                const labels: Record<string, string> = {
+                  starting: "Starting installation",
+                  "checking-platform": "Checking platform",
+                  "installing-prerequisites": "Installing prerequisites",
+                  "installing-cli": "Installing Harbor CLI",
+                  "verifying-cli": "Verifying installation",
+                  ready: "Ready",
+                  blocked: "Blocked",
+                  failed: "Setup failed",
+                  cancelled: "Cancelled",
+                  "refresh-required": "Restart required",
+                };
+                return labels[status] ?? status;
+              })()}
+            </span>
+          </div>
+          {setup.running && (
+            <progress className="progress progress-primary w-full" />
           )}
         </div>
 
-        {(setup.error || setup.detail?.lastError) && (
-          <div className="rounded border border-error/40 bg-error/10 p-3 text-sm">
+        {/* Guidance alert for terminal states */}
+        {!setup.running && guidance && (
+          <div
+            className={`alert ${alertClass[guidance.level]} text-left`}
+          >
+            <IconOctagonAlert className="h-5 w-5 shrink-0" />
+            <div>
+              <h3 className="font-bold">{guidance.title}</h3>
+              <p className="text-sm">{guidance.message}</p>
+              <ul className="mt-2 list-disc pl-4 text-sm">
+                {guidance.actions.map((a) => (
+                  <li key={a}>{a}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        )}
+
+        {(setup.error || setup.detail?.lastError) && !setup.running && (
+          <div className="rounded-box border border-error/20 bg-error/5 px-4 py-2 text-sm text-error">
             {setup.error ?? setup.detail?.lastError}
           </div>
         )}
 
-        {status === "refresh-required" && (
-          <div className="rounded border border-warning/40 bg-warning/10 p-3 text-sm">
-            Harbor is installed but the app cannot find it in PATH. Restart
-            Harbor App to pick up the new installation.
+        {/* Terminal output collapse */}
+        <div className="collapse collapse-arrow min-h-0 flex-1 overflow-hidden bg-neutral">
+          <input type="checkbox" defaultChecked />
+          <div className="collapse-title text-sm text-neutral-content/70">
+            Terminal output
           </div>
-        )}
-
-        <div
-          ref={outputRef}
-          className="flex-1 overflow-auto rounded bg-neutral p-3 font-mono text-sm text-neutral-content"
-        >
-          {setup.terminalOutput ? (
+          <div
+            ref={outputRef}
+            className="collapse-content overflow-auto font-mono text-sm text-neutral-content"
+          >
             <pre className="whitespace-pre-wrap break-words">
               {setup.terminalOutput}
             </pre>
-          ) : (
-            <div className="text-neutral-content/50">
-              Setup output will appear here.
-            </div>
-          )}
+          </div>
         </div>
 
-        <form className="flex gap-2" onSubmit={sendInput}>
-          <input
-            className="input input-sm input-bordered min-w-0 flex-1 font-mono"
-            type="password"
-            value={input}
-            placeholder="installer input"
-            autoComplete="off"
-            disabled={!setup.running}
-            onChange={(e) => setInput(e.target.value)}
-          />
-          <button
-            className="btn btn-sm btn-outline"
-            type="submit"
-            disabled={!setup.running || !input}
-          >
-            <IconPlay /> Send
-          </button>
-        </form>
-
-        <div className="flex gap-2 pb-2">
-          {setup.running ? (
-            <button className="btn btn-sm btn-outline" onClick={setup.cancelSetup}>
-              <IconStop /> Cancel
+        {/* Input for sudo / installer prompts */}
+        {setup.running && (
+          <form className="flex gap-2" onSubmit={sendInput}>
+            <div className="flex min-w-0 flex-1 flex-col gap-1">
+              <input
+                className="input input-sm input-bordered min-w-0 font-mono"
+                type="password"
+                value={input}
+                placeholder="sudo password"
+                autoComplete="off"
+                onChange={(e) => setInput(e.target.value)}
+              />
+              <span className="text-xs text-base-content/50">
+                Your system password — needed to install system packages
+              </span>
+            </div>
+            <button
+              className="btn btn-sm btn-ghost self-start"
+              type="submit"
+              disabled={!input}
+            >
+              Send
             </button>
-          ) : (
+          </form>
+        )}
+
+        {/* Action buttons */}
+        <div className="flex items-center justify-center gap-3">
+          {setup.running && (
+            <button
+              className="btn btn-sm btn-outline btn-error"
+              onClick={setup.cancelSetup}
+            >
+              <IconStop /> Cancel Installation
+            </button>
+          )}
+          {!setup.running && canInstall && (
             <button
               className="btn btn-sm btn-primary"
-              disabled={!canInstall}
               onClick={setup.startSetup}
             >
-              <IconPlay />
-              {status === "failed" || status === "cancelled"
-                ? "Retry"
-                : "Install Harbor"}
+              <IconPlay /> Retry
+            </button>
+          )}
+          {!setup.running && (
+            <button
+              className="btn btn-sm btn-ghost"
+              onClick={setup.redetect}
+            >
+              <IconRotateCW className="h-4 w-4" /> Redetect
             </button>
           )}
         </div>
+
+        {/* Footer help link */}
+        {!setup.running && (
+          <div className="flex justify-center pb-2">
+            <DocsLink />
+          </div>
+        )}
       </div>
     </div>
   );
