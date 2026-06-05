@@ -149,8 +149,19 @@ dnf_install() {
     fi
 
     if ! check_command docker || ! docker compose version >/dev/null 2>&1; then
-        log_info "Installing Docker Engine and Docker Compose via dnf"
-        sudo dnf install -y moby-engine docker-compose-plugin
+        local compose_pkg=""
+
+        if dnf list --available docker-compose-plugin 2>/dev/null | grep -q docker-compose-plugin; then
+            compose_pkg="docker-compose-plugin"
+        elif dnf list --available docker-compose 2>/dev/null | grep -q docker-compose; then
+            compose_pkg="docker-compose"
+        else
+            log_error "Neither 'docker-compose-plugin' nor 'docker-compose' is available via dnf repositories. Enable the Docker repository or install Docker Compose v2 manually."
+            return 1
+        fi
+
+        log_info "Installing Docker Engine and Docker Compose via dnf (${compose_pkg})"
+        sudo dnf install -y moby-engine "${compose_pkg}"
     else
         log_info "Docker and Docker Compose are already installed"
     fi
@@ -293,13 +304,13 @@ ensure_linux_docker_service() {
         if ! systemctl is-active docker >/dev/null 2>&1; then
             log_info "Starting Docker service"
             sudo systemctl start docker || true
+            wait_for_docker_access 30
         fi
     elif check_command rc-service && check_command rc-update; then
-        # OpenRC path — Alpine. rc-update is idempotent; rc-service start
-        # returns non-zero if docker is already running, swallow with `|| true`.
         log_info "Enabling and starting Docker service (OpenRC)"
         sudo rc-update add docker default >/dev/null 2>&1 || true
         sudo rc-service docker start >/dev/null 2>&1 || true
+        wait_for_docker_access 30
     fi
 }
 
@@ -346,8 +357,7 @@ verify_docker_access() {
     fi
 
     local docker_access_output
-    docker_access_output=$(docker info 2>&1)
-    if [ $? -eq 0 ]; then
+    if docker_access_output=$(docker info 2>&1); then
         log_info "Docker daemon is reachable without sudo"
         return 0
     fi
@@ -383,15 +393,14 @@ verify_docker_access() {
         fi
 
         if getent group docker >/dev/null 2>&1; then
+            local add_ok=false
             if [ "$(id -u)" -eq 0 ]; then
-                usermod -aG docker "$remediation_user" >/dev/null 2>&1
+                usermod -aG docker "$remediation_user" >/dev/null 2>&1 && add_ok=true
             elif check_command sudo; then
-                sudo usermod -aG docker "$remediation_user" >/dev/null 2>&1
-            else
-                false
+                sudo usermod -aG docker "$remediation_user" >/dev/null 2>&1 && add_ok=true
             fi
 
-            if [ $? -eq 0 ]; then
+            if [ "$add_ok" = true ]; then
                 log_warn "Added '${remediation_user}' to docker group"
                 log_warn "Re-login or run: newgrp docker"
                 log_warn "Then run: harbor doctor"
@@ -534,12 +543,16 @@ main() {
     verify_required_tools || exit 1
     check_optional_gpu_support
 
-    if [ "$PLATFORM" = "linux" ]; then
+    if [ "$PLATFORM" = "linux" ] && [ "${HARBOR_APP:-}" != "1" ]; then
         log_info "If you were added to the docker group, re-login before running Harbor commands."
     fi
 
     setup_stage "ready"
-    log_info "Dependency setup complete. Run 'harbor doctor' to validate full Harbor readiness."
+    if [ "${HARBOR_APP:-}" = "1" ]; then
+        log_info "Dependency setup complete."
+    else
+        log_info "Dependency setup complete. Run 'harbor doctor' to validate full Harbor readiness."
+    fi
 }
 
 main

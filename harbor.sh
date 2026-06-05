@@ -2505,14 +2505,22 @@ link_cli() {
         mkdir -p "$target_dir"
     fi
 
-    # Check if target directory exists in PATH
-    if ! echo "$PATH" | tr ':' '\n' | grep -q "$target_dir"; then
+    # Check if target directory exists in PATH (runtime or shell profile)
+    local path_in_runtime=false
+    local path_in_profile=false
+    if echo "$PATH" | tr ':' '\n' | grep -qxF "$target_dir"; then
+        path_in_runtime=true
+    fi
+    if [ -f "$shell_profile" ] && grep -qF "$target_dir" "$shell_profile"; then
+        path_in_profile=true
+    fi
+    if [ "$path_in_profile" = false ]; then
         log_info "Adding $target_dir to PATH..."
-
-        # Update the shell configuration file
-        echo -e "\nexport PATH=\"\$PATH:$target_dir\"\n" >>"$shell_profile"
-        export PATH="$PATH:$target_dir"
+        printf '\nexport PATH="$PATH:%s"\n' "$target_dir" >>"$shell_profile"
         echo "Updated $shell_profile with new PATH."
+    fi
+    if [ "$path_in_runtime" = false ]; then
+        export PATH="$PATH:$target_dir"
     fi
 
     # Create symlink

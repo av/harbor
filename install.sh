@@ -18,12 +18,34 @@ INSTALL_REQUIREMENTS=true
 
 # ========================================
 
+_LAST_SETUP_STAGE=""
 setup_stage() {
+  _LAST_SETUP_STAGE="$1"
   echo "HARBOR_SETUP_STAGE=$1"
 }
 
 resolve_harbor_version() {
-  curl -s "$HARBOR_RELEASE_URL" | sed -n 's/.*"tag_name": "\(.*\)".*/\1/p'
+  local response version attempt
+  for attempt in 1 2; do
+    response=$(curl -fsSL "$HARBOR_RELEASE_URL" 2>/dev/null) || {
+      if [ "$attempt" -eq 1 ]; then
+        sleep 2
+        continue
+      fi
+      echo "Warning: Failed to fetch latest release from $HARBOR_RELEASE_URL" >&2
+      return 1
+    }
+    version=$(printf '%s\n' "$response" | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -n1)
+    if [ -n "$version" ]; then
+      printf '%s\n' "$version"
+      return 0
+    fi
+    if [ "$attempt" -eq 1 ]; then
+      sleep 2
+    fi
+  done
+  echo "Warning: Could not parse version from GitHub API response" >&2
+  return 1
 }
 
 print_help() {
@@ -98,6 +120,12 @@ install_or_update_project() {
     fi
 
     echo "Installing from local source path: $HARBOR_INSTALL_SOURCE_PATH"
+    # Preserve user config across reinstall
+    local saved_env=""
+    if [ -f "$HARBOR_INSTALL_PATH/.env" ]; then
+      saved_env=$(mktemp)
+      cp "$HARBOR_INSTALL_PATH/.env" "$saved_env"
+    fi
     rm -rf "$HARBOR_INSTALL_PATH"
     mkdir -p "$HARBOR_INSTALL_PATH"
     (
@@ -108,6 +136,10 @@ install_or_update_project() {
         --exclude='./tests/artifacts' \
         -cf - .
     ) | tar -C "$HARBOR_INSTALL_PATH" -xf -
+    if [ -n "$saved_env" ]; then
+      cp "$saved_env" "$HARBOR_INSTALL_PATH/.env"
+      rm -f "$saved_env"
+    fi
     cd "$HARBOR_INSTALL_PATH"
     return 0
   fi
@@ -123,9 +155,20 @@ install_or_update_project() {
       rm -rf "$HARBOR_INSTALL_PATH"
     fi
     echo "Cloning project repository..."
-    if ! git clone --depth 1 --branch "$HARBOR_VERSION" "$HARBOR_REPO_URL" "$HARBOR_INSTALL_PATH"; then
-      echo "Error: git clone failed. Cleaning up partial clone."
+    local clone_ok=false
+    for attempt in 1 2; do
+      if git clone --depth 1 --branch "$HARBOR_VERSION" "$HARBOR_REPO_URL" "$HARBOR_INSTALL_PATH"; then
+        clone_ok=true
+        break
+      fi
       rm -rf "$HARBOR_INSTALL_PATH"
+      if [ "$attempt" -eq 1 ]; then
+        echo "Clone failed, retrying in 3 seconds..."
+        sleep 3
+      fi
+    done
+    if [ "$clone_ok" = false ]; then
+      echo "Error: git clone failed after 2 attempts."
       exit 1
     fi
     cd "$HARBOR_INSTALL_PATH"
@@ -144,6 +187,7 @@ doctor_requires_blocked() {
 
 main() {
   parse_args "$@"
+  trap 'ec=$?; if [ $ec -ne 0 ]; then case "$_LAST_SETUP_STAGE" in failed|blocked|refresh-required|ready) ;; *) echo "HARBOR_SETUP_STAGE=failed" ;; esac; fi' EXIT
 
   setup_stage "checking-platform"
   echo "Installing Harbor."
@@ -170,12 +214,12 @@ main() {
     if [ -n "$HARBOR_INSTALL_SOURCE_PATH" ]; then
       HARBOR_VERSION="source"
     else
-      HARBOR_VERSION=$(resolve_harbor_version)
+      HARBOR_VERSION=$(resolve_harbor_version) || true
     fi
   fi
 
   if [ -z "$HARBOR_VERSION" ]; then
-    echo "Error: Unable to resolve Harbor version."
+    echo "Error: Unable to resolve Harbor version. Check your network connection and retry."
     exit 1
   else
     echo "Resolved Harbor version: $HARBOR_VERSION"
@@ -211,7 +255,9 @@ main() {
   fi
   setup_stage "ready"
   echo "Installation complete."
-  echo "Restart your shell, then run 'harbor doctor' to verify your setup."
+  if [ "${HARBOR_APP:-}" != "1" ]; then
+    echo "Restart your shell, then run 'harbor doctor' to verify your setup."
+  fi
 }
 
 main "$@"
