@@ -32,6 +32,60 @@ check_command() {
     command -v "$1" >/dev/null 2>&1
 }
 
+# Run a command with privilege escalation (sudo if needed and available).
+# If already root, runs the command directly. If sudo is unavailable and
+# not root, logs a clear error and returns 1.
+run_privileged() {
+    if [ "$(id -u)" -eq 0 ]; then
+        "$@"
+    elif check_command sudo; then
+        sudo "$@"
+    else
+        log_error "Root privileges required but 'sudo' is not installed and you are not root."
+        log_error "Failed command: $*"
+        log_error "Either install sudo, run this script as root, or install the dependencies manually."
+        return 1
+    fi
+}
+
+# Validate that privileged commands will work before starting installs.
+# In non-interactive environments (no TTY, piped stdin), sudo may hang or
+# fail silently. This catches the problem early with a clear message.
+preflight_privilege_check() {
+    if [ "$(id -u)" -eq 0 ]; then
+        return 0
+    fi
+
+    if ! check_command sudo; then
+        log_error "'sudo' is not installed and you are not root."
+        log_error "Install sudo or run this script as root."
+        return 1
+    fi
+
+    # Attempt a no-op sudo to validate credentials/cached session.
+    # Use -n (non-interactive) first; if that fails, try regular sudo
+    # which may prompt for a password (acceptable if TTY is available).
+    if sudo -n true 2>/dev/null; then
+        return 0
+    fi
+
+    if [ -t 0 ]; then
+        # TTY available — sudo can prompt for password
+        log_info "Sudo access required. You may be prompted for your password."
+        if ! sudo true; then
+            log_error "Failed to obtain sudo access. Cannot install dependencies."
+            return 1
+        fi
+    else
+        # No TTY — sudo cannot prompt interactively
+        log_error "Sudo requires a password but no terminal is available for prompting."
+        log_error "Run this script in an interactive terminal, or pre-authorize sudo (e.g., 'sudo -v')."
+        return 1
+    fi
+
+    return 0
+}
+
 detect_platform() {
     case "$(uname -s)" in
         Linux)
@@ -105,32 +159,43 @@ require_supported_platform() {
 
 apt_install() {
     local missing=()
+    local need_docker=false
     check_command git || missing+=("git")
     check_command curl || missing+=("curl")
 
+    if ! check_command docker || ! docker compose version >/dev/null 2>&1; then
+        need_docker=true
+    fi
+
+    # Single apt-get update if anything needs installing
+    if [ ${#missing[@]} -gt 0 ] || [ "$need_docker" = true ]; then
+        log_info "Refreshing apt package index"
+        run_privileged apt-get update || return 1
+    fi
+
     if [ ${#missing[@]} -gt 0 ]; then
         log_info "Installing missing tools via apt: ${missing[*]}"
-        sudo apt-get update
-        sudo apt-get install -y "${missing[@]}"
+        run_privileged apt-get install -y "${missing[@]}" || return 1
     else
         log_info "git and curl are already installed"
     fi
 
-    if ! check_command docker || ! docker compose version >/dev/null 2>&1; then
+    if [ "$need_docker" = true ]; then
         local compose_pkg=""
-        sudo apt-get update
 
         if apt-cache show docker-compose-v2 >/dev/null 2>&1; then
             compose_pkg="docker-compose-v2"
         elif apt-cache show docker-compose-plugin >/dev/null 2>&1; then
             compose_pkg="docker-compose-plugin"
         else
-            log_error "Neither 'docker-compose-v2' nor 'docker-compose-plugin' is available via apt repositories. Enable the appropriate Docker/Ubuntu repositories or install Docker Compose v2 manually."
+            log_error "Neither 'docker-compose-v2' nor 'docker-compose-plugin' is available via apt repositories."
+            log_error "Enable the Docker repository: https://docs.docker.com/engine/install/"
+            log_error "Or install Docker Compose v2 manually."
             return 1
         fi
 
         log_info "Installing Docker Engine and Docker Compose via apt (${compose_pkg})"
-        sudo apt-get install -y docker.io "${compose_pkg}"
+        run_privileged apt-get install -y docker.io "${compose_pkg}" || return 1
     else
         log_info "Docker and Docker Compose plugin are already installed"
     fi
@@ -138,30 +203,57 @@ apt_install() {
 
 dnf_install() {
     local missing=()
+    local need_docker=false
     check_command git || missing+=("git")
     check_command curl || missing+=("curl")
 
+    if ! check_command docker || ! docker compose version >/dev/null 2>&1; then
+        need_docker=true
+    fi
+
+    # Refresh dnf metadata if anything needs installing (stale cache causes
+    # silent lookup failures with "dnf list --available")
+    if [ ${#missing[@]} -gt 0 ] || [ "$need_docker" = true ]; then
+        log_info "Refreshing dnf package metadata"
+        run_privileged dnf makecache --refresh -q 2>/dev/null || true
+    fi
+
     if [ ${#missing[@]} -gt 0 ]; then
         log_info "Installing missing tools via dnf: ${missing[*]}"
-        sudo dnf install -y "${missing[@]}"
+        run_privileged dnf install -y "${missing[@]}" || return 1
     else
         log_info "git and curl are already installed"
     fi
 
-    if ! check_command docker || ! docker compose version >/dev/null 2>&1; then
-        local compose_pkg=""
+    if [ "$need_docker" = true ]; then
+        local compose_pkg="" docker_pkg=""
 
         if dnf list --available docker-compose-plugin 2>/dev/null | grep -q docker-compose-plugin; then
             compose_pkg="docker-compose-plugin"
         elif dnf list --available docker-compose 2>/dev/null | grep -q docker-compose; then
             compose_pkg="docker-compose"
         else
-            log_error "Neither 'docker-compose-plugin' nor 'docker-compose' is available via dnf repositories. Enable the Docker repository or install Docker Compose v2 manually."
+            log_error "Neither 'docker-compose-plugin' nor 'docker-compose' is available via dnf."
+            log_error "Enable the Docker repository: https://docs.docker.com/engine/install/fedora/"
+            log_error "Or install Docker Compose v2 manually."
             return 1
         fi
 
-        log_info "Installing Docker Engine and Docker Compose via dnf (${compose_pkg})"
-        sudo dnf install -y moby-engine "${compose_pkg}"
+        # Prefer docker-ce (Docker's official package) over moby-engine.
+        # moby-engine was removed from Fedora 39+; docker-ce requires the
+        # Docker repo to be enabled.
+        if dnf list --available docker-ce 2>/dev/null | grep -q docker-ce; then
+            docker_pkg="docker-ce"
+        elif dnf list --available moby-engine 2>/dev/null | grep -q moby-engine; then
+            docker_pkg="moby-engine"
+        else
+            log_error "Neither 'docker-ce' nor 'moby-engine' is available via dnf."
+            log_error "Enable the Docker repository: https://docs.docker.com/engine/install/fedora/"
+            return 1
+        fi
+
+        log_info "Installing Docker Engine and Docker Compose via dnf (${docker_pkg}, ${compose_pkg})"
+        run_privileged dnf install -y "${docker_pkg}" "${compose_pkg}" || return 1
     else
         log_info "Docker and Docker Compose are already installed"
     fi
@@ -169,19 +261,31 @@ dnf_install() {
 
 pacman_install() {
     local missing=()
+    local need_docker=false
     check_command git || missing+=("git")
     check_command curl || missing+=("curl")
 
+    if ! check_command docker || ! docker compose version >/dev/null 2>&1; then
+        need_docker=true
+    fi
+
+    # Refresh package database before installing (stale db causes
+    # "target not found" errors that confuse users)
+    if [ ${#missing[@]} -gt 0 ] || [ "$need_docker" = true ]; then
+        log_info "Refreshing pacman package database"
+        run_privileged pacman -Sy --noconfirm || return 1
+    fi
+
     if [ ${#missing[@]} -gt 0 ]; then
         log_info "Installing missing tools via pacman: ${missing[*]}"
-        sudo pacman -S --noconfirm --needed "${missing[@]}"
+        run_privileged pacman -S --noconfirm --needed "${missing[@]}" || return 1
     else
         log_info "git and curl are already installed"
     fi
 
-    if ! check_command docker || ! docker compose version >/dev/null 2>&1; then
+    if [ "$need_docker" = true ]; then
         log_info "Installing Docker Engine and Docker Compose plugin via pacman"
-        sudo pacman -S --noconfirm --needed docker docker-compose
+        run_privileged pacman -S --noconfirm --needed docker docker-compose || return 1
     else
         log_info "Docker and Docker Compose plugin are already installed"
     fi
@@ -197,14 +301,14 @@ apk_install() {
 
     if [ ${#missing[@]} -gt 0 ]; then
         log_info "Installing missing tools via apk: ${missing[*]}"
-        sudo apk add --no-cache "${missing[@]}"
+        run_privileged apk add --no-cache "${missing[@]}" || return 1
     else
         log_info "git, curl, and bash are already installed"
     fi
 
     if ! check_command docker || ! docker compose version >/dev/null 2>&1; then
         log_info "Installing Docker Engine and Docker Compose plugin via apk"
-        sudo apk add --no-cache docker docker-cli-compose
+        run_privileged apk add --no-cache docker docker-cli-compose || return 1
     else
         log_info "Docker and Docker Compose plugin are already installed"
     fi
@@ -291,25 +395,42 @@ brew_install() {
 }
 
 ensure_linux_docker_service() {
-    if [ "$PLATFORM" != "linux" ] || [ "$IS_WSL" = true ]; then
+    if [ "$PLATFORM" != "linux" ]; then
         return 0
     fi
 
-    if check_command systemctl; then
+    # In WSL, Docker can come from two sources:
+    # 1. Docker Desktop on Windows with WSL integration (no service needed)
+    # 2. Docker Engine installed natively in WSL2 with systemd
+    # Only skip service management if Docker is already reachable (case 1).
+    if [ "$IS_WSL" = true ]; then
+        if docker info >/dev/null 2>&1; then
+            return 0
+        fi
+        # Docker not reachable in WSL — fall through to try systemd if available
+        if ! check_command systemctl || ! systemctl is-system-running >/dev/null 2>&1; then
+            log_warn "Docker is not reachable in WSL and systemd is not active."
+            log_warn "Either enable Docker Desktop WSL integration, or enable systemd in WSL:"
+            log_warn "  Add [boot] systemd=true to /etc/wsl.conf and restart WSL."
+            return 0
+        fi
+    fi
+
+    if check_command systemctl && systemctl is-system-running >/dev/null 2>&1; then
         if ! systemctl is-enabled docker >/dev/null 2>&1; then
             log_info "Enabling Docker service"
-            sudo systemctl enable docker >/dev/null 2>&1 || true
+            run_privileged systemctl enable docker >/dev/null 2>&1 || true
         fi
 
         if ! systemctl is-active docker >/dev/null 2>&1; then
             log_info "Starting Docker service"
-            sudo systemctl start docker || true
+            run_privileged systemctl start docker || true
             wait_for_docker_access 30
         fi
     elif check_command rc-service && check_command rc-update; then
         log_info "Enabling and starting Docker service (OpenRC)"
-        sudo rc-update add docker default >/dev/null 2>&1 || true
-        sudo rc-service docker start >/dev/null 2>&1 || true
+        run_privileged rc-update add docker default >/dev/null 2>&1 || true
+        run_privileged rc-service docker start >/dev/null 2>&1 || true
         wait_for_docker_access 30
     fi
 }
@@ -385,19 +506,13 @@ verify_docker_access() {
         add_user_cmd="usermod -aG docker ${remediation_user}"
 
         if ! getent group docker >/dev/null 2>&1; then
-            if [ "$(id -u)" -eq 0 ]; then
-                groupadd docker >/dev/null 2>&1
-            elif check_command sudo; then
-                sudo groupadd docker >/dev/null 2>&1
-            fi
+            run_privileged groupadd docker >/dev/null 2>&1 || true
         fi
 
         if getent group docker >/dev/null 2>&1; then
             local add_ok=false
-            if [ "$(id -u)" -eq 0 ]; then
-                usermod -aG docker "$remediation_user" >/dev/null 2>&1 && add_ok=true
-            elif check_command sudo; then
-                sudo usermod -aG docker "$remediation_user" >/dev/null 2>&1 && add_ok=true
+            if run_privileged usermod -aG docker "$remediation_user" >/dev/null 2>&1; then
+                add_ok=true
             fi
 
             if [ "$add_ok" = true ]; then
@@ -536,6 +651,11 @@ main() {
     require_supported_platform || exit 1
 
     setup_stage "installing-prerequisites"
+    # On macOS, brew doesn't need sudo; on Linux, verify sudo works before
+    # attempting any package installs (catches no-TTY / no-sudo early).
+    if [ "$PLATFORM" = "linux" ]; then
+        preflight_privilege_check || exit 1
+    fi
     install_requirements || exit 1
     ensure_linux_docker_service
 
