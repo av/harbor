@@ -209,19 +209,28 @@ show_help() {
 run_harbor_doctor() {
     log_info "Running Harbor Doctor..."
     has_errors=false
+    local docker_ok=false
 
     # Check if Docker is installed
     if command -v docker &>/dev/null; then
         log_info "${ok} Docker is installed"
 
-        # Check if Docker can be called without sudo
+        # Check if Docker can be called without sudo (with timeout to
+        # avoid hanging when daemon is starting up or unresponsive)
         local docker_access_output
-        docker_access_output=$(docker info 2>&1)
-        if [ $? -eq 0 ]; then
+        local timeout_cmd=""
+        if command -v timeout &>/dev/null; then
+            timeout_cmd="timeout 10"
+        fi
+        if docker_access_output=$($timeout_cmd docker info 2>&1); then
             log_info "${ok} Docker can be called without sudo"
             log_info "${ok} Docker daemon is running"
+            docker_ok=true
         else
-            if echo "$docker_access_output" | grep -qi "permission denied\|got permission denied while trying to connect to the docker daemon socket"; then
+            local exit_code=$?
+            if [ "$exit_code" -eq 124 ]; then
+                log_error "${nok} Docker daemon is not responding (timed out after 10s). It may still be starting up - try again in a moment."
+            elif echo "$docker_access_output" | grep -qi "permission denied\|got permission denied while trying to connect to the docker daemon socket"; then
                 log_error "${nok} Docker requires sudo for this user. Add your user to the 'docker' group and re-login."
             else
                 log_error "${nok} Docker daemon is not running or not reachable. Please start Docker."
@@ -233,19 +242,37 @@ run_harbor_doctor() {
         has_errors=true
     fi
 
-    # Check if Docker Compose (v2) is installed
-    if command -v docker &>/dev/null && docker compose version &>/dev/null; then
-        log_info "${ok} Docker Compose (v2) is installed"
-    else
-        log_error "${nok} Docker Compose (v2) is not installed. Please install Docker Compose (v2)."
-        has_errors=true
-    fi
+    # Only check Compose if Docker itself is working
+    if $docker_ok; then
+        # Check if Docker Compose (v2) is installed
+        if docker compose version &>/dev/null; then
+            log_info "${ok} Docker Compose (v2) is installed"
+        else
+            log_error "${nok} Docker Compose (v2) is not installed. Please install Docker Compose (v2)."
+            has_errors=true
+        fi
 
-    if ! has_modern_compose; then
-        log_error "${nok} Docker Compose version is older than $desired_compose_major.$desired_compose_minor.$desired_compose_patch. Please update Docker Compose (v2)."
-        has_errors=true
+        if ! has_modern_compose; then
+            log_error "${nok} Docker Compose version is older than $desired_compose_major.$desired_compose_minor.$desired_compose_patch. Please update Docker Compose (v2)."
+            has_errors=true
+        else
+            log_info "${ok} Docker Compose (v2) version is newer than $desired_compose_major.$desired_compose_minor.$desired_compose_patch"
+        fi
+
+        # Check Docker disk space (LLM models are large, disk exhaustion is common)
+        local docker_root_dir data_space_gb
+        docker_root_dir=$(echo "$docker_access_output" | grep "Docker Root Dir:" | sed 's/.*Docker Root Dir: *//')
+        if [ -n "$docker_root_dir" ]; then
+            # df -k is POSIX-portable (macOS lacks -BG); convert KB to GB
+            data_space_gb=$(df -k "$docker_root_dir" 2>/dev/null | awk 'NR==2 {printf "%d", $4/1048576}')
+            if [ -n "$data_space_gb" ] && [ "$data_space_gb" -lt 10 ] 2>/dev/null; then
+                log_warn "${nok} Low disk space on Docker storage (${data_space_gb}GB free at $docker_root_dir). LLM models are large - consider freeing space or running 'docker system prune'."
+            elif [ -n "$data_space_gb" ]; then
+                log_info "${ok} Docker storage has ${data_space_gb}GB free"
+            fi
+        fi
     else
-        log_info "${ok} Docker Compose (v2) version is newer than $desired_compose_major.$desired_compose_minor.$desired_compose_patch"
+        log_warn "  Skipping Compose and disk checks (Docker not reachable)"
     fi
 
     # Check if the Harbor workspace directory exists
@@ -273,31 +300,33 @@ run_harbor_doctor() {
     fi
 
     # Check if CLI is linked
-    if [ -L "$(eval echo "$(env_manager get cli.path)")/$(env_manager get cli.name)" ]; then
+    local cli_path cli_name
+    cli_path=$(env_manager get cli.path)
+    cli_name=$(env_manager get cli.name)
+    cli_path="${cli_path/#\~/$HOME}"
+    if [ -L "$cli_path/$cli_name" ]; then
         log_info "${ok} CLI is linked"
     else
         log_error "${nok} CLI is not linked. Run 'harbor link' to create a symlink."
         has_errors=true
     fi
 
+    # GPU checks: only show results for hardware that is actually present,
+    # to avoid noisy warnings on systems without discrete GPUs
     if has_nvidia; then
-        log_info "${ok} NVIDIA GPU is available"
-    else
-        log_warn "${nok} NVIDIA GPU is not available. NVIDIA GPU support may not work."
+        log_info "${ok} NVIDIA GPU detected"
+        if has_nvidia_ctk; then
+            log_info "${ok} NVIDIA Container Toolkit is installed"
+        else
+            log_warn "${nok} NVIDIA Container Toolkit is not installed. GPU containers won't be able to access the GPU. Install: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html"
+            has_errors=true
+        fi
     fi
 
-    # Check if nvidia-container-toolkit is installed
-    if has_nvidia_ctk; then
-        log_info "${ok} NVIDIA Container Toolkit is installed"
-    else
-        log_warn "${nok} NVIDIA Container Toolkit is not installed. NVIDIA GPU support may not work."
-    fi
-
-    # Check if rocm is installed
     if has_rocm; then
-        log_info "${ok} ROCm is installed"
-    else
-        log_warn "${nok} ROCm in not installed. AMD GPU support may not work."
+        log_info "${ok} AMD GPU with ROCm support detected"
+    elif [[ -e "/dev/kfd" ]]; then
+        log_warn "${nok} AMD GPU hardware found (/dev/kfd) but ROCm support is incomplete. Check that amdgpu kernel module is loaded and /dev/dri/renderD* devices exist."
     fi
 
     if $has_errors; then
@@ -314,7 +343,7 @@ has_nvidia() {
 }
 
 has_nvidia_ctk() {
-    command -v nvidia-container-toolkit &>/dev/null
+    command -v nvidia-ctk &>/dev/null || command -v nvidia-container-toolkit &>/dev/null
 }
 
 has_nvidia_cdi() {
@@ -328,16 +357,16 @@ has_nvidia_cdi() {
 }
 
 has_rocm() {
-    # 1. Hardware/Kernel check
+    # 1. Hardware check - /dev/kfd is the AMD GPU compute interface
     [[ -e "/dev/kfd" ]] || return 1
 
-    # 2. Docker configuration check
-    # Check if 'amd' is listed in docker runtimes
-    if docker info 2>/dev/null | grep -i "runtimes" | grep -q "amd"; then
-        return 0
-    fi
+    # 2. Verify render nodes exist (needed for container device passthrough)
+    ls /dev/dri/renderD* &>/dev/null || return 1
 
-    return 1
+    # 3. Verify amdgpu kernel module is loaded
+    lsmod 2>/dev/null | grep -q "^amdgpu " || return 1
+
+    return 0
 }
 
 has_modern_compose() {
