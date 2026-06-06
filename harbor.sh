@@ -33,6 +33,68 @@ _with_timeout() {
     fi
 }
 
+# Check that Docker is installed, Compose v2 is available, and the daemon
+# is reachable.  Provides clear, actionable error messages for first-run
+# users who may not yet have Docker set up.
+# Caches the result so repeated calls in the same invocation are free.
+_docker_ok=""
+_check_docker() {
+    # Return cached result when available
+    if [ -n "$_docker_ok" ]; then
+        [ "$_docker_ok" = "1" ] && return 0 || return 1
+    fi
+
+    if ! command -v docker &>/dev/null; then
+        _docker_ok=0
+        log_error "Docker is not installed."
+        log_error "Harbor requires Docker to run services."
+        if [[ "$(uname)" == "Darwin" ]]; then
+            log_error "Install Docker Desktop: https://docs.docker.com/desktop/install/mac-install/"
+        else
+            log_error "Install Docker Engine: https://docs.docker.com/engine/install/"
+        fi
+        log_error "After installing, run 'harbor doctor' to verify your setup."
+        return 1
+    fi
+
+    # docker compose version is fast (no daemon contact) and confirms
+    # both the Docker CLI and the Compose plugin are installed.
+    if ! docker compose version &>/dev/null; then
+        _docker_ok=0
+        log_error "Docker Compose (v2) is not available."
+        log_error "Harbor requires the Docker Compose plugin (v2)."
+        log_error "If Docker is installed, ensure the Compose plugin is included."
+        log_error "Check: https://docs.docker.com/compose/install/"
+        log_error "Run 'harbor doctor' for full diagnostics."
+        return 1
+    fi
+
+    # Verify the daemon is actually running.  Use docker version which is
+    # faster than docker info (no system enumeration) but still contacts
+    # the daemon.  Guard with timeout to avoid hanging when daemon is
+    # unresponsive (e.g. Docker Desktop still loading).
+    if ! _with_timeout 5 docker version &>/dev/null; then
+        _docker_ok=0
+        local exit_code=$?
+        if [ "$exit_code" -eq 124 ]; then
+            log_error "Docker daemon is not responding (timed out after 5s)."
+            log_error "It may still be starting up. Wait a moment and try again."
+        else
+            log_error "Docker daemon is not running or not reachable."
+        fi
+        if [[ "$(uname)" == "Darwin" ]]; then
+            log_error "Start Docker Desktop and wait for it to finish loading."
+        else
+            log_error "Start the Docker daemon: sudo systemctl start docker"
+        fi
+        log_error "Run 'harbor doctor' for full diagnostics."
+        return 1
+    fi
+
+    _docker_ok=1
+    return 0
+}
+
 show_version() {
     echo "Harbor CLI version: $version"
 }
@@ -788,6 +850,7 @@ resolve_compose_command() {
 }
 
 run_up() {
+    _check_docker || return 1
     local should_tail=false
     local should_open=false
     local should_attach=false
@@ -895,6 +958,7 @@ run_up() {
 }
 
 run_down() {
+    _check_docker || return 1
     local services=$(get_active_services)
     local matched_services=()
     local compose_targets=("$@")
@@ -986,6 +1050,7 @@ run_down() {
 }
 
 run_restart() {
+    _check_docker || return 1
     local active_services=$(get_active_services)
 
     if [ -z "$active_services" ] && [ $# -eq 0 ]; then
@@ -1025,6 +1090,7 @@ run_restart() {
 }
 
 run_ps() {
+    _check_docker || return 1
     local compose_targets=("$@")
 
     if [ $# -eq 0 ]; then
@@ -1035,6 +1101,7 @@ run_ps() {
 }
 
 run_build() {
+    _check_docker || return 1
     service=$1
     shift
 
@@ -1058,6 +1125,7 @@ run_build() {
 }
 
 run_shell() {
+    _check_docker || return 1
     service=$1
     shift
 
@@ -1076,10 +1144,12 @@ run_shell() {
 }
 
 run_logs() {
+    _check_docker || return 1
     $(compose_with_options "*") logs -n 20 -f "$@"
 }
 
 run_pull() {
+    _check_docker || return 1
     available_services=$(get_services --silent)
 
     for service in "$@"; do
@@ -1204,6 +1274,7 @@ run_llamacpp_pull() {
 }
 
 run_run() {
+    _check_docker || return 1
     service=$1
     shift
 
@@ -2548,6 +2619,7 @@ run_launch_command() {
 }
 
 run_stats() {
+    _check_docker || return 1
     if [ ! -t 1 ]; then
         $(compose_with_options "*") stats --no-stream "$@"
     else
@@ -2556,6 +2628,7 @@ run_stats() {
 }
 
 run_attach() {
+  _check_docker || return 1
   local service_name=$1
 
   if [ -z "$service_name" ]; then
@@ -3059,10 +3132,12 @@ nvidia_top() {
 }
 
 eject() {
+    _check_docker || return 1
     $(compose_with_options "$@") config
 }
 
 run_exec() {
+    _check_docker || return 1
     local service_name=""
     local before_args=()
     local after_args=()
@@ -8268,6 +8343,23 @@ cd "$harbor_home" || exit
 set_colors
 # Initialize the log levels
 set_default_log_levels
+
+# Commands that do not need .env or Docker — let them run even on a
+# broken / fresh install where ensure_env_file would fail.
+case "$1" in
+    help|--help|-h)
+        show_help
+        exit 0
+        ;;
+    version|--version|-v)
+        show_version
+        exit 0
+        ;;
+    home)
+        echo "$harbor_home"
+        exit 0
+        ;;
+esac
 
 # Config
 if ! ensure_env_file; then
