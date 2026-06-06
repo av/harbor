@@ -1600,6 +1600,25 @@ run_ps() {
         fi
     done
 
+    # Validate service names
+    local has_invalid=false
+    for arg in "${compose_targets[@]}"; do
+        if ! service_compose_exists "$arg"; then
+            log_error "Service '$arg' not found."
+            local suggestion
+            suggestion=$(_suggest_service "$arg")
+            if [ -n "$suggestion" ]; then
+                log_info "Did you mean: ${c_g}$suggestion${c_nc}?"
+            fi
+            has_invalid=true
+        fi
+    done
+
+    if $has_invalid; then
+        log_info "Run 'harbor ls' to see available services."
+        return 1
+    fi
+
     if [ ${#compose_targets[@]} -eq 0 ]; then
         compose_targets=("*")
     fi
@@ -1782,10 +1801,32 @@ run_logs() {
         esac
     done
 
+    # Validate service names
+    local validated_args=()
+    local has_invalid=false
+    for arg in "${args[@]}"; do
+        if ! service_compose_exists "$arg"; then
+            log_error "Service '$arg' not found."
+            local suggestion
+            suggestion=$(_suggest_service "$arg")
+            if [ -n "$suggestion" ]; then
+                log_info "Did you mean: ${c_g}$suggestion${c_nc}?"
+            fi
+            has_invalid=true
+        else
+            validated_args+=("$arg")
+        fi
+    done
+
+    if $has_invalid; then
+        log_info "Run 'harbor ls' to see available services."
+        return 1
+    fi
+
     if $follow; then
-        $(compose_with_options "*") logs -n "$tail_lines" -f "${args[@]}"
+        $(compose_with_options "*") logs -n "$tail_lines" -f "${validated_args[@]}"
     else
-        $(compose_with_options "*") logs -n "$tail_lines" "${args[@]}"
+        $(compose_with_options "*") logs -n "$tail_lines" "${validated_args[@]}"
     fi
 }
 
@@ -3330,10 +3371,32 @@ run_stats() {
         ;;
     esac
 
+    # Validate service names
+    local validated_args=()
+    local has_invalid=false
+    for arg in "$@"; do
+        if ! service_compose_exists "$arg"; then
+            log_error "Service '$arg' not found."
+            local suggestion
+            suggestion=$(_suggest_service "$arg")
+            if [ -n "$suggestion" ]; then
+                log_info "Did you mean: ${c_g}$suggestion${c_nc}?"
+            fi
+            has_invalid=true
+        else
+            validated_args+=("$arg")
+        fi
+    done
+
+    if $has_invalid; then
+        log_info "Run 'harbor ls' to see available services."
+        return 1
+    fi
+
     if [ ! -t 1 ]; then
-        $(compose_with_options "*") stats --no-stream "$@"
+        $(compose_with_options "*") stats --no-stream "${validated_args[@]}"
     else
-        $(compose_with_options "*") stats "$@"
+        $(compose_with_options "*") stats "${validated_args[@]}"
     fi
 }
 
@@ -7256,7 +7319,7 @@ establish_tunnel() {
     log_info "Intra URL: $intra_url"
     $(compose_with_options "cfd") run --rm -d --name "$container_name" cfd --url "$intra_url" || {
         log_error "Failed to start container"
-        exit 1
+        return 1
     }
 
     local timeout=60
@@ -7271,13 +7334,13 @@ establish_tunnel() {
     if [ -z "$tunnel_url" ]; then
         log_error "Failed to obtain tunnel URL within $timeout seconds"
         docker stop "$container_name" || true
-        exit 1
+        return 1
     fi
 
     log_info "Tunnel URL: $tunnel_url"
     print_qr "$tunnel_url" || {
         log_error "Failed to print QR code"
-        exit 1
+        return 1
     }
 }
 
@@ -7801,7 +7864,7 @@ run_litellm_command() {
             sys_open "$service_url/ui"
         else
             log_error "Failed to get service URL for litellm: $service_url"
-            exit 1
+            return 1
         fi
         ;;
     -h | --help | help)
@@ -8922,7 +8985,7 @@ run_tabbyapi_command() {
             sys_open "$service_url/docs"
         else
             log_error "Failed to get service URL for tabbyapi: $service_url"
-            exit 1
+            return 1
         fi
         ;;
     -h | --help | help)
@@ -10104,7 +10167,7 @@ run_langflow_command() {
             sys_open "$service_url"
         else
             log_error "Failed to get service URL for langflow: $service_url"
-            exit 1
+            return 1
         fi
         ;;
     -h | --help | help)
