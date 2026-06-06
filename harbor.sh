@@ -98,6 +98,143 @@ _check_docker() {
     return 0
 }
 
+# Check if a specific TCP port is in use on the host.
+# Uses ss (Linux), lsof (macOS/fallback), or /dev/tcp (bash builtin).
+# Returns 0 if the port IS in use, 1 if free.
+_is_port_in_use() {
+    local port="$1"
+    if command -v ss &>/dev/null; then
+        ss -tln "sport = :$port" 2>/dev/null | grep -q "LISTEN"
+        return $?
+    elif command -v lsof &>/dev/null; then
+        lsof -iTCP:"$port" -sTCP:LISTEN -P -n &>/dev/null
+        return $?
+    else
+        # Bash builtin /dev/tcp — opening a connection succeeds if port is listening
+        (echo >/dev/tcp/127.0.0.1/"$port") 2>/dev/null
+        return $?
+    fi
+}
+
+# Parse "docker compose config" output for host port mappings.
+# Outputs lines of "service_name:host_port" for each published port.
+_parse_compose_ports() {
+    local config_output="$1"
+    # Parse the YAML: find service names (top-level keys under "services:")
+    # and their published ports.
+    awk '
+    /^services:/ { in_services=1; next }
+    in_services && /^[^ ]/ { in_services=0 }
+    in_services && /^  [a-zA-Z0-9_-]+:/ {
+        gsub(/^  /, ""); gsub(/:.*/, "")
+        current_service=$0
+        next
+    }
+    in_services && /published:/ {
+        gsub(/.*published: *"?/, ""); gsub(/"? *$/, "")
+        if ($0 ~ /^[0-9]+$/) {
+            print current_service ":" $0
+        }
+    }
+    ' <<< "$config_output"
+}
+
+# Check for port conflicts before starting services.
+# 1. Inter-service conflicts: two services mapping the same host port
+# 2. Host conflicts: a host port already in use by another process
+# Returns 0 (no conflicts) or 1 (conflicts found).
+# Args: same as compose_with_options (service names and flags)
+_check_port_conflicts() {
+    local compose_cmd
+    compose_cmd=$(compose_with_options "$@") || return 0  # If compose resolution fails, skip check
+
+    local config_output
+    config_output=$($compose_cmd config 2>/dev/null) || return 0  # If config fails, skip check
+
+    local port_mappings
+    port_mappings=$(_parse_compose_ports "$config_output")
+
+    if [ -z "$port_mappings" ]; then
+        return 0
+    fi
+
+    local has_conflict=false
+
+    # 1. Check for inter-service duplicate ports.
+    # Uses a flat string of "port=service" pairs instead of associative
+    # arrays for bash 3.2 (macOS) compatibility.
+    local seen_ports=""
+    local conflict_ports=""
+    while IFS= read -r entry; do
+        local svc="${entry%%:*}"
+        local port="${entry##*:}"
+
+        # Look up which service already claimed this port
+        local existing=""
+        existing=$(printf '%s' "$seen_ports" | grep "^${port}=" | head -1 | sed 's/^[^=]*=//')
+
+        if [ -n "$existing" ] && [ "$svc" != "$existing" ]; then
+            has_conflict=true
+            conflict_ports="$conflict_ports:$port:"
+            local svc_upper other_upper
+            svc_upper=$(printf '%s' "$svc" | tr 'a-z-' 'A-Z_')
+            other_upper=$(printf '%s' "$existing" | tr 'a-z-' 'A-Z_')
+            log_error "Port conflict: ${c_g}$existing${c_nc} and ${c_g}$svc${c_nc} both map host port $port."
+            log_error "Change one with: harbor config set HARBOR_${svc_upper}_HOST_PORT <new_port>"
+            log_error "             or: harbor config set HARBOR_${other_upper}_HOST_PORT <new_port>"
+        elif [ -z "$existing" ]; then
+            seen_ports="${seen_ports}${port}=${svc}"$'\n'
+        fi
+    done <<< "$port_mappings"
+
+    # 2. Check for host port conflicts (ports already in use).
+    # Skip ports that have inter-service conflicts (already reported).
+    # Also skip ports owned by already-running Harbor containers (docker
+    # compose will reuse them without conflict).
+    local harbor_ports=""
+    if [ -n "$default_container_prefix" ]; then
+        harbor_ports=$(docker ps --format '{{.Ports}}' --filter "name=${default_container_prefix}" 2>/dev/null \
+            | grep -oE '(0\.0\.0\.0|\[::\]):[0-9]+' | sed 's/.*://' | sort -u) || true
+    fi
+
+    local checked_ports=""
+    while IFS= read -r entry; do
+        local svc="${entry%%:*}"
+        local port="${entry##*:}"
+
+        # Skip inter-service conflict ports
+        case "$conflict_ports" in
+            *":$port:"*) continue ;;
+        esac
+        # Skip duplicate port checks (same port, multiple protocols)
+        case "$checked_ports" in
+            *":$port:"*) continue ;;
+        esac
+        checked_ports="$checked_ports:$port:"
+
+        # Skip ports already bound by Harbor's own containers
+        if printf '%s\n' "$harbor_ports" | grep -qx "$port" 2>/dev/null; then
+            continue
+        fi
+
+        if _is_port_in_use "$port"; then
+            has_conflict=true
+            local svc_upper
+            svc_upper=$(printf '%s' "$svc" | tr 'a-z-' 'A-Z_')
+            log_warn "Port $port needed by ${c_g}$svc${c_nc} is already in use on the host."
+            log_warn "Change it with: harbor config set HARBOR_${svc_upper}_HOST_PORT <new_port>"
+            log_warn "Or stop the process using port $port."
+        fi
+    done <<< "$port_mappings"
+
+    if $has_conflict; then
+        log_info "Use 'harbor up --skip-port-check' to start anyway."
+        return 1
+    fi
+
+    return 0
+}
+
 show_version() {
     echo "Harbor CLI version: $version"
 }
@@ -123,6 +260,7 @@ show_help() {
     echo "    up --tail             - Start and tail the logs"
     echo "    up --open             - Start and open in the browser"
     echo "    up --no-defaults      - Do not include default services"
+    echo "    up --skip-port-check  - Skip port conflict pre-check"
 
     echo "  down|d                  - Stop and remove the containers"
     echo "  restart|r [handle]      - Down then up"
@@ -882,6 +1020,7 @@ run_up() {
     local should_open=false
     local should_attach=false
     local no_defaults=false
+    local skip_port_check=false
     local filtered_args=()
     local up_args=()
 
@@ -899,6 +1038,9 @@ run_up() {
             ;;
         --attach | -a)
             should_attach=true
+            ;;
+        --skip-port-check)
+            skip_port_check=true
             ;;
         *)
             filtered_args+=("$arg")
@@ -965,6 +1107,13 @@ run_up() {
             ;;
         esac
     done
+
+    # Pre-check for port conflicts before starting services
+    if ! $skip_port_check; then
+        if ! _check_port_conflicts "${up_args[@]}" "${filtered_args[@]}"; then
+            return 1
+        fi
+    fi
 
     $(compose_with_options "${up_args[@]}" "${filtered_args[@]}") up -d --wait
     local up_exit=$?
@@ -3096,7 +3245,16 @@ _harbor_completions() {
                 COMPREPLY=($(compgen -W "$services" -- "$cur"))
             fi
             ;;
-        up|u|start|s|down|d|logs|log|l|build|shell|pull|exec|run|stats|attach|cmd|eject|open|o|url|qr|launch|dive|env)
+        up|u|start|s)
+            if [[ "$cur" == --* ]]; then
+                COMPREPLY=($(compgen -W "--tail --open --attach --no-defaults --skip-port-check" -- "$cur"))
+            else
+                local services
+                services=$(_harbor_services)
+                COMPREPLY=($(compgen -W "$services" -- "$cur"))
+            fi
+            ;;
+        down|d|logs|log|l|build|shell|pull|exec|run|stats|attach|cmd|eject|open|o|url|qr|launch|dive|env)
             # Complete with service names
             local services
             services=$(_harbor_services)
@@ -3295,7 +3453,23 @@ _harbor() {
     fi
 
     case "${words[2]}" in
-        up|u|start|s|down|d|logs|log|l|build|shell|pull|exec|run|stats|attach|cmd|eject|open|o|url|qr|launch|dive|env)
+        up|u|start|s)
+            if [[ "$PREFIX" == --* ]]; then
+                local -a up_flags=(
+                    '--tail:Start and tail the logs'
+                    '--open:Start and open in browser'
+                    '--attach:Attach to the first service'
+                    '--no-defaults:Exclude default services'
+                    '--skip-port-check:Skip port conflict pre-check'
+                )
+                _describe -t flags 'flag' up_flags
+            else
+                local -a svc_list
+                svc_list=(${(f)"$(_harbor_services)"})
+                _describe -t services 'service' svc_list
+            fi
+            ;;
+        down|d|logs|log|l|build|shell|pull|exec|run|stats|attach|cmd|eject|open|o|url|qr|launch|dive|env)
             local -a svc_list
             svc_list=(${(f)"$(_harbor_services)"})
             _describe -t services 'service' svc_list
@@ -3511,6 +3685,13 @@ complete -c harbor -n __harbor_no_subcommand -a mcp -d 'Configure MCP'
 
 # Service name completions for service-accepting commands
 complete -c harbor -n __harbor_service_subcommand -a '(__harbor_services)'
+
+# Flags for 'up' command
+complete -c harbor -n '__harbor_using_subcommand up' -l tail -d 'Start and tail the logs'
+complete -c harbor -n '__harbor_using_subcommand up' -l open -d 'Start and open in browser'
+complete -c harbor -n '__harbor_using_subcommand up' -l attach -d 'Attach to the first service'
+complete -c harbor -n '__harbor_using_subcommand up' -l no-defaults -d 'Exclude default services'
+complete -c harbor -n '__harbor_using_subcommand up' -l skip-port-check -d 'Skip port conflict pre-check'
 
 # Config subcommands
 complete -c harbor -n '__harbor_using_subcommand config' -a get -d 'Get a config value'
