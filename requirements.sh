@@ -18,15 +18,15 @@ IS_WSL=false
 WSL_VERSION=""
 
 log_info() {
-    echo -e "${GREEN}[INFO]${NC} $1"
+    printf '%b[INFO]%b %s\n' "$GREEN" "$NC" "$1"
 }
 
 log_warn() {
-    echo -e "${YELLOW}[WARN]${NC} $1"
+    printf '%b[WARN]%b %s\n' "$YELLOW" "$NC" "$1"
 }
 
 log_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
+    printf '%b[ERROR]%b %s\n' "$RED" "$NC" "$1"
 }
 
 check_command() {

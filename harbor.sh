@@ -4579,22 +4579,27 @@ get_services() {
 }
 
 get_ip() {
-    # Try ip command first
-    ip_cmd=$(which ip 2>/dev/null)
-    if [ -n "$ip_cmd" ]; then
+    # Try ip command first (Linux)
+    if command -v ip >/dev/null 2>&1; then
         ip route get 1 | awk '{print $7; exit}'
         return
     fi
 
-    # Fallback to ifconfig
-    ifconfig_cmd=$(which ifconfig 2>/dev/null)
-    if [ -n "$ifconfig_cmd" ]; then
+    # Fallback to ifconfig (macOS, older Linux)
+    if command -v ifconfig >/dev/null 2>&1; then
         ifconfig | grep -Eo 'inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -Eo '([0-9]*\.){3}[0-9]*' | grep -v '127.0.0.1' | head -n1
         return
     fi
 
-    # Last resort: hostname
-    hostname -I | awk '{print $1}'
+    # Last resort: hostname -I (GNU/Linux) or ipconfig getifaddr (macOS)
+    if hostname -I >/dev/null 2>&1; then
+        hostname -I | awk '{print $1}'
+    elif command -v ipconfig >/dev/null 2>&1; then
+        # macOS: ipconfig getifaddr returns the IP for a given interface
+        ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || echo "127.0.0.1"
+    else
+        echo "127.0.0.1"
+    fi
 }
 
 extract_tunnel_url() {
