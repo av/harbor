@@ -205,20 +205,27 @@ install_or_update_project() {
   fi
 
   if [ -d "$HARBOR_INSTALL_PATH" ] && [ -d "$HARBOR_INSTALL_PATH/.git" ]; then
-    echo "Existing installation found. Updating..."
     cd "$HARBOR_INSTALL_PATH"
-    # Stash user-modified tracked files (override.env) so checkout succeeds
-    local had_stash=false
-    if ! git diff --quiet -- 'services/*/override.env' 2>/dev/null; then
-      git stash push --quiet -- 'services/*/override.env' 2>/dev/null && had_stash=true
-    fi
-    git fetch --depth 1 origin "+refs/tags/$HARBOR_VERSION:refs/tags/$HARBOR_VERSION"
-    git checkout "tags/$HARBOR_VERSION"
-    if [ "$had_stash" = true ]; then
-      git stash pop --quiet 2>/dev/null || {
-        echo "Warning: Could not auto-restore override.env changes (merge conflict)."
-        echo "Your overrides are saved in 'git stash'. Run 'cd $HARBOR_INSTALL_PATH && git stash pop' to recover."
-      }
+    # Check if already on the target version — skip fetch+checkout if so
+    local current_tag
+    current_tag=$(git describe --tags --exact-match HEAD 2>/dev/null || true)
+    if [ "$current_tag" = "$HARBOR_VERSION" ]; then
+      echo "Already on version $HARBOR_VERSION"
+    else
+      echo "Existing installation found. Updating to $HARBOR_VERSION..."
+      # Stash user-modified tracked files (override.env) so checkout succeeds
+      local had_stash=false
+      if ! git diff --quiet -- 'services/*/override.env' 2>/dev/null; then
+        git stash push --quiet -- 'services/*/override.env' 2>/dev/null && had_stash=true
+      fi
+      git fetch --depth 1 origin "+refs/tags/$HARBOR_VERSION:refs/tags/$HARBOR_VERSION"
+      git checkout "tags/$HARBOR_VERSION"
+      if [ "$had_stash" = true ]; then
+        git stash pop --quiet 2>/dev/null || {
+          echo "Warning: Could not auto-restore override.env changes (merge conflict)."
+          echo "Your overrides are saved in 'git stash'. Run 'cd $HARBOR_INSTALL_PATH && git stash pop' to recover."
+        }
+      fi
     fi
   else
     local backup_dir=""

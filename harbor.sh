@@ -271,8 +271,54 @@ run_harbor_doctor() {
                 log_info "${ok} Docker storage has ${data_space_gb}GB free"
             fi
         fi
+        # Check network/registry connectivity (non-destructive, fast, timeout-guarded)
+        log_info "  Checking registry connectivity..."
+
+        # Report proxy config if set (helps debug registry access issues)
+        local has_proxy=false
+        for proxy_var in HTTP_PROXY HTTPS_PROXY http_proxy https_proxy NO_PROXY no_proxy; do
+            if [ -n "${!proxy_var:-}" ]; then
+                log_info "  Proxy: $proxy_var=${!proxy_var}"
+                has_proxy=true
+            fi
+        done
+
+        # Use docker manifest inspect on a tiny image to test registry access
+        # without pulling or leaving images behind
+        local registry_timeout=""
+        if command -v timeout &>/dev/null; then
+            registry_timeout="timeout 10"
+        fi
+        local registry_output
+        if registry_output=$($registry_timeout docker manifest inspect alpine:latest 2>&1); then
+            log_info "${ok} Docker Hub registry is reachable"
+        else
+            local reg_exit=$?
+            if [ "$reg_exit" -eq 124 ]; then
+                log_warn "${nok} Registry connectivity check timed out (10s). Possible slow network or proxy issue."
+                if $has_proxy; then
+                    log_warn "  Proxy is configured - verify proxy settings allow access to registry-1.docker.io"
+                fi
+            elif echo "$registry_output" | grep -qi "no such host\|could not resolve\|name resolution\|DNS"; then
+                log_error "${nok} Cannot resolve Docker Hub (DNS failure). Check your internet connection."
+                has_errors=true
+            elif echo "$registry_output" | grep -qi "connection refused\|connection timed out\|network is unreachable\|no route to host"; then
+                log_error "${nok} Cannot reach Docker Hub (network error). Check your internet connection."
+                if $has_proxy; then
+                    log_warn "  Proxy is configured - verify proxy settings allow access to registry-1.docker.io"
+                fi
+                has_errors=true
+            elif echo "$registry_output" | grep -qi "403\|forbidden\|denied\|unauthorized\|blocked"; then
+                log_warn "${nok} Docker Hub registry access is blocked or denied. A firewall or registry mirror may be interfering."
+                if $has_proxy; then
+                    log_warn "  Proxy is configured - verify proxy allows access to registry-1.docker.io"
+                fi
+            else
+                log_warn "${nok} Registry connectivity check failed: $(echo "$registry_output" | head -1)"
+            fi
+        fi
     else
-        log_warn "  Skipping Compose and disk checks (Docker not reachable)"
+        log_warn "  Skipping Compose, disk, and registry checks (Docker not reachable)"
     fi
 
     # Check if the Harbor workspace directory exists
