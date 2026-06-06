@@ -3857,6 +3857,15 @@ _harbor_completions() {
                 COMPREPLY=($(compgen -W "$services" -- "$cur"))
             fi
             ;;
+        tunnels)
+            if ((cword == 2)); then
+                COMPREPLY=($(compgen -W "$defaults_subcommands" -- "$cur"))
+            elif ((cword == 3)) && [[ "${words[2]}" == "add" ]]; then
+                local services
+                services=$(_harbor_services)
+                COMPREPLY=($(compgen -W "$services" -- "$cur"))
+            fi
+            ;;
         models)
             if ((cword == 2)); then
                 COMPREPLY=($(compgen -W "$models_subcommands" -- "$cur"))
@@ -4295,6 +4304,22 @@ _harbor() {
                 _describe -t services 'service' svc_list
             fi
             ;;
+        tunnels)
+            if ((CURRENT == 3)); then
+                local -a tunnels_cmds=(
+                    'ls:List tunnel services'
+                    'list:List tunnel services'
+                    'add:Add a service to tunnel list'
+                    'rm:Remove a service from tunnel list'
+                    'clear:Remove all tunnel services'
+                )
+                _describe -t tunnels-commands 'tunnels command' tunnels_cmds
+            elif ((CURRENT == 4)) && [[ "${words[3]}" == "add" ]]; then
+                local -a svc_list
+                svc_list=(${(f)"$(_harbor_services)"})
+                _describe -t services 'service' svc_list
+            fi
+            ;;
         models)
             if ((CURRENT == 3)); then
                 local -a models_cmds
@@ -4636,6 +4661,13 @@ complete -c harbor -n '__harbor_using_subcommand defaults' -a list -d 'List defa
 complete -c harbor -n '__harbor_using_subcommand defaults' -a add -d 'Add a default service'
 complete -c harbor -n '__harbor_using_subcommand defaults' -a rm -d 'Remove a default service'
 complete -c harbor -n '__harbor_using_subcommand defaults' -a clear -d 'Remove all defaults'
+
+# Tunnels subcommands
+complete -c harbor -n '__harbor_using_subcommand tunnels' -a ls -d 'List tunnel services'
+complete -c harbor -n '__harbor_using_subcommand tunnels' -a list -d 'List tunnel services'
+complete -c harbor -n '__harbor_using_subcommand tunnels' -a add -d 'Add a service to tunnel list'
+complete -c harbor -n '__harbor_using_subcommand tunnels' -a rm -d 'Remove a service from tunnel list'
+complete -c harbor -n '__harbor_using_subcommand tunnels' -a clear -d 'Remove all tunnel services'
 
 # Models subcommands
 complete -c harbor -n '__harbor_using_subcommand models' -a ls -d 'List models'
@@ -6273,6 +6305,91 @@ run_defaults_command() {
         ;;
     *)
         env_manager_arr services.default "$@"
+        ;;
+    esac
+}
+
+run_tunnels_command() {
+    case "${1:-}" in
+    --help | -h | help)
+        echo "Manage services that will be auto-tunneled on 'harbor up'"
+        echo
+        echo "Usage: harbor tunnels <subcommand> [args]"
+        echo
+        echo "Subcommands:"
+        echo "  ls, list       List services in the tunnel list"
+        echo "  add <service>  Add a service to the tunnel list"
+        echo "  rm <service>   Remove a service from the tunnel list"
+        echo "  clear          Remove all services from the tunnel list"
+        echo
+        echo "Examples:"
+        echo "  harbor tunnels ls"
+        echo "  harbor tunnels add webui"
+        echo "  harbor tunnels rm webui"
+        echo
+        echo "See also: harbor tunnel <service> (create a one-off tunnel)"
+        return 0
+        ;;
+    add)
+        if [ -z "${2:-}" ]; then
+            echo "Usage: harbor tunnels add <service>"
+            return 1
+        fi
+        local svc="$2"
+        # Validate that the service exists
+        if ! service_compose_exists "$svc"; then
+            log_error "Service '$svc' not found."
+            local suggestion
+            suggestion=$(_suggest_service "$svc")
+            if [ -n "$suggestion" ]; then
+                log_info "Did you mean: ${c_g}$suggestion${c_nc}?"
+            fi
+            log_info "Run 'harbor ls' to see available services."
+            return 1
+        fi
+        # Check for duplicates
+        local current
+        current=$(env_manager get services.tunnels)
+        if [ -n "$current" ]; then
+            local IFS=";"
+            for existing in $current; do
+                if [ "$existing" = "$svc" ]; then
+                    log_warn "Service '$svc' is already in the tunnel list."
+                    return 0
+                fi
+            done
+            unset IFS
+        fi
+        env_manager_arr services.tunnels add "$svc"
+        ;;
+    rm)
+        if [ -n "${2:-}" ]; then
+            # If removing by name (not index), check it exists in tunnels
+            if ! [ "$2" -eq "$2" ] 2>/dev/null; then
+                local current
+                current=$(env_manager get services.tunnels)
+                local found=false
+                if [ -n "$current" ]; then
+                    local IFS=";"
+                    for existing in $current; do
+                        if [ "$existing" = "$2" ]; then
+                            found=true
+                            break
+                        fi
+                    done
+                    unset IFS
+                fi
+                if ! $found; then
+                    log_error "Service '$2' is not in the tunnel list."
+                    log_info "Current tunnels: $(env_manager get services.tunnels | tr ';' ' ')"
+                    return 1
+                fi
+            fi
+        fi
+        env_manager_arr services.tunnels "$@"
+        ;;
+    *)
+        env_manager_arr services.tunnels "$@"
         ;;
     esac
 }
@@ -11590,7 +11707,7 @@ main_entrypoint() {
         ;;
     tunnels)
         shift
-        env_manager_arr services.tunnels "$@"
+        run_tunnels_command "$@"
         ;;
     config)
         shift
