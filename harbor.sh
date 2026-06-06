@@ -4614,6 +4614,24 @@ unsafe_update() {
         log_error "Check your internet connection and try again."
         return 1
     fi
+
+    # Check if FETCH_HEAD was actually created by the fetch
+    if ! git rev-parse --verify FETCH_HEAD >/dev/null 2>&1; then
+        log_error "Fetch succeeded but no FETCH_HEAD was created."
+        log_error "The remote repository may be empty or misconfigured."
+        return 1
+    fi
+
+    # Skip reset if already at the same commit
+    local local_head remote_head
+    local_head=$(git rev-parse HEAD 2>/dev/null)
+    remote_head=$(git rev-parse FETCH_HEAD 2>/dev/null)
+    if [ "$local_head" = "$remote_head" ]; then
+        log_info "Already up to date (latest dev)."
+        # Return 2 to signal "no changes" (distinct from 0=updated, 1=error)
+        return 2
+    fi
+
     if ! git reset --hard FETCH_HEAD; then
         log_error "Failed to reset to latest main branch."
         log_error "Your working tree may be in an inconsistent state. Run 'git status' in $harbor_home to inspect."
@@ -4656,6 +4674,27 @@ update_harbor() {
         ;;
     esac
 
+    # Same-version skip: if already on the target version, avoid the full fetch/checkout cycle
+    local target_version=""
+    if $is_latest; then
+        : # --latest always fetches (no way to know if remote has new commits without fetching)
+    else
+        local current_tag
+        current_tag=$(git describe --tags --exact-match HEAD 2>/dev/null)
+        if [ -n "$current_tag" ]; then
+            target_version=$(resolve_harbor_version)
+            if [ -z "$target_version" ]; then
+                log_error "Could not determine the latest Harbor version."
+                log_error "Check your internet connection and try again."
+                return 1
+            fi
+            if [ "$current_tag" = "$target_version" ]; then
+                log_info "Already up to date ($target_version)."
+                return 0
+            fi
+        fi
+    fi
+
     # Warn about running services before updating — compose files may change between versions
     local running_services
     running_services=$(docker compose ps --services --filter "status=running" 2>/dev/null | tr '\n' ' ')
@@ -4671,41 +4710,53 @@ update_harbor() {
         git stash push --quiet -- 'services/*/override.env' 2>/dev/null && had_stash=true
     fi
 
+    # Helper to restore stashed override.env files on error
+    _restore_stash_on_error() {
+        if [ "$had_stash" = true ]; then
+            git stash pop --quiet 2>/dev/null || true
+        fi
+        # Provide rollback hint using the old version
+        if [ -n "$old_version" ]; then
+            log_info "To roll back, run: cd $harbor_home && git checkout tags/v$old_version"
+        fi
+    }
+
+    local did_update=true
     if $is_latest; then
         log_info "Updating to the latest dev version..."
-        if ! unsafe_update; then
-            # Restore override.env stash before returning on error
-            if [ "$had_stash" = true ]; then
-                git stash pop --quiet 2>/dev/null || true
-            fi
+        local update_rc=0
+        unsafe_update || update_rc=$?
+        if [ "$update_rc" -eq 1 ]; then
+            _restore_stash_on_error
             return 1
+        elif [ "$update_rc" -eq 2 ]; then
+            # Already up to date — restore stash and skip merge/migrate
+            did_update=false
         fi
     else
-        harbor_version=$(resolve_harbor_version)
-        if [ -z "$harbor_version" ]; then
+        # target_version was already resolved in the same-version check above,
+        # but if we skipped that check (e.g., not on an exact tag), resolve now
+        if [ -z "${target_version:-}" ]; then
+            target_version=$(resolve_harbor_version)
+        fi
+        if [ -z "$target_version" ]; then
             log_error "Could not determine the latest Harbor version."
             log_error "Check your internet connection and try again."
-            # Restore override.env stash before returning on error
-            if [ "$had_stash" = true ]; then
-                git stash pop --quiet 2>/dev/null || true
-            fi
+            _restore_stash_on_error
             return 1
         fi
+        harbor_version="$target_version"
         log_info "Updating to version $harbor_version..."
         if ! git fetch --all --tags; then
             log_error "Failed to fetch updates from the remote repository."
             log_error "Check your internet connection and try again."
-            if [ "$had_stash" = true ]; then
-                git stash pop --quiet 2>/dev/null || true
-            fi
+            _restore_stash_on_error
             return 1
         fi
         if ! git checkout "tags/$harbor_version"; then
             log_error "Failed to check out version $harbor_version."
             log_error "This version tag may not exist. Check available versions at https://github.com/av/harbor/releases"
-            if [ "$had_stash" = true ]; then
-                git stash pop --quiet 2>/dev/null || true
-            fi
+            _restore_stash_on_error
             return 1
         fi
     fi
@@ -4719,16 +4770,27 @@ update_harbor() {
         }
     fi
 
+    # Skip merge/migrate/success message if nothing changed
+    if [ "$did_update" = false ]; then
+        return 0
+    fi
+
     log_info "Merging .env files..."
     if ! merge_env_files; then
         log_warn "Config merge encountered issues. Your .env may need manual review."
         log_warn "Run 'harbor config update' to retry, or compare with profiles/default.env"
+        if [ -n "$old_version" ]; then
+            log_warn "To roll back: cd $harbor_home && git checkout tags/v$old_version"
+        fi
     fi
 
     log_info "Running config migrations..."
     if ! run_migrate_command; then
         log_warn "Config migration encountered issues."
         log_warn "Run 'harbor migrate --dry-run' to preview and 'harbor migrate' to retry."
+        if [ -n "$old_version" ]; then
+            log_warn "To roll back: cd $harbor_home && git checkout tags/v$old_version"
+        fi
     fi
 
     # Read the new version from the updated script on disk
