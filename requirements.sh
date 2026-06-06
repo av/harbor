@@ -466,26 +466,41 @@ ensure_linux_docker_service() {
             log_warn "Docker is not reachable in WSL2 and systemd is not active."
             log_warn "Either enable Docker Desktop WSL integration, or enable systemd in WSL:"
             log_warn "  Add [boot] systemd=true to /etc/wsl.conf and restart WSL."
-            return 0
+            return 1
         fi
     fi
 
     if check_command systemctl && systemctl is-system-running >/dev/null 2>&1; then
         if ! systemctl is-enabled docker >/dev/null 2>&1; then
             log_info "Enabling Docker service"
+            # enable can fail if Docker was installed via snap or non-standard means
             run_privileged systemctl enable docker >/dev/null 2>&1 || true
         fi
 
         if ! systemctl is-active docker >/dev/null 2>&1; then
             log_info "Starting Docker service"
-            run_privileged systemctl start docker || true
-            wait_for_docker_access 30
+            if ! run_privileged systemctl start docker; then
+                log_warn "Failed to start Docker service via systemctl"
+                log_warn "Docker may need manual startup or configuration"
+                return 1
+            fi
+            if ! wait_for_docker_access 30; then
+                log_warn "Docker service started but daemon did not become reachable within 30 seconds"
+                return 1
+            fi
         fi
     elif check_command rc-service && check_command rc-update; then
         log_info "Enabling and starting Docker service (OpenRC)"
+        # enable can fail if already added; not critical
         run_privileged rc-update add docker default >/dev/null 2>&1 || true
-        run_privileged rc-service docker start >/dev/null 2>&1 || true
-        wait_for_docker_access 30
+        if ! run_privileged rc-service docker start >/dev/null 2>&1; then
+            log_warn "Failed to start Docker service via OpenRC"
+            return 1
+        fi
+        if ! wait_for_docker_access 30; then
+            log_warn "Docker service started but daemon did not become reachable within 30 seconds"
+            return 1
+        fi
     fi
 }
 
@@ -632,9 +647,7 @@ verify_required_tools() {
         failed=true
     fi
 
-    verify_docker_access
-    local docker_access_status=$?
-    if [ $docker_access_status -eq 1 ]; then
+    if ! verify_docker_access; then
         failed=true
     fi
 
@@ -688,19 +701,19 @@ install_requirements() {
 
     case "$PLATFORM:$PKG_MANAGER" in
         macos:)
-            brew_install
+            brew_install || return 1
             ;;
         linux:apt)
-            apt_install
+            apt_install || return 1
             ;;
         linux:dnf)
-            dnf_install
+            dnf_install || return 1
             ;;
         linux:pacman)
-            pacman_install
+            pacman_install || return 1
             ;;
         linux:apk)
-            apk_install
+            apk_install || return 1
             ;;
         *)
             log_error "No installer path for platform='${PLATFORM}' pkg_manager='${PKG_MANAGER}'"
@@ -733,7 +746,9 @@ main() {
         preflight_privilege_check || exit 1
     fi
     install_requirements || exit 1
-    ensure_linux_docker_service
+    if ! ensure_linux_docker_service; then
+        log_warn "Docker service setup encountered issues (will verify below)"
+    fi
 
     setup_stage "checking-prerequisites"
     verify_required_tools || exit 1
