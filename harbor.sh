@@ -918,14 +918,37 @@ run_up() {
         fi
         if ! service_compose_exists "$service"; then
             log_error "Service '$service' not found."
+            local suggestion
+            suggestion=$(_suggest_service "$service")
+            if [ -n "$suggestion" ]; then
+                log_info "Did you mean: ${c_g}$suggestion${c_nc}?"
+            fi
+            log_info "Run 'harbor ls' to see available services."
             return 1
         fi
     done
 
+    # Validate default services (may be stale after uninstalling or renaming services)
+    if [ ${#filtered_args[@]} -eq 0 ] && ! $no_defaults; then
+        local valid_defaults=()
+        for service in "${default_options[@]}"; do
+            if is_capability "$service" || service_compose_exists "$service"; then
+                valid_defaults+=("$service")
+            else
+                log_warn "Default service '$service' no longer exists, skipping. Remove it with: harbor defaults rm $service"
+            fi
+        done
+        display_services=("${valid_defaults[@]}")
+        # Update the global so compose_with_options sees validated defaults
+        default_options=("${valid_defaults[@]}")
+    fi
+
     if [ ${#display_services[@]} -gt 0 ]; then
         log_info "Starting services: ${display_services[*]}"
     else
-        log_info "Starting services..."
+        log_warn "No services specified. Set defaults with 'harbor defaults add <service>' or specify services: 'harbor up <service>'"
+        log_info "Run 'harbor ls' to see available services."
+        return 0
     fi
 
     log_debug "Running 'up' for services: ${up_args[*]} ${filtered_args[*]}"
@@ -2986,6 +3009,9 @@ _harbor_completions() {
     # Skills subcommands
     local skills_subcommands="list ls get path"
 
+    # Defaults subcommands
+    local defaults_subcommands="ls list add rm clear"
+
     # Get service names (cached for performance)
     _harbor_services() {
         local harbor_home cache_file cache_age services
@@ -3059,6 +3085,15 @@ _harbor_completions() {
         skills)
             if ((cword == 2)); then
                 COMPREPLY=($(compgen -W "$skills_subcommands" -- "$cur"))
+            fi
+            ;;
+        defaults)
+            if ((cword == 2)); then
+                COMPREPLY=($(compgen -W "$defaults_subcommands" -- "$cur"))
+            elif ((cword == 3)) && [[ "${words[2]}" == "add" ]]; then
+                local services
+                services=$(_harbor_services)
+                COMPREPLY=($(compgen -W "$services" -- "$cur"))
             fi
             ;;
         up|u|start|s|down|d|logs|log|l|build|shell|pull|exec|run|stats|attach|cmd|eject|open|o|url|qr|launch|dive|env)
@@ -3326,6 +3361,22 @@ _harbor() {
                 _describe -t skills-commands 'skills command' skills_cmds
             fi
             ;;
+        defaults)
+            if ((CURRENT == 3)); then
+                local -a defaults_cmds=(
+                    'ls:List default services'
+                    'list:List default services'
+                    'add:Add a default service'
+                    'rm:Remove a default service'
+                    'clear:Remove all default services'
+                )
+                _describe -t defaults-commands 'defaults command' defaults_cmds
+            elif ((CURRENT == 4)) && [[ "${words[3]}" == "add" ]]; then
+                local -a svc_list
+                svc_list=(${(f)"$(_harbor_services)"})
+                _describe -t services 'service' svc_list
+            fi
+            ;;
     esac
 }
 
@@ -3524,6 +3575,13 @@ complete -c harbor -n '__harbor_using_subcommand skills' -a list -d 'List skills
 complete -c harbor -n '__harbor_using_subcommand skills' -a ls -d 'List skills'
 complete -c harbor -n '__harbor_using_subcommand skills' -a get -d 'Show a skill'
 complete -c harbor -n '__harbor_using_subcommand skills' -a path -d 'Print skill path'
+
+# Defaults subcommands
+complete -c harbor -n '__harbor_using_subcommand defaults' -a ls -d 'List default services'
+complete -c harbor -n '__harbor_using_subcommand defaults' -a list -d 'List default services'
+complete -c harbor -n '__harbor_using_subcommand defaults' -a add -d 'Add a default service'
+complete -c harbor -n '__harbor_using_subcommand defaults' -a rm -d 'Remove a default service'
+complete -c harbor -n '__harbor_using_subcommand defaults' -a clear -d 'Remove all defaults'
 
 # Aliases (h command)
 complete -c h -f -w harbor
@@ -4955,6 +5013,100 @@ override_yaml_value() {
 # shellcheck disable=SC2034
 __anchor_profiles=true
 
+_suggest_service() {
+    local input="$1"
+    local best_match=""
+    local best_distance=999
+
+    for svc_file in "$harbor_home"/services/compose.*.yml "$harbor_home"/services/compose.*.ts; do
+        [ -f "$svc_file" ] || continue
+        local base
+        base=$(basename "$svc_file")
+        # Extract service name: compose.<name>.yml or compose.<name>.<variant>.yml
+        local name="${base#compose.}"
+        name="${name%%.*}"
+        # Skip cross-files (compose.x.*)
+        [[ "$name" == "x" ]] && continue
+
+        local dist
+        dist=$(levenshtein_distance "$input" "$name")
+        if ((dist < best_distance)); then
+            best_distance=$dist
+            best_match=$name
+        fi
+    done
+
+    if ((best_distance <= 3 && best_distance > 0)); then
+        echo "$best_match"
+    fi
+}
+
+run_defaults_command() {
+    case "$1" in
+    add)
+        if [ -z "$2" ]; then
+            echo "Usage: harbor defaults add <service>"
+            return 1
+        fi
+        local svc="$2"
+        # Validate that the service exists
+        if ! is_capability "$svc" && ! service_compose_exists "$svc"; then
+            log_error "Service '$svc' not found."
+            local suggestion
+            suggestion=$(_suggest_service "$svc")
+            if [ -n "$suggestion" ]; then
+                log_info "Did you mean: ${c_g}$suggestion${c_nc}?"
+            fi
+            log_info "Run 'harbor ls' to see available services."
+            return 1
+        fi
+        # Check for duplicates
+        local current
+        current=$(env_manager get services.default)
+        if [ -n "$current" ]; then
+            local IFS=";"
+            for existing in $current; do
+                if [ "$existing" = "$svc" ]; then
+                    log_warn "Service '$svc' is already in defaults."
+                    return 0
+                fi
+            done
+            unset IFS
+        fi
+        env_manager_arr services.default add "$svc"
+        ;;
+    rm)
+        if [ -n "$2" ]; then
+            # If removing by name (not index), check it exists in defaults
+            if ! [ "$2" -eq "$2" ] 2>/dev/null; then
+                local current
+                current=$(env_manager get services.default)
+                local found=false
+                if [ -n "$current" ]; then
+                    local IFS=";"
+                    for existing in $current; do
+                        if [ "$existing" = "$2" ]; then
+                            found=true
+                            break
+                        fi
+                    done
+                    unset IFS
+                fi
+                if ! $found; then
+                    log_error "Service '$2' is not in defaults."
+                    log_info "Current defaults: $(env_manager get services.default | tr ';' ' ')"
+                    return 1
+                fi
+            fi
+        fi
+        env_manager_arr services.default "$@"
+        ;;
+    *)
+        env_manager_arr services.default "$@"
+        ;;
+    esac
+}
+
 run_profile_command() {
     case "$1" in
     save | add)
@@ -4977,20 +5129,24 @@ run_profile_command() {
         shift
         harbor_profile_merge "$@"
         ;;
-    --help | -h)
+    --help | -h | "")
         echo "Harbor profile management"
-        echo "Usage: $0 profile"
+        echo "Usage: harbor profile <command> [profile_name]"
         echo
         echo "Commands:"
         echo "  save|add <profile_name>      - Save the current configuration as a profile"
-        echo "  set|use|load <profile_name>  - Set current profile"
-        echo "  remove|rm <profile_name> - Remove a profile"
-        echo "  list|ls                  - List all profiles"
-        echo "  merge|m <profile_name>   - Merge a profile into the current configuration"
+        echo "  set|use|load <profile_name>  - Set current profile (supports URLs)"
+        echo "  remove|rm <profile_name>     - Remove a profile"
+        echo "  list|ls                      - List all profiles"
+        echo "  merge|m <profile_name>       - Merge a profile into the current configuration"
+        echo
+        echo "Profile names may contain letters, numbers, hyphens, underscores, and dots."
+        echo "Use a URL with 'set' to download and apply a remote profile."
         return 0
         ;;
     *)
-        echo "Usage: $0 profile {save|set|load|remove|list} [profile_name]"
+        log_error "Unknown profile command: $1"
+        echo "Usage: harbor profile {save|set|load|remove|list|merge} [profile_name]" >&2
         return 1
         ;;
     esac
@@ -4998,10 +5154,28 @@ run_profile_command() {
 
 harbor_profile_save() {
     local profile_name=$1
-    local profile_file="$profiles_dir/$profile_name.env"
 
     if [ -z "$profile_name" ]; then
         log_error "Please provide a profile name."
+        return 1
+    fi
+
+    # Validate profile name: alphanumeric, hyphens, underscores, dots only
+    if [[ ! "$profile_name" =~ ^[A-Za-z0-9._-]+$ ]]; then
+        log_error "Invalid profile name '$profile_name'. Use only letters, numbers, hyphens, underscores, and dots."
+        return 1
+    fi
+
+    # Prevent path traversal
+    if [[ "$profile_name" == *".."* ]] || [[ "$profile_name" == *"/"* ]]; then
+        log_error "Invalid profile name '$profile_name'. Path components are not allowed."
+        return 1
+    fi
+
+    local profile_file="$profiles_dir/$profile_name.env"
+
+    if [ ! -f "$default_current_env" ]; then
+        log_error "No current configuration to save. Run 'harbor up' first to initialize."
         return 1
     fi
 
@@ -5012,15 +5186,28 @@ harbor_profile_save() {
         fi
     fi
 
-    cp .env "$profile_file"
+    mkdir -p "$profiles_dir" || {
+        log_error "Failed to create profiles directory: $profiles_dir"
+        return 1
+    }
+    cp "$default_current_env" "$profile_file" || {
+        log_error "Failed to save profile. Check disk space and permissions."
+        return 1
+    }
     log_info "Profile '$profile_name' saved."
 }
 
 harbor_profile_list() {
+    local found=false
     echo "Available profiles:"
     for profile in "$profiles_dir"/*.env; do
+        [ -f "$profile" ] || continue
+        found=true
         basename "$profile" .env
     done
+    if ! $found; then
+        log_info "No saved profiles. Save the current config with: harbor profile save <name>"
+    fi
 }
 
 # Helper function to check if a string is a URL
@@ -5229,6 +5416,7 @@ harbor_profile_set() {
 
     if [ ! -f "$profile_file" ]; then
         log_error "Profile '$profile_name' not found."
+        log_info "Run 'harbor profile list' to see available profiles."
         return 1
     fi
 
@@ -5240,6 +5428,7 @@ harbor_profile_set() {
         env_size=$(wc -c < ".env" 2>/dev/null || echo 0)
 
         if [ "$profile_size" -lt "$env_size" ]; then
+            log_info "Profile is smaller than current config; merging to preserve new config keys."
             harbor_profile_merge "$profile_name"
             return $?
         fi
@@ -5260,26 +5449,51 @@ harbor_profile_merge() {
 
     if [ ! -f "$profile_file" ]; then
         log_error "Profile '$profile_name' not found."
+        log_info "Available profiles: $(harbor_profile_list 2>/dev/null | tail -n +2 | tr '\n' ' ')"
         return 1
     fi
 
-    local tmp_env_merge=$(mktemp -t harbor.XXXXXX)
-    cp "$profile_file" "$tmp_env_merge"
-    merge_env_files "$default_current_env" "$tmp_env_merge"
-    merge_env_files "$default_env" "$tmp_env_merge"
+    local tmp_env_merge
+    tmp_env_merge=$(mktemp -t harbor.XXXXXX) || {
+        log_error "Failed to create temporary file for merge."
+        return 1
+    }
+    trap 'rm -f "$tmp_env_merge" 2>/dev/null' RETURN
 
-    cp "$tmp_env_merge" "$default_current_env"
-    log_info "Profile '$profile_name' loaded."
+    cp "$profile_file" "$tmp_env_merge"
+    if ! merge_env_files "$default_current_env" "$tmp_env_merge"; then
+        log_error "Failed to merge current config into profile."
+        return 1
+    fi
+    if ! merge_env_files "$default_profile" "$tmp_env_merge"; then
+        log_error "Failed to merge default profile."
+        return 1
+    fi
+
+    cp "$tmp_env_merge" "$default_current_env" || {
+        log_error "Failed to write merged config."
+        return 1
+    }
+    trap - RETURN
+    rm -f "$tmp_env_merge" 2>/dev/null
+    log_info "Profile '$profile_name' merged into current configuration."
 }
 
 harbor_profile_remove() {
     local profile_name=$1
-    local profile_file="$profiles_dir/$profile_name.env"
 
     if [ -z "$profile_name" ]; then
         log_error "Please provide a profile name."
         return 1
     fi
+
+    # Validate profile name
+    if [[ ! "$profile_name" =~ ^[A-Za-z0-9._-]+$ ]] || [[ "$profile_name" == *".."* ]]; then
+        log_error "Invalid profile name '$profile_name'."
+        return 1
+    fi
+
+    local profile_file="$profiles_dir/$profile_name.env"
 
     if [ "$profile_name" == "default" ]; then
         log_error "Cannot remove the default profile."
@@ -5288,12 +5502,17 @@ harbor_profile_remove() {
 
     if [ ! -f "$profile_file" ]; then
         log_error "Profile '$profile_name' not found."
+        log_info "Available profiles: $(harbor_profile_list 2>/dev/null | tail -n +2 | tr '\n' ' ')"
         return 1
     fi
 
     run_gum confirm "Are you sure you want to remove profile '$profile_name'?" || return 1
 
-    rm "$profile_file"
+    if ! rm -f "$profile_file"; then
+        log_error "Failed to remove profile file: $profile_file"
+        log_error "Try manually: rm '$profile_file'"
+        return 1
+    fi
     log_info "Profile '$profile_name' removed."
 }
 
@@ -9657,7 +9876,7 @@ main_entrypoint() {
         ;;
     defaults)
         shift
-        env_manager_arr services.default "$@"
+        run_defaults_command "$@"
         ;;
     alias | aliases | a)
         shift
@@ -10137,6 +10356,14 @@ else
     log_error "Unknown command: $1"
     if [ -n "$suggestion" ]; then
         log_info "Did you mean: ${c_g}harbor ${suggestion}${c_nc}?"
+    elif service_compose_exists "$1"; then
+        log_info "'$1' is a service. To start it: ${c_g}harbor up $1${c_nc}"
+    else
+        local svc_suggestion
+        svc_suggestion=$(_suggest_service "$1")
+        if [ -n "$svc_suggestion" ]; then
+            log_info "Did you mean the service: ${c_g}harbor up $svc_suggestion${c_nc}?"
+        fi
     fi
     log_info "Run 'harbor help' for a list of commands."
 fi
