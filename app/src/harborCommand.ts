@@ -21,9 +21,11 @@ export function buildNativeHarborCommand(args: string[]) {
         "/usr/sbin",
         "/sbin",
     ].join(":");
+    // Respect HARBOR_HOME if set; fall back to $HOME/.harbor
+    const harborSh = '${HARBOR_HOME:-$HOME/.harbor}/harbor.sh';
     return [
         `export PATH="${pathPrefix}:$PATH"`,
-        `if ! command -v harbor >/dev/null 2>&1 && test -x "$HOME/.harbor/harbor.sh"; then function harbor() { "$HOME/.harbor/harbor.sh" "$@"; }; fi`,
+        `if ! command -v harbor >/dev/null 2>&1 && test -x "${harborSh}"; then function harbor() { "${harborSh}" "$@"; }; fi`,
         buildWindowsHarborCommand(args),
     ].join("; ");
 }

@@ -123,7 +123,7 @@ fn native_command_path() -> Option<OsString> {
 
 // Keep in sync with buildNativeHarborCommand in app/src/harborCommand.ts
 fn native_harbor_prelude() -> &'static str {
-    "export PATH=\"$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH\"; if ! command -v harbor >/dev/null 2>&1 && test -x \"$HOME/.harbor/harbor.sh\"; then function harbor() { \"$HOME/.harbor/harbor.sh\" \"$@\"; }; fi"
+    "export PATH=\"$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH\"; if ! command -v harbor >/dev/null 2>&1 && test -x \"${HARBOR_HOME:-$HOME/.harbor}/harbor.sh\"; then function harbor() { \"${HARBOR_HOME:-$HOME/.harbor}/harbor.sh\" \"$@\"; }; fi"
 }
 
 // ── Process execution ──────────────────────────────────

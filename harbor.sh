@@ -209,7 +209,7 @@ show_help() {
     echo "  find <file>           - Find a file in the caches visible to Harbor"
     echo "  ls|list [--active|-a] - List available/active Harbor services"
     echo "  ln|link [--short]     - Create a symlink to the CLI, --short for 'h' link"
-    echo "  unlink                - Remove CLI symlinks"
+    echo "  unlink|unln           - Remove CLI symlinks and PATH entries"
     echo "  eject                 - Eject the Compose configuration, accepts same options as 'up'"
     echo "  help|--help|-h        - Show this help message"
     echo "  version|--version|-v  - Show the CLI version"
@@ -390,13 +390,21 @@ run_harbor_doctor() {
         has_errors=true
     fi
 
-    # Check if CLI is linked
+    # Check if CLI is linked and symlink target is valid
     local cli_path cli_name
     cli_path=$(env_manager get cli.path)
     cli_name=$(env_manager get cli.name)
     cli_path="${cli_path/#\~/$HOME}"
     if [ -L "$cli_path/$cli_name" ]; then
-        log_info "${ok} CLI is linked"
+        local link_target
+        link_target=$(readlink "$cli_path/$cli_name")
+        if [ -f "$cli_path/$cli_name" ]; then
+            log_info "${ok} CLI is linked"
+        else
+            log_error "${nok} CLI symlink is broken: $cli_path/$cli_name -> $link_target"
+            log_error "    The target no longer exists. Run 'harbor link' to recreate."
+            has_errors=true
+        fi
     else
         log_error "${nok} CLI is not linked. Run 'harbor link' to create a symlink."
         has_errors=true
@@ -2582,6 +2590,16 @@ link_cli() {
     local script_path="$harbor_home/harbor.sh"
     local create_short_link=false
 
+    # Validate that the source script exists before creating a symlink to it.
+    # A corrupted or partial install could leave harbor_home without harbor.sh,
+    # producing a broken symlink that silently fails on every invocation.
+    if [[ ! -f "$script_path" ]]; then
+        log_error "Source script not found: $script_path"
+        log_error "The Harbor installation may be corrupted. Reinstall with:"
+        log_error "  curl -fsSL https://raw.githubusercontent.com/av/harbor/main/install.sh | bash"
+        return 1
+    fi
+
     # Check for "--short" flag
     for arg in "$@"; do
         if [[ "$arg" == "--short" ]]; then
@@ -2594,6 +2612,7 @@ link_cli() {
     # Check $SHELL first so that a bash user on macOS (where ~/.zshrc
     # exists by default) gets the right profile instead of always zshrc.
     local shell_profile=""
+    local fish_config=""
     local user_shell="${SHELL##*/}"
     case "$user_shell" in
         zsh)
@@ -2611,11 +2630,23 @@ link_cli() {
                 shell_profile="$HOME/.bashrc"
             fi
             ;;
+        fish)
+            # Fish uses a different config format; handle separately
+            fish_config="$HOME/.config/fish/conf.d/harbor.fish"
+            # Also update a POSIX profile for non-fish contexts (cron, scripts, etc.)
+            if [[ -f "$HOME/.profile" ]]; then
+                shell_profile="$HOME/.profile"
+            elif [[ -f "$HOME/.bashrc" ]]; then
+                shell_profile="$HOME/.bashrc"
+            else
+                shell_profile="$HOME/.profile"
+            fi
+            ;;
     esac
 
     # Fallback: if $SHELL didn't match or the file doesn't exist yet,
     # probe for existing profile files.
-    if [[ -z "$shell_profile" ]]; then
+    if [[ -z "$shell_profile" && -z "$fish_config" ]]; then
         if [[ -f "$HOME/.zshrc" ]]; then
             shell_profile="$HOME/.zshrc"
         elif [[ -f "$HOME/.bashrc" ]]; then
@@ -2631,7 +2662,7 @@ link_cli() {
         else
             log_warn "Sorry, but Harbor can't determine which shell configuration file to update."
             log_warn "Please link the CLI manually."
-            log_warn "Harbor supports: ~/.zshrc, ~/.bash_profile, ~/.bashrc, ~/.profile"
+            log_warn "Harbor supports: ~/.zshrc, ~/.bash_profile, ~/.bashrc, ~/.profile, fish"
             return 1
         fi
     fi
@@ -2639,7 +2670,11 @@ link_cli() {
     # Ensure target directory exists
     if [[ ! -d "$target_dir" ]]; then
         log_info "Creating $target_dir..."
-        mkdir -p "$target_dir"
+        if ! mkdir -p "$target_dir"; then
+            log_error "Failed to create directory: $target_dir"
+            log_error "Check permissions on the parent directory."
+            return 1
+        fi
     fi
 
     # Check if target directory exists in PATH (runtime or shell profile)
@@ -2648,16 +2683,40 @@ link_cli() {
     if echo "$PATH" | tr ':' '\n' | grep -qxF "$target_dir"; then
         path_in_runtime=true
     fi
-    if [ -f "$shell_profile" ] && grep -qF "$target_dir" "$shell_profile"; then
+    if [ -n "$shell_profile" ] && [ -f "$shell_profile" ] && grep -qF "$target_dir" "$shell_profile"; then
         path_in_profile=true
     fi
-    if [ "$path_in_profile" = false ]; then
+    if [ -n "$shell_profile" ] && [ "$path_in_profile" = false ]; then
         log_info "Adding $target_dir to PATH..."
         printf '\nexport PATH="$PATH:%s"\n' "$target_dir" >>"$shell_profile"
         echo "Updated $shell_profile with new PATH."
     fi
     if [ "$path_in_runtime" = false ]; then
         export PATH="$PATH:$target_dir"
+    fi
+
+    # Fish shell: write a fish-syntax config snippet so fish users get
+    # harbor in their PATH without relying on POSIX profile sourcing.
+    if [[ -n "$fish_config" ]]; then
+        local fish_dir
+        fish_dir=$(dirname "$fish_config")
+        if [[ ! -d "$fish_dir" ]]; then
+            mkdir -p "$fish_dir"
+        fi
+        if [[ ! -f "$fish_config" ]] || ! grep -qF "$target_dir" "$fish_config"; then
+            log_info "Adding $target_dir to fish PATH..."
+            printf '# Added by Harbor CLI\nif not contains "%s" $PATH\n    set -gx PATH $PATH "%s"\nend\n' \
+                "$target_dir" "$target_dir" >"$fish_config"
+            echo "Created $fish_config"
+        fi
+    fi
+
+    # Warn if a non-symlink file already exists at the target path.
+    # ln -sf removes existing symlinks, but a regular file (e.g., user's
+    # own script named "harbor") would be silently replaced.
+    if [[ -e "$target_dir/$script_name" && ! -L "$target_dir/$script_name" ]]; then
+        log_warn "A non-symlink file exists at $target_dir/$script_name"
+        log_warn "It will be replaced by a symlink to $script_path"
     fi
 
     # Create symlink
@@ -2672,6 +2731,10 @@ link_cli() {
 
     # Create short symlink if "--short" flag is present
     if $create_short_link; then
+        if [[ -e "$target_dir/$short_name" && ! -L "$target_dir/$short_name" ]]; then
+            log_warn "A non-symlink file exists at $target_dir/$short_name"
+            log_warn "It will be replaced by a symlink to $script_path"
+        fi
         if ln -sf "$script_path" "$target_dir/$short_name"; then
             log_info "Short symlink created: $target_dir/$short_name -> $script_path"
         else
@@ -2681,7 +2744,18 @@ link_cli() {
         fi
     fi
 
-    log_info "You may need to reload your shell or run 'source $shell_profile' for changes to take effect."
+    local reload_hint=""
+    if [[ -n "$shell_profile" ]]; then
+        reload_hint="'source $shell_profile'"
+    fi
+    if [[ -n "$fish_config" ]]; then
+        if [[ -n "$reload_hint" ]]; then
+            reload_hint="$reload_hint (or 'source $fish_config' in fish)"
+        else
+            reload_hint="'source $fish_config' in fish"
+        fi
+    fi
+    log_info "You may need to reload your shell or run $reload_hint for changes to take effect."
 }
 
 unlink_cli() {
@@ -2695,18 +2769,65 @@ unlink_cli() {
 
     # Remove the main symlink
     if [ -L "$target_dir/$script_name" ]; then
-        rm "$target_dir/$script_name"
-        log_info "Removed symlink: $target_dir/$script_name"
+        if rm "$target_dir/$script_name"; then
+            log_info "Removed symlink: $target_dir/$script_name"
+        else
+            log_warn "Failed to remove symlink: $target_dir/$script_name"
+            log_warn "Check permissions or remove manually: rm $target_dir/$script_name"
+        fi
     else
         log_info "Main symlink does not exist or is not a symbolic link."
     fi
 
     # Remove the short symlink
     if [ -L "$target_dir/$short_name" ]; then
-        rm "$target_dir/$short_name"
-        log_info "Removed short symlink: $target_dir/$short_name"
+        if rm "$target_dir/$short_name"; then
+            log_info "Removed short symlink: $target_dir/$short_name"
+        else
+            log_warn "Failed to remove short symlink: $target_dir/$short_name"
+            log_warn "Check permissions or remove manually: rm $target_dir/$short_name"
+        fi
     else
         log_info "Short symlink does not exist or is not a symbolic link."
+    fi
+
+    # Clean up PATH entries from shell profile files.
+    # link_cli adds 'export PATH="$PATH:<target_dir>"' to shell profiles;
+    # removing the symlinks without cleaning the profile leaves stale entries
+    # that accumulate on repeated link/unlink cycles.
+    local profiles_to_check=(
+        "$HOME/.zshrc"
+        "$HOME/.bashrc"
+        "$HOME/.bash_profile"
+        "$HOME/.profile"
+    )
+    local cleaned_profile=false
+    for profile in "${profiles_to_check[@]}"; do
+        if [ -f "$profile" ] && grep -qF "export PATH=\"\$PATH:$target_dir\"" "$profile"; then
+            # Remove the exact line that link_cli added, preserving file permissions
+            local temp_file
+            temp_file=$(mktemp)
+            grep -vF "export PATH=\"\$PATH:$target_dir\"" "$profile" > "$temp_file" || true
+            # Preserve original file permissions (chmod --reference is GNU-only)
+            local orig_perms
+            orig_perms=$(stat -c '%a' "$profile" 2>/dev/null || stat -f '%Lp' "$profile" 2>/dev/null) && \
+                chmod "$orig_perms" "$temp_file" 2>/dev/null || true
+            mv "$temp_file" "$profile"
+            log_info "Removed PATH entry from $profile"
+            cleaned_profile=true
+        fi
+    done
+
+    # Clean up fish config if it exists
+    local fish_config="$HOME/.config/fish/conf.d/harbor.fish"
+    if [ -f "$fish_config" ]; then
+        rm -f "$fish_config"
+        log_info "Removed fish config: $fish_config"
+        cleaned_profile=true
+    fi
+
+    if [ "$cleaned_profile" = false ]; then
+        log_info "No PATH entries found in shell profiles to clean up."
     fi
 }
 
@@ -3276,7 +3397,7 @@ suggest_command() {
     local known_commands=(
         up u start s down d restart r ps build shell logs l pull exec run
         stats attach cmd help --help -h hf defaults alias aliases a link ln
-        unlink launch open o url qr list ls version --version -v smi top dive eject
+        unlink unln launch open o url qr list ls version --version -v smi top dive eject
         ollama llamacpp tgi litellm vllm aphrodite openai opencode facts mi webui
         tabbyapi parllama oterm plandex pdx mistralrs interpreter opint
         cfd cloudflared cmdh fabric parler photoprism airllm txtai aider
@@ -8453,7 +8574,7 @@ main_entrypoint() {
         shift
         link_cli "$@"
         ;;
-    unlink)
+    unlink | unln)
         shift
         unlink_cli "$@"
         ;;
