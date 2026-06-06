@@ -344,7 +344,8 @@ run_harbor_doctor() {
     if [ -d "$harbor_home" ]; then
         log_info "${ok} Harbor home: $harbor_home"
     else
-        log_error "${nok} Harbor home does not exist or is not reachable."
+        log_error "${nok} Harbor home does not exist or is not reachable at: $harbor_home"
+        log_error "  Reinstall Harbor or set HARBOR_HOME to the correct path."
         has_errors=true
     fi
 
@@ -375,7 +376,8 @@ run_harbor_doctor() {
     if [ -f "$default_profile" ] && [ -r "$default_profile" ]; then
         log_info "${ok} Default profile exists and is readable"
     else
-        log_error "${nok} Default profile is missing or not readable. Please ensure it exists and has the correct permissions."
+        log_error "${nok} Default profile is missing or not readable at: $default_profile"
+        log_error "  This usually means the Harbor installation is incomplete. Try reinstalling: curl -fsSL https://raw.githubusercontent.com/av/harbor/main/install.sh | bash"
         has_errors=true
     fi
 
@@ -383,7 +385,8 @@ run_harbor_doctor() {
     if [ -f ".env" ] && [ -r ".env" ]; then
         log_info "${ok} Current profile (.env) exists and is readable"
     else
-        log_error "${nok} Current profile (.env) is missing or not readable. Please ensure it exists and has the correct permissions."
+        log_error "${nok} Current profile (.env) is missing or not readable."
+        log_error "  Run 'harbor config update' to regenerate it from the default profile."
         has_errors=true
     fi
 
@@ -534,7 +537,8 @@ run_routine() {
     local routine_name="$1"
 
     if [ -z "$routine_name" ]; then
-        log_error "run_routine requires a routine name"
+        log_error "Usage: harbor routine <name>"
+        log_error "Run 'ls $harbor_home/routines/' to see available routines."
         return 1
     fi
 
@@ -545,7 +549,8 @@ run_routine() {
     fi
 
     if [ ! -f $routine_path ]; then
-        log_error "Routine '$routine_name' not identified"
+        log_error "Routine '$routine_name' not found at $routine_path"
+        log_error "Run 'ls $harbor_home/routines/' to see available routines."
         return 1
     fi
 
@@ -844,7 +849,9 @@ run_up() {
     local up_exit=$?
 
     if [ $up_exit -ne 0 ]; then
-        log_error "Failed to start services (exit code: $up_exit)"
+        log_error "Failed to start services."
+        log_error "Run 'docker compose logs' in $harbor_home to see container errors."
+        log_error "Common causes: port conflicts, missing images, or insufficient disk space."
         return $up_exit
     fi
 
@@ -964,7 +971,8 @@ run_down() {
     if [ $down_exit -eq 0 ]; then
         log_info "Services stopped."
     else
-        log_error "Failed to stop services (exit code: $down_exit)"
+        log_error "Failed to stop services. Some containers may still be running."
+        log_error "Try 'docker ps' to see what is still running, or 'docker compose down --force' to force stop."
         return $down_exit
     fi
 }
@@ -973,7 +981,7 @@ run_restart() {
     local active_services=$(get_active_services)
 
     if [ -z "$active_services" ] && [ $# -eq 0 ]; then
-        log_error "No active services to restart."
+        log_warn "No active services to restart. Start services first with 'harbor up <service>'."
         return 0
     fi
 
@@ -2553,7 +2561,7 @@ run_attach() {
         log_info "Attaching to container $container_name..."
         docker attach "$container_name"
     else
-        log_error "Container $container_name is not running."
+        log_error "Container $container_name is not running. Start it with 'harbor up $service_name' first."
         return 1
   fi
 }
@@ -2656,7 +2664,9 @@ link_cli() {
     if ln -sf "$script_path" "$target_dir/$script_name"; then
         log_info "Symlink created: $target_dir/$script_name -> $script_path"
     else
-        log_warn "Failed to create symlink. Please check permissions and try again."
+        log_warn "Failed to create symlink at $target_dir/$script_name"
+        log_warn "Check that you have write permission to $target_dir"
+        log_warn "You can also run: ln -sf $script_path $target_dir/$script_name"
         return 1
     fi
 
@@ -2665,7 +2675,8 @@ link_cli() {
         if ln -sf "$script_path" "$target_dir/$short_name"; then
             log_info "Short symlink created: $target_dir/$short_name -> $script_path"
         else
-            log_warn "Failed to create short symlink. Please check permissions and try again."
+            log_warn "Failed to create short symlink at $target_dir/$short_name"
+            log_warn "Check that you have write permission to $target_dir"
             return 1
         fi
     fi
@@ -2734,7 +2745,7 @@ get_service_port() {
     if port=$(docker port "$target_name" | sed -n 's/.*:\([0-9][0-9]*\)$/\1/p' | head -n 1) && [ -n "$port" ]; then
         echo "$port"
     else
-        log_error "No port mapping found for service '$1': $port"
+        log_error "No port mapping found for service '$1'. The service may not expose a port, or it may still be starting up."
         return 1
     fi
 }
@@ -2905,7 +2916,7 @@ run_open() {
             return 0
         fi
     else
-        log_error "Failed to get service URL for '$1'"
+        log_error "Failed to get service URL for '$1'. Is the service running? Try 'harbor up $1' first."
         return 1
     fi
 }
@@ -2914,7 +2925,7 @@ smi() {
     if command -v nvidia-smi &>/dev/null; then
         nvidia-smi
     else
-        log_error "nvidia-smi not found."
+        log_error "nvidia-smi not found. Install NVIDIA drivers to use GPU monitoring."
     fi
 }
 
@@ -2922,7 +2933,7 @@ nvidia_top() {
     if command -v nvtop &>/dev/null; then
         nvtop
     else
-        log_error "nvtop not found."
+        log_error "nvtop not found. Install it with your package manager (e.g., 'sudo apt install nvtop')."
     fi
 }
 
@@ -2952,7 +2963,7 @@ run_exec() {
 
     # Check if service name was found
     if [[ -z $service_name ]]; then
-        echo "Error: No valid service name provided."
+        log_error "No valid service name provided. Specify a running service to exec into."
         return 1
     fi
 
@@ -3159,16 +3170,16 @@ swap_and_retry() {
                         return 0
                         ;;
                     1)
-                        log_error "General error occurred"
+                        log_error "Command failed. Run 'harbor help' for usage or 'harbor doctor' to check your setup."
                         ;;
                     2)
-                        log_error "Misuse of shell builtin"
+                        log_error "Invalid command syntax. Run 'harbor help' for usage."
                         ;;
                     126)
-                        log_error "Command invoked cannot execute (permission problem or not executable)"
+                        log_error "Permission denied or not executable. Check file permissions and your PATH."
                         ;;
                     127)
-                        log_error "Command not found"
+                        log_error "Required command not found. Run 'harbor doctor' to check your dependencies."
                         ;;
                     128)
                         log_error "Invalid exit argument"
@@ -4435,13 +4446,21 @@ unsafe_update() {
 }
 
 resolve_harbor_version() {
-    local response
-    response=$(curl -fsSL "$harbor_release_url" 2>/dev/null) || return 1
+    local response version
+    response=$(curl -fsSL "$harbor_release_url" 2>/dev/null) || {
+        log_warn "Failed to fetch latest release info from $harbor_release_url" >&2
+        return 1
+    }
     if command -v jq >/dev/null 2>&1; then
-        printf '%s\n' "$response" | jq -r '.tag_name // empty' 2>/dev/null
+        version=$(printf '%s\n' "$response" | jq -r '.tag_name // empty' 2>/dev/null)
     else
-        printf '%s\n' "$response" | sed -n 's/.*"tag_name" *: *"\([^"]*\)".*/\1/p' | head -n1
+        version=$(printf '%s\n' "$response" | sed -n 's/.*"tag_name" *: *"\([^"]*\)".*/\1/p' | head -n1)
     fi
+    if [ -z "$version" ]; then
+        log_warn "Could not parse version from GitHub API response" >&2
+        return 1
+    fi
+    printf '%s\n' "$version"
 }
 
 update_harbor() {
@@ -4464,9 +4483,22 @@ update_harbor() {
         unsafe_update
     else
         harbor_version=$(resolve_harbor_version)
+        if [ -z "$harbor_version" ]; then
+            log_error "Could not determine the latest Harbor version."
+            log_error "Check your internet connection or specify a version: harbor update --version <tag>"
+            return 1
+        fi
         log_info "Updating to version $harbor_version..."
-        git fetch --all --tags
-        git checkout tags/$harbor_version
+        if ! git fetch --all --tags; then
+            log_error "Failed to fetch updates from the remote repository."
+            log_error "Check your internet connection and try again."
+            return 1
+        fi
+        if ! git checkout "tags/$harbor_version"; then
+            log_error "Failed to check out version $harbor_version."
+            log_error "This version tag may not exist. Check available versions at https://github.com/av/harbor/releases"
+            return 1
+        fi
     fi
 
     if [ "$had_stash" = true ]; then

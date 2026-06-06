@@ -96,7 +96,8 @@ parse_args() {
       --source-path)
         shift
         if [ -z "${1:-}" ]; then
-          echo "Error: --source-path requires a path"
+          echo "Error: --source-path requires a path argument." >&2
+          echo "Usage: $0 --source-path /path/to/harbor/source" >&2
           exit 1
         fi
         HARBOR_INSTALL_SOURCE_PATH="$1"
@@ -104,7 +105,8 @@ parse_args() {
       --requirements-path)
         shift
         if [ -z "${1:-}" ]; then
-          echo "Error: --requirements-path requires a path"
+          echo "Error: --requirements-path requires a path argument." >&2
+          echo "Usage: $0 --requirements-path /path/to/requirements.sh" >&2
           exit 1
         fi
         HARBOR_REQUIREMENTS_PATH="$1"
@@ -112,7 +114,8 @@ parse_args() {
       --version)
         shift
         if [ -z "${1:-}" ]; then
-          echo "Error: --version requires a version"
+          echo "Error: --version requires a version tag (e.g., v0.4.19)." >&2
+          echo "Usage: $0 --version v0.4.19" >&2
           exit 1
         fi
         HARBOR_VERSION="$1"
@@ -122,9 +125,9 @@ parse_args() {
         exit 0
         ;;
       *)
-        echo "Error: Unknown option: $1"
-        echo
-        print_help
+        echo "Error: Unknown option: $1" >&2
+        echo >&2
+        print_help >&2
         exit 1
         ;;
     esac
@@ -177,7 +180,8 @@ restore_user_configs() {
 install_or_update_project() {
   if [ -n "$HARBOR_INSTALL_SOURCE_PATH" ]; then
     if [ ! -d "$HARBOR_INSTALL_SOURCE_PATH" ]; then
-      echo "Error: Local source path does not exist: $HARBOR_INSTALL_SOURCE_PATH"
+      echo "Error: Local source path does not exist: $HARBOR_INSTALL_SOURCE_PATH" >&2
+      echo "Verify the path is correct and the directory exists." >&2
       exit 1
     fi
 
@@ -252,7 +256,13 @@ install_or_update_project() {
       if [ -n "$backup_dir" ]; then
         rm -rf "$backup_dir"
       fi
-      echo "Error: git clone failed after 2 attempts."
+      echo "Error: git clone failed after 2 attempts." >&2
+      echo "Possible causes:" >&2
+      echo "  - No internet connection or DNS resolution failure" >&2
+      echo "  - GitHub is unreachable (check https://www.githubstatus.com)" >&2
+      echo "  - A firewall or proxy is blocking git:// or https:// connections" >&2
+      echo "  - Version '$HARBOR_VERSION' does not exist" >&2
+      echo "Try: git clone $HARBOR_REPO_URL (to diagnose the issue manually)" >&2
       exit 1
     fi
     if [ -n "$backup_dir" ]; then
@@ -320,12 +330,17 @@ main() {
     echo "Installing requirements..."
     if [ -n "$HARBOR_REQUIREMENTS_PATH" ]; then
       if ! bash "$HARBOR_REQUIREMENTS_PATH"; then
-        echo "Error: Failed to execute requirements installer at $HARBOR_REQUIREMENTS_PATH"
+        echo "Error: Requirements installer failed (script: $HARBOR_REQUIREMENTS_PATH)." >&2
+        echo "Review the error messages above for details." >&2
+        echo "You can also install dependencies manually (Docker, git, curl) and retry with --skip-requirements." >&2
         exit 1
       fi
     else
       if ! (set -o pipefail; curl -fsSL "$HARBOR_REQUIREMENTS_URL" | bash); then
-        echo "Error: Failed to download or execute requirements installer from $HARBOR_REQUIREMENTS_URL"
+        echo "Error: Requirements installer failed." >&2
+        echo "Review the error messages above for details." >&2
+        echo "If the download failed, check your internet connection." >&2
+        echo "You can also install dependencies manually (Docker, git, curl) and retry with --skip-requirements." >&2
         exit 1
       fi
     fi

@@ -34,39 +34,42 @@ const stateGuidance: Record<string, StateGuidance> = {
   blocked: {
     title: "Installation blocked",
     message:
-      "Something on your system prevented Harbor from completing setup.",
+      "A prerequisite is missing that prevents Harbor from being installed.",
     actions: [
-      "Check the error details below",
-      "The most common cause is Docker not being installed or running",
-      "On macOS, install Docker Desktop from docker.com before proceeding",
-      "On Linux, ensure a supported package manager is available (apt, dnf, pacman, or apk)",
+      "Check the error details below for the specific issue",
+      "On macOS: install Docker Desktop from docker.com/products/docker-desktop",
+      "On Linux: ensure Docker Engine and a supported package manager (apt, dnf, pacman, or apk) are available",
+      "On Windows: enable WSL2 and install a supported Linux distro (Ubuntu, Debian, Fedora, openSUSE, Kali, or Arch)",
+      "After fixing the issue, click Redetect to try again",
     ],
     level: "warning",
   },
   "refresh-required": {
-    title: "Almost there — restart needed",
+    title: "Almost there -- restart needed",
     message:
       "Harbor CLI is installed, but your session needs refreshing to access Docker.",
     actions: [
       "Close and reopen the Harbor app",
       "On Linux, you may need to log out and back in to pick up docker group membership",
+      "Alternatively, open a terminal and run: newgrp docker",
     ],
     level: "info",
   },
   failed: {
     title: "Installation failed",
-    message: "The setup process encountered an error.",
+    message: "The setup process encountered an error it could not recover from.",
     actions: [
-      "Review the terminal output for details",
-      "Check your internet connection",
-      "Try running the installation again",
+      "Expand the terminal output above to see the specific error",
+      "Check your internet connection (Harbor downloads ~50 MB during install)",
+      "If a package install failed, try installing Docker and git manually, then click Retry",
+      "If the problem persists, visit github.com/av/harbor/issues for help",
     ],
     level: "error",
   },
   cancelled: {
     title: "Installation cancelled",
     message: "You stopped the installation before it completed.",
-    actions: ["Click Retry to start again when you're ready"],
+    actions: ["Click Retry to start again when you are ready"],
     level: "info",
   },
 };

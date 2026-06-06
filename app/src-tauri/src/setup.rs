@@ -917,7 +917,7 @@ fn detect_harbor_status_core(platform: &str, detail: &mut HarborSetupDetail) {
             if check.code != Some(0) {
                 detail.status = "blocked".into();
                 detail.last_error = Some(
-                    "No supported package manager found (apt, dnf, pacman, or apk).".into(),
+                    "No supported package manager found (apt, dnf, pacman, or apk). Harbor needs a package manager to install Docker and other dependencies. Install one of these, or install Docker manually and retry.".into(),
                 );
                 return;
             }
@@ -1096,6 +1096,7 @@ pub fn start_harbor_setup(
             }
             Err(_panic) => {
                 emit_stage(&app, "failed");
+                let msg = "An unexpected internal error occurred during setup. Please try again, and if the problem persists, report it at github.com/av/harbor/issues".to_string();
                 let _ = app.emit(
                     "harbor-setup-complete",
                     SetupCompleteEvent {
@@ -1103,10 +1104,10 @@ pub fn start_harbor_setup(
                             status: "failed".into(),
                             platform: platform_name(),
                             cli_version: None,
-                            last_error: Some("Internal error during setup".into()),
+                            last_error: Some(msg.clone()),
                             running: false,
                         },
-                        error: Some("Internal error during setup".into()),
+                        error: Some(msg),
                     },
                 );
             }
@@ -1154,7 +1155,7 @@ pub fn write_harbor_setup_input(
         .lock()
         .map_err(|e| e.to_string())?;
     let Some(writer) = writer.as_mut() else {
-        return Err("Harbor setup is not waiting for input.".into());
+        return Err("No active setup process is running. Input can only be sent while installation is in progress.".into());
     };
     writer
         .write_all(data.as_bytes())

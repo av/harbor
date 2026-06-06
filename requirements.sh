@@ -186,12 +186,20 @@ apt_install() {
     # Single apt-get update if anything needs installing
     if [ ${#missing[@]} -gt 0 ] || [ "$need_docker" = true ]; then
         log_info "Refreshing apt package index"
-        run_privileged apt-get update || return 1
+        if ! run_privileged apt-get update; then
+            log_error "Failed to refresh apt package index."
+            log_error "Check your internet connection and that your apt sources are valid (/etc/apt/sources.list)."
+            return 1
+        fi
     fi
 
     if [ ${#missing[@]} -gt 0 ]; then
         log_info "Installing missing tools via apt: ${missing[*]}"
-        run_privileged apt-get install -y "${missing[@]}" || return 1
+        if ! run_privileged apt-get install -y "${missing[@]}"; then
+            log_error "Failed to install ${missing[*]} via apt."
+            log_error "Try running 'sudo apt-get install -y ${missing[*]}' manually to see detailed errors."
+            return 1
+        fi
     else
         log_info "git and curl are already installed"
     fi
@@ -211,7 +219,12 @@ apt_install() {
         fi
 
         log_info "Installing Docker Engine and Docker Compose via apt (${compose_pkg})"
-        run_privileged apt-get install -y docker.io "${compose_pkg}" || return 1
+        if ! run_privileged apt-get install -y docker.io "${compose_pkg}"; then
+            log_error "Failed to install Docker packages via apt."
+            log_error "Try running 'sudo apt-get install -y docker.io ${compose_pkg}' manually."
+            log_error "If packages are missing, add the Docker repository: https://docs.docker.com/engine/install/"
+            return 1
+        fi
     else
         log_info "Docker and Docker Compose plugin are already installed"
     fi
@@ -240,7 +253,11 @@ dnf_install() {
 
     if [ ${#missing[@]} -gt 0 ]; then
         log_info "Installing missing tools via dnf: ${missing[*]}"
-        run_privileged dnf install -y "${missing[@]}" || return 1
+        if ! run_privileged dnf install -y "${missing[@]}"; then
+            log_error "Failed to install ${missing[*]} via dnf."
+            log_error "Try running 'sudo dnf install -y ${missing[*]}' manually to see detailed errors."
+            return 1
+        fi
     else
         log_info "git and curl are already installed"
     fi
@@ -273,7 +290,12 @@ dnf_install() {
         fi
 
         log_info "Installing Docker Engine and Docker Compose via dnf (${docker_pkg}, ${compose_pkg})"
-        run_privileged dnf install -y "${docker_pkg}" "${compose_pkg}" || return 1
+        if ! run_privileged dnf install -y "${docker_pkg}" "${compose_pkg}"; then
+            log_error "Failed to install Docker packages via dnf."
+            log_error "Try running 'sudo dnf install -y ${docker_pkg} ${compose_pkg}' manually."
+            log_error "If packages are missing, add the Docker repository: https://docs.docker.com/engine/install/fedora/"
+            return 1
+        fi
     else
         log_info "Docker and Docker Compose are already installed"
     fi
@@ -297,19 +319,31 @@ pacman_install() {
     # "target not found" errors that confuse users)
     if [ ${#missing[@]} -gt 0 ] || [ "$need_docker" = true ]; then
         log_info "Refreshing pacman package database"
-        run_privileged pacman -Sy --noconfirm || return 1
+        if ! run_privileged pacman -Sy --noconfirm; then
+            log_error "Failed to refresh pacman package database."
+            log_error "Check your internet connection and mirror list (/etc/pacman.d/mirrorlist)."
+            return 1
+        fi
     fi
 
     if [ ${#missing[@]} -gt 0 ]; then
         log_info "Installing missing tools via pacman: ${missing[*]}"
-        run_privileged pacman -S --noconfirm --needed "${missing[@]}" || return 1
+        if ! run_privileged pacman -S --noconfirm --needed "${missing[@]}"; then
+            log_error "Failed to install ${missing[*]} via pacman."
+            log_error "Try running 'sudo pacman -S ${missing[*]}' manually to see detailed errors."
+            return 1
+        fi
     else
         log_info "git and curl are already installed"
     fi
 
     if [ "$need_docker" = true ]; then
         log_info "Installing Docker Engine and Docker Compose plugin via pacman"
-        run_privileged pacman -S --noconfirm --needed docker docker-compose || return 1
+        if ! run_privileged pacman -S --noconfirm --needed docker docker-compose; then
+            log_error "Failed to install Docker packages via pacman."
+            log_error "Try running 'sudo pacman -S docker docker-compose' manually."
+            return 1
+        fi
     else
         log_info "Docker and Docker Compose plugin are already installed"
     fi
@@ -325,7 +359,11 @@ apk_install() {
 
     if [ ${#missing[@]} -gt 0 ]; then
         log_info "Installing missing tools via apk: ${missing[*]}"
-        run_privileged apk add --no-cache "${missing[@]}" || return 1
+        if ! run_privileged apk add --no-cache "${missing[@]}"; then
+            log_error "Failed to install ${missing[*]} via apk."
+            log_error "Check your internet connection and that the community repository is enabled."
+            return 1
+        fi
     else
         log_info "git, curl, and bash are already installed"
     fi
@@ -335,7 +373,11 @@ apk_install() {
             log_info "Docker is provided by Docker Desktop (WSL integration) — skipping package install"
         else
             log_info "Installing Docker Engine and Docker Compose plugin via apk"
-            run_privileged apk add --no-cache docker docker-cli-compose || return 1
+            if ! run_privileged apk add --no-cache docker docker-cli-compose; then
+                log_error "Failed to install Docker packages via apk."
+                log_error "Ensure the community repository is enabled in /etc/apk/repositories."
+                return 1
+            fi
         fi
     else
         log_info "Docker and Docker Compose plugin are already installed"
@@ -415,14 +457,22 @@ brew_install() {
 
     if [ ${#missing[@]} -gt 0 ]; then
         log_info "Installing missing tools via brew: ${missing[*]}"
-        brew install "${missing[@]}" || return 1
+        if ! brew install "${missing[@]}"; then
+            log_error "Failed to install ${missing[*]} via Homebrew."
+            log_error "Try running 'brew install ${missing[*]}' manually to see detailed errors."
+            return 1
+        fi
     else
         log_info "git and curl are already installed"
     fi
 
     if ! check_command docker; then
         log_info "Installing Docker Desktop via Homebrew cask"
-        brew install --cask docker || return 1
+        if ! brew install --cask docker; then
+            log_error "Failed to install Docker Desktop via Homebrew."
+            log_error "Try installing Docker Desktop manually from https://docker.com/products/docker-desktop"
+            return 1
+        fi
         # Docker Desktop needs to be launched once after cask install to
         # complete setup (accept license, provision CLI tools, start daemon).
         log_info "Starting Docker Desktop for initial setup (this may take a moment)..."
