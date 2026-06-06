@@ -908,37 +908,66 @@ resolve_compose_files() {
 run_routine() {
     local routine_name="$1"
 
-    if [ -z "$routine_name" ]; then
-        log_error "Usage: harbor routine <name>"
-        log_error "Run 'ls $harbor_home/routines/' to see available routines."
+    case "$routine_name" in
+    -h | --help | help)
+        echo "Harbor Routine Runner"
+        echo
+        echo "Usage: harbor routine <name> [args...]"
+        echo
+        echo "Runs internal Deno routines from the routines/ directory."
+        echo "Uses local deno if available, falls back to Docker container."
+        echo
+        echo "Available routines:"
+        local rfile
+        for rfile in "$harbor_home"/routines/*.ts; do
+            [ -f "$rfile" ] || continue
+            echo "  $(basename "${rfile%.ts}")"
+        done
+        echo
+        echo "Examples:"
+        echo "  harbor routine mergeComposeFiles ollama webui"
+        echo "  harbor routine configSearch list"
+        return 0
+        ;;
+    "")
+        log_error "Usage: harbor routine <name> [args...]"
+        log_error "Run 'harbor routine --help' to see available routines."
         return 1
-    fi
+        ;;
+    esac
 
+    local routine_path
     if [[ "$routine_name" == *.* ]]; then
-        local routine_path="$harbor_home/routines/$routine_name"
+        routine_path="$harbor_home/routines/$routine_name"
     else
-        local routine_path="$harbor_home/routines/$routine_name.ts"
+        routine_path="$harbor_home/routines/$routine_name.ts"
     fi
 
-    if [ ! -f $routine_path ]; then
+    if [ ! -f "$routine_path" ]; then
         log_error "Routine '$routine_name' not found at $routine_path"
-        log_error "Run 'ls $harbor_home/routines/' to see available routines."
+        log_error "Run 'harbor routine --help' to see available routines."
         return 1
     fi
 
     shift
 
-    _check_docker || return 1
-
     log_debug "Running routine: $routine_name"
-    docker run --rm \
-        -v "$harbor_home:$harbor_home" \
-        -v harbor-deno-cache:/deno-dir:rw \
-        -w "$harbor_home" \
-        -e "HARBOR_LOG_LEVEL=$default_log_level" \
-        -e "HARBOR_COMPOSE_CACHE=$HARBOR_COMPOSE_CACHE" \
-        $default_routine_runtime \
-        $routine_path "$@"
+
+    if command -v deno &>/dev/null; then
+        log_debug "Using local deno for routine"
+        HARBOR_LOG_LEVEL="$default_log_level" deno run -A --unstable-sloppy-imports "$routine_path" "$@"
+    else
+        _check_docker || return 1
+        log_debug "Using Docker container for routine"
+        docker run --rm \
+            -v "$harbor_home:$harbor_home" \
+            -v harbor-deno-cache:/deno-dir:rw \
+            -w "$harbor_home" \
+            -e "HARBOR_LOG_LEVEL=$default_log_level" \
+            -e "HARBOR_COMPOSE_CACHE=$HARBOR_COMPOSE_CACHE" \
+            $default_routine_runtime \
+            "$routine_path" "$@"
+    fi
 }
 
 routine_compose_with_options() {
@@ -7790,14 +7819,53 @@ run_harbor_dev() {
         --container)
             use_container=true
             ;;
+        -h | --help | help)
+            echo "Harbor Dev Script Runner"
+            echo
+            echo "Usage: harbor dev <script> [args...] [--container]"
+            echo
+            echo "Runs development scripts from the .scripts/ directory."
+            echo "Uses local deno if available, falls back to Docker container."
+            echo
+            echo "Options:"
+            echo "  --container    Force execution in Docker container"
+            echo "  -h, --help     Show this help message"
+            echo
+            echo "Available scripts:"
+            local sfile
+            for sfile in "$harbor_home"/.scripts/*.ts; do
+                [ -f "$sfile" ] || continue
+                echo "  $(basename "${sfile%.ts}")"
+            done
+            echo
+            echo "Examples:"
+            echo "  harbor dev scaffold myservice"
+            echo "  harbor dev docs"
+            echo "  harbor dev lint --rules"
+            echo "  harbor dev test --suite smoke"
+            return 0
+            ;;
         *)
-            filtered_args+=("$arg") # Add to filtered arguments
+            filtered_args+=("$arg")
             ;;
         esac
     done
 
-    local script="${filtered_args[0]}"
+    local script="${filtered_args[0]:-}"
     local script_args=("${filtered_args[@]:1}")
+
+    if [ -z "$script" ]; then
+        log_error "Usage: harbor dev <script> [args...]"
+        log_error "Run 'harbor dev --help' to see available scripts."
+        return 1
+    fi
+
+    local script_path="$harbor_home/.scripts/$script.ts"
+    if [ ! -f "$script_path" ]; then
+        log_error "Dev script '$script' not found at $script_path"
+        log_error "Run 'harbor dev --help' to see available scripts."
+        return 1
+    fi
 
     if $use_container; then
         _check_docker || return 1
@@ -7811,7 +7879,7 @@ run_harbor_dev() {
             "./.scripts/$script.ts" "${script_args[@]}"
     else
         log_debug "running on host: $script"
-        deno run -A --unstable-sloppy-imports "./.scripts/$script.ts" "${script_args[@]}"
+        deno run -A --unstable-sloppy-imports "$script_path" "${script_args[@]}"
     fi
 }
 
