@@ -73,10 +73,13 @@ _check_docker() {
     # faster than docker info (no system enumeration) but still contacts
     # the daemon.  Guard with timeout to avoid hanging when daemon is
     # unresponsive (e.g. Docker Desktop still loading).
-    if ! _with_timeout 5 docker version &>/dev/null; then
+    # Capture exit code before the if-test consumes it ($? is always 0
+    # inside a then-block).
+    local docker_exit=0
+    _with_timeout 5 docker version &>/dev/null || docker_exit=$?
+    if [ "$docker_exit" -ne 0 ]; then
         _docker_ok=0
-        local exit_code=$?
-        if [ "$exit_code" -eq 124 ]; then
+        if [ "$docker_exit" -eq 124 ]; then
             log_error "Docker daemon is not responding (timed out after 5s)."
             log_error "It may still be starting up. Wait a moment and try again."
         else
@@ -3430,7 +3433,6 @@ complete -c harbor -n __harbor_no_subcommand -a promptfoo -d 'Run promptfoo'
 complete -c harbor -n __harbor_no_subcommand -a jupyter -d 'Configure Jupyter'
 complete -c harbor -n __harbor_no_subcommand -a langflow -d 'Configure Langflow'
 complete -c harbor -n __harbor_no_subcommand -a mcp -d 'Configure MCP'
-complete -c harbor -n __harbor_no_subcommand -a doctor -d 'Run diagnostics'
 
 # Service name completions for service-accepting commands
 complete -c harbor -n __harbor_service_subcommand -a '(__harbor_services)'
@@ -4213,18 +4215,18 @@ levenshtein_distance() {
 suggest_command() {
     local input="$1"
     local known_commands=(
-        up u start s down d restart r ps build shell logs l pull exec run
+        up u start s down d restart r ps build shell logs log l pull exec run
         stats attach cmd help --help -h hf defaults alias aliases a link ln
         unlink unln launch open o url qr list ls version --version -v smi top dive eject
-        ollama llamacpp tgi litellm vllm aphrodite openai opencode facts mi webui
-        tabbyapi parllama oterm plandex pdx mistralrs interpreter opint
-        cfd cloudflared cmdh fabric parler photoprism airllm txtai aider
-        nanobot chatui comfyui aichat omnichain lmeval lm_eval sglang
+        ollama llamacpp ikllamacpp tgi litellm vllm dmr mlx omlx aphrodite openai
+        opencode facts mi npcsh webui tabbyapi parllama oterm plandex pdx mistralrs
+        interpreter opint cfd cloudflared cmdh fabric parler photoprism airllm txtai
+        aider nanobot chatui comfyui aichat omnichain lmeval lm_eval sglang
         jupyter ol1 ktransformers openhands oh stt speaches boost nexa
         repopack k6 promptfoo pf webtop langflow kobold morphic gptme hermes mcp tokscale
         migrate modularmax tunnel t tunnels config profile profiles p gum
         fixfs info update how find home vscode doctor bench history h size
-        env dev tools eval routine completion
+        env dev tools eval routine volumes skills models completion openfang
     )
 
     local best_match=""
