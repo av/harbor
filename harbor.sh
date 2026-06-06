@@ -5624,6 +5624,114 @@ log_error() { log "ERROR" "$@"; }
 # shellcheck disable=SC2034
 __anchor_envm=true
 
+# Pure-bash fallback for configSearch when neither deno nor Docker is
+# available.  This is critical for first-run experience: a freshly
+# installed Harbor should be able to list/search config without Docker
+# running.
+_config_search_bash() {
+    local command="$1"; shift
+    local env_file=""
+    local prefix="HARBOR_"
+    local rest_args=()
+
+    # Parse --env-file and --prefix flags (same interface as the Deno routine)
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+        --env-file)
+            env_file="$2"; shift 2 ;;
+        --prefix)
+            prefix="$2"; shift 2 ;;
+        *)
+            rest_args+=("$1"); shift ;;
+        esac
+    done
+
+    if [[ -z "$env_file" ]]; then
+        env_file="$harbor_home/.env"
+    fi
+
+    if [[ ! -f "$env_file" ]]; then
+        log_error "Cannot read env file: $env_file"
+        return 1
+    fi
+
+    local prefix_len=${#prefix}
+
+    case "$command" in
+    list)
+        while IFS= read -r line || [[ -n "$line" ]]; do
+            # Skip lines that don't start with the prefix
+            [[ "$line" == "${prefix}"* ]] || continue
+            # Split on first =
+            local key="${line%%=*}"
+            local raw_value="${line#*=}"
+            # Strip the prefix
+            local stripped="${key:$prefix_len}"
+            # Lowercase
+            local lower
+            lower=$(printf '%s' "$stripped" | tr 'A-Z' 'a-z')
+            # Replace first _ with .
+            local display_key="${lower/_/.}"
+            # Decode value: strip surrounding quotes
+            local value="$raw_value"
+            value="${value#\"}"
+            value="${value%\"}"
+            value="${value#\'}"
+            value="${value%\'}"
+            # Print padded
+            printf '%-30s %s\n' "$display_key" "$value"
+        done < "$env_file"
+        ;;
+    search)
+        local query="${rest_args[0]:-}"
+        if [[ -z "$query" ]]; then
+            echo "Usage: harbor config search <query>"
+            return 1
+        fi
+        local query_lc
+        query_lc=$(printf '%s' "$query" | tr 'A-Z' 'a-z')
+        # Normalize: replace . and - with _
+        local query_norm="${query_lc//[.-]/_}"
+
+        local found=false
+        while IFS= read -r line || [[ -n "$line" ]]; do
+            [[ "$line" == "${prefix}"* ]] || continue
+            local key="${line%%=*}"
+            local raw_value="${line#*=}"
+            local stripped="${key:$prefix_len}"
+            local lower
+            lower=$(printf '%s' "$stripped" | tr 'A-Z' 'a-z')
+            local display_key="${lower/_/.}"
+            local value="$raw_value"
+            value="${value#\"}"
+            value="${value%\"}"
+            value="${value#\'}"
+            value="${value%\'}"
+
+            # Build search blob (same approach as the Deno routine)
+            local hyphen_key="${display_key//./-}"
+            local norm_key="${display_key//[.-]/_}"
+            local value_lc
+            value_lc=$(printf '%s' "$value" | tr 'A-Z' 'a-z')
+            local blob="$display_key $value_lc $hyphen_key $norm_key"
+
+            if [[ "$blob" == *"$query_lc"* ]] || [[ "$blob" == *"$query_norm"* ]]; then
+                printf '%-30s %s\n' "$display_key" "$value"
+                found=true
+            fi
+        done < "$env_file"
+
+        if ! $found; then
+            echo "No results found for: $query"
+        fi
+        ;;
+    *)
+        log_error "Unknown config search command: $command"
+        return 1
+        ;;
+    esac
+}
+
 env_manager() {
     local env_file=".env"
     local prefix="HARBOR_"
@@ -5773,7 +5881,11 @@ env_manager() {
         fi
         ;;
     list | ls)
-        run_routine configSearch list --env-file "$env_file" --prefix "$prefix"
+        if command -v deno &>/dev/null || _check_docker 2>/dev/null; then
+            run_routine configSearch list --env-file "$env_file" --prefix "$prefix"
+        else
+            _config_search_bash list --env-file "$env_file" --prefix "$prefix"
+        fi
         ;;
     reset)
         shift
@@ -5788,7 +5900,11 @@ env_manager() {
         merge_env_files
         ;;
     search | find)
-        run_routine configSearch search --env-file "$env_file" --prefix "$prefix" "$2"
+        if command -v deno &>/dev/null || _check_docker 2>/dev/null; then
+            run_routine configSearch search --env-file "$env_file" --prefix "$prefix" "$2"
+        else
+            _config_search_bash search --env-file "$env_file" --prefix "$prefix" "$2"
+        fi
         ;;
     --help | -h)
         echo "Harbor configuration management"
