@@ -328,8 +328,10 @@ show_help() {
     echo "    up --no-defaults      - Do not include default services"
     echo "    up --skip-port-check  - Skip port conflict pre-check"
 
-    echo "  down|d                  - Stop and remove the containers"
-    echo "  restart|r [handle]      - Down then up"
+    echo "  down|d [handle(s)]      - Stop and remove the containers"
+    echo "    down --volumes        - Also remove named volumes"
+    echo "    down --rmi local|all  - Also remove images"
+    echo "  restart|r [handle(s)]   - Down then up"
     echo "  ps                      - List the running containers"
     echo "  logs|l [handle]         - View logs (--no-follow for non-streaming)"
     echo "  exec <handle> <command> - Execute a command in a running service"
@@ -1315,37 +1317,94 @@ run_up() {
 }
 
 run_down() {
+    case "${1:-}" in
+    --help | -h | help)
+        echo "Stop and remove Harbor service containers"
+        echo
+        echo "Usage: harbor down [service...] [options]"
+        echo
+        echo "Options:"
+        echo "  --volumes, -v       Remove named volumes declared in compose files"
+        echo "  --rmi <type>        Remove images (\"local\" or \"all\")"
+        echo "  --timeout, -t <s>   Shutdown timeout in seconds (default: 10)"
+        echo
+        echo "Examples:"
+        echo "  harbor down                 Stop all running services"
+        echo "  harbor down ollama webui    Stop specific services"
+        echo "  harbor down --volumes       Stop all and remove volumes"
+        echo "  harbor down --rmi local     Stop all and remove locally-built images"
+        echo
+        echo "See also: harbor restart, harbor ps"
+        return 0
+        ;;
+    esac
+
     _check_docker || return 1
+
     local services=$(get_active_services)
     local matched_services=()
-    local compose_targets=("$@")
+    local compose_targets=()
     local requested_services=()
+    local down_flags=()
     local stop_dmr=false
     local stop_mlx=false
     local stop_omlx=false
 
     log_debug "Active services: $services"
 
-    for service in "$@"; do
-        case "$service" in
+    local expect_flag_value=false
+    for arg in "$@"; do
+        if $expect_flag_value; then
+            down_flags+=("$arg")
+            expect_flag_value=false
+            continue
+        fi
+        case "$arg" in
+        --rmi|--timeout|-t)
+            down_flags+=("$arg")
+            expect_flag_value=true
+            ;;
+        --rmi=*|--timeout=*|-t=*)
+            down_flags+=("$arg")
+            ;;
         --*)
+            down_flags+=("$arg")
             ;;
         dmr)
             stop_dmr=true
-            requested_services+=("$service")
+            requested_services+=("$arg")
+            compose_targets+=("$arg")
             ;;
         mlx)
             stop_mlx=true
-            requested_services+=("$service")
+            requested_services+=("$arg")
+            compose_targets+=("$arg")
             ;;
         omlx)
             stop_omlx=true
-            requested_services+=("$service")
+            requested_services+=("$arg")
+            compose_targets+=("$arg")
             ;;
         *)
-            requested_services+=("$service")
+            requested_services+=("$arg")
+            compose_targets+=("$arg")
             ;;
         esac
+    done
+
+    # Validate service names
+    for svc in "${requested_services[@]}"; do
+        case "$svc" in dmr|mlx|omlx) continue ;; esac
+        if ! service_compose_exists "$svc"; then
+            log_error "Service '$svc' not found."
+            local suggestion
+            suggestion=$(_suggest_service "$svc")
+            if [ -n "$suggestion" ]; then
+                log_info "Did you mean: ${c_g}$suggestion${c_nc}?"
+            fi
+            log_info "Run 'harbor ls' to see available services."
+            return 1
+        fi
     done
 
     if [ ${#requested_services[@]} -eq 0 ]; then
@@ -1365,10 +1424,12 @@ run_down() {
     # e.g. beszel-agent, beszel-agent-init, dify-api, langfuse-worker — get
     # torn down with their parent. Without this, `harbor down beszel` only
     # stops the hub and leaves the docker.sock-mounted agent running.
-    local raw_services=$(docker compose ps -a --format "{{.Service}}")
-    for service in "$@"; do
-        log_debug "Checking if service '$service' has companions running..."
-        matched_service=$(echo "$raw_services" | grep "^$service-" || true)
+    local raw_services
+    raw_services=$(docker compose ps -a --format "{{.Service}}")
+    local svc matched_service
+    for svc in "${requested_services[@]}"; do
+        log_debug "Checking if service '$svc' has companions running..."
+        matched_service=$(echo "$raw_services" | grep "^${svc}-" || true)
         if [ -n "$matched_service" ]; then
             matched_services+=($matched_service)
         fi
@@ -1376,11 +1437,11 @@ run_down() {
 
     log_debug "Matched: ${matched_services[*]}"
 
-    if [ $# -eq 0 ]; then
+    if [ ${#requested_services[@]} -eq 0 ]; then
         log_info "Stopping all services..."
         compose_targets=("*")
     else
-        log_info "Stopping services: $*"
+        log_info "Stopping services: ${requested_services[*]}"
     fi
 
     if $stop_mlx; then
@@ -1393,8 +1454,23 @@ run_down() {
         run_dmr_command stop || true
     fi
 
-    matched_services_str=$(printf " %s" "${matched_services[@]}")
-    $(compose_with_options "${compose_targets[@]}") down --remove-orphans --timeout 10 "$@" $matched_services_str
+    local matched_services_str=""
+    if [ ${#matched_services[@]} -gt 0 ]; then
+        matched_services_str=$(printf " %s" "${matched_services[@]}")
+    fi
+
+    # Add default timeout unless user specified one
+    local has_timeout=false
+    local flag
+    for flag in "${down_flags[@]}"; do
+        case "$flag" in --timeout|--timeout=*|-t|-t=*) has_timeout=true ;; esac
+    done
+    local timeout_args=()
+    if ! $has_timeout; then
+        timeout_args=(--timeout 10)
+    fi
+
+    $(compose_with_options "${compose_targets[@]}") down --remove-orphans "${timeout_args[@]}" "${down_flags[@]}" "${requested_services[@]}" $matched_services_str
     local down_exit=$?
 
     if [ $down_exit -eq 0 ]; then
@@ -1407,7 +1483,34 @@ run_down() {
 }
 
 run_restart() {
+    case "${1:-}" in
+    --help | -h | help)
+        echo "Restart Harbor services (down then up)"
+        echo
+        echo "Usage: harbor restart [service...] [options]"
+        echo
+        echo "With no arguments, restarts all currently running services."
+        echo "With service names, stops those services and starts them along"
+        echo "with any other currently running services."
+        echo
+        echo "Options:"
+        echo "  --open, -o          Open in browser after restart"
+        echo "  --tail, -t          Tail logs after restart"
+        echo "  --no-defaults       Do not include default services on restart"
+        echo "  --skip-port-check   Skip port conflict pre-check"
+        echo
+        echo "Examples:"
+        echo "  harbor restart              Restart all running services"
+        echo "  harbor restart ollama       Restart ollama (keeps other services running)"
+        echo "  harbor restart webui --tail Restart webui and tail logs"
+        echo
+        echo "See also: harbor down, harbor up"
+        return 0
+        ;;
+    esac
+
     _check_docker || return 1
+
     local active_services=$(get_active_services)
 
     if [ -z "$active_services" ] && [ $# -eq 0 ]; then
@@ -1426,11 +1529,29 @@ run_restart() {
         fi
     done
 
+    # Validate explicitly requested service names
+    local svc
+    for svc in "${services[@]}"; do
+        case "$svc" in dmr|mlx|omlx) continue ;; esac
+        if ! service_compose_exists "$svc"; then
+            log_error "Service '$svc' not found."
+            local suggestion
+            suggestion=$(_suggest_service "$svc")
+            if [ -n "$suggestion" ]; then
+                log_info "Did you mean: ${c_g}$suggestion${c_nc}?"
+            fi
+            log_info "Run 'harbor ls' to see available services."
+            return 1
+        fi
+    done
+
     local unique_services=()
     local all_services=($active_services "${services[@]}")
 
+    local s
     for s in "${all_services[@]}"; do
         local is_seen=0
+        local u
         for u in "${unique_services[@]}"; do
             if [[ "$s" == "$u" ]]; then
                 is_seen=1
@@ -1442,7 +1563,11 @@ run_restart() {
         fi
     done
 
-    run_down "${services[@]}"
+    if ! run_down "${services[@]}"; then
+        log_error "Failed to stop services. Aborting restart."
+        log_error "Check 'docker ps' for stuck containers, then retry."
+        return 1
+    fi
     run_up "${unique_services[@]}" "${flags[@]}"
 }
 
@@ -1483,25 +1608,65 @@ run_ps() {
 }
 
 run_build() {
+    local service="${1:-}"
+
+    case "$service" in
+    --help | -h | help)
+        echo "Build Docker images for a Harbor service"
+        echo
+        echo "Usage: harbor build <service> [docker-build-options]"
+        echo
+        echo "Options (passed through to docker compose build):"
+        echo "  --no-cache          Do not use cache when building"
+        echo "  --pull              Always pull newer base images"
+        echo "  --progress <type>   Set build output type (auto, plain, tty)"
+        echo
+        echo "Examples:"
+        echo "  harbor build webui                Build the webui image"
+        echo "  harbor build webui --no-cache     Build without cache"
+        echo "  harbor build webui --pull         Pull latest base image"
+        echo
+        echo "See also: harbor up, harbor pull"
+        return 0
+        ;;
+    "")
+        log_error "Usage: harbor build <service> [options]"
+        log_error "Run 'harbor build --help' for more information."
+        log_info "Run 'harbor ls' to see available services."
+        return 1
+        ;;
+    esac
+
     _check_docker || return 1
-    service=$1
     shift
 
-    if [ -z "$service" ]; then
-        log_error "Usage: harbor build <service>"
+    if ! service_compose_exists "$service"; then
+        log_error "Service '$service' not found."
+        local suggestion
+        suggestion=$(_suggest_service "$service")
+        if [ -n "$suggestion" ]; then
+            log_info "Did you mean: ${c_g}$suggestion${c_nc}?"
+        fi
+        log_info "Run 'harbor ls' to see available services."
         return 1
     fi
 
-    local services=$(get_services --silent)
+    local all_services
+    all_services=$(get_services --silent)
+    local matched_services=()
+    local matched_service
 
     log_debug "Checking if service '$service' has subservices..."
-    matched_service=$(echo "$services" | grep "^$service-")
+    matched_service=$(echo "$all_services" | grep "^$service-" || true)
     if [ -n "$matched_service" ]; then
         log_debug "Matched service: $matched_service"
-        matched_services+=("$matched_service")
+        matched_services+=($matched_service)
     fi
 
-    matched_services_str=$(printf " %s" "${matched_services[@]}")
+    local matched_services_str=""
+    if [ ${#matched_services[@]} -gt 0 ]; then
+        matched_services_str=$(printf " %s" "${matched_services[@]}")
+    fi
     log_debug "Building" "$service" "$@" $matched_services_str
     $(compose_with_options "*") build "$service" "$@" $matched_services_str
 }
@@ -3652,7 +3817,34 @@ _harbor_completions() {
                 COMPREPLY=($(compgen -W "$services" -- "$cur"))
             fi
             ;;
-        down|d|build|shell|pull|exec|run|stats|attach|cmd|eject|open|o|url|qr|launch|dive)
+        down|d)
+            if [[ "$cur" == --* ]]; then
+                COMPREPLY=($(compgen -W "--volumes --rmi --timeout" -- "$cur"))
+            else
+                local services
+                services=$(_harbor_services)
+                COMPREPLY=($(compgen -W "$services" -- "$cur"))
+            fi
+            ;;
+        restart|r)
+            if [[ "$cur" == --* ]]; then
+                COMPREPLY=($(compgen -W "--open --tail --no-defaults --skip-port-check" -- "$cur"))
+            else
+                local services
+                services=$(_harbor_services)
+                COMPREPLY=($(compgen -W "$services" -- "$cur"))
+            fi
+            ;;
+        build)
+            if [[ "$cur" == --* ]]; then
+                COMPREPLY=($(compgen -W "--no-cache --pull --progress" -- "$cur"))
+            else
+                local services
+                services=$(_harbor_services)
+                COMPREPLY=($(compgen -W "$services" -- "$cur"))
+            fi
+            ;;
+        shell|pull|exec|run|stats|attach|cmd|eject|open|o|url|qr|launch|dive)
             # Complete with service names
             local services
             services=$(_harbor_services)
@@ -3893,7 +4085,50 @@ _harbor() {
                 _describe -t services 'service' svc_list
             fi
             ;;
-        down|d|build|shell|pull|exec|run|stats|attach|cmd|eject|open|o|url|qr|launch|dive)
+        down|d)
+            if [[ "$PREFIX" == --* ]]; then
+                local -a down_flags=(
+                    '--volumes:Remove named volumes'
+                    '--rmi:Remove images (local or all)'
+                    '--timeout:Shutdown timeout in seconds'
+                )
+                _describe -t flags 'flag' down_flags
+            else
+                local -a svc_list
+                svc_list=(${(f)"$(_harbor_services)"})
+                _describe -t services 'service' svc_list
+            fi
+            ;;
+        restart|r)
+            if [[ "$PREFIX" == --* ]]; then
+                local -a restart_flags=(
+                    '--open:Open in browser after restart'
+                    '--tail:Tail logs after restart'
+                    '--no-defaults:Exclude default services'
+                    '--skip-port-check:Skip port conflict pre-check'
+                )
+                _describe -t flags 'flag' restart_flags
+            else
+                local -a svc_list
+                svc_list=(${(f)"$(_harbor_services)"})
+                _describe -t services 'service' svc_list
+            fi
+            ;;
+        build)
+            if [[ "$PREFIX" == --* ]]; then
+                local -a build_flags=(
+                    '--no-cache:Build without cache'
+                    '--pull:Always pull newer base images'
+                    '--progress:Set build output type'
+                )
+                _describe -t flags 'flag' build_flags
+            else
+                local -a svc_list
+                svc_list=(${(f)"$(_harbor_services)"})
+                _describe -t services 'service' svc_list
+            fi
+            ;;
+        shell|pull|exec|run|stats|attach|cmd|eject|open|o|url|qr|launch|dive)
             local -a svc_list
             svc_list=(${(f)"$(_harbor_services)"})
             _describe -t services 'service' svc_list
@@ -4228,6 +4463,24 @@ complete -c harbor -n '__harbor_using_subcommand up' -l open -d 'Start and open 
 complete -c harbor -n '__harbor_using_subcommand up' -l attach -d 'Attach to the first service'
 complete -c harbor -n '__harbor_using_subcommand up' -l no-defaults -d 'Exclude default services'
 complete -c harbor -n '__harbor_using_subcommand up' -l skip-port-check -d 'Skip port conflict pre-check'
+
+# Flags for 'down' command
+complete -c harbor -n '__harbor_using_subcommand down' -l volumes -s v -d 'Remove named volumes'
+complete -c harbor -n '__harbor_using_subcommand down' -l rmi -d 'Remove images (local or all)'
+complete -c harbor -n '__harbor_using_subcommand down' -l timeout -s t -d 'Shutdown timeout in seconds'
+complete -c harbor -n '__harbor_using_subcommand d' -l volumes -s v -d 'Remove named volumes'
+
+# Flags for 'restart' command
+complete -c harbor -n '__harbor_using_subcommand restart' -l open -d 'Open in browser after restart'
+complete -c harbor -n '__harbor_using_subcommand restart' -l tail -d 'Tail logs after restart'
+complete -c harbor -n '__harbor_using_subcommand restart' -l no-defaults -d 'Exclude default services'
+complete -c harbor -n '__harbor_using_subcommand restart' -l skip-port-check -d 'Skip port conflict pre-check'
+complete -c harbor -n '__harbor_using_subcommand r' -l open -d 'Open in browser after restart'
+
+# Flags for 'build' command
+complete -c harbor -n '__harbor_using_subcommand build' -l no-cache -d 'Build without cache'
+complete -c harbor -n '__harbor_using_subcommand build' -l pull -d 'Always pull newer base images'
+complete -c harbor -n '__harbor_using_subcommand build' -l progress -d 'Set build output type'
 
 # Flags for 'logs' command
 complete -c harbor -n '__harbor_using_subcommand logs' -l no-follow -d 'Show recent logs and exit'
