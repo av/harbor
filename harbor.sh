@@ -331,8 +331,8 @@ show_help() {
     echo "  down|d                  - Stop and remove the containers"
     echo "  restart|r [handle]      - Down then up"
     echo "  ps                      - List the running containers"
-    echo "  logs|l <handle>         - View the logs of the containers"
-    echo "  exec <handle> [command] - Execute a command in a running service"
+    echo "  logs|l [handle]         - View logs (--no-follow for non-streaming)"
+    echo "  exec <handle> <command> - Execute a command in a running service"
     echo "  pull <handle>           - Pull Docker images or download models"
     echo "    pull <service>...     - Pull Docker images for service(s)"
     echo "    pull <model>          - Download a model (alias for 'harbor models pull')"
@@ -1448,13 +1448,38 @@ run_restart() {
 
 run_ps() {
     _check_docker || return 1
-    local compose_targets=("$@")
 
-    if [ $# -eq 0 ]; then
+    case "${1:-}" in
+    --help | -h | help)
+        echo "List running Harbor service containers"
+        echo
+        echo "Usage: harbor ps [service...] [docker-ps-options]"
+        echo
+        echo "Examples:"
+        echo "  harbor ps                Show all running Harbor containers"
+        echo "  harbor ps ollama webui   Show only ollama and webui containers"
+        echo "  harbor ps -a             Show all containers (including stopped)"
+        return 0
+        ;;
+    esac
+
+    # Separate service names from docker ps flags to avoid double-passing
+    local compose_targets=()
+    local ps_flags=()
+
+    for arg in "$@"; do
+        if [[ "$arg" == -* ]]; then
+            ps_flags+=("$arg")
+        else
+            compose_targets+=("$arg")
+        fi
+    done
+
+    if [ ${#compose_targets[@]} -eq 0 ]; then
         compose_targets=("*")
     fi
 
-    $(compose_with_options "${compose_targets[@]}") ps "$@"
+    $(compose_with_options "${compose_targets[@]}") ps "${ps_flags[@]}"
 }
 
 run_build() {
@@ -1483,26 +1508,120 @@ run_build() {
 
 run_shell() {
     _check_docker || return 1
-    service=$1
+    local service="${1:-}"
+
+    case "$service" in
+    --help | -h | help | "")
+        echo "Open a shell inside a running service container"
+        echo
+        echo "Usage: harbor shell <service> [shell]"
+        echo
+        echo "Arguments:"
+        echo "  service   Name of a running service (see 'harbor ps')"
+        echo "  shell     Shell to use (default: auto-detect bash, then sh)"
+        echo
+        echo "Examples:"
+        echo "  harbor shell ollama           Open a shell in the ollama container"
+        echo "  harbor shell webui sh         Open sh instead of bash"
+        if [ -z "$service" ]; then
+            return 1
+        fi
+        return 0
+        ;;
+    esac
+
     shift
 
-    if [ -z "$service" ]; then
-        log_error "Usage: harbor shell <service>"
-        exit 1
+    # Validate service name
+    if ! service_compose_exists "$service"; then
+        log_error "Service '$service' not found."
+        local suggestion
+        suggestion=$(_suggest_service "$service")
+        if [ -n "$suggestion" ]; then
+            log_info "Did you mean: ${c_g}$suggestion${c_nc}?"
+        fi
+        log_info "Run 'harbor ls' to see available services."
+        return 1
     fi
 
-    local shell="bash"
-
-    if [ -n "$1" ]; then
-        shell="$1"
+    # Check if service is running — exec into it rather than creating a new container
+    if is_service_running "$service"; then
+        local shell="${1:-}"
+        if [ -z "$shell" ]; then
+            # Auto-detect: try bash, fall back to sh
+            if docker compose exec "$service" bash -c "true" >/dev/null 2>&1; then
+                shell="bash"
+            else
+                shell="sh"
+            fi
+        fi
+        log_info "Opening $shell in running container '$service'..."
+        docker compose exec -it "$service" "$shell"
+    else
+        log_error "Service '$service' is not running."
+        log_info "Start it first with: harbor up $service"
+        return 1
     fi
-
-    $(compose_with_options "*") run -it --entrypoint "$shell" "$service"
 }
 
 run_logs() {
     _check_docker || return 1
-    $(compose_with_options "*") logs -n 20 -f "$@"
+
+    case "${1:-}" in
+    --help | -h | help)
+        echo "View logs from service containers"
+        echo
+        echo "Usage: harbor logs [options] [service...]"
+        echo
+        echo "Options:"
+        echo "  --no-follow, --no-tail   Show recent logs and exit (do not stream)"
+        echo "  -n, --tail <N>           Number of lines to show (default: 20)"
+        echo "  --follow, -f             Stream logs in real-time (default)"
+        echo
+        echo "Examples:"
+        echo "  harbor logs ollama              Stream ollama logs"
+        echo "  harbor logs --no-follow ollama  Show last 20 lines and exit"
+        echo "  harbor logs -n 100 webui        Show last 100 lines and stream"
+        echo "  harbor logs                     Stream logs from all running services"
+        return 0
+        ;;
+    esac
+
+    local follow=true
+    local tail_lines="20"
+    local args=()
+
+    while [ $# -gt 0 ]; do
+        case "$1" in
+        --no-follow | --no-tail)
+            follow=false
+            shift
+            ;;
+        -n | --tail)
+            if [ -n "${2:-}" ]; then
+                tail_lines="$2"
+                shift 2
+            else
+                log_error "--tail requires a number of lines."
+                return 1
+            fi
+            ;;
+        -f | --follow)
+            follow=true
+            shift
+            ;;
+        *)
+            args+=("$1")
+            shift
+            ;;
+        esac
+    done
+
+    if $follow; then
+        $(compose_with_options "*") logs -n "$tail_lines" -f "${args[@]}"
+    else
+        $(compose_with_options "*") logs -n "$tail_lines" "${args[@]}"
+    fi
 }
 
 run_pull() {
@@ -3029,6 +3148,23 @@ run_launch_command() {
 
 run_stats() {
     _check_docker || return 1
+
+    case "${1:-}" in
+    --help | -h | help)
+        echo "Show live resource usage statistics for Harbor containers"
+        echo
+        echo "Usage: harbor stats [service...]"
+        echo
+        echo "When piped or redirected, shows a single snapshot instead of streaming."
+        echo
+        echo "Examples:"
+        echo "  harbor stats                Live resource usage for all containers"
+        echo "  harbor stats ollama webui   Live resource usage for specific services"
+        echo "  harbor stats > usage.txt    Snapshot to file (non-streaming)"
+        return 0
+        ;;
+    esac
+
     if [ ! -t 1 ]; then
         $(compose_with_options "*") stats --no-stream "$@"
     else
@@ -3037,23 +3173,56 @@ run_stats() {
 }
 
 run_attach() {
-  _check_docker || return 1
-  local service_name=$1
+    _check_docker || return 1
+    local service_name="${1:-}"
 
-  if [ -z "$service_name" ]; then
-      log_error "Usage: harbor attach <service>"
-      return 1
-  fi
+    case "$service_name" in
+    --help | -h | help)
+        echo "Attach to a running service container's main process"
+        echo
+        echo "Usage: harbor attach <service>"
+        echo
+        echo "WARNING: Ctrl+C while attached sends SIGINT to the container's"
+        echo "main process, which may stop the service. Use Ctrl+P, Ctrl+Q"
+        echo "to detach safely without stopping the container."
+        echo
+        echo "For interactive shell access, prefer: harbor shell <service>"
+        echo
+        echo "Examples:"
+        echo "  harbor attach ollama    Attach to ollama's main process"
+        return 0
+        ;;
+    "")
+        log_error "No service specified."
+        echo "Usage: harbor attach <service>" >&2
+        echo "Run 'harbor ps' to see running services." >&2
+        return 1
+        ;;
+    esac
 
-  local container_name=$(get_container_name "$service_name")
+    # Validate service name
+    if ! service_compose_exists "$service_name"; then
+        log_error "Service '$service_name' not found."
+        local suggestion
+        suggestion=$(_suggest_service "$service_name")
+        if [ -n "$suggestion" ]; then
+            log_info "Did you mean: ${c_g}$suggestion${c_nc}?"
+        fi
+        log_info "Run 'harbor ls' to see available services."
+        return 1
+    fi
 
-  if docker ps --filter "name=$container_name" | grep -q "$container_name"; then
-        log_info "Attaching to container $container_name..."
+    local container_name
+    container_name=$(get_container_name "$service_name")
+
+    if docker ps --filter "name=$container_name" --format '{{.Names}}' | grep -q "^${container_name}$"; then
+        log_warn "Attaching to container $container_name. Use Ctrl+P, Ctrl+Q to detach safely."
         docker attach "$container_name"
     else
-        log_error "Container $container_name is not running. Start it with 'harbor up $service_name' first."
+        log_error "Service '$service_name' is not running."
+        log_info "Start it first with: harbor up $service_name"
         return 1
-  fi
+    fi
 }
 
 run_hf_open() {
@@ -3474,7 +3643,16 @@ _harbor_completions() {
                 COMPREPLY=($(compgen -W "$services" -- "$cur"))
             fi
             ;;
-        down|d|logs|log|l|build|shell|pull|exec|run|stats|attach|cmd|eject|open|o|url|qr|launch|dive)
+        logs|log|l)
+            if [[ "$cur" == --* ]]; then
+                COMPREPLY=($(compgen -W "--no-follow --no-tail --tail --follow" -- "$cur"))
+            else
+                local services
+                services=$(_harbor_services)
+                COMPREPLY=($(compgen -W "$services" -- "$cur"))
+            fi
+            ;;
+        down|d|build|shell|pull|exec|run|stats|attach|cmd|eject|open|o|url|qr|launch|dive)
             # Complete with service names
             local services
             services=$(_harbor_services)
@@ -3700,7 +3878,22 @@ _harbor() {
                 _describe -t services 'service' svc_list
             fi
             ;;
-        down|d|logs|log|l|build|shell|pull|exec|run|stats|attach|cmd|eject|open|o|url|qr|launch|dive)
+        logs|log|l)
+            if [[ "$PREFIX" == --* ]]; then
+                local -a logs_flags=(
+                    '--no-follow:Show recent logs and exit'
+                    '--no-tail:Show recent logs and exit'
+                    '--tail:Number of lines to show'
+                    '--follow:Stream logs in real-time'
+                )
+                _describe -t flags 'flag' logs_flags
+            else
+                local -a svc_list
+                svc_list=(${(f)"$(_harbor_services)"})
+                _describe -t services 'service' svc_list
+            fi
+            ;;
+        down|d|build|shell|pull|exec|run|stats|attach|cmd|eject|open|o|url|qr|launch|dive)
             local -a svc_list
             svc_list=(${(f)"$(_harbor_services)"})
             _describe -t services 'service' svc_list
@@ -4035,6 +4228,14 @@ complete -c harbor -n '__harbor_using_subcommand up' -l open -d 'Start and open 
 complete -c harbor -n '__harbor_using_subcommand up' -l attach -d 'Attach to the first service'
 complete -c harbor -n '__harbor_using_subcommand up' -l no-defaults -d 'Exclude default services'
 complete -c harbor -n '__harbor_using_subcommand up' -l skip-port-check -d 'Skip port conflict pre-check'
+
+# Flags for 'logs' command
+complete -c harbor -n '__harbor_using_subcommand logs' -l no-follow -d 'Show recent logs and exit'
+complete -c harbor -n '__harbor_using_subcommand logs' -l no-tail -d 'Show recent logs and exit'
+complete -c harbor -n '__harbor_using_subcommand logs' -l tail -d 'Number of lines to show'
+complete -c harbor -n '__harbor_using_subcommand logs' -l follow -d 'Stream logs in real-time'
+complete -c harbor -n '__harbor_using_subcommand log' -l no-follow -d 'Show recent logs and exit'
+complete -c harbor -n '__harbor_using_subcommand l' -l no-follow -d 'Show recent logs and exit'
 
 # Env subcommands (harbor env <service> <subcommand>)
 complete -c harbor -n __harbor_env_needs_service -a '(__harbor_services)'
@@ -4537,15 +4738,45 @@ eject() {
 
 run_exec() {
     _check_docker || return 1
+
+    case "${1:-}" in
+    --help | -h | help)
+        echo "Execute a command inside a running service container"
+        echo
+        echo "Usage: harbor exec [options] <service> <command> [args...]"
+        echo
+        echo "Options are passed to 'docker compose exec' (e.g. -T for non-interactive)."
+        echo
+        echo "Examples:"
+        echo "  harbor exec ollama ollama list              List Ollama models"
+        echo "  harbor exec webui ls /app                   List files in webui container"
+        echo "  harbor exec -T ollama cat /etc/os-release   Non-interactive command"
+        echo
+        echo "For an interactive shell, prefer: harbor shell <service>"
+        return 0
+        ;;
+    "")
+        log_error "No service or command specified."
+        echo "Usage: harbor exec <service> <command> [args...]" >&2
+        echo "Run 'harbor ps' to see running services." >&2
+        return 1
+        ;;
+    esac
+
     local service_name=""
     local before_args=()
     local after_args=()
     local parsing_after=false
 
-    # Parse arguments
+    # Get running services using compose context (respects project dir)
+    local running_services
+    running_services=$(docker compose ps --services --filter "status=running" 2>/dev/null) || running_services=""
+
+    # Parse arguments: flags before the service name are docker exec flags,
+    # everything after is the command to run inside the container.
     for arg in "$@"; do
         if [[ -z $service_name ]]; then
-            if docker compose ps --services | grep -q "^${arg}$"; then
+            if echo "$running_services" | grep -q "^${arg}$"; then
                 service_name="$arg"
                 parsing_after=true
             else
@@ -4556,26 +4787,42 @@ run_exec() {
         fi
     done
 
-    # Check if service name was found
     if [[ -z $service_name ]]; then
-        log_error "No valid service name provided. Specify a running service to exec into."
+        # Check if the first non-flag arg is a known service that's not running
+        local first_non_flag=""
+        for arg in "$@"; do
+            if [[ "$arg" != -* ]]; then
+                first_non_flag="$arg"
+                break
+            fi
+        done
+
+        if [ -n "$first_non_flag" ] && service_compose_exists "$first_non_flag"; then
+            log_error "Service '$first_non_flag' is not running."
+            log_info "Start it first with: harbor up $first_non_flag"
+        elif [ -n "$first_non_flag" ]; then
+            log_error "Service '$first_non_flag' not found."
+            local suggestion
+            suggestion=$(_suggest_service "$first_non_flag")
+            if [ -n "$suggestion" ]; then
+                log_info "Did you mean: ${c_g}$suggestion${c_nc}?"
+            fi
+            log_info "Run 'harbor ps' to see running services."
+        else
+            log_error "No valid service name provided."
+            echo "Usage: harbor exec <service> <command> [args...]" >&2
+            echo "Run 'harbor ps' to see running services." >&2
+        fi
         return 1
     fi
 
-    # Check if the service is running
-    if docker compose ps --services --filter "status=running" | grep -q "^${service_name}$"; then
-        log_info "Service ${service_name} is running. Executing command..."
-
-        # Construct the command
-        local full_command=("${before_args[@]}" "${service_name}" "${after_args[@]}")
-
-        # Execute the command
-        # shellcheck disable=SC2068
-        docker compose exec ${full_command[@]}
-    else
-        log_error "Service ${service_name} is not running. Please start it with 'harbor up ${service_name}' first."
+    if [ ${#after_args[@]} -eq 0 ]; then
+        log_warn "No command specified. For an interactive shell, use: harbor shell $service_name"
         return 1
     fi
+
+    log_info "Executing in ${service_name}..."
+    docker compose exec "${before_args[@]}" "${service_name}" "${after_args[@]}"
 }
 
 set_colors() {
