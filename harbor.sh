@@ -267,9 +267,9 @@ show_help() {
     echo "  ps                      - List the running containers"
     echo "  logs|l <handle>         - View the logs of the containers"
     echo "  exec <handle> [command] - Execute a command in a running service"
-    echo "  pull <handle>           - Pull the latest images or models"
-    echo "    pull <service>        - Pull Docker images for a service"
-    echo "    pull <model>          - Pull Ollama model or llama.cpp HF model"
+    echo "  pull <handle>           - Pull Docker images or download models"
+    echo "    pull <service>...     - Pull Docker images for service(s)"
+    echo "    pull <model>          - Download a model (alias for 'harbor models pull')"
     echo "  dive <handle>           - Run the Dive CLI to inspect Docker images"
     echo "  run <alias>             - Run a command defined as an alias"
     echo "  run <handle> [command]  - Run a one-off command in a service container"
@@ -1441,17 +1441,52 @@ run_logs() {
 
 run_pull() {
     _check_docker || return 1
+
+    if [ $# -eq 0 ]; then
+        log_error "No service or model specified."
+        echo "Usage:" >&2
+        echo "  harbor pull <service> [service...]   Pull Docker images for services" >&2
+        echo "  harbor pull <model>                  Pull a model (alias for 'harbor models pull')" >&2
+        echo "" >&2
+        echo "Examples:" >&2
+        echo "  harbor pull ollama webui             Pull Docker images" >&2
+        echo "  harbor pull qwen3:8b                 Pull an Ollama model" >&2
+        return 1
+    fi
+
+    local available_services
     available_services=$(get_services --silent)
 
-    for service in "$@"; do
-        if echo "$available_services" | grep -q "^$service$"; then
-            log_info "Pulling service $service"
+    # Separate services (Docker image pull) from models (model download).
+    # If any arg is not a known service, treat ALL args as a single model pull
+    # invocation rather than silently mixing the two operations.
+    local service_args=()
+    local has_non_service=false
+    for arg in "$@"; do
+        if echo "$available_services" | grep -q "^${arg}$"; then
+            service_args+=("$arg")
         else
-            run_models_pull "$service"
-            return 0
+            has_non_service=true
+            break
         fi
     done
 
+    if $has_non_service; then
+        if [ ${#service_args[@]} -gt 0 ]; then
+            # Mixed: some args are services, some aren't. This is confusing.
+            # Treat the non-service arg as a model and warn about the ambiguity.
+            log_warn "Ignoring service arguments (${service_args[*]}) -- treating '$arg' as a model to download."
+            log_warn "To pull Docker images, use: harbor pull ${service_args[*]}"
+            log_warn "To pull a model, use: harbor models pull $arg"
+        fi
+        run_models_pull "$arg"
+        return
+    fi
+
+    # All args are known services -- pull their Docker images
+    for service in "${service_args[@]}"; do
+        log_info "Pulling service $service"
+    done
     $(compose_with_options "$@") pull
 }
 
@@ -1488,7 +1523,18 @@ llamacpp_pull_model_args() {
 }
 
 run_llamacpp_pull() {
+    _check_docker || return 1
+
     local model="$1"
+
+    if [ -z "$model" ]; then
+        log_error "No model specified for llamacpp pull."
+        echo "Usage: harbor models pull --source llamacpp <model>" >&2
+        echo "  model can be: org/repo (HuggingFace GGUF repo)" >&2
+        echo "  or a full URL: https://huggingface.co/org/repo/blob/main/file.gguf" >&2
+        return 1
+    fi
+
     log_info "Detected Llama.cpp target: $model"
     log_info "Starting ephemeral llama-server to pull model to cache..."
 
@@ -3253,6 +3299,9 @@ _harbor_completions() {
     # Defaults subcommands
     local defaults_subcommands="ls list add rm clear"
 
+    # Models subcommands
+    local models_subcommands="ls list pull rm remove"
+
     # Get service names (cached for performance)
     _harbor_services() {
         local harbor_home cache_file cache_age services
@@ -3335,6 +3384,13 @@ _harbor_completions() {
                 local services
                 services=$(_harbor_services)
                 COMPREPLY=($(compgen -W "$services" -- "$cur"))
+            fi
+            ;;
+        models)
+            if ((cword == 2)); then
+                COMPREPLY=($(compgen -W "$models_subcommands" -- "$cur"))
+            elif ((cword >= 3)) && [[ "${words[2]}" == "pull" || "${words[2]}" == "rm" || "${words[2]}" == "remove" || "${words[2]}" == "ls" || "${words[2]}" == "list" ]] && [[ "$cur" == --* ]]; then
+                COMPREPLY=($(compgen -W "--source -s --json" -- "$cur"))
             fi
             ;;
         up|u|start|s)
@@ -3674,6 +3730,23 @@ _harbor() {
                 _describe -t services 'service' svc_list
             fi
             ;;
+        models)
+            if ((CURRENT == 3)); then
+                local -a models_cmds
+                models_cmds=(
+                    'ls:List models'
+                    'list:List models'
+                    'pull:Download a model'
+                    'rm:Remove a model'
+                    'remove:Remove a model'
+                )
+                _describe -t models-commands 'models command' models_cmds
+            elif ((CURRENT >= 4)) && [[ "$cur" == --* ]]; then
+                local -a models_flags
+                models_flags=('--source:Filter by source' '--json:Output as JSON')
+                _describe -t flags 'flag' models_flags
+            fi
+            ;;
     esac
 }
 
@@ -3972,6 +4045,13 @@ complete -c harbor -n '__harbor_using_subcommand defaults' -a list -d 'List defa
 complete -c harbor -n '__harbor_using_subcommand defaults' -a add -d 'Add a default service'
 complete -c harbor -n '__harbor_using_subcommand defaults' -a rm -d 'Remove a default service'
 complete -c harbor -n '__harbor_using_subcommand defaults' -a clear -d 'Remove all defaults'
+
+# Models subcommands
+complete -c harbor -n '__harbor_using_subcommand models' -a ls -d 'List models'
+complete -c harbor -n '__harbor_using_subcommand models' -a list -d 'List models'
+complete -c harbor -n '__harbor_using_subcommand models' -a pull -d 'Download a model'
+complete -c harbor -n '__harbor_using_subcommand models' -a rm -d 'Remove a model'
+complete -c harbor -n '__harbor_using_subcommand models' -a remove -d 'Remove a model'
 
 # Aliases (h command)
 complete -c h -f -w harbor
@@ -5946,6 +6026,7 @@ run_harbor_find() {
 }
 
 run_hf_docker_cli() {
+    _check_docker || return 1
     $(compose_with_options "hf") run --rm hf "$@"
 }
 
@@ -5956,7 +6037,7 @@ run_tokscale_cli() {
 check_hf_cache() {
     local maybe_cache_entry
 
-    maybe_cache_entry=$(run_hf_docker_cli scan-cache | grep $1)
+    maybe_cache_entry=$(run_hf_docker_cli scan-cache | grep -F "$1")
 
     if [ -z "$maybe_cache_entry" ]; then
         log_warn "$1 is missing in Hugging Face cache."
@@ -5973,18 +6054,18 @@ parse_hf_url() {
     local ref="/blob/main/"
 
     # Extract repo name
-    repo_name=${url#$base_url}
+    local repo_name=${url#$base_url}
     repo_name=${repo_name%%$ref*}
 
     # Extract file specifier
-    file_specifier=${url#*$ref}
+    local file_specifier=${url#*$ref}
 
     # Return values separated by a delimiter (we'll use '|')
     echo "$repo_name$delimiter$file_specifier"
 }
 
 hf_url_2_llama_spec() {
-    local decomposed=$(parse_hf_url $1)
+    local decomposed=$(parse_hf_url "$1")
     local repo_name=$(echo "$decomposed" | cut -d"$delimiter" -f1)
     local file_specifier=$(echo "$decomposed" | cut -d"$delimiter" -f2)
 
@@ -7177,6 +7258,7 @@ run_hf_command() {
         ;;
     dl)
         shift
+        _check_docker || return 1
         $(compose_with_options "hfdownloader") run --rm hfdownloader "$@"
         return
         ;;
@@ -7562,6 +7644,8 @@ omlx_host_stop() {
 }
 
 run_models_routine() {
+    _check_docker || return 1
+
     local requested_source=""
     local arg
     local prev_was_source=false
@@ -7651,7 +7735,20 @@ run_models_pull() {
         shift 2
     fi
 
-    local model="$1"
+    local model="${1:-}"
+
+    if [ -z "$model" ]; then
+        log_error "No model specified."
+        echo "Usage: harbor models pull [--source SOURCE] <model>" >&2
+        echo "" >&2
+        echo "Examples:" >&2
+        echo "  harbor models pull qwen3:8b                          # Ollama model" >&2
+        echo "  harbor models pull bartowski/Llama-3.2-1B-Instruct-GGUF  # Auto-detect source" >&2
+        echo "  harbor models pull --source hf meta-llama/Llama-3.2-1B   # HuggingFace download" >&2
+        echo "  harbor models pull --source ollama qwen3:8b              # Explicit Ollama" >&2
+        return 1
+    fi
+
     local repo="${model%:*}"
 
     case "$source" in
@@ -7683,14 +7780,50 @@ run_models_pull() {
         ;;
     *)
         log_error "Unknown model source: $source"
+        log_error "Valid sources: ollama, hf, llamacpp, dmr, mlx, omlx"
         return 1
         ;;
     esac
 
-    local hf_meta
-    hf_meta=$(curl -sf --connect-timeout 5 "https://huggingface.co/api/models/$repo" 2>/dev/null) || true
+    # Auto-detect the right source by checking HuggingFace API.
+    # Models with a "/" are likely HF repo identifiers (org/repo).
+    # Models without "/" are likely Ollama models (e.g., qwen3:8b).
+    if [[ "$repo" != *"/"* ]]; then
+        # No slash means it's an Ollama-style model name
+        run_ollama_command pull "$model"
+        return
+    fi
 
-    if [ -z "$hf_meta" ]; then
+    # Has a slash -- check HuggingFace to determine format
+    local hf_meta hf_http_code
+    hf_http_code=$(curl -sf --connect-timeout 5 -w '%{http_code}' -o /tmp/harbor_hf_meta_$$.json \
+        "https://huggingface.co/api/models/$repo" 2>/dev/null) || hf_http_code="000"
+    hf_meta=""
+    if [ "$hf_http_code" = "200" ] && [ -f /tmp/harbor_hf_meta_$$.json ]; then
+        hf_meta=$(cat /tmp/harbor_hf_meta_$$.json)
+    fi
+    rm -f /tmp/harbor_hf_meta_$$.json
+
+    if [ "$hf_http_code" = "000" ]; then
+        # Network error -- cannot auto-detect source
+        log_error "Could not reach HuggingFace API to auto-detect model source."
+        log_error "Check your network connection, or specify the source explicitly:"
+        log_error "  harbor models pull --source ollama $model"
+        log_error "  harbor models pull --source hf $model"
+        log_error "  harbor models pull --source llamacpp $model"
+        return 1
+    fi
+
+    if [ "$hf_http_code" = "404" ] || [ -z "$hf_meta" ]; then
+        # Not found on HuggingFace -- try Ollama
+        log_debug "Model '$repo' not found on HuggingFace (HTTP $hf_http_code), trying Ollama..."
+        run_ollama_command pull "$model"
+        return
+    fi
+
+    if [ "$hf_http_code" != "200" ]; then
+        # Unexpected HTTP status (401 for gated models, 5xx, etc.)
+        log_warn "HuggingFace API returned HTTP $hf_http_code for '$repo'. Trying Ollama..."
         run_ollama_command pull "$model"
         return
     fi
@@ -7764,8 +7897,8 @@ run_models_command() {
         ;;
     *)
         log_error "Unknown models subcommand: $1"
-        show_models_help
-        exit 1
+        show_models_help >&2
+        return 1
         ;;
     esac
 }
@@ -8865,6 +8998,8 @@ run_ollama_command() {
         return 0
         ;;
     esac
+
+    _check_docker || return 1
 
     local services=$(get_active_services)
     local ollama_host=$(env_manager get ollama.internal.url)

@@ -24,11 +24,16 @@ export async function listOllamaModels(): Promise<OllamaModel[]> {
 
 export async function removeOllamaModel(name: string): Promise<boolean> {
   const url = `${getOllamaUrl()}/api/delete`;
-  const res = await fetch(url, {
-    method: 'DELETE',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: name }),
-  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: name }),
+    });
+  } catch (err) {
+    throw new Error(`Could not reach Ollama at ${url}: ${(err as Error).message}. Is Ollama running?`);
+  }
   if (res.status === 200) return true;
   if (res.status === 404) return false;
   const body = await res.text().catch(() => '');
