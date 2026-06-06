@@ -3011,15 +3011,28 @@ ensure_env_file() {
     local tgt_file=".env"
 
     if [ ! -f "$tgt_file" ]; then
+        if [ ! -f "$src_file" ]; then
+            log_error "Default profile not found: $src_file"
+            log_error "Your Harbor installation may be corrupted. Try reinstalling with: curl -sS https://get.harbor.sh | bash"
+            return 1
+        fi
         echo "Creating .env file..."
-        cp "$src_file" "$tgt_file"
+        if ! cp "$src_file" "$tgt_file"; then
+            log_error "Failed to create .env file from $src_file"
+            return 1
+        fi
+        # .env may contain API keys — restrict to owner-only access
+        chmod 600 "$tgt_file" 2>/dev/null || true
     fi
 }
 
 reset_env_file() {
     log_warn "Resetting Harbor configuration..."
-    rm .env
-    ensure_env_file
+    rm -f .env
+    if ! ensure_env_file; then
+        log_error "Failed to reset configuration."
+        return 1
+    fi
 }
 
 merge_env_files() {
@@ -3399,7 +3412,10 @@ env_manager() {
         upper_key=$(harbor_upper "$2")
         upper_key="${upper_key//[.-]/_}"
         upper_key="${upper_key#$prefix}"
-        value=$(grep "^$prefix$upper_key=" "$env_file" | cut -d '=' -f2-)
+        # Use head -1 to return only the first match when keys are
+        # duplicated (e.g. after a buggy merge or manual edit).
+        local value
+        value=$(grep "^$prefix$upper_key=" "$env_file" | head -1 | cut -d '=' -f2-)
         value="${value#\"}" # Remove leading quote if present
         value="${value%\"}" # Remove trailing quote if present
         echo "$value"
@@ -3415,12 +3431,27 @@ env_manager() {
         upper_key="${upper_key#$prefix}"
         shift 2          # Remove 'set' and the key from the arguments
         local value="$*" # Capture all remaining arguments as the value
-        if grep -q "^$prefix$upper_key=" "$env_file"; then
-            if [[ "$(uname)" == "Darwin" ]]; then
-                sed -i '' "s|^$prefix$upper_key=.*|$prefix$upper_key=\"$value\"|" "$env_file"
-            else
-                sed -i "s|^$prefix$upper_key=.*|$prefix$upper_key=\"$value\"|" "$env_file"  # harbor-lint disable=HARBOR002
-            fi
+        local full_key="$prefix$upper_key"
+        if grep -q "^$full_key=" "$env_file"; then
+            # Replace using line-number addressing to avoid sed delimiter
+            # injection.  Values containing |, &, \, or other sed
+            # metacharacters previously corrupted the .env file because
+            # they were interpolated into a sed s||| command.
+            local line_num
+            line_num=$(grep -n "^${full_key}=" "$env_file" | head -1 | cut -d: -f1)
+            local tmp_set
+            tmp_set=$(mktemp -t harbor_set.XXXXXX) || {
+                log_error "Failed to create temporary file for config set."
+                return 1
+            }
+            head -n $((line_num - 1)) "$env_file" > "$tmp_set"
+            printf '%s="%s"\n' "$full_key" "$value" >> "$tmp_set"
+            tail -n +$((line_num + 1)) "$env_file" >> "$tmp_set"
+            mv "$tmp_set" "$env_file" || {
+                rm -f "$tmp_set"
+                log_error "Failed to write updated config to $env_file"
+                return 1
+            }
         else
             # Defensively ensure the env file ends with a newline before
             # appending — otherwise a missing trailing newline upstream
@@ -3430,12 +3461,12 @@ env_manager() {
             if [ -s "$env_file" ] && [ -n "$(tail -c1 "$env_file")" ]; then
                 printf '\n' >>"$env_file"
             fi
-            echo "$prefix$upper_key=\"$value\"" >>"$env_file"
+            printf '%s="%s"\n' "$full_key" "$value" >>"$env_file"
             if [[ "$prefix" == "HARBOR_" ]]; then
-                log_warn "Key $prefix$upper_key is not a known Harbor config variable. To set a service env var, use: harbor config <service> set <key> <value>"
+                log_warn "Key $full_key is not a known Harbor config variable. To set a service env var, use: harbor config <service> set <key> <value>"
             fi
         fi
-        $silent || log_info "Set $prefix$upper_key to: \"$value\""
+        $silent || log_info "Set $full_key to: \"$value\""
         ;;
     unset | rm | remove)
         if [[ -z "$2" ]]; then
@@ -4276,14 +4307,16 @@ __anchor_utils=true
 
 run_harbor_find() {
     local dirs=""
-    local dir
+    local dir raw_dir
 
-    for dir in \
-        "$(eval echo "$(env_manager get hf.cache)")" \
-        "$(eval echo "$(env_manager get llamacpp.cache)")" \
-        "$(eval echo "$(env_manager get ollama.cache)")" \
-        "$(eval echo "$(env_manager get vllm.cache)")" \
-        "$(eval echo "$(env_manager get comfyui.workspace)")"; do
+    for raw_dir in \
+        "$(env_manager get hf.cache)" \
+        "$(env_manager get llamacpp.cache)" \
+        "$(env_manager get ollama.cache)" \
+        "$(env_manager get vllm.cache)" \
+        "$(env_manager get comfyui.workspace)"; do
+        # Safe tilde expansion without eval
+        dir="${raw_dir/#\~/$HOME}"
         if [ -d "$dir" ]; then
             dirs="$dirs $dir"
         fi
@@ -8054,7 +8087,9 @@ set_colors
 set_default_log_levels
 
 # Config
-ensure_env_file
+if ! ensure_env_file; then
+    exit 1
+fi
 # Current user ID - FS + UIDs for containers (where applicable)
 env_manager --silent set user.id "$(id -u)"
 env_manager --silent set group.id "$(id -g)"
