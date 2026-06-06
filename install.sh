@@ -1,5 +1,21 @@
 #!/bin/bash
 
+# Detect non-bash shells early. When piped (curl | sh), the shebang is
+# ignored and /bin/sh interprets the script instead. Bash-specific
+# features like `set -o pipefail` then fail with a confusing error.
+# shellcheck disable=SC2128
+if [ -z "${BASH_VERSION:-}" ]; then
+  # When run as a file (not piped), $0 is a real path -- re-exec under bash.
+  if [ -f "$0" ] && command -v bash >/dev/null 2>&1; then
+    exec bash "$0" "$@"
+  fi
+  _current_shell=$(ps -p $$ -o comm= 2>/dev/null || echo "unknown shell")
+  echo "Error: Harbor install requires bash, but is running under ${_current_shell}." >&2
+  echo "Please run:  curl -fsSL <url> | bash" >&2
+  echo "         or: bash install.sh" >&2
+  exit 1
+fi
+
 set -e
 
 # This is an installation script for the Harbor project.
@@ -35,7 +51,11 @@ resolve_harbor_version() {
       echo "Warning: Failed to fetch latest release from $HARBOR_RELEASE_URL" >&2
       return 1
     }
-    version=$(printf '%s\n' "$response" | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -n1)
+    if command -v jq >/dev/null 2>&1; then
+      version=$(printf '%s\n' "$response" | jq -r '.tag_name // empty' 2>/dev/null)
+    else
+      version=$(printf '%s\n' "$response" | sed -n 's/.*"tag_name" *: *"\([^"]*\)".*/\1/p' | head -n1)
+    fi
     if [ -n "$version" ]; then
       printf '%s\n' "$version"
       return 0

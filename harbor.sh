@@ -2517,39 +2517,49 @@ link_cli() {
         fi
     done
 
-    # Determine which shell configuration file to update
+    # Determine which shell configuration file to update.
+    # Check $SHELL first so that a bash user on macOS (where ~/.zshrc
+    # exists by default) gets the right profile instead of always zshrc.
     local shell_profile=""
-    if [[ -f "$HOME/.zshrc" ]]; then
-        shell_profile="$HOME/.zshrc"
-    elif [[ "$OSTYPE" == "darwin"* ]]; then
-        if [[ -f "$HOME/.bash_profile" ]]; then
-            shell_profile="$HOME/.bash_profile"
+    local user_shell="${SHELL##*/}"
+    case "$user_shell" in
+        zsh)
+            shell_profile="$HOME/.zshrc"
+            ;;
+        bash)
+            if [[ -f "$HOME/.bash_profile" ]]; then
+                shell_profile="$HOME/.bash_profile"
+            elif [[ -f "$HOME/.bashrc" ]]; then
+                shell_profile="$HOME/.bashrc"
+            elif [[ "$OSTYPE" == "darwin"* ]]; then
+                # macOS bash login shells read .bash_profile
+                shell_profile="$HOME/.bash_profile"
+            else
+                shell_profile="$HOME/.bashrc"
+            fi
+            ;;
+    esac
+
+    # Fallback: if $SHELL didn't match or the file doesn't exist yet,
+    # probe for existing profile files.
+    if [[ -z "$shell_profile" ]]; then
+        if [[ -f "$HOME/.zshrc" ]]; then
+            shell_profile="$HOME/.zshrc"
         elif [[ -f "$HOME/.bashrc" ]]; then
             shell_profile="$HOME/.bashrc"
-        elif [[ -f "$HOME/.profile" ]]; then
-            shell_profile="$HOME/.profile"
-        else
-            shell_profile="$HOME/.zshrc"
-        fi
-    else
-        if [[ -f "$HOME/.bashrc" ]]; then
-            shell_profile="$HOME/.bashrc"
-        elif [[ -f "$HOME/.profile" ]]; then
-            shell_profile="$HOME/.profile"
         elif [[ -f "$HOME/.bash_profile" ]]; then
             shell_profile="$HOME/.bash_profile"
+        elif [[ -f "$HOME/.profile" ]]; then
+            shell_profile="$HOME/.profile"
+        elif [[ "$OSTYPE" == "darwin"* ]]; then
+            shell_profile="$HOME/.zshrc"
+        elif [[ "$OSTYPE" == linux* ]]; then
+            shell_profile="$HOME/.bashrc"
         else
-            # Match any Linux OSTYPE (linux-gnu, linux-musl on Alpine, …)
-            # rather than only GNU. Default to ~/.bashrc — the subsequent
-            # appends are to a new file, which is fine.
-            if [[ "$OSTYPE" == linux* ]]; then
-                shell_profile="$HOME/.bashrc"
-            else
-                log_warn "Sorry, but Harbor can't determine which shell configuration file to update."
-                log_warn "Please link the CLI manually."
-                log_warn "Harbor supports: ~/.zshrc, ~/.bash_profile, ~/.bashrc, ~/.profile"
-                return 1
-            fi
+            log_warn "Sorry, but Harbor can't determine which shell configuration file to update."
+            log_warn "Please link the CLI manually."
+            log_warn "Harbor supports: ~/.zshrc, ~/.bash_profile, ~/.bashrc, ~/.profile"
+            return 1
         fi
     fi
 
@@ -4360,7 +4370,13 @@ unsafe_update() {
 }
 
 resolve_harbor_version() {
-    curl -fsSL "$harbor_release_url" 2>/dev/null | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -n1
+    local response
+    response=$(curl -fsSL "$harbor_release_url" 2>/dev/null) || return 1
+    if command -v jq >/dev/null 2>&1; then
+        printf '%s\n' "$response" | jq -r '.tag_name // empty' 2>/dev/null
+    else
+        printf '%s\n' "$response" | sed -n 's/.*"tag_name" *: *"\([^"]*\)".*/\1/p' | head -n1
+    fi
 }
 
 update_harbor() {

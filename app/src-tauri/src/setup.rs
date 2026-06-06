@@ -538,30 +538,6 @@ fn reset_cancel(state: &SetupState) {
     }
 }
 
-struct SetupActiveGuard<'a> {
-    state: &'a SetupState,
-}
-
-impl Drop for SetupActiveGuard<'_> {
-    fn drop(&mut self) {
-        if let Ok(mut active) = self.state.setup_active.lock() {
-            *active = false;
-        }
-    }
-}
-
-fn acquire_setup_lock(state: &SetupState) -> Result<SetupActiveGuard<'_>, String> {
-    let mut active = state
-        .setup_active
-        .lock()
-        .map_err(|e| format!("setup lock poisoned: {e}"))?;
-    if *active {
-        return Err("Harbor setup is already in progress.".into());
-    }
-    *active = true;
-    Ok(SetupActiveGuard { state })
-}
-
 // ── PTY execution ──────────────────────────────────────
 
 fn format_pty_exit(status: &ExitStatus) -> String {
