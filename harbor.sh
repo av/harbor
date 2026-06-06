@@ -375,10 +375,13 @@ show_help() {
     echo
     echo "  env <service> [key] [value]   - Manage override.env variables for a service"
     echo "    env <service>               - List all variables for a service"
-    echo "    env <service> <key>         - Get a specific variable for a service"
-    echo "    env <service> <key> <value> - Set a specific variable for a service"
-    echo "    env <service> get <key>     - Get a specific variable (explicit form)"
-    echo "    env <service> unset <key>   - Remove a specific variable for a service"
+    echo "    env <service> <key>         - Get a specific variable"
+    echo "    env <service> <key> <value> - Set a specific variable"
+    echo "    env <service> get <key>     - Get a specific variable (explicit)"
+    echo "    env <service> set <key> <val> - Set a specific variable (explicit)"
+    echo "    env <service> unset <key>   - Remove a specific variable"
+    echo "    env <service> ls            - List all variables"
+    echo "    env <service> search <query> - Search variables"
     echo
     echo "  profile|profiles|p [ls|rm|add] - Manage Harbor profiles"
     echo "    profile ls|list             - List all profiles"
@@ -3343,11 +3346,22 @@ _harbor_completions() {
                 COMPREPLY=($(compgen -W "$services" -- "$cur"))
             fi
             ;;
-        down|d|logs|log|l|build|shell|pull|exec|run|stats|attach|cmd|eject|open|o|url|qr|launch|dive|env)
+        down|d|logs|log|l|build|shell|pull|exec|run|stats|attach|cmd|eject|open|o|url|qr|launch|dive)
             # Complete with service names
             local services
             services=$(_harbor_services)
             COMPREPLY=($(compgen -W "$services" -- "$cur"))
+            ;;
+        env)
+            if ((cword == 2)); then
+                # Complete with service names
+                local services
+                services=$(_harbor_services)
+                COMPREPLY=($(compgen -W "$services" -- "$cur"))
+            elif ((cword == 3)); then
+                # Complete with env subcommands
+                COMPREPLY=($(compgen -W "get set ls list unset rm remove search find" -- "$cur"))
+            fi
             ;;
     esac
 }
@@ -3558,10 +3572,30 @@ _harbor() {
                 _describe -t services 'service' svc_list
             fi
             ;;
-        down|d|logs|log|l|build|shell|pull|exec|run|stats|attach|cmd|eject|open|o|url|qr|launch|dive|env)
+        down|d|logs|log|l|build|shell|pull|exec|run|stats|attach|cmd|eject|open|o|url|qr|launch|dive)
             local -a svc_list
             svc_list=(${(f)"$(_harbor_services)"})
             _describe -t services 'service' svc_list
+            ;;
+        env)
+            if ((CURRENT == 3)); then
+                local -a svc_list
+                svc_list=(${(f)"$(_harbor_services)"})
+                _describe -t services 'service' svc_list
+            elif ((CURRENT == 4)); then
+                local -a env_cmds=(
+                    'get:Get a specific override'
+                    'set:Set an override'
+                    'ls:List all overrides'
+                    'list:List all overrides'
+                    'unset:Remove an override'
+                    'rm:Remove an override'
+                    'remove:Remove an override'
+                    'search:Search overrides'
+                    'find:Search overrides'
+                )
+                _describe -t env-commands 'env command' env_cmds
+            fi
             ;;
         config)
             if ((CURRENT == 3)); then
@@ -3694,8 +3728,18 @@ end
 function __harbor_service_subcommand
     set -l cmd (commandline -opc)
     if test (count $cmd) -ge 2
-        contains -- $cmd[2] up u start s down d logs log l build shell pull exec run stats attach cmd eject open o url qr launch dive env
+        contains -- $cmd[2] up u start s down d logs log l build shell pull exec run stats attach cmd eject open o url qr launch dive
     end
+end
+
+function __harbor_env_needs_service
+    set -l cmd (commandline -opc)
+    test (count $cmd) -eq 2; and test "$cmd[2]" = env
+end
+
+function __harbor_env_needs_subcommand
+    set -l cmd (commandline -opc)
+    test (count $cmd) -eq 3; and test "$cmd[2]" = env
 end
 
 # Top-level commands
@@ -3781,6 +3825,17 @@ complete -c harbor -n '__harbor_using_subcommand up' -l open -d 'Start and open 
 complete -c harbor -n '__harbor_using_subcommand up' -l attach -d 'Attach to the first service'
 complete -c harbor -n '__harbor_using_subcommand up' -l no-defaults -d 'Exclude default services'
 complete -c harbor -n '__harbor_using_subcommand up' -l skip-port-check -d 'Skip port conflict pre-check'
+
+# Env subcommands (harbor env <service> <subcommand>)
+complete -c harbor -n __harbor_env_needs_service -a '(__harbor_services)'
+complete -c harbor -n __harbor_env_needs_subcommand -a get -d 'Get a specific override'
+complete -c harbor -n __harbor_env_needs_subcommand -a set -d 'Set an override'
+complete -c harbor -n __harbor_env_needs_subcommand -a ls -d 'List all overrides'
+complete -c harbor -n __harbor_env_needs_subcommand -a list -d 'List all overrides'
+complete -c harbor -n __harbor_env_needs_subcommand -a unset -d 'Remove an override'
+complete -c harbor -n __harbor_env_needs_subcommand -a rm -d 'Remove an override'
+complete -c harbor -n __harbor_env_needs_subcommand -a search -d 'Search overrides'
+complete -c harbor -n __harbor_env_needs_subcommand -a find -d 'Search overrides'
 
 # Config subcommands
 complete -c harbor -n '__harbor_using_subcommand config' -a get -d 'Get a config value'
@@ -4711,7 +4766,7 @@ env_manager() {
         shift
 
         case "$1" in
-        get|set|ls|list|search|find|--help|-h)
+        get|set|ls|list|search|find|unset|rm|remove|--help|-h)
             ;;
         *)
             if [[ $# -eq 0 ]]; then
@@ -4800,15 +4855,27 @@ env_manager() {
         upper_key=$(harbor_upper "$2")
         upper_key="${upper_key//[.-]/_}"
         upper_key="${upper_key#$prefix}"
-        if grep -q "^$prefix$upper_key=" "$env_file"; then
-            if [[ "$(uname)" == "Darwin" ]]; then
-                sed -i '' "/^$prefix$upper_key=/d" "$env_file"
-            else
-                sed -i "/^$prefix$upper_key=/d" "$env_file"  # harbor-lint disable=HARBOR002
-            fi
-            $silent || log_info "Removed $prefix$upper_key"
+        local full_key="$prefix$upper_key"
+        if grep -q "^${full_key}=" "$env_file"; then
+            # Use line-number addressing to avoid sed regex injection
+            # (same approach as the 'set' handler).
+            local line_num
+            line_num=$(grep -n "^${full_key}=" "$env_file" | head -1 | cut -d: -f1)
+            local tmp_unset
+            tmp_unset=$(mktemp -t harbor_unset.XXXXXX) || {
+                log_error "Failed to create temporary file for config unset."
+                return 1
+            }
+            head -n $((line_num - 1)) "$env_file" > "$tmp_unset"
+            tail -n +$((line_num + 1)) "$env_file" >> "$tmp_unset"
+            mv "$tmp_unset" "$env_file" || {
+                rm -f "$tmp_unset"
+                log_error "Failed to write updated config to $env_file"
+                return 1
+            }
+            $silent || log_info "Removed $full_key"
         else
-            $silent || log_warn "Key $prefix$upper_key is not set in $env_file"
+            $silent || log_warn "Key $full_key is not set in $env_file"
         fi
         ;;
     list | ls)
@@ -6602,10 +6669,31 @@ run_harbor_size() {
 run_harbor_env() {
     local service=$1
 
-    # Check folder
     if [ -z "$service" ]; then
         log_error "Please provide a service name."
+        log_error "Usage: harbor env <service> [command] [key] [value]"
+        log_error "Run 'harbor ls' to see available services."
         return 1
+    fi
+
+    # Handle --help / -h before treating as service name
+    if [[ "$service" == "--help" || "$service" == "-h" || "$service" == "help" ]]; then
+        echo "Manage per-service environment variable overrides"
+        echo
+        echo "Usage:"
+        echo "  harbor env <service>                     List all overrides for a service"
+        echo "  harbor env <service> <key>               Get a specific override"
+        echo "  harbor env <service> <key> <value>       Set an override"
+        echo "  harbor env <service> get <key>            Get a specific override (explicit)"
+        echo "  harbor env <service> set <key> <value>    Set an override (explicit)"
+        echo "  harbor env <service> unset <key>          Remove an override"
+        echo "  harbor env <service> ls|list              List all overrides"
+        echo "  harbor env <service> search <query>       Search overrides"
+        echo
+        echo "These variables are stored in services/<service>/override.env"
+        echo "and are passed directly to the service container via env_file"
+        echo "in the Docker Compose configuration."
+        return 0
     fi
 
     shift
@@ -6616,9 +6704,14 @@ run_harbor_env() {
     case "$1" in
     get|set|ls|list|search|find|unset|rm|remove)
         mgr_cmd=$1
-        env_var=$2
-        shift 2
-        env_val="$*"
+        env_var="${2:-}"
+        # Safe shift: only shift as many args as exist
+        if [ $# -ge 2 ]; then
+            shift 2
+            env_val="$*"
+        else
+            shift
+        fi
         ;;
     "")
         ;;
@@ -6639,7 +6732,18 @@ run_harbor_env() {
     log_debug "'env' $env_file - $mgr_cmd $env_var $env_val"
 
     if [ ! -f "$env_file" ]; then
-        log_error "Unknown service: $service. Please provide a valid service name."
+        if service_compose_exists "$service"; then
+            log_error "Service '$service' exists but has no override.env file."
+            log_error "Create one with: touch $harbor_home/services/$service/override.env"
+        else
+            log_error "Unknown service: $service"
+            local suggestion
+            suggestion=$(_suggest_service "$service")
+            if [ -n "$suggestion" ]; then
+                log_error "Did you mean: $suggestion?"
+            fi
+            log_error "Run 'harbor ls' to see available services."
+        fi
         return 1
     fi
 
