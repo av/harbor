@@ -8,6 +8,10 @@ $InstallUrl = "https://raw.githubusercontent.com/av/harbor/refs/heads/main/insta
 $DockerDesktopArch = if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { "arm64" } else { "amd64" }
 $DockerDesktopInstallerUrl = "https://desktop.docker.com/win/main/$DockerDesktopArch/Docker%20Desktop%20Installer.exe"
 
+# Supported WSL distro name prefixes, in preference order.
+# Keep in sync with WSL_DISTRO_PREFIXES in app/src-tauri/src/setup.rs.
+$SupportedDistroPrefixes = @("Ubuntu", "Debian", "Fedora", "openSUSE", "Kali", "Arch")
+
 function Write-SetupStage {
   param([string]$Stage)
   Write-Output "HARBOR_SETUP_STAGE=$Stage"
@@ -22,8 +26,15 @@ function Invoke-Wsl {
 }
 
 function Test-WslAvailable {
-  & wsl.exe --status 2>&1 | Write-Output
-  return $LASTEXITCODE -eq 0
+  if (-not (Get-Command wsl.exe -ErrorAction SilentlyContinue)) {
+    return $false
+  }
+  # Capture output without piping through Write-Output, which can
+  # reset $LASTEXITCODE in some PowerShell versions.
+  $output = & wsl.exe --status 2>&1
+  $result = $LASTEXITCODE -eq 0
+  if ($output) { Write-Output $output }
+  return $result
 }
 
 function Normalize-WslOutput {
@@ -121,7 +132,11 @@ function Start-DockerDesktop {
   }
 
   Write-Output "Starting Docker Desktop."
-  Start-Process -FilePath $desktopPath | Out-Null
+  try {
+    Start-Process -FilePath $desktopPath
+  } catch {
+    Write-Output "WARNING: Failed to start Docker Desktop ($($_.Exception.Message)). Please start it manually."
+  }
 }
 
 function Install-DockerDesktop {
@@ -136,7 +151,30 @@ function Install-DockerDesktop {
 
   Write-Output "Installing Docker Desktop with the official Docker Desktop installer."
   $installerPath = Join-Path $env:TEMP "Docker Desktop Installer.exe"
-  Invoke-WebRequest -UseBasicParsing -Uri $DockerDesktopInstallerUrl -OutFile $installerPath
+
+  # Retry the download up to 3 times. The installer is ~600MB and network
+  # interruptions are common, especially on slower connections.
+  $maxAttempts = 3
+  for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+    try {
+      if ($attempt -gt 1) {
+        Write-Output "Download attempt $attempt of $maxAttempts..."
+      }
+      Invoke-WebRequest -UseBasicParsing -Uri $DockerDesktopInstallerUrl -OutFile $installerPath
+      break
+    } catch {
+      if ($attempt -eq $maxAttempts) {
+        throw "Failed to download Docker Desktop installer after $maxAttempts attempts: $_"
+      }
+      Write-Output "Download failed: $_. Retrying in 5 seconds..."
+      Start-Sleep -Seconds 5
+    }
+  }
+
+  if (-not (Test-Path $installerPath)) {
+    throw "Docker Desktop installer was not downloaded. Check your network connection and try again."
+  }
+
   $installer = Start-Process -FilePath $installerPath -Wait -PassThru -ArgumentList @("install", "--user")
   if ($installer.ExitCode -ne 0) {
     throw "Docker Desktop installer exited with code $($installer.ExitCode)"
@@ -146,8 +184,24 @@ function Install-DockerDesktop {
 function Test-WslDockerReady {
   param([string]$TargetDistro)
 
-  & wsl.exe -d $TargetDistro -e bash -lic "docker info >/dev/null && docker compose version"
-  return $LASTEXITCODE -eq 0
+  # Use timeout to prevent docker info from hanging when the daemon is
+  # starting up or unresponsive. The 15-second limit matches DETECT_TIMEOUT
+  # in setup.rs.
+  $job = Start-Job -ScriptBlock {
+    param($d)
+    & wsl.exe -d $d -e bash -lic "docker info >/dev/null 2>&1 && docker compose version >/dev/null 2>&1"
+    $LASTEXITCODE
+  } -ArgumentList $TargetDistro
+
+  $completed = Wait-Job $job -Timeout 15
+  if ($null -eq $completed) {
+    Stop-Job $job
+    Remove-Job $job -Force
+    return $false
+  }
+  $exitCode = Receive-Job $job
+  Remove-Job $job -Force
+  return $exitCode -eq 0
 }
 
 function Wait-WslDockerReady {
@@ -185,16 +239,41 @@ if (-not (Test-WslAvailable)) {
 Write-SetupStage "checking-prerequisites"
 $distros = Normalize-WslOutput ((& wsl.exe --list --verbose) -join "`n")
 if ([string]::IsNullOrWhiteSpace($Distro)) {
-  if ($distros -match "(?m)^\s*\*?\s*(Ubuntu[^\s]*)\s+Running\s+2\s*$") {
-    $Distro = $Matches[1]
-  } elseif ($distros -match "(?m)^\s*\*?\s*(Ubuntu[^\s]*)\s+\w+\s+2\s*$") {
-    $Distro = $Matches[1]
+  # Try each supported distro prefix in preference order,
+  # preferring a running WSL2 distro over a stopped one.
+  foreach ($prefix in $SupportedDistroPrefixes) {
+    if ($distros -match "(?m)^\s*\*?\s*($([regex]::Escape($prefix))[^\s]*)\s+Running\s+2\s*$") {
+      $Distro = $Matches[1]
+      break
+    }
+  }
+  if ([string]::IsNullOrWhiteSpace($Distro)) {
+    foreach ($prefix in $SupportedDistroPrefixes) {
+      if ($distros -match "(?m)^\s*\*?\s*($([regex]::Escape($prefix))[^\s]*)\s+\w+\s+2\s*$") {
+        $Distro = $Matches[1]
+        break
+      }
+    }
   }
 }
 
 if ([string]::IsNullOrWhiteSpace($Distro)) {
+  # Check if there is a WSL1 distro that matches — give a specific upgrade message.
+  $wsl1Match = $null
+  foreach ($prefix in $SupportedDistroPrefixes) {
+    if ($distros -match "(?m)^\s*\*?\s*($([regex]::Escape($prefix))[^\s]*)\s+\w+\s+1\s*$") {
+      $wsl1Match = $Matches[1]
+      break
+    }
+  }
+  if ($wsl1Match) {
+    Write-SetupStage "blocked"
+    throw "Found WSL1 distro '$wsl1Match' but Harbor requires WSL2. Upgrade it with: wsl --set-version $wsl1Match 2"
+  }
+
   Write-SetupStage "installing-prerequisites"
-  Write-Output "No WSL2 Ubuntu distro was found. Installing Ubuntu."
+  $supportedNames = $SupportedDistroPrefixes -join ", "
+  Write-Output "No supported WSL2 distro found (checked: $supportedNames). Installing Ubuntu."
   & wsl.exe --install -d Ubuntu
   if ($LASTEXITCODE -ne 0) {
     Write-SetupStage "failed"
@@ -204,9 +283,13 @@ if ([string]::IsNullOrWhiteSpace($Distro)) {
   throw "Ubuntu WSL installation started. Complete first-run account setup, then retry Harbor setup."
 }
 
-if ($distros -notmatch "(?m)^\s*\*?\s*$([regex]::Escape($Distro))\s+\w+\s+2\s*$") {
+# Verify the selected distro is actually WSL2.
+if ($distros -match "(?m)^\s*\*?\s*$([regex]::Escape($Distro))\s+\w+\s+1\s*$") {
   Write-SetupStage "blocked"
-  throw "Selected distro '$Distro' is not a WSL2 distro. Harbor setup requires WSL2."
+  throw "Selected distro '$Distro' is running under WSL1. Harbor requires WSL2. Upgrade it with: wsl --set-version $Distro 2"
+} elseif ($distros -notmatch "(?m)^\s*\*?\s*$([regex]::Escape($Distro))\s+\w+\s+2\s*$") {
+  Write-SetupStage "blocked"
+  throw "Selected distro '$Distro' is not a WSL2 distro or is not installed. Set HARBOR_WSL_DISTRO to a valid WSL2 distro name."
 }
 
 try {
