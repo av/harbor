@@ -283,6 +283,29 @@ run_harbor_doctor() {
         has_errors=true
     fi
 
+    # WSL-specific diagnostics
+    if grep -qiE "microsoft|wsl" /proc/version 2>/dev/null || [ -n "${WSL_INTEROP:-}" ]; then
+        local wsl_ver="unknown"
+        if [ -n "${WSL_INTEROP:-}" ] || grep -qi "microsoft-standard\|microsoft-WSL2" /proc/version 2>/dev/null; then
+            wsl_ver="2"
+        else
+            wsl_ver="1"
+        fi
+        log_info "${ok} WSL${wsl_ver} environment detected"
+
+        if [ "$wsl_ver" = "1" ]; then
+            log_error "${nok} WSL1 does not support Docker natively. Upgrade to WSL2: wsl --set-version <distro> 2"
+            has_errors=true
+        fi
+
+        # Warn if harbor_home is on a Windows-mounted filesystem (slow IO)
+        local home_mount
+        home_mount=$(df -P "$harbor_home" 2>/dev/null | awk 'NR==2 {print $6}')
+        if [ -n "$home_mount" ] && echo "$home_mount" | grep -q "^/mnt/[a-zA-Z]"; then
+            log_warn "${nok} Harbor home is on a Windows filesystem ($home_mount). File operations will be slow. Consider moving to the Linux filesystem."
+        fi
+    fi
+
     # Check if the default profile file exists and is readable
     if [ -f "$default_profile" ] && [ -r "$default_profile" ]; then
         log_info "${ok} Default profile exists and is readable"
@@ -2753,19 +2776,31 @@ sys_info() {
 
 sys_open() {
     url=$1
+    local rc=1
 
-    # Open the URL in the default browser
+    # Open the URL in the default browser.
+    # In WSL, standard Linux openers (xdg-open) may not work because
+    # there is no display server. Use wslview (from wslu) or
+    # explorer.exe as WSL-specific fallbacks.
     if command -v xdg-open &>/dev/null; then
-        xdg-open "$url"
+        xdg-open "$url" 2>/dev/null
         rc=$?
-    elif command -v open &>/dev/null; then
+    fi
+    if [ $rc -ne 0 ] && command -v wslview &>/dev/null; then
+        wslview "$url" 2>/dev/null
+        rc=$?
+    fi
+    if [ $rc -ne 0 ] && command -v open &>/dev/null; then
         open "$url"
         rc=$?
-    elif command -v start &>/dev/null; then
+    fi
+    if [ $rc -ne 0 ] && command -v explorer.exe &>/dev/null; then
+        explorer.exe "$url" 2>/dev/null
+        rc=$?
+    fi
+    if [ $rc -ne 0 ] && command -v start &>/dev/null; then
         start "$url"
         rc=$?
-    else
-        rc=1
     fi
 
     if [ $rc -ne 0 ]; then

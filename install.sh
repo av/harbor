@@ -276,6 +276,18 @@ main() {
   setup_stage "checking-platform"
   echo "Installing Harbor."
 
+  # Early WSL checks that apply regardless of --skip-requirements
+  if grep -qiE "microsoft|wsl" /proc/version 2>/dev/null || [ -n "${WSL_INTEROP:-}" ]; then
+    # Warn if HARBOR_INSTALL_PATH is on a Windows-mounted filesystem
+    local install_mount
+    install_mount=$(df -P "$(dirname "$HARBOR_INSTALL_PATH")" 2>/dev/null | awk 'NR==2 {print $6}')
+    if [ -n "$install_mount" ] && echo "$install_mount" | grep -q "^/mnt/[a-zA-Z]"; then
+      echo "Warning: Install path ($HARBOR_INSTALL_PATH) is on a Windows filesystem ($install_mount)."
+      echo "Warning: File operations on /mnt/ paths are significantly slower than the Linux filesystem."
+      echo "Warning: Consider: HARBOR_INSTALL_PATH=~/.harbor (on ext4) for better performance."
+    fi
+  fi
+
   if [ "$INSTALL_REQUIREMENTS" = true ]; then
     setup_stage "installing-prerequisites"
     echo "Installing requirements..."

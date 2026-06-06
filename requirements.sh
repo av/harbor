@@ -15,6 +15,7 @@ DISTRO_ID=""
 DISTRO_LIKE=""
 PKG_MANAGER=""
 IS_WSL=false
+WSL_VERSION=""
 
 log_info() {
     echo -e "${GREEN}[INFO]${NC} $1"
@@ -102,6 +103,15 @@ detect_platform() {
     if [ "$PLATFORM" = "linux" ]; then
         if grep -qiE "microsoft|wsl" /proc/version 2>/dev/null || [ -n "${WSL_INTEROP:-}" ]; then
             IS_WSL=true
+            # Detect WSL version: WSL2 has a real Linux kernel (microsoft-standard),
+            # WSL1 has a translation layer (Microsoft). WSL_INTEROP only exists in WSL2.
+            if [ -n "${WSL_INTEROP:-}" ]; then
+                WSL_VERSION="2"
+            elif grep -qi "microsoft-standard\|microsoft-WSL2" /proc/version 2>/dev/null; then
+                WSL_VERSION="2"
+            else
+                WSL_VERSION="1"
+            fi
         fi
 
         if [ -f /etc/os-release ]; then
@@ -164,7 +174,13 @@ apt_install() {
     check_command curl || missing+=("curl")
 
     if ! check_command docker || ! docker compose version >/dev/null 2>&1; then
-        need_docker=true
+        # In WSL with Docker Desktop integration, Docker is provided by the
+        # Windows host. Installing docker.io/docker-ce creates conflicts.
+        if is_wsl_docker_desktop; then
+            log_info "Docker is provided by Docker Desktop (WSL integration) — skipping package install"
+        else
+            need_docker=true
+        fi
     fi
 
     # Single apt-get update if anything needs installing
@@ -208,7 +224,11 @@ dnf_install() {
     check_command curl || missing+=("curl")
 
     if ! check_command docker || ! docker compose version >/dev/null 2>&1; then
-        need_docker=true
+        if is_wsl_docker_desktop; then
+            log_info "Docker is provided by Docker Desktop (WSL integration) — skipping package install"
+        else
+            need_docker=true
+        fi
     fi
 
     # Refresh dnf metadata if anything needs installing (stale cache causes
@@ -266,7 +286,11 @@ pacman_install() {
     check_command curl || missing+=("curl")
 
     if ! check_command docker || ! docker compose version >/dev/null 2>&1; then
-        need_docker=true
+        if is_wsl_docker_desktop; then
+            log_info "Docker is provided by Docker Desktop (WSL integration) — skipping package install"
+        else
+            need_docker=true
+        fi
     fi
 
     # Refresh package database before installing (stale db causes
@@ -307,8 +331,12 @@ apk_install() {
     fi
 
     if ! check_command docker || ! docker compose version >/dev/null 2>&1; then
-        log_info "Installing Docker Engine and Docker Compose plugin via apk"
-        run_privileged apk add --no-cache docker docker-cli-compose || return 1
+        if is_wsl_docker_desktop; then
+            log_info "Docker is provided by Docker Desktop (WSL integration) — skipping package install"
+        else
+            log_info "Installing Docker Engine and Docker Compose plugin via apk"
+            run_privileged apk add --no-cache docker docker-cli-compose || return 1
+        fi
     else
         log_info "Docker and Docker Compose plugin are already installed"
     fi
@@ -394,6 +422,28 @@ brew_install() {
     fi
 }
 
+# Detect whether Docker is provided by Docker Desktop for Windows via WSL integration.
+# Docker Desktop injects its own docker binary into WSL (typically at
+# /usr/bin/docker or via /mnt/wsl/docker-desktop/...). When this is the case,
+# installing docker.io or docker-ce via the package manager creates conflicts
+# (two Docker daemons, socket confusion). This function returns 0 if Docker
+# Desktop is providing Docker in WSL, 1 otherwise.
+is_wsl_docker_desktop() {
+    [ "$IS_WSL" = true ] || return 1
+    # Docker Desktop integration puts its socket at a well-known path
+    if [ -S "/var/run/docker.sock" ] && docker info >/dev/null 2>&1; then
+        # Check if docker context or info references Docker Desktop
+        if docker info 2>/dev/null | grep -qi "docker desktop\|com.docker.depi"; then
+            return 0
+        fi
+        # Docker Desktop WSL integration creates a special context
+        if docker context ls 2>/dev/null | grep -qi "desktop-linux"; then
+            return 0
+        fi
+    fi
+    return 1
+}
+
 ensure_linux_docker_service() {
     if [ "$PLATFORM" != "linux" ]; then
         return 0
@@ -404,12 +454,16 @@ ensure_linux_docker_service() {
     # 2. Docker Engine installed natively in WSL2 with systemd
     # Only skip service management if Docker is already reachable (case 1).
     if [ "$IS_WSL" = true ]; then
+        if [ "$WSL_VERSION" = "1" ]; then
+            log_warn "WSL1 cannot run Docker natively. Docker Desktop WSL integration is required."
+            return 1
+        fi
         if docker info >/dev/null 2>&1; then
             return 0
         fi
-        # Docker not reachable in WSL — fall through to try systemd if available
+        # Docker not reachable in WSL2 — fall through to try systemd if available
         if ! check_command systemctl || ! systemctl is-system-running >/dev/null 2>&1; then
-            log_warn "Docker is not reachable in WSL and systemd is not active."
+            log_warn "Docker is not reachable in WSL2 and systemd is not active."
             log_warn "Either enable Docker Desktop WSL integration, or enable systemd in WSL:"
             log_warn "  Add [boot] systemd=true to /etc/wsl.conf and restart WSL."
             return 0
@@ -604,10 +658,32 @@ check_optional_gpu_support() {
     fi
 }
 
+warn_wsl_slow_filesystem() {
+    # /mnt/c, /mnt/d, etc. are Windows NTFS filesystems mounted via drvfs/9p.
+    # IO on these paths is 5-10x slower than the native ext4 filesystem.
+    # Harbor and Docker perform poorly when installed on these paths.
+    local home_mount
+    home_mount=$(df -P "$HOME" 2>/dev/null | awk 'NR==2 {print $6}')
+    if [ -n "$home_mount" ] && echo "$home_mount" | grep -q "^/mnt/[a-zA-Z]"; then
+        log_warn "Your HOME ($HOME) is on a Windows filesystem ($home_mount)."
+        log_warn "File operations on Windows-mounted paths (/mnt/c, /mnt/d, ...) are significantly slower."
+        log_warn "Harbor will install to $HOME/.harbor which will have degraded performance."
+        log_warn "For better performance, set your WSL default user's HOME to a Linux path"
+        log_warn "or override the install path: HARBOR_INSTALL_PATH=~/.harbor"
+    fi
+}
+
 install_requirements() {
     if [ "$IS_WSL" = true ]; then
-        log_warn "WSL environment detected"
+        log_warn "WSL${WSL_VERSION} environment detected"
+        if [ "$WSL_VERSION" = "1" ]; then
+            log_error "WSL1 does not support Docker natively. Harbor requires Docker."
+            log_error "Upgrade to WSL2: wsl --set-version <distro> 2"
+            log_error "Or install Docker Desktop on Windows and enable WSL integration."
+            return 1
+        fi
         log_warn "Preferred setup is Docker Desktop on Windows with WSL integration enabled"
+        warn_wsl_slow_filesystem
     fi
 
     case "$PLATFORM:$PKG_MANAGER" in

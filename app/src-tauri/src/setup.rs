@@ -286,31 +286,33 @@ fn persist_wsl_distro(distro: &str) {
     let _ = fs::write(path, distro);
 }
 
-fn parse_wsl2_ubuntu_distro(output: &str, require_running: bool) -> Option<String> {
-    output
-        .replace('\0', "")
-        .lines()
-        .filter_map(|line| {
+/// Supported WSL distro prefixes for auto-detection, in preference order.
+/// Ubuntu is preferred because install.ps1 installs it by default.
+const WSL_DISTRO_PREFIXES: &[&str] = &["Ubuntu", "Debian", "Fedora", "openSUSE", "Kali", "Arch"];
+
+fn parse_wsl2_supported_distro(output: &str, require_running: bool) -> Option<String> {
+    let cleaned = output.replace('\0', "");
+    for prefix in WSL_DISTRO_PREFIXES {
+        for line in cleaned.lines() {
             let parts = line.split_whitespace().collect::<Vec<_>>();
             if parts.is_empty() {
-                return None;
+                continue;
             }
             let name_index = if parts.first() == Some(&"*") { 1 } else { 0 };
             let state_index = name_index + 1;
             let version_index = name_index + 2;
-            let name = parts.get(name_index)?;
-            let state = parts.get(state_index)?;
-            let version = parts.get(version_index)?;
-            if name.starts_with("Ubuntu")
+            let Some(name) = parts.get(name_index) else { continue };
+            let Some(state) = parts.get(state_index) else { continue };
+            let Some(version) = parts.get(version_index) else { continue };
+            if name.starts_with(prefix)
                 && *version == "2"
                 && (!require_running || state.eq_ignore_ascii_case("Running"))
             {
-                Some((*name).to_string())
-            } else {
-                None
+                return Some((*name).to_string());
             }
-        })
-        .next()
+        }
+    }
+    None
 }
 
 fn parse_wsl_distro_exists(output: &str, distro: &str) -> bool {
@@ -364,8 +366,8 @@ fn resolve_wsl_distro() -> Option<String> {
             return Some(distro);
         }
     }
-    let distro = parse_wsl2_ubuntu_distro(&distros.stdout, true)
-        .or_else(|| parse_wsl2_ubuntu_distro(&distros.stdout, false));
+    let distro = parse_wsl2_supported_distro(&distros.stdout, true)
+        .or_else(|| parse_wsl2_supported_distro(&distros.stdout, false));
     if let Some(distro) = distro.as_deref() {
         persist_wsl_distro(distro);
     }
@@ -867,7 +869,7 @@ fn detect_windows_blocker(detail: &mut HarborSetupDetail) -> bool {
     if distros.code != Some(0) {
         detail.status = "blocked".into();
         detail.last_error =
-            Some("No WSL2 Ubuntu distro is available.".into());
+            Some("No WSL2 distro is available. Install one with: wsl --install -d Ubuntu".into());
         return true;
     }
 
@@ -875,13 +877,13 @@ fn detect_windows_blocker(detail: &mut HarborSetupDetail) -> bool {
         if !parse_wsl_distro_exists(&distros.stdout, &distro) {
             detail.status = "blocked".into();
             detail.last_error =
-                Some(format!("Selected WSL distro '{distro}' is not available."));
+                Some(format!("Selected WSL distro '{distro}' is not a WSL2 distro or is not installed."));
             return true;
         }
     } else if preferred_wsl_distro().is_none() {
         detail.status = "blocked".into();
         detail.last_error =
-            Some("No WSL2 Ubuntu distro is available.".into());
+            Some("No supported WSL2 distro found (Ubuntu, Debian, Fedora, openSUSE, Kali, Arch). Install one with: wsl --install -d Ubuntu, or set HARBOR_WSL_DISTRO to use a custom distro.".into());
         return true;
     }
 
