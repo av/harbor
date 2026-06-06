@@ -296,7 +296,7 @@ show_help() {
     echo "Harbor Workspace Commands:"
     echo "  home    - Show path to the Harbor workspace"
     echo "  vscode  - Open Harbor Workspace in VS Code"
-    echo "  fixfs   - Fix file system ACLs for service volumes"
+    echo "  fixfs   - Fix file ownership for service volumes and caches"
 }
 
 run_harbor_doctor() {
@@ -3137,7 +3137,7 @@ _harbor() {
         'profiles:Manage profiles'
         'p:Manage profiles'
         'gum:Run gum CLI'
-        'fixfs:Fix file system permissions'
+        'fixfs:Fix file ownership for service volumes and caches'
         'info:Show system info'
         'update:Update Harbor'
         'how:Get help on how to do things'
@@ -3420,7 +3420,8 @@ complete -c harbor -n __harbor_no_subcommand -a eject -d 'Output resolved Compos
 complete -c harbor -n __harbor_no_subcommand -a config -d 'Manage configuration'
 complete -c harbor -n __harbor_no_subcommand -a profile -d 'Manage profiles'
 complete -c harbor -n __harbor_no_subcommand -a gum -d 'Run gum CLI'
-complete -c harbor -n __harbor_no_subcommand -a fixfs -d 'Fix file system permissions'
+complete -c harbor -n __harbor_no_subcommand -a fixfs -d 'Fix file ownership for service volumes'
+complete -c harbor -n '__harbor_using_subcommand fixfs' -l dry-run -d 'Preview without changes'
 complete -c harbor -n __harbor_no_subcommand -a info -d 'Show system info'
 complete -c harbor -n __harbor_no_subcommand -a update -d 'Update Harbor'
 complete -c harbor -n __harbor_no_subcommand -a how -d 'Get help on how to do things'
@@ -5375,30 +5376,36 @@ hf_spec_2_folder_spec() {
 }
 
 docker_fsacl() {
+    # Single-folder chown helper. Currently unused -- run_fixfs handles
+    # all fixfs logic with batching and deduplication. Kept as a public
+    # API in case external scripts or future code need per-folder fixes.
     local folder=$1
 
-    # Skip if folder doesn't exist
+    _check_docker || return 1
+
     if [[ ! -e "$folder" ]]; then
         log_debug "fsacl: skipping non-existent path: $folder"
         return 0
     fi
 
-    # Get host user's uid/gid to set ownership correctly
+    # macOS: Docker Desktop osxfs/virtiofs maps all bind-mounted files as
+    # owned by the Docker Desktop user. chown inside a container is a no-op.
+    if [[ "$(uname)" == "Darwin" ]]; then
+        log_debug "fsacl: skipping on macOS (Docker Desktop manages file ownership via osxfs/virtiofs)"
+        return 0
+    fi
+
     local uid=$(id -u)
     local gid=$(id -g)
-
     log_debug "fsacl: $folder (chown to $uid:$gid)"
 
-    # Convert to absolute path (required for Docker volume mount)
     local abs_folder=$(_portable_realpath "$folder")
 
-    # Spawn container as root to fix ownership
-    # Using Deno Alpine image which includes standard Unix tools
     docker run --rm \
         --entrypoint sh \
         -v "$abs_folder:/target" \
         -u root \
-        denoland/deno:alpine \
+        alpine:3.20 \
         -c "chown -R $uid:$gid /target" || {
         log_warn "Failed to fix permissions for: $folder"
         return 1
@@ -5406,32 +5413,118 @@ docker_fsacl() {
 }
 
 run_fixfs() {
+    local dry_run=false
+
+    # Parse arguments
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+        --dry-run)
+            dry_run=true
+            shift
+            ;;
+        --help | -h | help)
+            echo "Fix file ownership for Harbor service volumes and caches"
+            echo
+            echo "Usage: harbor fixfs [--dry-run]"
+            echo
+            echo "Options:"
+            echo "  --dry-run   Show which paths would be fixed without changing anything"
+            echo
+            echo "Discovers all external cache, workspace, and config directories"
+            echo "from your Harbor configuration and sets ownership to your user."
+            echo "Useful after Docker creates bind-mount directories as root."
+            echo
+            echo "Note: Not needed on macOS (Docker Desktop manages ownership)."
+            echo "Note: Not applicable with rootless Docker (uid remapping)."
+            return 0
+            ;;
+        *)
+            log_error "Unknown option: $1"
+            log_error "Usage: harbor fixfs [--dry-run]"
+            return 1
+            ;;
+        esac
+    done
+
+    # Docker is required to run a privileged container for chown
+    if ! $dry_run; then
+        _check_docker || return 1
+    fi
+
+    # On macOS, Docker Desktop uses osxfs/virtiofs to share host files with
+    # containers. All bind-mounted files appear owned by the user running
+    # Docker Desktop regardless of on-disk ownership. chown inside a
+    # container is silently ignored -- the host filesystem is unaffected.
+    # Warn and exit early since the operation would be a misleading no-op.
+    if [[ "$(uname)" == "Darwin" ]]; then
+        log_warn "harbor fixfs is not needed on macOS."
+        log_warn "Docker Desktop for Mac uses osxfs/virtiofs, which transparently"
+        log_warn "maps file ownership. Permission issues on macOS are typically caused"
+        log_warn "by Docker Desktop file sharing settings, not file ownership."
+        log_warn "Check Docker Desktop > Settings > Resources > File Sharing."
+        return 0
+    fi
+
+    # Detect rootless Docker -- the uid namespace is remapped, so chown
+    # to the host uid inside the container sets ownership to a different
+    # actual uid on the host filesystem.
+    if ! $dry_run; then
+        local docker_security
+        docker_security=$(docker info --format '{{.SecurityOptions}}' 2>/dev/null || true)
+        if echo "$docker_security" | grep -q 'rootless'; then
+            log_warn "Rootless Docker detected. File ownership is managed through"
+            log_warn "user namespace remapping. harbor fixfs may not produce the"
+            log_warn "expected results. If you still have permission issues, check"
+            log_warn "your subuid/subgid configuration."
+            log_warn "See: https://docs.docker.com/engine/security/rootless/"
+            return 0
+        fi
+    fi
+
     local uid=$(id -u)
     local gid=$(id -g)
 
     local paths=("$harbor_home")
 
-    # Discover external folder-type config values via env_manager search
-    # Paths starting with ./ are under harbor_home, already covered above
+    # Discover external folder-type config values via env_manager search.
+    # Paths starting with ./ are under harbor_home, already covered by
+    # the recursive chown on $harbor_home above.
     local suffixes=("_CACHE" "_WORKSPACE" "_CONFIG_PATH" "_CONFIG_DIR")
+    local search_failed=false
     for suffix in "${suffixes[@]}"; do
+        local search_output
+        search_output=$(env_manager --silent search "$suffix" 2>/dev/null) || {
+            # Config search may fail if deno is unavailable or .env is broken.
+            # Continue with what we have -- at minimum $harbor_home is covered.
+            if ! $search_failed; then
+                log_warn "Could not search config for $suffix paths (config search unavailable)."
+                log_warn "Only harbor_home ($harbor_home) will be fixed."
+                search_failed=true
+            fi
+            continue
+        }
         while read -r _key value; do
             [[ -z "$value" || "$value" == ./* ]] && continue
             paths+=("${value/#\~/$HOME}")
-        done < <(env_manager --silent search "$suffix")
+        done <<< "$search_output"
     done
 
-    # Create missing directories and build volume mounts
-    local volume_args=()
-    local chown_commands=()
-    local counter=0
-
+    # Deduplicate paths. When two config keys point to the same directory
+    # (or a key points to a child of another already-listed path), chowning
+    # both wastes time and mounts the same filesystem twice.
+    local -a unique_paths=()
+    local -a seen_abs=()
     for path in "${paths[@]}"; do
-        # Skip empty paths
         [[ -z "$path" ]] && continue
 
-        # Create directory if missing
+        # Resolve to absolute for comparison (create first if missing so
+        # _portable_realpath can resolve). In dry-run mode, report but
+        # don't create missing directories.
         if [[ ! -e "$path" ]]; then
+            if $dry_run; then
+                log_info "  [would create] $path"
+                continue
+            fi
             log_debug "fixfs: creating missing directory: $path"
             mkdir -p "$path" || {
                 log_warn "fixfs: failed to create directory: $path"
@@ -5439,36 +5532,79 @@ run_fixfs() {
             }
         fi
 
-        # Convert to absolute path and add to volume mounts
-        local abs_path=$(_portable_realpath "$path")
-        volume_args+=("-v" "$abs_path:/target$counter")
-        chown_commands+=("chown -R $uid:$gid /target$counter")
-        ((counter++)) || true
+        local abs_path
+        abs_path=$(_portable_realpath "$path")
+
+        # Check for exact duplicate or child of already-listed parent
+        local is_dup=false
+        for seen in "${seen_abs[@]}"; do
+            if [[ "$abs_path" == "$seen" ]]; then
+                is_dup=true
+                break
+            fi
+            if [[ "$abs_path" == "$seen"/* ]]; then
+                is_dup=true
+                log_debug "fixfs: skipping $abs_path (child of $seen)"
+                break
+            fi
+        done
+        $is_dup && continue
+
+        unique_paths+=("$abs_path")
+        seen_abs+=("$abs_path")
     done
 
-    # Run single container if we have paths to fix
-    if [[ ${#volume_args[@]} -gt 0 ]]; then
-        log_info "Fixing permissions for $counter volume(s)..."
+    if [[ ${#unique_paths[@]} -eq 0 ]]; then
+        log_warn "No valid paths found to fix."
+        return 0
+    fi
 
-        # Build chown script by joining commands with &&
-        local chown_script
-        chown_script=$(printf '%s && ' "${chown_commands[@]}")
-        chown_script="${chown_script% && }"  # Remove trailing ' && '
+    if $dry_run; then
+        log_info "Dry run: would fix ownership to $uid:$gid for ${#unique_paths[@]} path(s):"
+        for abs_path in "${unique_paths[@]}"; do
+            local owner
+            owner=$(stat -c '%u:%g' "$abs_path" 2>/dev/null || stat -f '%u:%g' "$abs_path" 2>/dev/null || echo "?:?")
+            if [[ "$owner" == "$uid:$gid" ]]; then
+                log_info "  $abs_path (already $uid:$gid)"
+            else
+                log_info "  $abs_path (currently $owner -> $uid:$gid)"
+            fi
+        done
+        return 0
+    fi
+
+    log_info "Fixing permissions for ${#unique_paths[@]} path(s)..."
+    log_info "Target ownership: $uid:$gid"
+
+    # Process paths individually so a single mount failure doesn't block
+    # all other paths. Large caches (e.g. ~/.cache/huggingface at 100GB+)
+    # can take a long time; per-path feedback lets users see progress.
+    local fixed=0
+    local failed=0
+    for abs_path in "${unique_paths[@]}"; do
+        log_info "  $abs_path ..."
 
         docker run --rm \
             --entrypoint sh \
-            "${volume_args[@]}" \
+            -v "$abs_path:/target" \
             -u root \
-            denoland/deno:alpine \
-            -c "$chown_script" || {
-            log_warn "Failed to fix permissions for some volumes"
-            return 1
+            alpine:3.20 \
+            -c "chown -R $uid:$gid /target" 2>/dev/null || {
+            log_warn "  Failed: $abs_path"
+            log_warn "  Check that the path exists and Docker can mount it."
+            ((failed++)) || true
+            continue
         }
+        ((fixed++)) || true
+    done
 
-        log_info "Successfully fixed permissions"
-    else
-        log_warn "No valid paths found to fix"
+    if [[ $failed -gt 0 ]]; then
+        log_warn "Fixed $fixed path(s), failed $failed path(s)."
+        log_warn "For failed paths, try: sudo chown -R $(id -u):$(id -g) <path>"
+        return 1
     fi
+
+    log_info "Successfully fixed permissions for $fixed path(s)."
 }
 
 open_home_code() {
@@ -9829,7 +9965,7 @@ main_entrypoint() {
         ;;
     fixfs)
         shift
-        run_fixfs
+        run_fixfs "$@"
         ;;
     info)
         shift
