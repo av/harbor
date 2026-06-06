@@ -4810,11 +4810,11 @@ get_service_port() {
         return 1
     fi
 
-    service_name="$1"
+    local service_name="$1"
     target_name=$(get_container_name "$1")
 
     # Check if the specified service is running
-    if ! echo "$services" | grep -q "$service_name"; then
+    if ! echo "$services" | grep -qx "$service_name"; then
         log_warn "Service '$1' is not currently running."
         log_info "Running services:"
         log_info "$services"
@@ -4869,9 +4869,13 @@ get_intra_url() {
     local intra_port
 
     container_name=$(get_container_name "$service_name")
-    intra_host=$container_name
+    # Docker Compose DNS resolves by service name, not container name.
+    # e.g., "ollama" is resolvable inside harbor-network, "harbor.ollama" may not be.
+    intra_host=$service_name
 
-    if intra_port=$(docker port $container_name | awk -F'[ /]' '{print $1}' | sort -n | uniq); then
+    # docker port can return multiple lines (one per exposed port);
+    # pick the first (lowest) port number.
+    if intra_port=$(docker port "$container_name" | awk -F'[ /]' '{print $1}' | sort -n | head -n1) && [ -n "$intra_port" ]; then
         echo "http://$intra_host:$intra_port"
         return 0
     else
@@ -4881,6 +4885,27 @@ get_intra_url() {
 }
 
 get_url() {
+    case "${1:-}" in
+    --help | -h | help)
+        echo "Usage: harbor url [options] <service>"
+        echo ""
+        echo "Get the URL for a running service."
+        echo ""
+        echo "Options:"
+        echo "  (default)                  URL on localhost (http://localhost:<port>)"
+        echo "  -a, --addressable, --lan   LAN-accessible URL (http://<ip>:<port>)"
+        echo "  -i, --internal, --intra    URL within Harbor's Docker network"
+        echo ""
+        echo "Examples:"
+        echo "  harbor url webui           http://localhost:33801"
+        echo "  harbor url -a webui        http://192.168.1.100:33801"
+        echo "  harbor url -i webui        http://webui:8080"
+        echo ""
+        echo "See also: harbor open, harbor ps"
+        return 0
+        ;;
+    esac
+
     local is_local=true
     local is_addressable=false
     local is_intra=false
@@ -4941,7 +4966,7 @@ sys_info() {
 }
 
 sys_open() {
-    url=$1
+    local url=$1
     local rc=1
 
     # Open the URL in the default browser.
@@ -4976,6 +5001,31 @@ sys_open() {
 }
 
 run_open() {
+    case "${1:-}" in
+    --help | -h | help)
+        echo "Usage: harbor open <service>"
+        echo ""
+        echo "Open a running service's UI in the default browser."
+        echo ""
+        echo "The URL is resolved in order:"
+        echo "  1. Custom URL from config (<service>.open_url)"
+        echo "  2. Auto-detected URL from Docker port mapping"
+        echo ""
+        echo "Examples:"
+        echo "  harbor open webui     Open the WebUI interface"
+        echo "  harbor open ollama    Open Ollama's endpoint"
+        echo ""
+        echo "See also: harbor url, harbor up"
+        return 0
+        ;;
+    "")
+        log_error "No service specified."
+        log_error "Usage: harbor open <service>"
+        log_error "Run 'harbor ps' to see running services."
+        return 1
+        ;;
+    esac
+
     local service_handle=$1
     local service_url
 
@@ -7302,23 +7352,80 @@ extract_tunnel_url() {
 }
 
 establish_tunnel() {
-    case $1 in
+    case "${1:-}" in
+    --help | -h | help)
+        echo "Usage: harbor tunnel <service>"
+        echo "       harbor tunnel down|stop"
+        echo ""
+        echo "Expose a running service to the internet via Cloudflare Tunnel."
+        echo "Creates a temporary tunnel using cloudflared (no account required)."
+        echo ""
+        echo "Subcommands:"
+        echo "  down, stop, d, s    Stop all running tunnels"
+        echo ""
+        echo "Examples:"
+        echo "  harbor tunnel webui        Tunnel the WebUI to the internet"
+        echo "  harbor tunnel ollama       Tunnel Ollama's API"
+        echo "  harbor tunnel down         Stop all tunnels"
+        echo ""
+        echo "Auto-tunnels: configure services to tunnel on 'harbor up':"
+        echo "  harbor tunnels add webui   Add webui to auto-tunnel list"
+        echo "  harbor tunnels ls          List auto-tunneled services"
+        echo "  harbor tunnels rm webui    Remove from auto-tunnel list"
+        echo ""
+        echo "See also: harbor url, harbor open"
+        return 0
+        ;;
     down | stop | d | s)
+        _check_docker || return 1
         echo "Stopping all tunnels"
-        docker stop $(docker ps -q --filter "name=cfd.tunnel") || true
-        exit 0
+        local tunnel_ids
+        tunnel_ids=$(docker ps -q --filter "name=cfd.tunnel")
+        if [ -n "$tunnel_ids" ]; then
+            docker stop $tunnel_ids || true
+        else
+            log_info "No tunnels are currently running."
+        fi
+        return 0
+        ;;
+    "")
+        log_error "No service specified."
+        log_error "Usage: harbor tunnel <service>"
+        log_error "Run 'harbor ps' to see running services."
+        return 1
         ;;
     esac
 
-    local intra_url=$(get_url -i "$@")
-    local container_name=$(get_container_name "cfd.tunnel.$(date +%s)")
+    _check_docker || return 1
+
+    # Validate service name
+    if ! service_compose_exists "$1"; then
+        log_error "Service '$1' not found."
+        local suggestion
+        if suggestion=$(_suggest_service "$1") && [ -n "$suggestion" ]; then
+            log_info "Did you mean: $suggestion?"
+        fi
+        log_info "Run 'harbor ls' to see available services."
+        return 1
+    fi
+
+    local intra_url
+    if ! intra_url=$(get_url -i "$@") || [ -z "$intra_url" ]; then
+        log_error "Failed to get internal URL for '$1'. Is the service running?"
+        log_error "Start it first with: harbor up $1"
+        return 1
+    fi
+
+    local container_name
+    container_name=$(get_container_name "cfd.tunnel.$(date +%s)")
     local tunnel_url=""
 
     log_info "Starting new tunnel"
     log_info "Container name: $container_name"
     log_info "Intra URL: $intra_url"
     $(compose_with_options "cfd") run --rm -d --name "$container_name" cfd --url "$intra_url" || {
-        log_error "Failed to start container"
+        log_error "Failed to start tunnel container."
+        log_error "Check that Docker is running and the cloudflared image is available."
         return 1
     }
 
@@ -7327,12 +7434,13 @@ establish_tunnel() {
     while [ -z "$tunnel_url" ] && [ $elapsed -lt $timeout ]; do
         sleep 1
         log_info "Waiting for tunnel URL..."
-        tunnel_url=$(docker logs -n 200 $container_name 2>&1 | extract_tunnel_url) || true
+        tunnel_url=$(docker logs -n 200 "$container_name" 2>&1 | extract_tunnel_url) || true
         elapsed=$((elapsed + 1))
     done
 
     if [ -z "$tunnel_url" ]; then
-        log_error "Failed to obtain tunnel URL within $timeout seconds"
+        log_error "Failed to obtain tunnel URL within $timeout seconds."
+        log_error "Check tunnel container logs: docker logs $container_name"
         docker stop "$container_name" || true
         return 1
     fi
