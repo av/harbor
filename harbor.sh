@@ -3034,6 +3034,12 @@ merge_env_files() {
         target_file=".env"
     fi
 
+    if [[ ! -f "$default_file" ]]; then
+        log_error "Default profile not found: $default_file"
+        log_error "Your Harbor installation may be corrupted. Try reinstalling with: curl -sS https://get.harbor.sh | bash"
+        return 1
+    fi
+
     # Check if both files exist
     if [[ ! -f "$target_file" ]]; then
         cp "$default_file" "$target_file"
@@ -3041,8 +3047,13 @@ merge_env_files() {
         return
     fi
 
-    # Create a temporary file
-    local temp_file=$(mktemp -t harbor.XXXXXX)
+    # Create a temporary file; clean up on error or interrupt
+    local temp_file
+    temp_file=$(mktemp -t harbor.XXXXXX) || {
+        log_error "Failed to create temporary file for config merge."
+        return 1
+    }
+    trap 'rm -f "$temp_file" 2>/dev/null' RETURN
 
     # Variable to track empty lines
     local empty_lines=0
@@ -3050,11 +3061,11 @@ merge_env_files() {
     local prev_line=""
     local repeat_count=0
 
-    # Read .env line by line and merge with .env
+    # Read default file line by line and merge with target
     while IFS= read -r line || [[ -n "$line" ]]; do
         # Handle empty lines
         if [[ -z "$line" ]]; then
-            ((empty_lines++))
+            ((empty_lines++)) || true
             if ((empty_lines <= 2)); then
                 echo "$line" >>"$temp_file"
             fi
@@ -3067,7 +3078,7 @@ merge_env_files() {
 
         # Check for repeated lines
         if [[ "$line" == "$prev_line" ]]; then
-            ((repeat_count++))
+            ((repeat_count++)) || true
             if ((repeat_count <= 1)); then
                 echo "$line" >>"$temp_file"
             fi
@@ -3075,11 +3086,11 @@ merge_env_files() {
             repeat_count=0
             if [[ "$line" =~ ^[[:alnum:]_]+=.* ]]; then
                 var_name="${line%%=*}"
-                if grep -q "^$var_name=" "$target_file"; then
-                    # If the variable exists in .env, use that value
-                    grep "^$var_name=" "$target_file" >>"$temp_file"
+                if grep -q "^${var_name}=" "$target_file"; then
+                    # If the variable exists in target, use that value
+                    grep "^${var_name}=" "$target_file" >>"$temp_file"
                 else
-                    # If the variable doesn't exist in .env, add the new line
+                    # If the variable doesn't exist in target, add the new line
                     echo "$line" >>"$temp_file"
                 fi
             else
@@ -3094,7 +3105,7 @@ merge_env_files() {
     while IFS= read -r line || [[ -n "$line" ]]; do
         if [[ "$line" =~ ^[[:alnum:]_]+=.* ]]; then
             var_name="${line%%=*}"
-            if ! grep -q "^$var_name=" "$default_file"; then
+            if ! grep -q "^${var_name}=" "$default_file"; then
                 if ! $added_custom; then
                     echo "" >> "$temp_file"
                     echo "# Custom Variables" >> "$temp_file"
@@ -3113,7 +3124,13 @@ merge_env_files() {
     fi
 
     # Move the temporary file to replace the target file
-    mv "$temp_file" "$target_file"
+    mv "$temp_file" "$target_file" || {
+        log_error "Failed to write merged config to $target_file"
+        return 1
+    }
+
+    # Clear the RETURN trap since temp_file has been moved (no longer exists)
+    trap - RETURN
 
     log_info "Merged content from $default_file into $target_file, preserving order and structure"
 }
@@ -4399,7 +4416,7 @@ run_fixfs() {
         local abs_path=$(_portable_realpath "$path")
         volume_args+=("-v" "$abs_path:/target$counter")
         chown_commands+=("chown -R $uid:$gid /target$counter")
-        ((counter++))
+        ((counter++)) || true
     done
 
     # Run single container if we have paths to fix
@@ -4438,10 +4455,22 @@ open_home_code() {
 }
 
 unsafe_update() {
-    git fetch origin main --depth 1
-    git reset --hard FETCH_HEAD
+    if ! git fetch origin main --depth 1; then
+        log_error "Failed to fetch latest main branch from origin."
+        log_error "Check your internet connection and try again."
+        return 1
+    fi
+    if ! git reset --hard FETCH_HEAD; then
+        log_error "Failed to reset to latest main branch."
+        log_error "Your working tree may be in an inconsistent state. Run 'git status' in $harbor_home to inspect."
+        return 1
+    fi
     if [ "$(git rev-parse --abbrev-ref HEAD)" != "main" ]; then
-        git checkout -B main FETCH_HEAD
+        if ! git checkout -B main FETCH_HEAD; then
+            log_error "Failed to switch to main branch."
+            log_error "Run 'git status' in $harbor_home to inspect."
+            return 1
+        fi
     fi
 }
 
@@ -4465,12 +4494,22 @@ resolve_harbor_version() {
 
 update_harbor() {
     local is_latest=false
+    local old_version="$version"
 
     case "$1" in
     --latest | -l)
         is_latest=true
         ;;
     esac
+
+    # Warn about running services before updating — compose files may change between versions
+    local running_services
+    running_services=$(docker compose ps --services --filter "status=running" 2>/dev/null | tr '\n' ' ')
+    if [ -n "$running_services" ]; then
+        log_warn "Running services detected: $running_services"
+        log_warn "Compose files may change between versions. Stop services first with 'harbor down'"
+        log_warn "or restart them after update with 'harbor restart'."
+    fi
 
     # Stash user-modified override.env files so checkout/reset doesn't fail or destroy them
     local had_stash=false
@@ -4480,23 +4519,39 @@ update_harbor() {
 
     if $is_latest; then
         log_info "Updating to the latest dev version..."
-        unsafe_update
+        if ! unsafe_update; then
+            # Restore override.env stash before returning on error
+            if [ "$had_stash" = true ]; then
+                git stash pop --quiet 2>/dev/null || true
+            fi
+            return 1
+        fi
     else
         harbor_version=$(resolve_harbor_version)
         if [ -z "$harbor_version" ]; then
             log_error "Could not determine the latest Harbor version."
-            log_error "Check your internet connection or specify a version: harbor update --version <tag>"
+            log_error "Check your internet connection and try again."
+            # Restore override.env stash before returning on error
+            if [ "$had_stash" = true ]; then
+                git stash pop --quiet 2>/dev/null || true
+            fi
             return 1
         fi
         log_info "Updating to version $harbor_version..."
         if ! git fetch --all --tags; then
             log_error "Failed to fetch updates from the remote repository."
             log_error "Check your internet connection and try again."
+            if [ "$had_stash" = true ]; then
+                git stash pop --quiet 2>/dev/null || true
+            fi
             return 1
         fi
         if ! git checkout "tags/$harbor_version"; then
             log_error "Failed to check out version $harbor_version."
             log_error "This version tag may not exist. Check available versions at https://github.com/av/harbor/releases"
+            if [ "$had_stash" = true ]; then
+                git stash pop --quiet 2>/dev/null || true
+            fi
             return 1
         fi
     fi
@@ -4504,17 +4559,32 @@ update_harbor() {
     if [ "$had_stash" = true ]; then
         git stash pop --quiet 2>/dev/null || {
             log_warn "Could not auto-restore override.env changes (merge conflict)."
-            log_warn "Your overrides are saved in 'git stash'. Run 'git stash pop' in $harbor_home to recover."
+            log_warn "Your overrides are saved in 'git stash'. Recover manually:"
+            log_warn "  cd $harbor_home && git stash show -p | git apply --3way"
+            log_warn "Or restore individual override.env files from 'git stash list'."
         }
     fi
 
     log_info "Merging .env files..."
-    merge_env_files
+    if ! merge_env_files; then
+        log_warn "Config merge encountered issues. Your .env may need manual review."
+        log_warn "Run 'harbor config update' to retry, or compare with profiles/default.env"
+    fi
 
     log_info "Running config migrations..."
-    run_migrate_command
+    if ! run_migrate_command; then
+        log_warn "Config migration encountered issues."
+        log_warn "Run 'harbor migrate --dry-run' to preview and 'harbor migrate' to retry."
+    fi
 
-    log_info "Harbor updated successfully."
+    # Read the new version from the updated script on disk
+    local new_version
+    new_version=$(grep '^version="' "$harbor_home/harbor.sh" 2>/dev/null | head -1 | cut -d'"' -f2)
+    if [ -n "$new_version" ]; then
+        log_info "Harbor updated successfully: $old_version -> $new_version"
+    else
+        log_info "Harbor updated successfully."
+    fi
 }
 
 run_migrate_command() {
@@ -4533,15 +4603,35 @@ run_migrate_command() {
         ;;
     *)
         log_debug "Running migration script"
-        local target_config_version=$(grep '^HARBOR_CONFIG_VERSION=' "$default_profile" | cut -d '=' -f2-)
+        local target_config_version
+        target_config_version=$(grep '^HARBOR_CONFIG_VERSION=' "$default_profile" | cut -d '=' -f2-)
         target_config_version="${target_config_version#\"}"
         target_config_version="${target_config_version%\"}"
 
         if [[ -z "$target_config_version" ]]; then
-            target_config_version="$version"
+            # Read version from the on-disk script, not $version which may be stale after self-update
+            target_config_version=$(grep '^version="' "$harbor_home/harbor.sh" 2>/dev/null | head -1 | cut -d'"' -f2)
+            if [[ -z "$target_config_version" ]]; then
+                target_config_version="$version"
+            fi
         fi
 
-        deno run -A --unstable-sloppy-imports "$harbor_home/.scripts/migrate.ts" --target "$target_config_version" "$@"
+        if command -v deno &>/dev/null; then
+            deno run -A --unstable-sloppy-imports "$harbor_home/.scripts/migrate.ts" --target "$target_config_version" "$@"
+        elif command -v docker &>/dev/null; then
+            log_debug "deno not found, running migration in container"
+            docker run --rm \
+                -v "$harbor_home:$harbor_home" \
+                -v harbor-deno-cache:/deno-dir:rw \
+                -w "$harbor_home" \
+                denoland/deno:distroless \
+                run -A --unstable-sloppy-imports \
+                "./.scripts/migrate.ts" --target "$target_config_version" "$@"
+        else
+            log_warn "Neither deno nor docker available to run config migrations."
+            log_warn "Install deno (https://deno.land) or ensure Docker is running, then run: harbor migrate"
+            return 1
+        fi
         ;;
     esac
 }
