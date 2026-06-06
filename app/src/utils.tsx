@@ -34,6 +34,11 @@ export const toasted = async ({
     }
 };
 
+/**
+ * Memoize a function so it only runs once and caches the result.
+ * For async functions: if the returned promise rejects, the cache is cleared
+ * so the next call will retry instead of returning a stale rejected promise.
+ */
 export const once = <T extends unknown>(fn: () => T) => {
     let called = false;
     let value: T;
@@ -42,6 +47,15 @@ export const once = <T extends unknown>(fn: () => T) => {
         if (!called) {
             called = true;
             value = fn();
+
+            // If the value is a promise, clear the cache on rejection so
+            // transient failures (CLI not yet in PATH, Docker starting up)
+            // don't permanently break the app.
+            if (value && typeof (value as any).catch === 'function') {
+                (value as any).catch(() => {
+                    called = false;
+                });
+            }
         }
 
         return value;

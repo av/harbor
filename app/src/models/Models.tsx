@@ -12,6 +12,7 @@ import { ModelEntry, formatSize, formatDate, detailSummary } from "./ModelEntry"
 import { LostSquirrel } from "../LostSquirrel";
 import { useModelPull } from "./ModelPullContext";
 import { ModelPullPane } from "./ModelPullPane";
+import { toasted } from "../utils";
 
 type SortField = "model" | "size" | "modified";
 type SortDir = "asc" | "desc";
@@ -100,12 +101,15 @@ export const Models = () => {
                 key="confirm-remove-model"
                 onConfirm={async () => {
                     setRemovingModel(entry.model);
-                    try {
-                        await runHarbor(["models", "rm", entry.model]);
-                        reload();
-                    } finally {
-                        setRemovingModel(null);
-                    }
+                    await toasted({
+                        action: async () => {
+                            await runHarbor(["models", "rm", entry.model]);
+                            reload();
+                        },
+                        ok: <span>Removed <span className="font-mono">{entry.model}</span></span>,
+                        error: <span>Failed to remove <span className="font-mono">{entry.model}</span></span>,
+                        finally: () => setRemovingModel(null),
+                    });
                 }}
             >
                 <h2 className="text-2xl mb-2 font-bold">Remove model?</h2>

@@ -20,9 +20,15 @@ export const ServiceActions = ({
   const openService = async (e: React.MouseEvent) => {
     markHandled(e);
 
-    const urlResult = await runHarbor(["url", service.handle]);
-    const url = resolveResultLines(urlResult).join("");
-    await runOpen([url]);
+    try {
+      const urlResult = await runHarbor(["url", service.handle]);
+      const url = resolveResultLines(urlResult).join("");
+      if (url) {
+        await runOpen([url]);
+      }
+    } catch (err) {
+      console.error("Failed to get service URL:", err);
+    }
   };
 
   const toggleService = (e: React.MouseEvent) => {

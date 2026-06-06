@@ -11,7 +11,7 @@ const ANCHORS = {
 };
 
 export const Doctor = () => {
-    const { result, loading, error, rerun } = useHarbor(["doctor"]);
+    const { result, loading, error, rerun } = useHarbor(["doctor"], { raw: true });
     const output = useMemo(() => {
         const out = result?.stderr ?? "";
         const items = out
