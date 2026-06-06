@@ -576,6 +576,95 @@ run_harbor_doctor() {
         fi
     fi
 
+    # SELinux diagnostics (Fedora, RHEL, CentOS, Rocky, Alma)
+    if command -v getenforce &>/dev/null || [ -f /sys/fs/selinux/enforce ]; then
+        local selinux_mode="unknown"
+        if command -v getenforce &>/dev/null; then
+            selinux_mode=$(getenforce 2>/dev/null || echo "unknown")
+        elif [ -f /sys/fs/selinux/enforce ]; then
+            local enforce_val
+            enforce_val=$(cat /sys/fs/selinux/enforce 2>/dev/null)
+            case "$enforce_val" in
+                1) selinux_mode="Enforcing" ;;
+                0) selinux_mode="Permissive" ;;
+                *) selinux_mode="unknown" ;;
+            esac
+        fi
+
+        if [ "$selinux_mode" = "Enforcing" ]; then
+            log_warn "${nok} SELinux is Enforcing. Docker bind mounts may be denied silently."
+            log_warn "  Harbor compose files do not use :z/:Z volume labels."
+            log_warn "  If containers report 'Permission denied' on mounted files, consider:"
+            log_warn "    1. Install container-selinux: sudo dnf install -y container-selinux"
+            log_warn "    2. Check for recent denials: sudo ausearch -m avc -ts recent --comm docker 2>/dev/null"
+            log_warn "    3. As a last resort: sudo setenforce 0 (temporary, resets on reboot)"
+
+            # Check if container-selinux is installed (provides base policies for containers)
+            if command -v rpm &>/dev/null; then
+                if rpm -q container-selinux &>/dev/null; then
+                    log_info "${ok} container-selinux is installed"
+                else
+                    log_warn "${nok} container-selinux is not installed. Install it: sudo dnf install -y container-selinux"
+                fi
+            fi
+
+            # Check for recent Docker AVC denials (non-destructive, fast)
+            if command -v ausearch &>/dev/null; then
+                local avc_count
+                avc_count=$(ausearch -m avc -ts recent --comm docker 2>/dev/null | grep -c "^type=AVC" 2>/dev/null || echo "0")
+                if [ "$avc_count" -gt 0 ] 2>/dev/null; then
+                    log_warn "${nok} Found ${avc_count} recent SELinux AVC denial(s) for Docker."
+                    log_warn "  Run 'sudo ausearch -m avc -ts recent --comm docker' for details."
+                    log_warn "  Run 'sudo sealert -a /var/log/audit/audit.log' for human-readable explanations (if setroubleshoot is installed)."
+                fi
+            fi
+        elif [ "$selinux_mode" = "Permissive" ]; then
+            log_info "${ok} SELinux is Permissive (not blocking Docker)"
+        elif [ "$selinux_mode" = "Disabled" ]; then
+            log_info "${ok} SELinux is Disabled"
+        else
+            log_info "  SELinux status: ${selinux_mode}"
+        fi
+    fi
+
+    # Fedora/RHEL-specific Docker guidance
+    if [ -f /etc/os-release ]; then
+        local doctor_distro_id
+        doctor_distro_id=$(awk -F= '/^ID=/{gsub(/"/,"",$2); print tolower($2)}' /etc/os-release)
+        case "$doctor_distro_id" in
+            fedora|rhel|centos|rocky|almalinux)
+                # Check if using moby-engine instead of docker-ce (common misconfiguration on Fedora)
+                if $docker_ok && command -v rpm &>/dev/null; then
+                    if rpm -q moby-engine &>/dev/null && ! rpm -q docker-ce &>/dev/null; then
+                        log_warn "  Using moby-engine instead of docker-ce. moby-engine was removed from Fedora 39+."
+                        log_warn "  For better compatibility, switch to Docker's official packages:"
+                        case "$doctor_distro_id" in
+                            centos)
+                                log_warn "    https://docs.docker.com/engine/install/centos/"
+                                ;;
+                            rhel|rocky|almalinux)
+                                log_warn "    https://docs.docker.com/engine/install/rhel/"
+                                ;;
+                            *)
+                                log_warn "    https://docs.docker.com/engine/install/fedora/"
+                                ;;
+                        esac
+                    fi
+                fi
+
+                # Detect immutable variants
+                local doctor_variant
+                doctor_variant=$(awk -F= '/^VARIANT_ID=/{gsub(/"/,"",$2); print tolower($2)}' /etc/os-release)
+                case "${doctor_variant:-}" in
+                    silverblue|kinoite|sericea|onyx|coreos|iot)
+                        log_info "  Immutable OS variant detected: ${doctor_variant}"
+                        log_info "  Standard dnf install will not work. Use rpm-ostree or Toolbox."
+                        ;;
+                esac
+                ;;
+        esac
+    fi
+
     # Check if the default profile file exists and is readable
     if [ -f "$default_profile" ] && [ -r "$default_profile" ]; then
         log_info "${ok} Default profile exists and is readable"

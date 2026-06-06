@@ -13,9 +13,11 @@ HOMEBREW_INSTALL_URL="https://raw.githubusercontent.com/Homebrew/install/HEAD/in
 PLATFORM=""
 DISTRO_ID=""
 DISTRO_LIKE=""
+DISTRO_VARIANT=""
 PKG_MANAGER=""
 IS_WSL=false
 WSL_VERSION=""
+IS_IMMUTABLE=false
 
 log_info() {
     printf '%b[INFO]%b %s\n' "$GREEN" "$NC" "$1"
@@ -117,6 +119,23 @@ detect_platform() {
         if [ -f /etc/os-release ]; then
             DISTRO_ID=$(awk -F= '/^ID=/{gsub(/"/,"",$2); print tolower($2)}' /etc/os-release)
             DISTRO_LIKE=$(awk -F= '/^ID_LIKE=/{gsub(/"/,"",$2); print tolower($2)}' /etc/os-release)
+            DISTRO_VARIANT=$(awk -F= '/^VARIANT_ID=/{gsub(/"/,"",$2); print tolower($2)}' /etc/os-release)
+        fi
+
+        # Detect immutable/OSTree-based distros where dnf/apt install does
+        # not work (Fedora Silverblue/Kinoite, Fedora CoreOS, Fedora IoT,
+        # RHEL for Edge, Universal Blue, etc.)
+        if [ -n "$DISTRO_VARIANT" ]; then
+            case "$DISTRO_VARIANT" in
+                silverblue|kinoite|sericea|onyx|coreos|iot)
+                    IS_IMMUTABLE=true
+                    ;;
+            esac
+        fi
+        # Also detect via rpm-ostree presence (catches variants we don't
+        # list above, and custom OSTree-based images)
+        if [ "$IS_IMMUTABLE" = false ] && check_command rpm-ostree; then
+            IS_IMMUTABLE=true
         fi
 
         case "$DISTRO_ID" in
@@ -230,9 +249,28 @@ apt_install() {
     fi
 }
 
+# Return the correct Docker Engine install URL for the current dnf-based distro.
+# Fedora, CentOS, and RHEL each have their own install page.
+_dnf_docker_install_url() {
+    case "$DISTRO_ID" in
+        centos)
+            echo "https://docs.docker.com/engine/install/centos/"
+            ;;
+        rhel|rocky|almalinux)
+            echo "https://docs.docker.com/engine/install/rhel/"
+            ;;
+        *)
+            # Fedora and anything else that uses dnf
+            echo "https://docs.docker.com/engine/install/fedora/"
+            ;;
+    esac
+}
+
 dnf_install() {
     local missing=()
     local need_docker=false
+    local docker_url
+    docker_url=$(_dnf_docker_install_url)
     check_command git || missing+=("git")
     check_command curl || missing+=("curl")
 
@@ -271,7 +309,7 @@ dnf_install() {
             compose_pkg="docker-compose"
         else
             log_error "Neither 'docker-compose-plugin' nor 'docker-compose' is available via dnf."
-            log_error "Enable the Docker repository: https://docs.docker.com/engine/install/fedora/"
+            log_error "Enable the Docker repository: $docker_url"
             log_error "Or install Docker Compose v2 manually."
             return 1
         fi
@@ -285,7 +323,7 @@ dnf_install() {
             docker_pkg="moby-engine"
         else
             log_error "Neither 'docker-ce' nor 'moby-engine' is available via dnf."
-            log_error "Enable the Docker repository: https://docs.docker.com/engine/install/fedora/"
+            log_error "Enable the Docker repository: $docker_url"
             return 1
         fi
 
@@ -293,7 +331,7 @@ dnf_install() {
         if ! run_privileged dnf install -y "${docker_pkg}" "${compose_pkg}"; then
             log_error "Failed to install Docker packages via dnf."
             log_error "Try running 'sudo dnf install -y ${docker_pkg} ${compose_pkg}' manually."
-            log_error "If packages are missing, add the Docker repository: https://docs.docker.com/engine/install/fedora/"
+            log_error "If packages are missing, add the Docker repository: $docker_url"
             return 1
         fi
     else
@@ -778,6 +816,30 @@ install_requirements() {
         warn_wsl_slow_filesystem
     fi
 
+    # Immutable/OSTree distros (Fedora Silverblue/Kinoite, CoreOS, etc.)
+    # cannot use dnf/apt install for system packages. Detect and guide.
+    if [ "$IS_IMMUTABLE" = true ]; then
+        log_warn "Immutable OS detected (variant='${DISTRO_VARIANT:-unknown}')"
+        log_warn "Standard package installation (dnf install / apt install) is not supported on this system."
+        log_warn "Install Docker and dependencies manually:"
+        if check_command rpm-ostree; then
+            log_warn "  Option 1: rpm-ostree install docker-ce docker-compose-plugin git curl"
+            log_warn "            systemctl reboot  # rpm-ostree changes require a reboot"
+            log_warn "  Option 2: Use a Toolbox/Distrobox container for Harbor:"
+            log_warn "            toolbox create harbor && toolbox enter harbor"
+            log_warn "            Then install normally inside the container."
+        fi
+        log_warn "  Docker: https://docs.docker.com/engine/install/"
+        # Check if requirements are already met despite being immutable
+        if check_command docker && check_command git && check_command curl && docker compose version >/dev/null 2>&1; then
+            log_info "All required tools are already installed. Continuing."
+        else
+            log_error "Missing dependencies on an immutable OS. Install them manually (see above) and retry with --skip-requirements."
+            return 1
+        fi
+        return 0
+    fi
+
     case "$PLATFORM:$PKG_MANAGER" in
         macos:)
             brew_install || return 1
@@ -811,7 +873,15 @@ main() {
     detect_platform
 
     if [ "$PLATFORM" = "linux" ]; then
-        log_info "Platform: Linux (distro='${DISTRO_ID:-unknown}', pkg='${PKG_MANAGER:-unknown}')"
+        local platform_info="Platform: Linux (distro='${DISTRO_ID:-unknown}', pkg='${PKG_MANAGER:-unknown}'"
+        if [ -n "$DISTRO_VARIANT" ]; then
+            platform_info="${platform_info}, variant='${DISTRO_VARIANT}'"
+        fi
+        if [ "$IS_IMMUTABLE" = true ]; then
+            platform_info="${platform_info}, immutable=true"
+        fi
+        platform_info="${platform_info})"
+        log_info "$platform_info"
     elif [ "$PLATFORM" = "macos" ]; then
         log_info "Platform: macOS"
     fi
