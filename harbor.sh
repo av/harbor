@@ -98,6 +98,72 @@ _check_docker() {
     return 0
 }
 
+# Check available disk space at a given path and warn if below a threshold.
+# Usage: _check_disk_space <path> [min_gb] [label]
+#   path   - filesystem path to check (uses its mount point)
+#   min_gb - minimum free GB before warning (default: 10)
+#   label  - human-readable label for log messages (default: the path)
+# Returns 0 always (warning only, never blocks).  Sets _disk_space_gb to
+# the available space for callers that want to inspect it.
+_disk_space_gb=""
+_check_disk_space() {
+    local check_path="$1"
+    local min_gb="${2:-10}"
+    local label="${3:-$check_path}"
+    _disk_space_gb=""
+
+    # Resolve tilde if present
+    check_path="${check_path/#\~/$HOME}"
+
+    # Walk up to find the nearest existing ancestor directory
+    # (the target dir may not exist yet, e.g., first pull)
+    local probe_path="$check_path"
+    while [ ! -d "$probe_path" ] && [ "$probe_path" != "/" ]; do
+        probe_path="$(dirname "$probe_path")"
+    done
+
+    if [ ! -d "$probe_path" ]; then
+        # Cannot determine mount point -- skip silently
+        return 0
+    fi
+
+    # df -k is POSIX-portable (macOS lacks -BG); convert KB to GB
+    local avail_kb avail_gb
+    avail_kb=$(df -k "$probe_path" 2>/dev/null | awk 'NR==2 {print $4}')
+
+    if [ -z "$avail_kb" ]; then
+        return 0
+    fi
+
+    # Integer division: KB -> GB (1048576 KB = 1 GB)
+    avail_gb=$((avail_kb / 1048576))
+    _disk_space_gb="$avail_gb"
+
+    if [ "$avail_gb" -lt "$min_gb" ] 2>/dev/null; then
+        log_warn "Low disk space for $label: ${avail_gb}GB free (warning threshold: ${min_gb}GB)."
+        log_warn "LLM models are typically 4-70GB. The download may fail if space runs out."
+        log_warn "Free space or choose a smaller model. Run 'harbor doctor' for details."
+    fi
+
+    return 0
+}
+
+# Check disk space for the Docker storage backend (where Ollama stores models
+# inside its container volume).  Uses Docker Root Dir from "docker info" output.
+# Usage: _check_docker_disk_space [min_gb]
+_check_docker_disk_space() {
+    local min_gb="${1:-10}"
+
+    # Try to get Docker Root Dir from docker info (fast, already cached by
+    # _check_docker in most flows)
+    local docker_root_dir
+    docker_root_dir=$(docker info 2>/dev/null | grep "Docker Root Dir:" | sed 's/.*Docker Root Dir: *//')
+
+    if [ -n "$docker_root_dir" ]; then
+        _check_disk_space "$docker_root_dir" "$min_gb" "Docker storage ($docker_root_dir)"
+    fi
+}
+
 # Check if a specific TCP port is in use on the host.
 # Uses ss (Linux), lsof (macOS/fallback), or /dev/tcp (bash builtin).
 # Returns 0 if the port IS in use, 1 if free.
@@ -1534,6 +1600,12 @@ run_llamacpp_pull() {
         echo "  or a full URL: https://huggingface.co/org/repo/blob/main/file.gguf" >&2
         return 1
     fi
+
+    # Disk space check -- llamacpp downloads GGUF models into the HF cache
+    local hf_cache_path
+    hf_cache_path=$(env_manager get hf.cache)
+    hf_cache_path="${hf_cache_path/#\~/$HOME}"
+    _check_disk_space "$hf_cache_path" 10 "HuggingFace cache ($hf_cache_path)"
 
     log_info "Detected Llama.cpp target: $model"
     log_info "Starting ephemeral llama-server to pull model to cache..."
@@ -6027,6 +6099,15 @@ run_harbor_find() {
 
 run_hf_docker_cli() {
     _check_docker || return 1
+
+    # Disk space check before download -- HF CLI stores models in the HF cache
+    if [ "${1:-}" = "download" ]; then
+        local hf_cache_path
+        hf_cache_path=$(env_manager get hf.cache)
+        hf_cache_path="${hf_cache_path/#\~/$HOME}"
+        _check_disk_space "$hf_cache_path" 10 "HuggingFace cache ($hf_cache_path)"
+    fi
+
     $(compose_with_options "hf") run --rm hf "$@"
 }
 
@@ -7259,6 +7340,11 @@ run_hf_command() {
     dl)
         shift
         _check_docker || return 1
+        # Disk space check -- hfdownloader stores models in the HF cache
+        local hf_dl_cache
+        hf_dl_cache=$(env_manager get hf.cache)
+        hf_dl_cache="${hf_dl_cache/#\~/$HOME}"
+        _check_disk_space "$hf_dl_cache" 10 "HuggingFace cache ($hf_dl_cache)"
         $(compose_with_options "hfdownloader") run --rm hfdownloader "$@"
         return
         ;;
@@ -9000,6 +9086,15 @@ run_ollama_command() {
     esac
 
     _check_docker || return 1
+
+    # Disk space check before pull -- Ollama stores models in its cache dir
+    # which is bind-mounted from the host
+    if [ "${1:-}" = "pull" ]; then
+        local ollama_cache
+        ollama_cache=$(env_manager get ollama.cache)
+        ollama_cache="${ollama_cache/#\~/$HOME}"
+        _check_disk_space "$ollama_cache" 10 "Ollama model storage ($ollama_cache)"
+    fi
 
     local services=$(get_active_services)
     local ollama_host=$(env_manager get ollama.internal.url)
