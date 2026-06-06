@@ -275,7 +275,7 @@ show_help() {
     echo "  ls|list [--active|-a] - List available/active Harbor services"
     echo "  ln|link [--short]     - Create a symlink to the CLI, --short for 'h' link"
     echo "  unlink|unln           - Remove CLI symlinks and PATH entries"
-    echo "  eject                 - Eject the Compose configuration, accepts same options as 'up'"
+    echo "  eject                 - Eject resolved Compose configuration, accepts same options as 'up'"
     echo "  help|--help|-h        - Show this help message"
     echo "  version|--version|-v  - Show the CLI version"
     echo "  gum                   - Run the Gum terminal commands"
@@ -599,9 +599,9 @@ resolve_compose_files() {
         # For each file, count the number of dots in the filename
         # and prepend this count to the filename
         awk -F. '{print NF-1, $0}' |
-        # Sort the files based on the
-        # number of dots, in ascending order
-        sort -n |
+        # Sort by dot count (primary) then alphabetically (secondary)
+        # to ensure deterministic order across filesystems
+        sort -n -k1,1 -k2 |
         # Remove the dot count, leaving
         # just the sorted filenames
         cut -d' ' -f2-
@@ -660,7 +660,15 @@ routine_compose_with_options() {
         fi
     fi
 
-    run_routine mergeComposeFiles "$@" "${options[@]}"
+    local cmd
+    cmd=$(run_routine mergeComposeFiles "$@" "${options[@]}")
+    if [ -z "$cmd" ]; then
+        log_error "Failed to resolve compose configuration."
+        log_error "The compose file merge routine produced no output."
+        log_error "Try 'harbor doctor' to diagnose, or set 'harbor config set legacy.cli true' to use the legacy compose resolver."
+        return 1
+    fi
+    echo "$cmd"
 }
 
 compose_with_options() {
@@ -682,6 +690,10 @@ compose_with_options() {
             ;;
         --no-defaults)
             options=()
+            shift
+            ;;
+        --no-merge)
+            # No-op in legacy mode (files are never merged)
             shift
             ;;
         *)
@@ -844,10 +856,21 @@ resolve_compose_command() {
         fi
     done
 
-    local cmd=$(compose_with_options --no-merge "$@")
+    local cmd
+    cmd=$(compose_with_options --no-merge "$@") || return 1
 
     if $is_human; then
-        echo "$cmd" | sed "s|-f $harbor_home/|\n - |g"
+        # Replace -f <harbor_home>/ with newline + " - " for readability.
+        # Use awk instead of sed for portable newline handling (BSD sed
+        # does not interpret \n in replacement strings).
+        local pattern="-f $harbor_home/"
+        echo "$cmd" | awk -v pat="$pattern" -v rep=" - " '{
+            while ((idx = index($0, pat)) > 0) {
+                printf "%s\n%s", substr($0, 1, idx-1), rep
+                $0 = substr($0, idx + length(pat))
+            }
+            print
+        }'
     else
         echo "$cmd"
     fi
@@ -3108,7 +3131,7 @@ _harbor() {
         'smi:nvidia-smi'
         'top:nvidia-top'
         'dive:Inspect Docker images'
-        'eject:Output standalone Compose config'
+        'eject:Output resolved Compose config'
         'config:Manage configuration'
         'profile:Manage profiles'
         'profiles:Manage profiles'
@@ -3393,7 +3416,7 @@ complete -c harbor -n __harbor_no_subcommand -a version -d 'Show version'
 complete -c harbor -n __harbor_no_subcommand -a smi -d 'nvidia-smi'
 complete -c harbor -n __harbor_no_subcommand -a top -d 'nvidia-top'
 complete -c harbor -n __harbor_no_subcommand -a dive -d 'Inspect Docker images'
-complete -c harbor -n __harbor_no_subcommand -a eject -d 'Output standalone Compose config'
+complete -c harbor -n __harbor_no_subcommand -a eject -d 'Output resolved Compose config'
 complete -c harbor -n __harbor_no_subcommand -a config -d 'Manage configuration'
 complete -c harbor -n __harbor_no_subcommand -a profile -d 'Manage profiles'
 complete -c harbor -n __harbor_no_subcommand -a gum -d 'Run gum CLI'
@@ -3878,7 +3901,37 @@ nvidia_top() {
 
 eject() {
     _check_docker || return 1
-    $(compose_with_options "$@") config
+
+    case "$1" in
+    --help | -h | help)
+        echo "Usage: harbor eject [options] [services...]"
+        echo ""
+        echo "Output a fully-resolved Docker Compose configuration for the given services."
+        echo "Accepts the same service arguments as 'harbor up'."
+        echo ""
+        echo "Options:"
+        echo "  --no-defaults   Exclude default services, only include named services"
+        echo ""
+        echo "Examples:"
+        echo "  harbor eject ollama                  Eject ollama + default services"
+        echo "  harbor eject --no-defaults ollama    Eject only ollama"
+        echo "  harbor eject ollama > compose.yml    Save to file"
+        echo ""
+        echo "NOTE: The output contains absolute paths to this Harbor installation"
+        echo "and bind-mounted config files. To use on another machine, update the"
+        echo "volume source paths to match that machine's Harbor install location."
+        echo ""
+        echo "WARNING: The ejected configuration inlines ALL environment"
+        echo "variables from .env, including API keys and secrets."
+        echo "Review the output before sharing."
+        return 0
+        ;;
+    esac
+
+    log_warn "Ejected config contains all .env variables including secrets. Review before sharing."
+    local compose_cmd
+    compose_cmd=$(compose_with_options "$@") || return 1
+    $compose_cmd config
 }
 
 run_exec() {
