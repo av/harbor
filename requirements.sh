@@ -361,8 +361,19 @@ load_homebrew_shellenv() {
 
 install_homebrew() {
     log_info "Homebrew is not installed. Installing Homebrew through the official installer."
-    /bin/bash -c "$(curl -fsSL "$HOMEBREW_INSTALL_URL")" || return 1
-    load_homebrew_shellenv
+    # The Homebrew installer prompts "Press RETURN to continue" by default.
+    # When run in a pipe (curl | bash), stdin is consumed and the prompt may
+    # hang or fail. NONINTERACTIVE=1 suppresses the prompt.
+    if [ ! -t 0 ]; then
+        NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL "$HOMEBREW_INSTALL_URL")" || return 1
+    else
+        /bin/bash -c "$(curl -fsSL "$HOMEBREW_INSTALL_URL")" || return 1
+    fi
+    if ! load_homebrew_shellenv; then
+        log_warn "Homebrew installed but could not load its shell environment."
+        log_warn "You may need to restart your terminal or run: eval \"\$(brew shellenv)\""
+        return 1
+    fi
 }
 
 start_macos_docker_desktop() {
@@ -412,13 +423,31 @@ brew_install() {
     if ! check_command docker; then
         log_info "Installing Docker Desktop via Homebrew cask"
         brew install --cask docker || return 1
+        # Docker Desktop needs to be launched once after cask install to
+        # complete setup (accept license, provision CLI tools, start daemon).
+        log_info "Starting Docker Desktop for initial setup (this may take a moment)..."
+        if start_macos_docker_desktop; then
+            if wait_for_docker_access 180; then
+                log_info "Docker Desktop is running"
+            else
+                log_warn "Docker Desktop was started but the daemon did not become reachable within 3 minutes."
+                log_warn "Open Docker Desktop manually and complete the initial setup."
+            fi
+        else
+            log_warn "Could not start Docker Desktop automatically."
+            log_warn "Open Docker Desktop from Applications to complete the initial setup."
+        fi
     else
         log_info "docker CLI is already installed"
     fi
 
     if ! docker compose version >/dev/null 2>&1; then
-        log_warn "Docker Compose v2 not detected"
-        log_warn "Install and start Docker Desktop: https://docs.docker.com/desktop/setup/install/mac-install/"
+        if ! docker info >/dev/null 2>&1; then
+            log_warn "Docker daemon is not running. Start Docker Desktop to enable Docker Compose."
+        else
+            log_warn "Docker Compose v2 not detected."
+            log_warn "Update Docker Desktop: https://docs.docker.com/desktop/setup/install/mac-install/"
+        fi
     fi
 }
 

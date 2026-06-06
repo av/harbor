@@ -6,6 +6,33 @@ set -eo pipefail
 # == Functions
 # ========================================================================
 
+# Portable timeout: run a command with a time limit.
+# Uses GNU timeout if available, falls back to perl (always on macOS).
+# Returns 124 on timeout (matching GNU timeout convention).
+# Usage: _with_timeout 10 docker info
+_with_timeout() {
+    local secs="$1"; shift
+    if command -v timeout &>/dev/null; then
+        timeout "$secs" "$@"
+        return $?
+    elif command -v perl &>/dev/null; then
+        perl -e '
+            my $t=shift @ARGV;
+            my $pid=fork;
+            if(!$pid){exec @ARGV;die "exec: $!"}
+            $SIG{ALRM}=sub{kill 15,$pid;exit 124};
+            alarm $t;
+            waitpid $pid,0;
+            exit($?>>8)
+        ' "$secs" "$@"
+        return $?
+    else
+        # No timeout mechanism available; run without time limit
+        "$@"
+        return $?
+    fi
+}
+
 show_version() {
     echo "Harbor CLI version: $version"
 }
@@ -218,11 +245,7 @@ run_harbor_doctor() {
         # Check if Docker can be called without sudo (with timeout to
         # avoid hanging when daemon is starting up or unresponsive)
         local docker_access_output
-        local timeout_cmd=""
-        if command -v timeout &>/dev/null; then
-            timeout_cmd="timeout 10"
-        fi
-        if docker_access_output=$($timeout_cmd docker info 2>&1); then
+        if docker_access_output=$(_with_timeout 10 docker info 2>&1); then
             log_info "${ok} Docker can be called without sudo"
             log_info "${ok} Docker daemon is running"
             docker_ok=true
@@ -285,12 +308,8 @@ run_harbor_doctor() {
 
         # Use docker manifest inspect on a tiny image to test registry access
         # without pulling or leaving images behind
-        local registry_timeout=""
-        if command -v timeout &>/dev/null; then
-            registry_timeout="timeout 10"
-        fi
         local registry_output
-        if registry_output=$($registry_timeout docker manifest inspect alpine:latest 2>&1); then
+        if registry_output=$(_with_timeout 10 docker manifest inspect alpine:latest 2>&1); then
             log_info "${ok} Docker Hub registry is reachable"
         else
             local reg_exit=$?
@@ -4316,7 +4335,7 @@ docker_fsacl() {
     log_debug "fsacl: $folder (chown to $uid:$gid)"
 
     # Convert to absolute path (required for Docker volume mount)
-    local abs_folder=$(realpath "$folder")
+    local abs_folder=$(_portable_realpath "$folder")
 
     # Spawn container as root to fix ownership
     # Using Deno Alpine image which includes standard Unix tools
@@ -4366,7 +4385,7 @@ run_fixfs() {
         fi
 
         # Convert to absolute path and add to volume mounts
-        local abs_path=$(realpath "$path")
+        local abs_path=$(_portable_realpath "$path")
         volume_args+=("-v" "$abs_path:/target$counter")
         chown_commands+=("chown -R $uid:$gid /target$counter")
         ((counter++))
@@ -7841,7 +7860,51 @@ harbor_repo_url="https://github.com/av/harbor.git"
 harbor_release_url="https://api.github.com/repos/av/harbor/releases/latest"
 delimiter="|"
 scramble_exit_code=42
-harbor_home=${HARBOR_HOME:-$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")}  # harbor-lint disable=HARBOR003
+# Portable readlink -f: resolve symlinks on both GNU (Linux) and BSD (macOS).
+# macOS BSD readlink does not support -f; this loop manually chases symlinks.
+_resolve_symlink() {
+    local target="$1"
+    while [ -L "$target" ]; do
+        local dir link
+        dir=$(dirname "$target")
+        link=$(readlink "$target")
+        # If the link is relative, resolve it against the directory of the symlink
+        if [[ "$link" != /* ]]; then
+            target="$dir/$link"
+        else
+            target="$link"
+        fi
+    done
+    # Canonicalize the directory path (cd -P resolves remaining .. and symlinked dirs)
+    local dir
+    dir=$(cd -P "$(dirname "$target")" && pwd)
+    printf '%s/%s\n' "$dir" "$(basename "$target")"
+}
+
+# Portable realpath: canonicalize a path without requiring GNU coreutils.
+# macOS only ships realpath from Ventura (13.0)+; this works everywhere.
+_portable_realpath() {
+    local target="$1"
+    if [[ -d "$target" ]]; then
+        (cd -P "$target" && pwd)
+    elif [[ -e "$target" ]]; then
+        local dir base
+        dir=$(cd -P "$(dirname "$target")" && pwd)
+        base=$(basename "$target")
+        printf '%s/%s\n' "$dir" "$base"
+    else
+        # Path doesn't exist yet — canonicalize the parent and append
+        local dir base
+        dir=$(cd -P "$(dirname "$target")" 2>/dev/null && pwd) || {
+            printf '%s\n' "$target"
+            return 1
+        }
+        base=$(basename "$target")
+        printf '%s/%s\n' "$dir" "$base"
+    fi
+}
+
+harbor_home=${HARBOR_HOME:-$(dirname "$(_resolve_symlink "${BASH_SOURCE[0]}")")}  # harbor-lint disable=HARBOR003
 profiles_dir="$harbor_home/profiles"
 default_profile="$profiles_dir/default.env"
 default_current_env="$harbor_home/.env"
