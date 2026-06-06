@@ -928,6 +928,8 @@ run_routine() {
 
     shift
 
+    _check_docker || return 1
+
     log_debug "Running routine: $routine_name"
     docker run --rm \
         -v "$harbor_home:$harbor_home" \
@@ -4947,6 +4949,7 @@ get_url() {
 }
 
 print_qr() {
+    _check_docker || return 1
     local url="$1"
     $(compose_with_options "qrgen") run --rm qrgen "$url"
 }
@@ -6725,6 +6728,7 @@ run_hf_docker_cli() {
 }
 
 run_tokscale_cli() {
+    _check_docker || return 1
     $(compose_with_options "tokscale") run --rm tokscale "$@"
 }
 
@@ -7506,6 +7510,7 @@ run_history() {
         return 0
         ;;
     *)
+        _check_docker || return 1
         local max_entries=10
         local history_file="$default_history_file"
         local tmp_dir=$(mktemp -d -t harbor.XXXXXX)
@@ -7678,6 +7683,7 @@ run_harbor_dev() {
     local script_args=("${filtered_args[@]:1}")
 
     if $use_container; then
+        _check_docker || return 1
         log_debug "running in container: $script"
         docker run --rm \
             -v "$harbor_home:$harbor_home" \
@@ -7707,15 +7713,18 @@ run_gum() {
         log_error "gum requires a TTY"
         return 1
     fi
+    _check_docker || return 1
     docker run --rm -it -e "TERM=xterm-256color" $default_gum_image "$@"
 }
 
 run_dive() {
+    _check_docker || return 1
     local dive_image=wagoodman/dive
     docker run --rm -it -v /var/run/docker.sock:/var/run/docker.sock $dive_image "$@"
 }
 
 run_av_tools() {
+    _check_docker || return 1
     docker run --rm -it -p 6274:6274 -p 6277:6277 -v cache:/app/cache ghcr.io/av/tools:latest "$@"
 }
 
@@ -8665,6 +8674,16 @@ run_dmr_command() {
     shift || true
 
     case "$cmd" in
+    help|-h|--help)
+        echo "Usage: harbor dmr <start|stop|status|ls|pull|rm>"
+        echo "Manages Docker Model Runner for the Harbor dmr backend."
+        return 0
+        ;;
+    esac
+
+    _check_docker || return 1
+
+    case "$cmd" in
     start | serve)
         dmr_host_start
         ;;
@@ -8684,10 +8703,6 @@ run_dmr_command() {
     rm | remove)
         docker_model_available || { log_error "Docker Model Runner CLI is not available."; return 1; }
         docker model rm "$@"
-        ;;
-    help | -h | --help)
-        echo "Usage: harbor dmr <start|stop|status|ls|pull|rm>"
-        echo "Manages Docker Model Runner for the Harbor dmr backend."
         ;;
     *)
         log_error "Unknown dmr subcommand: $cmd"
@@ -8925,6 +8940,8 @@ run_opencode_command() {
 }
 
 run_facts_command() {
+    _check_docker || return 1
+
     local tty_opt=""
     if [ ! -t 0 ] || [ ! -t 1 ]; then
         tty_opt="-T"
@@ -8940,6 +8957,8 @@ run_facts_command() {
 }
 
 run_mi_command() {
+    _check_docker || return 1
+
     local tty_opt=""
     if [ ! -t 0 ] || [ ! -t 1 ]; then
         tty_opt="-T"
@@ -8968,6 +8987,8 @@ run_mi_command() {
 }
 
 run_npcsh_command() {
+    _check_docker || return 1
+
     local tty_opt=""
     if [ ! -t 0 ] || [ ! -t 1 ]; then
         tty_opt="-T"
@@ -9114,22 +9135,30 @@ run_tabbyapi_command() {
 }
 
 run_parllama_command() {
+    _check_docker || return 1
     $(compose_with_options "parllama") run --rm -it --entrypoint bash parllama -c "uvx parllama"
 }
 
 run_oterm_command() {
+    _check_docker || return 1
     $(compose_with_options "oterm") run --rm -it oterm
 }
 
 run_plandex_command() {
     case "$1" in
-    health)
-        shift
-        execute_and_process "get_url plandex-server" "curl {{output}}/health" "No plandexserver URL:"
-        ;;
     pwd)
         shift
         echo $original_dir
+        return 0
+        ;;
+    esac
+
+    _check_docker || return 1
+
+    case "$1" in
+    health)
+        shift
+        execute_and_process "get_url plandex-server" "curl {{output}}/health" "No plandexserver URL:"
         ;;
     *)
         $(compose_with_options "plandex") run --rm -v "$original_dir:/app/context" --workdir "/app/context" -it --entrypoint "plandex" plandex "$@"
@@ -9138,6 +9167,15 @@ run_plandex_command() {
 }
 
 run_mistralrs_command() {
+    # Config-only subcommands handled in case below; Docker call in * branch
+    case "$1" in
+    model|type|arch|isq|args|version|-h|--help|help|health|docs)
+        ;;
+    *)
+        _check_docker || return 1
+        ;;
+    esac
+
     update_model_spec() {
         local spec=""
         local current_model=$(env_manager get mistralrs.model)
@@ -9220,6 +9258,15 @@ run_mistralrs_command() {
 }
 
 run_opint_command() {
+    # Docker needed only for the * (passthrough) branch
+    case "$1" in
+    backend|profiles|--profiles|-p|models|--local_models|pwd|model|args|cmd|-os|--os)
+        ;;
+    *)
+        _check_docker || return 1
+        ;;
+    esac
+
     update_cmd() {
         local cmd=""
         local current_model=$(env_manager get opint.model)
@@ -9324,6 +9371,8 @@ run_cmdh_command() {
         ;;
     esac
 
+    _check_docker || return 1
+
     local services=$(get_active_services)
 
     # Mount the current directory and set it as the working directory
@@ -9337,6 +9386,8 @@ run_cmdh_command() {
 }
 
 run_harbor_how_command() {
+    _check_docker || return 1
+
     local services=$(get_active_services)
 
     local tty_opt=""
@@ -9415,6 +9466,8 @@ run_fabric_command() {
         echo "Fabric CLI Help:"
         ;;
     esac
+
+    _check_docker || return 1
 
     local services=$(get_active_services)
 
@@ -9565,6 +9618,8 @@ run_aider_command() {
         ;;
     esac
 
+    _check_docker || return 1
+
     local services
 
     services=$(get_active_services)
@@ -9598,6 +9653,8 @@ run_nanobot_command() {
         echo "  harbor nanobot model [model] - Get or set the nanobot model"
         ;;
     esac
+
+    _check_docker || return 1
 
     local services
     services=$(get_active_services)
@@ -9730,6 +9787,8 @@ run_aichat_command() {
         echo "Original CLI help:"
         ;;
     esac
+
+    _check_docker || return 1
 
     local services=$(get_active_services)
 
@@ -9889,6 +9948,7 @@ run_bench_command() {
         ;;
     run)
         shift
+        _check_docker || return 1
         local services=$(get_active_services)
         $(compose_with_options $services "bench") run --rm "bench" "$@"
         ;;
@@ -9961,6 +10021,8 @@ run_lm_eval_command() {
         echo "Original CLI help:"
         ;;
     esac
+
+    _check_docker || return 1
 
     local services=$(get_active_services)
 
@@ -10338,6 +10400,8 @@ run_photoprism_command() {
         ;;
     esac
 
+    _check_docker || return 1
+
     local services=$(get_active_services)
 
     if ! is_service_running "photoprism"; then
@@ -10351,6 +10415,8 @@ run_photoprism_command() {
 }
 
 run_openhands_command() {
+    _check_docker || return 1
+
     local services=$(get_active_services)
 
     $(compose_with_options $services "openhands") run \
@@ -10437,6 +10503,8 @@ run_nexa_command() {
         ;;
     esac
 
+    _check_docker || return 1
+
     local services=$(get_active_services)
 
     $(compose_with_options $services "nexa") run \
@@ -10450,6 +10518,8 @@ run_nexa_command() {
 }
 
 run_repopack_command() {
+    _check_docker || return 1
+
     local services=$(get_active_services)
 
     $(compose_with_options $services "repopack") run \
@@ -10462,6 +10532,8 @@ run_repopack_command() {
 }
 
 run_k6_command() {
+    _check_docker || return 1
+
     local services=$(get_active_services)
     echo "Active services: $services"
 
@@ -10499,13 +10571,15 @@ run_promptfoo_eval() {
         return 1
     }
 
-    trap 'popd >/dev/null; exit 130' INT
+    trap 'popd >/dev/null; return 130' INT
     harbor pf eval $other_args
     trap - INT
     popd >/dev/null
 }
 
 run_promptfoo_command() {
+    _check_docker || return 1
+
     local services=$(get_active_services)
     log_debug "Active services: $services"
 
@@ -10530,8 +10604,8 @@ run_promptfoo_command() {
     esac
 
     # Run promptfoo CLI, handle Ctrl+C/Ctrl+D gracefully
-    trap 'echo; log_info "Promptfoo CLI interrupted."; exit 130' INT
-    trap 'echo; log_info "Promptfoo CLI terminated."; exit 130' TERM
+    trap 'echo; log_info "Promptfoo CLI interrupted."; return 130' INT
+    trap 'echo; log_info "Promptfoo CLI terminated."; return 130' TERM
 
     $(compose_with_options $services "promptfoo") run \
         $tty_opt \
@@ -10549,6 +10623,8 @@ run_promptfoo_command() {
 }
 
 run_webtop_command() {
+    _check_docker || return 1
+
     local services=$(get_active_services)
     local is_running=false
 
@@ -10651,6 +10727,8 @@ run_gptme_command() {
         ;;
     esac
 
+    _check_docker || return 1
+
     local services=$(get_active_services)
     local model_id=$(env_manager get gptme.model)
     local model_spec="local/$model_id"
@@ -10687,6 +10765,8 @@ run_hermes_command() {
         echo
         ;;
     esac
+
+    _check_docker || return 1
 
     local services=$(get_active_services)
 
@@ -10728,6 +10808,8 @@ run_openfang_command() {
         return 0
         ;;
     esac
+
+    _check_docker || return 1
 
     local services
     services=$(get_active_services)
