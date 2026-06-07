@@ -1,6 +1,12 @@
 #!/bin/bash
 
-set -u
+# Enable nounset only on bash >= 4.4. Older versions (notably macOS's
+# bash 3.2) treat empty arrays as "unbound variable" under set -u,
+# crashing the script when git/curl are already installed (empty missing array).
+if [ "${BASH_VERSINFO[0]:-0}" -gt 4 ] || \
+   { [ "${BASH_VERSINFO[0]:-0}" -eq 4 ] && [ "${BASH_VERSINFO[1]:-0}" -ge 4 ]; }; then
+    set -u
+fi
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -33,6 +39,30 @@ log_error() {
 
 check_command() {
     command -v "$1" >/dev/null 2>&1
+}
+
+# Run a command with a timeout. Uses GNU timeout if available, falls back to
+# a perl alarm-based approach, and runs without a time limit if neither exists.
+_with_timeout() {
+    local secs="$1"; shift
+    if check_command timeout; then
+        timeout "$secs" "$@"
+        return $?
+    elif check_command perl; then
+        perl -e '
+            my $t=shift @ARGV;
+            my $pid=fork;
+            if(!$pid){exec @ARGV;die "exec: $!"}
+            $SIG{ALRM}=sub{kill 15,$pid;exit 124};
+            alarm $t;
+            waitpid $pid,0;
+            exit($?>>8)
+        ' "$secs" "$@"
+        return $?
+    else
+        "$@"
+        return $?
+    fi
 }
 
 # Run a command with privilege escalation (sudo if needed and available).
@@ -72,8 +102,8 @@ preflight_privilege_check() {
         return 0
     fi
 
-    if [ -t 0 ]; then
-        # TTY available — sudo can prompt for password
+    if [ -c /dev/tty ]; then
+        # TTY available — sudo can prompt for password (via /dev/tty, not stdin)
         log_info "Sudo access required. You may be prompted for your password."
         if ! sudo true; then
             log_error "Failed to obtain sudo access. Cannot install dependencies."
@@ -134,7 +164,7 @@ detect_platform() {
         fi
         # Also detect via rpm-ostree presence (catches variants we don't
         # list above, and custom OSTree-based images)
-        if [ "$IS_IMMUTABLE" = false ] && check_command rpm-ostree; then
+        if [ "$IS_IMMUTABLE" = false ] && check_command rpm-ostree && [ -d /ostree ]; then
             IS_IMMUTABLE=true
         fi
 
@@ -188,28 +218,33 @@ require_supported_platform() {
 
 apt_install() {
     local missing=()
-    local need_docker=false
+    local need_engine=false
+    local need_compose=false
     check_command git || missing+=("git")
     check_command curl || missing+=("curl")
 
-    if ! check_command docker || ! docker compose version >/dev/null 2>&1; then
-        # In WSL with Docker Desktop integration, Docker is provided by the
-        # Windows host. Installing docker.io/docker-ce creates conflicts.
+    if ! check_command docker; then
+        need_engine=true
+        need_compose=true
+    elif ! docker compose version >/dev/null 2>&1; then
+        need_compose=true
+    fi
+
+    # In WSL with Docker Desktop integration, Docker is provided by the
+    # Windows host. Installing docker.io/docker-ce creates conflicts.
+    if [ "$need_engine" = true ] || [ "$need_compose" = true ]; then
         if is_wsl_docker_desktop; then
             log_info "Docker is provided by Docker Desktop (WSL integration) — skipping package install"
-        else
-            need_docker=true
+            need_engine=false
+            need_compose=false
         fi
     fi
 
     # Single apt-get update if anything needs installing
-    if [ ${#missing[@]} -gt 0 ] || [ "$need_docker" = true ]; then
+    if [ ${#missing[@]} -gt 0 ] || [ "$need_engine" = true ] || [ "$need_compose" = true ]; then
         log_info "Refreshing apt package index"
-        if ! run_privileged apt-get update; then
-            log_error "Failed to refresh apt package index."
-            log_error "Check your internet connection and that your apt sources are valid (/etc/apt/sources.list)."
-            return 1
-        fi
+        run_privileged apt-get update || \
+            log_warn "apt-get update had errors (possibly a stale third-party PPA); continuing — install steps will report any real failures."
     fi
 
     if [ ${#missing[@]} -gt 0 ]; then
@@ -223,8 +258,8 @@ apt_install() {
         log_info "git and curl are already installed"
     fi
 
-    if [ "$need_docker" = true ]; then
-        local compose_pkg=""
+    if [ "$need_engine" = true ] || [ "$need_compose" = true ]; then
+        local compose_pkg="" docker_pkg=""
 
         if apt-cache show docker-compose-v2 >/dev/null 2>&1; then
             compose_pkg="docker-compose-v2"
@@ -237,12 +272,30 @@ apt_install() {
             return 1
         fi
 
-        log_info "Installing Docker Engine and Docker Compose via apt (${compose_pkg})"
-        if ! run_privileged apt-get install -y docker.io "${compose_pkg}"; then
-            log_error "Failed to install Docker packages via apt."
-            log_error "Try running 'sudo apt-get install -y docker.io ${compose_pkg}' manually."
-            log_error "If packages are missing, add the Docker repository: https://docs.docker.com/engine/install/"
-            return 1
+        if [ "$need_engine" = true ]; then
+            # Prefer docker-ce (Docker's official package) if available;
+            # fall back to docker.io (distro package).
+            if apt-cache show docker-ce >/dev/null 2>&1; then
+                docker_pkg="docker-ce"
+            else
+                docker_pkg="docker.io"
+            fi
+
+            log_info "Installing Docker Engine and Docker Compose via apt (${docker_pkg}, ${compose_pkg})"
+            if ! run_privileged apt-get install -y "${docker_pkg}" "${compose_pkg}"; then
+                log_error "Failed to install Docker packages via apt."
+                log_error "Try running 'sudo apt-get install -y ${docker_pkg} ${compose_pkg}' manually."
+                log_error "If packages are missing, add the Docker repository: https://docs.docker.com/engine/install/"
+                return 1
+            fi
+        else
+            log_info "Installing Docker Compose plugin via apt (${compose_pkg})"
+            if ! run_privileged apt-get install -y "${compose_pkg}"; then
+                log_error "Failed to install ${compose_pkg} via apt."
+                log_error "Try running 'sudo apt-get install -y ${compose_pkg}' manually."
+                log_error "If packages are missing, add the Docker repository: https://docs.docker.com/engine/install/"
+                return 1
+            fi
         fi
     else
         log_info "Docker and Docker Compose plugin are already installed"
@@ -268,23 +321,33 @@ _dnf_docker_install_url() {
 
 dnf_install() {
     local missing=()
-    local need_docker=false
+    local need_engine=false
+    local need_compose=false
     local docker_url
     docker_url=$(_dnf_docker_install_url)
     check_command git || missing+=("git")
     check_command curl || missing+=("curl")
 
-    if ! check_command docker || ! docker compose version >/dev/null 2>&1; then
+    if ! check_command docker; then
+        need_engine=true
+        need_compose=true
+    elif ! docker compose version >/dev/null 2>&1; then
+        need_compose=true
+    fi
+
+    # In WSL with Docker Desktop integration, Docker is provided by the
+    # Windows host. Installing docker-ce/moby-engine creates conflicts.
+    if [ "$need_engine" = true ] || [ "$need_compose" = true ]; then
         if is_wsl_docker_desktop; then
             log_info "Docker is provided by Docker Desktop (WSL integration) — skipping package install"
-        else
-            need_docker=true
+            need_engine=false
+            need_compose=false
         fi
     fi
 
     # Refresh dnf metadata if anything needs installing (stale cache causes
     # silent lookup failures with "dnf list --available")
-    if [ ${#missing[@]} -gt 0 ] || [ "$need_docker" = true ]; then
+    if [ ${#missing[@]} -gt 0 ] || [ "$need_engine" = true ] || [ "$need_compose" = true ]; then
         log_info "Refreshing dnf package metadata"
         run_privileged dnf makecache --refresh -q 2>/dev/null || true
     fi
@@ -300,39 +363,57 @@ dnf_install() {
         log_info "git and curl are already installed"
     fi
 
-    if [ "$need_docker" = true ]; then
+    if [ "$need_engine" = true ] || [ "$need_compose" = true ]; then
         local compose_pkg="" docker_pkg=""
 
-        if dnf list --available docker-compose-plugin 2>/dev/null | grep -q docker-compose-plugin; then
-            compose_pkg="docker-compose-plugin"
-        elif dnf list --available docker-compose 2>/dev/null | grep -q docker-compose; then
-            compose_pkg="docker-compose"
-        else
-            log_error "Neither 'docker-compose-plugin' nor 'docker-compose' is available via dnf."
-            log_error "Enable the Docker repository: $docker_url"
-            log_error "Or install Docker Compose v2 manually."
-            return 1
+        if [ "$need_compose" = true ]; then
+            if rpm -q docker-compose-plugin >/dev/null 2>&1; then
+                compose_pkg="docker-compose-plugin"
+            elif dnf list --available docker-compose-plugin 2>/dev/null | grep -q docker-compose-plugin; then
+                compose_pkg="docker-compose-plugin"
+            elif dnf list --available docker-compose 2>/dev/null | grep -q docker-compose; then
+                compose_pkg="docker-compose"
+            else
+                log_error "Neither 'docker-compose-plugin' nor 'docker-compose' is available via dnf."
+                log_error "Enable the Docker repository: $docker_url"
+                log_error "Or install Docker Compose v2 manually."
+                return 1
+            fi
         fi
 
-        # Prefer docker-ce (Docker's official package) over moby-engine.
-        # moby-engine was removed from Fedora 39+; docker-ce requires the
-        # Docker repo to be enabled.
-        if dnf list --available docker-ce 2>/dev/null | grep -q docker-ce; then
-            docker_pkg="docker-ce"
-        elif dnf list --available moby-engine 2>/dev/null | grep -q moby-engine; then
-            docker_pkg="moby-engine"
-        else
-            log_error "Neither 'docker-ce' nor 'moby-engine' is available via dnf."
-            log_error "Enable the Docker repository: $docker_url"
-            return 1
-        fi
+        if [ "$need_engine" = true ]; then
+            # Check already-installed packages first (rpm -q), then fall back
+            # to --available. dnf list --available excludes installed packages,
+            # so relying on it alone misses an already-installed docker-ce.
+            if rpm -q docker-ce >/dev/null 2>&1; then
+                docker_pkg="docker-ce"
+            elif dnf list --available docker-ce 2>/dev/null | grep -q docker-ce; then
+                docker_pkg="docker-ce"
+            elif rpm -q moby-engine >/dev/null 2>&1; then
+                docker_pkg="moby-engine"
+            elif dnf list --available moby-engine 2>/dev/null | grep -q moby-engine; then
+                docker_pkg="moby-engine"
+            else
+                log_error "Neither 'docker-ce' nor 'moby-engine' is available via dnf."
+                log_error "Enable the Docker repository: $docker_url"
+                return 1
+            fi
 
-        log_info "Installing Docker Engine and Docker Compose via dnf (${docker_pkg}, ${compose_pkg})"
-        if ! run_privileged dnf install -y "${docker_pkg}" "${compose_pkg}"; then
-            log_error "Failed to install Docker packages via dnf."
-            log_error "Try running 'sudo dnf install -y ${docker_pkg} ${compose_pkg}' manually."
-            log_error "If packages are missing, add the Docker repository: $docker_url"
-            return 1
+            log_info "Installing Docker Engine and Docker Compose via dnf (${docker_pkg}, ${compose_pkg})"
+            if ! run_privileged dnf install -y "${docker_pkg}" "${compose_pkg}"; then
+                log_error "Failed to install Docker packages via dnf."
+                log_error "Try running 'sudo dnf install -y ${docker_pkg} ${compose_pkg}' manually."
+                log_error "If packages are missing, add the Docker repository: $docker_url"
+                return 1
+            fi
+        else
+            log_info "Installing Docker Compose plugin via dnf (${compose_pkg})"
+            if ! run_privileged dnf install -y "${compose_pkg}"; then
+                log_error "Failed to install ${compose_pkg} via dnf."
+                log_error "Try running 'sudo dnf install -y ${compose_pkg}' manually."
+                log_error "If packages are missing, add the Docker repository: $docker_url"
+                return 1
+            fi
         fi
     else
         log_info "Docker and Docker Compose are already installed"
@@ -353,15 +434,8 @@ pacman_install() {
         fi
     fi
 
-    # Refresh package database before installing (stale db causes
-    # "target not found" errors that confuse users)
     if [ ${#missing[@]} -gt 0 ] || [ "$need_docker" = true ]; then
-        log_info "Refreshing pacman package database"
-        if ! run_privileged pacman -Sy --noconfirm; then
-            log_error "Failed to refresh pacman package database."
-            log_error "Check your internet connection and mirror list (/etc/pacman.d/mirrorlist)."
-            return 1
-        fi
+        log_info "Tip: run 'sudo pacman -Syu' first if your system hasn't been updated recently"
     fi
 
     if [ ${#missing[@]} -gt 0 ]; then
@@ -442,12 +516,23 @@ load_homebrew_shellenv() {
 install_homebrew() {
     log_info "Homebrew is not installed. Installing Homebrew through the official installer."
     # The Homebrew installer prompts "Press RETURN to continue" by default.
+    # Download the installer first so a silent curl failure (empty output)
+    # does not silently succeed via `/bin/bash -c ""`.
+    local homebrew_script
+    homebrew_script="$(curl -fsSL "$HOMEBREW_INSTALL_URL")" || {
+        log_error "Failed to download Homebrew installer from $HOMEBREW_INSTALL_URL"
+        return 1
+    }
+    if [ -z "$homebrew_script" ]; then
+        log_error "Homebrew installer script is empty; download may have failed."
+        return 1
+    fi
     # When run in a pipe (curl | bash), stdin is consumed and the prompt may
     # hang or fail. NONINTERACTIVE=1 suppresses the prompt.
     if [ ! -t 0 ]; then
-        NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL "$HOMEBREW_INSTALL_URL")" || return 1
+        NONINTERACTIVE=1 /bin/bash -c "$homebrew_script" || return 1
     else
-        /bin/bash -c "$(curl -fsSL "$HOMEBREW_INSTALL_URL")" || return 1
+        /bin/bash -c "$homebrew_script" || return 1
     fi
     if ! load_homebrew_shellenv; then
         log_warn "Homebrew installed but could not load its shell environment."
@@ -470,7 +555,7 @@ wait_for_docker_access() {
     local deadline=$((SECONDS + timeout_seconds))
 
     while [ "$SECONDS" -lt "$deadline" ]; do
-        if docker info >/dev/null 2>&1; then
+        if _with_timeout 10 docker info >/dev/null 2>&1; then
             return 0
         fi
         log_info "Waiting for Docker daemon"
@@ -548,13 +633,13 @@ brew_install() {
 is_wsl_docker_desktop() {
     [ "$IS_WSL" = true ] || return 1
     # Docker Desktop integration puts its socket at a well-known path
-    if [ -S "/var/run/docker.sock" ] && docker info >/dev/null 2>&1; then
+    if [ -S "/var/run/docker.sock" ] && _with_timeout 10 docker info >/dev/null 2>&1; then
         # Check if docker context or info references Docker Desktop
-        if docker info 2>/dev/null | grep -qi "docker desktop\|com.docker.depi"; then
+        if _with_timeout 10 docker info 2>/dev/null | grep -qi "docker desktop\|com.docker.depi"; then
             return 0
         fi
         # Docker Desktop WSL integration creates a special context
-        if docker context ls 2>/dev/null | grep -qi "desktop-linux"; then
+        if _with_timeout 10 docker context ls 2>/dev/null | grep -qi "desktop-linux"; then
             return 0
         fi
     fi
@@ -575,11 +660,11 @@ ensure_linux_docker_service() {
             log_warn "WSL1 cannot run Docker natively. Docker Desktop WSL integration is required."
             return 1
         fi
-        if docker info >/dev/null 2>&1; then
+        if _with_timeout 15 docker info >/dev/null 2>&1; then
             return 0
         fi
         # Docker not reachable in WSL2 — fall through to try systemd if available
-        if ! check_command systemctl || ! systemctl is-system-running >/dev/null 2>&1; then
+        if ! check_command systemctl || ! systemctl is-system-running 2>/dev/null | grep -qE '^(running|degraded|starting)$'; then
             log_warn "Docker is not reachable in WSL2 and systemd is not active."
             log_warn "Either enable Docker Desktop WSL integration, or enable systemd in WSL:"
             log_warn "  Add [boot] systemd=true to /etc/wsl.conf and restart WSL."
@@ -587,7 +672,7 @@ ensure_linux_docker_service() {
         fi
     fi
 
-    if check_command systemctl && systemctl is-system-running >/dev/null 2>&1; then
+    if check_command systemctl && systemctl is-system-running 2>/dev/null | grep -qE '^(running|degraded|starting)$'; then
         if ! systemctl is-enabled docker >/dev/null 2>&1; then
             log_info "Enabling Docker service"
             # enable can fail if Docker was installed via snap or non-standard means
@@ -664,7 +749,7 @@ verify_docker_access() {
     fi
 
     local docker_access_output
-    if docker_access_output=$(docker info 2>&1); then
+    if docker_access_output=$(_with_timeout 15 docker info 2>&1); then
         log_info "Docker daemon is reachable without sudo"
         return 0
     fi
@@ -722,11 +807,12 @@ verify_docker_access() {
                 return 0
             fi
             log_warn "Start Docker Desktop (or an alternative like OrbStack) before using Harbor services"
-            return 0
+            return 1
         fi
         log_error "Docker daemon is not running or not reachable"
         if [ "$IS_WSL" = true ]; then
-            log_error "In WSL, start Docker Desktop and enable WSL integration for this distro."
+            log_error "Native Docker Engine: sudo systemctl start docker"
+            log_error "Docker Desktop: ensure it is running and WSL integration is enabled for this distro"
         elif [ "$PLATFORM" = "linux" ]; then
             log_error "Try: sudo systemctl start docker"
         else
@@ -863,12 +949,7 @@ install_requirements() {
     esac
 }
 
-setup_stage() {
-    echo "HARBOR_SETUP_STAGE=$1"
-}
-
 main() {
-    setup_stage "checking-platform"
     log_info "Detecting platform and package manager"
     detect_platform
 
@@ -888,10 +969,9 @@ main() {
 
     require_supported_platform || exit 1
 
-    setup_stage "installing-prerequisites"
     # On macOS, brew doesn't need sudo; on Linux, verify sudo works before
     # attempting any package installs (catches no-TTY / no-sudo early).
-    if [ "$PLATFORM" = "linux" ]; then
+    if [ "$PLATFORM" = "linux" ] && [ "$IS_IMMUTABLE" = false ]; then
         preflight_privilege_check || exit 1
     fi
     install_requirements || exit 1
@@ -899,7 +979,6 @@ main() {
         log_warn "Docker service setup encountered issues (will verify below)"
     fi
 
-    setup_stage "checking-prerequisites"
     verify_required_tools || exit 1
     check_optional_gpu_support
 
@@ -907,7 +986,6 @@ main() {
         log_info "If you were added to the docker group, re-login before running Harbor commands."
     fi
 
-    setup_stage "ready"
     if [ "${HARBOR_APP:-}" = "1" ]; then
         log_info "Dependency setup complete."
     else

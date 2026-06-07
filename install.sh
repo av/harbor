@@ -6,7 +6,7 @@
 # shellcheck disable=SC2128
 if [ -z "${BASH_VERSION:-}" ]; then
   # When run as a file (not piped), $0 is a real path -- re-exec under bash.
-  if [ -f "$0" ] && command -v bash >/dev/null 2>&1; then
+  if [ -f "$0" ] && [ "$(dd if="$0" bs=1 count=2 2>/dev/null)" = "#!" ] && command -v bash >/dev/null 2>&1; then
     exec bash "$0" "$@"
   fi
   _current_shell=$(ps -p $$ -o comm= 2>/dev/null || echo "unknown shell")
@@ -193,14 +193,26 @@ install_or_update_project() {
     fi
     rm -rf "$HARBOR_INSTALL_PATH"
     mkdir -p "$HARBOR_INSTALL_PATH"
-    (
+    if ! (set -o pipefail; (
       cd "$HARBOR_INSTALL_SOURCE_PATH"
       tar \
         --exclude='./.git' \
         --exclude='./.env' \
         --exclude='./tests/artifacts' \
         -cf - .
-    ) | tar -C "$HARBOR_INSTALL_PATH" -xf -
+    ) | tar -C "$HARBOR_INSTALL_PATH" -xf -); then
+      echo "Error: Failed to copy from source path: $HARBOR_INSTALL_SOURCE_PATH" >&2
+      if [ -n "$backup_dir" ]; then
+        echo "Attempting to restore your config backup..." >&2
+        if mkdir -p "$HARBOR_INSTALL_PATH" && cp -a "$backup_dir/." "$HARBOR_INSTALL_PATH/"; then
+          rm -rf "$backup_dir"
+          echo "Config backup restored to $HARBOR_INSTALL_PATH" >&2
+        else
+          echo "Restore failed. Your config backup is at: $backup_dir" >&2
+        fi
+      fi
+      exit 1
+    fi
     if [ -n "$backup_dir" ]; then
       restore_user_configs "$backup_dir"
     fi
@@ -222,8 +234,15 @@ install_or_update_project() {
       if ! git diff --quiet -- 'services/*/override.env' 2>/dev/null; then
         git stash push --quiet -- 'services/*/override.env' 2>/dev/null && had_stash=true
       fi
-      git fetch --depth 1 origin "+refs/tags/$HARBOR_VERSION:refs/tags/$HARBOR_VERSION"
-      git checkout "tags/$HARBOR_VERSION"
+      if ! git fetch --depth 1 origin "+refs/tags/$HARBOR_VERSION:refs/tags/$HARBOR_VERSION" || \
+         ! git checkout "tags/$HARBOR_VERSION"; then
+        if [ "$had_stash" = true ]; then
+          git stash pop --quiet 2>/dev/null || true
+        fi
+        echo "Error: Failed to update to version $HARBOR_VERSION." >&2
+        echo "Your override.env customizations have been restored." >&2
+        exit 1
+      fi
       if [ "$had_stash" = true ]; then
         git stash pop --quiet 2>/dev/null || {
           echo "Warning: Could not auto-restore override.env changes (merge conflict)."
@@ -254,9 +273,16 @@ install_or_update_project() {
     done
     if [ "$clone_ok" = false ]; then
       if [ -n "$backup_dir" ]; then
-        rm -rf "$backup_dir"
+        echo "Error: git clone failed after 2 attempts. Attempting to restore your config backup..." >&2
+        if mkdir -p "$HARBOR_INSTALL_PATH" && cp -a "$backup_dir/." "$HARBOR_INSTALL_PATH/"; then
+          rm -rf "$backup_dir"
+          echo "Config backup restored to $HARBOR_INSTALL_PATH" >&2
+        else
+          echo "Restore failed. Your config backup is at: $backup_dir" >&2
+        fi
+      else
+        echo "Error: git clone failed after 2 attempts." >&2
       fi
-      echo "Error: git clone failed after 2 attempts." >&2
       echo "Possible causes:" >&2
       echo "  - No internet connection or DNS resolution failure" >&2
       echo "  - GitHub is unreachable (check https://www.githubstatus.com)" >&2
@@ -279,7 +305,7 @@ doctor_requires_refresh() {
 
 doctor_requires_blocked() {
   printf '%s\n' "$1" | grep -qi \
-    "Docker daemon is not running\|Docker daemon is not.*reachable\|Please start Docker\|Cannot connect to the Docker daemon\|Start Docker Desktop"
+    "Docker daemon is not running\|Docker daemon is not.*reachable\|Docker daemon is not responding\|Please start Docker\|Cannot connect to the Docker daemon\|Start Docker Desktop"
 }
 
 acquire_install_lock() {
@@ -344,6 +370,17 @@ main() {
         exit 1
       fi
     fi
+
+    # Homebrew on Apple Silicon installs to /opt/homebrew which may not be in
+    # PATH. The requirements script may have installed tools via brew in a
+    # piped subprocess whose PATH changes were lost.
+    for _brew_path in /opt/homebrew/bin/brew /usr/local/bin/brew; do
+      if [ -x "$_brew_path" ]; then
+        eval "$("$_brew_path" shellenv 2>/dev/null)" || true
+        break
+      fi
+    done
+    unset _brew_path
   fi
 
   setup_stage "installing-cli"
@@ -382,16 +419,16 @@ main() {
     printf '%s\n' "$doctor_output"
   else
     printf '%s\n' "$doctor_output"
-    if doctor_requires_refresh "$doctor_output"; then
-      setup_stage "refresh-required"
-      echo "Harbor CLI is installed, but Docker access needs a refreshed shell session."
-      echo "Re-login or run 'newgrp docker', then retry Harbor App setup."
-      exit 1
-    fi
     if doctor_requires_blocked "$doctor_output"; then
       setup_stage "blocked"
       echo "Harbor CLI is installed, but Docker is not reachable."
       echo "Start Docker Desktop or the Docker daemon, then retry Harbor App setup."
+      exit 1
+    fi
+    if doctor_requires_refresh "$doctor_output"; then
+      setup_stage "refresh-required"
+      echo "Harbor CLI is installed, but Docker access needs a refreshed shell session."
+      echo "Re-login or run 'newgrp docker', then retry Harbor App setup."
       exit 1
     fi
     setup_stage "failed"
