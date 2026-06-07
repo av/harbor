@@ -182,7 +182,7 @@ detect_platform() {
                 PKG_MANAGER="apk"
                 ;;
             *)
-                if echo "$DISTRO_LIKE" | grep -q "debian"; then
+                if echo "$DISTRO_LIKE" | grep -Eq "debian|ubuntu"; then
                     PKG_MANAGER="apt"
                 elif echo "$DISTRO_LIKE" | grep -Eq "rhel|fedora"; then
                     PKG_MANAGER="dnf"
@@ -713,6 +713,10 @@ version_to_int() {
     minor=0
     patch=0
     IFS='.' read -r major minor patch <<< "$version"
+    # Strip leading zeros to prevent printf interpreting as octal (e.g., "08")
+    major=$((10#${major:-0}))
+    minor=$((10#${minor:-0}))
+    patch=$((10#${patch:-0}))
     printf '%d%03d%03d\n' "$major" "$minor" "$patch"
 }
 
