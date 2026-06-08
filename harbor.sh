@@ -5398,7 +5398,8 @@ merge_env_files() {
                 var_name="${line%%=*}"
                 if grep -q "^${var_name}=" "$target_file"; then
                     # If the variable exists in target, use that value
-                    grep "^${var_name}=" "$target_file" >>"$temp_file"
+                    # Use head -1 to avoid duplicating keys if target has multiple entries
+                    grep "^${var_name}=" "$target_file" | head -1 >>"$temp_file"
                 else
                     # If the variable doesn't exist in target, add the new line
                     echo "$line" >>"$temp_file"
@@ -7328,6 +7329,15 @@ unsafe_update() {
         return 2
     fi
 
+    # Warn about non-override local modifications that will be destroyed by reset --hard
+    # (override.env files are handled separately via stash in update_harbor)
+    local dirty_files
+    dirty_files=$(git diff --name-only -- ':!services/*/override.env' 2>/dev/null)
+    if [ -n "$dirty_files" ]; then
+        log_warn "Local modifications to tracked files will be overwritten by --latest update:"
+        printf '%s\n' "$dirty_files" | while IFS= read -r f; do log_warn "  $f"; done
+    fi
+
     if ! git reset --hard FETCH_HEAD; then
         log_error "Failed to reset to latest main branch."
         log_error "Your working tree may be in an inconsistent state. Run 'git status' in $harbor_home to inspect."
@@ -7343,11 +7353,28 @@ unsafe_update() {
 }
 
 resolve_harbor_version() {
-    local response version
-    response=$(curl -fsSL --connect-timeout 15 --max-time 30 "$harbor_release_url" 2>/dev/null) || {
+    local response version http_code
+    # Use -w to capture HTTP status code even when -f would suppress it
+    # Use GITHUB_TOKEN/GH_TOKEN if available for higher rate limits (60 -> 5000 req/hr)
+    local curl_args=(-sSL --connect-timeout 15 --max-time 30 -w '\n%{http_code}')
+    local token="${GITHUB_TOKEN:-${GH_TOKEN:-}}"
+    if [ -n "$token" ]; then
+        curl_args+=(-H "Authorization: token $token")
+    fi
+    response=$(curl "${curl_args[@]}" "$harbor_release_url" 2>/dev/null) || {
         log_warn "Failed to fetch latest release info from $harbor_release_url" >&2
         return 1
     }
+    http_code=$(printf '%s\n' "$response" | tail -1)
+    response=$(printf '%s\n' "$response" | sed '$d')
+    if [ "$http_code" = "403" ]; then
+        log_warn "GitHub API rate limit likely exceeded (HTTP 403)." >&2
+        log_warn "Wait a few minutes or set GITHUB_TOKEN to raise the limit." >&2
+        return 1
+    elif [ "$http_code" != "200" ]; then
+        log_warn "Failed to fetch latest release info (HTTP $http_code) from $harbor_release_url" >&2
+        return 1
+    fi
     if command -v jq >/dev/null 2>&1; then
         version=$(printf '%s\n' "$response" | jq -r '.tag_name // empty' 2>/dev/null)
     else
@@ -7414,15 +7441,32 @@ update_harbor() {
     fi
 
     # Stash user-modified override.env files so checkout/reset doesn't fail or destroy them
+    # Use global _UPDATE_HAD_STASH so signal traps can restore it on SIGINT/SIGTERM
+    _UPDATE_HAD_STASH=false
     local had_stash=false
     if ! git diff --quiet -- 'services/*/override.env' 2>/dev/null; then
-        git stash push --quiet -- 'services/*/override.env' 2>/dev/null && had_stash=true
+        git stash push --quiet -- 'services/*/override.env' 2>/dev/null && {
+            had_stash=true
+            _UPDATE_HAD_STASH=true
+        }
     fi
+
+    # Trap SIGINT/SIGTERM to restore stashed override.env before exiting
+    trap '
+        if [ "$_UPDATE_HAD_STASH" = true ]; then
+            log_warn "Update interrupted — restoring stashed override.env files..."
+            git stash pop --quiet 2>/dev/null || log_warn "Could not auto-restore override.env. Run: cd '"$harbor_home"' && git stash pop"
+            _UPDATE_HAD_STASH=false
+        fi
+        trap - INT TERM
+        kill -INT $$
+    ' INT TERM
 
     # Helper to restore stashed override.env files on error
     _restore_stash_on_error() {
         if [ "$had_stash" = true ]; then
             git stash pop --quiet 2>/dev/null || true
+            _UPDATE_HAD_STASH=false
         fi
         # Provide rollback hint using the old version
         if [ -n "$old_version" ]; then
@@ -7462,9 +7506,18 @@ update_harbor() {
             _restore_stash_on_error
             return 1
         fi
-        if ! git checkout "tags/$harbor_version"; then
+        local checkout_output
+        if ! checkout_output=$(git checkout "tags/$harbor_version" 2>&1); then
             log_error "Failed to check out version $harbor_version."
-            log_error "This version tag may not exist. Check available versions at https://github.com/av/harbor/releases"
+            if printf '%s\n' "$checkout_output" | grep -qi "local changes.*would be overwritten"; then
+                log_error "You have local modifications to tracked files that conflict with the update."
+                log_error "Run 'git status' in $harbor_home to see which files are modified."
+                log_error "To discard local changes and force update: cd $harbor_home && git checkout -- . && harbor update"
+            elif printf '%s\n' "$checkout_output" | grep -qi "did not match"; then
+                log_error "This version tag may not exist. Check available versions at https://github.com/av/harbor/releases"
+            else
+                log_error "$checkout_output"
+            fi
             _restore_stash_on_error
             return 1
         fi
@@ -7477,7 +7530,11 @@ update_harbor() {
             log_warn "  cd $harbor_home && git stash show -p | git apply --3way"
             log_warn "Or restore individual override.env files from 'git stash list'."
         }
+        _UPDATE_HAD_STASH=false
     fi
+
+    # Clear the signal trap now that stash has been handled
+    trap - INT TERM
 
     # Skip merge/migrate/success message if nothing changed
     if [ "$did_update" = false ]; then
