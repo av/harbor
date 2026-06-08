@@ -40,7 +40,7 @@ export const HarborConfigSectionEditor = (
     });
 
     // Keep sections open when searching
-    if (!!search.query) {
+    if (search.query) {
         open = true;
     }
 

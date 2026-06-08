@@ -27,12 +27,10 @@ export const EXTRA: Record<string, {
     [DEFAULT_PROFILE]: {
         name: "Default",
         content: (
-            <>
-                <span>
-                    Defaults from the current Harbor CLI. Save as a new profile
-                    to edit.
-                </span>
-            </>
+            <span>
+                Defaults from the current Harbor CLI. Save as a new profile
+                to edit.
+            </span>
         ),
     },
     [CURRENT_PROFILE]: {
@@ -63,11 +61,9 @@ export const SECTIONS_ORDER = [
 export const SECTIONS_EXTRA: Partial<Record<string, { content: ReactNode }>> = {
     UI: {
         content: (
-            <>
-                <span>
-                    Main Frontend, Autoopen
-                </span>
-            </>
+            <span>
+                Main Frontend, Autoopen
+            </span>
         ),
     },
 };
