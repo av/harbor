@@ -17,18 +17,19 @@ export const ServiceActions = ({
 }) => {
   const [loading, setLoading] = useState(false);
 
-  const openService = async (e: React.MouseEvent) => {
+  const openService = (e: React.MouseEvent) => {
     markHandled(e);
 
-    try {
-      const urlResult = await runHarbor(["url", service.handle]);
-      const url = resolveResultLines(urlResult).join("");
-      if (url) {
-        await runOpen([url]);
-      }
-    } catch (err) {
-      console.error("Failed to get service URL:", err);
-    }
+    toasted({
+      action: async () => {
+        const urlResult = await runHarbor(["url", service.handle]);
+        const url = resolveResultLines(urlResult).join("");
+        if (url) {
+          await runOpen([url]);
+        }
+      },
+      error: `Failed to open ${service.name ?? service.handle}`,
+    });
   };
 
   const toggleService = (e: React.MouseEvent) => {
