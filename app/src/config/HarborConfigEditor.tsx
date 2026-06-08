@@ -33,8 +33,11 @@ export const HarborConfigEditor = (
     const [, setConfigVersion] = useSharedState("configVersion", 0);
 
     const maybeExtra = EXTRA[config.profile.name];
-    const handleFileOpen = async () => {
-        await runOpen([config.profile.file]);
+    const handleFileOpen = () => {
+        toasted({
+            action: () => runOpen([config.profile.file]),
+            error: "Failed to open config file",
+        });
     };
 
     const handleSave = async () => {

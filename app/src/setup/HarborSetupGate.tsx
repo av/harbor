@@ -8,6 +8,7 @@ import {
   IconStop,
 } from "../Icons";
 import { runOpen } from "../useOpen";
+import { toasted } from "../utils";
 import { useHarborSetup } from "./HarborSetupContext";
 
 const DOCS_URL = "https://github.com/av/harbor";
@@ -137,7 +138,10 @@ function stepState(
 const DocsLink: FC = () => (
   <button
     className="link link-hover inline-flex items-center gap-1 text-sm text-base-content/50"
-    onClick={() => runOpen([DOCS_URL])}
+    onClick={() => toasted({
+      action: () => runOpen([DOCS_URL]),
+      error: "Failed to open documentation",
+    })}
   >
     Documentation <IconExternalLink className="h-3 w-3" />
   </button>

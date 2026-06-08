@@ -138,12 +138,18 @@ export const Models = () => {
                         />
                         <IconButton
                             icon={<span className="text-[1.25em]"><IconBrandOllama /></span>}
-                            onClick={() => runOpen(["https://ollama.com/search"])}
+                            onClick={() => toasted({
+                                action: () => runOpen(["https://ollama.com/search"]),
+                                error: "Failed to open Ollama models page",
+                            })}
                             title="Browse Ollama models"
                         />
                         <IconButton
                             icon={<span className="text-[1.25em]"><IconBrandHuggingFace /></span>}
-                            onClick={() => runOpen(["https://huggingface.co/models?library=gguf"])}
+                            onClick={() => toasted({
+                                action: () => runOpen(["https://huggingface.co/models?library=gguf"]),
+                                error: "Failed to open HuggingFace models page",
+                            })}
                             title="Browse HuggingFace models"
                         />
                     </>
