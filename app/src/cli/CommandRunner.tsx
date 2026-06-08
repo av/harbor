@@ -5,7 +5,7 @@ import AnsiToHtml from "ansi-to-html";
 import { Section } from "../Section";
 import { IconButton } from "../IconButton";
 import { IconEraser, IconPlay, IconStop } from "../Icons";
-import { isWindows } from "../utils";
+import { errorMessage, isWindows } from "../utils";
 import { buildNativeHarborArgs, buildWindowsWslHarborArgs } from "../harborCommand";
 
 const converter = new AnsiToHtml({ escapeXML: true });
@@ -155,7 +155,7 @@ export const CommandRunner = () => {
             const child = await command.spawn();
             activeChild.current = child;
         } catch (e) {
-            const msg = e instanceof Error ? e.message : String(e);
+            const msg = errorMessage(e);
             setEntries((prev) =>
                 prev.map((ent) =>
                     ent.id === id

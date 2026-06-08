@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import AnsiToHtml from "ansi-to-html";
 import { spawnHarborPty } from "../terminal/harborPty";
+import { errorMessage } from "../utils";
 import type { IPty } from "../terminal/harborPty";
 
 const converter = new AnsiToHtml({ escapeXML: true });
@@ -267,7 +268,7 @@ export function useHarborStream(args: string[], options?: UseHarborStreamOptions
         } catch (e) {
             if (generationRef.current !== generation) return;
             ptyRef.current = null;
-            const msg = e instanceof Error ? e.message : String(e);
+            const msg = errorMessage(e);
             stopCancelTimeout();
             flushBuffers();
             setError(msg);

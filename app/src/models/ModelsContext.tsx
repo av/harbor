@@ -1,5 +1,6 @@
 import { createContext, FC, PropsWithChildren, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { runHarbor } from "../useHarbor";
+import { errorMessage } from "../utils";
 import { ModelEntry, parseModels } from "./ModelEntry";
 import type { ModelsStatus, UseModelsResult } from "./useModels";
 
@@ -57,7 +58,7 @@ export const ModelsProvider: FC<PropsWithChildren> = ({ children }) => {
                     return;
                 }
 
-                const msg = e instanceof Error ? e.message : String(e);
+                const msg = errorMessage(e);
                 setError(isDockerError(msg) ? "Docker is not running. Start Docker and retry." : msg);
                 setStatus("error");
             }
