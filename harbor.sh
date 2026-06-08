@@ -777,10 +777,83 @@ run_harbor_doctor() {
     # Check if the .env file exists and is readable
     if [ -f ".env" ] && [ -r ".env" ]; then
         log_info "${ok} Current profile (.env) exists and is readable"
+
+        # Validate .env syntax: catch common issues that cause silent misbehavior
+        local env_issues=0
+        local env_line_num=0
+        while IFS= read -r line || [ -n "$line" ]; do
+            env_line_num=$((env_line_num + 1))
+
+            # Skip blank lines and comments
+            [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+
+            # Lines must contain '=' (KEY=VALUE format)
+            if [[ "$line" != *=* ]]; then
+                if [ "$env_issues" -eq 0 ]; then
+                    log_warn "  .env syntax issues:"
+                fi
+                log_warn "    Line $env_line_num: missing '=' separator: $(printf '%.60s' "$line")"
+                env_issues=$((env_issues + 1))
+            fi
+        done < .env
+
+        # Check for duplicate keys (docker compose uses last value,
+        # but scripts that source .env use the first — silent misbehavior)
+        local dup_keys
+        dup_keys=$(grep -v '^\s*#' .env | grep -v '^\s*$' | grep '=' | sed 's/=.*//' | sort | uniq -d)
+        if [ -n "$dup_keys" ]; then
+            local dup_count
+            dup_count=$(echo "$dup_keys" | wc -l)
+            if [ "$env_issues" -eq 0 ]; then
+                log_warn "  .env syntax issues:"
+            fi
+            log_warn "    $dup_count duplicate key(s): $(echo "$dup_keys" | head -3 | tr '\n' ' ')"
+            env_issues=$((env_issues + dup_count))
+        fi
+
+        if [ "$env_issues" -gt 0 ]; then
+            log_warn "  Found $env_issues .env issue(s). Run 'harbor config update' to regenerate from defaults."
+        fi
+
+        # Warn about stale keys: present in .env but absent from profiles/default.env
+        if [ -f "$default_profile" ] && [ -r "$default_profile" ]; then
+            local stale_count=0
+            local stale_keys=""
+            local env_key
+            while IFS= read -r line || [ -n "$line" ]; do
+                [[ -z "$line" || "$line" =~ ^[[:space:]]*# || "$line" != *=* ]] && continue
+                env_key="${line%%=*}"
+                # Skip non-HARBOR_ keys (user-added, system, etc.)
+                [[ "$env_key" != HARBOR_* ]] && continue
+                if ! grep -q "^${env_key}=" "$default_profile" 2>/dev/null; then
+                    stale_count=$((stale_count + 1))
+                    if [ "$stale_count" -le 5 ]; then
+                        stale_keys="${stale_keys:+$stale_keys, }$env_key"
+                    fi
+                fi
+            done < .env
+            if [ "$stale_count" -gt 0 ]; then
+                local stale_msg="$stale_keys"
+                if [ "$stale_count" -gt 5 ]; then
+                    stale_msg="$stale_msg, ... ($stale_count total)"
+                fi
+                log_warn "  $stale_count key(s) in .env not found in default profile: $stale_msg"
+                log_warn "  These may be from an older version or manual edits. Harmless but may indicate stale config."
+            fi
+        fi
     else
         log_error "${nok} Current profile (.env) is missing or not readable."
         log_error "  Run 'harbor config update' to regenerate it from the default profile."
         has_errors=true
+    fi
+
+    # Check Harbor home disk space (LLM models, configs, and caches live here)
+    local home_space_gb
+    home_space_gb=$(df -k "$harbor_home" 2>/dev/null | awk 'NR==2 {printf "%d", $4/1048576}')
+    if [ -n "$home_space_gb" ] && [ "$home_space_gb" -lt 5 ] 2>/dev/null; then
+        log_warn "${nok} Low disk space on Harbor home (${home_space_gb}GB free at $harbor_home). LLM models and service data require significant space."
+    elif [ -n "$home_space_gb" ]; then
+        log_info "${ok} Harbor home has ${home_space_gb}GB free"
     fi
 
     # Check if CLI is linked and symlink target is valid.
@@ -805,6 +878,19 @@ run_harbor_doctor() {
             log_error "${nok} CLI is not linked. Run 'harbor link' to create a symlink."
             has_errors=true
         fi
+
+        # Verify cli_path is in PATH (symlink exists but won't be found if
+        # the directory isn't in PATH — e.g., shell profile not sourced)
+        case ":$PATH:" in
+            *":$cli_path:"*)
+                log_info "${ok} CLI directory is in PATH"
+                ;;
+            *)
+                log_warn "${nok} CLI directory '$cli_path' is not in PATH."
+                log_warn "  The 'harbor' command won't be found in new shells."
+                log_warn "  Run 'harbor ln' to re-add the PATH entry, then open a new terminal."
+                ;;
+        esac
     else
         log_warn "  Skipping CLI link check (.env not available)"
     fi
