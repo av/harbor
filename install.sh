@@ -506,7 +506,12 @@ main() {
   fi
 
   if [ -z "$HARBOR_VERSION" ]; then
-    echo "Error: Unable to resolve Harbor version. Check your network connection and retry."
+    echo "Error: Unable to resolve Harbor version." >&2
+    echo "Possible causes:" >&2
+    echo "  - No internet connection or DNS failure" >&2
+    echo "  - GitHub API rate limit exceeded (60 requests/hour for unauthenticated users)" >&2
+    echo "To specify a version manually: $0 --version v0.4.19" >&2
+    echo "Available versions: https://github.com/av/harbor/releases" >&2
     exit 1
   else
     echo "Resolved Harbor version: $HARBOR_VERSION"

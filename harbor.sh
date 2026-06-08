@@ -538,12 +538,22 @@ run_harbor_doctor() {
             elif echo "$docker_access_output" | grep -qi "permission denied\|got permission denied while trying to connect to the docker daemon socket"; then
                 log_error "${nok} Docker requires sudo for this user. Add your user to the 'docker' group and re-login."
             else
-                log_error "${nok} Docker daemon is not running or not reachable. Please start Docker."
+                log_error "${nok} Docker daemon is not running or not reachable."
+                if [[ "$OSTYPE" == darwin* ]]; then
+                    log_error "  Start Docker Desktop from Applications, or run: open -a Docker"
+                elif grep -qiE "microsoft|wsl" /proc/version 2>/dev/null; then
+                    log_error "  Start Docker Desktop on Windows and enable WSL integration for this distro,"
+                    log_error "  or start the native daemon: sudo systemctl start docker"
+                else
+                    log_error "  Start the daemon: sudo systemctl start docker"
+                    log_error "  If using Docker Desktop: open Docker Desktop from your application menu"
+                fi
             fi
             has_errors=true
         fi
     else
-        log_error "${nok} Docker is not installed. Please install Docker."
+        log_error "${nok} Docker is not installed."
+        log_error "  Install Docker: https://docs.docker.com/engine/install/"
         has_errors=true
     fi
 
@@ -553,12 +563,16 @@ run_harbor_doctor() {
         if docker compose version &>/dev/null; then
             log_info "${ok} Docker Compose (v2) is installed"
         else
-            log_error "${nok} Docker Compose (v2) is not installed. Please install Docker Compose (v2)."
+            log_error "${nok} Docker Compose (v2) is not installed."
+            log_error "  Install Docker Compose: https://docs.docker.com/compose/install/"
             has_errors=true
         fi
 
         if ! has_modern_compose; then
-            log_error "${nok} Docker Compose version is older than $desired_compose_major.$desired_compose_minor.$desired_compose_patch. Please update Docker Compose (v2)."
+            local installed_compose
+            installed_compose=$(docker compose version --short 2>/dev/null || echo "unknown")
+            log_error "${nok} Docker Compose version ($installed_compose) is older than required ($desired_compose_major.$desired_compose_minor.$desired_compose_patch)."
+            log_error "  Update Docker Compose: https://docs.docker.com/compose/install/"
             has_errors=true
         else
             log_info "${ok} Docker Compose (v2) version is newer than $desired_compose_major.$desired_compose_minor.$desired_compose_patch"
@@ -871,11 +885,11 @@ run_harbor_doctor() {
                 log_info "${ok} CLI is linked"
             else
                 log_error "${nok} CLI symlink is broken: $cli_path/$cli_name -> $link_target"
-                log_error "    The target no longer exists. Run 'harbor link' to recreate."
+                log_error "    The target no longer exists. Run 'harbor ln' to recreate."
                 has_errors=true
             fi
         else
-            log_error "${nok} CLI is not linked. Run 'harbor link' to create a symlink."
+            log_error "${nok} CLI is not linked. Run 'harbor ln' to create a symlink."
             has_errors=true
         fi
 

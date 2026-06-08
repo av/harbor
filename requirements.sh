@@ -686,9 +686,17 @@ install_homebrew() {
     # When run in a pipe (curl | bash), stdin is consumed and the prompt may
     # hang or fail. NONINTERACTIVE=1 suppresses the prompt.
     if [ ! -t 0 ]; then
-        NONINTERACTIVE=1 /bin/bash -c "$homebrew_script" || return 1
+        if ! NONINTERACTIVE=1 /bin/bash -c "$homebrew_script"; then
+            log_error "Homebrew installer failed. Review the errors above."
+            log_error "Try installing Homebrew manually: https://brew.sh"
+            return 1
+        fi
     else
-        /bin/bash -c "$homebrew_script" || return 1
+        if ! /bin/bash -c "$homebrew_script"; then
+            log_error "Homebrew installer failed. Review the errors above."
+            log_error "Try installing Homebrew manually: https://brew.sh"
+            return 1
+        fi
     fi
     if ! load_homebrew_shellenv; then
         log_warn "Homebrew installed but could not load its shell environment."
@@ -867,7 +875,8 @@ ensure_linux_docker_service() {
             log_info "Starting Docker service"
             if ! run_privileged systemctl start docker; then
                 log_warn "Failed to start Docker service via systemctl"
-                log_warn "Docker may need manual startup or configuration"
+                log_warn "Check the service log for details: journalctl -xeu docker.service"
+                log_warn "Common causes: missing kernel modules, storage driver issues, or port conflicts"
                 return 1
             fi
             if ! wait_for_docker_access 30; then
@@ -881,6 +890,7 @@ ensure_linux_docker_service() {
         run_privileged rc-update add docker default >/dev/null 2>&1 || true
         if ! run_privileged rc-service docker start >/dev/null 2>&1; then
             log_warn "Failed to start Docker service via OpenRC"
+            log_warn "Check the service log: cat /var/log/docker.log"
             return 1
         fi
         if ! wait_for_docker_access 30; then
@@ -943,7 +953,13 @@ is_compose_modern() {
 
 verify_docker_access() {
     if ! check_command docker; then
-        log_error "Docker is not installed or not in PATH"
+        log_error "Docker is not installed or not in PATH."
+        if [ -x /usr/bin/docker ] || [ -x /usr/local/bin/docker ]; then
+            log_error "Docker binary exists but is not in the current PATH."
+            log_error "Restart your terminal or run: export PATH=\"\$PATH:/usr/bin:/usr/local/bin\""
+        else
+            log_error "Install Docker: https://docs.docker.com/engine/install/"
+        fi
         return 1
     fi
 
@@ -1062,7 +1078,11 @@ verify_required_tools() {
         if check_command "$tool"; then
             log_info "$tool is installed: $($tool --version 2>/dev/null | head -n1)"
         else
-            log_error "$tool is not installed"
+            log_error "$tool is not installed."
+            case "$tool" in
+                docker) log_error "  Install Docker: https://docs.docker.com/engine/install/" ;;
+                *)      log_error "  Install it with your system package manager (e.g., apt/dnf/brew install $tool)" ;;
+            esac
             failed=true
         fi
     done
@@ -1077,8 +1097,13 @@ verify_required_tools() {
             failed=true
         fi
     else
-        log_error "Docker Compose v2 is not installed or unavailable"
-        log_error "Install Docker Compose plugin and retry"
+        log_error "Docker Compose v2 is not installed or unavailable."
+        if _with_timeout 5 docker info >/dev/null 2>&1; then
+            log_error "Docker daemon is running but the Compose plugin is missing."
+            log_error "Install it: https://docs.docker.com/compose/install/linux/"
+        else
+            log_error "Docker daemon may not be running — start Docker first, then check Compose."
+        fi
         failed=true
     fi
 

@@ -1022,7 +1022,7 @@ fn detect_harbor_status_core(platform: &str, detail: &mut HarborSetupDetail) {
         "windows" => {}
         _ => {
             detail.status = "blocked".into();
-            detail.last_error = Some(format!("Unsupported platform: {platform}"));
+            detail.last_error = Some(format!("Unsupported platform: {platform}. Harbor supports Linux, macOS, and Windows (via WSL2)."));
             return;
         }
     }
@@ -1077,7 +1077,7 @@ fn detect_harbor_status_core(platform: &str, detail: &mut HarborSetupDetail) {
         if exists.code == Some(0) {
             detail.status = "refresh-required".into();
             detail.last_error = Some(
-                "Harbor is installed but not in PATH. Restart the app to pick up the new installation.".into(),
+                "Harbor is installed but not in PATH. Close and reopen this app, or open a new terminal and run 'harbor doctor' to verify.".into(),
             );
             return;
         }
