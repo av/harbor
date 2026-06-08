@@ -98,6 +98,24 @@ const alertClass: Record<GuidanceLevel, string> = {
   error: "alert-error",
 };
 
+const GuidanceAlert: FC<{ guidance: StateGuidance; className?: string }> = ({
+  guidance,
+  className,
+}) => (
+  <div className={`alert ${alertClass[guidance.level]} text-left ${className ?? ""}`}>
+    <IconOctagonAlert className="h-5 w-5 shrink-0" />
+    <div>
+      <h3 className="font-bold">{guidance.title}</h3>
+      <p className="text-sm">{guidance.message}</p>
+      <ul className="mt-2 list-disc pl-4 text-sm">
+        {guidance.actions.map((a) => (
+          <li key={a}>{a}</li>
+        ))}
+      </ul>
+    </div>
+  </div>
+);
+
 function stepState(
   stepKey: string,
   currentStatus: string,
@@ -198,20 +216,7 @@ export const HarborSetupGate: FC<{ children: ReactNode }> = ({ children }) => {
             )}
 
             {guidance && (
-              <div
-                className={`alert ${alertClass[guidance.level]} max-w-lg text-left`}
-              >
-                <IconOctagonAlert className="h-5 w-5 shrink-0" />
-                <div>
-                  <h3 className="font-bold">{guidance.title}</h3>
-                  <p className="text-sm">{guidance.message}</p>
-                  <ul className="mt-2 list-disc pl-4 text-sm">
-                    {guidance.actions.map((a) => (
-                      <li key={a}>{a}</li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
+              <GuidanceAlert guidance={guidance} className="max-w-lg" />
             )}
 
             {(setup.error || setup.detail?.lastError) && (
@@ -314,20 +319,7 @@ export const HarborSetupGate: FC<{ children: ReactNode }> = ({ children }) => {
 
         {/* Guidance alert for terminal states */}
         {!setup.running && guidance && (
-          <div
-            className={`alert ${alertClass[guidance.level]} text-left`}
-          >
-            <IconOctagonAlert className="h-5 w-5 shrink-0" />
-            <div>
-              <h3 className="font-bold">{guidance.title}</h3>
-              <p className="text-sm">{guidance.message}</p>
-              <ul className="mt-2 list-disc pl-4 text-sm">
-                {guidance.actions.map((a) => (
-                  <li key={a}>{a}</li>
-                ))}
-              </ul>
-            </div>
-          </div>
+          <GuidanceAlert guidance={guidance} />
         )}
 
         {(setup.error || setup.detail?.lastError) && !setup.running && (

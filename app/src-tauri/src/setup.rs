@@ -521,13 +521,13 @@ fn emit_process_line(
         *last = Some(line.trim().to_string());
     }
     if let Some(marker) = parse_setup_stage_marker(line) {
+        emit_stage(app, &marker);
         if let Ok(mut current) = marker_state.lock() {
             *current = Some(marker.clone());
         }
-        if let Ok(mut stage) = current_stage_state.lock() {
-            *stage = Some(marker.clone());
+        if let Ok(mut stage_lock) = current_stage_state.lock() {
+            *stage_lock = Some(marker);
         }
-        emit_stage(app, &marker);
     }
     emit_log(app, stage, stream, line);
 }
