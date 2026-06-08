@@ -1,6 +1,7 @@
 data/
 cache/
 logs/
+config/
 config.db
 logs.db
 config.json
