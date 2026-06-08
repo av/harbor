@@ -510,7 +510,7 @@ show_help() {
 
 run_harbor_doctor() {
     log_info "Running Harbor Doctor..."
-    has_errors=false
+    local has_errors=false
     local docker_ok=false
 
     # Check if Docker is installed
@@ -622,6 +622,28 @@ run_harbor_doctor() {
         log_error "${nok} Harbor home does not exist or is not reachable at: $harbor_home"
         log_error "  Reinstall Harbor or set HARBOR_HOME to the correct path."
         has_errors=true
+    fi
+
+    # Check prerequisites for 'harbor update'
+    if command -v git &>/dev/null; then
+        log_info "${ok} git is installed"
+    else
+        log_error "${nok} git is not installed. Harbor requires git for updates."
+        has_errors=true
+    fi
+
+    if command -v curl &>/dev/null; then
+        log_info "${ok} curl is installed"
+    else
+        log_error "${nok} curl is not installed. Harbor requires curl for version checks and updates."
+        has_errors=true
+    fi
+
+    # Check if Harbor home is a git repo (required for 'harbor update')
+    if [ -d "$harbor_home" ] && [ ! -d "$harbor_home/.git" ]; then
+        log_warn "${nok} Harbor home is not a git repository ($harbor_home/.git not found)."
+        log_warn "  'harbor update' will not work. If you installed via --source-path,"
+        log_warn "  reinstall with: curl -fsSL https://raw.githubusercontent.com/av/harbor/main/install.sh | bash"
     fi
 
     # WSL-specific diagnostics
@@ -7341,6 +7363,19 @@ resolve_harbor_version() {
 update_harbor() {
     local is_latest=false
     local old_version="$version"
+
+    # Verify prerequisites before attempting any git operations
+    if [ ! -d "$harbor_home/.git" ]; then
+        log_error "Harbor home ($harbor_home) is not a git repository."
+        log_error "This can happen if Harbor was installed via --source-path (tar copy)."
+        log_error "Reinstall with: curl -fsSL https://raw.githubusercontent.com/av/harbor/main/install.sh | bash"
+        return 1
+    fi
+
+    if ! command -v git &>/dev/null; then
+        log_error "git is not installed. Harbor requires git for updates."
+        return 1
+    fi
 
     case "$1" in
     --latest | -l)
