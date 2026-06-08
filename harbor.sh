@@ -5617,15 +5617,24 @@ execute_and_process() {
     local error_message="$3"
 
     # Execute the command and capture its output
+    local command_output
     command_output=$(eval "$command_to_execute" 2>&1)
-    exit_code=$?
+    local exit_code=$?
 
     # Check the exit code
     if [ $exit_code -eq 0 ]; then
-        # Replace placeholder with command output, using | as delimiter
-        success_command_modified=$(echo "$success_command" | sed "s|{{output}}|$command_output|")
-        # If the command succeeded, pass the output to the success command
-        eval "$success_command_modified"
+        # Replace {{output}} with captured output using bash substitution,
+        # then invoke the result as a simple command (no eval). This prevents
+        # command injection when command_output contains shell metacharacters
+        # (e.g., semicolons, pipes, backticks from a malicious .env value).
+        #
+        # All callers use the pattern: "command {{output}}[/suffix]"
+        # where command is a single word (curl, sys_open) and {{output}}
+        # plus optional suffix form a single argument.
+        local cmd_name="${success_command%% *}"
+        local cmd_arg_template="${success_command#* }"
+        local cmd_arg="${cmd_arg_template//\{\{output\}\}/$command_output}"
+        "$cmd_name" "$cmd_arg"
     else
         # If the command failed, print the custom error message and the output
         log_warn "$error_message Exit code: $exit_code. Output:"
