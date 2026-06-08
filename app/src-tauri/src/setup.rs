@@ -17,6 +17,8 @@ const HARBOR_INSTALL_URL: &str =
 const HARBOR_WINDOWS_INSTALL_URL: &str =
     "https://raw.githubusercontent.com/av/harbor/refs/heads/main/install.ps1";
 const DETECT_TIMEOUT: Duration = Duration::from_secs(15);
+const PANIC_RECOVERY_MESSAGE: &str =
+    "An unexpected internal error occurred during setup. Please try again, and if the problem persists, report it at github.com/av/harbor/issues";
 
 #[derive(Default)]
 pub struct SetupState {
@@ -1209,7 +1211,7 @@ pub fn start_harbor_setup(
                     emit_setup_failure(
                         &app,
                         "failed",
-                        "An unexpected internal error occurred during setup. Please try again, and if the problem persists, report it at github.com/av/harbor/issues".to_string(),
+                        PANIC_RECOVERY_MESSAGE.to_string(),
                     );
                 }
             }
@@ -1221,7 +1223,7 @@ pub fn start_harbor_setup(
             emit_setup_failure(
                 &app,
                 "failed",
-                "An unexpected internal error occurred during setup. Please try again, and if the problem persists, report it at github.com/av/harbor/issues".to_string(),
+                PANIC_RECOVERY_MESSAGE.to_string(),
             );
         }
 
