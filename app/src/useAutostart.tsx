@@ -9,13 +9,10 @@ export const useAutostart = () => {
 
     useEffect(() => {
         const checkAutostart = async () => {
+            setLoading(true);
             try {
-                setLoading(true);
-
                 const enabled = await isEnabled();
                 __setAutostart(enabled);
-            } catch (e) {
-                throw e;
             } finally {
                 setLoading(false);
             }
@@ -29,9 +26,8 @@ export const useAutostart = () => {
 
     const setAutostart = async (enabled: boolean) => {
         const action = async () => {
+            setLoading(true);
             try {
-                setLoading(true);
-
                 if (enabled) {
                     await enable();
                 } else {
@@ -39,8 +35,6 @@ export const useAutostart = () => {
                 }
 
                 __setAutostart(enabled);
-            } catch (e) {
-                throw e;
             } finally {
                 setLoading(false);
             }

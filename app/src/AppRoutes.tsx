@@ -56,10 +56,4 @@ export const ROUTES: Record<string, HarborRoute> = {
     },
 };
 
-export const ROUTE_NAMES = {
-    home: 'Home',
-    config: 'Config',
-    settings: 'Settings',
-};
-
 export const ROUTES_LIST = Object.values(ROUTES);

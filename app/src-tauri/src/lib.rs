@@ -19,7 +19,7 @@ pub fn run() {
     builder
         .manage(setup::SetupState::default())
         .setup(|app| {
-            #[cfg(all(desktop))]
+            #[cfg(desktop)]
             {
                 let handle = app.handle();
                 tray::create_tray(handle)?;

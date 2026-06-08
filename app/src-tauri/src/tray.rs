@@ -51,8 +51,5 @@ fn toggle_window_visibility<R: Runtime>(app: &tauri::AppHandle<R>) {
             let _ = window.show();
             let _ = window.set_focus();
         }
-    } else {
-        // If the window doesn't exist, create it
-        // let _ = build_main_window(app, url); // Make sure 'url' is defined or passed as a parameter
     }
 }
