@@ -11,6 +11,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { errorMessage } from "../utils";
 
 export interface HarborSetupDetail {
   status: string;
@@ -84,7 +85,7 @@ export const HarborSetupProvider: FC<{ children: ReactNode }> = ({ children }) =
       setDetail(next);
       setRunning(next.running);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorMessage(e));
     } finally {
       setLoading(false);
     }
@@ -185,7 +186,7 @@ export const HarborSetupProvider: FC<{ children: ReactNode }> = ({ children }) =
     try {
       await invoke("start_harbor_setup");
     } catch (e) {
-      const rawMessage = e instanceof Error ? e.message : String(e);
+      const rawMessage = errorMessage(e);
       setError(rawMessage);
       setRunning(false);
       setDetail((prev) => ({
@@ -209,7 +210,7 @@ export const HarborSetupProvider: FC<{ children: ReactNode }> = ({ children }) =
     try {
       await invoke("write_harbor_setup_input", { data });
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorMessage(e));
       throw e;
     }
   }, []);
@@ -229,7 +230,7 @@ export const HarborSetupProvider: FC<{ children: ReactNode }> = ({ children }) =
       // Showing Retry while the process is still running would hit the
       // "already in progress" guard.  The error is displayed and the
       // user can try Cancel again.
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorMessage(e));
     }
   }, []);
 

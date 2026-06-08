@@ -193,3 +193,7 @@ export function isHandled(e: React.SyntheticEvent) {
 export function normalizeServiceKey(handle: string): string {
     return handle.toUpperCase().replace(/-/g, "_").split("_")[0];
 }
+
+export function errorMessage(e: unknown): string {
+    return e instanceof Error ? e.message : String(e);
+}
