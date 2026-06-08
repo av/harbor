@@ -26,32 +26,18 @@ fn verify_prelude_sync() {
     let rs_harbor_sh = extract_rs_harbor_sh(&rs_prelude);
 
     if ts_paths != rs_paths {
-        panic!(
-            "\n\n\
-            ╔══════════════════════════════════════════════════════════════════╗\n\
-            ║ PRELUDE SYNC ERROR: PATH entries differ between Rust and TS     ║\n\
-            ╠══════════════════════════════════════════════════════════════════╣\n\
-            ║ TypeScript (harborCommand.ts): {:?}\n\
-            ║ Rust (setup.rs):              {:?}\n\
-            ║                                                                  ║\n\
-            ║ Update BOTH files to keep them in sync.                           ║\n\
-            ╚══════════════════════════════════════════════════════════════════╝\n\n",
-            ts_paths, rs_paths
+        sync_error_panic(
+            "PATH entries differ between Rust and TS",
+            &format!("{:?}", ts_paths),
+            &format!("{:?}", rs_paths),
         );
     }
 
     if ts_harbor_sh != rs_harbor_sh {
-        panic!(
-            "\n\n\
-            ╔══════════════════════════════════════════════════════════════════╗\n\
-            ║ PRELUDE SYNC ERROR: harbor.sh path differs between Rust and TS  ║\n\
-            ╠══════════════════════════════════════════════════════════════════╣\n\
-            ║ TypeScript (harborCommand.ts): {:?}\n\
-            ║ Rust (setup.rs):              {:?}\n\
-            ║                                                                  ║\n\
-            ║ Update BOTH files to keep them in sync.                           ║\n\
-            ╚══════════════════════════════════════════════════════════════════╝\n\n",
-            ts_harbor_sh, rs_harbor_sh
+        sync_error_panic(
+            "harbor.sh path differs between Rust and TS",
+            &ts_harbor_sh,
+            &rs_harbor_sh,
         );
     }
 
@@ -174,6 +160,21 @@ fn extract_rs_harbor_sh(prelude: &str) -> String {
     let end = after.find('"')
         .unwrap_or_else(|| panic!("Could not find closing quote after 'test -x' in prelude"));
     after[..end].to_string()
+}
+
+fn sync_error_panic(header: &str, ts_value: &str, rs_value: &str) -> ! {
+    panic!(
+        "\n\n\
+        ╔══════════════════════════════════════════════════════════════════╗\n\
+        ║ PRELUDE SYNC ERROR: {:<43}║\n\
+        ╠══════════════════════════════════════════════════════════════════╣\n\
+        ║ TypeScript (harborCommand.ts): {}\n\
+        ║ Rust (setup.rs):              {}\n\
+        ║                                                                  ║\n\
+        ║ Update BOTH files to keep them in sync.                           ║\n\
+        ╚══════════════════════════════════════════════════════════════════╝\n\n",
+        header, ts_value, rs_value
+    );
 }
 
 fn main() {
