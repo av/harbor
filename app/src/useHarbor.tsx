@@ -183,18 +183,19 @@ export const useHarborTrigger = (args: string[], options?: UseHarborOptions) => 
     const [result, setResult] = useState<ChildProcess<string> | null>(null);
     const [error, setError] = useState<Error | null>(null);
 
+    const raw = options?.raw;
+    const timeoutMs = options?.timeoutMs;
+    const noTimeout = options?.noTimeout;
+
     const runCommand = useCallback(
         async () => {
             setLoading(true);
             setError(null);
 
-            const runOptions: RunHarborOptions = {
-                timeoutMs: options?.timeoutMs,
-                noTimeout: options?.noTimeout,
-            };
+            const runOptions: RunHarborOptions = { timeoutMs, noTimeout };
 
             try {
-                const result = options?.raw
+                const result = raw
                     ? await runHarborRaw(args, runOptions)
                     : await runHarbor(args, runOptions);
                 setResult(result);
@@ -208,7 +209,7 @@ export const useHarborTrigger = (args: string[], options?: UseHarborOptions) => 
                 setLoading(false);
             }
         },
-        args,
+        [...args, raw, timeoutMs, noTimeout],
     );
 
     const run = useCallback(() => {
