@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useMemo, useRef } from 'react'
 
 import { ControlFunctions, debounce, DebounceOptions } from './utils'
 import { useUnmount } from './useUnmount'
@@ -13,7 +13,7 @@ export function useDebounceCallback<T extends (...args: any) => ReturnType<T>>(
   delay = 500,
   options?: DebounceOptions,
 ): DebouncedState<T> {
-  const debouncedFunc = useRef<ReturnType<typeof debounce>>()
+  const debouncedFunc = useRef<DebouncedState<T>>()
 
   useUnmount(() => {
     if (debouncedFunc.current) {
@@ -39,10 +39,7 @@ export function useDebounceCallback<T extends (...args: any) => ReturnType<T>>(
     return wrappedFunc
   }, [func, delay, options])
 
-  // Update the debounced function ref whenever func, wait, or options change
-  useEffect(() => {
-    debouncedFunc.current = debounce(func, delay, options)
-  }, [func, delay, options])
+  debouncedFunc.current = debounced
 
   return debounced
 }
