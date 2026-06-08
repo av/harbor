@@ -1001,14 +1001,6 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         wikiUrl: `${wikiUrl}/2.3.83-Satellite-Unsloth-Studio`,
         tooltip: 'No-code web UI for fine-tuning LLMs with Unsloth. 2x faster training and 70% less memory, powered by llama.cpp + Hugging Face.',
     },
-    bifrost: {
-        name: 'Bifrost',
-        tags: [HST.satellite, HST.api, HST.infra],
-        projectUrl: 'https://github.com/maximhq/bifrost',
-        logo: 'https://www.google.com/s2/favicons?domain=getmaxim.ai&sz=128',
-        wikiUrl: `${wikiUrl}/2.3.84-Satellite-Bifrost`,
-        tooltip: 'Fast OpenAI-compatible AI gateway with provider routing, failover, observability, and Harbor backend bootstrapping.',
-    },
     surfsense: {
         name: 'SurfSense',
         tags: [HST.satellite, HST.rag, HST.workflows],
@@ -1104,5 +1096,13 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         logo: 'https://www.google.com/s2/favicons?domain=voicebox.sh&sz=128',
         wikiUrl: `${wikiUrl}/2.1.16-Frontend-Voicebox`,
         tooltip: 'Local-first AI voice studio for voice cloning, preset voices, speech generation, dictation, transcription, and agent speech.',
+    },
+    bifrost: {
+        name: 'Bifrost',
+        tags: [HST.satellite, HST.api, HST.infra],
+        projectUrl: 'https://github.com/maximhq/bifrost',
+        logo: 'https://www.google.com/s2/favicons?domain=getmaxim.ai&sz=128',
+        wikiUrl: `${wikiUrl}/2.3.92-Satellite-Bifrost`,
+        tooltip: 'Fast OpenAI-compatible LLM gateway for routing requests across model providers.',
     },
 };

@@ -6,25 +6,12 @@ services:
       - ./.env
       - ./services/bifrost/override.env
     environment:
-      APP_PORT: ${HARBOR_BIFROST_APP_PORT}
       APP_HOST: 0.0.0.0
       APP_DIR: /app/data
-      LOG_LEVEL: ${HARBOR_BIFROST_LOG_LEVEL}
-      LOG_STYLE: ${HARBOR_BIFROST_LOG_STYLE}
-      OPENAI_API_KEY: ${HARBOR_OPENAI_KEY:-}
-      ANTHROPIC_API_KEY: ${HARBOR_ANTHROPIC_KEY:-}
-      MISTRAL_API_KEY: ${HARBOR_MISTRAL_KEY:-}
-      GROQ_API_KEY: ${HARBOR_GROQ_KEY:-}
-      COHERE_API_KEY: ${HARBOR_COHERE_KEY:-}
     ports:
-      - ${HARBOR_BIFROST_HOST_PORT}:${HARBOR_BIFROST_APP_PORT}
+      - ${HARBOR_BIFROST_HOST_PORT}:8080
     volumes:
       - ${HARBOR_BIFROST_WORKSPACE}:/app/data
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "-O", "/dev/null", "http://127.0.0.1:${HARBOR_BIFROST_APP_PORT}/health"]
-      interval: 5s
-      timeout: 3s
-      retries: 20
-      start_period: 5s
+      - ./services/bifrost/config:/app/config
     networks:
       - harbor-network
