@@ -1,14 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { Child, Command } from "@tauri-apps/plugin-shell";
-import AnsiToHtml from "ansi-to-html";
 
 import { Section } from "../Section";
 import { IconButton } from "../IconButton";
 import { IconEraser, IconPlay, IconStop } from "../Icons";
-import { errorMessage, isWindows } from "../utils";
+import { ansiConverter, errorMessage, isWindows } from "../utils";
 import { buildNativeHarborArgs, buildWindowsWslHarborArgs } from "../harborCommand";
-
-const converter = new AnsiToHtml({ escapeXML: true });
 
 function parseArgs(input: string): string[] {
     const matches = input.match(/(?:[^\s"']+|"[^"]*"|'[^']*'|["'])+/g);
@@ -99,13 +96,13 @@ export const CommandRunner = () => {
                 : Command.create("bash", buildNativeHarborArgs(args));
 
             command.stdout.on("data", (line: string) => {
-                const html = converter.toHtml(line);
+                const html = ansiConverter.toHtml(line);
                 stdoutBuf.current += (stdoutBuf.current ? "\n" : "") + html;
                 patchEntry(id, { stdout: stdoutBuf.current });
             });
 
             command.stderr.on("data", (line: string) => {
-                const html = converter.toHtml(line);
+                const html = ansiConverter.toHtml(line);
                 stderrBuf.current += (stderrBuf.current ? "\n" : "") + html;
                 patchEntry(id, { stderr: stderrBuf.current });
             });

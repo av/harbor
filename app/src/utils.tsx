@@ -1,8 +1,11 @@
 import { platform } from '@tauri-apps/plugin-os';
 import { ChildProcess } from "@tauri-apps/plugin-shell";
+import AnsiToHtml from "ansi-to-html";
 
 import toast from "react-hot-toast";
 import { IconCheck, IconOctagonAlert } from "./Icons";
+
+export const ansiConverter = new AnsiToHtml({ escapeXML: true });
 
 type Message = Parameters<typeof toast>[0];
 

@@ -1,10 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import AnsiToHtml from "ansi-to-html";
 import { spawnHarborPty } from "../terminal/harborPty";
-import { errorMessage } from "../utils";
+import { ansiConverter, errorMessage } from "../utils";
 import type { IPty } from "../terminal/harborPty";
-
-const converter = new AnsiToHtml({ escapeXML: true });
 const BUFFER_CAP = 2000;
 const BUFFER_TRIM = 200;
 const FLUSH_INTERVAL_MS = 100;
@@ -101,7 +98,7 @@ export function useHarborStream(args: string[], options?: UseHarborStreamOptions
             return;
         }
 
-        textBufRef.current.push(raw ? remainder : converter.toHtml(remainder));
+        textBufRef.current.push(raw ? remainder : ansiConverter.toHtml(remainder));
         trimBuffers();
         dirtyRef.current = true;
     }, [raw, trimBuffers]);
@@ -216,7 +213,7 @@ export function useHarborStream(args: string[], options?: UseHarborStreamOptions
 
                 const text = decoderRef.current.decode(chunk, { stream: true });
                 if (text) {
-                    textBufRef.current.push(raw ? text : converter.toHtml(text));
+                    textBufRef.current.push(raw ? text : ansiConverter.toHtml(text));
                 }
 
                 trimBuffers();
