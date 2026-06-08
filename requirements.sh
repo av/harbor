@@ -162,9 +162,18 @@ detect_platform() {
                     ;;
             esac
         fi
+        # openSUSE MicroOS is an immutable distro (uses transactional-update,
+        # not zypper directly). Its DISTRO_ID is "opensuse-microos".
+        if [ "$IS_IMMUTABLE" = false ] && [ "$DISTRO_ID" = "opensuse-microos" ]; then
+            IS_IMMUTABLE=true
+        fi
         # Also detect via rpm-ostree presence (catches variants we don't
         # list above, and custom OSTree-based images)
         if [ "$IS_IMMUTABLE" = false ] && check_command rpm-ostree && [ -d /ostree ]; then
+            IS_IMMUTABLE=true
+        fi
+        # Detect transactional-update (openSUSE MicroOS, SLE Micro) as immutable
+        if [ "$IS_IMMUTABLE" = false ] && check_command transactional-update; then
             IS_IMMUTABLE=true
         fi
 
@@ -174,6 +183,9 @@ detect_platform() {
                 ;;
             fedora|rhel|centos|rocky|almalinux)
                 PKG_MANAGER="dnf"
+                ;;
+            opensuse-leap|opensuse-tumbleweed|sles|sled)
+                PKG_MANAGER="zypper"
                 ;;
             arch|manjaro|endeavouros)
                 PKG_MANAGER="pacman"
@@ -186,6 +198,8 @@ detect_platform() {
                     PKG_MANAGER="apt"
                 elif echo "$DISTRO_LIKE" | grep -Eq "rhel|fedora"; then
                     PKG_MANAGER="dnf"
+                elif echo "$DISTRO_LIKE" | grep -Eq "suse|opensuse"; then
+                    PKG_MANAGER="zypper"
                 elif echo "$DISTRO_LIKE" | grep -q "arch"; then
                     PKG_MANAGER="pacman"
                 elif echo "$DISTRO_LIKE" | grep -q "alpine"; then
@@ -210,6 +224,8 @@ require_supported_platform() {
     if [ -z "$PKG_MANAGER" ]; then
         log_error "Unsupported Linux distribution (ID='${DISTRO_ID:-unknown}', ID_LIKE='${DISTRO_LIKE:-unknown}')"
         log_error "Please install Docker Engine, docker compose plugin (v2 >= ${MIN_COMPOSE_VERSION}), git, and curl manually."
+        log_error "Docker install docs: https://docs.docker.com/engine/install/"
+        log_error "Then retry with: curl ... | bash -s -- --skip-requirements"
         return 1
     fi
 
@@ -509,6 +525,94 @@ apk_install() {
         fi
     else
         log_info "Docker and Docker Compose plugin are already installed"
+    fi
+}
+
+zypper_install() {
+    local missing=()
+    local need_engine=false
+    local need_compose=false
+    check_command git || missing+=("git")
+    check_command curl || missing+=("curl")
+
+    if ! check_command docker; then
+        need_engine=true
+        need_compose=true
+    elif ! docker compose version >/dev/null 2>&1; then
+        need_compose=true
+    fi
+
+    if [ "$need_engine" = true ] || [ "$need_compose" = true ]; then
+        if is_wsl_docker_desktop; then
+            log_info "Docker is provided by Docker Desktop (WSL integration) — skipping package install"
+            need_engine=false
+            need_compose=false
+        fi
+    fi
+
+    if [ ${#missing[@]} -gt 0 ]; then
+        log_info "Installing missing tools via zypper: ${missing[*]}"
+        if ! run_privileged zypper --non-interactive install "${missing[@]}"; then
+            log_error "Failed to install ${missing[*]} via zypper."
+            log_error "Try running 'sudo zypper install ${missing[*]}' manually to see detailed errors."
+            return 1
+        fi
+    else
+        log_info "git and curl are already installed"
+    fi
+
+    if [ "$need_engine" = true ] || [ "$need_compose" = true ]; then
+        if [ "$need_engine" = true ]; then
+            # Prefer docker-ce from Docker's official repo if available;
+            # fall back to docker from the distro repo.
+            local docker_pkg=""
+            if zypper se -x docker-ce 2>/dev/null | grep -q 'docker-ce'; then
+                docker_pkg="docker-ce"
+            elif zypper se -x docker 2>/dev/null | grep -q '| docker '; then
+                docker_pkg="docker"
+            else
+                log_error "Neither 'docker-ce' nor 'docker' is available via zypper."
+                log_error "Add the Docker repository: https://docs.docker.com/engine/install/sles/"
+                return 1
+            fi
+
+            log_info "Installing Docker Engine via zypper (${docker_pkg})"
+            if ! run_privileged zypper --non-interactive install "${docker_pkg}"; then
+                log_error "Failed to install ${docker_pkg} via zypper."
+                log_error "Try running 'sudo zypper install ${docker_pkg}' manually."
+                log_error "If packages are missing, add the Docker repository: https://docs.docker.com/engine/install/sles/"
+                return 1
+            fi
+
+            # docker-ce bundles Compose v2; re-check before installing separately
+            if [ "$need_compose" = true ] && docker compose version >/dev/null 2>&1; then
+                log_info "Docker Compose v2 is bundled with ${docker_pkg}"
+                need_compose=false
+            fi
+        fi
+
+        if [ "$need_compose" = true ]; then
+            local compose_pkg=""
+            if zypper se -x docker-compose-plugin 2>/dev/null | grep -q 'docker-compose-plugin'; then
+                compose_pkg="docker-compose-plugin"
+            elif zypper se -x docker-compose 2>/dev/null | grep -q 'docker-compose'; then
+                compose_pkg="docker-compose"
+            else
+                log_error "Neither 'docker-compose-plugin' nor 'docker-compose' is available via zypper."
+                log_error "Add the Docker repository: https://docs.docker.com/engine/install/sles/"
+                log_error "Or install Docker Compose v2 manually."
+                return 1
+            fi
+
+            log_info "Installing Docker Compose plugin via zypper (${compose_pkg})"
+            if ! run_privileged zypper --non-interactive install "${compose_pkg}"; then
+                log_error "Failed to install ${compose_pkg} via zypper."
+                log_error "Try running 'sudo zypper install ${compose_pkg}' manually."
+                return 1
+            fi
+        fi
+    else
+        log_info "Docker and Docker Compose are already installed"
     fi
 }
 
@@ -905,15 +1009,39 @@ verify_required_tools() {
 }
 
 check_optional_gpu_support() {
-    if check_command nvidia-smi; then
-        log_info "NVIDIA GPU detected"
+    local has_nvidia_hardware=false
+    local has_nvidia_driver=false
+
+    # Check for actual NVIDIA GPU hardware via multiple methods.
+    # nvidia-smi alone is insufficient: it can be installed without a GPU
+    # (CUDA toolkit), and hardware can exist without nvidia-smi (no driver).
+    if check_command nvidia-smi && nvidia-smi -L >/dev/null 2>&1; then
+        has_nvidia_hardware=true
+        has_nvidia_driver=true
+    elif check_command lspci && lspci 2>/dev/null | grep -qi "nvidia"; then
+        has_nvidia_hardware=true
+        # Hardware present via lspci. nvidia-smi could exist but fail to
+        # talk to the driver (module not loaded, version mismatch). Only
+        # trust the driver if nvidia-smi -L succeeds, not mere presence.
+    elif [ -e /dev/nvidia0 ] || [ -d /proc/driver/nvidia ]; then
+        has_nvidia_hardware=true
+        has_nvidia_driver=true
+    fi
+
+    if [ "$has_nvidia_hardware" = true ]; then
+        if [ "$has_nvidia_driver" = false ]; then
+            log_warn "NVIDIA GPU hardware detected but drivers are not installed"
+            log_warn "Install NVIDIA drivers first: https://docs.nvidia.com/datacenter/tesla/driver-installation-guide/"
+            return
+        fi
+
+        log_info "NVIDIA GPU detected (driver installed)"
         if check_command nvidia-ctk || check_command nvidia-container-toolkit; then
             log_info "NVIDIA container toolkit detected"
         else
             log_warn "NVIDIA GPU detected but NVIDIA container toolkit is missing (optional)"
+            log_warn "GPU containers won't work without it. Install: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html"
         fi
-    else
-        log_warn "NVIDIA GPU not detected (optional)"
     fi
 }
 
@@ -945,13 +1073,19 @@ install_requirements() {
         warn_wsl_slow_filesystem
     fi
 
-    # Immutable/OSTree distros (Fedora Silverblue/Kinoite, CoreOS, etc.)
-    # cannot use dnf/apt install for system packages. Detect and guide.
+    # Immutable/OSTree distros (Fedora Silverblue/Kinoite, CoreOS, openSUSE
+    # MicroOS, etc.) cannot use standard package installs. Detect and guide.
     if [ "$IS_IMMUTABLE" = true ]; then
-        log_warn "Immutable OS detected (variant='${DISTRO_VARIANT:-unknown}')"
-        log_warn "Standard package installation (dnf install / apt install) is not supported on this system."
+        log_warn "Immutable OS detected (variant='${DISTRO_VARIANT:-unknown}', distro='${DISTRO_ID:-unknown}')"
+        log_warn "Standard package installation is not supported on this system."
         log_warn "Install Docker and dependencies manually:"
-        if check_command rpm-ostree; then
+        if check_command transactional-update; then
+            log_warn "  Option 1: transactional-update pkg install docker docker-compose git curl"
+            log_warn "            systemctl reboot  # transactional-update changes require a reboot"
+            log_warn "  Option 2: Use a Toolbox/Distrobox container for Harbor:"
+            log_warn "            toolbox create harbor && toolbox enter harbor"
+            log_warn "            Then install normally inside the container."
+        elif check_command rpm-ostree; then
             log_warn "  Option 1: rpm-ostree install docker-ce docker-compose-plugin git curl"
             log_warn "            systemctl reboot  # rpm-ostree changes require a reboot"
             log_warn "  Option 2: Use a Toolbox/Distrobox container for Harbor:"
@@ -984,6 +1118,9 @@ install_requirements() {
             ;;
         linux:apk)
             apk_install || return 1
+            ;;
+        linux:zypper)
+            zypper_install || return 1
             ;;
         *)
             log_error "No installer path for platform='${PLATFORM}' pkg_manager='${PKG_MANAGER}'"
