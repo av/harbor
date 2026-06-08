@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo, useEffect } from "react";
+import { useState, useRef, useMemo } from "react";
 import { runHarbor } from "../useHarbor";
 import { useOverlays } from "../OverlayContext";
 import { ConfirmModal } from "../ConfirmModal";
@@ -13,6 +13,7 @@ import { LostSquirrel } from "../LostSquirrel";
 import { useModelPull } from "./ModelPullContext";
 import { ModelPullPane } from "./ModelPullPane";
 import { toasted } from "../utils";
+import { Shortcuts, useGlobalKeydown } from "../useGlobalKeydown";
 
 type SortField = "model" | "size" | "modified";
 type SortDir = "asc" | "desc";
@@ -26,6 +27,11 @@ const SOURCE_BADGE: Record<string, string> = {
 function sourceBadgeClass(source: string): string {
     return SOURCE_BADGE[source] ?? "badge-ghost";
 }
+
+const SortIndicator = ({ field, active, dir }: { field: SortField; active: SortField; dir: SortDir }) => {
+    if (active !== field) return <IconArrowUpDown className="opacity-30 text-sm" />;
+    return <span className="text-xs">{dir === "asc" ? "↑" : "↓"}</span>;
+};
 
 export const Models = () => {
     const { models, status, error, reload } = useModels();
@@ -43,16 +49,10 @@ export const Models = () => {
     const pullInputRef = useRef<HTMLInputElement>(null);
     const nameFilterRef = useRef<HTMLInputElement>(null);
 
-    useEffect(() => {
-        const handler = (e: KeyboardEvent) => {
-            if ((e.ctrlKey || e.metaKey) && e.key === "f") {
-                e.preventDefault();
-                nameFilterRef.current?.focus();
-            }
-        };
-        window.addEventListener("keydown", handler);
-        return () => window.removeEventListener("keydown", handler);
-    }, []);
+    useGlobalKeydown(Shortcuts.find, (e) => {
+        e.preventDefault();
+        nameFilterRef.current?.focus();
+    });
 
     const sources = useMemo(
         () => Array.from(new Set(models.map((m) => m.source))).sort(),
@@ -81,11 +81,6 @@ export const Models = () => {
             setSortField(field);
             setSortDir("asc");
         }
-    };
-
-    const SortIndicator = ({ field }: { field: SortField }) => {
-        if (sortField !== field) return <IconArrowUpDown className="opacity-30 text-sm" />;
-        return <span className="text-xs">{sortDir === "asc" ? "↑" : "↓"}</span>;
     };
 
     const handlePull = () => {
@@ -264,7 +259,7 @@ export const Models = () => {
                                         className="flex items-center gap-1"
                                         onClick={() => handleSort("model")}
                                     >
-                                        Model <SortIndicator field="model" />
+                                        Model <SortIndicator field="model" active={sortField} dir={sortDir} />
                                     </button>
                                 </th>
                                 <th>Details</th>
@@ -273,7 +268,7 @@ export const Models = () => {
                                         className="flex items-center gap-1"
                                         onClick={() => handleSort("size")}
                                     >
-                                        Size <SortIndicator field="size" />
+                                        Size <SortIndicator field="size" active={sortField} dir={sortDir} />
                                     </button>
                                 </th>
                                 <th>
@@ -281,7 +276,7 @@ export const Models = () => {
                                         className="flex items-center gap-1"
                                         onClick={() => handleSort("modified")}
                                     >
-                                        Modified <SortIndicator field="modified" />
+                                        Modified <SortIndicator field="modified" active={sortField} dir={sortDir} />
                                     </button>
                                 </th>
                                 <th></th>
