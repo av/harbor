@@ -1,3 +1,4 @@
+import { ReactNode } from "react";
 import { IconCheck, IconOctagonAlert, IconStop, IconX } from "../Icons";
 import { XTermView } from "../terminal/XTermView";
 import { type ModelPullSession } from "./ModelPullContext";
@@ -8,14 +9,14 @@ interface ModelPullPaneProps {
     onDismiss: () => void;
 }
 
-const STATUS_META: Record<string, { badgeClass: string; label: string }> = {
-    running:   { badgeClass: "badge-info",    label: "Running" },
-    success:   { badgeClass: "badge-success", label: "Success" },
-    failure:   { badgeClass: "badge-error",   label: "Failed" },
-    cancelled: { badgeClass: "badge-warning", label: "Cancelled" },
+const STATUS_META: Record<string, { badgeClass: string; label: string; icon: ReactNode }> = {
+    running:   { badgeClass: "badge-info",    label: "Running",   icon: <span className="loading loading-spinner loading-xs text-base-content/50" /> },
+    success:   { badgeClass: "badge-success", label: "Success",   icon: <IconCheck className="w-4 h-4 text-success" /> },
+    failure:   { badgeClass: "badge-error",   label: "Failed",    icon: <IconOctagonAlert className="w-4 h-4 text-error" /> },
+    cancelled: { badgeClass: "badge-warning", label: "Cancelled", icon: <IconX className="w-4 h-4 text-warning" /> },
 };
 
-const DEFAULT_STATUS_META = { badgeClass: "badge-ghost", label: "Pending" };
+const DEFAULT_STATUS_META = { badgeClass: "badge-ghost", label: "Pending", icon: null };
 
 function getStatusMeta(status: ModelPullSession["status"]) {
     return STATUS_META[status] ?? DEFAULT_STATUS_META;
@@ -31,15 +32,7 @@ export const ModelPullPane = ({ session, onCancel, onDismiss }: ModelPullPanePro
                 <span className="text-sm font-medium flex-1 min-w-0 truncate" title={session.modelName}>
                     {session.modelName} — Pull
                 </span>
-                {session.status === "running" ? (
-                    <span className="loading loading-spinner loading-xs text-base-content/50" />
-                ) : session.status === "success" ? (
-                    <IconCheck className="w-4 h-4 text-success" />
-                ) : session.status === "failure" ? (
-                    <IconOctagonAlert className="w-4 h-4 text-error" />
-                ) : session.status === "cancelled" ? (
-                    <IconX className="w-4 h-4 text-warning" />
-                ) : null}
+                {statusMeta.icon}
                 <span className={`badge badge-sm ${statusMeta.badgeClass}`}>
                     {statusMeta.label}
                 </span>
