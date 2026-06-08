@@ -124,7 +124,7 @@ export const TerminalPanel = () => {
             });
         };
 
-        spawnShell();
+        spawnShell().catch(() => {});
 
         // Update theme when data-theme attribute changes
         const stopWatching = watchTheme(() => {
