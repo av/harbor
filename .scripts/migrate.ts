@@ -185,7 +185,15 @@ async function main(): Promise<void> {
     const modulePath = new URL(`./migrations/${migrationVersion}.ts`, import.meta.url).href;
     const migration = await import(modulePath) as MigrationModule;
 
-    await migration.up(context);
+    try {
+      await migration.up(context);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error(`[migrate] Migration ${migrationVersion} failed: ${msg}`);
+      console.error(`[migrate] Config version remains at ${currentVersion}.`);
+      console.error(`[migrate] The migration may have partially applied. Review your .env and retry with: harbor migrate`);
+      Deno.exit(1);
+    }
 
     await updateConfigVersion(context, migrationVersion);
   }

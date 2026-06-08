@@ -7534,16 +7534,31 @@ unsafe_update() {
         printf '%s\n' "$dirty_files" | while IFS= read -r f; do log_warn "  $f"; done
     fi
 
-    if ! git reset --hard FETCH_HEAD; then
-        log_error "Failed to reset to latest main branch."
-        log_error "Your working tree may be in an inconsistent state. Run 'git status' in $harbor_home to inspect."
-        return 1
-    fi
-    if [ "$(git rev-parse --abbrev-ref HEAD)" != "main" ]; then
+    # If on a non-main branch, switch to main first to avoid silently
+    # overwriting the custom branch ref with git reset --hard
+    local current_branch
+    current_branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+    if [ "$current_branch" != "main" ] && [ "$current_branch" != "HEAD" ]; then
+        log_warn "Currently on branch '$current_branch', switching to main for update."
+        log_warn "Your '$current_branch' branch is preserved — switch back with: git checkout $current_branch"
         if ! git checkout -B main FETCH_HEAD; then
             log_error "Failed to switch to main branch."
             log_error "Run 'git status' in $harbor_home to inspect."
             return 1
+        fi
+    else
+        if ! git reset --hard FETCH_HEAD; then
+            log_error "Failed to reset to latest main branch."
+            log_error "Your working tree may be in an inconsistent state. Run 'git status' in $harbor_home to inspect."
+            return 1
+        fi
+        # If on detached HEAD, create/reset main branch
+        if [ "$current_branch" = "HEAD" ]; then
+            if ! git checkout -B main FETCH_HEAD; then
+                log_error "Failed to switch to main branch."
+                log_error "Run 'git status' in $harbor_home to inspect."
+                return 1
+            fi
         fi
     fi
 }
@@ -7627,13 +7642,22 @@ update_harbor() {
         fi
     fi
 
-    # Warn about running services before updating — compose files may change between versions
-    local running_services
-    running_services=$(docker compose ps --services --filter "status=running" 2>/dev/null | tr '\n' ' ')
-    if [ -n "$running_services" ]; then
-        log_warn "Running services detected: $running_services"
-        log_warn "Compose files may change between versions. Stop services first with 'harbor down'"
-        log_warn "or restart them after update with 'harbor restart'."
+    # Warn about running services before updating — compose files may change between versions.
+    # Cannot use 'docker compose ps' because compose.yml alone defines no services —
+    # service-specific compose files are only loaded by compose_with_options.
+    # Instead, use 'docker ps' with the compose project label derived from the directory name.
+    local compose_project
+    compose_project=$(basename "$harbor_home" | tr '[:upper:]' '[:lower:]' | sed 's/^[^a-z0-9]*//' | sed 's/[^a-z0-9_-]//g')
+    if [ -n "$compose_project" ] && command -v docker &>/dev/null; then
+        local running_count
+        running_count=$(docker ps --filter "label=com.docker.compose.project=$compose_project" --filter "status=running" -q 2>/dev/null | wc -l)
+        if [ "${running_count:-0}" -gt 0 ]; then
+            local running_names
+            running_names=$(docker ps --filter "label=com.docker.compose.project=$compose_project" --filter "status=running" --format '{{.Label "com.docker.compose.service"}}' 2>/dev/null | sort -u | tr '\n' ' ')
+            log_warn "Running Harbor services detected: ${running_names:-($running_count containers)}"
+            log_warn "Compose files may change between versions. Stop services first with 'harbor down'"
+            log_warn "or restart them after update with 'harbor restart'."
+        fi
     fi
 
     # Stash user-modified override.env files so checkout/reset doesn't fail or destroy them
@@ -7648,10 +7672,12 @@ update_harbor() {
     fi
 
     # Trap SIGINT/SIGTERM to restore stashed override.env before exiting
+    # Use single-quoted trap with $harbor_home expanded at execution time (not definition)
+    # to avoid command injection if harbor_home contains special characters
     trap '
         if [ "$_UPDATE_HAD_STASH" = true ]; then
             log_warn "Update interrupted — restoring stashed override.env files..."
-            git stash pop --quiet 2>/dev/null || log_warn "Could not auto-restore override.env. Run: cd '"$harbor_home"' && git stash pop"
+            git stash pop --quiet 2>/dev/null || log_warn "Could not auto-restore override.env. Run: cd $harbor_home && git stash pop"
             _UPDATE_HAD_STASH=false
         fi
         trap - INT TERM
@@ -7696,6 +7722,18 @@ update_harbor() {
         fi
         harbor_version="$target_version"
         log_info "Updating to version $harbor_version..."
+        # Shallow clones (created by install.sh --depth 1) cannot checkout tags
+        # whose commit objects are outside the shallow boundary. Deepen enough
+        # to include the target tag. Using --deepen=1 + specific tag ref is the
+        # cheapest network operation that makes the tag commit reachable.
+        if [ -f "$harbor_home/.git/shallow" ]; then
+            log_debug "Shallow clone detected — fetching target tag with depth"
+            if ! git fetch --depth 1 origin "tag $harbor_version" 2>/dev/null; then
+                # Fallback: unshallow entirely (more expensive but reliable)
+                log_debug "Tag-specific fetch failed, trying full unshallow"
+                git fetch --unshallow 2>/dev/null || true
+            fi
+        fi
         if ! git fetch --all --tags; then
             log_error "Failed to fetch updates from the remote repository."
             log_error "Check your internet connection and try again."
