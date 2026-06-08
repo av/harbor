@@ -103,6 +103,14 @@ impl SetupError {
     }
 }
 
+/// Shared mutable state threaded through `emit_process_line` /
+/// `emit_process_chunk` during a PTY read loop.
+struct ProcessLineState {
+    marker: Arc<Mutex<Option<String>>>,
+    current_stage: Arc<Mutex<Option<String>>>,
+    last_line: Arc<Mutex<Option<String>>>,
+}
+
 // ── Platform utilities ─────────────────────────────────
 
 fn platform_name() -> &'static str {
@@ -531,19 +539,17 @@ fn emit_process_line(
     stage: &str,
     stream: &str,
     line: &str,
-    marker_state: &Arc<Mutex<Option<String>>>,
-    current_stage_state: &Arc<Mutex<Option<String>>>,
-    last_line_state: &Arc<Mutex<Option<String>>>,
+    pls: &ProcessLineState,
 ) {
-    if let Ok(mut last) = last_line_state.lock() {
+    if let Ok(mut last) = pls.last_line.lock() {
         *last = Some(line.trim().to_string());
     }
     if let Some(marker) = parse_setup_stage_marker(line) {
         emit_stage(app, &marker);
-        if let Ok(mut current) = marker_state.lock() {
+        if let Ok(mut current) = pls.marker.lock() {
             *current = Some(marker.clone());
         }
-        if let Ok(mut stage_lock) = current_stage_state.lock() {
+        if let Ok(mut stage_lock) = pls.current_stage.lock() {
             *stage_lock = Some(marker);
         }
     }
@@ -555,9 +561,7 @@ fn emit_process_chunk(
     stage: &str,
     stream: &str,
     chunk: &str,
-    marker_state: &Arc<Mutex<Option<String>>>,
-    current_stage_state: &Arc<Mutex<Option<String>>>,
-    last_line_state: &Arc<Mutex<Option<String>>>,
+    pls: &ProcessLineState,
     line_buffer: &mut String,
 ) {
     emit_terminal_output(app, chunk);
@@ -565,15 +569,7 @@ fn emit_process_chunk(
         if ch == '\n' || ch == '\r' {
             let line = line_buffer.trim_end_matches('\r');
             if !line.trim().is_empty() {
-                emit_process_line(
-                    app,
-                    stage,
-                    stream,
-                    line,
-                    marker_state,
-                    current_stage_state,
-                    last_line_state,
-                );
+                emit_process_line(app, stage, stream, line, pls);
             }
             line_buffer.clear();
         } else {
@@ -711,13 +707,18 @@ fn run_logged(
         *w = Some(writer);
     }
 
-    let marker_state = Arc::new(Mutex::new(None));
-    let last_line_state = Arc::new(Mutex::new(None));
+    let pls = ProcessLineState {
+        marker: Arc::new(Mutex::new(None)),
+        current_stage: state.current_stage.clone(),
+        last_line: Arc::new(Mutex::new(None)),
+    };
     let reader_app = app.clone();
     let reader_stage = stage.to_string();
-    let reader_marker = marker_state.clone();
-    let reader_current_stage = state.current_stage.clone();
-    let reader_last_line = last_line_state.clone();
+    let reader_pls = ProcessLineState {
+        marker: pls.marker.clone(),
+        current_stage: pls.current_stage.clone(),
+        last_line: pls.last_line.clone(),
+    };
     let reader_thread = std::thread::spawn(move || {
         let mut buffer = [0_u8; 4096];
         let mut line_buffer = String::new();
@@ -748,9 +749,7 @@ fn run_logged(
                             &reader_stage,
                             "pty",
                             &chunk,
-                            &reader_marker,
-                            &reader_current_stage,
-                            &reader_last_line,
+                            &reader_pls,
                             &mut line_buffer,
                         );
                     }
@@ -771,9 +770,7 @@ fn run_logged(
                 &reader_stage,
                 "pty",
                 &chunk,
-                &reader_marker,
-                &reader_current_stage,
-                &reader_last_line,
+                &reader_pls,
                 &mut line_buffer,
             );
         }
@@ -783,9 +780,7 @@ fn run_logged(
                 &reader_stage,
                 "pty",
                 &line_buffer,
-                &reader_marker,
-                &reader_current_stage,
-                &reader_last_line,
+                &reader_pls,
             );
         }
     });
@@ -851,14 +846,14 @@ fn run_logged(
             message: format!("{stage} cancelled"),
         })
     } else {
-        let terminal_marker = marker_state
+        let terminal_marker = pls.marker
             .lock()
             .ok()
             .and_then(|m| m.clone())
             .filter(|m| marker_is_terminal(m));
 
         if let Some(marker) = terminal_marker {
-            let last_output = last_line_state
+            let last_output = pls.last_line
                 .lock()
                 .ok()
                 .and_then(|l| l.clone())
