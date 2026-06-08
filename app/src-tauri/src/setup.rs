@@ -51,6 +51,18 @@ pub struct HarborSetupDetail {
     pub running: bool,
 }
 
+impl HarborSetupDetail {
+    fn checking() -> Self {
+        Self {
+            status: "checking".into(),
+            platform: platform_name().into(),
+            cli_version: None,
+            last_error: None,
+            running: false,
+        }
+    }
+}
+
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct SetupStageEvent {
@@ -454,10 +466,8 @@ fn emit_setup_failure(app: &AppHandle, status: &str, message: &str) {
         SetupCompleteEvent {
             detail: HarborSetupDetail {
                 status: status.into(),
-                platform: platform_name().into(),
-                cli_version: None,
                 last_error: Some(message.into()),
-                running: false,
+                ..HarborSetupDetail::checking()
             },
             error: Some(message.into()),
         },
@@ -906,15 +916,8 @@ fn detect_windows_blocker(detail: &mut HarborSetupDetail) -> bool {
 /// Run the full detection logic, ignoring whether setup is active.
 /// Used internally after a successful install to verify the CLI is available.
 fn detect_harbor_status() -> HarborSetupDetail {
-    let platform = platform_name();
-    let mut detail = HarborSetupDetail {
-        status: "checking".into(),
-        platform: platform.into(),
-        cli_version: None,
-        last_error: None,
-        running: false,
-    };
-    detect_harbor_status_core(platform, &mut detail);
+    let mut detail = HarborSetupDetail::checking();
+    detect_harbor_status_core(platform_name(), &mut detail);
     detail
 }
 
@@ -925,22 +928,16 @@ fn detect_harbor_setup_inner(state: &SetupState) -> HarborSetupDetail {
             .lock()
             .map(|pid| pid.is_some())
             .unwrap_or(false);
-    let platform = platform_name();
 
-    let mut detail = HarborSetupDetail {
-        status: "checking".into(),
-        platform: platform.into(),
-        cli_version: None,
-        last_error: None,
-        running,
-    };
+    let mut detail = HarborSetupDetail::checking();
+    detail.running = running;
 
     if running {
         detail.status = current_setup_stage(state);
         return detail;
     }
 
-    detect_harbor_status_core(platform, &mut detail);
+    detect_harbor_status_core(platform_name(), &mut detail);
     detail
 }
 
