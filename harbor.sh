@@ -1,5 +1,12 @@
 #!/usr/bin/env bash
 
+# Guard: harbor.sh requires bash. Running with sh/dash/zsh produces cryptic errors.
+if [ -z "$BASH_VERSION" ]; then
+    echo "Error: harbor.sh must be run with bash, not sh or another shell." >&2
+    echo "Run as: bash $0 $*" >&2
+    exit 1
+fi
+
 set -eo pipefail
 
 # ========================================================================
@@ -9891,7 +9898,9 @@ run_harbor_how_command() {
 
     local prompt_file
     prompt_file=$(mktemp "${TMPDIR:-/tmp}/harbor-how.XXXXXX")
-    trap "rm -f '$prompt_file'" EXIT
+    # Use a RETURN trap (function-scoped) to clean up — an EXIT trap here
+    # would replace the global EXIT trap that cleans up HARBOR_COMPOSE_CACHE.
+    trap "rm -f '$prompt_file'" RETURN
 
     local cli_help
     cli_help=$(show_help 2>&1)
@@ -11349,10 +11358,19 @@ scramble_exit_code=42
 # macOS BSD readlink does not support -f; this loop manually chases symlinks.
 _resolve_symlink() {
     local target="$1"
+    local max_depth=40  # match POSIX SYMLOOP_MAX
+    local depth=0
     while [ -L "$target" ]; do
+        if (( ++depth > max_depth )); then
+            printf '%s\n' "$target"
+            return 1
+        fi
         local dir link
         dir=$(dirname "$target")
-        link=$(readlink "$target")
+        link=$(readlink "$target") || {
+            # readlink failed (broken/unreadable symlink) — stop chasing
+            break
+        }
         # If the link is relative, resolve it against the directory of the symlink
         if [[ "$link" != /* ]]; then
             target="$dir/$link"
