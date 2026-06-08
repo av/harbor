@@ -752,10 +752,12 @@ brew_install() {
 # Desktop is providing Docker in WSL, 1 otherwise.
 is_wsl_docker_desktop() {
     [ "$IS_WSL" = true ] || return 1
+    check_command docker || return 1
     # Docker Desktop integration puts its socket at a well-known path
-    if [ -S "/var/run/docker.sock" ] && _with_timeout 10 docker info >/dev/null 2>&1; then
-        # Check if docker context or info references Docker Desktop
-        if _with_timeout 10 docker info 2>/dev/null | grep -qi "docker desktop\|com.docker.depi"; then
+    local docker_info_output
+    if [ -S "/var/run/docker.sock" ] && docker_info_output=$(_with_timeout 10 docker info 2>/dev/null); then
+        # Check if docker info references Docker Desktop
+        if echo "$docker_info_output" | grep -qi "docker desktop\|com.docker.depi"; then
             return 0
         fi
         # Docker Desktop WSL integration creates a special context
@@ -793,10 +795,20 @@ ensure_linux_docker_service() {
     fi
 
     if check_command systemctl && systemctl is-system-running 2>/dev/null | grep -qE '^(running|degraded|starting)$'; then
-        if ! systemctl is-enabled docker >/dev/null 2>&1; then
+        # Enable docker to start on boot. Check both docker.service and
+        # docker.socket — socket activation is the default on many distros.
+        if ! systemctl is-enabled docker >/dev/null 2>&1 && \
+           ! systemctl is-enabled docker.socket >/dev/null 2>&1; then
             log_info "Enabling Docker service"
             # enable can fail if Docker was installed via snap or non-standard means
             run_privileged systemctl enable docker >/dev/null 2>&1 || true
+        fi
+
+        # Docker may already be reachable via socket activation (docker.socket)
+        # even if docker.service is not active. Check reachability first to
+        # avoid unnecessary start and confusing "Starting Docker service" output.
+        if _with_timeout 5 docker info >/dev/null 2>&1; then
+            return 0
         fi
 
         if ! systemctl is-active docker >/dev/null 2>&1; then
@@ -885,6 +897,27 @@ verify_docker_access() {
 
     local docker_access_output
     if docker_access_output=$(_with_timeout 15 docker info 2>&1); then
+        # When running as root (or via sudo), docker info always succeeds
+        # because root has full socket access. But the real user (SUDO_USER)
+        # may not be in the docker group yet — they'll get "permission denied"
+        # when they run harbor as themselves. Proactively add them.
+        if [ "$(id -u)" -eq 0 ] && [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "root" ]; then
+            if ! id -nG "$SUDO_USER" 2>/dev/null | grep -qw docker; then
+                log_info "Docker daemon is reachable (running as root)"
+                # Ensure docker group exists and add the real user
+                if check_command groupadd; then
+                    groupadd docker >/dev/null 2>&1 || true
+                fi
+                if usermod -aG docker "$SUDO_USER" >/dev/null 2>&1; then
+                    log_warn "Added '${SUDO_USER}' to docker group so Harbor works without sudo"
+                    log_warn "Re-login or run: newgrp docker"
+                else
+                    log_warn "Docker works as root but '${SUDO_USER}' is not in the docker group"
+                    log_warn "Run: sudo usermod -aG docker ${SUDO_USER}"
+                fi
+                return 0
+            fi
+        fi
         log_info "Docker daemon is reachable without sudo"
         return 0
     fi
