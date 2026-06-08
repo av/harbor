@@ -3629,13 +3629,16 @@ link_cli() {
         log_warn "It will be replaced by a symlink to $script_path"
     fi
 
-    # Create symlink
-    if ln -sf "$script_path" "$target_dir/$script_name"; then
+    # Create symlink.  Use -n so that if the target is a symlink pointing
+    # to a directory, ln replaces the symlink itself instead of creating a
+    # link inside that directory (default ln -sf behavior on both GNU and
+    # BSD when the target dereferences to a directory).
+    if ln -sfn "$script_path" "$target_dir/$script_name"; then
         log_info "Symlink created: $target_dir/$script_name -> $script_path"
     else
         log_warn "Failed to create symlink at $target_dir/$script_name"
         log_warn "Check that you have write permission to $target_dir"
-        log_warn "You can also run: ln -sf $script_path $target_dir/$script_name"
+        log_warn "You can also run: ln -sfn $script_path $target_dir/$script_name"
         return 1
     fi
 
@@ -3645,7 +3648,7 @@ link_cli() {
             log_warn "A non-symlink file exists at $target_dir/$short_name"
             log_warn "It will be replaced by a symlink to $script_path"
         fi
-        if ln -sf "$script_path" "$target_dir/$short_name"; then
+        if ln -sfn "$script_path" "$target_dir/$short_name"; then
             log_info "Short symlink created: $target_dir/$short_name -> $script_path"
         else
             log_warn "Failed to create short symlink at $target_dir/$short_name"

@@ -185,6 +185,40 @@ install_or_update_project() {
       exit 1
     fi
 
+    # Resolve both paths to catch overlaps like --source-path ~/.harbor with
+    # HARBOR_INSTALL_PATH=~/.harbor, or --source-path . when CWD is the
+    # install dir.  Without this check, rm -rf wipes the source before tar
+    # can read it, destroying the installation with no way to recover.
+    local resolved_source resolved_install
+    resolved_source=$(cd -P "$HARBOR_INSTALL_SOURCE_PATH" && pwd)
+    resolved_install="$HARBOR_INSTALL_PATH"
+    if [ -d "$HARBOR_INSTALL_PATH" ]; then
+      resolved_install=$(cd -P "$HARBOR_INSTALL_PATH" && pwd)
+    fi
+    if [ "$resolved_source" = "$resolved_install" ]; then
+      echo "Error: --source-path and install path resolve to the same directory:" >&2
+      echo "  source:  $resolved_source" >&2
+      echo "  install: $resolved_install" >&2
+      echo "Use a different --source-path or set HARBOR_INSTALL_PATH to a separate location." >&2
+      exit 1
+    fi
+    # Also reject source inside install path or vice versa — rm -rf of either
+    # would destroy the other.
+    case "$resolved_source/" in
+      "$resolved_install/"*)
+        echo "Error: --source-path ($resolved_source) is inside the install path ($resolved_install)." >&2
+        echo "Use a different --source-path or set HARBOR_INSTALL_PATH to a separate location." >&2
+        exit 1
+        ;;
+    esac
+    case "$resolved_install/" in
+      "$resolved_source/"*)
+        echo "Error: Install path ($resolved_install) is inside --source-path ($resolved_source)." >&2
+        echo "Use a different HARBOR_INSTALL_PATH or --source-path." >&2
+        exit 1
+        ;;
+    esac
+
     echo "Installing from local source path: $HARBOR_INSTALL_SOURCE_PATH"
     local backup_dir=""
     if [ -d "$HARBOR_INSTALL_PATH" ]; then
