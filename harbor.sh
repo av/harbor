@@ -776,24 +776,30 @@ run_harbor_doctor() {
         has_errors=true
     fi
 
-    # Check if CLI is linked and symlink target is valid
-    local cli_path cli_name
-    cli_path=$(env_manager get cli.path)
-    cli_name=$(env_manager get cli.name)
-    cli_path="${cli_path/#\~/$HOME}"
-    if [ -L "$cli_path/$cli_name" ]; then
-        local link_target
-        link_target=$(readlink "$cli_path/$cli_name")
-        if [ -f "$cli_path/$cli_name" ]; then
-            log_info "${ok} CLI is linked"
+    # Check if CLI is linked and symlink target is valid.
+    # This requires .env (for cli.path/cli.name), so skip when .env is
+    # missing — doctor must remain usable on broken installs.
+    if [ -f ".env" ] && [ -r ".env" ]; then
+        local cli_path cli_name
+        cli_path=$(env_manager get cli.path)
+        cli_name=$(env_manager get cli.name)
+        cli_path="${cli_path/#\~/$HOME}"
+        if [ -L "$cli_path/$cli_name" ]; then
+            local link_target
+            link_target=$(readlink "$cli_path/$cli_name")
+            if [ -f "$cli_path/$cli_name" ]; then
+                log_info "${ok} CLI is linked"
+            else
+                log_error "${nok} CLI symlink is broken: $cli_path/$cli_name -> $link_target"
+                log_error "    The target no longer exists. Run 'harbor link' to recreate."
+                has_errors=true
+            fi
         else
-            log_error "${nok} CLI symlink is broken: $cli_path/$cli_name -> $link_target"
-            log_error "    The target no longer exists. Run 'harbor link' to recreate."
+            log_error "${nok} CLI is not linked. Run 'harbor link' to create a symlink."
             has_errors=true
         fi
     else
-        log_error "${nok} CLI is not linked. Run 'harbor link' to create a symlink."
-        has_errors=true
+        log_warn "  Skipping CLI link check (.env not available)"
     fi
 
     # GPU checks: only show results for hardware that is actually present,
@@ -906,6 +912,24 @@ __anchor_fns=true
 
 harbor_upper() {
     LC_ALL=C printf '%s' "$1" | tr 'a-z' 'A-Z'
+}
+
+# Escape BRE metacharacters in a string so it can be safely used in grep
+# patterns.  Without this, key names containing *, [, ], \, ^, or $ are
+# interpreted as regex operators — a key like "[A-Z]OO" would match
+# HARBOR_AOO, HARBOR_BOO, etc., potentially reading or overwriting the
+# wrong config entry.
+_grep_escape() {
+    # Escape: \ first (to avoid double-escaping), then ^ $ . * [ ]
+    local s="$1"
+    s="${s//\\/\\\\}"
+    s="${s//\^/\\^}"
+    s="${s//\$/\\$}"
+    s="${s//\./\\.}"
+    s="${s//\*/\\*}"
+    s="${s//\[/\\[}"
+    s="${s//\]/\\]}"
+    printf '%s' "$s"
 }
 
 harbor_lower() {
@@ -5820,8 +5844,9 @@ env_manager() {
         upper_key="${upper_key#$prefix}"
         # Use head -1 to return only the first match when keys are
         # duplicated (e.g. after a buggy merge or manual edit).
-        local value
-        value=$(grep "^$prefix$upper_key=" "$env_file" | head -1 | cut -d '=' -f2-)
+        local value grep_key
+        grep_key=$(_grep_escape "$prefix$upper_key")
+        value=$(grep "^${grep_key}=" "$env_file" | head -1 | cut -d '=' -f2-)
         value="${value#\"}" # Remove leading quote if present
         value="${value%\"}" # Remove trailing quote if present
         echo "$value"
@@ -5838,21 +5863,29 @@ env_manager() {
         shift 2          # Remove 'set' and the key from the arguments
         local value="$*" # Capture all remaining arguments as the value
         local full_key="$prefix$upper_key"
-        if grep -q "^$full_key=" "$env_file"; then
+        local grep_key
+        grep_key=$(_grep_escape "$full_key")
+        if grep -q "^${grep_key}=" "$env_file"; then
             # Replace using line-number addressing to avoid sed delimiter
             # injection.  Values containing |, &, \, or other sed
             # metacharacters previously corrupted the .env file because
             # they were interpolated into a sed s||| command.
             local line_num
-            line_num=$(grep -n "^${full_key}=" "$env_file" | head -1 | cut -d: -f1)
+            line_num=$(grep -n "^${grep_key}=" "$env_file" | head -1 | cut -d: -f1)
             local tmp_set
             tmp_set=$(mktemp -t harbor_set.XXXXXX) || {
                 log_error "Failed to create temporary file for config set."
                 return 1
             }
-            head -n $((line_num - 1)) "$env_file" > "$tmp_set"
-            printf '%s="%s"\n' "$full_key" "$value" >> "$tmp_set"
-            tail -n +$((line_num + 1)) "$env_file" >> "$tmp_set"
+            {
+                head -n $((line_num - 1)) "$env_file"
+                printf '%s="%s"\n' "$full_key" "$value"
+                tail -n +$((line_num + 1)) "$env_file"
+            } > "$tmp_set" || {
+                rm -f "$tmp_set"
+                log_error "Failed to build updated config file."
+                return 1
+            }
             mv "$tmp_set" "$env_file" || {
                 rm -f "$tmp_set"
                 log_error "Failed to write updated config to $env_file"
@@ -5884,18 +5917,26 @@ env_manager() {
         upper_key="${upper_key//[.-]/_}"
         upper_key="${upper_key#$prefix}"
         local full_key="$prefix$upper_key"
-        if grep -q "^${full_key}=" "$env_file"; then
+        local grep_key
+        grep_key=$(_grep_escape "$full_key")
+        if grep -q "^${grep_key}=" "$env_file"; then
             # Use line-number addressing to avoid sed regex injection
             # (same approach as the 'set' handler).
             local line_num
-            line_num=$(grep -n "^${full_key}=" "$env_file" | head -1 | cut -d: -f1)
+            line_num=$(grep -n "^${grep_key}=" "$env_file" | head -1 | cut -d: -f1)
             local tmp_unset
             tmp_unset=$(mktemp -t harbor_unset.XXXXXX) || {
                 log_error "Failed to create temporary file for config unset."
                 return 1
             }
-            head -n $((line_num - 1)) "$env_file" > "$tmp_unset"
-            tail -n +$((line_num + 1)) "$env_file" >> "$tmp_unset"
+            {
+                head -n $((line_num - 1)) "$env_file"
+                tail -n +$((line_num + 1)) "$env_file"
+            } > "$tmp_unset" || {
+                rm -f "$tmp_unset"
+                log_error "Failed to build updated config file."
+                return 1
+            }
             mv "$tmp_unset" "$env_file" || {
                 rm -f "$tmp_unset"
                 log_error "Failed to write updated config to $env_file"
@@ -11334,6 +11375,11 @@ case "$1" in
         shift
         run_completion_command "$@"
         exit 0
+        ;;
+    doctor)
+        shift
+        run_harbor_doctor "$@"
+        exit $?
         ;;
 esac
 
