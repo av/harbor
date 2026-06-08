@@ -454,19 +454,27 @@ dnf_install() {
 
 pacman_install() {
     local missing=()
-    local need_docker=false
+    local need_engine=false
+    local need_compose=false
     check_command git || missing+=("git")
     check_command curl || missing+=("curl")
 
-    if ! check_command docker || ! docker compose version >/dev/null 2>&1; then
+    if ! check_command docker; then
+        need_engine=true
+        need_compose=true
+    elif ! docker compose version >/dev/null 2>&1; then
+        need_compose=true
+    fi
+
+    if [ "$need_engine" = true ] || [ "$need_compose" = true ]; then
         if is_wsl_docker_desktop; then
             log_info "Docker is provided by Docker Desktop (WSL integration) — skipping package install"
-        else
-            need_docker=true
+            need_engine=false
+            need_compose=false
         fi
     fi
 
-    if [ ${#missing[@]} -gt 0 ] || [ "$need_docker" = true ]; then
+    if [ ${#missing[@]} -gt 0 ] || [ "$need_engine" = true ] || [ "$need_compose" = true ]; then
         log_info "Tip: run 'sudo pacman -Syu' first if your system hasn't been updated recently"
     fi
 
@@ -481,8 +489,11 @@ pacman_install() {
         log_info "git and curl are already installed"
     fi
 
-    if [ "$need_docker" = true ]; then
-        log_info "Installing Docker Engine and Docker Compose plugin via pacman"
+    if [ "$need_engine" = true ] || [ "$need_compose" = true ]; then
+        # Arch packages Docker Compose v2 as 'docker-compose' (provides both
+        # the standalone binary and the CLI plugin). pacman --needed prevents
+        # reinstalling packages that are already current.
+        log_info "Installing Docker packages via pacman"
         if ! run_privileged pacman -S --noconfirm --needed docker docker-compose; then
             log_error "Failed to install Docker packages via pacman."
             log_error "Try running 'sudo pacman -S docker docker-compose' manually."
@@ -494,12 +505,30 @@ pacman_install() {
 }
 
 apk_install() {
-    # Alpine's community repo provides `docker` and `docker-compose` (v2).
+    # Alpine's community repo provides `docker` and `docker-cli-compose` (v2).
     # We also ensure `bash` is present — harbor.sh uses bash-only constructs.
     local missing=()
+    local need_docker=false
     check_command git || missing+=("git")
     check_command curl || missing+=("curl")
     check_command bash || missing+=("bash")
+
+    if ! check_command docker || ! docker compose version >/dev/null 2>&1; then
+        if is_wsl_docker_desktop; then
+            log_info "Docker is provided by Docker Desktop (WSL integration) — skipping package install"
+        else
+            need_docker=true
+        fi
+    fi
+
+    # Refresh the apk index if anything needs installing. Stale indexes
+    # (common on minimal Docker images or long-running Alpine installs)
+    # cause "unable to select packages" or 404 download errors.
+    if [ ${#missing[@]} -gt 0 ] || [ "$need_docker" = true ]; then
+        log_info "Refreshing apk package index"
+        run_privileged apk update >/dev/null 2>&1 || \
+            log_warn "apk update had errors (possibly unreachable repository); continuing"
+    fi
 
     if [ ${#missing[@]} -gt 0 ]; then
         log_info "Installing missing tools via apk: ${missing[*]}"
@@ -512,19 +541,17 @@ apk_install() {
         log_info "git, curl, and bash are already installed"
     fi
 
-    if ! check_command docker || ! docker compose version >/dev/null 2>&1; then
-        if is_wsl_docker_desktop; then
-            log_info "Docker is provided by Docker Desktop (WSL integration) — skipping package install"
-        else
-            log_info "Installing Docker Engine and Docker Compose plugin via apk"
-            if ! run_privileged apk add --no-cache docker docker-cli-compose; then
-                log_error "Failed to install Docker packages via apk."
-                log_error "Ensure the community repository is enabled in /etc/apk/repositories."
-                return 1
-            fi
+    if [ "$need_docker" = true ]; then
+        log_info "Installing Docker Engine and Docker Compose plugin via apk"
+        if ! run_privileged apk add --no-cache docker docker-cli-compose; then
+            log_error "Failed to install Docker packages via apk."
+            log_error "Ensure the community repository is enabled in /etc/apk/repositories."
+            return 1
         fi
     else
-        log_info "Docker and Docker Compose plugin are already installed"
+        if [ "$need_docker" = false ]; then
+            log_info "Docker and Docker Compose plugin are already installed"
+        fi
     fi
 }
 
@@ -548,6 +575,15 @@ zypper_install() {
             need_engine=false
             need_compose=false
         fi
+    fi
+
+    # Refresh zypper metadata if anything needs installing. Stale metadata
+    # causes package-not-found errors, especially after adding the Docker
+    # CE repository.
+    if [ ${#missing[@]} -gt 0 ] || [ "$need_engine" = true ] || [ "$need_compose" = true ]; then
+        log_info "Refreshing zypper repository metadata"
+        run_privileged zypper --non-interactive refresh >/dev/null 2>&1 || \
+            log_warn "zypper refresh had errors (possibly unreachable repository); continuing"
     fi
 
     if [ ${#missing[@]} -gt 0 ]; then
@@ -732,6 +768,22 @@ brew_install() {
         fi
     else
         log_info "docker CLI is already installed"
+        # Docker Desktop may be installed but not running. Attempt to start it
+        # so that `docker compose version` and later verification steps succeed.
+        if ! _with_timeout 15 docker info >/dev/null 2>&1; then
+            log_info "Docker daemon is not running — attempting to start Docker Desktop..."
+            if start_macos_docker_desktop; then
+                if wait_for_docker_access 180; then
+                    log_info "Docker Desktop is running"
+                else
+                    log_warn "Docker Desktop was started but the daemon did not become reachable within 3 minutes."
+                    log_warn "Open Docker Desktop manually and complete the initial setup."
+                fi
+            else
+                log_warn "Could not start Docker Desktop automatically."
+                log_warn "Open Docker Desktop from Applications to start the daemon."
+            fi
+        fi
     fi
 
     if ! docker compose version >/dev/null 2>&1; then
