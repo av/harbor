@@ -1,8 +1,5 @@
-import { HarborService } from "../serviceMetadata";
-import { ServiceTags } from "../ServiceTags";
-import { HST } from "../serviceMetadata";
-import { HSTColors } from "../ServiceTags";
-import { HSTColorOpts } from "../ServiceTags";
+import { HarborService, HST } from "../serviceMetadata";
+import { ServiceTags, HSTColors, HSTColorOpts } from "../ServiceTags";
 import { isHandled, markHandled } from "../utils";
 import { useNavigate } from "react-router-dom";
 import { ServiceActions } from "../service/ServiceActions";

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { spawnHarborPty } from "../terminal/harborPty";
+import { spawnHarborPty, type IPty } from "../terminal/harborPty";
 import { ansiConverter, errorMessage } from "../utils";
-import type { IPty } from "../terminal/harborPty";
 const BUFFER_CAP = 2000;
 const BUFFER_TRIM = 200;
 const FLUSH_INTERVAL_MS = 100;

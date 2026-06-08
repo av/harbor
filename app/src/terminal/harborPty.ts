@@ -1,5 +1,4 @@
-import { spawn } from "tauri-pty";
-import type { IPty } from "tauri-pty";
+import { spawn, type IPty } from "tauri-pty";
 import { isWindows } from "../utils";
 import { buildNativeHarborArgs, buildWindowsWslHarborArgs } from "../harborCommand";
 

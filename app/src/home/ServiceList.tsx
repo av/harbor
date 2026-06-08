@@ -1,20 +1,18 @@
-import { ChangeEvent } from "react";
+import { ChangeEvent, useState } from "react";
 
 import { IconRotateCW } from "../Icons";
 import { Section } from "../Section";
 import { ServiceCard } from "./ServiceCard";
 import { Loader } from "../Loading";
 import { IconButton } from "../IconButton";
-import { HarborService } from "../serviceMetadata";
+import { HarborService, HST } from "../serviceMetadata";
 import { ACTION_ICONS } from "../serviceActions";
 import { ServiceTag } from "../ServiceTags";
-import { HST } from '../serviceMetadata';
 import { runHarbor } from "../useHarbor";
 import { errorMessage, toasted } from "../utils";
 import { SearchInput } from "../SearchInput";
 import { useSearch } from "../useSearch";
 import { LostSquirrel } from "../LostSquirrel";
-import { useState } from "react";
 
 const serviceOrderBy = (a: HarborService, b: HarborService) => {
   if ((a.isRunning || a.isDefault) && !(b.isRunning || b.isDefault)) {
