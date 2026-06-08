@@ -175,7 +175,7 @@ fn collect_readers(
     (stdout, stderr)
 }
 
-fn run_capture_timeout(program: &str, args: &[&str], timeout: Option<Duration>) -> ProcessOutput {
+fn run_capture_timeout(program: &str, args: &[&str], timeout: Duration) -> ProcessOutput {
     let mut command = Command::new(program);
     command.args(args);
     if platform_name() != "windows" {
@@ -184,99 +184,84 @@ fn run_capture_timeout(program: &str, args: &[&str], timeout: Option<Duration>) 
         }
     }
 
-    if let Some(limit) = timeout {
-        match command
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-        {
-            Ok(mut child) => {
-                let stdout_reader = child
-                    .stdout
-                    .take()
-                    .map(|r: ChildStdout| spawn_output_reader(r));
-                let stderr_reader = child
-                    .stderr
-                    .take()
-                    .map(|r: ChildStderr| spawn_output_reader(r));
-                let started = Instant::now();
-                loop {
-                    match child.try_wait() {
-                        Ok(Some(status)) => {
-                            let (stdout, stderr) =
-                                collect_readers(stdout_reader, stderr_reader);
-                            return ProcessOutput {
-                                code: status.code(),
-                                stdout,
-                                stderr,
-                            };
-                        }
-                        Ok(None) => {
-                            if started.elapsed() > limit {
-                                let _ = child.kill();
-                                let _ = child.wait();
-                                let (stdout, stderr) =
-                                    collect_readers(stdout_reader, stderr_reader);
-                                return ProcessOutput {
-                                    code: Some(124),
-                                    stdout,
-                                    stderr: format!(
-                                        "{}{}{} timed out after {}s",
-                                        stderr,
-                                        if stderr.is_empty() { "" } else { "\n" },
-                                        program,
-                                        limit.as_secs()
-                                    ),
-                                };
-                            }
-                            std::thread::sleep(Duration::from_millis(100));
-                        }
-                        Err(err) => {
-                            // try_wait failed at the OS level.  Kill and
-                            // reap the child so we don't leak it, then
-                            // join the reader threads to avoid dangling
-                            // background threads.
+    match command
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+    {
+        Ok(mut child) => {
+            let stdout_reader = child
+                .stdout
+                .take()
+                .map(|r: ChildStdout| spawn_output_reader(r));
+            let stderr_reader = child
+                .stderr
+                .take()
+                .map(|r: ChildStderr| spawn_output_reader(r));
+            let started = Instant::now();
+            loop {
+                match child.try_wait() {
+                    Ok(Some(status)) => {
+                        let (stdout, stderr) =
+                            collect_readers(stdout_reader, stderr_reader);
+                        return ProcessOutput {
+                            code: status.code(),
+                            stdout,
+                            stderr,
+                        };
+                    }
+                    Ok(None) => {
+                        if started.elapsed() > timeout {
                             let _ = child.kill();
                             let _ = child.wait();
                             let (stdout, stderr) =
                                 collect_readers(stdout_reader, stderr_reader);
                             return ProcessOutput {
-                                code: Some(127),
+                                code: Some(124),
                                 stdout,
                                 stderr: format!(
-                                    "{}{}{}",
-                                    err,
-                                    if stderr.is_empty() { "" } else { "\n" },
+                                    "{}{}{} timed out after {}s",
                                     stderr,
+                                    if stderr.is_empty() { "" } else { "\n" },
+                                    program,
+                                    timeout.as_secs()
                                 ),
                             };
                         }
+                        std::thread::sleep(Duration::from_millis(100));
+                    }
+                    Err(err) => {
+                        // try_wait failed at the OS level.  Kill and
+                        // reap the child so we don't leak it, then
+                        // join the reader threads to avoid dangling
+                        // background threads.
+                        let _ = child.kill();
+                        let _ = child.wait();
+                        let (stdout, stderr) =
+                            collect_readers(stdout_reader, stderr_reader);
+                        return ProcessOutput {
+                            code: Some(127),
+                            stdout,
+                            stderr: format!(
+                                "{}{}{}",
+                                err,
+                                if stderr.is_empty() { "" } else { "\n" },
+                                stderr,
+                            ),
+                        };
                     }
                 }
             }
-            Err(err) => ProcessOutput {
-                code: Some(127),
-                stdout: String::new(),
-                stderr: err.to_string(),
-            },
         }
-    } else {
-        match command.output() {
-            Ok(output) => ProcessOutput {
-                code: output.status.code(),
-                stdout: String::from_utf8_lossy(&output.stdout).to_string(),
-                stderr: String::from_utf8_lossy(&output.stderr).to_string(),
-            },
-            Err(err) => ProcessOutput {
-                code: Some(127),
-                stdout: String::new(),
-                stderr: err.to_string(),
-            },
-        }
+        Err(err) => ProcessOutput {
+            code: Some(127),
+            stdout: String::new(),
+            stderr: err.to_string(),
+        },
     }
 }
 
-fn run_shell_timeout(script: &str, timeout: Option<Duration>) -> ProcessOutput {
+fn run_shell_timeout(script: &str, timeout: Duration) -> ProcessOutput {
     if platform_name() == "windows" {
         run_capture_timeout(
             "powershell.exe",
@@ -443,7 +428,7 @@ fn resolve_wsl_distro() -> Option<String> {
         persist_wsl_distro(&distro);
         return Some(distro);
     }
-    let distros = run_capture_timeout("wsl.exe", &["--list", "--verbose"], Some(DETECT_TIMEOUT));
+    let distros = run_capture_timeout("wsl.exe", &["--list", "--verbose"], DETECT_TIMEOUT);
     if distros.code != Some(0) {
         return None;
     }
@@ -457,7 +442,7 @@ fn resolve_wsl_distro() -> Option<String> {
     // German "Wird ausgeführt"), so matching the English word "Running"
     // fails on non-English Windows.
     let running_output =
-        run_capture_timeout("wsl.exe", &["--list", "--running"], Some(DETECT_TIMEOUT));
+        run_capture_timeout("wsl.exe", &["--list", "--running"], DETECT_TIMEOUT);
     let running_names = if running_output.code == Some(0) {
         parse_running_distro_names(&running_output.stdout)
     } else {
@@ -481,7 +466,7 @@ fn wsl_bash_args(script: &str) -> Vec<String> {
     args
 }
 
-fn run_wsl_bash_timeout(script: &str, timeout: Option<Duration>) -> ProcessOutput {
+fn run_wsl_bash_timeout(script: &str, timeout: Duration) -> ProcessOutput {
     let args = wsl_bash_args(script);
     let arg_refs = args.iter().map(String::as_str).collect::<Vec<_>>();
     run_capture_timeout("wsl.exe", &arg_refs, timeout)
@@ -955,7 +940,7 @@ fn windows_install_script(distro: Option<&str>) -> String {
 // ── Detection ──────────────────────────────────────────
 
 fn detect_windows_blocker(detail: &mut HarborSetupDetail) -> bool {
-    let wsl_status = run_capture_timeout("wsl.exe", &["--status"], Some(DETECT_TIMEOUT));
+    let wsl_status = run_capture_timeout("wsl.exe", &["--status"], DETECT_TIMEOUT);
     if wsl_status.code != Some(0) {
         detail.status = "blocked".into();
         detail.last_error =
@@ -966,7 +951,7 @@ fn detect_windows_blocker(detail: &mut HarborSetupDetail) -> bool {
     let distros = run_capture_timeout(
         "wsl.exe",
         &["--list", "--verbose"],
-        Some(DETECT_TIMEOUT),
+        DETECT_TIMEOUT,
     );
     if distros.code != Some(0) {
         detail.status = "blocked".into();
@@ -1038,7 +1023,7 @@ fn detect_harbor_status_core(platform: &str, detail: &mut HarborSetupDetail) {
         "linux" => {
             let check = run_shell_timeout(
                 "command -v apt-get >/dev/null || command -v dnf >/dev/null || command -v pacman >/dev/null || command -v apk >/dev/null || command -v zypper >/dev/null",
-                Some(DETECT_TIMEOUT),
+                DETECT_TIMEOUT,
             );
             if check.code != Some(0) {
                 detail.status = "blocked".into();
@@ -1054,7 +1039,7 @@ fn detect_harbor_status_core(platform: &str, detail: &mut HarborSetupDetail) {
             // get actionable guidance instead of a cryptic install failure.
             let docker_check = run_shell_timeout(
                 "command -v docker >/dev/null 2>&1",
-                Some(DETECT_TIMEOUT),
+                DETECT_TIMEOUT,
             );
             if docker_check.code != Some(0) {
                 detail.status = "blocked".into();
@@ -1079,7 +1064,7 @@ fn detect_harbor_status_core(platform: &str, detail: &mut HarborSetupDetail) {
     let version = if platform == "windows" {
         run_wsl_bash_timeout(
             "command -v harbor >/dev/null && harbor --version",
-            Some(DETECT_TIMEOUT),
+            DETECT_TIMEOUT,
         )
     } else {
         run_shell_timeout(
@@ -1087,7 +1072,7 @@ fn detect_harbor_status_core(platform: &str, detail: &mut HarborSetupDetail) {
                 "{}; command -v harbor >/dev/null && harbor --version",
                 native_harbor_prelude()
             ),
-            Some(DETECT_TIMEOUT),
+            DETECT_TIMEOUT,
         )
     };
 
@@ -1117,7 +1102,7 @@ fn detect_harbor_status_core(platform: &str, detail: &mut HarborSetupDetail) {
     if platform != "windows" {
         let exists = run_shell_timeout(
             "test -e \"$HOME/.local/bin/harbor\" -o -x \"$HOME/.harbor/harbor.sh\"",
-            Some(DETECT_TIMEOUT),
+            DETECT_TIMEOUT,
         );
         if exists.code == Some(0) {
             detail.status = "refresh-required".into();
