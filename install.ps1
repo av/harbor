@@ -39,7 +39,10 @@ function Test-WslAvailable {
 
 function Normalize-WslOutput {
   param([string]$Text)
-  $Text -replace [string][char]0, ""
+  # Remove null bytes (UTF-16LE artifacts) and the BOM (U+FEFF) that
+  # wsl.exe sometimes emits.  Without this, regex anchors like ^ fail to
+  # match the first line.
+  $Text -replace [string][char]0, "" -replace ([string][char]0xFEFF), ""
 }
 
 function ConvertTo-BashSingleQuoted {
@@ -175,9 +178,14 @@ function Install-DockerDesktop {
     throw "Docker Desktop installer was not downloaded. Check your network connection and try again."
   }
 
-  $installer = Start-Process -FilePath $installerPath -Wait -PassThru -ArgumentList @("install", "--user")
-  if ($installer.ExitCode -ne 0) {
-    throw "Docker Desktop installer exited with code $($installer.ExitCode)"
+  try {
+    $installer = Start-Process -FilePath $installerPath -Wait -PassThru -ArgumentList @("install", "--user")
+    if ($installer.ExitCode -ne 0) {
+      throw "Docker Desktop installer exited with code $($installer.ExitCode)"
+    }
+  } finally {
+    # Clean up the ~600MB installer to avoid leaving stale files in TEMP.
+    Remove-Item -Path $installerPath -Force -ErrorAction SilentlyContinue
   }
 }
 
@@ -189,7 +197,11 @@ function Test-WslDockerReady {
   # in setup.rs.
   $job = Start-Job -ScriptBlock {
     param($d)
-    & wsl.exe -d $d -e bash -lic "docker info >/dev/null 2>&1 && docker compose version >/dev/null 2>&1"
+    # Suppress all output so that only the exit code marker reaches the
+    # output stream.  Without this, wsl.exe startup messages (e.g.
+    # "Starting <distro>...") end up in the Receive-Job result, turning
+    # it into an array and breaking the exit-code comparison.
+    & wsl.exe -d $d -e bash -lic "docker info >/dev/null 2>&1 && docker compose version >/dev/null 2>&1" *> $null
     $LASTEXITCODE
   } -ArgumentList $TargetDistro
 
@@ -199,8 +211,15 @@ function Test-WslDockerReady {
     Remove-Job $job -Force
     return $false
   }
-  $exitCode = Receive-Job $job
+  $output = Receive-Job $job
   Remove-Job $job -Force
+  # If Receive-Job still returns multiple objects (e.g. from shell
+  # profile output), use only the last one — the explicit $LASTEXITCODE.
+  if ($output -is [array]) {
+    $exitCode = $output[-1]
+  } else {
+    $exitCode = $output
+  }
   return $exitCode -eq 0
 }
 
@@ -241,6 +260,9 @@ $distros = Normalize-WslOutput ((& wsl.exe --list --verbose) -join "`n")
 if ([string]::IsNullOrWhiteSpace($Distro)) {
   # Try each supported distro prefix in preference order,
   # preferring a running WSL2 distro over a stopped one.
+  # Use .+ instead of \w+ for the state field because non-English
+  # Windows locales can produce multi-word state names (e.g. German
+  # "Wird ausgeführt" for "Running").
   foreach ($prefix in $SupportedDistroPrefixes) {
     if ($distros -match "(?m)^\s*\*?\s*($([regex]::Escape($prefix))[^\s]*)\s+Running\s+2\s*$") {
       $Distro = $Matches[1]
@@ -249,7 +271,7 @@ if ([string]::IsNullOrWhiteSpace($Distro)) {
   }
   if ([string]::IsNullOrWhiteSpace($Distro)) {
     foreach ($prefix in $SupportedDistroPrefixes) {
-      if ($distros -match "(?m)^\s*\*?\s*($([regex]::Escape($prefix))[^\s]*)\s+\w+\s+2\s*$") {
+      if ($distros -match "(?m)^\s*\*?\s*($([regex]::Escape($prefix))[^\s]*)\s+.+\s+2\s*$") {
         $Distro = $Matches[1]
         break
       }
@@ -261,7 +283,7 @@ if ([string]::IsNullOrWhiteSpace($Distro)) {
   # Check if there is a WSL1 distro that matches — give a specific upgrade message.
   $wsl1Match = $null
   foreach ($prefix in $SupportedDistroPrefixes) {
-    if ($distros -match "(?m)^\s*\*?\s*($([regex]::Escape($prefix))[^\s]*)\s+\w+\s+1\s*$") {
+    if ($distros -match "(?m)^\s*\*?\s*($([regex]::Escape($prefix))[^\s]*)\s+.+\s+1\s*$") {
       $wsl1Match = $Matches[1]
       break
     }
@@ -284,10 +306,10 @@ if ([string]::IsNullOrWhiteSpace($Distro)) {
 }
 
 # Verify the selected distro is actually WSL2.
-if ($distros -match "(?m)^\s*\*?\s*$([regex]::Escape($Distro))\s+\w+\s+1\s*$") {
+if ($distros -match "(?m)^\s*\*?\s*$([regex]::Escape($Distro))\s+.+\s+1\s*$") {
   Write-SetupStage "blocked"
   throw "Selected distro '$Distro' is running under WSL1. Harbor requires WSL2. Upgrade it with: wsl --set-version $Distro 2"
-} elseif ($distros -notmatch "(?m)^\s*\*?\s*$([regex]::Escape($Distro))\s+\w+\s+2\s*$") {
+} elseif ($distros -notmatch "(?m)^\s*\*?\s*$([regex]::Escape($Distro))\s+.+\s+2\s*$") {
   Write-SetupStage "blocked"
   throw "Selected distro '$Distro' is not a WSL2 distro or is not installed. Set HARBOR_WSL_DISTRO to a valid WSL2 distro name."
 }

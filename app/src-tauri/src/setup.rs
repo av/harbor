@@ -291,7 +291,7 @@ fn persist_wsl_distro(distro: &str) {
 const WSL_DISTRO_PREFIXES: &[&str] = &["Ubuntu", "Debian", "Fedora", "openSUSE", "Kali", "Arch"];
 
 fn parse_wsl2_supported_distro(output: &str, require_running: bool) -> Option<String> {
-    let cleaned = output.replace('\0', "");
+    let cleaned = output.replace('\0', "").replace('\u{FEFF}', "");
     for prefix in WSL_DISTRO_PREFIXES {
         for line in cleaned.lines() {
             let parts = line.split_whitespace().collect::<Vec<_>>();
@@ -300,13 +300,19 @@ fn parse_wsl2_supported_distro(output: &str, require_running: bool) -> Option<St
             }
             let name_index = if parts.first() == Some(&"*") { 1 } else { 0 };
             let state_index = name_index + 1;
-            let version_index = name_index + 2;
+            // Use the last element as the version column.  Non-English
+            // Windows locales can produce multi-word state names (e.g.
+            // German "Wird ausgeführt" for "Running"), which shifts the
+            // column layout when using split_whitespace.
             let Some(name) = parts.get(name_index) else { continue };
-            let Some(state) = parts.get(state_index) else { continue };
-            let Some(version) = parts.get(version_index) else { continue };
+            let Some(version) = parts.last() else { continue };
+            // Need at least one state token between name and version.
+            if parts.len() <= name_index + 2 {
+                continue;
+            }
             if name.starts_with(prefix)
                 && *version == "2"
-                && (!require_running || state.eq_ignore_ascii_case("Running"))
+                && (!require_running || parts.get(state_index).is_some_and(|s| s.eq_ignore_ascii_case("Running")))
             {
                 return Some((*name).to_string());
             }
@@ -316,14 +322,15 @@ fn parse_wsl2_supported_distro(output: &str, require_running: bool) -> Option<St
 }
 
 fn parse_wsl_distro_exists(output: &str, distro: &str) -> bool {
-    output.replace('\0', "").lines().any(|line| {
+    output.replace('\0', "").replace('\u{FEFF}', "").lines().any(|line| {
         let parts = line.split_whitespace().collect::<Vec<_>>();
         if parts.is_empty() {
             return false;
         }
         let name_index = if parts.first() == Some(&"*") { 1 } else { 0 };
-        let version_index = name_index + 2;
-        parts.get(name_index) == Some(&distro) && parts.get(version_index) == Some(&"2")
+        // Use the last element as the version column to handle
+        // multi-word localized state names.
+        parts.get(name_index) == Some(&distro) && parts.last() == Some(&"2")
     })
 }
 
