@@ -32,13 +32,10 @@ export class DataClass {
     }
 
     removeListener(listener: () => void) {
-        if (this.listeners.includes(listener)) {
-            this.listeners.splice(this.listeners.indexOf(listener), 1);
+        const idx = this.listeners.indexOf(listener);
+        if (idx !== -1) {
+            this.listeners.splice(idx, 1);
         }
-    }
-
-    mutate() {
-        this.notifyChange();
     }
 
     getMutableFields(): string[] {
@@ -83,11 +80,4 @@ export class DataClass {
         });
     }
 
-    instance(): this {
-        return this;
-    }
-}
-
-export function useDataClass(cls: DataClass) {
-    return cls.use();
 }
