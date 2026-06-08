@@ -31,8 +31,20 @@ function Test-WslAvailable {
   }
   # Capture output without piping through Write-Output, which can
   # reset $LASTEXITCODE in some PowerShell versions.
-  $output = & wsl.exe --status 2>&1
-  $result = $LASTEXITCODE -eq 0
+  #
+  # Use a local $ErrorActionPreference override because 2>&1 converts
+  # native-command stderr lines into ErrorRecords. Under the script's
+  # global $ErrorActionPreference = "Stop" (PowerShell 5.1), even a
+  # single ErrorRecord triggers a terminating exception — killing the
+  # whole script instead of returning $false.
+  $prevEAP = $ErrorActionPreference
+  $ErrorActionPreference = "SilentlyContinue"
+  try {
+    $output = & wsl.exe --status 2>&1
+    $result = $LASTEXITCODE -eq 0
+  } finally {
+    $ErrorActionPreference = $prevEAP
+  }
   if ($output) { Write-Output $output }
   return $result
 }
@@ -257,6 +269,11 @@ if (-not (Test-WslAvailable)) {
 
 Write-SetupStage "checking-prerequisites"
 $distros = Normalize-WslOutput ((& wsl.exe --list --verbose) -join "`n")
+# Get running distro names via --list --running (locale-independent — the
+# output is just names, no state column).  Used below to prefer a running
+# WSL2 distro over a stopped one without relying on the English word
+# "Running" in the --list --verbose output.
+$runningDistros = Normalize-WslOutput ((& wsl.exe --list --running) -join "`n")
 if ([string]::IsNullOrWhiteSpace($Distro)) {
   # Try each supported distro prefix in preference order,
   # preferring a running WSL2 distro over a stopped one.
@@ -264,9 +281,14 @@ if ([string]::IsNullOrWhiteSpace($Distro)) {
   # Windows locales can produce multi-word state names (e.g. German
   # "Wird ausgeführt" for "Running").
   foreach ($prefix in $SupportedDistroPrefixes) {
-    if ($distros -match "(?m)^\s*\*?\s*($([regex]::Escape($prefix))[^\s]*)\s+Running\s+2\s*$") {
-      $Distro = $Matches[1]
-      break
+    if ($distros -match "(?m)^\s*\*?\s*($([regex]::Escape($prefix))[^\s]*)\s+.+\s+2\s*$") {
+      $candidate = $Matches[1]
+      # Check if this WSL2 distro is currently running.  The --list
+      # --running output may include a "(Default)" suffix after the name.
+      if ($runningDistros -match "(?m)^\s*$([regex]::Escape($candidate))(\s|\s*$)") {
+        $Distro = $candidate
+        break
+      }
     }
   }
   if ([string]::IsNullOrWhiteSpace($Distro)) {

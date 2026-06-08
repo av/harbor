@@ -290,7 +290,10 @@ fn persist_wsl_distro(distro: &str) {
 /// Ubuntu is preferred because install.ps1 installs it by default.
 const WSL_DISTRO_PREFIXES: &[&str] = &["Ubuntu", "Debian", "Fedora", "openSUSE", "Kali", "Arch"];
 
-fn parse_wsl2_supported_distro(output: &str, require_running: bool) -> Option<String> {
+fn parse_wsl2_supported_distro(
+    output: &str,
+    running_names: Option<&[String]>,
+) -> Option<String> {
     let cleaned = output.replace('\0', "").replace('\u{FEFF}', "");
     for prefix in WSL_DISTRO_PREFIXES {
         for line in cleaned.lines() {
@@ -299,7 +302,6 @@ fn parse_wsl2_supported_distro(output: &str, require_running: bool) -> Option<St
                 continue;
             }
             let name_index = if parts.first() == Some(&"*") { 1 } else { 0 };
-            let state_index = name_index + 1;
             // Use the last element as the version column.  Non-English
             // Windows locales can produce multi-word state names (e.g.
             // German "Wird ausgeführt" for "Running"), which shifts the
@@ -312,13 +314,42 @@ fn parse_wsl2_supported_distro(output: &str, require_running: bool) -> Option<St
             }
             if name.starts_with(prefix)
                 && *version == "2"
-                && (!require_running || parts.get(state_index).is_some_and(|s| s.eq_ignore_ascii_case("Running")))
+                && running_names
+                    .map(|names| names.iter().any(|n| n == name))
+                    .unwrap_or(true)
             {
                 return Some((*name).to_string());
             }
         }
     }
     None
+}
+
+/// Parse the output of `wsl.exe --list --running` into a list of distro names.
+/// This output is locale-independent (just names, no state/version columns),
+/// so it avoids the localized "Running" detection problem.
+///
+/// The `--list` (non-verbose) format may include a "(Default)" suffix
+/// after the name, so we strip everything from the first `(` onward.
+fn parse_running_distro_names(output: &str) -> Vec<String> {
+    let cleaned = output.replace('\0', "").replace('\u{FEFF}', "");
+    cleaned
+        .lines()
+        .skip(1) // skip the header line ("Windows Subsystem for Linux Distributions:")
+        .filter_map(|line| {
+            let trimmed = line.trim().trim_start_matches('*').trim();
+            if trimmed.is_empty() {
+                return None;
+            }
+            // Strip "(Default)" or any other parenthetical suffix.
+            let name = trimmed.split('(').next().unwrap_or(trimmed).trim();
+            if name.is_empty() {
+                None
+            } else {
+                Some(name.to_string())
+            }
+        })
+        .collect()
 }
 
 fn parse_wsl_distro_exists(output: &str, distro: &str) -> bool {
@@ -373,8 +404,19 @@ fn resolve_wsl_distro() -> Option<String> {
             return Some(distro);
         }
     }
-    let distro = parse_wsl2_supported_distro(&distros.stdout, true)
-        .or_else(|| parse_wsl2_supported_distro(&distros.stdout, false));
+    // Use `--list --running` for locale-independent detection of running
+    // distros.  The `--list --verbose` state column is localized (e.g.
+    // German "Wird ausgeführt"), so matching the English word "Running"
+    // fails on non-English Windows.
+    let running_output =
+        run_capture_timeout("wsl.exe", &["--list", "--running"], Some(DETECT_TIMEOUT));
+    let running_names = if running_output.code == Some(0) {
+        parse_running_distro_names(&running_output.stdout)
+    } else {
+        Vec::new()
+    };
+    let distro = parse_wsl2_supported_distro(&distros.stdout, Some(&running_names))
+        .or_else(|| parse_wsl2_supported_distro(&distros.stdout, None));
     if let Some(distro) = distro.as_deref() {
         persist_wsl_distro(distro);
     }
