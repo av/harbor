@@ -13,7 +13,6 @@ export const Settings = () => {
   };
 
   return (
-    <>
       <Section
         header=""
         children={
@@ -126,6 +125,5 @@ export const Settings = () => {
           </div>
         }
       />
-    </>
   );
 };
