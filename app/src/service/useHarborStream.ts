@@ -50,6 +50,8 @@ export function useHarborStream(args: string[], options?: UseHarborStreamOptions
     const bufferVersionRef = useRef(0);
     const decoderRef = useRef(new TextDecoder());
     const cancelTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const onCompleteRef = useRef(options?.onComplete);
+    onCompleteRef.current = options?.onComplete;
 
     const stopCancelTimeout = useCallback(() => {
         if (cancelTimeoutRef.current !== null) {
@@ -77,8 +79,8 @@ export function useHarborStream(args: string[], options?: UseHarborStreamOptions
 
     const emitCompletion = useCallback((nextCompletion: HarborStreamCompletion) => {
         setCompletion(nextCompletion);
-        options?.onComplete?.(nextCompletion);
-    }, [options]);
+        onCompleteRef.current?.(nextCompletion);
+    }, []);
 
     const trimBuffers = useCallback(() => {
         if (chunkBufRef.current.length <= BUFFER_CAP) {
