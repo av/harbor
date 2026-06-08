@@ -204,10 +204,27 @@ fn run_capture_timeout(program: &str, args: &[&str], timeout: Option<Duration>) 
                             std::thread::sleep(Duration::from_millis(100));
                         }
                         Err(err) => {
+                            // try_wait failed at the OS level.  Kill and
+                            // reap the child so we don't leak it, then
+                            // join the reader threads to avoid dangling
+                            // background threads.
+                            let _ = child.kill();
+                            let _ = child.wait();
+                            let stdout = stdout_reader
+                                .and_then(|r| r.join().ok())
+                                .unwrap_or_default();
+                            let stderr = stderr_reader
+                                .and_then(|r| r.join().ok())
+                                .unwrap_or_default();
                             return ProcessOutput {
                                 code: Some(127),
-                                stdout: String::new(),
-                                stderr: err.to_string(),
+                                stdout,
+                                stderr: format!(
+                                    "{}{}{}",
+                                    err,
+                                    if stderr.is_empty() { "" } else { "\n" },
+                                    stderr,
+                                ),
                             };
                         }
                     }
@@ -641,6 +658,7 @@ fn run_logged(
         .unwrap_or(false)
     {
         let _ = child.kill();
+        let _ = child.wait();
         clear_running_state(state, true);
         emit_stage(app, "cancelled");
         return Err(format!("HARBOR_SETUP_STATUS=cancelled; {stage} cancelled"));
@@ -746,11 +764,21 @@ fn run_logged(
                     .unwrap_or(false)
                 {
                     let _ = child.kill();
+                    // Reap the child to prevent zombies.  After kill()
+                    // (SIGHUP on Unix, TerminateProcess on Windows) the
+                    // process should exit quickly.
+                    let _ = child.wait();
                     break Err(format!("{stage} timed out"));
                 }
                 std::thread::sleep(Duration::from_millis(250));
             }
-            Err(err) => break Err(err.to_string()),
+            Err(err) => {
+                // try_wait failed at the OS level.  Kill and reap so we
+                // don't leak a zombie or leave the process running.
+                let _ = child.kill();
+                let _ = child.wait();
+                break Err(err.to_string());
+            }
         }
     };
 

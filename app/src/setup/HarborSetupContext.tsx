@@ -123,9 +123,12 @@ export const HarborSetupProvider: FC<{ children: ReactNode }> = ({ children }) =
             }
             if (event.payload.detail.status === "ready") {
               setJustInstalled(true);
-            } else if (!event.payload.error) {
-              redetect();
             }
+            // Don't redetect here — the complete event already carries
+            // a fresh HarborSetupDetail from detect_harbor_status() on
+            // the Rust side.  Calling redetect() would flash a loading
+            // spinner for up to 60 seconds only to return the same
+            // status (e.g. "refresh-required") that we already have.
           },
         ),
       ]);
