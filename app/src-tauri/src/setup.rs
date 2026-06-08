@@ -85,13 +85,8 @@ struct ProcessOutput {
 
 // ── Platform utilities ─────────────────────────────────
 
-fn platform_name() -> String {
-    match std::env::consts::OS {
-        "macos" => "macos".into(),
-        "windows" => "windows".into(),
-        "linux" => "linux".into(),
-        other => other.into(),
-    }
+fn platform_name() -> &'static str {
+    std::env::consts::OS
 }
 
 fn shell_quote(value: &str) -> String {
@@ -493,7 +488,7 @@ fn emit_setup_failure(app: &AppHandle, status: &str, message: String) {
         SetupCompleteEvent {
             detail: HarborSetupDetail {
                 status: status.into(),
-                platform: platform_name(),
+                platform: platform_name().into(),
                 cli_version: None,
                 last_error: Some(message.clone()),
                 running: false,
@@ -974,12 +969,12 @@ fn detect_harbor_status() -> HarborSetupDetail {
     let platform = platform_name();
     let mut detail = HarborSetupDetail {
         status: "checking".into(),
-        platform: platform.clone(),
+        platform: platform.into(),
         cli_version: None,
         last_error: None,
         running: false,
     };
-    detect_harbor_status_core(&platform, &mut detail);
+    detect_harbor_status_core(platform, &mut detail);
     detail
 }
 
@@ -994,7 +989,7 @@ fn detect_harbor_setup_inner(state: &SetupState) -> HarborSetupDetail {
 
     let mut detail = HarborSetupDetail {
         status: "checking".into(),
-        platform: platform.clone(),
+        platform: platform.into(),
         cli_version: None,
         last_error: None,
         running,
@@ -1005,7 +1000,7 @@ fn detect_harbor_setup_inner(state: &SetupState) -> HarborSetupDetail {
         return detail;
     }
 
-    detect_harbor_status_core(&platform, &mut detail);
+    detect_harbor_status_core(platform, &mut detail);
     detail
 }
 
