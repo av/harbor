@@ -94,6 +94,12 @@ export const HarborSetupProvider: FC<{ children: ReactNode }> = ({ children }) =
           });
         }),
         listen<{ status: string }>("harbor-setup-status", (event) => {
+          // Ignore "ready" here — the complete event handles it.
+          // Processing "ready" in this listener would momentarily set
+          // detail.status="ready" + running=false before justInstalled
+          // is set by the complete handler, making the setup gate flash
+          // the main app for one render frame.
+          if (event.payload.status === "ready") return;
           const isTerminal = TERMINAL_STATUSES.has(event.payload.status);
           setDetail((prev) => ({
             ...(prev ?? DEFAULT_DETAIL),
@@ -117,7 +123,7 @@ export const HarborSetupProvider: FC<{ children: ReactNode }> = ({ children }) =
             }
             if (event.payload.detail.status === "ready") {
               setJustInstalled(true);
-            } else {
+            } else if (!event.payload.error) {
               redetect();
             }
           },
@@ -161,6 +167,7 @@ export const HarborSetupProvider: FC<{ children: ReactNode }> = ({ children }) =
       setDetail((prev) => ({
         ...(prev ?? DEFAULT_DETAIL),
         status: "failed",
+        running: false,
         lastError: rawMessage,
       }));
     }

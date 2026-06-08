@@ -357,7 +357,7 @@ fn resolve_wsl_distro() -> Option<String> {
         persist_wsl_distro(&distro);
         return Some(distro);
     }
-    let distros = run_capture_timeout("wsl.exe", &["--list", "--verbose"], None);
+    let distros = run_capture_timeout("wsl.exe", &["--list", "--verbose"], Some(DETECT_TIMEOUT));
     if distros.code != Some(0) {
         return None;
     }
@@ -1011,10 +1011,14 @@ pub fn start_harbor_setup(
     state: State<'_, SetupState>,
 ) -> Result<(), String> {
     {
-        let mut active = state
-            .setup_active
-            .lock()
-            .map_err(|e| format!("setup lock poisoned: {e}"))?;
+        let mut active = match state.setup_active.lock() {
+            Ok(guard) => guard,
+            // Recover from a mutex poisoned by a prior thread panic.
+            // The cleanup code resets the value, but if the panic
+            // occurred before cleanup ran, clear the poison here so
+            // the user can retry without restarting the app.
+            Err(e) => e.into_inner(),
+        };
         if *active {
             return Err("Harbor setup is already in progress.".into());
         }
@@ -1029,95 +1033,128 @@ pub fn start_harbor_setup(
     std::thread::spawn(move || {
         let state: State<'_, SetupState> = app.state();
 
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            if platform_name() == "windows" {
-                let distro = preferred_wsl_distro();
-                run_logged_shell(
-                    &app,
-                    &state,
-                    "installing-cli",
-                    &windows_install_script(distro.as_deref()),
-                    Some(Duration::from_secs(1800)),
-                )
-            } else {
-                run_logged_shell(
-                    &app,
-                    &state,
-                    "installing-cli",
-                    &install_script(),
-                    Some(Duration::from_secs(1800)),
-                )
+        // Wrap the entire body in catch_unwind so that setup_active is
+        // always released, even if detect_harbor_status() or emit() panic.
+        // Without this, an uncaught panic leaves setup_active=true
+        // permanently, making the "Install" button non-functional until
+        // the app is restarted.
+        let outer = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                if platform_name() == "windows" {
+                    let distro = preferred_wsl_distro();
+                    run_logged_shell(
+                        &app,
+                        &state,
+                        "installing-cli",
+                        &windows_install_script(distro.as_deref()),
+                        Some(Duration::from_secs(1800)),
+                    )
+                } else {
+                    run_logged_shell(
+                        &app,
+                        &state,
+                        "installing-cli",
+                        &install_script(),
+                        Some(Duration::from_secs(1800)),
+                    )
+                }
+            }));
+
+            // Emit the complete event BEFORE releasing setup_active, so that
+            // any concurrent redetect() still sees the process as running and
+            // doesn't report a stale intermediate state.
+            match result {
+                Ok(Ok(())) => {
+                    // Use detect_harbor_status() which skips the setup_active
+                    // check (still true at this point) and runs full detection.
+                    let detail = detect_harbor_status();
+                    emit_stage(&app, &detail.status);
+                    let _ = app.emit(
+                        "harbor-setup-complete",
+                        SetupCompleteEvent {
+                            detail,
+                            error: None,
+                        },
+                    );
+                }
+                Ok(Err(e)) => {
+                    let status_match = e
+                        .strip_prefix("HARBOR_SETUP_STATUS=")
+                        .and_then(|rest| rest.split_once(';').map(|(s, _)| s.to_string()));
+                    let status = status_match.unwrap_or_else(|| "failed".to_string());
+                    let message = if let Some(rest) =
+                        e.strip_prefix(&format!("HARBOR_SETUP_STATUS={status}; "))
+                    {
+                        rest.to_string()
+                    } else {
+                        e.clone()
+                    };
+                    emit_stage(&app, &status);
+                    let _ = app.emit(
+                        "harbor-setup-complete",
+                        SetupCompleteEvent {
+                            detail: HarborSetupDetail {
+                                status,
+                                platform: platform_name(),
+                                cli_version: None,
+                                last_error: Some(message.clone()),
+                                running: false,
+                            },
+                            error: Some(message),
+                        },
+                    );
+                }
+                Err(_panic) => {
+                    emit_stage(&app, "failed");
+                    let msg = "An unexpected internal error occurred during setup. Please try again, and if the problem persists, report it at github.com/av/harbor/issues".to_string();
+                    let _ = app.emit(
+                        "harbor-setup-complete",
+                        SetupCompleteEvent {
+                            detail: HarborSetupDetail {
+                                status: "failed".into(),
+                                platform: platform_name(),
+                                cli_version: None,
+                                last_error: Some(msg.clone()),
+                                running: false,
+                            },
+                            error: Some(msg),
+                        },
+                    );
+                }
             }
         }));
 
-        // Emit the complete event BEFORE releasing setup_active, so that
-        // any concurrent redetect() still sees the process as running and
-        // doesn't report a stale intermediate state.
-        match result {
-            Ok(Ok(())) => {
-                // Use detect_harbor_status() which skips the setup_active
-                // check (still true at this point) and runs full detection.
-                let detail = detect_harbor_status();
-                emit_stage(&app, &detail.status);
-                let _ = app.emit(
-                    "harbor-setup-complete",
-                    SetupCompleteEvent {
-                        detail,
-                        error: None,
+        // If the outer catch_unwind caught a panic (from detect_harbor_status
+        // or emit calls), try to emit a last-ditch failed event.
+        if outer.is_err() {
+            let msg = "An unexpected internal error occurred during setup. Please try again, and if the problem persists, report it at github.com/av/harbor/issues".to_string();
+            let _ = app.emit(
+                "harbor-setup-complete",
+                SetupCompleteEvent {
+                    detail: HarborSetupDetail {
+                        status: "failed".into(),
+                        platform: platform_name(),
+                        cli_version: None,
+                        last_error: Some(msg.clone()),
+                        running: false,
                     },
-                );
-            }
-            Ok(Err(e)) => {
-                let status_match = e
-                    .strip_prefix("HARBOR_SETUP_STATUS=")
-                    .and_then(|rest| rest.split_once(';').map(|(s, _)| s.to_string()));
-                let status = status_match.unwrap_or_else(|| "failed".to_string());
-                let message = if let Some(rest) =
-                    e.strip_prefix(&format!("HARBOR_SETUP_STATUS={status}; "))
-                {
-                    rest.to_string()
-                } else {
-                    e.clone()
-                };
-                emit_stage(&app, &status);
-                let _ = app.emit(
-                    "harbor-setup-complete",
-                    SetupCompleteEvent {
-                        detail: HarborSetupDetail {
-                            status,
-                            platform: platform_name(),
-                            cli_version: None,
-                            last_error: Some(message.clone()),
-                            running: false,
-                        },
-                        error: Some(message),
-                    },
-                );
-            }
-            Err(_panic) => {
-                emit_stage(&app, "failed");
-                let msg = "An unexpected internal error occurred during setup. Please try again, and if the problem persists, report it at github.com/av/harbor/issues".to_string();
-                let _ = app.emit(
-                    "harbor-setup-complete",
-                    SetupCompleteEvent {
-                        detail: HarborSetupDetail {
-                            status: "failed".into(),
-                            platform: platform_name(),
-                            cli_version: None,
-                            last_error: Some(msg.clone()),
-                            running: false,
-                        },
-                        error: Some(msg),
-                    },
-                );
-            }
+                    error: Some(msg),
+                },
+            );
         }
 
         // Release the lock after emitting complete event.
         // The guard must be dropped before `state` (which borrows `app`).
+        // This runs unconditionally — even after panics — because the
+        // outer catch_unwind prevents unwinding past this point.
         let _ = match state.setup_active.lock() {
             Ok(mut active) => { *active = false; }
-            Err(_) => {}
+            Err(e) => {
+                // Mutex was poisoned by a prior panic. Clear the poison
+                // and release the lock so setup can be retried.
+                let mut active = e.into_inner();
+                *active = false;
+            }
         };
     });
 
