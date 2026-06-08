@@ -331,11 +331,18 @@ fn persist_wsl_distro(distro: &str) {
 /// Ubuntu is preferred because install.ps1 installs it by default.
 const WSL_DISTRO_PREFIXES: &[&str] = &["Ubuntu", "Debian", "Fedora", "openSUSE", "Kali", "Arch"];
 
+/// Strip null bytes and BOM from `wsl.exe` output.  WSL emits UTF-16LE
+/// with a BOM, which after lossy UTF-8 conversion leaves stray `\0` and
+/// `\u{FEFF}` characters that break line parsing.
+fn clean_wsl_output(output: &str) -> String {
+    output.replace('\0', "").replace('\u{FEFF}', "")
+}
+
 fn parse_wsl2_supported_distro(
     output: &str,
     running_names: Option<&[String]>,
 ) -> Option<String> {
-    let cleaned = output.replace('\0', "").replace('\u{FEFF}', "");
+    let cleaned = clean_wsl_output(output);
     for prefix in WSL_DISTRO_PREFIXES {
         for line in cleaned.lines() {
             let parts = line.split_whitespace().collect::<Vec<_>>();
@@ -373,7 +380,7 @@ fn parse_wsl2_supported_distro(
 /// The `--list` (non-verbose) format may include a "(Default)" suffix
 /// after the name, so we strip everything from the first `(` onward.
 fn parse_running_distro_names(output: &str) -> Vec<String> {
-    let cleaned = output.replace('\0', "").replace('\u{FEFF}', "");
+    let cleaned = clean_wsl_output(output);
     cleaned
         .lines()
         .skip(1) // skip the header line ("Windows Subsystem for Linux Distributions:")
@@ -394,7 +401,7 @@ fn parse_running_distro_names(output: &str) -> Vec<String> {
 }
 
 fn parse_wsl_distro_exists(output: &str, distro: &str) -> bool {
-    output.replace('\0', "").replace('\u{FEFF}', "").lines().any(|line| {
+    clean_wsl_output(output).lines().any(|line| {
         let parts = line.split_whitespace().collect::<Vec<_>>();
         if parts.is_empty() {
             return false;
