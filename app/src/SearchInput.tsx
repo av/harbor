@@ -1,15 +1,10 @@
 import { HTMLAttributes, useRef } from 'react';
-import { KEY_CODES, KeyMatch, useGlobalKeydown } from './useGlobalKeydown';
-
-const searchShortcut: KeyMatch = {
-  key: KEY_CODES.F,
-  ctrlKey: true,
-};
+import { Shortcuts, useGlobalKeydown } from './useGlobalKeydown';
 
 export const SearchInput = ({ ...rest }: HTMLAttributes<HTMLInputElement>) => {
   const inputRef = useRef<HTMLInputElement>(null);
 
-  useGlobalKeydown(searchShortcut, (e) => {
+  useGlobalKeydown(Shortcuts.find, (e) => {
     e.preventDefault();
     inputRef.current?.focus();
   })
