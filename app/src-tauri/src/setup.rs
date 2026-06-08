@@ -78,11 +78,9 @@ struct SetupCompleteEvent {
     error: Option<String>,
 }
 
-#[allow(dead_code)]
 struct ProcessOutput {
     code: Option<i32>,
     stdout: String,
-    stderr: String,
 }
 
 /// Structured error from `run_logged` / `run_logged_shell`.
@@ -105,6 +103,7 @@ impl SetupError {
 
 /// Shared mutable state threaded through `emit_process_line` /
 /// `emit_process_chunk` during a PTY read loop.
+#[derive(Clone)]
 struct ProcessLineState {
     marker: Arc<Mutex<Option<String>>>,
     current_stage: Arc<Mutex<Option<String>>>,
@@ -202,61 +201,46 @@ fn run_capture_timeout(program: &str, args: &[&str], timeout: Duration) -> Proce
             loop {
                 match child.try_wait() {
                     Ok(Some(status)) => {
-                        let (stdout, stderr) =
+                        let (stdout, _stderr) =
                             collect_readers(stdout_reader, stderr_reader);
                         return ProcessOutput {
                             code: status.code(),
                             stdout,
-                            stderr,
                         };
                     }
                     Ok(None) => {
                         if started.elapsed() > timeout {
                             let _ = child.kill();
                             let _ = child.wait();
-                            let (stdout, stderr) =
+                            let (stdout, _stderr) =
                                 collect_readers(stdout_reader, stderr_reader);
                             return ProcessOutput {
                                 code: Some(124),
                                 stdout,
-                                stderr: format!(
-                                    "{}{}{} timed out after {}s",
-                                    stderr,
-                                    if stderr.is_empty() { "" } else { "\n" },
-                                    program,
-                                    timeout.as_secs()
-                                ),
                             };
                         }
                         std::thread::sleep(Duration::from_millis(100));
                     }
-                    Err(err) => {
+                    Err(_) => {
                         // try_wait failed at the OS level.  Kill and
                         // reap the child so we don't leak it, then
                         // join the reader threads to avoid dangling
                         // background threads.
                         let _ = child.kill();
                         let _ = child.wait();
-                        let (stdout, stderr) =
+                        let (stdout, _stderr) =
                             collect_readers(stdout_reader, stderr_reader);
                         return ProcessOutput {
                             code: Some(127),
                             stdout,
-                            stderr: format!(
-                                "{}{}{}",
-                                err,
-                                if stderr.is_empty() { "" } else { "\n" },
-                                stderr,
-                            ),
                         };
                     }
                 }
             }
         }
-        Err(err) => ProcessOutput {
+        Err(_) => ProcessOutput {
             code: Some(127),
             stdout: String::new(),
-            stderr: err.to_string(),
         },
     }
 }
@@ -705,11 +689,7 @@ fn run_logged(
     };
     let reader_app = app.clone();
     let reader_stage = stage.to_string();
-    let reader_pls = ProcessLineState {
-        marker: pls.marker.clone(),
-        current_stage: pls.current_stage.clone(),
-        last_line: pls.last_line.clone(),
-    };
+    let reader_pls = pls.clone();
     let reader_thread = std::thread::spawn(move || {
         let mut buffer = [0_u8; 4096];
         let mut line_buffer = String::new();

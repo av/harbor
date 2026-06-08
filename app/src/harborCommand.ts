@@ -6,7 +6,7 @@ export function shellQuote(value: string) {
     return `'${value.replace(/'/g, "'\\''")}'`;
 }
 
-export function buildWindowsHarborCommand(args: string[]) {
+function buildHarborShellCommand(args: string[]) {
     return ["harbor", ...args.map(shellQuote)].join(" ");
 }
 
@@ -26,7 +26,7 @@ export function buildNativeHarborCommand(args: string[]) {
     return [
         `export PATH="${pathPrefix}:$PATH"`,
         `if ! command -v harbor >/dev/null 2>&1 && test -x "${harborSh}"; then function harbor() { "${harborSh}" "$@"; }; fi`,
-        buildWindowsHarborCommand(args),
+        buildHarborShellCommand(args),
     ].join("; ");
 }
 
@@ -61,5 +61,5 @@ export async function buildWindowsWslArgs(commandArgs: string[]) {
 }
 
 export async function buildWindowsWslHarborArgs(args: string[]) {
-    return buildWindowsWslArgs(["bash", "-lic", buildWindowsHarborCommand(args)]);
+    return buildWindowsWslArgs(["bash", "-lic", buildHarborShellCommand(args)]);
 }
