@@ -14,7 +14,8 @@ const DOCS_URL = "https://github.com/av/harbor";
 
 const SETUP_STEPS = [
   { key: "checking-platform", label: "Check" },
-  { key: "installing-prerequisites", label: "Prerequisites" },
+  { key: "checking-prerequisites", label: "Prerequisites" },
+  { key: "installing-prerequisites", label: "Install deps" },
   { key: "installing-cli", label: "Install CLI" },
   { key: "linking-cli", label: "Link CLI" },
   { key: "verifying-cli", label: "Verify" },
@@ -292,8 +293,10 @@ export const HarborSetupGate: FC<{ children: ReactNode }> = ({ children }) => {
                 const labels: Record<string, string> = {
                   starting: "Starting installation",
                   "checking-platform": "Checking platform",
+                  "checking-prerequisites": "Checking prerequisites",
                   "installing-prerequisites": "Installing prerequisites",
                   "installing-cli": "Installing Harbor CLI",
+                  "linking-cli": "Linking CLI to PATH",
                   "verifying-cli": "Verifying installation",
                   ready: "Ready",
                   blocked: "Blocked",

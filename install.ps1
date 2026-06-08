@@ -158,10 +158,13 @@ function Install-DockerDesktop {
   if (Get-Command winget -ErrorAction SilentlyContinue) {
     Write-Output "Installing Docker Desktop with winget."
     & winget install --exact --id Docker.DockerDesktop --accept-package-agreements --accept-source-agreements
-    if ($LASTEXITCODE -ne 0) {
-      throw "winget failed to install Docker Desktop with code $LASTEXITCODE"
+    if ($LASTEXITCODE -eq 0) {
+      return
     }
-    return
+    # winget failed — fall back to direct download.  This can happen when
+    # winget is present but misconfigured (broken source, network proxy
+    # blocking the msstore, expired agreements, etc.).
+    Write-Output "WARNING: winget install failed (exit code $LASTEXITCODE). Falling back to direct download."
   }
 
   Write-Output "Installing Docker Desktop with the official Docker Desktop installer."
@@ -273,7 +276,16 @@ $distros = Normalize-WslOutput ((& wsl.exe --list --verbose) -join "`n")
 # output is just names, no state column).  Used below to prefer a running
 # WSL2 distro over a stopped one without relying on the English word
 # "Running" in the --list --verbose output.
-$runningDistros = Normalize-WslOutput ((& wsl.exe --list --running) -join "`n")
+# wsl.exe --list --running exits non-zero when no distros are running,
+# potentially writing an error message to stdout (locale-dependent).
+# Capture $LASTEXITCODE so we can discard the output when the command fails,
+# avoiding false-positive distro name matches against the error text.
+$runningRaw = (& wsl.exe --list --running) -join "`n"
+if ($LASTEXITCODE -eq 0) {
+  $runningDistros = Normalize-WslOutput $runningRaw
+} else {
+  $runningDistros = ""
+}
 if ([string]::IsNullOrWhiteSpace($Distro)) {
   # Try each supported distro prefix in preference order,
   # preferring a running WSL2 distro over a stopped one.
@@ -337,10 +349,30 @@ if ($distros -match "(?m)^\s*\*?\s*$([regex]::Escape($Distro))\s+.+\s+1\s*$") {
 }
 
 try {
-  Invoke-Wsl @("-d", $Distro, "-e", "bash", "-lic", "uname -s && command -v bash && command -v curl")
+  # Use Start-Job with a timeout to prevent hanging on broken/unresponsive
+  # WSL distros (e.g., filesystem corruption, hung systemd init, interactive
+  # first-run setup prompts).  Without a timeout, this blocks the entire
+  # install for up to 30 minutes (the Tauri run_logged timeout).
+  $healthJob = Start-Job -ScriptBlock {
+    param($d)
+    & wsl.exe -d $d -e bash -lic "uname -s && command -v bash && command -v curl" *> $null
+    $LASTEXITCODE
+  } -ArgumentList $Distro
+  $healthCompleted = Wait-Job $healthJob -Timeout 30
+  if ($null -eq $healthCompleted) {
+    Stop-Job $healthJob
+    Remove-Job $healthJob -Force
+    throw "WSL distro '$Distro' did not respond within 30 seconds"
+  }
+  $healthOutput = Receive-Job $healthJob
+  Remove-Job $healthJob -Force
+  if ($healthOutput -is [array]) { $healthOutput = $healthOutput[-1] }
+  if ($healthOutput -ne 0) {
+    throw "WSL distro '$Distro' health check failed (exit code $healthOutput)"
+  }
 } catch {
   Write-SetupStage "blocked"
-  throw "WSL distro '$Distro' cannot run basic commands (bash, curl). Complete the distro first-run setup, then retry."
+  throw "WSL distro '$Distro' cannot run basic commands (bash, curl). The distro may need a first-run setup (username/password creation) or may be corrupted. Run 'wsl -d $Distro' in a terminal to check, then retry."
 }
 
 Write-SetupStage "checking-prerequisites"
@@ -355,7 +387,7 @@ if (-not (Test-DockerDesktopInstalled)) {
 Start-DockerDesktop
 if (-not (Wait-WslDockerReady $Distro)) {
   Write-SetupStage "blocked"
-  throw "Docker Desktop did not become reachable inside WSL distro '$Distro'. Start Docker Desktop and enable WSL integration for this distro, then retry."
+  throw "Docker Desktop did not become reachable inside WSL distro '$Distro' within 3 minutes. Possible causes: (1) Docker Desktop requires accepting the EULA/subscription agreement on first launch, (2) WSL integration is not enabled for '$Distro' in Docker Desktop Settings > Resources > WSL Integration, (3) Docker Desktop failed to start. Open Docker Desktop manually, complete any first-run prompts, then retry."
 }
 
 Write-SetupStage "installing-cli"
