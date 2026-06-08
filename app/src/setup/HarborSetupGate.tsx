@@ -16,6 +16,7 @@ const SETUP_STEPS = [
   { key: "checking-platform", label: "Check" },
   { key: "installing-prerequisites", label: "Prerequisites" },
   { key: "installing-cli", label: "Install CLI" },
+  { key: "linking-cli", label: "Link CLI" },
   { key: "verifying-cli", label: "Verify" },
 ] as const;
 

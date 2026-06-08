@@ -3639,7 +3639,13 @@ link_cli() {
     if echo "$PATH" | tr ':' '\n' | grep -qxF "$target_dir"; then
         path_in_runtime=true
     fi
-    if [ -n "$shell_profile" ] && [ -f "$shell_profile" ] && grep -qF "$target_dir" "$shell_profile"; then
+    # Match the exact line that link_cli writes, not just a substring of
+    # target_dir anywhere in the profile.  A bare substring match would
+    # false-positive on comments or longer paths that contain target_dir
+    # (e.g., "/home/user/.local/bin/tools" matches "/home/user/.local/bin").
+    local path_export_line
+    path_export_line=$(printf 'export PATH="$PATH:%s"' "$target_dir")
+    if [ -n "$shell_profile" ] && [ -f "$shell_profile" ] && grep -qxF "$path_export_line" "$shell_profile"; then
         path_in_profile=true
     fi
     if [ -n "$shell_profile" ] && [ "$path_in_profile" = false ]; then
@@ -4872,20 +4878,36 @@ _uninstall_completions() {
         log_info "Removed zsh completions: $zsh_comp"
         cleaned=true
     fi
-    # Clean up fpath entry from zshrc
+    # Clean up fpath entry from zshrc.
+    # link_cli/_install_completions appends two consecutive lines:
+    #   fpath=(<comp_dir> $fpath)
+    #   autoload -Uz compinit && compinit
+    # Remove only the compinit line that immediately follows the fpath line
+    # Harbor added — never remove a standalone compinit line that the user
+    # had in their config before Harbor was installed.
     local zshrc="$HOME/.zshrc"
     local zsh_comp_dir="$HOME/.local/share/zsh/site-functions"
     if [[ -f "$zshrc" ]] && grep -qF "$zsh_comp_dir" "$zshrc"; then
         local temp_file
         temp_file=$(mktemp)
-        grep -vF "$zsh_comp_dir" "$zshrc" > "$temp_file" || true
-        # Also remove the compinit line that immediately followed the fpath line
-        grep -v '^autoload -Uz compinit && compinit$' "$temp_file" > "${temp_file}.2" || true
+        # Use awk to remove the fpath line and ONLY a compinit line that
+        # immediately follows it (skip=1 means "skip the next line if it
+        # matches the compinit pattern").
+        awk -v dir="$zsh_comp_dir" '
+            index($0, dir) {
+                skip = 1
+                next
+            }
+            skip && /^autoload -Uz compinit && compinit$/ {
+                skip = 0
+                next
+            }
+            { skip = 0; print }
+        ' "$zshrc" > "$temp_file" || true
         local orig_perms
         orig_perms=$(stat -c '%a' "$zshrc" 2>/dev/null || stat -f '%Lp' "$zshrc" 2>/dev/null) && \
-            chmod "$orig_perms" "${temp_file}.2" 2>/dev/null || true
-        mv "${temp_file}.2" "$zshrc"
-        rm -f "$temp_file"
+            chmod "$orig_perms" "$temp_file" 2>/dev/null || true
+        mv "$temp_file" "$zshrc"
         log_info "Removed fpath entry from $zshrc"
     fi
 

@@ -510,7 +510,14 @@ main() {
   fi
 
   ./harbor.sh -v
-  ./harbor.sh ln
+
+  setup_stage "linking-cli"
+  if ! ./harbor.sh ln; then
+    echo "Warning: CLI linking failed. Harbor is installed but may not be in your PATH."
+    echo "You can link manually later with: $HARBOR_INSTALL_PATH/harbor.sh ln"
+    # Continue to doctor — the install itself succeeded, only the symlink failed.
+    # Doctor will report the missing link and the user can fix it.
+  fi
 
   echo ""
   setup_stage "verifying-cli"
