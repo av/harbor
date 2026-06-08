@@ -2,9 +2,8 @@ import { Dispatch, useCallback } from 'react';
 import { useSharedState } from './useSharedState';
 import * as localStorage from './localStorage';
 
-export const STORED_STATE_PREFIX = 'storedState:';
-export const getStoredKey = (key: string): string => `${STORED_STATE_PREFIX}${key}`;
-export const hasKey = (key: string): boolean => localStorage.hasKey(getStoredKey(key));
+const STORED_STATE_PREFIX = 'storedState:';
+const getStoredKey = (key: string): string => `${STORED_STATE_PREFIX}${key}`;
 
 
 export const useStoredState = <T extends unknown>(
