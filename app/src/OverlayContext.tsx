@@ -21,16 +21,12 @@ export const OverlayProvider = ({ children }: { children: ReactNode }) => {
     const overlays = useArrayState(useState<Array<Overlay>>([]));
     const value = useMemo<OverlayContextProps>(
         () => ({
-            open: (overlay: Overlay) => {
-                overlays.push(overlay);
-            },
-            close: () => {
-                overlays.pop();
-            },
+            open: overlays.push,
+            close: overlays.pop,
             opened: overlays.items.length,
-            closeAll: () => overlays.clear(),
+            closeAll: overlays.clear,
         }),
-        [overlays],
+        [overlays.items.length, overlays.push, overlays.pop, overlays.clear],
     );
 
     return (
