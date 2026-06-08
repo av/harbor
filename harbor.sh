@@ -5480,6 +5480,11 @@ merge_env_files() {
         sed -i -e :a -e '/^\n*$/{$d;N;ba' -e '}' "$temp_file"  # harbor-lint disable=HARBOR002
     fi
 
+    # Preserve original file permissions before replacing
+    local orig_perms
+    orig_perms=$(stat -c '%a' "$target_file" 2>/dev/null || stat -f '%Lp' "$target_file" 2>/dev/null) && \
+        chmod "$orig_perms" "$temp_file" 2>/dev/null || true
+
     # Move the temporary file to replace the target file
     mv "$temp_file" "$target_file" || {
         log_error "Failed to write merged config to $target_file"
@@ -5908,6 +5913,11 @@ env_manager() {
                 log_error "Failed to build updated config file."
                 return 1
             }
+            # Preserve original file permissions (mktemp creates 0600,
+            # which would silently change override.env files from 0644)
+            local orig_perms
+            orig_perms=$(stat -c '%a' "$env_file" 2>/dev/null || stat -f '%Lp' "$env_file" 2>/dev/null) && \
+                chmod "$orig_perms" "$tmp_set" 2>/dev/null || true
             mv "$tmp_set" "$env_file" || {
                 rm -f "$tmp_set"
                 log_error "Failed to write updated config to $env_file"
@@ -5959,6 +5969,10 @@ env_manager() {
                 log_error "Failed to build updated config file."
                 return 1
             }
+            # Preserve original file permissions (same rationale as 'set')
+            local orig_perms
+            orig_perms=$(stat -c '%a' "$env_file" 2>/dev/null || stat -f '%Lp' "$env_file" 2>/dev/null) && \
+                chmod "$orig_perms" "$tmp_unset" 2>/dev/null || true
             mv "$tmp_unset" "$env_file" || {
                 rm -f "$tmp_unset"
                 log_error "Failed to write updated config to $env_file"
@@ -6424,23 +6438,38 @@ override_yaml_value() {
     local file="$1"
     local key="$2"
     local new_value="$3"
-    local temp_file="$(mktemp -t harbor.XXXXXX)"
 
     if [ -z "$file" ] || [ -z "$key" ] || [ -z "$new_value" ]; then
         echo "Usage: override_yaml_value <file_path> <key> <new_value>"
         return 1
     fi
 
-    awk -v key="$key" -v value="$new_value" '
+    local temp_file
+    temp_file=$(mktemp -t harbor.XXXXXX) || {
+        log_error "Failed to create temporary file."
+        return 1
+    }
+
+    if ! awk -v key="$key" -v value="$new_value" '
     $0 ~ key {
         sub(/:[[:space:]]*.*/, ": " value)
     }
     {print}
-    ' "$file" >"$temp_file" && mv "$temp_file" "$file"
+    ' "$file" >"$temp_file"; then
+        rm -f "$temp_file"
+        log_error "Failed to update '$key' in $file"
+        return 1
+    fi
 
-    if [ $? -eq 0 ]; then
+    # Preserve original file permissions
+    local orig_perms
+    orig_perms=$(stat -c '%a' "$file" 2>/dev/null || stat -f '%Lp' "$file" 2>/dev/null) && \
+        chmod "$orig_perms" "$temp_file" 2>/dev/null || true
+
+    if mv "$temp_file" "$file"; then
         log_info "Successfully updated '$key' in $file"
     else
+        rm -f "$temp_file"
         log_error "Failed to update '$key' in $file"
         return 1
     fi
@@ -6979,23 +7008,27 @@ harbor_profile_merge() {
         log_error "Failed to create temporary file for merge."
         return 1
     }
-    trap 'rm -f "$tmp_env_merge" 2>/dev/null' RETURN
+    # Do NOT use a RETURN trap here: merge_env_files sets its own RETURN
+    # trap which clobbers the caller's, leaking $tmp_env_merge on failure.
+    # Use explicit cleanup on each error path instead.
 
     cp "$profile_file" "$tmp_env_merge"
     if ! merge_env_files "$default_current_env" "$tmp_env_merge"; then
+        rm -f "$tmp_env_merge" 2>/dev/null
         log_error "Failed to merge current config into profile."
         return 1
     fi
     if ! merge_env_files "$default_profile" "$tmp_env_merge"; then
+        rm -f "$tmp_env_merge" 2>/dev/null
         log_error "Failed to merge default profile."
         return 1
     fi
 
     cp "$tmp_env_merge" "$default_current_env" || {
+        rm -f "$tmp_env_merge" 2>/dev/null
         log_error "Failed to write merged config."
         return 1
     }
-    trap - RETURN
     rm -f "$tmp_env_merge" 2>/dev/null
     log_info "Profile '$profile_name' merged into current configuration."
 }
