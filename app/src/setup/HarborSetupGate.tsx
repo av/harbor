@@ -92,6 +92,8 @@ const statusLabels: Record<string, string> = {
   "not-installed": "Not installed",
 };
 
+const INSTALLABLE_STATUSES = new Set(["not-installed", "failed", "cancelled"]);
+
 const alertClass: Record<GuidanceLevel, string> = {
   warning: "alert-warning",
   info: "alert-info",
@@ -179,9 +181,7 @@ export const HarborSetupGate: FC<{ children: ReactNode }> = ({ children }) => {
   const canInstall =
     !setup.loading &&
     !setup.running &&
-    (status === "not-installed" ||
-      status === "failed" ||
-      status === "cancelled");
+    INSTALLABLE_STATUSES.has(status);
   const isIdle = !setup.running && !setup.terminalOutput;
   const guidance = stateGuidance[status];
 
