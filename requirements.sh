@@ -261,15 +261,17 @@ apt_install() {
     if [ "$need_engine" = true ] || [ "$need_compose" = true ]; then
         local compose_pkg="" docker_pkg=""
 
-        if apt-cache show docker-compose-v2 >/dev/null 2>&1; then
-            compose_pkg="docker-compose-v2"
-        elif apt-cache show docker-compose-plugin >/dev/null 2>&1; then
-            compose_pkg="docker-compose-plugin"
-        else
-            log_error "Neither 'docker-compose-v2' nor 'docker-compose-plugin' is available via apt repositories."
-            log_error "Enable the Docker repository: https://docs.docker.com/engine/install/"
-            log_error "Or install Docker Compose v2 manually."
-            return 1
+        if [ "$need_compose" = true ]; then
+            if apt-cache show docker-compose-v2 >/dev/null 2>&1; then
+                compose_pkg="docker-compose-v2"
+            elif apt-cache show docker-compose-plugin >/dev/null 2>&1; then
+                compose_pkg="docker-compose-plugin"
+            else
+                log_error "Neither 'docker-compose-v2' nor 'docker-compose-plugin' is available via apt repositories."
+                log_error "Enable the Docker repository: https://docs.docker.com/engine/install/"
+                log_error "Or install Docker Compose v2 manually."
+                return 1
+            fi
         fi
 
         if [ "$need_engine" = true ]; then
@@ -281,10 +283,14 @@ apt_install() {
                 docker_pkg="docker.io"
             fi
 
-            log_info "Installing Docker Engine and Docker Compose via apt (${docker_pkg}, ${compose_pkg})"
-            if ! run_privileged apt-get install -y "${docker_pkg}" "${compose_pkg}"; then
+            local apt_pkgs=("${docker_pkg}")
+            if [ -n "$compose_pkg" ]; then
+                apt_pkgs+=("${compose_pkg}")
+            fi
+            log_info "Installing Docker packages via apt: ${apt_pkgs[*]}"
+            if ! run_privileged apt-get install -y "${apt_pkgs[@]}"; then
                 log_error "Failed to install Docker packages via apt."
-                log_error "Try running 'sudo apt-get install -y ${docker_pkg} ${compose_pkg}' manually."
+                log_error "Try running 'sudo apt-get install -y ${apt_pkgs[*]}' manually."
                 log_error "If packages are missing, add the Docker repository: https://docs.docker.com/engine/install/"
                 return 1
             fi
@@ -399,10 +405,14 @@ dnf_install() {
                 return 1
             fi
 
-            log_info "Installing Docker Engine and Docker Compose via dnf (${docker_pkg}, ${compose_pkg})"
-            if ! run_privileged dnf install -y "${docker_pkg}" "${compose_pkg}"; then
+            local dnf_pkgs=("${docker_pkg}")
+            if [ -n "$compose_pkg" ]; then
+                dnf_pkgs+=("${compose_pkg}")
+            fi
+            log_info "Installing Docker packages via dnf: ${dnf_pkgs[*]}"
+            if ! run_privileged dnf install -y "${dnf_pkgs[@]}"; then
                 log_error "Failed to install Docker packages via dnf."
-                log_error "Try running 'sudo dnf install -y ${docker_pkg} ${compose_pkg}' manually."
+                log_error "Try running 'sudo dnf install -y ${dnf_pkgs[*]}' manually."
                 log_error "If packages are missing, add the Docker repository: $docker_url"
                 return 1
             fi
@@ -615,7 +625,7 @@ brew_install() {
     fi
 
     if ! docker compose version >/dev/null 2>&1; then
-        if ! docker info >/dev/null 2>&1; then
+        if ! _with_timeout 15 docker info >/dev/null 2>&1; then
             log_warn "Docker daemon is not running. Start Docker Desktop to enable Docker Compose."
         else
             log_warn "Docker Compose v2 not detected."
@@ -703,6 +713,17 @@ ensure_linux_docker_service() {
             log_warn "Docker service started but daemon did not become reachable within 30 seconds"
             return 1
         fi
+    else
+        # No init system (systemd/OpenRC) — common in Docker containers
+        # and CI environments. Docker may still be reachable via a mounted
+        # socket or already-running daemon. Check rather than assuming.
+        if _with_timeout 10 docker info >/dev/null 2>&1; then
+            return 0
+        fi
+        # Docker is not reachable and we have no way to start it
+        log_warn "No init system (systemd/OpenRC) detected and Docker daemon is not reachable."
+        log_warn "If running in a container, mount the Docker socket (-v /var/run/docker.sock:/var/run/docker.sock)."
+        return 1
     fi
 }
 
@@ -780,11 +801,23 @@ verify_docker_access() {
         add_group_cmd="groupadd docker"
         add_user_cmd="usermod -aG docker ${remediation_user}"
 
-        if ! getent group docker >/dev/null 2>&1; then
+        # getent may not be available on Alpine or other minimal systems;
+        # fall back to checking /etc/group directly.
+        _group_exists() {
+            if check_command getent; then
+                getent group "$1" >/dev/null 2>&1
+            elif [ -f /etc/group ]; then
+                grep -q "^$1:" /etc/group 2>/dev/null
+            else
+                return 1
+            fi
+        }
+
+        if ! _group_exists docker; then
             run_privileged groupadd docker >/dev/null 2>&1 || true
         fi
 
-        if getent group docker >/dev/null 2>&1; then
+        if _group_exists docker; then
             local add_ok=false
             if run_privileged usermod -aG docker "$remediation_user" >/dev/null 2>&1; then
                 add_ok=true
