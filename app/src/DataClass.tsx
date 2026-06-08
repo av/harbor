@@ -63,8 +63,10 @@ export class DataClass {
                                 const result = targetValue.apply(target, args);
 
                                 if (result instanceof Promise) {
-                                    return result.then(() => this.notifyChange())
-                                        .then(() => result);
+                                    return result.then((v: unknown) => {
+                                        this.notifyChange();
+                                        return v;
+                                    });
                                 }
 
                                 this.notifyChange();
