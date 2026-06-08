@@ -879,7 +879,10 @@ fn install_script() -> String {
     if let Ok(local) = std::env::var("HARBOR_APP_INSTALL_SCRIPT") {
         format!("bash {}", shell_quote(&local))
     } else {
-        format!("curl -fsSL {} | bash", shell_quote(HARBOR_INSTALL_URL))
+        format!(
+            "curl -fsSL --connect-timeout 15 --max-time 60 {} | bash",
+            shell_quote(HARBOR_INSTALL_URL)
+        )
     }
 }
 

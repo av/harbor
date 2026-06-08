@@ -64,7 +64,7 @@ function ConvertTo-BashSingleQuoted {
 
 function Get-HarborInstallCommand {
   if ([string]::IsNullOrWhiteSpace($InstallPath)) {
-    return "curl -fsSL '$InstallUrl' | bash"
+    return "curl -fsSL --connect-timeout 15 --max-time 60 '$InstallUrl' | bash"
   }
 
   $quotedPath = ConvertTo-BashSingleQuoted $InstallPath
@@ -391,10 +391,14 @@ if (-not (Wait-WslDockerReady $Distro)) {
 }
 
 Write-SetupStage "installing-cli"
+# install.sh emits its own HARBOR_SETUP_STAGE markers (checking-platform,
+# installing-prerequisites, installing-cli, linking-cli, verifying-cli, ready)
+# that flow through WSL stdout to the Tauri PTY reader.  On success it sets
+# "ready"; on failure it sets "blocked", "refresh-required", or "failed" and
+# exits non-zero (which Invoke-Wsl converts to a throw).
+# Do NOT re-run "harbor doctor" or re-emit "verifying-cli" here — that would
+# cause the step indicator to regress from "ready" back to "verify" briefly
+# and duplicate work that install.sh already completed.
 Invoke-Wsl @("-d", $Distro, "-e", "bash", "-lic", "$(Get-HarborInstallCommand)")
 
-Write-SetupStage "verifying-cli"
-Invoke-Wsl @("-d", $Distro, "-e", "bash", "-lic", "harbor --version && harbor doctor")
-
-Write-SetupStage "ready"
 Write-Output "Harbor CLI installed in WSL distro '$Distro'."
