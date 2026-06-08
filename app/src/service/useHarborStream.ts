@@ -116,30 +116,34 @@ export function useHarborStream(args: string[], options?: UseHarborStreamOptions
         }
     }, []);
 
+    const finalizeCancellation = useCallback((generation: number) => {
+        if (generationRef.current !== generation) return;
+        flushBuffers();
+        setError(null);
+        emitCompletion({
+            status: "cancelled",
+            exitCode: null,
+            error: null,
+        });
+        setIsStreaming(false);
+    }, [emitCompletion, flushBuffers]);
+
     const stopStream = useCallback(async () => {
         const pty = ptyRef.current;
+        const generation = ++generationRef.current;
+        stopCancelTimeout();
+        stopInterval();
 
         if (!pty) {
-            const generation = ++generationRef.current;
-            stopCancelTimeout();
-            stopInterval();
-            if (isStreaming && generationRef.current === generation) {
-                flushBuffers();
-                setError(null);
-                emitCompletion({
-                    status: "cancelled",
-                    exitCode: null,
-                    error: null,
-                });
+            if (isStreaming) {
+                finalizeCancellation(generation);
+            } else {
+                setIsStreaming(false);
             }
-            setIsStreaming(false);
             return;
         }
 
-        const generation = ++generationRef.current;
         ptyRef.current = null;
-        stopCancelTimeout();
-        stopInterval();
 
         try {
             pty.write("\x03");
@@ -151,17 +155,8 @@ export function useHarborStream(args: string[], options?: UseHarborStreamOptions
             killPty(pty);
         }, CANCEL_KILL_DELAY_MS);
 
-        if (generationRef.current !== generation) return;
-
-        flushBuffers();
-        setError(null);
-        emitCompletion({
-            status: "cancelled",
-            exitCode: null,
-            error: null,
-        });
-        setIsStreaming(false);
-    }, [emitCompletion, flushBuffers, isStreaming, killPty, stopCancelTimeout, stopInterval]);
+        finalizeCancellation(generation);
+    }, [finalizeCancellation, isStreaming, killPty, stopCancelTimeout, stopInterval]);
 
     const stop = useCallback(() => {
         void stopStream();
