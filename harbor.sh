@@ -6807,7 +6807,7 @@ download_profile() {
     mkdir -p "$profiles_dir"
 
     # Download the file
-    if curl -sL "$raw_url" -o "$profile_file"; then
+    if curl -sL --connect-timeout 15 --max-time 60 "$raw_url" -o "$profile_file"; then
         # Check if downloaded file is empty or contains error content
         if [ ! -s "$profile_file" ]; then
             log_error "Downloaded profile is empty"
@@ -7344,7 +7344,7 @@ unsafe_update() {
 
 resolve_harbor_version() {
     local response version
-    response=$(curl -fsSL "$harbor_release_url" 2>/dev/null) || {
+    response=$(curl -fsSL --connect-timeout 15 --max-time 30 "$harbor_release_url" 2>/dev/null) || {
         log_warn "Failed to fetch latest release info from $harbor_release_url" >&2
         return 1
     }

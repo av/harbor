@@ -43,7 +43,7 @@ setup_stage() {
 resolve_harbor_version() {
   local response version attempt
   for attempt in 1 2; do
-    response=$(curl -fsSL "$HARBOR_RELEASE_URL" 2>/dev/null) || {
+    response=$(curl -fsSL --connect-timeout 15 --max-time 30 "$HARBOR_RELEASE_URL" 2>/dev/null) || {
       if [ "$attempt" -eq 1 ]; then
         sleep 2
         continue
@@ -268,12 +268,24 @@ install_or_update_project() {
       if ! git diff --quiet -- 'services/*/override.env' 2>/dev/null; then
         git stash push --quiet -- 'services/*/override.env' 2>/dev/null && had_stash=true
       fi
-      if ! git fetch --depth 1 origin "+refs/tags/$HARBOR_VERSION:refs/tags/$HARBOR_VERSION" || \
-         ! git checkout "tags/$HARBOR_VERSION"; then
+      # Try tag first, then branch — --version accepts both (e.g. v0.4.19 or main)
+      local fetch_ok=false checkout_ref=""
+      if git fetch --depth 1 origin "+refs/tags/$HARBOR_VERSION:refs/tags/$HARBOR_VERSION" 2>/dev/null; then
+        fetch_ok=true
+        checkout_ref="tags/$HARBOR_VERSION"
+      elif git fetch --depth 1 origin "+refs/heads/$HARBOR_VERSION:refs/remotes/origin/$HARBOR_VERSION" 2>/dev/null; then
+        fetch_ok=true
+        checkout_ref="origin/$HARBOR_VERSION"
+      fi
+      if [ "$fetch_ok" = false ] || ! git checkout "$checkout_ref"; then
         if [ "$had_stash" = true ]; then
           git stash pop --quiet 2>/dev/null || true
         fi
-        echo "Error: Failed to update to version $HARBOR_VERSION." >&2
+        echo "Error: Failed to update to version '$HARBOR_VERSION'." >&2
+        echo "Possible causes:" >&2
+        echo "  - '$HARBOR_VERSION' is not a valid tag or branch name" >&2
+        echo "  - Network error prevented fetching from the remote" >&2
+        echo "  Check available versions: https://github.com/av/harbor/releases" >&2
         echo "Your override.env customizations have been restored." >&2
         exit 1
       fi
@@ -396,7 +408,7 @@ main() {
         exit 1
       fi
     else
-      if ! (set -o pipefail; curl -fsSL "$HARBOR_REQUIREMENTS_URL" | bash); then
+      if ! (set -o pipefail; curl -fsSL --connect-timeout 15 --max-time 300 "$HARBOR_REQUIREMENTS_URL" | bash); then
         echo "Error: Requirements installer failed." >&2
         echo "Review the error messages above for details." >&2
         echo "If the download failed, check your internet connection." >&2

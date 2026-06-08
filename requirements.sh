@@ -370,34 +370,21 @@ dnf_install() {
     fi
 
     if [ "$need_engine" = true ] || [ "$need_compose" = true ]; then
-        local compose_pkg="" docker_pkg=""
-
-        if [ "$need_compose" = true ]; then
-            if rpm -q docker-compose-plugin >/dev/null 2>&1; then
-                compose_pkg="docker-compose-plugin"
-            elif dnf list --available docker-compose-plugin 2>/dev/null | grep -q docker-compose-plugin; then
-                compose_pkg="docker-compose-plugin"
-            elif dnf list --available docker-compose 2>/dev/null | grep -q docker-compose; then
-                compose_pkg="docker-compose"
-            else
-                log_error "Neither 'docker-compose-plugin' nor 'docker-compose' is available via dnf."
-                log_error "Enable the Docker repository: $docker_url"
-                log_error "Or install Docker Compose v2 manually."
-                return 1
-            fi
-        fi
+        local docker_pkg=""
 
         if [ "$need_engine" = true ]; then
             # Check already-installed packages first (rpm -q), then fall back
             # to --available. dnf list --available excludes installed packages,
             # so relying on it alone misses an already-installed docker-ce.
+            # Anchor grep to "^pkg." to avoid false positives on dnf5 where
+            # advisory or suggestion text can contain the package name.
             if rpm -q docker-ce >/dev/null 2>&1; then
                 docker_pkg="docker-ce"
-            elif dnf list --available docker-ce 2>/dev/null | grep -q docker-ce; then
+            elif dnf list --available docker-ce 2>/dev/null | grep -q '^docker-ce\.'; then
                 docker_pkg="docker-ce"
             elif rpm -q moby-engine >/dev/null 2>&1; then
                 docker_pkg="moby-engine"
-            elif dnf list --available moby-engine 2>/dev/null | grep -q moby-engine; then
+            elif dnf list --available moby-engine 2>/dev/null | grep -q '^moby-engine\.'; then
                 docker_pkg="moby-engine"
             else
                 log_error "Neither 'docker-ce' nor 'moby-engine' is available via dnf."
@@ -405,18 +392,37 @@ dnf_install() {
                 return 1
             fi
 
-            local dnf_pkgs=("${docker_pkg}")
-            if [ -n "$compose_pkg" ]; then
-                dnf_pkgs+=("${compose_pkg}")
-            fi
-            log_info "Installing Docker packages via dnf: ${dnf_pkgs[*]}"
-            if ! run_privileged dnf install -y "${dnf_pkgs[@]}"; then
-                log_error "Failed to install Docker packages via dnf."
-                log_error "Try running 'sudo dnf install -y ${dnf_pkgs[*]}' manually."
+            log_info "Installing Docker Engine via dnf (${docker_pkg})"
+            if ! run_privileged dnf install -y "${docker_pkg}"; then
+                log_error "Failed to install ${docker_pkg} via dnf."
+                log_error "Try running 'sudo dnf install -y ${docker_pkg}' manually."
                 log_error "If packages are missing, add the Docker repository: $docker_url"
                 return 1
             fi
-        else
+
+            # Modern docker-ce bundles Compose v2 as a built-in subcommand.
+            # Re-check before trying to install a separate compose package.
+            if [ "$need_compose" = true ] && docker compose version >/dev/null 2>&1; then
+                log_info "Docker Compose v2 is bundled with ${docker_pkg}"
+                need_compose=false
+            fi
+        fi
+
+        if [ "$need_compose" = true ]; then
+            local compose_pkg=""
+            if rpm -q docker-compose-plugin >/dev/null 2>&1; then
+                compose_pkg="docker-compose-plugin"
+            elif dnf list --available docker-compose-plugin 2>/dev/null | grep -q '^docker-compose-plugin\.'; then
+                compose_pkg="docker-compose-plugin"
+            elif dnf list --available docker-compose 2>/dev/null | grep -q '^docker-compose\.'; then
+                compose_pkg="docker-compose"
+            else
+                log_error "Neither 'docker-compose-plugin' nor 'docker-compose' is available via dnf."
+                log_error "Enable the Docker repository: $docker_url"
+                log_error "Or install Docker Compose v2 manually."
+                return 1
+            fi
+
             log_info "Installing Docker Compose plugin via dnf (${compose_pkg})"
             if ! run_privileged dnf install -y "${compose_pkg}"; then
                 log_error "Failed to install ${compose_pkg} via dnf."
@@ -529,7 +535,7 @@ install_homebrew() {
     # Download the installer first so a silent curl failure (empty output)
     # does not silently succeed via `/bin/bash -c ""`.
     local homebrew_script
-    homebrew_script="$(curl -fsSL "$HOMEBREW_INSTALL_URL")" || {
+    homebrew_script="$(curl -fsSL --connect-timeout 15 --max-time 60 "$HOMEBREW_INSTALL_URL")" || {
         log_error "Failed to download Homebrew installer from $HOMEBREW_INSTALL_URL"
         return 1
     }
