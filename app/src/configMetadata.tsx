@@ -6,14 +6,6 @@ export type HarborProfile = {
     content: string;
 };
 
-export enum HarborConfigType {
-    string = "string",
-    number = "number",
-    boolean = "boolean",
-    array = "array",
-    dict = "dict",
-}
-
 export const CURRENT_PROFILE = "__current";
 export const DEFAULT_PROFILE = "default";
 

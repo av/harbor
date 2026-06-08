@@ -103,12 +103,6 @@ export const validate = <T,>(
     }
 };
 
-export const notEmpty = (value: string) => {
-    if (value.length === 0) {
-        return "The value should not be empty";
-    }
-};
-
 export type DebounceOptions = {
     leading?: boolean
     trailing?: boolean
