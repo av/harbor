@@ -24,6 +24,10 @@ set -e
 # ========================================
 
 HARBOR_INSTALL_PATH="${HARBOR_INSTALL_PATH:-${HOME}/.harbor}"
+# Strip trailing slash — a trailing slash causes the lock file path
+# ("$HARBOR_INSTALL_PATH.lock") to land inside the install directory,
+# where rm -rf during source-path install can delete the active lock.
+HARBOR_INSTALL_PATH="${HARBOR_INSTALL_PATH%/}"
 HARBOR_REPO_URL="${HARBOR_REPO_URL:-https://github.com/av/harbor.git}"
 HARBOR_RELEASE_URL="${HARBOR_RELEASE_URL:-https://api.github.com/repos/av/harbor/releases/latest}"
 HARBOR_REQUIREMENTS_URL="${HARBOR_REQUIREMENTS_URL:-https://raw.githubusercontent.com/av/harbor/refs/heads/main/requirements.sh}"
@@ -357,8 +361,12 @@ install_or_update_project() {
 }
 
 doctor_requires_refresh() {
+  # Match only Docker-specific permission messages from harbor doctor.
+  # IMPORTANT: do NOT use broad patterns like "permission denied" — that
+  # false-positives on SELinux guidance ("If containers report 'Permission
+  # denied'"), registry error messages, and other non-Docker-group output.
   printf '%s\n' "$1" | grep -qi \
-    "Docker requires sudo\|docker group\|newgrp docker\|re-login\|permission denied"
+    "Docker requires sudo\|'docker' group\|newgrp docker"
 }
 
 doctor_requires_blocked() {
@@ -454,6 +462,11 @@ main() {
     setup_stage "installing-prerequisites"
     echo "Installing requirements..."
     if [ -n "$HARBOR_REQUIREMENTS_PATH" ]; then
+      if [ ! -f "$HARBOR_REQUIREMENTS_PATH" ]; then
+        echo "Error: Requirements script not found: $HARBOR_REQUIREMENTS_PATH" >&2
+        echo "Verify the --requirements-path is correct. The file must exist and be readable." >&2
+        exit 1
+      fi
       if ! bash "$HARBOR_REQUIREMENTS_PATH"; then
         echo "Error: Requirements installer failed (script: $HARBOR_REQUIREMENTS_PATH)." >&2
         echo "Review the error messages above for details." >&2
@@ -506,10 +519,13 @@ main() {
   # (harbor update does this, but install.sh didn't — new keys were missing after upgrade)
   if [ -f "$HARBOR_INSTALL_PATH/.env" ] && [ -f "$HARBOR_INSTALL_PATH/profiles/default.env" ]; then
     echo "Merging configuration..."
-    ./harbor.sh config update
+    if ! ./harbor.sh config update; then
+      echo "Warning: Config merge failed. Your .env may be missing new default keys." >&2
+      echo "You can run 'harbor config update' manually after installation." >&2
+    fi
   fi
 
-  ./harbor.sh -v
+  ./harbor.sh -v || true
 
   setup_stage "linking-cli"
   if ! ./harbor.sh ln; then
