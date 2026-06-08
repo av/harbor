@@ -73,10 +73,9 @@ export const ServiceList = ({
       tagFilter.length === 0 ||
       service.tags.some((tag) => tagFilter.includes(tag));
 
-    const matchesSearch = [
-      serviceSearch.matches(service.name ?? service.handle),
-      serviceSearch.matches(service.tags.join(" ")),
-    ].some((match) => !!match);
+    const matchesSearch =
+      serviceSearch.matches(service.name ?? service.handle) ||
+      serviceSearch.matches(service.tags.join(" "));
 
     return matchesTags && matchesSearch;
   });

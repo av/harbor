@@ -47,6 +47,7 @@ export class DataClass {
 
     createProxy() {
         const mutableFields = new Set(this.getMutableFields());
+        const wrapperCache = new Map<string, (...args: unknown[]) => unknown>();
 
         return Proxy.revocable(this, {
             get: (target, prop) => {
@@ -56,17 +57,22 @@ export class DataClass {
                     const targetValue = target[targetProp];
 
                     if (typeof targetValue === "function") {
-                        return (...args: unknown[]) => {
-                            const result = targetValue.apply(target, args);
+                        let cached = wrapperCache.get(prop);
+                        if (!cached) {
+                            cached = (...args: unknown[]) => {
+                                const result = targetValue.apply(target, args);
 
-                            if (result instanceof Promise) {
-                                return result.then(() => this.notifyChange())
-                                    .then(() => result);
-                            }
+                                if (result instanceof Promise) {
+                                    return result.then(() => this.notifyChange())
+                                        .then(() => result);
+                                }
 
-                            this.notifyChange();
-                            return result;
-                        };
+                                this.notifyChange();
+                                return result;
+                            };
+                            wrapperCache.set(prop, cached);
+                        }
+                        return cached;
                     }
                 }
 
