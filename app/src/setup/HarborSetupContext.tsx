@@ -212,6 +212,7 @@ export const HarborSetupProvider: FC<{ children: ReactNode }> = ({ children }) =
       await invoke("write_harbor_setup_input", { data });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+      throw e;
     }
   }, []);
 

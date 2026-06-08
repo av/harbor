@@ -174,7 +174,8 @@ export const HarborSetupGate: FC<{ children: ReactNode }> = ({ children }) => {
       await setup.writeSetupInput(input + "\n");
       setInput("");
     } catch {
-      // Error surfaces through the context
+      // writeSetupInput already called setError; keep input so the user
+      // doesn't have to retype their password after a transient failure.
     }
   };
 
