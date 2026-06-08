@@ -56,22 +56,18 @@ export const useArrayState = <T>(
     }, []);
 
     const pop = useCallback(() => {
-        const item = itemsRef.current.pop();
-
-        if (item) {
-            setItems([...itemsRef.current]);
-        }
-
+        const { current } = itemsRef;
+        if (current.length === 0) return undefined;
+        const item = current[current.length - 1];
+        setItems(current.slice(0, -1));
         return item;
     }, []);
 
     const shift = useCallback(() => {
-        const item = itemsRef.current.shift();
-
-        if (item) {
-            setItems([...itemsRef.current]);
-        }
-
+        const { current } = itemsRef;
+        if (current.length === 0) return undefined;
+        const item = current[0];
+        setItems(current.slice(1));
         return item;
     }, []);
 
