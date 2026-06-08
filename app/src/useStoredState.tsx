@@ -1,4 +1,4 @@
-import { Dispatch } from 'react';
+import { Dispatch, useCallback } from 'react';
 import { useSharedState } from './useSharedState';
 import * as localStorage from './localStorage';
 
@@ -16,10 +16,10 @@ export const useStoredState = <T extends unknown>(
         () => localStorage.readLocalStorage(key, defaultValue),
     );
 
-    const setStoredState = (newState: T) => {
+    const setStoredState = useCallback((newState: T) => {
         localStorage.writeLocalStorage(key, newState);
         setState(newState);
-    };
+    }, [key, setState]);
 
     return [state, setStoredState];
 };
