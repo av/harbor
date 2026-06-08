@@ -14,15 +14,17 @@ export const useSearch = (id: string) => {
 
   const debouncedSetQuery = useDebounceCallback(setQueryQb, 350);
 
+  const matches = useCallback((str: string) => {
+    if (queryRef.current === '') {
+      return true;
+    }
+
+    return str.toLowerCase().includes(queryRef.current);
+  }, []);
+
   return {
     query,
     setQuery: debouncedSetQuery,
-    matches: (str: string) => {
-      if (queryRef.current === '') {
-        return true;
-      }
-
-      return str.toLowerCase().includes(queryRef.current);
-    }
+    matches,
   }
 }
