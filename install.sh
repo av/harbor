@@ -34,6 +34,11 @@ INSTALL_REQUIREMENTS=true
 
 # ========================================
 
+# Global state for EXIT trap cleanup — local variables in install_or_update_project
+# are not visible from the trap handler, so these track resources that need cleanup
+# on unexpected exit (SIGINT, SIGTERM, set -e failure).
+_BACKUP_DIR=""
+_HAD_STASH=false
 _LAST_SETUP_STAGE=""
 setup_stage() {
   _LAST_SETUP_STAGE="$1"
@@ -220,10 +225,9 @@ install_or_update_project() {
     esac
 
     echo "Installing from local source path: $HARBOR_INSTALL_SOURCE_PATH"
-    local backup_dir=""
     if [ -d "$HARBOR_INSTALL_PATH" ]; then
-      backup_dir=$(mktemp -d)
-      backup_user_configs "$backup_dir"
+      _BACKUP_DIR=$(mktemp -d)
+      backup_user_configs "$_BACKUP_DIR"
     fi
     rm -rf "$HARBOR_INSTALL_PATH"
     mkdir -p "$HARBOR_INSTALL_PATH"
@@ -236,19 +240,22 @@ install_or_update_project() {
         -cf - .
     ) | tar -C "$HARBOR_INSTALL_PATH" -xf -); then
       echo "Error: Failed to copy from source path: $HARBOR_INSTALL_SOURCE_PATH" >&2
-      if [ -n "$backup_dir" ]; then
+      if [ -n "$_BACKUP_DIR" ]; then
         echo "Attempting to restore your config backup..." >&2
-        if mkdir -p "$HARBOR_INSTALL_PATH" && cp -a "$backup_dir/." "$HARBOR_INSTALL_PATH/"; then
-          rm -rf "$backup_dir"
+        if mkdir -p "$HARBOR_INSTALL_PATH" && cp -a "$_BACKUP_DIR/." "$HARBOR_INSTALL_PATH/"; then
+          rm -rf "$_BACKUP_DIR"
+          _BACKUP_DIR=""
           echo "Config backup restored to $HARBOR_INSTALL_PATH" >&2
         else
-          echo "Restore failed. Your config backup is at: $backup_dir" >&2
+          echo "Restore failed. Your config backup is at: $_BACKUP_DIR" >&2
+          _BACKUP_DIR=""
         fi
       fi
       exit 1
     fi
-    if [ -n "$backup_dir" ]; then
-      restore_user_configs "$backup_dir"
+    if [ -n "$_BACKUP_DIR" ]; then
+      restore_user_configs "$_BACKUP_DIR"
+      _BACKUP_DIR=""
     fi
     cd "$HARBOR_INSTALL_PATH"
     return 0
@@ -263,10 +270,11 @@ install_or_update_project() {
       echo "Already on version $HARBOR_VERSION"
     else
       echo "Existing installation found. Updating to $HARBOR_VERSION..."
-      # Stash user-modified tracked files (override.env) so checkout succeeds
-      local had_stash=false
+      # Stash user-modified tracked files (override.env) so checkout succeeds.
+      # Uses global _HAD_STASH so the EXIT trap can restore on unexpected exit.
+      _HAD_STASH=false
       if ! git diff --quiet -- 'services/*/override.env' 2>/dev/null; then
-        git stash push --quiet -- 'services/*/override.env' 2>/dev/null && had_stash=true
+        git stash push --quiet -- 'services/*/override.env' 2>/dev/null && _HAD_STASH=true
       fi
       # Try tag first, then branch — --version accepts both (e.g. v0.4.19 or main)
       local fetch_ok=false checkout_ref=""
@@ -278,8 +286,9 @@ install_or_update_project() {
         checkout_ref="origin/$HARBOR_VERSION"
       fi
       if [ "$fetch_ok" = false ] || ! git checkout "$checkout_ref"; then
-        if [ "$had_stash" = true ]; then
+        if [ "$_HAD_STASH" = true ]; then
           git stash pop --quiet 2>/dev/null || true
+          _HAD_STASH=false
         fi
         echo "Error: Failed to update to version '$HARBOR_VERSION'." >&2
         echo "Possible causes:" >&2
@@ -289,19 +298,19 @@ install_or_update_project() {
         echo "Your override.env customizations have been restored." >&2
         exit 1
       fi
-      if [ "$had_stash" = true ]; then
+      if [ "$_HAD_STASH" = true ]; then
         git stash pop --quiet 2>/dev/null || {
           echo "Warning: Could not auto-restore override.env changes (merge conflict)."
           echo "Your overrides are saved in 'git stash'. Run 'cd $HARBOR_INSTALL_PATH && git stash pop' to recover."
         }
+        _HAD_STASH=false
       fi
     fi
   else
-    local backup_dir=""
     if [ -d "$HARBOR_INSTALL_PATH" ]; then
       echo "Existing non-git installation found. Re-cloning..."
-      backup_dir=$(mktemp -d)
-      backup_user_configs "$backup_dir"
+      _BACKUP_DIR=$(mktemp -d)
+      backup_user_configs "$_BACKUP_DIR"
       rm -rf "$HARBOR_INSTALL_PATH"
     fi
     echo "Cloning project repository..."
@@ -318,13 +327,15 @@ install_or_update_project() {
       fi
     done
     if [ "$clone_ok" = false ]; then
-      if [ -n "$backup_dir" ]; then
+      if [ -n "$_BACKUP_DIR" ]; then
         echo "Error: git clone failed after 2 attempts. Attempting to restore your config backup..." >&2
-        if mkdir -p "$HARBOR_INSTALL_PATH" && cp -a "$backup_dir/." "$HARBOR_INSTALL_PATH/"; then
-          rm -rf "$backup_dir"
+        if mkdir -p "$HARBOR_INSTALL_PATH" && cp -a "$_BACKUP_DIR/." "$HARBOR_INSTALL_PATH/"; then
+          rm -rf "$_BACKUP_DIR"
+          _BACKUP_DIR=""
           echo "Config backup restored to $HARBOR_INSTALL_PATH" >&2
         else
-          echo "Restore failed. Your config backup is at: $backup_dir" >&2
+          echo "Restore failed. Your config backup is at: $_BACKUP_DIR" >&2
+          _BACKUP_DIR=""
         fi
       else
         echo "Error: git clone failed after 2 attempts." >&2
@@ -337,8 +348,9 @@ install_or_update_project() {
       echo "Try: git clone $HARBOR_REPO_URL (to diagnose the issue manually)" >&2
       exit 1
     fi
-    if [ -n "$backup_dir" ]; then
-      restore_user_configs "$backup_dir"
+    if [ -n "$_BACKUP_DIR" ]; then
+      restore_user_configs "$_BACKUP_DIR"
+      _BACKUP_DIR=""
     fi
     cd "$HARBOR_INSTALL_PATH"
   fi
@@ -366,12 +378,34 @@ acquire_install_lock() {
     fi
   else
     # macOS fallback: mkdir is atomic
-    if ! mkdir "$HARBOR_LOCK_FILE.d" 2>/dev/null; then
-      echo "Error: Another Harbor install is already running."
-      echo "If this is incorrect, remove $HARBOR_LOCK_FILE.d and retry."
-      exit 1
+    local lock_dir="$HARBOR_LOCK_FILE.d"
+    if ! mkdir "$lock_dir" 2>/dev/null; then
+      # Check for stale lock: if the PID file exists and the process is dead,
+      # the lock was left behind by a killed install (e.g. SIGKILL).
+      local stale_pid
+      if [ -f "$lock_dir/pid" ]; then
+        stale_pid=$(cat "$lock_dir/pid" 2>/dev/null)
+        if [ -n "$stale_pid" ] && ! kill -0 "$stale_pid" 2>/dev/null; then
+          echo "Warning: Removing stale install lock (previous install PID $stale_pid is no longer running)."
+          rm -rf "$lock_dir"
+          if ! mkdir "$lock_dir" 2>/dev/null; then
+            echo "Error: Another Harbor install is already running."
+            echo "If this is incorrect, remove $lock_dir and retry."
+            exit 1
+          fi
+        else
+          echo "Error: Another Harbor install is already running (PID ${stale_pid:-unknown})."
+          echo "If this is incorrect, remove $lock_dir and retry."
+          exit 1
+        fi
+      else
+        echo "Error: Another Harbor install is already running."
+        echo "If this is incorrect, remove $lock_dir and retry."
+        exit 1
+      fi
     fi
-    HARBOR_LOCK_FILE="$HARBOR_LOCK_FILE.d"
+    printf '%s\n' "$$" > "$lock_dir/pid"
+    HARBOR_LOCK_FILE="$lock_dir"
   fi
   trap 'rm -rf "$HARBOR_LOCK_FILE" 2>/dev/null' EXIT
 }
@@ -379,8 +413,27 @@ acquire_install_lock() {
 main() {
   parse_args "$@"
   acquire_install_lock
-  # Override the lock-cleanup trap with one that also handles setup stage
-  trap 'ec=$?; rm -rf "$HARBOR_LOCK_FILE" 2>/dev/null; if [ $ec -ne 0 ]; then case "$_LAST_SETUP_STAGE" in failed|blocked|refresh-required|ready) ;; *) echo "HARBOR_SETUP_STAGE=failed" ;; esac; fi' EXIT
+  # Override the lock-cleanup trap with one that also handles setup stage,
+  # leaked backup directories, and orphaned git stashes.
+  trap '
+    ec=$?
+    rm -rf "$HARBOR_LOCK_FILE" 2>/dev/null
+    if [ $ec -ne 0 ]; then
+      # Restore git-stashed override.env files on unexpected exit
+      if [ "$_HAD_STASH" = true ] && [ -d "$HARBOR_INSTALL_PATH/.git" ]; then
+        (cd "$HARBOR_INSTALL_PATH" && git stash pop --quiet 2>/dev/null) || true
+      fi
+      # Warn about leaked backup directory (contains user configs)
+      if [ -n "$_BACKUP_DIR" ] && [ -d "$_BACKUP_DIR" ]; then
+        echo "Warning: Config backup preserved at: $_BACKUP_DIR" >&2
+        echo "You may want to restore it manually or delete it." >&2
+      fi
+      case "$_LAST_SETUP_STAGE" in
+        failed|blocked|refresh-required|ready) ;;
+        *) echo "HARBOR_SETUP_STAGE=failed" ;;
+      esac
+    fi
+  ' EXIT
 
   setup_stage "checking-platform"
   echo "Installing Harbor."
