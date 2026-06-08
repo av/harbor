@@ -8,6 +8,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -61,10 +62,20 @@ export const HarborSetupProvider: FC<{ children: ReactNode }> = ({ children }) =
   const [terminalOutput, setTerminalOutput] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [justInstalled, setJustInstalled] = useState(false);
+  // Guard against double-click races.  React's onClick can fire twice
+  // before the state update from the first call triggers a re-render
+  // that disables/hides the button.  Without this, the second invoke
+  // hits the backend's "already in progress" guard and overwrites the
+  // first call's "starting" status with "failed".
+  const startingRef = useRef(false);
 
   const redetect = useCallback(async () => {
     setLoading(true);
     setError(null);
+    // Clear stale terminal output from a prior install attempt so that
+    // the gate shows the clean welcome screen (isIdle check) instead of
+    // the progress screen with confusing leftover output.
+    setTerminalOutput("");
     try {
       const next = await invoke<HarborSetupDetail>("detect_harbor_setup");
       if (import.meta.env.VITE_FORCE_SETUP && next.status === "ready") {
@@ -152,15 +163,27 @@ export const HarborSetupProvider: FC<{ children: ReactNode }> = ({ children }) =
   }, [redetect]);
 
   const startSetup = useCallback(async () => {
+    if (startingRef.current) return;
+    startingRef.current = true;
     setRunning(true);
     setError(null);
     setTerminalOutput("");
-    setDetail((prev) => ({
-      ...(prev ?? DEFAULT_DETAIL),
-      status: "starting",
-      running: true,
-      lastError: null,
-    }));
+    // Capture the pre-start status so we can restore it if the invoke
+    // fails immediately (e.g. IPC error).  Without this, a failed
+    // reinstall from the CLI page permanently traps the user in the
+    // setup screen: the optimistic "starting" -> error "failed"
+    // transition makes ready=false, unmounting the main app with no
+    // path back except Redetect.
+    let previousStatus: string | undefined;
+    setDetail((prev) => {
+      previousStatus = prev?.status;
+      return {
+        ...(prev ?? DEFAULT_DETAIL),
+        status: "starting",
+        running: true,
+        lastError: null,
+      };
+    });
     try {
       await invoke("start_harbor_setup");
     } catch (e) {
@@ -169,10 +192,18 @@ export const HarborSetupProvider: FC<{ children: ReactNode }> = ({ children }) =
       setRunning(false);
       setDetail((prev) => ({
         ...(prev ?? DEFAULT_DETAIL),
-        status: "failed",
+        // If the previous status was a terminal "working" state (ready,
+        // refresh-required), restore it so the gate doesn't trap the
+        // user.  For install-flow states (not-installed, failed,
+        // cancelled), use "failed" since there is nothing to go back to.
+        status: previousStatus === "ready" || previousStatus === "refresh-required"
+          ? previousStatus
+          : "failed",
         running: false,
         lastError: rawMessage,
       }));
+    } finally {
+      startingRef.current = false;
     }
   }, []);
 
@@ -194,8 +225,12 @@ export const HarborSetupProvider: FC<{ children: ReactNode }> = ({ children }) =
       // process finished between kill and status check) overwrites the
       // optimistic state.
     } catch (e) {
+      // Don't set running=false here — the setup process may still be
+      // active on the backend (the cancel/kill attempt itself failed).
+      // Showing Retry while the process is still running would hit the
+      // "already in progress" guard.  The error is displayed and the
+      // user can try Cancel again.
       setError(e instanceof Error ? e.message : String(e));
-      setRunning(false);
     }
   }, []);
 

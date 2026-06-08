@@ -303,6 +303,7 @@ export const HarborSetupGate: FC<{ children: ReactNode }> = ({ children }) => {
                   failed: "Setup failed",
                   cancelled: "Cancelled",
                   "refresh-required": "Restart required",
+                  "not-installed": "Not installed",
                 };
                 return labels[status] ?? status;
               })()}
