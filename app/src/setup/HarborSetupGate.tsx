@@ -184,6 +184,7 @@ export const HarborSetupGate: FC<{ children: ReactNode }> = ({ children }) => {
     INSTALLABLE_STATUSES.has(status);
   const isIdle = !setup.running && !setup.terminalOutput;
   const guidance = stateGuidance[status];
+  const displayError = setup.error ?? setup.detail?.lastError;
 
   const sendInput = async (e: FormEvent) => {
     e.preventDefault();
@@ -219,9 +220,9 @@ export const HarborSetupGate: FC<{ children: ReactNode }> = ({ children }) => {
               <GuidanceAlert guidance={guidance} className="max-w-lg" />
             )}
 
-            {(setup.error || setup.detail?.lastError) && (
+            {displayError && (
               <p className="max-w-md text-center text-sm text-error">
-                {setup.error ?? setup.detail?.lastError}
+                {displayError}
               </p>
             )}
 
@@ -322,9 +323,9 @@ export const HarborSetupGate: FC<{ children: ReactNode }> = ({ children }) => {
           <GuidanceAlert guidance={guidance} />
         )}
 
-        {(setup.error || setup.detail?.lastError) && !setup.running && (
+        {displayError && !setup.running && (
           <div className="rounded-box border border-error/20 bg-error/5 px-4 py-2 text-sm text-error">
-            {setup.error ?? setup.detail?.lastError}
+            {displayError}
           </div>
         )}
 
