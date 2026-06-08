@@ -582,7 +582,7 @@ fn run_logged(
     stage: &str,
     program: &str,
     args: &[&str],
-    timeout: Option<Duration>,
+    timeout: Duration,
 ) -> Result<(), SetupError> {
     set_current_stage(state, stage);
     emit_stage(app, stage);
@@ -710,10 +710,7 @@ fn run_logged(
         match child.try_wait() {
             Ok(Some(status)) => break Ok(status),
             Ok(None) => {
-                if timeout
-                    .map(|limit| started.elapsed() > limit)
-                    .unwrap_or(false)
-                {
+                if started.elapsed() > timeout {
                     let _ = child.kill();
                     // Reap the child to prevent zombies.  After kill()
                     // (SIGHUP on Unix, TerminateProcess on Windows) the
@@ -807,7 +804,7 @@ fn run_logged_shell(
     state: &SetupState,
     stage: &str,
     script: &str,
-    timeout: Option<Duration>,
+    timeout: Duration,
 ) -> Result<(), SetupError> {
     if platform_name() == "windows" {
         run_logged(
@@ -1104,7 +1101,7 @@ pub fn start_harbor_setup(
                         &state,
                         "installing-cli",
                         &windows_install_script(distro.as_deref()),
-                        Some(Duration::from_secs(1800)),
+                        Duration::from_secs(1800),
                     )
                 } else {
                     run_logged_shell(
@@ -1112,7 +1109,7 @@ pub fn start_harbor_setup(
                         &state,
                         "installing-cli",
                         &install_script(),
-                        Some(Duration::from_secs(1800)),
+                        Duration::from_secs(1800),
                     )
                 }
             }));
