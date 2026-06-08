@@ -139,6 +139,19 @@ where
     })
 }
 
+fn collect_readers(
+    stdout_reader: Option<std::thread::JoinHandle<String>>,
+    stderr_reader: Option<std::thread::JoinHandle<String>>,
+) -> (String, String) {
+    let stdout = stdout_reader
+        .and_then(|r| r.join().ok())
+        .unwrap_or_default();
+    let stderr = stderr_reader
+        .and_then(|r| r.join().ok())
+        .unwrap_or_default();
+    (stdout, stderr)
+}
+
 fn run_capture_timeout(program: &str, args: &[&str], timeout: Option<Duration>) -> ProcessOutput {
     let mut command = Command::new(program);
     command.args(args);
@@ -167,12 +180,8 @@ fn run_capture_timeout(program: &str, args: &[&str], timeout: Option<Duration>) 
                 loop {
                     match child.try_wait() {
                         Ok(Some(status)) => {
-                            let stdout = stdout_reader
-                                .and_then(|r| r.join().ok())
-                                .unwrap_or_default();
-                            let stderr = stderr_reader
-                                .and_then(|r| r.join().ok())
-                                .unwrap_or_default();
+                            let (stdout, stderr) =
+                                collect_readers(stdout_reader, stderr_reader);
                             return ProcessOutput {
                                 code: status.code(),
                                 stdout,
@@ -183,12 +192,8 @@ fn run_capture_timeout(program: &str, args: &[&str], timeout: Option<Duration>) 
                             if started.elapsed() > limit {
                                 let _ = child.kill();
                                 let _ = child.wait();
-                                let stdout = stdout_reader
-                                    .and_then(|r| r.join().ok())
-                                    .unwrap_or_default();
-                                let stderr = stderr_reader
-                                    .and_then(|r| r.join().ok())
-                                    .unwrap_or_default();
+                                let (stdout, stderr) =
+                                    collect_readers(stdout_reader, stderr_reader);
                                 return ProcessOutput {
                                     code: Some(124),
                                     stdout,
@@ -210,12 +215,8 @@ fn run_capture_timeout(program: &str, args: &[&str], timeout: Option<Duration>) 
                             // background threads.
                             let _ = child.kill();
                             let _ = child.wait();
-                            let stdout = stdout_reader
-                                .and_then(|r| r.join().ok())
-                                .unwrap_or_default();
-                            let stderr = stderr_reader
-                                .and_then(|r| r.join().ok())
-                                .unwrap_or_default();
+                            let (stdout, stderr) =
+                                collect_readers(stdout_reader, stderr_reader);
                             return ProcessOutput {
                                 code: Some(127),
                                 stdout,
@@ -482,6 +483,23 @@ fn emit_terminal_output(app: &AppHandle, data: &str) {
     let _ = app.emit(
         "harbor-setup-terminal-output",
         SetupTerminalOutputEvent { data: data.into() },
+    );
+}
+
+fn emit_setup_failure(app: &AppHandle, status: &str, message: String) {
+    emit_stage(app, status);
+    let _ = app.emit(
+        "harbor-setup-complete",
+        SetupCompleteEvent {
+            detail: HarborSetupDetail {
+                status: status.into(),
+                platform: platform_name(),
+                cli_version: None,
+                last_error: Some(message.clone()),
+                running: false,
+            },
+            error: Some(message),
+        },
     );
 }
 
@@ -1190,36 +1208,13 @@ pub fn start_harbor_setup(
                     } else {
                         e.clone()
                     };
-                    emit_stage(&app, &status);
-                    let _ = app.emit(
-                        "harbor-setup-complete",
-                        SetupCompleteEvent {
-                            detail: HarborSetupDetail {
-                                status,
-                                platform: platform_name(),
-                                cli_version: None,
-                                last_error: Some(message.clone()),
-                                running: false,
-                            },
-                            error: Some(message),
-                        },
-                    );
+                    emit_setup_failure(&app, &status, message);
                 }
                 Err(_panic) => {
-                    emit_stage(&app, "failed");
-                    let msg = "An unexpected internal error occurred during setup. Please try again, and if the problem persists, report it at github.com/av/harbor/issues".to_string();
-                    let _ = app.emit(
-                        "harbor-setup-complete",
-                        SetupCompleteEvent {
-                            detail: HarborSetupDetail {
-                                status: "failed".into(),
-                                platform: platform_name(),
-                                cli_version: None,
-                                last_error: Some(msg.clone()),
-                                running: false,
-                            },
-                            error: Some(msg),
-                        },
+                    emit_setup_failure(
+                        &app,
+                        "failed",
+                        "An unexpected internal error occurred during setup. Please try again, and if the problem persists, report it at github.com/av/harbor/issues".to_string(),
                     );
                 }
             }
@@ -1228,19 +1223,10 @@ pub fn start_harbor_setup(
         // If the outer catch_unwind caught a panic (from detect_harbor_status
         // or emit calls), try to emit a last-ditch failed event.
         if outer.is_err() {
-            let msg = "An unexpected internal error occurred during setup. Please try again, and if the problem persists, report it at github.com/av/harbor/issues".to_string();
-            let _ = app.emit(
-                "harbor-setup-complete",
-                SetupCompleteEvent {
-                    detail: HarborSetupDetail {
-                        status: "failed".into(),
-                        platform: platform_name(),
-                        cli_version: None,
-                        last_error: Some(msg.clone()),
-                        running: false,
-                    },
-                    error: Some(msg),
-                },
+            emit_setup_failure(
+                &app,
+                "failed",
+                "An unexpected internal error occurred during setup. Please try again, and if the problem persists, report it at github.com/av/harbor/issues".to_string(),
             );
         }
 
