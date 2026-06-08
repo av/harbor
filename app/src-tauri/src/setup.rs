@@ -85,6 +85,24 @@ struct ProcessOutput {
     stderr: String,
 }
 
+/// Structured error from `run_logged` / `run_logged_shell`.
+///
+/// Replaces the previous pattern of encoding status into the error
+/// string as `"HARBOR_SETUP_STATUS=<status>; <message>"` and parsing
+/// it back at the call site.
+struct SetupError {
+    /// Terminal status to emit (e.g. "cancelled", "failed", "blocked").
+    status: String,
+    /// Human-readable error message.
+    message: String,
+}
+
+impl SetupError {
+    fn failed(message: String) -> Self {
+        Self { status: "failed".into(), message }
+    }
+}
+
 // ── Platform utilities ─────────────────────────────────
 
 fn platform_name() -> &'static str {
@@ -483,7 +501,7 @@ fn emit_terminal_output(app: &AppHandle, data: &str) {
     );
 }
 
-fn emit_setup_failure(app: &AppHandle, status: &str, message: String) {
+fn emit_setup_failure(app: &AppHandle, status: &str, message: &str) {
     emit_stage(app, status);
     let _ = app.emit(
         "harbor-setup-complete",
@@ -492,10 +510,10 @@ fn emit_setup_failure(app: &AppHandle, status: &str, message: String) {
                 status: status.into(),
                 platform: platform_name().into(),
                 cli_version: None,
-                last_error: Some(message.clone()),
+                last_error: Some(message.into()),
                 running: false,
             },
-            error: Some(message),
+            error: Some(message.into()),
         },
     );
 }
@@ -636,7 +654,7 @@ fn run_logged(
     program: &str,
     args: &[&str],
     timeout: Option<Duration>,
-) -> Result<(), String> {
+) -> Result<(), SetupError> {
     set_current_stage(state, stage);
     emit_stage(app, stage);
     let command_line = format!("$ {} {}", program, args.join(" "));
@@ -651,7 +669,7 @@ fn run_logged(
             pixel_width: 0,
             pixel_height: 0,
         })
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| SetupError::failed(e.to_string()))?;
     let mut command = CommandBuilder::new(program);
     command.args(args);
     command.env("TERM", "xterm-256color");
@@ -659,12 +677,12 @@ fn run_logged(
     let mut reader = pair
         .master
         .try_clone_reader()
-        .map_err(|e| e.to_string())?;
-    let writer = pair.master.take_writer().map_err(|e| e.to_string())?;
+        .map_err(|e| SetupError::failed(e.to_string()))?;
+    let writer = pair.master.take_writer().map_err(|e| SetupError::failed(e.to_string()))?;
     let mut child = pair
         .slave
         .spawn_command(command)
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| SetupError::failed(e.to_string()))?;
 
     if state
         .cancel_requested
@@ -676,7 +694,10 @@ fn run_logged(
         let _ = child.wait();
         clear_running_state(state, true);
         emit_stage(app, "cancelled");
-        return Err(format!("HARBOR_SETUP_STATUS=cancelled; {stage} cancelled"));
+        return Err(SetupError {
+            status: "cancelled".into(),
+            message: format!("{stage} cancelled"),
+        });
     }
 
     let pid = child.process_id().unwrap_or(0);
@@ -770,7 +791,7 @@ fn run_logged(
     });
 
     let started = Instant::now();
-    let wait_result: Result<ExitStatus, String> = loop {
+    let wait_result: Result<ExitStatus, SetupError> = loop {
         match child.try_wait() {
             Ok(Some(status)) => break Ok(status),
             Ok(None) => {
@@ -783,7 +804,7 @@ fn run_logged(
                     // (SIGHUP on Unix, TerminateProcess on Windows) the
                     // process should exit quickly.
                     let _ = child.wait();
-                    break Err(format!("{stage} timed out"));
+                    break Err(SetupError::failed(format!("{stage} timed out")));
                 }
                 std::thread::sleep(Duration::from_millis(250));
             }
@@ -792,7 +813,7 @@ fn run_logged(
                 // don't leak a zombie or leave the process running.
                 let _ = child.kill();
                 let _ = child.wait();
-                break Err(err.to_string());
+                break Err(SetupError::failed(err.to_string()));
             }
         }
     };
@@ -825,7 +846,10 @@ fn run_logged(
         Ok(())
     } else if was_cancelled {
         emit_stage(app, "cancelled");
-        Err(format!("HARBOR_SETUP_STATUS=cancelled; {stage} cancelled"))
+        Err(SetupError {
+            status: "cancelled".into(),
+            message: format!("{stage} cancelled"),
+        })
     } else {
         let terminal_marker = marker_state
             .lock()
@@ -848,16 +872,19 @@ fn run_logged(
                 .map(|l| format!("; {l}"))
                 .unwrap_or_default();
 
-            return Err(format!(
-                "HARBOR_SETUP_STATUS={marker}; {stage} exited with code {}{detail}",
-                format_pty_exit(&status),
-            ));
+            return Err(SetupError {
+                status: marker,
+                message: format!(
+                    "{stage} exited with code {}{detail}",
+                    format_pty_exit(&status),
+                ),
+            });
         }
 
-        Err(format!(
+        Err(SetupError::failed(format!(
             "{stage} exited with code {}",
             format_pty_exit(&status)
-        ))
+        )))
     }
 }
 
@@ -867,7 +894,7 @@ fn run_logged_shell(
     stage: &str,
     script: &str,
     timeout: Option<Duration>,
-) -> Result<(), String> {
+) -> Result<(), SetupError> {
     if platform_name() == "windows" {
         run_logged(
             app,
@@ -1194,24 +1221,13 @@ pub fn start_harbor_setup(
                     );
                 }
                 Ok(Err(e)) => {
-                    let status_match = e
-                        .strip_prefix("HARBOR_SETUP_STATUS=")
-                        .and_then(|rest| rest.split_once(';').map(|(s, _)| s.to_string()));
-                    let status = status_match.unwrap_or_else(|| "failed".to_string());
-                    let message = if let Some(rest) =
-                        e.strip_prefix(&format!("HARBOR_SETUP_STATUS={status}; "))
-                    {
-                        rest.to_string()
-                    } else {
-                        e.clone()
-                    };
-                    emit_setup_failure(&app, &status, message);
+                    emit_setup_failure(&app, &e.status, &e.message);
                 }
                 Err(_panic) => {
                     emit_setup_failure(
                         &app,
                         "failed",
-                        PANIC_RECOVERY_MESSAGE.to_string(),
+                        PANIC_RECOVERY_MESSAGE,
                     );
                 }
             }
@@ -1223,7 +1239,7 @@ pub fn start_harbor_setup(
             emit_setup_failure(
                 &app,
                 "failed",
-                PANIC_RECOVERY_MESSAGE.to_string(),
+                PANIC_RECOVERY_MESSAGE,
             );
         }
 
