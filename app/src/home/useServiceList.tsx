@@ -29,12 +29,12 @@ export const useServiceList = () => {
 
             return {
                 handle,
-                isRunning: runningResult.includes(handle) ?? false,
-                isDefault: defaultsResult.includes(handle) ?? false,
+                isRunning: runningResult.includes(handle),
+                isDefault: defaultsResult.includes(handle),
                 tags: [],
                 ...maybeMetadata,
             };
-        }).filter((s) => isCoreService(s.handle)) ?? [];
+        }).filter((s) => isCoreService(s.handle));
     }, [all.result, running.result, defaults.result]);
 
     const rerun = () => {

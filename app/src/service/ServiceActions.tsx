@@ -80,12 +80,7 @@ export const ServiceActions = ({
     {
       canLaunch && (
         <>
-          {service.isRunning && (
-            <span className="service-status-dot inline-block bg-success shrink-0 w-2 h-2 rounded-full" />
-          )}
-          {!service.isRunning && (
-            <span className="service-status-dot inline-block bg-base-content/20 shrink-0 w-2 h-2 rounded-full" />
-          )}
+          <span className={`service-status-dot inline-block shrink-0 w-2 h-2 rounded-full ${service.isRunning ? "bg-success" : "bg-base-content/20"}`} />
           <IconButton
             disabled={loading}
             icon={actionIcon}
