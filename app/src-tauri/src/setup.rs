@@ -53,14 +53,6 @@ pub struct HarborSetupDetail {
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct SetupLogEvent {
-    stage: String,
-    stream: String,
-    line: String,
-}
-
-#[derive(Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
 struct SetupStageEvent {
     status: String,
 }
@@ -448,17 +440,6 @@ fn emit_stage(app: &AppHandle, stage: &str) {
     );
 }
 
-fn emit_log(app: &AppHandle, stage: &str, stream: &str, line: &str) {
-    let _ = app.emit(
-        "harbor-setup-log",
-        SetupLogEvent {
-            stage: stage.into(),
-            stream: stream.into(),
-            line: line.into(),
-        },
-    );
-}
-
 fn emit_terminal_output(app: &AppHandle, data: &str) {
     let _ = app.emit(
         "harbor-setup-terminal-output",
@@ -493,8 +474,6 @@ fn parse_setup_stage_marker(line: &str) -> Option<String> {
 
 fn emit_process_line(
     app: &AppHandle,
-    stage: &str,
-    stream: &str,
     line: &str,
     pls: &ProcessLineState,
 ) {
@@ -510,13 +489,10 @@ fn emit_process_line(
             *stage_lock = Some(marker);
         }
     }
-    emit_log(app, stage, stream, line);
 }
 
 fn emit_process_chunk(
     app: &AppHandle,
-    stage: &str,
-    stream: &str,
     chunk: &str,
     pls: &ProcessLineState,
     line_buffer: &mut String,
@@ -526,7 +502,7 @@ fn emit_process_chunk(
         if ch == '\n' || ch == '\r' {
             let line = line_buffer.trim_end_matches('\r');
             if !line.trim().is_empty() {
-                emit_process_line(app, stage, stream, line, pls);
+                emit_process_line(app, line, pls);
             }
             line_buffer.clear();
         } else {
@@ -611,7 +587,6 @@ fn run_logged(
     set_current_stage(state, stage);
     emit_stage(app, stage);
     let command_line = format!("$ {} {}", program, args.join(" "));
-    emit_log(app, stage, "stdout", &command_line);
     emit_terminal_output(app, &format!("{command_line}\r\n"));
 
     let pty_system = native_pty_system();
@@ -669,7 +644,6 @@ fn run_logged(
         last_line: Arc::new(Mutex::new(None)),
     };
     let reader_app = app.clone();
-    let reader_stage = stage.to_string();
     let reader_pls = pls.clone();
     let reader_thread = std::thread::spawn(move || {
         let mut buffer = [0_u8; 4096];
@@ -698,8 +672,6 @@ fn run_logged(
                             String::from_utf8_lossy(&utf8_carry[..valid_end]).to_string();
                         emit_process_chunk(
                             &reader_app,
-                            &reader_stage,
-                            "pty",
                             &chunk,
                             &reader_pls,
                             &mut line_buffer,
@@ -719,8 +691,6 @@ fn run_logged(
             let chunk = String::from_utf8_lossy(&utf8_carry).to_string();
             emit_process_chunk(
                 &reader_app,
-                &reader_stage,
-                "pty",
                 &chunk,
                 &reader_pls,
                 &mut line_buffer,
@@ -729,8 +699,6 @@ fn run_logged(
         if !line_buffer.trim().is_empty() {
             emit_process_line(
                 &reader_app,
-                &reader_stage,
-                "pty",
                 &line_buffer,
                 &reader_pls,
             );
