@@ -41,7 +41,7 @@ export const ProfileSelector = (
                 key="config-name"
                 onCreate={async (name) => {
                     const def = configs.find((c) => c.isDefault);
-                    def?.saveAs(name);
+                    await def?.saveAs(name);
                     setSelected(name);
                     overlays.close();
                     setConfigVersion(v => v + 1);
