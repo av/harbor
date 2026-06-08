@@ -10,7 +10,7 @@ import { ACTION_ICONS } from "../serviceActions";
 import { ServiceTag } from "../ServiceTags";
 import { HST } from '../serviceMetadata';
 import { runHarbor } from "../useHarbor";
-import { toasted } from "../utils";
+import { errorMessage, toasted } from "../utils";
 import { SearchInput } from "../SearchInput";
 import { useSearch } from "../useSearch";
 import { LostSquirrel } from "../LostSquirrel";
@@ -167,7 +167,7 @@ export const ServiceList = ({
       children={
         <div className="rounded-box">
           <Loader loading={loading} loader="overlay" />
-          {!!error && <div className="my-2">{String((error as Error).message ?? error)}</div>}
+          {!!error && <div className="my-2">{errorMessage(error)}</div>}
           {pinnedSection}
           {services && (
             <ul className="flex gap-4 flex-wrap">

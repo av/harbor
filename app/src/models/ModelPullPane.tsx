@@ -8,34 +8,17 @@ interface ModelPullPaneProps {
     onDismiss: () => void;
 }
 
+const STATUS_META: Record<string, { badgeClass: string; label: string }> = {
+    running:   { badgeClass: "badge-info",    label: "Running" },
+    success:   { badgeClass: "badge-success", label: "Success" },
+    failure:   { badgeClass: "badge-error",   label: "Failed" },
+    cancelled: { badgeClass: "badge-warning", label: "Cancelled" },
+};
+
+const DEFAULT_STATUS_META = { badgeClass: "badge-ghost", label: "Pending" };
+
 function getStatusMeta(status: ModelPullSession["status"]) {
-    switch (status) {
-        case "running":
-            return {
-                badgeClass: "badge-info",
-                label: "Running",
-            };
-        case "success":
-            return {
-                badgeClass: "badge-success",
-                label: "Success",
-            };
-        case "failure":
-            return {
-                badgeClass: "badge-error",
-                label: "Failed",
-            };
-        case "cancelled":
-            return {
-                badgeClass: "badge-warning",
-                label: "Cancelled",
-            };
-        default:
-            return {
-                badgeClass: "badge-ghost",
-                label: "Pending",
-            };
-    }
+    return STATUS_META[status] ?? DEFAULT_STATUS_META;
 }
 
 export const ModelPullPane = ({ session, onCancel, onDismiss }: ModelPullPaneProps) => {
