@@ -10,18 +10,16 @@ export const Modal = ({ children }: { children: ReactNode }) => {
     });
 
     return (
-        <>
-            <dialog className="modal modal-open bg-base-300/50 backdrop-blur">
-                <div className="modal-box">
-                    {children}
-                </div>
-                <form
-                    method="dialog"
-                    className="modal-backdrop"
-                    onClick={() => close()}
-                >
-                </form>
-            </dialog>
-        </>
+        <dialog className="modal modal-open bg-base-300/50 backdrop-blur">
+            <div className="modal-box">
+                {children}
+            </div>
+            <form
+                method="dialog"
+                className="modal-backdrop"
+                onClick={() => close()}
+            >
+            </form>
+        </dialog>
     );
 };

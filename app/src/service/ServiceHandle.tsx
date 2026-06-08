@@ -8,7 +8,7 @@ export const ServiceHandle = ({ service }: { service: HarborService }) => {
       data-tip="Service handle in Harbor CLI"
     >
       <IconTerminal />
-      <span className="">{service.handle}</span>
+      <span>{service.handle}</span>
     </div>
   );
 };

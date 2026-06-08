@@ -62,9 +62,7 @@ export const ProfileSelector = (
                             const activeClass = profile.name === selected
                                 ? "tab-active"
                                 : "";
-                            const name = EXTRA[profile.name]
-                                ? EXTRA[profile.name].name
-                                : profile.name;
+                            const name = EXTRA[profile.name]?.name ?? profile.name;
 
                             return (
                                 <a
