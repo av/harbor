@@ -6,7 +6,7 @@ use std::{
     fs,
     io::{Read, Write},
     path::PathBuf,
-    process::{ChildStderr, ChildStdout, Command, Stdio},
+    process::{ChildStdout, Command, Stdio},
     sync::{Arc, Mutex, OnceLock},
     time::{Duration, Instant},
 };
@@ -161,17 +161,8 @@ where
     })
 }
 
-fn collect_readers(
-    stdout_reader: Option<std::thread::JoinHandle<String>>,
-    stderr_reader: Option<std::thread::JoinHandle<String>>,
-) -> (String, String) {
-    let stdout = stdout_reader
-        .and_then(|r| r.join().ok())
-        .unwrap_or_default();
-    let stderr = stderr_reader
-        .and_then(|r| r.join().ok())
-        .unwrap_or_default();
-    (stdout, stderr)
+fn join_reader(reader: Option<std::thread::JoinHandle<String>>) -> String {
+    reader.and_then(|r| r.join().ok()).unwrap_or_default()
 }
 
 fn run_capture_timeout(program: &str, args: &[&str], timeout: Duration) -> ProcessOutput {
@@ -185,7 +176,7 @@ fn run_capture_timeout(program: &str, args: &[&str], timeout: Duration) -> Proce
 
     match command
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stderr(Stdio::null())
         .spawn()
     {
         Ok(mut child) => {
@@ -193,30 +184,22 @@ fn run_capture_timeout(program: &str, args: &[&str], timeout: Duration) -> Proce
                 .stdout
                 .take()
                 .map(|r: ChildStdout| spawn_output_reader(r));
-            let stderr_reader = child
-                .stderr
-                .take()
-                .map(|r: ChildStderr| spawn_output_reader(r));
             let started = Instant::now();
             loop {
                 match child.try_wait() {
                     Ok(Some(status)) => {
-                        let (stdout, _stderr) =
-                            collect_readers(stdout_reader, stderr_reader);
                         return ProcessOutput {
                             code: status.code(),
-                            stdout,
+                            stdout: join_reader(stdout_reader),
                         };
                     }
                     Ok(None) => {
                         if started.elapsed() > timeout {
                             let _ = child.kill();
                             let _ = child.wait();
-                            let (stdout, _stderr) =
-                                collect_readers(stdout_reader, stderr_reader);
                             return ProcessOutput {
                                 code: Some(124),
-                                stdout,
+                                stdout: join_reader(stdout_reader),
                             };
                         }
                         std::thread::sleep(Duration::from_millis(100));
@@ -224,15 +207,13 @@ fn run_capture_timeout(program: &str, args: &[&str], timeout: Duration) -> Proce
                     Err(_) => {
                         // try_wait failed at the OS level.  Kill and
                         // reap the child so we don't leak it, then
-                        // join the reader threads to avoid dangling
-                        // background threads.
+                        // join the reader thread to avoid a dangling
+                        // background thread.
                         let _ = child.kill();
                         let _ = child.wait();
-                        let (stdout, _stderr) =
-                            collect_readers(stdout_reader, stderr_reader);
                         return ProcessOutput {
                             code: Some(127),
-                            stdout,
+                            stdout: join_reader(stdout_reader),
                         };
                     }
                 }
