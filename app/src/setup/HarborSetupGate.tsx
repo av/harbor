@@ -76,6 +76,22 @@ const stateGuidance: Record<string, StateGuidance> = {
   },
 };
 
+const statusLabels: Record<string, string> = {
+  starting: "Starting installation",
+  "checking-platform": "Checking platform",
+  "checking-prerequisites": "Checking prerequisites",
+  "installing-prerequisites": "Installing prerequisites",
+  "installing-cli": "Installing Harbor CLI",
+  "linking-cli": "Linking CLI to PATH",
+  "verifying-cli": "Verifying installation",
+  ready: "Ready",
+  blocked: "Blocked",
+  failed: "Setup failed",
+  cancelled: "Cancelled",
+  "refresh-required": "Restart required",
+  "not-installed": "Not installed",
+};
+
 const alertClass: Record<GuidanceLevel, string> = {
   warning: "alert-warning",
   info: "alert-info",
@@ -288,26 +304,7 @@ export const HarborSetupGate: FC<{ children: ReactNode }> = ({ children }) => {
             {setup.running && (
               <span className="loading loading-spinner loading-xs" />
             )}
-            <span>
-              {(() => {
-                const labels: Record<string, string> = {
-                  starting: "Starting installation",
-                  "checking-platform": "Checking platform",
-                  "checking-prerequisites": "Checking prerequisites",
-                  "installing-prerequisites": "Installing prerequisites",
-                  "installing-cli": "Installing Harbor CLI",
-                  "linking-cli": "Linking CLI to PATH",
-                  "verifying-cli": "Verifying installation",
-                  ready: "Ready",
-                  blocked: "Blocked",
-                  failed: "Setup failed",
-                  cancelled: "Cancelled",
-                  "refresh-required": "Restart required",
-                  "not-installed": "Not installed",
-                };
-                return labels[status] ?? status;
-              })()}
-            </span>
+            <span>{statusLabels[status] ?? status}</span>
           </div>
           {setup.running && (
             <progress className="progress progress-primary w-full" />
