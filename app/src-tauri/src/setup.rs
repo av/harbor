@@ -696,7 +696,6 @@ fn run_logged(
         let _ = child.kill();
         let _ = child.wait();
         clear_running_state(state, true);
-        emit_stage(app, "cancelled");
         return Err(SetupError {
             status: "cancelled".into(),
             message: format!("{stage} cancelled"),
@@ -847,7 +846,6 @@ fn run_logged(
     if status.success() {
         Ok(())
     } else if was_cancelled {
-        emit_stage(app, "cancelled");
         Err(SetupError {
             status: "cancelled".into(),
             message: format!("{stage} cancelled"),
