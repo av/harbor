@@ -36,7 +36,6 @@ export const ModelPullProvider: FC<PropsWithChildren> = ({ children }) => {
         onComplete: () => {
             reload();
         },
-        appendExitMessage: false,
         raw: true,
     });
 

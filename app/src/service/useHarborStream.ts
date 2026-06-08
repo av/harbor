@@ -32,7 +32,6 @@ export interface HarborStreamCompletion {
 
 interface UseHarborStreamOptions {
     raw?: boolean;
-    appendExitMessage?: boolean;
     onComplete?: (completion: HarborStreamCompletion) => void;
 }
 

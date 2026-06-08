@@ -29,7 +29,6 @@ interface CliEntry {
     stderr: string;
     exitCode: number | null;
     running: boolean;
-    cancelled?: boolean;
 }
 
 export const CommandRunner = () => {
@@ -45,6 +44,9 @@ export const CommandRunner = () => {
     const stderrBuf = useRef("");
     const inputRef = useRef<HTMLInputElement>(null);
     const outputRef = useRef<HTMLDivElement>(null);
+
+    const patchEntry = (id: number, patch: Partial<CliEntry>) =>
+        setEntries((prev) => prev.map((e) => (e.id === id ? { ...e, ...patch } : e)));
 
     useEffect(() => {
         if (!running) {
@@ -99,75 +101,45 @@ export const CommandRunner = () => {
             command.stdout.on("data", (line: string) => {
                 const html = converter.toHtml(line);
                 stdoutBuf.current += (stdoutBuf.current ? "\n" : "") + html;
-                setEntries((prev) =>
-                    prev.map((e) =>
-                        e.id === id ? { ...e, stdout: stdoutBuf.current } : e,
-                    ),
-                );
+                patchEntry(id, { stdout: stdoutBuf.current });
             });
 
             command.stderr.on("data", (line: string) => {
                 const html = converter.toHtml(line);
                 stderrBuf.current += (stderrBuf.current ? "\n" : "") + html;
-                setEntries((prev) =>
-                    prev.map((e) =>
-                        e.id === id ? { ...e, stderr: stderrBuf.current } : e,
-                    ),
-                );
+                patchEntry(id, { stderr: stderrBuf.current });
             });
 
             command.on("close", (payload: { code: number | null }) => {
                 activeChild.current = null;
-                setEntries((prev) =>
-                    prev.map((e) =>
-                        e.id === id
-                            ? {
-                                  ...e,
-                                  stdout: stdoutBuf.current,
-                                  stderr: stderrBuf.current,
-                                  exitCode: payload.code,
-                                  running: false,
-                              }
-                            : e,
-                    ),
-                );
+                patchEntry(id, {
+                    stdout: stdoutBuf.current,
+                    stderr: stderrBuf.current,
+                    exitCode: payload.code,
+                    running: false,
+                });
                 setRunning(false);
             });
 
             command.on("error", (err: string) => {
                 activeChild.current = null;
                 stderrBuf.current += (stderrBuf.current ? "\n" : "") + err;
-                setEntries((prev) =>
-                    prev.map((e) =>
-                        e.id === id
-                            ? {
-                                  ...e,
-                                  stderr: stderrBuf.current,
-                                  exitCode: 1,
-                                  running: false,
-                              }
-                            : e,
-                    ),
-                );
+                patchEntry(id, {
+                    stderr: stderrBuf.current,
+                    exitCode: 1,
+                    running: false,
+                });
                 setRunning(false);
             });
 
             const child = await command.spawn();
             activeChild.current = child;
         } catch (e) {
-            const msg = errorMessage(e);
-            setEntries((prev) =>
-                prev.map((ent) =>
-                    ent.id === id
-                        ? {
-                              ...ent,
-                              stderr: msg,
-                              exitCode: 1,
-                              running: false,
-                          }
-                        : ent,
-                ),
-            );
+            patchEntry(id, {
+                stderr: errorMessage(e),
+                exitCode: 1,
+                running: false,
+            });
             setRunning(false);
         }
     };
