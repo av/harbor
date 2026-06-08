@@ -66,38 +66,22 @@ export const useTheme = () => {
         setThemeState(newTheme);
     }, []);
 
-    const changeTheme = useCallback((newTheme: string) => {
-        updateTheme({ ...themeRef.current, theme: newTheme });
-    }, []);
-
-    const changeHue = useCallback((newHue: number) => {
-        updateTheme({ ...themeRef.current, hue: newHue });
-    }, []);
-
-    const changeSaturation = useCallback((newSaturation: number) => {
-        updateTheme({ ...themeRef.current, saturation: newSaturation });
-    }, []);
-
-    const changeContrast = useCallback((newContrast: number) => {
-        updateTheme({ ...themeRef.current, contrast: newContrast });
-    }, []);
-
-    const changeBrightness = useCallback((newBrightness: number) => {
-        updateTheme({ ...themeRef.current, brightness: newBrightness });
-    }, []);
-
-    const changeInvert = useCallback((newInvert: number) => {
-        updateTheme({ ...themeRef.current, invert: newInvert });
-    }, []);
+    const changeField = useCallback(
+        <K extends keyof typeof DEFAULT_THEME_STATE>(field: K) =>
+            (value: (typeof DEFAULT_THEME_STATE)[K]) => {
+                updateTheme({ ...themeRef.current, [field]: value });
+            },
+        [],
+    );
 
     return {
         ...theme,
         reset: () => updateTheme(DEFAULT_THEME_STATE),
-        setTheme: changeTheme,
-        setHue: changeHue,
-        setSaturation: changeSaturation,
-        setContrast: changeContrast,
-        setBrightness: changeBrightness,
-        setInvert: changeInvert,
+        setTheme: changeField("theme"),
+        setHue: changeField("hue"),
+        setSaturation: changeField("saturation"),
+        setContrast: changeField("contrast"),
+        setBrightness: changeField("brightness"),
+        setInvert: changeField("invert"),
     };
 }
