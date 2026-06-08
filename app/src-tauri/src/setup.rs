@@ -774,11 +774,15 @@ fn run_logged(
         })
         .unwrap_or(false);
 
-    if was_cancelled {
+    // Check success BEFORE cancel: if the process completed successfully
+    // before the kill signal arrived, honour the success.  Otherwise a
+    // last-instant cancel races with normal completion and the user sees
+    // "cancelled" even though the install finished.
+    if status.success() {
+        Ok(())
+    } else if was_cancelled {
         emit_stage(app, "cancelled");
         Err(format!("HARBOR_SETUP_STATUS=cancelled; {stage} cancelled"))
-    } else if status.success() {
-        Ok(())
     } else {
         let terminal_marker = marker_state
             .lock()
@@ -960,13 +964,13 @@ fn detect_harbor_status_core(platform: &str, detail: &mut HarborSetupDetail) {
     match platform {
         "linux" => {
             let check = run_shell_timeout(
-                "command -v apt-get >/dev/null || command -v dnf >/dev/null || command -v pacman >/dev/null || command -v apk >/dev/null",
+                "command -v apt-get >/dev/null || command -v dnf >/dev/null || command -v pacman >/dev/null || command -v apk >/dev/null || command -v zypper >/dev/null",
                 Some(DETECT_TIMEOUT),
             );
             if check.code != Some(0) {
                 detail.status = "blocked".into();
                 detail.last_error = Some(
-                    "No supported package manager found (apt, dnf, pacman, or apk). Harbor needs a package manager to install Docker and other dependencies. Install one of these, or install Docker manually and retry.".into(),
+                    "No supported package manager found (apt, dnf, pacman, apk, or zypper). Harbor needs a package manager to install Docker and other dependencies. Install one of these, or install Docker manually and retry.".into(),
                 );
                 return;
             }
@@ -1016,7 +1020,24 @@ fn detect_harbor_status_core(platform: &str, detail: &mut HarborSetupDetail) {
 
     if version.code == Some(0) {
         detail.status = "ready".into();
-        detail.cli_version = Some(version.stdout.trim().to_string());
+        // `harbor --version` outputs "Harbor CLI version: X.Y.Z".
+        // Use the last non-empty line to skip login-shell noise (MOTD,
+        // profile banners) that may precede the version output.
+        // Strip the "Harbor CLI version: " prefix so the UI (which already
+        // displays a "CLI version:" label) doesn't show a doubled prefix.
+        let raw = version.stdout.trim().to_string();
+        let last_line = raw
+            .lines()
+            .rev()
+            .find(|l| !l.trim().is_empty())
+            .unwrap_or(&raw)
+            .trim();
+        let cleaned = last_line
+            .strip_prefix("Harbor CLI version: ")
+            .or_else(|| last_line.strip_prefix("Harbor CLI version:"))
+            .unwrap_or(last_line)
+            .trim();
+        detail.cli_version = Some(cleaned.to_string());
         return;
     }
 

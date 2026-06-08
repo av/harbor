@@ -38,7 +38,7 @@ const stateGuidance: Record<string, StateGuidance> = {
     actions: [
       "Check the error details below for the specific issue",
       "On macOS: install Docker Desktop from docker.com/products/docker-desktop",
-      "On Linux: ensure Docker Engine and a supported package manager (apt, dnf, pacman, or apk) are available",
+      "On Linux: ensure Docker Engine and a supported package manager (apt, dnf, pacman, apk, or zypper) are available",
       "On Windows: enable WSL2 and install a supported Linux distro (Ubuntu, Debian, Fedora, openSUSE, Kali, or Arch)",
       "After fixing the issue, click Redetect to try again",
     ],
@@ -237,7 +237,7 @@ export const HarborSetupGate: FC<{ children: ReactNode }> = ({ children }) => {
                     : "Install Harbor"}
                 </button>
               )}
-              {(guidance || status === "not-installed") && (
+              {(guidance || status === "not-installed" || setup.error) && (
                 <button
                   className="btn btn-ghost btn-sm self-center"
                   onClick={setup.redetect}
@@ -334,14 +334,14 @@ export const HarborSetupGate: FC<{ children: ReactNode }> = ({ children }) => {
         )}
 
         {/* Terminal output collapse */}
-        <div className="collapse collapse-arrow min-h-0 flex-1 overflow-hidden bg-neutral">
+        <div className="collapse collapse-arrow min-h-0 flex-1 bg-base-200">
           <input type="checkbox" defaultChecked />
-          <div className="collapse-title text-sm text-neutral-content/70">
+          <div className="collapse-title text-sm text-base-content/70">
             Terminal output
           </div>
           <div
             ref={outputRef}
-            className="collapse-content overflow-auto font-mono text-sm text-neutral-content"
+            className="collapse-content !min-h-0 overflow-y-auto font-mono text-sm text-base-content"
           >
             <pre className="whitespace-pre-wrap break-words">
               {setup.terminalOutput}
