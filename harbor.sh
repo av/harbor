@@ -1013,6 +1013,7 @@ run_routine() {
         _check_docker || return 1
         log_debug "Using Docker container for routine"
         docker run --rm \
+            --user "$(id -u):$(id -g)" \
             -v "$harbor_home:$harbor_home" \
             -v harbor-deno-cache:/deno-dir:rw \
             -w "$harbor_home" \
@@ -4843,8 +4844,10 @@ _install_completions() {
             }
             # Ensure the directory is in fpath by adding to zshrc if needed
             local zshrc="$HOME/.zshrc"
-            if [[ -f "$zshrc" ]] && ! grep -qF "$comp_dir" "$zshrc"; then
-                printf '\nfpath=(%s $fpath)\nautoload -Uz compinit && compinit\n' "$comp_dir" >> "$zshrc"
+            local fpath_line
+            fpath_line=$(printf 'fpath=(%s $fpath)' "$comp_dir")
+            if [[ -f "$zshrc" ]] && ! grep -qxF "$fpath_line" "$zshrc"; then
+                printf '\n%s\nautoload -Uz compinit && compinit\n' "$fpath_line" >> "$zshrc"
                 log_info "Added $comp_dir to fpath in $zshrc"
             fi
             ;;
@@ -4894,14 +4897,18 @@ _uninstall_completions() {
     # had in their config before Harbor was installed.
     local zshrc="$HOME/.zshrc"
     local zsh_comp_dir="$HOME/.local/share/zsh/site-functions"
-    if [[ -f "$zshrc" ]] && grep -qF "$zsh_comp_dir" "$zshrc"; then
+    local fpath_line
+    fpath_line=$(printf 'fpath=(%s $fpath)' "$zsh_comp_dir")
+    if [[ -f "$zshrc" ]] && grep -qxF "$fpath_line" "$zshrc"; then
         local temp_file
         temp_file=$(mktemp)
-        # Use awk to remove the fpath line and ONLY a compinit line that
-        # immediately follows it (skip=1 means "skip the next line if it
-        # matches the compinit pattern").
-        awk -v dir="$zsh_comp_dir" '
-            index($0, dir) {
+        # Use awk to remove the exact fpath line Harbor wrote and ONLY
+        # a compinit line that immediately follows it (skip=1 means
+        # "skip the next line if it matches the compinit pattern").
+        # Match the exact fpath=(<dir> $fpath) line to avoid removing
+        # user lines that merely mention the directory path.
+        awk -v line="$fpath_line" '
+            $0 == line {
                 skip = 1
                 next
             }
@@ -7706,6 +7713,7 @@ run_migrate_command() {
         elif command -v docker &>/dev/null; then
             log_debug "deno not found, running migration in container"
             docker run --rm \
+                --user "$(id -u):$(id -g)" \
                 -v "$harbor_home:$harbor_home" \
                 -v harbor-deno-cache:/deno-dir:rw \
                 -w "$harbor_home" \
@@ -8971,6 +8979,7 @@ run_models_routine() {
     fi
 
     docker run --rm \
+        --user "$(id -u):$(id -g)" \
         --network=harbor_harbor-network \
         --add-host "host.docker.internal:host-gateway" \
         --add-host "model-runner.docker.internal:host-gateway" \
@@ -9900,7 +9909,9 @@ run_harbor_how_command() {
     prompt_file=$(mktemp "${TMPDIR:-/tmp}/harbor-how.XXXXXX")
     # Use a RETURN trap (function-scoped) to clean up — an EXIT trap here
     # would replace the global EXIT trap that cleans up HARBOR_COMPOSE_CACHE.
-    trap "rm -f '$prompt_file'" RETURN
+    # Use a variable reference instead of interpolating the path into the
+    # trap string — avoids command injection if TMPDIR contains quotes.
+    trap 'rm -f "$prompt_file"' RETURN
 
     local cli_help
     cli_help=$(show_help 2>&1)
