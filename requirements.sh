@@ -1,5 +1,17 @@
 #!/bin/bash
 
+# Guard: requirements.sh uses bash-only features (arrays, +=, process
+# substitution). Running with sh/dash produces a cryptic "Bad substitution"
+# on the BASH_VERSINFO check below. Detect and bail early with guidance.
+# shellcheck disable=SC2128
+if [ -z "${BASH_VERSION:-}" ]; then
+    _current_shell=$(ps -p $$ -o comm= 2>/dev/null || echo "unknown shell")
+    echo "Error: requirements.sh requires bash, but is running under ${_current_shell}." >&2
+    echo "Please run:  bash requirements.sh" >&2
+    echo "         or: curl -fsSL <url> | bash" >&2
+    exit 1
+fi
+
 # Enable nounset only on bash >= 4.4. Older versions (notably macOS's
 # bash 3.2) treat empty arrays as "unbound variable" under set -u,
 # crashing the script when git/curl are already installed (empty missing array).
@@ -739,7 +751,11 @@ brew_install() {
     fi
 
     local missing=()
-    check_command git || missing+=("git")
+    # On macOS, /usr/bin/git is an Xcode CLT shim: `command -v git` returns
+    # true even when CLT is not installed. The shim either triggers a GUI
+    # install dialog (interactive) or fails silently (non-interactive/Tauri).
+    # Use `git --version` to verify git actually works, not just exists.
+    git --version >/dev/null 2>&1 || missing+=("git")
     check_command curl || missing+=("curl")
 
     if [ ${#missing[@]} -gt 0 ]; then
@@ -855,10 +871,11 @@ ensure_linux_docker_service() {
     fi
 
     if check_command systemctl && systemctl is-system-running 2>/dev/null | grep -qE '^(running|degraded|starting)$'; then
-        # Enable docker to start on boot. Check both docker.service and
-        # docker.socket — socket activation is the default on many distros.
+        # Enable docker to start on boot. Check docker.service, docker.socket
+        # (default on many distros), and snap.docker.dockerd (snap installs).
         if ! systemctl is-enabled docker >/dev/null 2>&1 && \
-           ! systemctl is-enabled docker.socket >/dev/null 2>&1; then
+           ! systemctl is-enabled docker.socket >/dev/null 2>&1 && \
+           ! systemctl is-enabled snap.docker.dockerd >/dev/null 2>&1; then
             log_info "Enabling Docker service"
             # enable can fail if Docker was installed via snap or non-standard means
             run_privileged systemctl enable docker >/dev/null 2>&1 || true
@@ -872,11 +889,28 @@ ensure_linux_docker_service() {
         fi
 
         if ! systemctl is-active docker >/dev/null 2>&1; then
+            # Snap-installed Docker uses a different service name
+            if systemctl is-active snap.docker.dockerd >/dev/null 2>&1; then
+                # Snap Docker service is running but daemon isn't reachable.
+                # This can happen if the snap socket is at a non-standard path
+                # and DOCKER_HOST is not set.
+                log_warn "Snap Docker service is running but the daemon is not reachable."
+                log_warn "Try: sudo snap restart docker"
+                log_warn "If the issue persists, check: snap logs docker"
+                return 1
+            fi
             log_info "Starting Docker service"
             if ! run_privileged systemctl start docker; then
-                log_warn "Failed to start Docker service via systemctl"
-                log_warn "Check the service log for details: journalctl -xeu docker.service"
-                log_warn "Common causes: missing kernel modules, storage driver issues, or port conflicts"
+                # Check if this is a snap Docker that just needs a different command
+                if snap list docker >/dev/null 2>&1; then
+                    log_warn "Docker appears to be installed via Snap."
+                    log_warn "Try: sudo snap start docker"
+                    log_warn "If the issue persists: snap logs docker"
+                else
+                    log_warn "Failed to start Docker service via systemctl"
+                    log_warn "Check the service log for details: journalctl -xeu docker.service"
+                    log_warn "Common causes: missing kernel modules, storage driver issues, or port conflicts"
+                fi
                 return 1
             fi
             if ! wait_for_docker_access 30; then
@@ -1062,7 +1096,12 @@ verify_docker_access() {
             log_error "Native Docker Engine: sudo systemctl start docker"
             log_error "Docker Desktop: ensure it is running and WSL integration is enabled for this distro"
         elif [ "$PLATFORM" = "linux" ]; then
-            log_error "Try: sudo systemctl start docker"
+            if snap list docker >/dev/null 2>&1; then
+                log_error "Docker appears to be installed via Snap."
+                log_error "Try: sudo snap start docker"
+            else
+                log_error "Try: sudo systemctl start docker"
+            fi
         else
             log_error "Start Docker Desktop and retry"
         fi

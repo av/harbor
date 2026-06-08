@@ -11,7 +11,7 @@ if [ -z "${BASH_VERSION:-}" ]; then
   fi
   _current_shell=$(ps -p $$ -o comm= 2>/dev/null || echo "unknown shell")
   echo "Error: Harbor install requires bash, but is running under ${_current_shell}." >&2
-  echo "Please run:  curl -fsSL <url> | bash" >&2
+  echo "Please run:  curl -fsSL https://raw.githubusercontent.com/av/harbor/main/install.sh | bash" >&2
   echo "         or: bash install.sh" >&2
   exit 1
 fi
