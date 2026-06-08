@@ -13,6 +13,7 @@ import { errorMessage, toasted } from "../utils";
 import { SearchInput } from "../SearchInput";
 import { useSearch } from "../useSearch";
 import { LostSquirrel } from "../LostSquirrel";
+import { matchesServiceFilter } from "./serviceFilter";
 
 const serviceOrderBy = (a: HarborService, b: HarborService) => {
   if ((a.isRunning || a.isDefault) && !(b.isRunning || b.isDefault)) {
@@ -66,17 +67,9 @@ export const ServiceList = ({
     rerun();
   };
 
-  const filteredServices = services.filter((service) => {
-    const matchesTags =
-      tagFilter.length === 0 ||
-      service.tags.some((tag) => tagFilter.includes(tag));
-
-    const matchesSearch =
-      serviceSearch.matches(service.name ?? service.handle) ||
-      serviceSearch.matches(service.tags.join(" "));
-
-    return matchesTags && matchesSearch;
-  });
+  const filteredServices = services.filter((service) =>
+    matchesServiceFilter(service, serviceSearch.matches, tagFilter),
+  );
 
   const unpinnedServices = services.filter(s => !pinnedIds.includes(s.handle));
   const unpinnedFiltered = filteredServices.filter(s => !pinnedIds.includes(s.handle));

@@ -1,10 +1,11 @@
 import { HarborService } from "../serviceMetadata";
 import { ServiceCard } from "./ServiceCard";
+import { matchesServiceFilter } from "./serviceFilter";
 
 type PinnedServicesProps = {
   services: HarborService[];
   pinnedIds: string[];
-  searchQuery: string;
+  searchMatches: (str: string) => boolean;
   tagFilter: string[];
   onUpdate: () => void;
   onTogglePin: (handle: string) => void;
@@ -13,7 +14,7 @@ type PinnedServicesProps = {
 export const PinnedServices = ({
   services,
   pinnedIds,
-  searchQuery,
+  searchMatches,
   tagFilter,
   onUpdate,
   onTogglePin,
@@ -24,16 +25,7 @@ export const PinnedServices = ({
 
   const pinnedServices = services
     .filter((s) => pinnedIds.includes(s.handle))
-    .filter((s) => {
-      const matchesTags =
-        tagFilter.length === 0 || s.tags.some((t) => tagFilter.includes(t));
-      const q = searchQuery.toLowerCase();
-      const matchesSearch =
-        !q ||
-        (s.name ?? s.handle).toLowerCase().includes(q) ||
-        s.tags.join(" ").toLowerCase().includes(q);
-      return matchesTags && matchesSearch;
-    })
+    .filter((s) => matchesServiceFilter(s, searchMatches, tagFilter))
     .sort((a, b) =>
       (a.name ?? a.handle).localeCompare(b.name ?? b.handle, undefined, {
         numeric: true,

@@ -45,7 +45,7 @@ export const Home = () => {
           <PinnedServices
             services={services}
             pinnedIds={pinnedIds}
-            searchQuery={serviceSearch.query}
+            searchMatches={serviceSearch.matches}
             tagFilter={tagFilter}
             onUpdate={rerun}
             onTogglePin={handleTogglePin}
