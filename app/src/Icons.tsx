@@ -80,54 +80,6 @@ export function IconOctagonAlert(props: SVGProps<SVGSVGElement>) {
     );
 }
 
-export function IconWiRefreshAlt(props: SVGProps<SVGSVGElement>) {
-    return (
-        <svg
-            viewBox="0 0 30 30"
-            fill="currentColor"
-            height="1em"
-            width="1em"
-            {...props}
-        >
-            <path d="M11.78 14.91c0 .79.19 1.51.57 2.17.38.66.9 1.19 1.57 1.57.67.38 1.39.58 2.18.58.19 0 .35-.07.48-.22.13-.14.2-.31.2-.51 0-.19-.07-.35-.2-.48s-.29-.19-.49-.19c-.81 0-1.5-.28-2.07-.85-.57-.57-.85-1.26-.85-2.07 0-.78.27-1.45.8-2.02s1.16-.86 1.88-.86l-.33.32c-.15.15-.22.31-.21.49 0 .18.07.34.2.48.13.14.29.21.49.21s.37-.07.51-.21l1.51-1.5c.13-.11.2-.27.2-.51 0-.22-.07-.38-.2-.47l-1.51-1.53c-.13-.14-.29-.21-.49-.21s-.36.07-.5.21-.21.3-.21.5c0 .21.07.38.22.51l.3.28c-1.15.08-2.11.53-2.89 1.35-.77.82-1.16 1.81-1.16 2.96z" />
-        </svg>
-    );
-}
-
-export function IconRedo(props: SVGProps<SVGSVGElement>) {
-    return (
-        <svg
-            viewBox="0 0 24 24"
-            fill="currentColor"
-            height="1em"
-            width="1em"
-            {...props}
-        >
-            <path d="M18.4 10.6C16.55 9 14.15 8 11.5 8c-4.65 0-8.58 3.03-9.96 7.22L3.9 16a8.002 8.002 0 017.6-5.5c1.95 0 3.73.72 5.12 1.88L13 16h9V7l-3.6 3.6z" />
-        </svg>
-    );
-}
-
-export function IconStarHalf(props: SVGProps<SVGSVGElement>) {
-    return (
-        <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="1em"
-            height="1em"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="lucide lucide-star-half"
-            {...props}
-        >
-            <path d="M12 17.8 5.8 21 7 14.1 2 9.3l7-1L12 2" />
-        </svg>
-    );
-}
-
 export function IconBandage(props: SVGProps<SVGSVGElement>) {
     return (
         <svg
