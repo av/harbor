@@ -4,7 +4,7 @@ import * as localStorage from "./localStorage";
 import { useCallback, useRef } from "react";
 import { useStoredState } from "./useStoredState";
 
-export const DEFAULT_THEME = "harborLight";
+const DEFAULT_THEME = "harborLight";
 
 // "dim" theme crashes tauri app host
 // due to unexplainable reasons, so removing it
@@ -17,7 +17,7 @@ export const THEMES = [
     ...Object.keys(themes).filter((theme) => !DISABLED_THEMES.has(theme)),
 ];
 
-export const DEFAULT_THEME_STATE = {
+const DEFAULT_THEME_STATE = {
     theme: DEFAULT_THEME,
     hue: 0,
     saturation: 100,
@@ -30,7 +30,7 @@ export const getTheme = () => {
     return localStorage.readLocalStorage<typeof DEFAULT_THEME_STATE>('themeState', DEFAULT_THEME_STATE);
 }
 
-export const setTheme = (theme: typeof DEFAULT_THEME_STATE) => {
+const setTheme = (theme: typeof DEFAULT_THEME_STATE) => {
     const themeRoot = document.documentElement;
 
     if (themeRoot) {

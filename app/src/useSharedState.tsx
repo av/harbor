@@ -6,8 +6,8 @@ import {
     useState,
 } from "react";
 
-export type StateKey = string | symbol;
-export type StateEntry<T> = {
+type StateKey = string | symbol;
+type StateEntry<T> = {
     value: T;
     hooks: Set<Dispatch<SetStateAction<T>>>;
 };
@@ -25,7 +25,7 @@ const getSharedStates = (): Map<StateKey, StateEntry<unknown>> => {
     return globalThis.__sharedStates as Map<StateKey, StateEntry<unknown>>;
 };
 
-export const states = getSharedStates();
+const states = getSharedStates();
 
 export const useSharedState = <T,>(
     key: StateKey,

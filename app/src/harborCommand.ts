@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 
 let cachedWindowsWslDistro: string | undefined;
 
-export function shellQuote(value: string) {
+function shellQuote(value: string) {
     return `'${value.replace(/'/g, "'\\''")}'`;
 }
 
@@ -34,7 +34,7 @@ export function buildNativeHarborArgs(args: string[]) {
     return ["-lc", buildNativeHarborCommand(args)];
 }
 
-export async function getHarborWslDistro() {
+async function getHarborWslDistro() {
     if (cachedWindowsWslDistro) {
         return cachedWindowsWslDistro;
     }
