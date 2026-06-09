@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 
 import { useHarbor } from "../useHarbor";
 import { HarborService, serviceMetadata } from "../serviceMetadata";
@@ -37,10 +37,10 @@ export const useServiceList = () => {
         }).filter((s) => isCoreService(s.handle));
     }, [all.result, running.result, defaults.result]);
 
-    const rerun = () => {
+    const rerun = useCallback(() => {
         all.rerun();
         running.rerun();
-    }
+    }, [all.rerun, running.rerun]);
 
     return {
         services,

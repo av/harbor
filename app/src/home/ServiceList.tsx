@@ -1,4 +1,4 @@
-import { ChangeEvent, useState } from "react";
+import { ChangeEvent, ReactNode, useState } from "react";
 
 import { IconRotateCW } from "../Icons";
 import { Section } from "../Section";
@@ -38,7 +38,7 @@ type ServiceListProps = {
   onTagFilterChange: (tags: string[]) => void;
   pinnedIds: string[];
   onTogglePin: (handle: string) => void;
-  pinnedSection?: React.ReactNode;
+  pinnedSection?: ReactNode;
 };
 
 export const ServiceList = ({
@@ -63,10 +63,6 @@ export const ServiceList = ({
     onTagFilterChange(next);
   };
 
-  const handleServiceUpdate = () => {
-    rerun();
-  };
-
   const filteredServices = services.filter((service) =>
     matchesServiceFilter(service, serviceSearch.matches, tagFilter),
   );
@@ -85,18 +81,16 @@ export const ServiceList = ({
   const actionTip = anyRunning ? "Stop all services" : `Start default services`;
 
   const handleToggle = () => {
-    const msg = (str: string) => <span>{str}</span>;
-
     const action = () => {
       setChanging(true);
       return runHarbor([anyRunning ? "down" : "up"]);
     };
     const ok = anyRunning
-      ? msg("All services stopped")
-      : msg("Started default services");
+      ? "All services stopped"
+      : "Started default services";
     const err = anyRunning
-      ? msg("Failed to stop all services")
-      : msg("Failed to start default services");
+      ? "Failed to stop all services"
+      : "Failed to start default services";
 
     toasted({
       action,
@@ -104,7 +98,7 @@ export const ServiceList = ({
       error: err,
       finally() {
         setChanging(false);
-        handleServiceUpdate();
+        rerun();
       },
     });
   };
@@ -165,7 +159,7 @@ export const ServiceList = ({
                 <li key={service.handle} className="m-0 p-0">
                   <ServiceCard
                     service={service}
-                    onUpdate={handleServiceUpdate}
+                    onUpdate={rerun}
                     isPinned={pinnedIds.includes(service.handle)}
                     onTogglePin={onTogglePin}
                   />

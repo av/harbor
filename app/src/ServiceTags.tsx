@@ -1,3 +1,4 @@
+import { ReactNode } from "react";
 import { IconAudioLines, IconAward, IconBandage, IconPocketKnife } from "./Icons";
 import { HarborService, HST } from "./serviceMetadata";
 import './tags.css';
@@ -26,7 +27,7 @@ export const HSTTooltips: Partial<Record<HST, string>> = {
   [HST.tools]: "Service provides tools for LLMs and agents."
 };
 
-export const TAG_ADORNMENTS: Partial<Record<HST, React.ReactNode>> = {
+export const TAG_ADORNMENTS: Partial<Record<HST, ReactNode>> = {
   [HST.partial]: (
     <span className="mr-1 opacity-40">
       <IconBandage />

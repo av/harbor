@@ -14,7 +14,7 @@ export const PROFILES_DIR = "profiles";
 
 export const EXTRA: Record<string, {
     name: string;
-    content: React.ReactNode;
+    content: ReactNode;
 }> = {
     [DEFAULT_PROFILE]: {
         name: "Default",

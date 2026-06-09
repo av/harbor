@@ -12,7 +12,7 @@ import { ModelPullProvider } from "./models/ModelPullContext";
 import { HarborSetupGate } from "./setup/HarborSetupGate";
 import { HarborSetupProvider } from "./setup/HarborSetupContext";
 
-export const DRAWER_ID = "app-drawer";
+const DRAWER_ID = "app-drawer";
 
 const NavTerminalButton: FC = () => {
   const { isOpen, close, openAndFocus } = useTerminalPanel();

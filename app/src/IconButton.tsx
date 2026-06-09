@@ -1,7 +1,7 @@
-import { ButtonHTMLAttributes } from "react";
+import { ButtonHTMLAttributes, ReactNode } from "react";
 
 export type IconButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
-    icon: React.ReactNode;
+    icon: ReactNode;
 };
 
 export const IconButton = (

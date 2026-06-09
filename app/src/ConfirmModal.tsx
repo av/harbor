@@ -1,3 +1,4 @@
+import { ReactNode } from "react";
 import { Modal } from "./Modal";
 import { useOverlays } from "./OverlayContext";
 import { KEY_CODES, useGlobalKeydown } from "./useGlobalKeydown";
@@ -7,7 +8,7 @@ export const ConfirmModal = ({
     children,
 }: {
     onConfirm: () => void;
-    children: React.ReactNode;
+    children: ReactNode;
 }) => {
     const { close } = useOverlays();
     const handleConfirm = () => {

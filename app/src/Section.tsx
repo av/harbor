@@ -1,8 +1,8 @@
-import { HTMLProps } from "react";
+import { HTMLProps, ReactNode } from "react";
 
 export type SectionProps = HTMLProps<HTMLDivElement> & {
-    header: React.ReactNode;
-    children: React.ReactNode;
+    header: ReactNode;
+    children: ReactNode;
 };
 
 export const Section = ({ header, children, ...rest }: SectionProps) => {
