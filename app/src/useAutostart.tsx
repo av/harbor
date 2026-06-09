@@ -49,7 +49,7 @@ export const useAutostart = () => {
 
     return {
         enabled: autostart,
-        loading: loading,
+        loading,
         setAutostart,
     };
 };

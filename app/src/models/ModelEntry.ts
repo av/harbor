@@ -1,4 +1,4 @@
-export interface ModelDetails {
+interface ModelDetails {
     family?: string;
     parameters?: string;
     quantization?: string;
