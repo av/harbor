@@ -7,11 +7,23 @@
       "skillPath": "agent-integration-testing/SKILL.md",
       "computedHash": "1c4770eb61d896674f47fc0e1819871cf540d77cef615f64751c81fef88b8b68"
     },
+    "anneal": {
+      "source": "av/skills",
+      "sourceType": "github",
+      "skillPath": "anneal/SKILL.md",
+      "computedHash": "78b10f2a05875b75bba4be3f60c9a487782414a52ed93ff4e50534fe0c09bb5a"
+    },
     "bugbash": {
       "source": "av/skills",
       "sourceType": "github",
       "skillPath": "bugbash/SKILL.md",
       "computedHash": "d68cfc7d3724f7a810c31e3fccff79e0205fb14fff4950bbcc9b3f83b3be6320"
+    },
+    "bughunt": {
+      "source": "av/skills",
+      "sourceType": "github",
+      "skillPath": "bughunt/SKILL.md",
+      "computedHash": "37332ad8f7fe35a29579ac02ce46d01d7f850cef5edce3b33e3bfecc65f76ad3"
     },
     "discipline": {
       "source": "av/skills",
