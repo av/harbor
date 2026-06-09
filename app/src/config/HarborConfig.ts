@@ -60,8 +60,8 @@ export class HarborConfigEntry {
         this.name = name;
         this.value = value;
         this.sectionId = sectionId;
-        this.section = section || null;
-        this.config = config || null;
+        this.section = section ?? null;
+        this.config = config ?? null;
     }
 
     toString() {
