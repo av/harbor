@@ -7,7 +7,7 @@ export const KEY_CODES = {
     F: "f",
 };
 
-export type KeyMatch = {
+type KeyMatch = {
     key: string;
     ctrlKey?: boolean;
     shiftKey?: boolean;
@@ -64,7 +64,7 @@ export const Shortcuts = {
     ],
 };
 
-export const matches = (event: KeyboardEvent, match: KeyMatch) => {
+const matches = (event: KeyboardEvent, match: KeyMatch) => {
     return (
         event.key.toLowerCase() === match.key.toLowerCase() &&
         event.ctrlKey === !!match.ctrlKey &&
