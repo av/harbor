@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { MouseEvent, useState } from 'react';
 
 import { IconButton } from '../IconButton';
 import { HarborService, HST } from '../serviceMetadata'
@@ -17,7 +17,7 @@ export const ServiceActions = ({
 }) => {
   const [loading, setLoading] = useState(false);
 
-  const openService = (e: React.MouseEvent) => {
+  const openService = (e: MouseEvent) => {
     markHandled(e);
 
     toasted({
@@ -32,7 +32,7 @@ export const ServiceActions = ({
     });
   };
 
-  const toggleService = (e: React.MouseEvent) => {
+  const toggleService = (e: MouseEvent) => {
     markHandled(e);
 
     const msg = (str: string) => (
@@ -65,7 +65,7 @@ export const ServiceActions = ({
     });
   };
 
-  const handleWikiClick = (e: React.MouseEvent) => {
+  const handleWikiClick = (e: MouseEvent) => {
     markHandled(e);
   }
 

@@ -1,3 +1,4 @@
+import { SyntheticEvent } from "react";
 import { platform } from '@tauri-apps/plugin-os';
 import { ChildProcess } from "@tauri-apps/plugin-shell";
 import AnsiToHtml from "ansi-to-html";
@@ -179,11 +180,11 @@ export function resolveResultLines(process: ChildProcess<string> | undefined | n
  * React handles stopPropagation very poorly in some cases,
  * this is a workaround
  */
-export function markHandled(e: React.SyntheticEvent) {
+export function markHandled(e: SyntheticEvent) {
     Object.assign(e.nativeEvent, { __handled: true });
 }
 
-export function isHandled(e: React.SyntheticEvent) {
+export function isHandled(e: SyntheticEvent) {
     return '__handled' in e.nativeEvent;
 }
 

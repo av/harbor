@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { KeyboardEvent, useEffect, useRef, useState } from "react";
 import { Child, Command } from "@tauri-apps/plugin-shell";
 
 import { Section } from "../Section";
@@ -157,7 +157,7 @@ export const CommandRunner = () => {
         inputRef.current?.focus();
     };
 
-    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
         if (e.key === "Enter") {
             e.preventDefault();
             runCommand();

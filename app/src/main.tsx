@@ -1,4 +1,4 @@
-import React from "react";
+import { StrictMode } from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter as Router } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
@@ -14,7 +14,7 @@ import "@xterm/xterm/css/xterm.css";
 init();
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
-  <React.StrictMode>
+  <StrictMode>
     <Router>
       <OverlayProvider>
         <App />
@@ -26,7 +26,7 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
         }}
       />
     </Router>
-  </React.StrictMode>,
+  </StrictMode>,
 );
 
 setTimeout(() => {
