@@ -23,12 +23,3 @@ export const writeLocalStorage = <T>(key: string, newState: T) => {
         console.error(`Error writing to localStorage with key "${key}":`, e);
     }
 };
-
-export const deleteLocalStorage = (key: string) => {
-    try {
-        localStorage.removeItem(key);
-    } catch (e) {
-        console.error(`Error deleting localStorage item with key "${key}":`, e);
-    }
-};
-
