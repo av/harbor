@@ -1,4 +1,4 @@
-import { createContext, FC, MutableRefObject, ReactNode, useCallback, useContext, useRef, useState } from "react";
+import { createContext, FC, MutableRefObject, ReactNode, useCallback, useContext, useMemo, useRef, useState } from "react";
 
 interface TerminalContextValue {
     isOpen: boolean;
@@ -34,8 +34,12 @@ export const TerminalProvider: FC<{ children: ReactNode }> = ({ children }) => {
         // Defer focus so the panel has time to expand and xterm to become visible
         setTimeout(() => focusRef.current?.(), 0);
     }, []);
+    const value = useMemo(
+        () => ({ isOpen, open, close, toggle, focusRef, openAndFocus }),
+        [isOpen, open, close, toggle, openAndFocus],
+    );
     return (
-        <TerminalContext.Provider value={{ isOpen, open, close, toggle, focusRef, openAndFocus }}>
+        <TerminalContext.Provider value={value}>
             {children}
         </TerminalContext.Provider>
     );

@@ -162,9 +162,6 @@ export const TerminalPanel = () => {
                 if (ptyRef.current && terminal) {
                     ptyRef.current.resize(terminal.cols, terminal.rows);
                 }
-            });
-            // Focus the terminal itself when the panel becomes visible
-            requestAnimationFrame(() => {
                 terminalRef.current?.focus();
             });
         }
