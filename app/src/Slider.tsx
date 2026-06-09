@@ -1,10 +1,10 @@
-import React from "react";
+import { ChangeEvent, CSSProperties } from "react";
 
 interface SliderProps {
   min: number;
   max: number;
   value: number;
-  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onChange: (e: ChangeEvent<HTMLInputElement>) => void;
 }
 
 export const Slider = ({ min, max, value, onChange }: SliderProps) => {
@@ -19,7 +19,7 @@ export const Slider = ({ min, max, value, onChange }: SliderProps) => {
       max={max}
       value={value}
       className="harbor-slider"
-      style={{ "--slider-fill-ratio": ratio } as React.CSSProperties}
+      style={{ "--slider-fill-ratio": ratio } as CSSProperties}
       onChange={onChange}
     />
   );

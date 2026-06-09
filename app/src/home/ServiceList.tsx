@@ -55,7 +55,7 @@ export const ServiceList = ({
   const serviceSearch = useSearch("services");
   const [changing, setChanging] = useState(false);
 
-  const handleTagsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleTagsChange = (e: ChangeEvent<HTMLInputElement>) => {
     const { name, checked } = e.target;
     const next = checked
       ? [...tagFilter, name].filter((v, i, a) => a.indexOf(v) === i)

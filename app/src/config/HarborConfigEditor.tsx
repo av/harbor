@@ -218,7 +218,7 @@ export const HarborConfigEditor = (
                 <input type="checkbox" />
                 <div className="collapse-title text-2xl font-bold">Source</div>
                 <div className="collapse-content rounded-box">
-                    <pre className="overflow-auto">{config?.profile.content}</pre>
+                    <pre className="overflow-auto">{config.profile.content}</pre>
                 </div>
             </div>
         </>

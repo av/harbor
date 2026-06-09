@@ -1,7 +1,7 @@
 import { createContext, ReactNode, useContext, useMemo, useState } from "react";
 import { useArrayState } from "./useArrayState";
 
-export type Overlay = ReactNode;
+type Overlay = ReactNode;
 
 interface OverlayContextProps {
     open: (props: Overlay) => void;

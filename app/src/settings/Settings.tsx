@@ -1,3 +1,4 @@
+import { ChangeEvent } from "react";
 import { Section } from "../Section";
 import { IconChevronDown } from "../Icons";
 import { THEMES, useTheme } from "../theme";
@@ -8,7 +9,7 @@ export const Settings = () => {
   const theme = useTheme();
   const autostart = useAutostart();
 
-  const handleAutostartChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAutostartChange = (e: ChangeEvent<HTMLInputElement>) => {
     autostart.setAutostart(e.target.checked);
   };
 
