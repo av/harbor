@@ -114,9 +114,29 @@ Resolution order: GitHub homepage favicon → dashboardicons.com → GitHub owne
 - Comments only for non-obvious logic — never restate what the code does
 - No emojis in UI or copy — use Lucide icons instead
 
+### Building the App
+
+```bash
+# RPM (Fedora — ayatana env vars required)
+TAURI_LINUX_AYATANA_APPINDICATOR=1 PKG_CONFIG_PATH="$HOME/.local/lib/pkgconfig" npx tauri build --bundles rpm
+```
+
+Fedora ships `libayatana-appindicator-gtk3` instead of `libappindicator-gtk3`. A local `.pc` file at `~/.local/lib/pkgconfig/ayatana-appindicator3-0.1.pc` provides the missing pkg-config entry. Without these env vars the bundler panics.
+
 ### Release Notes
 
 When updating the `## News` / changelog section in the `README.md`, always use a bulleted list format: `- **vx.x.x** - one sentence`. Do not use a table.
+
+Release notes are user-facing changelog, not commit messages. Match the style of prior releases (fetch with `gh release view vX.Y.Z --json body`).
+
+- One sentence per bullet about user-observable change. No `—` cause clauses, no implementation rationale.
+- Skip changes with no user-visible effect (internal refactors, lint fixes, polish on features introduced in the same release).
+- Lead with the symptom or capability, not the mechanism. "Workspace bind mounts now stay owned by your host user" not "`workspace-init` sidecar pattern rolled out."
+- Don't enumerate full lists of affected services in-bullet. Say "rolled out to 17 services."
+
+### llamacpp
+
+Never set `llamacpp.model` (`HARBOR_LLAMACPP_MODEL`) config. The router discovers models from the HF cache automatically. Setting it overrides that behavior.
 
 <!-- facts:start -->
 ## Fact-driven development
