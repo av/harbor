@@ -122,7 +122,7 @@ export const resolveProfilesDir = once(async function __resolveProfilesDir() {
     return await join(homeDir, PROFILES_DIR);
 });
 
-export interface RunHarborOptions {
+interface RunHarborOptions {
     /** Custom timeout in milliseconds. Overrides the default and per-command timeouts. */
     timeoutMs?: number;
     /** If true, disable timeout entirely (use with caution). */
