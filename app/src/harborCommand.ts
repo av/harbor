@@ -11,7 +11,7 @@ function buildHarborShellCommand(args: string[]) {
 }
 
 // Keep in sync with native_harbor_prelude in app/src-tauri/src/setup.rs
-export function buildNativeHarborCommand(args: string[]) {
+function buildNativeHarborCommand(args: string[]) {
     const pathPrefix = [
         "$HOME/.local/bin",
         "/opt/homebrew/bin",

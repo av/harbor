@@ -4,7 +4,7 @@ import { useHarbor } from "../useHarbor";
 import { HarborService, serviceMetadata } from "../serviceMetadata";
 import { resolveResultLines } from "../utils";
 
-export const isCoreService = (handle: string) => {
+const isCoreService = (handle: string) => {
     return !handle.includes('-') || handle in serviceMetadata;
 }
 

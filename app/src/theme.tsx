@@ -9,7 +9,7 @@ export const DEFAULT_THEME = "harborLight";
 // "dim" theme crashes tauri app host
 // due to unexplainable reasons, so removing it
 // from the list of available themes permanently
-export const DISABLED_THEMES = new Set(['dim'])
+const DISABLED_THEMES = new Set(['dim'])
 
 export const THEMES = [
     "harborLight",

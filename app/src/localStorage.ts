@@ -32,6 +32,3 @@ export const deleteLocalStorage = (key: string) => {
     }
 };
 
-export const hasKey = (key: string): boolean => {
-    return localStorage.getItem(key) !== null;
-};
