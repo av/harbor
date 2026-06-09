@@ -45,7 +45,6 @@ export const Doctor = () => {
 
     return (
         <Section
-            className=""
             header={
                 <>
                     <span>Doctor</span>
