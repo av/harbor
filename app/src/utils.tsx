@@ -55,8 +55,8 @@ export const once = <T extends unknown>(fn: () => T) => {
             // If the value is a promise, clear the cache on rejection so
             // transient failures (CLI not yet in PATH, Docker starting up)
             // don't permanently break the app.
-            if (value && typeof (value as any).catch === 'function') {
-                (value as any).catch(() => {
+            if (value instanceof Promise) {
+                value.catch(() => {
                     called = false;
                 });
             }
