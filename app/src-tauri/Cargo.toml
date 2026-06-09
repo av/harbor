@@ -11,20 +11,20 @@ name = "harbor_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies.tauri-build]
-version = "2.1.0"
+version = "2.6"
 features = []
 
 [dependencies]
-tauri-plugin-shell = "2.2.0"
+tauri-plugin-shell = "2.3"
 serde_json = "1"
-tauri-plugin-store = "2.2.0"
-tauri-plugin-fs = "2.2.0"
-tauri-plugin-os = "2"
+tauri-plugin-store = "2.4"
+tauri-plugin-fs = "2.5"
+tauri-plugin-os = "2.3"
 tauri-plugin-pty = "0.2"
 portable-pty = "0.9"
 
 [dependencies.tauri]
-version = "2.4.0"
+version = "2.11"
 features = ["protocol-asset", "tray-icon"]
 
 [dependencies.serde]
@@ -35,6 +35,6 @@ features = ["derive"]
 git = "https://github.com/tauri-apps/fix-path-env-rs"
 
 [target."cfg(not(any(target_os = \"android\", target_os = \"ios\")))".dependencies]
-tauri-plugin-autostart = "2.2.0"
-tauri-plugin-single-instance = "2.2.0"
-tauri-plugin-window-state = "2.2.0"
+tauri-plugin-autostart = "2.5"
+tauri-plugin-single-instance = "2.4"
+tauri-plugin-window-state = "2.4"
