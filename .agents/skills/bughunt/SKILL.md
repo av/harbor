@@ -16,7 +16,9 @@ Fully autonomous pipeline: find, triage, fix, and audit bugs in a scoped area of
 | **Scope** | _(required)_ | `the install script`, `src/auth/`, `the CLI argument parser` |
 | **Sections** | auto-split from scope | `split by platform`, `one per module` |
 | **Platforms** | inferred from repo | `Linux, macOS, WSL` |
-| **Output** | `/tmp/bughunt-output/` | `Output directory: ./qa/` |
+| **Output** | `/tmp/bughunt-output/<project>/` | `Output directory: ./qa/` |
+
+`<project>` is the basename of the repo root (e.g. `/tmp/bughunt-output/harbor/`). The output directory — and therefore prior-run memory — is always per-project; never read or write another project's reports.
 
 ## Workflow
 
@@ -44,6 +46,15 @@ Create the output directory and initialize the report:
 ```bash
 mkdir -p {OUTPUT_DIR}/evidence
 ```
+
+### Prior-run memory
+
+Before launching discovery, check the output directory for reports from previous runs (`report.md`, `report-*.md`). Prior-run memory is per-project: only reports under this project's output directory count. If using the default location, also check the legacy global `/tmp/bughunt-output/` root for reports whose stated scope matches this repo, and migrate them into the project subdirectory. If any exist:
+
+1. Read them. Extract every previously fixed finding and every previously disputed finding with its rejection reason.
+2. Preserve the old report (rename to `report-<n>.md`) — never overwrite it.
+3. Pass relevant prior findings into the discovery prompts ("these were already found and fixed/rejected: ... do not re-report them") and dedupe new findings against them before triage. A finding that matches a previously disputed one inherits its DISPUTED verdict unless new evidence contradicts the old reasoning.
+4. Note the severity trend across runs in the new report. If this run's findings are all lower-severity than the last run's, say so explicitly — that is the expected convergence, not a shortfall.
 
 ## Phase 2 — Discover
 
@@ -100,9 +111,11 @@ Launch one subagent per finding using the Agent tool, all in parallel (send all 
 
 ### Verdicts
 
-- **CONFIRMED** — bug is real at the stated severity. Proceeds to fix.
-- **DOWNGRADE** — bug is real but severity is wrong. Adjust and keep if still actionable.
-- **DISPUTED** — bug is not real, requires impossible preconditions, or has zero practical impact. Drop from the report.
+- **CONFIRMED** — bug is real at (or near) the stated severity. Proceeds to fix.
+- **DOWNGRADE** — bug is real but severity is wrong. Adjust the severity. Fix it only if the *post-downgrade* severity is Medium or higher; otherwise record it in the report as a known low-severity issue and do not fix. Cheapness of the fix is not a reason to apply it — "downgraded but it's a one-liner" is how a run inflates its fix count.
+- **DISPUTED** — bug is not real, requires impossible preconditions, or has zero practical impact. Keep it in the report's rejection table (with the refuting reason) — future runs dedupe against it — but never fix it.
+
+**The fix bar does not flex to fill the run.** A run that confirms zero fixable bugs is a successful run — report "no findings above the fix bar" and the full rejection table, and stop. Do not lower the threshold because the report would otherwise look thin. The rejection table is a first-class deliverable: a well-refuted false positive is worth as much as a fix.
 
 Update the report with triage results. Proceed immediately to Fix — do not wait for user input.
 
@@ -190,5 +203,6 @@ If a fix fails the audit:
 - **Discovery is broad, triage is adversarial.** Discovery agents should cast a wide net. Triage agents should be skeptical — their job is to kill false positives, not confirm findings.
 - **Fixes are minimal.** A fix agent should change the fewest lines possible to resolve the confirmed bug. No cleanup, no refactoring, no "while I'm here" improvements.
 - **The audit catches what agents miss.** Agents don't have cross-platform knowledge baked in. The audit phase exists specifically to catch platform-specific mistakes, lint violations, and convention breaks that individual fix agents can't know about.
+- **Null results are valid.** Repeated runs over the same scope must converge toward zero fixes. If they don't, the fix bar is floating — tighten it, don't celebrate the yield. Judge a run by the quality of its rejections and the severity of what it confirms, never by fix count.
 - **Report incrementally.** Update the report after each phase completes. If the session is interrupted, the work so far is preserved.
 - **Log, don't ask.** Write findings, triage verdicts, fix summaries, and audit results into the report as you go. The user reads the final report — they do not participate during execution.
