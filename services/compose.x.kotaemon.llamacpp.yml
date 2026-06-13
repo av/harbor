@@ -1,0 +1,7 @@
+services:
+  kotaemon:
+    environment:
+      - OPENAI_API_BASE=http://llamacpp:8080/v1
+      - OPENAI_API_KEY=sk-llamacpp
+      - LOCAL_MODEL=${HARBOR_KOTAEMON_LOCAL_MODEL}
+      - LOCAL_MODEL_EMBEDDINGS=${HARBOR_KOTAEMON_LOCAL_MODEL_EMBEDDINGS}

@@ -1,0 +1,5 @@
+services:
+  openhands:
+    environment:
+      - LLM_BASE_URL=http://llamacpp:8080/v1
+      - LLM_API_KEY=sk-llamacpp

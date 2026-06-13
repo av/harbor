@@ -1,0 +1,37 @@
+channel:
+  - id: 1
+    name: LlamaCpp
+    type: openai
+    priority: 0
+    weight: 1
+    models:
+      - llama
+    retry: 1
+    secret: sk-llamacpp
+    endpoint: http://llamacpp:8080
+    mapper: ""
+    state: true
+    group:
+      - anonymous
+      - normal
+      - basic
+      - standard
+      - pro
+    proxy:
+      proxytype: 0
+      proxy: ""
+      username: ""
+      password: ""
+    reflect: {}
+    hitmodels:
+      - llama
+    excludemodels: []
+    currentsecret: null
+market:
+  - id: llama
+    name: LlamaCpp
+    description: ""
+    default: true
+    highcontext: false
+    avatar: llama2.webp
+    tag: []

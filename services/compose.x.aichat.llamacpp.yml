@@ -1,0 +1,4 @@
+services:
+  aichat:
+    volumes:
+      - ./services/aichat/configs/aichat.llamacpp.yml:/app/configs/llamacpp.yml

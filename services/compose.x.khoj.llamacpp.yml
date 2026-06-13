@@ -1,0 +1,8 @@
+services:
+  khoj:
+    depends_on:
+      - llamacpp
+    environment:
+      - OPENAI_BASE_URL=http://llamacpp:8080/v1/
+      - OPENAI_API_KEY=sk-llamacpp
+      - KHOJ_DEFAULT_CHAT_MODEL=${HARBOR_KHOJ_DEFAULT_MODEL}
