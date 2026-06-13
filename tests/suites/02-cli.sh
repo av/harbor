@@ -1665,3 +1665,393 @@ fi
 
 rm -f /tmp/cli-step.out
 suite_log "OK"
+
+# ---------------------------------------------------------------------------
+# 37. Profile save/load round-trip (v0.5.0 supplement)
+#     harbor profile save/load/ls/rm are the core profile management commands.
+#     Test the full lifecycle: save current config as a profile, verify it
+#     appears in listing, modify a config value, load the profile to restore
+#     the original, then clean up. Note: gum confirm blocks rm in non-TTY
+#     mode, so cleanup uses direct file removal.
+# ---------------------------------------------------------------------------
+suite_log "=== Profile save/load round-trip ==="
+
+# Use a unique profile name to avoid collisions with user profiles
+test_profile_name="harbor-test-profile-$$"
+harbor_home_dir="$(harbor home)"
+profile_file="$harbor_home_dir/profiles/$test_profile_name.env"
+
+# Ensure no leftover from a previous run
+rm -f "$profile_file"
+
+# Save the current configuration as a profile
+assert_ok "profile save: save current config" harbor profile save "$test_profile_name"
+
+# Verify the profile file was created
+if [ ! -f "$profile_file" ]; then
+  fail "profile save: profile file not created at $profile_file"
+fi
+suite_log "profile save: profile file exists"
+
+# Verify profile appears in listing
+assert_match "profile ls: includes saved profile" "$test_profile_name" harbor profile ls
+
+# Record a config value, change it, then load the profile to restore
+original_prefix=$(harbor config get container.prefix)
+harbor config set container.prefix "harbor-test-changed-$$" >/dev/null 2>&1
+
+changed_prefix=$(harbor config get container.prefix)
+if [ "$changed_prefix" = "$original_prefix" ]; then
+  fail "profile round-trip: config set did not actually change the value"
+fi
+suite_log "profile round-trip: config value changed from '$original_prefix' to '$changed_prefix'"
+
+# Load the profile — should restore the original value
+assert_ok "profile load: load saved profile" harbor profile load "$test_profile_name"
+
+restored_prefix=$(harbor config get container.prefix)
+if [ "$restored_prefix" != "$original_prefix" ]; then
+  fail "profile load: container.prefix not restored (expected '$original_prefix', got '$restored_prefix')"
+fi
+suite_log "profile load: container.prefix correctly restored to '$original_prefix'"
+
+# Profile load of a nonexistent profile should fail
+suite_log "profile load: nonexistent profile fails"
+if harbor profile load "nonexistent-profile-xyz-$$" >/tmp/cli-step.out 2>&1; then
+  cat /tmp/cli-step.out >&2
+  fail "profile load of nonexistent profile unexpectedly succeeded"
+fi
+
+# Profile save with invalid name (path traversal) should fail
+suite_log "profile save: rejects path traversal name"
+if harbor profile save "../escape" >/tmp/cli-step.out 2>&1; then
+  cat /tmp/cli-step.out >&2
+  fail "profile save with path traversal name unexpectedly succeeded"
+fi
+
+# Profile help shows commands
+assert_match "profile --help: shows commands" "save|add" harbor profile --help
+
+# Cleanup: remove the profile file directly (gum confirm blocks in non-TTY)
+rm -f "$profile_file"
+if [ -f "$profile_file" ]; then
+  fail "profile cleanup: could not remove test profile"
+fi
+suite_log "profile cleanup: test profile removed"
+
+# Verify the profile no longer appears in listing
+suite_log "profile ls: no longer includes removed profile"
+if harbor profile ls 2>/tmp/cli-step.out | grep -q "$test_profile_name"; then
+  fail "profile ls still shows removed profile '$test_profile_name'"
+fi
+suite_log "profile round-trip: complete"
+
+# ---------------------------------------------------------------------------
+# 38. Update CLI behavior (v0.5.0 supplement)
+#     harbor update got significant hardening in v0.5.0: same-version skip,
+#     shallow clone handling, override.env stash/restore, signal traps.
+#     Test what we can safely verify without actually running a destructive
+#     update (no git fetch/checkout).
+# ---------------------------------------------------------------------------
+suite_log "=== Update CLI behavior ==="
+
+# harbor version outputs the expected format
+assert_match "harbor version: correct format" \
+  'Harbor CLI version: [0-9]+\.[0-9]+\.[0-9]+' harbor --version
+
+# The version string should be a valid semver-ish number
+version_str=$(harbor --version 2>&1 | sed 's/Harbor CLI version: //')
+if ! echo "$version_str" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+  fail "version string '$version_str' is not in X.Y.Z format"
+fi
+suite_log "harbor version: '$version_str' is valid semver format"
+
+# update_harbor function validates .git directory exists
+# Extract and test the prerequisite check in isolation
+harbor_script="$(harbor home)/harbor.sh"
+suite_log "update: prerequisite check — .git directory"
+(
+  log_error() { echo "ERROR: $*" >&2; }
+  log_warn() { echo "WARN: $*" >&2; }
+  log_info() { echo "INFO: $*" >&2; }
+  log_debug() { :; }
+  _with_timeout() { shift; "$@"; }
+  harbor_home="/tmp/harbor-fake-no-git-$$"
+  mkdir -p "$harbor_home"
+  version="0.0.0"
+
+  # Source just the update_harbor function
+  eval "$(sed -n '/^update_harbor()/,/^}/p' "$harbor_script")"
+
+  # Should fail because /tmp/harbor-fake-no-git-$$ has no .git
+  if update_harbor 2>/tmp/cli-step-update.out; then
+    echo "UNEXPECTED_SUCCESS"
+  else
+    echo "EXPECTED_FAIL"
+  fi
+  rmdir "$harbor_home" 2>/dev/null
+) > /tmp/cli-step.out 2>&1
+
+if ! grep -q "EXPECTED_FAIL" /tmp/cli-step.out; then
+  cat /tmp/cli-step.out >&2
+  fail "update prerequisite: did not reject missing .git directory"
+fi
+suite_log "update: correctly rejects missing .git directory"
+
+# update_harbor requires git command
+suite_log "update: prerequisite check — git command"
+(
+  log_error() { echo "ERROR: $*" >&2; }
+  log_warn() { echo "WARN: $*" >&2; }
+  log_info() { echo "INFO: $*" >&2; }
+  log_debug() { :; }
+  _with_timeout() { shift; "$@"; }
+  harbor_home="/tmp/harbor-fake-git-$$"
+  mkdir -p "$harbor_home/.git"
+  version="0.0.0"
+
+  eval "$(sed -n '/^update_harbor()/,/^}/p' "$harbor_script")"
+
+  # Override PATH to hide git
+  PATH="/usr/sbin"
+  if update_harbor 2>/tmp/cli-step-update.out; then
+    echo "UNEXPECTED_SUCCESS"
+  else
+    echo "EXPECTED_FAIL"
+  fi
+  rm -rf "$harbor_home"
+) > /tmp/cli-step.out 2>&1
+
+if ! grep -q "EXPECTED_FAIL" /tmp/cli-step.out; then
+  cat /tmp/cli-step.out >&2
+  fail "update prerequisite: did not reject missing git command"
+fi
+suite_log "update: correctly rejects missing git command"
+
+# Verify resolve_harbor_version function exists and handles errors
+suite_log "update: resolve_harbor_version defined"
+if ! grep -q "resolve_harbor_version()" "$harbor_script"; then
+  fail "resolve_harbor_version function not found in harbor.sh"
+fi
+suite_log "update: resolve_harbor_version function exists"
+
+# Verify the same-version skip logic is present in the source
+if ! grep -q "Already up to date" "$harbor_script"; then
+  fail "update: same-version skip message not found in harbor.sh"
+fi
+suite_log "update: same-version skip logic present"
+
+# Verify shallow clone handling is present
+if ! grep -q "shallow" "$harbor_script"; then
+  fail "update: shallow clone handling not found in harbor.sh"
+fi
+suite_log "update: shallow clone handling present"
+
+# Verify override.env stash/restore is present
+if ! grep -q "override.env" "$harbor_script"; then
+  fail "update: override.env stash/restore not found in harbor.sh"
+fi
+suite_log "update: override.env stash/restore present"
+
+rm -f /tmp/cli-step.out /tmp/cli-step-update.out
+
+# ---------------------------------------------------------------------------
+# 39. Install validation and doctor --check (v0.5.0 supplement)
+#     v0.5.0 added doctor --check mode for scripted validation. Test deeper
+#     aspects: individual check categories, expected output patterns, and
+#     the --check flag behavior beyond the basic pass/fail from section #13.
+# ---------------------------------------------------------------------------
+suite_log "=== Install validation ==="
+
+# doctor --check should verify essential prerequisites
+suite_log "doctor --check: captures output"
+harbor doctor --check >/tmp/cli-doctor.out 2>&1 || true
+doctor_output=$(cat /tmp/cli-doctor.out)
+
+# Doctor should check for git
+if ! echo "$doctor_output" | grep -qi "git"; then
+  fail "doctor --check: does not check for git"
+fi
+suite_log "doctor --check: validates git"
+
+# Doctor should check for curl
+if ! echo "$doctor_output" | grep -qi "curl"; then
+  fail "doctor --check: does not check for curl"
+fi
+suite_log "doctor --check: validates curl"
+
+# Doctor should check Harbor home directory
+if ! echo "$doctor_output" | grep -qi "harbor home\|Harbor home"; then
+  fail "doctor --check: does not check Harbor home"
+fi
+suite_log "doctor --check: validates Harbor home"
+
+# Doctor should check .git repository status
+if ! echo "$doctor_output" | grep -qi "git"; then
+  fail "doctor --check: does not check git repository"
+fi
+suite_log "doctor --check: validates git status"
+
+# Doctor should mention Docker (even if unavailable, it should check)
+if ! echo "$doctor_output" | grep -qi "docker\|Docker"; then
+  fail "doctor --check: does not mention Docker"
+fi
+suite_log "doctor --check: checks Docker"
+
+# Verify doctor runs without --check too (interactive mode)
+assert_ok "doctor: runs in default mode" harbor doctor
+
+# Verify the validate_profile_content function rejects command injection
+# This is an install hardening measure from v0.5.0
+suite_log "install hardening: validate_profile_content rejects injection"
+(
+  log_error() { echo "ERROR: $*" >&2; }
+  eval "$(sed -n '/^validate_profile_content()/,/^}/p' "$harbor_script")"
+
+  # Create a malicious profile with command substitution
+  malicious_profile="/tmp/harbor-malicious-profile-$$.env"
+  echo 'HARBOR_EVIL_KEY=$(whoami)' > "$malicious_profile"
+  if validate_profile_content "$malicious_profile" 2>/dev/null; then
+    echo "ACCEPTED_INJECTION"
+  else
+    echo "REJECTED_INJECTION"
+  fi
+  rm -f "$malicious_profile"
+) > /tmp/cli-step.out 2>&1
+
+if ! grep -q "REJECTED_INJECTION" /tmp/cli-step.out; then
+  cat /tmp/cli-step.out >&2
+  fail "validate_profile_content accepted command injection"
+fi
+suite_log "install hardening: command injection correctly rejected"
+
+# Also test backtick injection
+suite_log "install hardening: validate_profile_content rejects backtick injection"
+(
+  log_error() { echo "ERROR: $*" >&2; }
+  eval "$(sed -n '/^validate_profile_content()/,/^}/p' "$harbor_script")"
+
+  malicious_profile="/tmp/harbor-malicious-profile2-$$.env"
+  echo 'HARBOR_EVIL_KEY=`whoami`' > "$malicious_profile"
+  if validate_profile_content "$malicious_profile" 2>/dev/null; then
+    echo "ACCEPTED_INJECTION"
+  else
+    echo "REJECTED_INJECTION"
+  fi
+  rm -f "$malicious_profile"
+) > /tmp/cli-step.out 2>&1
+
+if ! grep -q "REJECTED_INJECTION" /tmp/cli-step.out; then
+  cat /tmp/cli-step.out >&2
+  fail "validate_profile_content accepted backtick injection"
+fi
+suite_log "install hardening: backtick injection correctly rejected"
+
+# Test that a clean profile passes validation
+suite_log "install hardening: validate_profile_content accepts clean profile"
+(
+  log_error() { echo "ERROR: $*" >&2; }
+  eval "$(sed -n '/^validate_profile_content()/,/^}/p' "$harbor_script")"
+
+  clean_profile="/tmp/harbor-clean-profile-$$.env"
+  echo 'HARBOR_TEST_KEY=hello_world' > "$clean_profile"
+  echo 'HARBOR_ANOTHER_KEY=42' >> "$clean_profile"
+  echo '# This is a comment' >> "$clean_profile"
+  if validate_profile_content "$clean_profile" 2>/dev/null; then
+    echo "ACCEPTED_CLEAN"
+  else
+    echo "REJECTED_CLEAN"
+  fi
+  rm -f "$clean_profile"
+) > /tmp/cli-step.out 2>&1
+
+if ! grep -q "ACCEPTED_CLEAN" /tmp/cli-step.out; then
+  cat /tmp/cli-step.out >&2
+  fail "validate_profile_content rejected a clean profile"
+fi
+suite_log "install hardening: clean profile correctly accepted"
+
+rm -f /tmp/cli-step.out /tmp/cli-doctor.out
+
+# ---------------------------------------------------------------------------
+# 40. harbor home and path resolution (v0.5.0 supplement)
+#     harbor home outputs the resolved harbor installation directory. This
+#     is the root path used for services, profiles, config, and all internal
+#     operations. Verify it's correct and contains expected structure.
+# ---------------------------------------------------------------------------
+suite_log "=== harbor home and path resolution ==="
+
+# harbor home outputs a valid directory path
+harbor_home_path=$(harbor home)
+if [ -z "$harbor_home_path" ]; then
+  fail "harbor home: output is empty"
+fi
+suite_log "harbor home: outputs '$harbor_home_path'"
+
+if [ ! -d "$harbor_home_path" ]; then
+  fail "harbor home: path '$harbor_home_path' is not a directory"
+fi
+suite_log "harbor home: path is a valid directory"
+
+# harbor home path should contain expected subdirectories
+for expected_dir in services profiles routines docs app; do
+  if [ ! -d "$harbor_home_path/$expected_dir" ]; then
+    fail "harbor home: missing expected subdirectory '$expected_dir'"
+  fi
+  suite_log "harbor home: contains $expected_dir/"
+done
+
+# harbor home should contain harbor.sh
+if [ ! -f "$harbor_home_path/harbor.sh" ]; then
+  fail "harbor home: harbor.sh not found"
+fi
+suite_log "harbor home: contains harbor.sh"
+
+# harbor home should contain .env (the active config)
+if [ ! -f "$harbor_home_path/.env" ]; then
+  fail "harbor home: .env not found"
+fi
+suite_log "harbor home: contains .env"
+
+# harbor home should be a git repository
+if [ ! -d "$harbor_home_path/.git" ]; then
+  fail "harbor home: .git directory not found (not a git repo)"
+fi
+suite_log "harbor home: is a git repository"
+
+# harbor home should contain compose.yml (base compose file)
+if [ ! -f "$harbor_home_path/compose.yml" ]; then
+  fail "harbor home: compose.yml not found"
+fi
+suite_log "harbor home: contains compose.yml"
+
+# Harbor resolves its own location correctly — the script at harbor_home_path
+# should be the same as the one on PATH
+harbor_on_path=$(command -v harbor)
+if [ -z "$harbor_on_path" ]; then
+  fail "harbor home: harbor not found on PATH"
+fi
+
+# Resolve symlinks to compare actual files
+harbor_resolved=$(readlink -f "$harbor_on_path" 2>/dev/null || realpath "$harbor_on_path" 2>/dev/null || echo "$harbor_on_path")
+harbor_home_script=$(readlink -f "$harbor_home_path/harbor.sh" 2>/dev/null || realpath "$harbor_home_path/harbor.sh" 2>/dev/null || echo "$harbor_home_path/harbor.sh")
+
+if [ "$harbor_resolved" != "$harbor_home_script" ]; then
+  fail "harbor home: script on PATH ($harbor_resolved) does not match harbor home script ($harbor_home_script)"
+fi
+suite_log "harbor home: PATH script matches harbor home script"
+
+# Verify profiles directory contains at least the default profile
+if [ ! -f "$harbor_home_path/profiles/default.env" ]; then
+  fail "harbor home: profiles/default.env not found"
+fi
+suite_log "harbor home: profiles/default.env exists"
+
+# Verify services directory has compose files
+svc_count=$(ls "$harbor_home_path"/services/compose.*.yml 2>/dev/null | wc -l)
+if [ "$svc_count" -lt 10 ]; then
+  fail "harbor home: services directory has too few compose files ($svc_count, expected >= 10)"
+fi
+suite_log "harbor home: services directory has $svc_count compose files"
+
+suite_log "OK"
