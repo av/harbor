@@ -73,6 +73,18 @@ if [ "$1" = "port" ]; then
       echo "8000/tcp -> 0.0.0.0:8004"
       exit 0
       ;;
+    harbor.dmr)
+      echo "8080/tcp -> 0.0.0.0:34920"
+      exit 0
+      ;;
+    harbor.mlx)
+      echo "8080/tcp -> 0.0.0.0:34930"
+      exit 0
+      ;;
+    harbor.omlx)
+      echo "8080/tcp -> 0.0.0.0:34940"
+      exit 0
+      ;;
   esac
 fi
 
@@ -619,6 +631,72 @@ run_launch "vscode opens the current workspace through code" \
 assert_log '^tool=code$'
 assert_log '^cwd='"$HARBOR_TEST_REPO"'$'
 assert_log '^arg='"$HARBOR_TEST_REPO"'$'
+
+run_launch "dmr backend resolves models and launches codex" \
+  "dmr" "root-array" \
+  --backend dmr codex
+assert_log '^tool=codex$'
+assert_log '^cwd='"$HARBOR_TEST_REPO"'$'
+assert_log '^OPENAI_API_KEY=sk-harbor$'
+assert_log '^arg=-m$'
+assert_log '^arg=root-array-model$'
+
+run_launch "dmr backend launches claude with correct base URL" \
+  "dmr" "root-array" \
+  --backend dmr --model root-array-model claude -p "hello"
+assert_log '^tool=claude$'
+assert_log '^ANTHROPIC_BASE_URL=http://localhost:34920$'
+assert_log '^arg=--model$'
+assert_log '^arg=root-array-model$'
+assert_log '^arg=-p$'
+assert_log '^arg=hello$'
+
+run_launch "mlx backend resolves models and launches codex" \
+  "mlx" "root-array" \
+  --backend mlx codex
+assert_log '^tool=codex$'
+assert_log '^cwd='"$HARBOR_TEST_REPO"'$'
+assert_log '^OPENAI_API_KEY=sk-harbor$'
+assert_log '^arg=-m$'
+assert_log '^arg=root-array-model$'
+
+run_launch "mlx backend launches opencode with inline provider config" \
+  "mlx" "root-array" \
+  --backend mlx opencode run
+assert_log '^tool=opencode$'
+assert_log '^cwd='"$HARBOR_TEST_REPO"'$'
+assert_log '^OPENAI_API_KEY=sk-harbor$'
+assert_log '^arg=-m$'
+assert_log '^arg=harbor-mlx/root-array-model$'
+assert_log '^arg=run$'
+assert_json '.provider["harbor-mlx"].options.baseURL == "http://localhost:34930/v1"'
+
+run_launch "omlx backend resolves models and launches codex" \
+  "omlx" "root-array" \
+  --backend omlx codex
+assert_log '^tool=codex$'
+assert_log '^cwd='"$HARBOR_TEST_REPO"'$'
+assert_log '^OPENAI_API_KEY=sk-harbor$'
+assert_log '^arg=-m$'
+assert_log '^arg=root-array-model$'
+
+run_launch "omlx backend launches hermes with correct environment" \
+  "omlx" "openai-mixed" \
+  --backend omlx hermes
+assert_log '^tool=hermes$'
+assert_log '^cwd='"$HARBOR_TEST_REPO"'$'
+assert_log '^OPENAI_BASE_URL=http://localhost:34940/v1$'
+assert_log '^OPENAI_API_KEY=sk-harbor$'
+assert_log '^HERMES_MODEL=qwen-chat-model$'
+assert_log '^arg=chat$'
+
+run_launch "dmr backend starts when not running" \
+  "" "root-array" \
+  --backend dmr --model root-array-model opencode run
+assert_log '^tool=opencode$'
+assert_log '^arg=harbor-dmr/root-array-model$'
+assert_output "Backend 'dmr' is not running; starting it"
+assert_docker_log 'up -d --wait dmr$'
 
 run_parallel_history_smoke
 

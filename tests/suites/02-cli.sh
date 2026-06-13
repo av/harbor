@@ -1201,5 +1201,184 @@ assert_match "hermes.host.port has a default" \
   '^[0-9]+$' \
   harbor config get hermes.host.port
 
+# ---------------------------------------------------------------------------
+# 29. harbor down -v flag passthrough (v0.5.0 — P1.6)
+#     `harbor down -v` must forward the -v flag to docker compose down so that
+#     named volumes are removed. We use a fake docker binary to intercept the
+#     compose call and verify -v appears in the arguments.
+# ---------------------------------------------------------------------------
+
+down_fake_bin="$(mktemp -d -t harbor-down.XXXXXX)"
+down_fake_log="$(mktemp -t harbor-down-log.XXXXXX)"
+cat >"$down_fake_bin/docker" <<'DOWN_FAKE_DOCKER'
+#!/usr/bin/env bash
+
+# compose version -- needed by _check_docker
+if [[ "$*" == *"compose version"* ]]; then
+  echo "Docker Compose version v2.30.0"
+  exit 0
+fi
+
+# compose ps --format {{.Service}} -- needed by get_active_services
+if [[ "$*" == *'compose ps --format'* ]]; then
+  echo "ollama"
+  exit 0
+fi
+
+# compose ps -a --format -- needed by run_down sibling lookup
+if [[ "$*" == *'compose ps -a --format'* ]]; then
+  echo "ollama"
+  exit 0
+fi
+
+# compose ps --services --filter status=running
+if [[ "$*" == *"--services --filter"* ]]; then
+  echo "ollama"
+  exit 0
+fi
+
+# config --services -- needed by get_services
+if [[ "$*" == *"config --services"* ]]; then
+  printf '%s\n' ollama webui llamacpp
+  exit 0
+fi
+
+# Log every compose invocation for later inspection
+if [ "$1" = "compose" ]; then
+  printf '%s\n' "$*" >>"$HARBOR_DOWN_FAKE_LOG"
+  exit 0
+fi
+
+exit 0
+DOWN_FAKE_DOCKER
+chmod +x "$down_fake_bin/docker"
+
+# Test: harbor down -v passes -v to compose down
+: >"$down_fake_log"
+suite_log "down -v: flag is forwarded to compose"
+if ! HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false HARBOR_DOWN_FAKE_LOG="$down_fake_log" PATH="$down_fake_bin:$PATH" harbor down -v >/tmp/cli-step.out 2>&1; then
+  cat /tmp/cli-step.out >&2
+  fail "harbor down -v exited non-zero"
+fi
+if ! grep -q ' down ' "$down_fake_log"; then
+  cat "$down_fake_log" >&2
+  fail "harbor down -v did not call compose down"
+fi
+if ! grep -q -- '-v' "$down_fake_log"; then
+  cat "$down_fake_log" >&2
+  fail "harbor down -v did not forward -v to compose"
+fi
+
+# Test: harbor down --volumes also forwards --volumes
+: >"$down_fake_log"
+suite_log "down --volumes: flag is forwarded to compose"
+if ! HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false HARBOR_DOWN_FAKE_LOG="$down_fake_log" PATH="$down_fake_bin:$PATH" harbor down --volumes >/tmp/cli-step.out 2>&1; then
+  cat /tmp/cli-step.out >&2
+  fail "harbor down --volumes exited non-zero"
+fi
+if ! grep -q -- '--volumes' "$down_fake_log"; then
+  cat "$down_fake_log" >&2
+  fail "harbor down --volumes did not forward --volumes to compose"
+fi
+
+# Test: harbor down (no flags) does not pass -v
+: >"$down_fake_log"
+suite_log "down (no flags): no -v in compose args"
+if ! HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false HARBOR_DOWN_FAKE_LOG="$down_fake_log" PATH="$down_fake_bin:$PATH" harbor down >/tmp/cli-step.out 2>&1; then
+  cat /tmp/cli-step.out >&2
+  fail "harbor down (no flags) exited non-zero"
+fi
+if grep -q -- ' -v ' "$down_fake_log" || grep -Eq -- ' -v$' "$down_fake_log"; then
+  cat "$down_fake_log" >&2
+  fail "harbor down (no flags) unexpectedly passed -v to compose"
+fi
+
+# Test: harbor down --rmi local forwards --rmi local
+: >"$down_fake_log"
+suite_log "down --rmi local: flags forwarded to compose"
+if ! HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false HARBOR_DOWN_FAKE_LOG="$down_fake_log" PATH="$down_fake_bin:$PATH" harbor down --rmi local >/tmp/cli-step.out 2>&1; then
+  cat /tmp/cli-step.out >&2
+  fail "harbor down --rmi local exited non-zero"
+fi
+if ! grep -q -- '--rmi' "$down_fake_log" || ! grep -q -- 'local' "$down_fake_log"; then
+  cat "$down_fake_log" >&2
+  fail "harbor down --rmi local did not forward flags to compose"
+fi
+
+rm -rf "$down_fake_bin" "$down_fake_log"
+
+# ---------------------------------------------------------------------------
+# 30. End-to-end port conflict detection (v0.5.0 — P0.6 supplement)
+#     Section #24 tested the port parser and inter-service conflict detection.
+#     This section tests host-level port conflict detection: occupy a port on
+#     the host and verify _is_port_in_use detects it.
+# ---------------------------------------------------------------------------
+
+harbor_script="$(harbor home)/harbor.sh"
+
+# Find a high port that is currently free.
+conflict_test_port=""
+for candidate_port in 59871 59872 59873 59874 59875; do
+  if ! ss -tln "sport = :$candidate_port" 2>/dev/null | grep -q "LISTEN" 2>/dev/null; then
+    conflict_test_port="$candidate_port"
+    break
+  fi
+done
+
+if [ -n "$conflict_test_port" ]; then
+  # Verify _is_port_in_use returns false for the free port.
+  suite_log "port conflict e2e: free port $conflict_test_port is not in use"
+  port_in_use_result=0
+  (
+    eval "$(sed -n '/_is_port_in_use()/,/^}/p' "$harbor_script")"
+    _is_port_in_use "$conflict_test_port"
+  ) && port_in_use_result=$? || port_in_use_result=$?
+  if [ "$port_in_use_result" -eq 0 ]; then
+    fail "_is_port_in_use reported free port $conflict_test_port as in use"
+  fi
+
+  # Bind the port with a background listener.
+  suite_log "port conflict e2e: occupied port $conflict_test_port detected"
+  # Use bash's built-in /dev/tcp redirection trick or nc
+  if command -v socat &>/dev/null; then
+    socat TCP-LISTEN:"$conflict_test_port",reuseaddr,fork /dev/null &
+    listener_pid=$!
+  elif command -v nc &>/dev/null; then
+    # GNU nc (ncat) on Fedora supports -l -k
+    nc -l -k "$conflict_test_port" >/dev/null 2>&1 &
+    listener_pid=$!
+  else
+    # Python fallback
+    python3 -c "
+import socket, time
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+s.bind(('127.0.0.1', $conflict_test_port))
+s.listen(1)
+time.sleep(30)
+" &
+    listener_pid=$!
+  fi
+
+  # Wait briefly for the listener to bind.
+  sleep 0.3
+
+  port_in_use_result=1
+  (
+    eval "$(sed -n '/_is_port_in_use()/,/^}/p' "$harbor_script")"
+    _is_port_in_use "$conflict_test_port"
+  ) && port_in_use_result=$? || port_in_use_result=$?
+
+  # Clean up the listener immediately.
+  kill "$listener_pid" 2>/dev/null || true
+  wait "$listener_pid" 2>/dev/null || true
+
+  if [ "$port_in_use_result" -ne 0 ]; then
+    fail "_is_port_in_use did not detect occupied port $conflict_test_port"
+  fi
+else
+  suite_log "port conflict e2e: SKIP (no free port found in range)"
+fi
+
 rm -f /tmp/cli-step.out
 suite_log "OK"
