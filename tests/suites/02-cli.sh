@@ -784,5 +784,171 @@ if grep -q 'boost' /tmp/cli-step.out; then
   fail "harbor defaults rm did not remove boost from defaults"
 fi
 
+# ---------------------------------------------------------------------------
+# 20. Tab completion generation (v0.5.0 — P1.3)
+#     `harbor completion bash|zsh|fish` must emit valid, non-empty scripts
+#     that contain key commands and the correct shell-specific markers.
+# ---------------------------------------------------------------------------
+
+# Bash completion: must contain `complete -F` and key subcommands.
+assert_match "completion bash emits complete -F" \
+  'complete -F' \
+  harbor completion bash
+assert_match "completion bash includes 'up'" \
+  '\bup\b' \
+  harbor completion bash
+assert_match "completion bash includes 'volumes'" \
+  '\bvolumes\b' \
+  harbor completion bash
+assert_match "completion bash includes 'skills'" \
+  '\bskills\b' \
+  harbor completion bash
+
+# Zsh completion: must start with #compdef marker.
+assert_match "completion zsh emits #compdef" \
+  '#compdef' \
+  harbor completion zsh
+assert_match "completion zsh includes 'config'" \
+  'config' \
+  harbor completion zsh
+
+# Fish completion: must contain `complete -c harbor` directives.
+assert_match "completion fish emits complete -c harbor" \
+  'complete -c harbor' \
+  harbor completion fish
+assert_match "completion fish includes 'down'" \
+  'down' \
+  harbor completion fish
+
+# No-args case: should print usage with supported shells.
+assert_match "completion no-args shows usage" \
+  'harbor completion <shell>' \
+  harbor completion
+
+# Invalid shell should fail.
+suite_log "completion: invalid shell fails"
+if harbor completion nosuchshell >/tmp/cli-step.out 2>&1; then
+  cat /tmp/cli-step.out >&2
+  fail "harbor completion nosuchshell unexpectedly succeeded"
+fi
+
+# ---------------------------------------------------------------------------
+# 21. Pure-bash config search fallback (v0.5.0 — P1.4)
+#     `harbor config search` uses a pure-bash fallback (_config_search_bash)
+#     when deno is unavailable. In test containers deno is typically absent,
+#     so we're already exercising the fallback path.
+# ---------------------------------------------------------------------------
+
+# config search for a well-known key should return results.
+assert_match "config search ollama returns results" \
+  'ollama' \
+  harbor config search ollama
+
+# config search for a specific key format should match dot-notation output.
+assert_match "config search webui returns results" \
+  'webui' \
+  harbor config search webui
+
+# config ls should succeed (exercises the same fallback for list mode).
+assert_ok "config ls via fallback" harbor config ls
+
+# config search with no query should fail with usage.
+suite_log "config search no-query shows usage"
+if harbor config search >/tmp/cli-step.out 2>&1; then
+  cat /tmp/cli-step.out >&2
+  fail "harbor config search with no query unexpectedly succeeded"
+fi
+
+# ---------------------------------------------------------------------------
+# 22. Config set/get round-trip and preservation (v0.5.0 — P1.5)
+#     `harbor config set` must preserve file permissions and not corrupt
+#     adjacent config values. This tests the head/tail line-replacement
+#     logic and the chmod permission-copy path.
+# ---------------------------------------------------------------------------
+
+# Record .env permissions before the test.
+harbor_home_dir="$(harbor home)"
+env_perms_before=$(stat -c '%a' "$harbor_home_dir/.env" 2>/dev/null || stat -f '%Lp' "$harbor_home_dir/.env" 2>/dev/null)
+
+# Round-trip a fresh key.
+assert_ok    "config set test.perm to 'hello'" harbor config set test.perm hello
+assert_match "config get test.perm returns 'hello'" \
+  '^hello$' \
+  harbor config get test.perm
+
+# Set a second key and verify the first is not corrupted.
+assert_ok    "config set test.perm2 to 'world'" harbor config set test.perm2 world
+assert_match "config get test.perm still returns 'hello'" \
+  '^hello$' \
+  harbor config get test.perm
+assert_match "config get test.perm2 returns 'world'" \
+  '^world$' \
+  harbor config get test.perm2
+
+# Overwrite the first key and verify the second is untouched.
+assert_ok    "config set test.perm to 'changed'" harbor config set test.perm changed
+assert_match "config get test.perm returns 'changed'" \
+  '^changed$' \
+  harbor config get test.perm
+assert_match "config get test.perm2 still returns 'world'" \
+  '^world$' \
+  harbor config get test.perm2
+
+# Check permissions were preserved.
+env_perms_after=$(stat -c '%a' "$harbor_home_dir/.env" 2>/dev/null || stat -f '%Lp' "$harbor_home_dir/.env" 2>/dev/null)
+suite_log "config set preserves .env permissions ($env_perms_before -> $env_perms_after)"
+if [ "$env_perms_before" != "$env_perms_after" ]; then
+  fail "config set changed .env permissions from $env_perms_before to $env_perms_after"
+fi
+
+# Verify no leftover temp files in the harbor home directory.
+suite_log "config set leaves no temp files"
+leftover=$(find "$harbor_home_dir" -maxdepth 1 -name 'harbor_set.*' -o -name 'tmp.*' 2>/dev/null | head -3)
+if [ -n "$leftover" ]; then
+  echo "$leftover" >&2
+  fail "config set left temp files in harbor home"
+fi
+
+# Clean up test keys.
+assert_ok "config unset test.perm"  harbor config unset test.perm
+assert_ok "config unset test.perm2" harbor config unset test.perm2
+
+# ---------------------------------------------------------------------------
+# 23. Daytona multi-container structure (v0.5.0 — P1.7)
+#     Daytona is a complex multi-container service with API, proxy, runner,
+#     SSH gateway, database, and supporting infrastructure. Verify the
+#     compose config lists the expected sub-services.
+# ---------------------------------------------------------------------------
+
+# harbor cmd daytona should exit 0 (already tested in #15, but we need the
+# output for the config --services check below).
+assert_ok "daytona compose parses" harbor cmd daytona
+
+# Extract the compose command and list its services.
+daytona_cmd=$(harbor cmd daytona 2>/dev/null)
+suite_log "daytona compose lists multiple sub-services"
+daytona_services=$($daytona_cmd config --services 2>/dev/null) || {
+  fail "daytona compose config --services failed"
+}
+
+# Daytona should have at minimum these core sub-services.
+for expected_svc in daytona daytona-proxy daytona-runner daytona-ssh daytona-db daytona-redis daytona-minio; do
+  suite_log "daytona sub-service present: $expected_svc"
+  if ! echo "$daytona_services" | grep -q "^${expected_svc}$"; then
+    echo "Services found:" >&2
+    echo "$daytona_services" >&2
+    fail "daytona compose config --services missing: $expected_svc"
+  fi
+done
+
+# Count total sub-services — Daytona has 14 in its compose file.
+daytona_svc_count=$(echo "$daytona_services" | wc -l | tr -d ' ')
+suite_log "daytona has $daytona_svc_count sub-services (expected >= 10)"
+if [ "$daytona_svc_count" -lt 10 ]; then
+  echo "Only $daytona_svc_count services found:" >&2
+  echo "$daytona_services" >&2
+  fail "daytona should have at least 10 sub-services, found $daytona_svc_count"
+fi
+
 rm -f /tmp/cli-step.out
 suite_log "OK"
