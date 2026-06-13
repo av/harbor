@@ -160,6 +160,11 @@ async function applyCustomVolumes(compose: ComposeObject): Promise<ComposeObject
     }
 
     for (const vol of customVolumes) {
+      if (!vol.includes(':')) {
+        log.warn(`Skipping malformed custom volume "${vol}" for ${serviceName}: expected "<source>:<target>" mount syntax`);
+        continue;
+      }
+
       if (!serviceDef.volumes.includes(vol)) {
         serviceDef.volumes.push(vol);
       }
@@ -215,6 +220,9 @@ export async function mergeComposeFiles(args) {
 
     merged = await applyCustomVolumes(merged);
 
+    // Older Harbor versions ran this routine as root in a container, leaving a
+    // root-owned merged file behind; remove it before writing as the host user.
+    await Deno.remove(`${paths.home}/${paths.mergedYaml}`).catch(() => {});
     await Deno.writeTextFile(`${paths.home}/${paths.mergedYaml}`, yaml.stringify(merged))
     targetFiles.push(`${paths.home}/${paths.mergedYaml}`);
   } else {

@@ -256,17 +256,68 @@ export function encodeBashValue(value: string): string {
   return `"${escaped}"`;
 }
 
+// Compose `environment` lists use KEY=VALUE entries where the last occurrence
+// of a KEY wins. Merge key-aware so a later file's entry replaces an earlier
+// one with the same KEY (even when values are byte-identical), and normalize
+// so each KEY appears once in the merged output.
+function envVarName(item: unknown): string | null {
+  return typeof item === "string" ? item.split("=")[0] : null;
+}
+
+function mergeEnvironmentArrays(target: unknown[], source: unknown[]): unknown[] {
+  const merged: unknown[] = [];
+  for (const item of [...target, ...source]) {
+    const name = envVarName(item);
+    if (name !== null) {
+      const existing = merged.findIndex((m) => envVarName(m) === name);
+      if (existing !== -1) merged.splice(existing, 1);
+      merged.push(item);
+    } else if (!merged.includes(item)) {
+      merged.push(item);
+    }
+  }
+  return merged;
+}
+
+// Compose `depends_on` accepts a list of service names or a map with
+// per-service conditions. Mixing forms across merged files must not drop
+// conditions (e.g. an init sidecar's service_completed_successfully), so
+// normalize the list form to its map equivalent before merging.
+function normalizeDependsOn(value: unknown): Record<string, unknown> | null {
+  if (Array.isArray(value)) {
+    const map: Record<string, unknown> = {};
+    for (const item of value) {
+      if (typeof item === "string") map[item] = { condition: "service_started" };
+    }
+    return map;
+  }
+  if (value && typeof value === "object") return value as Record<string, unknown>;
+  return null;
+}
+
 export function deepMerge<T extends Record<string, unknown>>(target: T, source: T): T {
   const result = { ...target } as Record<string, unknown>;
   for (const key of Object.keys(source)) {
     const sv = source[key];
     const tv = target[key];
-    if (Array.isArray(tv) && Array.isArray(sv)) {
-      const merged = [...tv];
-      for (const item of sv) {
-        if (!merged.includes(item)) merged.push(item);
+    if (key === "depends_on" && tv != null && sv != null && (Array.isArray(tv) || Array.isArray(sv))) {
+      const tn = normalizeDependsOn(tv);
+      const sn = normalizeDependsOn(sv);
+      if (tn && sn) {
+        result[key] = deepMerge(tn, sn);
+        continue;
       }
-      result[key] = merged;
+    }
+    if (Array.isArray(tv) && Array.isArray(sv)) {
+      if (key === "environment") {
+        result[key] = mergeEnvironmentArrays(tv, sv);
+      } else {
+        const merged = [...tv];
+        for (const item of sv) {
+          if (!merged.includes(item)) merged.push(item);
+        }
+        result[key] = merged;
+      }
     } else if (
       sv && tv &&
       typeof sv === "object" && !Array.isArray(sv) &&

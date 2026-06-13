@@ -296,6 +296,8 @@ export default async function apply(
   await Deno.mkdir(join(dir, "./services/surfsense/configs"), {
     recursive: true,
   });
+  // Remove first: older Harbor versions generated this file as root in a container
+  await Deno.remove(configPath).catch(() => {});
   await Deno.writeTextFile(configPath, renderConfig(entries));
 
   const mount = `${GENERATED_CONFIG}:/app/app/config/global_llm_config.yaml:ro`;

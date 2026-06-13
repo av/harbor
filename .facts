@@ -74,6 +74,14 @@
   command: rg -q 'run_models_routine' harbor.sh && rg -q 'dmr' routines/models.ts && rg -q 'mlx' routines/models.ts && rg -q 'omlx' routines/models.ts
   tags: [implemented]
 
+## compose-merge
+- label: compose environment-list merging is key-aware: a later cross-file's KEY=VALUE entry replaces an earlier same-KEY entry even when byte-identical, so .a.b tie-breaker files take effect
+  command: grep -q 'mergeEnvironmentArrays' routines/utils.ts
+  tags: [implemented, bughunt]
+- label: compose deepMerge normalizes list-form depends_on to map form when merging, so cross-file depends_on never drops init-sidecar completion conditions
+  command: deno eval --unstable-sloppy-imports 'import {deepMerge} from "./routines/utils.ts"; const r: any = deepMerge({depends_on:{i:{condition:"service_completed_successfully"}}} as any, {depends_on:["o"]} as any); if (!r.depends_on?.i) Deno.exit(1);'
+  tags: [implemented, bughunt]
+
 # services
 - label: compose.yml defines only the shared harbor-network without service definitions
   command: grep -q 'harbor-network' compose.yml && ! grep -q '^services:' compose.yml
