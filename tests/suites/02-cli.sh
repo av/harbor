@@ -527,5 +527,74 @@ if harbor skills get nonexistent-skill-xyz >/tmp/cli-step.out 2>&1; then
   fail "harbor skills get nonexistent unexpectedly succeeded"
 fi
 
+# ---------------------------------------------------------------------------
+# 15. New backend services compose validation (v0.5.0 — P0.7)
+#     DMR, MLX, oMLX, and Daytona were added in this release. Their compose
+#     files must exist and parse without errors.
+# ---------------------------------------------------------------------------
+
+# Compose files exist at the expected paths.
+harbor_home="$(harbor home)"
+for svc in dmr mlx omlx daytona; do
+  suite_log "compose file exists: $svc"
+  [ -f "$harbor_home/services/compose.${svc}.yml" ] \
+    || fail "compose file missing: services/compose.${svc}.yml"
+done
+
+# harbor ls includes all four new services.
+assert_match "harbor ls includes dmr"     '\bdmr\b'     harbor ls
+assert_match "harbor ls includes mlx"     '\bmlx\b'     harbor ls
+assert_match "harbor ls includes omlx"    '\bomlx\b'    harbor ls
+assert_match "harbor ls includes daytona" '\bdaytona\b' harbor ls
+
+# harbor cmd exits 0 for each (compose parses correctly).
+assert_ok "harbor cmd dmr"     harbor cmd dmr
+assert_ok "harbor cmd mlx"     harbor cmd mlx
+assert_ok "harbor cmd omlx"    harbor cmd omlx
+assert_ok "harbor cmd daytona" harbor cmd daytona
+
+# ---------------------------------------------------------------------------
+# 16. Cross-service integration file validity spot-checks (v0.5.0 — P0.8)
+#     78+ new compose.x.<satellite>.<backend>.yml files were added for DMR,
+#     MLX, oMLX, and llamacpp integrations. Validate a representative sample
+#     of ~20 pairs by checking that `harbor cmd <satellite> <backend>` exits 0
+#     (meaning all compose files — base + service + integration — parse).
+# ---------------------------------------------------------------------------
+
+# llamacpp integrations (now a default service — highest priority).
+assert_ok "integration: webui + llamacpp"       harbor cmd webui llamacpp
+assert_ok "integration: boost + llamacpp"       harbor cmd boost llamacpp
+assert_ok "integration: aider + llamacpp"       harbor cmd aider llamacpp
+assert_ok "integration: chatui + llamacpp"      harbor cmd chatui llamacpp
+assert_ok "integration: hermes + llamacpp"      harbor cmd hermes llamacpp
+assert_ok "integration: cognee + llamacpp"      harbor cmd cognee llamacpp
+assert_ok "integration: openhands + llamacpp"   harbor cmd openhands llamacpp
+assert_ok "integration: perplexica + llamacpp"  harbor cmd perplexica llamacpp
+assert_ok "integration: lobechat + llamacpp"    harbor cmd lobechat llamacpp
+assert_ok "integration: sillytavern + llamacpp" harbor cmd sillytavern llamacpp
+assert_ok "integration: plandex + llamacpp"     harbor cmd plandex llamacpp
+assert_ok "integration: promptfoo + llamacpp"   harbor cmd promptfoo llamacpp
+assert_ok "integration: bifrost + llamacpp"     harbor cmd bifrost llamacpp
+
+# DMR integrations.
+assert_ok "integration: aider + dmr"    harbor cmd aider dmr
+assert_ok "integration: boost + dmr"    harbor cmd boost dmr
+assert_ok "integration: chatui + dmr"   harbor cmd chatui dmr
+assert_ok "integration: hermes + dmr"   harbor cmd hermes dmr
+assert_ok "integration: litellm + dmr"  harbor cmd litellm dmr
+
+# MLX integrations.
+assert_ok "integration: aider + mlx"   harbor cmd aider mlx
+assert_ok "integration: chatui + mlx"  harbor cmd chatui mlx
+assert_ok "integration: cognee + mlx"  harbor cmd cognee mlx
+
+# oMLX integrations.
+assert_ok "integration: aider + omlx"    harbor cmd aider omlx
+assert_ok "integration: bifrost + omlx"  harbor cmd bifrost omlx
+assert_ok "integration: boost + omlx"    harbor cmd boost omlx
+
+# Cross-backend triple — satellite with two backends at once.
+assert_ok "integration: aider + llamacpp + dmr" harbor cmd aider llamacpp dmr
+
 rm -f /tmp/cli-step.out
 suite_log "OK"
