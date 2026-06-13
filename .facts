@@ -252,3 +252,6 @@
   command: test $(grep -cE "apt-cache show (docker-ce|docker-compose-v2|docker-compose-plugin)" requirements.sh) -gt 0 && ! grep -E "apt-cache show (docker-ce|docker-compose-v2|docker-compose-plugin)" requirements.sh | grep -v "Package:" | grep -q .
   tags: [spec, implemented]
 - On a clean Ubuntu 24.04 without the Docker APT repository, the Harbor App guided install completes end-to-end by installing docker.io, with no manual repo configuration required @spec @implemented
+
+## daytona
+- tests/app-daytona-install.md exists and covers in-app Harbor install verification on Ubuntu 24.04 and Fedora 42 Daytona sandboxes @implemented @app-daytona-install-spec

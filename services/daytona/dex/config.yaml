@@ -1,0 +1,25 @@
+issuer: http://localhost:35006/dex
+storage:
+  type: sqlite3
+  config:
+    file: /var/dex/dex.db
+
+web:
+  http: 0.0.0.0:5556
+  allowedOrigins: ['*']
+  allowedHeaders: ['x-requested-with']
+staticClients:
+  - id: daytona
+    redirectURIs:
+      - 'http://localhost:35000'
+      - 'http://localhost:35000/api/oauth2-redirect.html'
+      - 'http://localhost:35000/callback'
+      - 'http://proxy.localhost:35001/callback'
+    name: 'Daytona'
+    public: true
+enablePasswordDB: true
+staticPasswords:
+  - email: 'dev@daytona.io'
+    hash: '$2a$10$2b2cU8CPhOTaGrs1HRQuAueS7JTT5ZHsHSzYiFPm1leZck7Mc8T4W'
+    username: 'admin'
+    userID: '1234'

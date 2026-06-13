@@ -1355,6 +1355,16 @@ service_compose_exists() {
         return 0
     fi
 
+    # Companion sub-services (e.g. langfuse-worker, daytona-registry-ui) are
+    # defined inside the parent's compose file and follow <parent>-<suffix> naming.
+    local parent="$service"
+    while [[ "$parent" == *-* ]]; do
+        parent="${parent%-*}"
+        if [ -f "$services_dir/compose.$parent.yml" ] || [ -f "$services_dir/compose.$parent.ts" ]; then
+            return 0
+        fi
+    done
+
     return 1
 }
 
@@ -1396,6 +1406,51 @@ resolve_compose_command() {
     else
         echo "$cmd"
     fi
+}
+
+# Daytona ships no SSH keys by default; mint per-install keys on first
+# `harbor up daytona` and persist them to .env. Keys are stored base64-encoded
+# as the daytona-ssh image expects (SSH_PRIVATE_KEY / SSH_HOST_KEY).
+ensure_daytona_ssh_keys() {
+    local existing
+    existing=$(env_manager --silent get daytona.ssh_gateway_private_key)
+    if [ -n "$existing" ]; then
+        return 0
+    fi
+
+    if ! command -v ssh-keygen &>/dev/null; then
+        log_error "Daytona needs per-install SSH gateway keys, but 'ssh-keygen' was not found."
+        log_error "Install an OpenSSH client (apt: openssh-client, dnf: openssh-clients, brew: openssh) and re-run 'harbor up daytona'."
+        return 1
+    fi
+
+    log_info "Generating Daytona SSH gateway keys (first run only)..."
+    local key_dir
+    key_dir=$(mktemp -d -t harbor_daytona_ssh.XXXXXX) || {
+        log_error "Failed to create temporary directory for Daytona SSH keys."
+        return 1
+    }
+
+    if ! ssh-keygen -t rsa -b 3072 -N "" -C "harbor-daytona" -f "$key_dir/gateway" -q ||
+        ! ssh-keygen -t rsa -b 3072 -N "" -C "harbor-daytona" -f "$key_dir/host" -q; then
+        rm -rf "$key_dir"
+        log_error "ssh-keygen failed while generating Daytona SSH keys."
+        return 1
+    fi
+
+    # base64 | tr -d '\n' produces a single line on both GNU and BSD base64
+    local private_b64 public_b64 host_b64
+    private_b64=$(base64 <"$key_dir/gateway" | tr -d '\n')
+    public_b64=$(base64 <"$key_dir/gateway.pub" | tr -d '\n')
+    host_b64=$(base64 <"$key_dir/host" | tr -d '\n')
+    rm -rf "$key_dir"
+
+    env_manager --silent set daytona.ssh_gateway_private_key "$private_b64" &&
+        env_manager --silent set daytona.ssh_gateway_public_key "$public_b64" &&
+        env_manager --silent set daytona.ssh_host_key "$host_b64" || {
+        log_error "Failed to persist Daytona SSH keys to .env"
+        return 1
+    }
 }
 
 run_up() {
@@ -1488,6 +1543,9 @@ run_up() {
             ;;
         omlx)
             run_omlx_command start
+            ;;
+        daytona)
+            ensure_daytona_ssh_keys || return 1
             ;;
         esac
     done

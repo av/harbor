@@ -1,0 +1,333 @@
+services:
+  daytona:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.daytona
+    image: ${HARBOR_DAYTONA_IMAGE}:${HARBOR_DAYTONA_VERSION}
+    env_file:
+      - ./.env
+      - ./services/daytona/override.env
+    ports:
+      - ${HARBOR_DAYTONA_HOST_PORT}:3000
+    environment:
+      OTEL_ENABLED: "true"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://daytona-otel:4318
+      DEFAULT_SNAPSHOT: ${HARBOR_DAYTONA_DEFAULT_SNAPSHOT}
+      ENCRYPTION_KEY: ${HARBOR_DAYTONA_ENCRYPTION_KEY}
+      ENCRYPTION_SALT: ${HARBOR_DAYTONA_ENCRYPTION_SALT}
+      NODE_ENV: production
+      PORT: "3000"
+      DB_HOST: daytona-db
+      DB_PORT: "5432"
+      DB_USERNAME: ${HARBOR_DAYTONA_DB_USER}
+      DB_PASSWORD: ${HARBOR_DAYTONA_DB_PASSWORD}
+      DB_DATABASE: ${HARBOR_DAYTONA_DB_NAME}
+      REDIS_HOST: daytona-redis
+      REDIS_PORT: "6379"
+      OIDC_CLIENT_ID: daytona
+      OIDC_ISSUER_BASE_URL: http://daytona-dex:5556/dex
+      PUBLIC_OIDC_DOMAIN: http://localhost:${HARBOR_DAYTONA_DEX_HOST_PORT}/dex
+      OIDC_AUDIENCE: daytona
+      OIDC_MANAGEMENT_API_ENABLED: ""
+      OIDC_MANAGEMENT_API_CLIENT_ID: ""
+      OIDC_MANAGEMENT_API_CLIENT_SECRET: ""
+      OIDC_MANAGEMENT_API_AUDIENCE: ""
+      DASHBOARD_URL: http://localhost:${HARBOR_DAYTONA_HOST_PORT}/dashboard
+      DASHBOARD_BASE_API_URL: http://localhost:${HARBOR_DAYTONA_HOST_PORT}
+      POSTHOG_API_KEY: ""
+      POSTHOG_HOST: ""
+      POSTHOG_ENVIRONMENT: local
+      TRANSIENT_REGISTRY_URL: http://daytona-registry:6000
+      TRANSIENT_REGISTRY_ADMIN: admin
+      TRANSIENT_REGISTRY_PASSWORD: password
+      TRANSIENT_REGISTRY_PROJECT_ID: daytona
+      INTERNAL_REGISTRY_URL: http://daytona-registry:6000
+      INTERNAL_REGISTRY_ADMIN: admin
+      INTERNAL_REGISTRY_PASSWORD: password
+      INTERNAL_REGISTRY_PROJECT_ID: daytona
+      SMTP_HOST: daytona-maildev
+      SMTP_PORT: "1025"
+      SMTP_USER: ""
+      SMTP_PASSWORD: ""
+      SMTP_SECURE: ""
+      SMTP_EMAIL_FROM: "Daytona Team <no-reply@daytona.io>"
+      S3_ENDPOINT: http://daytona-minio:9000
+      S3_STS_ENDPOINT: http://daytona-minio:9000/minio/v1/assume-role
+      S3_REGION: us-east-1
+      S3_ACCESS_KEY: ${HARBOR_DAYTONA_MINIO_ROOT_USER}
+      S3_SECRET_KEY: ${HARBOR_DAYTONA_MINIO_ROOT_PASSWORD}
+      S3_DEFAULT_BUCKET: ${HARBOR_DAYTONA_MINIO_BUCKET}
+      S3_ACCOUNT_ID: /
+      S3_ROLE_NAME: /
+      ENVIRONMENT: docker-compose
+      MAX_AUTO_ARCHIVE_INTERVAL: "43200"
+      MAINTENANCE_MODE: "false"
+      PROXY_DOMAIN: proxy.localhost:${HARBOR_DAYTONA_PROXY_HOST_PORT}
+      PROXY_PROTOCOL: http
+      PROXY_API_KEY: ${HARBOR_DAYTONA_PROXY_API_KEY}
+      PROXY_TEMPLATE_URL: "http://{{PORT}}-{{sandboxId}}.proxy.localhost:${HARBOR_DAYTONA_PROXY_HOST_PORT}"
+      DEFAULT_RUNNER_DOMAIN: daytona-runner:3003
+      DEFAULT_RUNNER_API_URL: http://daytona-runner:3003
+      DEFAULT_RUNNER_PROXY_URL: http://daytona-runner:3003
+      DEFAULT_RUNNER_API_KEY: ${HARBOR_DAYTONA_RUNNER_API_KEY}
+      DEFAULT_RUNNER_CPU: "4"
+      DEFAULT_RUNNER_MEMORY: "8"
+      DEFAULT_RUNNER_DISK: "50"
+      DEFAULT_RUNNER_NAME: default
+      DEFAULT_REGION_ID: us
+      DEFAULT_REGION_NAME: us
+      DEFAULT_REGION_ENFORCE_QUOTAS: "false"
+      DEFAULT_ORG_QUOTA_TOTAL_CPU_QUOTA: "10000"
+      DEFAULT_ORG_QUOTA_TOTAL_MEMORY_QUOTA: "10000"
+      DEFAULT_ORG_QUOTA_TOTAL_DISK_QUOTA: "100000"
+      DEFAULT_ORG_QUOTA_MAX_CPU_PER_SANDBOX: "100"
+      DEFAULT_ORG_QUOTA_MAX_MEMORY_PER_SANDBOX: "100"
+      DEFAULT_ORG_QUOTA_MAX_DISK_PER_SANDBOX: "1000"
+      DEFAULT_ORG_QUOTA_SNAPSHOT_QUOTA: "1000"
+      DEFAULT_ORG_QUOTA_MAX_SNAPSHOT_SIZE: "1000"
+      DEFAULT_ORG_QUOTA_VOLUME_QUOTA: "10000"
+      SSH_GATEWAY_API_KEY: ${HARBOR_DAYTONA_SSH_API_KEY}
+      SSH_GATEWAY_COMMAND: "ssh -p ${HARBOR_DAYTONA_SSH_HOST_PORT} {{TOKEN}}@localhost"
+      SSH_GATEWAY_PUBLIC_KEY: ${HARBOR_DAYTONA_SSH_GATEWAY_PUBLIC_KEY}
+      SSH_GATEWAY_URL: "localhost:${HARBOR_DAYTONA_SSH_HOST_PORT}"
+      RUNNER_DECLARATIVE_BUILD_SCORE_THRESHOLD: "10"
+      RUNNER_AVAILABILITY_SCORE_THRESHOLD: "10"
+      RUNNER_START_SCORE_THRESHOLD: "3"
+      SKIP_USER_EMAIL_VERIFICATION: "true"
+      RUN_MIGRATIONS: "true"
+      OTEL_COLLECTOR_API_KEY: ${HARBOR_DAYTONA_OTEL_COLLECTOR_API_KEY}
+      HEALTH_CHECK_API_KEY: ${HARBOR_DAYTONA_ENCRYPTION_KEY}
+      ADMIN_API_KEY: ${HARBOR_DAYTONA_ADMIN_API_KEY}
+      ADMIN_TOTAL_CPU_QUOTA: "10000"
+      ADMIN_TOTAL_MEMORY_QUOTA: "10000"
+      ADMIN_TOTAL_DISK_QUOTA: "100000"
+      ADMIN_MAX_CPU_PER_SANDBOX: "100"
+      ADMIN_MAX_MEMORY_PER_SANDBOX: "100"
+      ADMIN_MAX_DISK_PER_SANDBOX: "1000"
+      ADMIN_SNAPSHOT_QUOTA: "1000"
+      ADMIN_MAX_SNAPSHOT_SIZE: "1000"
+      ADMIN_VOLUME_QUOTA: "10000"
+    networks:
+      - harbor-network
+    privileged: true
+    depends_on:
+      daytona-db:
+        condition: service_healthy
+      daytona-redis:
+        condition: service_healthy
+      daytona-runner:
+        condition: service_started
+      daytona-dex:
+        condition: service_healthy
+      daytona-registry:
+        condition: service_started
+
+  daytona-proxy:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.daytona-proxy
+    image: ${HARBOR_DAYTONA_PROXY_IMAGE}:${HARBOR_DAYTONA_PROXY_VERSION}
+    environment:
+      DAYTONA_API_URL: http://daytona:3000/api
+      PROXY_PORT: "4000"
+      PROXY_API_KEY: ${HARBOR_DAYTONA_PROXY_API_KEY}
+      PROXY_PROTOCOL: http
+      OIDC_CLIENT_ID: daytona
+      OIDC_CLIENT_SECRET: ""
+      OIDC_DOMAIN: http://daytona-dex:5556/dex
+      OIDC_PUBLIC_DOMAIN: http://localhost:${HARBOR_DAYTONA_DEX_HOST_PORT}/dex
+      OIDC_AUDIENCE: daytona
+      REDIS_HOST: daytona-redis
+      REDIS_PORT: "6379"
+      TOOLBOX_ONLY_MODE: "false"
+      PREVIEW_WARNING_ENABLED: "false"
+    networks:
+      - harbor-network
+    ports:
+      - ${HARBOR_DAYTONA_PROXY_HOST_PORT}:4000
+
+  daytona-runner:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.daytona-runner
+    image: ${HARBOR_DAYTONA_RUNNER_IMAGE}:${HARBOR_DAYTONA_RUNNER_VERSION}
+    environment:
+      ENVIRONMENT: development
+      API_PORT: "3003"
+      DAYTONA_RUNNER_TOKEN: ${HARBOR_DAYTONA_RUNNER_API_KEY}
+      LOG_FILE_PATH: /home/daytona/runner/runner.log
+      RESOURCE_LIMITS_DISABLED: "true"
+      AWS_ENDPOINT_URL: http://daytona-minio:9000
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: ${HARBOR_DAYTONA_MINIO_ROOT_USER}
+      AWS_SECRET_ACCESS_KEY: ${HARBOR_DAYTONA_MINIO_ROOT_PASSWORD}
+      AWS_DEFAULT_BUCKET: ${HARBOR_DAYTONA_MINIO_BUCKET}
+      DAYTONA_API_URL: http://daytona:3000/api
+      RUNNER_DOMAIN: daytona-runner
+      SSH_GATEWAY_ENABLE: "true"
+      SSH_PUBLIC_KEY: ${HARBOR_DAYTONA_SSH_GATEWAY_PUBLIC_KEY}
+      INTER_SANDBOX_NETWORK_ENABLED: "false"
+      USE_SNAPSHOT_ENTRYPOINT: "true"
+    volumes:
+      - ./services/daytona/daemon.json:/etc/docker/daemon.json
+    networks:
+      - harbor-network
+    ports:
+      - ${HARBOR_DAYTONA_RUNNER_HOST_PORT}:3003
+    privileged: true
+
+  daytona-ssh:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.daytona-ssh
+    image: ${HARBOR_DAYTONA_SSH_IMAGE}:${HARBOR_DAYTONA_SSH_VERSION}
+    environment:
+      API_URL: http://daytona:3000/api
+      API_KEY: ${HARBOR_DAYTONA_SSH_API_KEY}
+      SSH_PRIVATE_KEY: ${HARBOR_DAYTONA_SSH_GATEWAY_PRIVATE_KEY}
+      SSH_HOST_KEY: ${HARBOR_DAYTONA_SSH_HOST_KEY}
+      SSH_GATEWAY_PORT: "2222"
+    networks:
+      - harbor-network
+    ports:
+      - ${HARBOR_DAYTONA_SSH_HOST_PORT}:2222
+
+  daytona-dex:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.daytona-dex
+    image: ${HARBOR_DAYTONA_DEX_IMAGE}:${HARBOR_DAYTONA_DEX_VERSION}
+    volumes:
+      - ./services/daytona/dex/config.yaml:/etc/dex/config.yaml
+      - ${HARBOR_DAYTONA_WORKSPACE}/dex:/var/dex
+    entrypoint: ['sh', '-c', 'touch /var/dex/dex.db && exec dex serve /etc/dex/config.yaml']
+    networks:
+      - harbor-network
+    ports:
+      - ${HARBOR_DAYTONA_DEX_HOST_PORT}:5556
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "--quiet", "http://localhost:5556/dex/.well-known/openid-configuration"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  daytona-db:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.daytona-db
+    image: ${HARBOR_DAYTONA_DB_IMAGE}:${HARBOR_DAYTONA_DB_VERSION}
+    environment:
+      POSTGRES_PASSWORD: ${HARBOR_DAYTONA_DB_PASSWORD}
+      POSTGRES_USER: ${HARBOR_DAYTONA_DB_USER}
+      POSTGRES_DB: ${HARBOR_DAYTONA_DB_NAME}
+    networks:
+      - harbor-network
+    ports:
+      - ${HARBOR_DAYTONA_DB_HOST_PORT}:5432
+    volumes:
+      - ${HARBOR_DAYTONA_WORKSPACE}/db:/var/lib/postgresql/18/docker
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -d ${HARBOR_DAYTONA_DB_NAME} -U ${HARBOR_DAYTONA_DB_USER}"]
+      interval: 1s
+      timeout: 5s
+      retries: 10
+
+  daytona-pgadmin:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.daytona-pgadmin
+    image: ${HARBOR_DAYTONA_PGADMIN_IMAGE}:${HARBOR_DAYTONA_PGADMIN_VERSION}
+    entrypoint: ['sh', '-c', 'chmod 600 /pgpass && exec /entrypoint.sh']
+    environment:
+      PGADMIN_DEFAULT_EMAIL: dev@daytona.io
+      PGADMIN_DEFAULT_PASSWORD: pgadmin
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: 'False'
+    user: root
+    volumes:
+      - ./services/daytona/pgadmin/servers.json:/pgadmin4/servers.json
+      - ./services/daytona/pgadmin/pgpass:/pgpass
+    depends_on:
+      daytona-db:
+        condition: service_healthy
+    ports:
+      - ${HARBOR_DAYTONA_PGADMIN_HOST_PORT}:80
+    networks:
+      - harbor-network
+
+  daytona-redis:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.daytona-redis
+    image: ${HARBOR_DAYTONA_REDIS_IMAGE}:${HARBOR_DAYTONA_REDIS_VERSION}
+    networks:
+      - harbor-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 1s
+      timeout: 5s
+      retries: 10
+
+  daytona-registry:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.daytona-registry
+    image: ${HARBOR_DAYTONA_REGISTRY_IMAGE}:${HARBOR_DAYTONA_REGISTRY_VERSION}
+    environment:
+      REGISTRY_HTTP_HEADERS_Access-Control-Allow-Origin: '[http://registry-ui.example.com]'
+      REGISTRY_HTTP_HEADERS_Access-Control-Allow-Methods: '[HEAD,GET,OPTIONS,DELETE]'
+      REGISTRY_HTTP_HEADERS_Access-Control-Allow-Credentials: '[true]'
+      REGISTRY_HTTP_HEADERS_Access-Control-Allow-Headers: '[Authorization,Accept,Cache-Control]'
+      REGISTRY_HTTP_HEADERS_Access-Control-Expose-Headers: '[Docker-Content-Digest]'
+      REGISTRY_STORAGE_DELETE_ENABLED: 'true'
+      REGISTRY_HTTP_ADDR: daytona-registry:6000
+    volumes:
+      - ${HARBOR_DAYTONA_WORKSPACE}/registry:/var/lib/registry
+    networks:
+      - harbor-network
+    ports:
+      - ${HARBOR_DAYTONA_REGISTRY_HOST_PORT}:6000
+
+  daytona-registry-ui:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.daytona-registry-ui
+    image: ${HARBOR_DAYTONA_REGISTRY_UI_IMAGE}:${HARBOR_DAYTONA_REGISTRY_UI_VERSION}
+    environment:
+      SINGLE_REGISTRY: "true"
+      REGISTRY_TITLE: Daytona Registry
+      DELETE_IMAGES: "true"
+      SHOW_CONTENT_DIGEST: "true"
+      NGINX_PROXY_PASS_URL: http://daytona-registry:6000
+      SHOW_CATALOG_NB_TAGS: "true"
+      CATALOG_MIN_BRANCHES: "1"
+      CATALOG_MAX_BRANCHES: "1"
+      TAGLIST_PAGE_SIZE: "100"
+      REGISTRY_SECURED: "false"
+      CATALOG_ELEMENTS_LIMIT: "1000"
+    networks:
+      - harbor-network
+    ports:
+      - ${HARBOR_DAYTONA_REGISTRY_UI_HOST_PORT}:80
+
+  daytona-minio:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.daytona-minio
+    image: ${HARBOR_DAYTONA_MINIO_IMAGE}:${HARBOR_DAYTONA_MINIO_VERSION}
+    environment:
+      MINIO_ROOT_USER: ${HARBOR_DAYTONA_MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${HARBOR_DAYTONA_MINIO_ROOT_PASSWORD}
+      MINIO_IDENTITY_STS_EXPIRY: "24h"
+    volumes:
+      - ${HARBOR_DAYTONA_WORKSPACE}/minio:/data
+    command: server /data --console-address ":9001"
+    networks:
+      - harbor-network
+    ports:
+      - ${HARBOR_DAYTONA_MINIO_HOST_PORT}:9000
+      - ${HARBOR_DAYTONA_MINIO_CONSOLE_HOST_PORT}:9001
+
+  daytona-jaeger:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.daytona-jaeger
+    image: ${HARBOR_DAYTONA_JAEGER_IMAGE}:${HARBOR_DAYTONA_JAEGER_VERSION}
+    networks:
+      - harbor-network
+    ports:
+      - ${HARBOR_DAYTONA_JAEGER_HOST_PORT}:16686
+
+  daytona-otel:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.daytona-otel
+    image: ${HARBOR_DAYTONA_OTEL_IMAGE}:${HARBOR_DAYTONA_OTEL_VERSION}
+    volumes:
+      - ./services/daytona/otel/otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml
+    networks:
+      - harbor-network
+    depends_on:
+      - daytona-jaeger
+
+  daytona-maildev:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.daytona-maildev
+    image: ${HARBOR_DAYTONA_MAILDEV_IMAGE}:${HARBOR_DAYTONA_MAILDEV_VERSION}
+    networks:
+      - harbor-network
+    ports:
+      - ${HARBOR_DAYTONA_MAILDEV_HOST_PORT}:1080

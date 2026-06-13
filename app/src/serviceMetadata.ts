@@ -1105,4 +1105,12 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         wikiUrl: `${wikiUrl}/2.1.16-Frontend-Voicebox`,
         tooltip: 'Local-first AI voice studio for voice cloning, preset voices, speech generation, dictation, transcription, and agent speech.',
     },
+    daytona: {
+        name: 'Daytona',
+        tags: [HST.satellite, HST.infra, HST.api],
+        projectUrl: 'https://github.com/daytonaio/daytona',
+        logo: 'https://www.google.com/s2/favicons?domain=daytona.io&sz=128',
+        wikiUrl: `${wikiUrl}/2.3.92-Satellite-Daytona`,
+        tooltip: 'Self-hosted sandbox platform for AI agents with Docker-in-Docker, computer use, and GPU support.',
+    },
 };
