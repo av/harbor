@@ -3,16 +3,24 @@
 # Runs on every container start before SillyTavern starts.
 # SILLYTAVERN_OLLAMA_URL   - set by compose.x.sillytavern.ollama.yml
 # SILLYTAVERN_LLAMACPP_URL - set by compose.x.sillytavern.llamacpp.yml
+# SILLYTAVERN_DMR_URL      - set by compose.x.sillytavern.dmr.yml
+# SILLYTAVERN_MLX_URL      - set by compose.x.sillytavern.mlx.yml
+# SILLYTAVERN_OMLX_URL     - set by compose.x.sillytavern.omlx.yml
 
 export SETTINGS_FILE=/home/node/app/data/default-user/settings.json
 export SEED_FILE=/home/node/app/default/content/settings.json
 
-if [ -n "$SILLYTAVERN_OLLAMA_URL" ] || [ -n "$SILLYTAVERN_LLAMACPP_URL" ]; then
+if [ -n "$SILLYTAVERN_OLLAMA_URL" ] || [ -n "$SILLYTAVERN_LLAMACPP_URL" ] || [ -n "$SILLYTAVERN_DMR_URL" ] || [ -n "$SILLYTAVERN_MLX_URL" ] || [ -n "$SILLYTAVERN_OMLX_URL" ]; then
     node - <<'HARBOR_INIT_EOF'
 const fs = require('node:fs');
 
 const ollamaUrl   = process.env.SILLYTAVERN_OLLAMA_URL   || '';
 const llamacppUrl = process.env.SILLYTAVERN_LLAMACPP_URL || '';
+// DMR, MLX and OMLX are OpenAI-compatible — mapped to SillyTavern's 'generic' type
+const genericUrl  = process.env.SILLYTAVERN_OMLX_URL
+    || process.env.SILLYTAVERN_MLX_URL
+    || process.env.SILLYTAVERN_DMR_URL
+    || '';
 const settingsPath = process.env.SETTINGS_FILE;
 const seedPath     = process.env.SEED_FILE;
 
@@ -26,7 +34,11 @@ if (llamacppUrl) {
     serverUrls.llamacpp = llamacppUrl;
 }
 
-const primaryType = llamacppUrl ? 'llamacpp' : ollamaUrl ? 'ollama' : null;
+if (genericUrl) {
+    serverUrls.generic = genericUrl;
+}
+
+const primaryType = genericUrl ? 'generic' : llamacppUrl ? 'llamacpp' : ollamaUrl ? 'ollama' : null;
 
 function patchSettings(filePath) {
     const settings = JSON.parse(fs.readFileSync(filePath, 'utf8'));

@@ -14,19 +14,23 @@ export async function collectFiles(
   globs: string[],
   exclude: string[] = [],
 ): Promise<string[]> {
+  // Service runtime data (e.g. services/daytona/data) can contain root-owned
+  // dirs that throw PermissionDenied when walked — never descend into them.
+  const options = {
+    root,
+    includeDirs: false,
+    globstar: true,
+    exclude: ["services/*/data"],
+  };
   const seen = new Set<string>();
   for (const g of globs) {
-    for await (
-      const entry of expandGlob(g, { root, includeDirs: false, globstar: true })
-    ) {
+    for await (const entry of expandGlob(g, options)) {
       if (entry.isFile) seen.add(entry.path);
     }
   }
   const drop = new Set<string>();
   for (const g of exclude) {
-    for await (
-      const entry of expandGlob(g, { root, includeDirs: false, globstar: true })
-    ) {
+    for await (const entry of expandGlob(g, options)) {
       if (entry.isFile) drop.add(entry.path);
     }
   }

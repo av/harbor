@@ -48,6 +48,7 @@
 - label: harbor.sh avoids Bash 4 case-conversion parameter expansion for macOS Bash 3 compatibility
   command: bash -n harbor.sh && ! rg -q '\$\{[^}]+(\^\^|,,)' harbor.sh
   tags: [implemented]
+- when compose_with_options fails in get_services, harbor ls exits nonzero instead of executing a bare 'config' word @get-services-guard @implemented
 
 ## launch
 - label: harbor launch routes host tools codex, claude, opencode, pi, and others to OpenAI-compatible Harbor backends with optional --backend, --model, --config, and --web

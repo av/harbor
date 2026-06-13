@@ -1058,6 +1058,14 @@ resolve_compose_files() {
         cut -d' ' -f2-
 }
 
+_deno_cache_volume() {
+    # Named volumes are created root-owned, which breaks Deno's npm cache
+    # when the container runs as the host uid. Bind-mount a host dir instead.
+    local cache_dir="$harbor_home/.deno-cache"
+    mkdir -p "$cache_dir" 2>/dev/null
+    echo "$cache_dir:/deno-dir:rw"
+}
+
 run_routine() {
     local routine_name="$1"
 
@@ -1115,7 +1123,7 @@ run_routine() {
         docker run --rm \
             --user "$(id -u):$(id -g)" \
             -v "$harbor_home:$harbor_home" \
-            -v harbor-deno-cache:/deno-dir:rw \
+            -v "$(_deno_cache_volume)" \
             -w "$harbor_home" \
             -e "HARBOR_LOG_LEVEL=$default_log_level" \
             -e "HARBOR_COMPOSE_CACHE=$HARBOR_COMPOSE_CACHE" \
@@ -1552,7 +1560,7 @@ run_down() {
         --rmi=*|--timeout=*|-t=*)
             down_flags+=("$arg")
             ;;
-        --*)
+        -v|--*)
             down_flags+=("$arg")
             ;;
         dmr)
@@ -1777,12 +1785,23 @@ run_ps() {
     local compose_targets=()
     local ps_flags=()
 
-    for arg in "$@"; do
-        if [[ "$arg" == -* ]]; then
-            ps_flags+=("$arg")
-        else
-            compose_targets+=("$arg")
-        fi
+    while [ $# -gt 0 ]; do
+        case "$1" in
+        --format|--filter|--status|-n|--last)
+            ps_flags+=("$1")
+            if [ $# -gt 1 ]; then
+                ps_flags+=("$2")
+                shift
+            fi
+            ;;
+        -*)
+            ps_flags+=("$1")
+            ;;
+        *)
+            compose_targets+=("$1")
+            ;;
+        esac
+        shift
     done
 
     # Validate service names
@@ -7670,7 +7689,7 @@ update_harbor() {
     # service-specific compose files are only loaded by compose_with_options.
     # Instead, use 'docker ps' with the compose project label derived from the directory name.
     local compose_project
-    compose_project=$(basename "$harbor_home" | tr '[:upper:]' '[:lower:]' | sed 's/^[^a-z0-9]*//' | sed 's/[^a-z0-9_-]//g')
+    compose_project=$(basename "$harbor_home" | tr 'A-Z' 'a-z' | sed 's/^[^a-z0-9]*//' | sed 's/[^a-z0-9_-]//g')
     if [ -n "$compose_project" ] && command -v docker &>/dev/null; then
         local running_count
         running_count=$(docker ps --filter "label=com.docker.compose.project=$compose_project" --filter "status=running" -q 2>/dev/null | wc -l)
@@ -7862,7 +7881,7 @@ run_migrate_command() {
             docker run --rm \
                 --user "$(id -u):$(id -g)" \
                 -v "$harbor_home:$harbor_home" \
-                -v harbor-deno-cache:/deno-dir:rw \
+                -v "$(_deno_cache_volume)" \
                 -w "$harbor_home" \
                 denoland/deno:distroless \
                 run -A --unstable-sloppy-imports \
@@ -7936,7 +7955,9 @@ get_services() {
         fi
     else
         $is_silent || log_info "Harbor services:"
-        $(compose_with_options "*") config --services
+        local compose_cmd
+        compose_cmd=$(compose_with_options "*") || return 1
+        $compose_cmd config --services
     fi
 }
 
@@ -8341,7 +8362,7 @@ run_harbor_dev() {
         log_debug "running in container: $script"
         docker run --rm \
             -v "$harbor_home:$harbor_home" \
-            -v harbor-deno-cache:/deno-dir:rw \
+            -v "$(_deno_cache_volume)" \
             -w "$harbor_home" \
             denoland/deno:distroless \
             run -A --unstable-sloppy-imports \
@@ -9133,7 +9154,7 @@ run_models_routine() {
         -v "$harbor_home:$harbor_home" \
         -v "$hf_cache:$hf_cache:rw" \
         -v "$llamacpp_cache:$llamacpp_cache:rw" \
-        -v harbor-deno-cache:/deno-dir:rw \
+        -v "$(_deno_cache_volume)" \
         -w "$harbor_home" \
         -e "HARBOR_LOG_LEVEL=$default_log_level" \
         -e "HARBOR_COMPOSE_CACHE=$HARBOR_COMPOSE_CACHE" \
@@ -12455,7 +12476,6 @@ else
     elif service_compose_exists "$1"; then
         log_info "'$1' is a service. To start it: ${c_g}harbor up $1${c_nc}"
     else
-        local svc_suggestion
         svc_suggestion=$(_suggest_service "$1")
         if [ -n "$svc_suggestion" ]; then
             log_info "Did you mean the service: ${c_g}harbor up $svc_suggestion${c_nc}?"
