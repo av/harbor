@@ -11422,6 +11422,7 @@ run_hermes_command() {
         echo "  harbor hermes api_key [key]     - Get or set the Hermes Agent API key"
         echo "  harbor hermes ...               - Any other Hermes CLI command (proxied to container)"
         echo
+        return 0
         ;;
     esac
 

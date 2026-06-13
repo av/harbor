@@ -110,6 +110,17 @@
   command: test -f services/compose.facts.yml && rg -q 'run_facts_command' harbor.sh
   tags: [implemented]
 
+## hermes
+- label: hermes ships a non-empty default API key (sk-hermes) so the gateway API server never runs with auth disabled
+  command: grep -q 'HARBOR_HERMES_API_KEY="sk-hermes"' profiles/default.env && grep -q 'hermes.api_key' .scripts/migrations/0.5.0.ts
+  tags: [implemented, bughunt]
+- label: harbor hermes help prints usage and returns without proxying to the container
+  command: grep -A2 'Any other Hermes CLI command' harbor.sh | grep -q 'return 0'
+  tags: [implemented, bughunt]
+- label: hermes docs do not advertise the nonexistent 'harbor hermes server' subcommand; the API server starts automatically with harbor up
+  command: ! grep -rq 'harbor hermes server' docs/
+  tags: [implemented, bughunt]
+
 # app
 - label: Harbor App blocks main UI behind a setup gate until setup detail status is ready
   command: rg -q 'detail\?\.status === "ready"' app/src/setup/HarborSetupContext.tsx
