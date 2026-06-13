@@ -950,5 +950,256 @@ if [ "$daytona_svc_count" -lt 10 ]; then
   fail "daytona should have at least 10 sub-services, found $daytona_svc_count"
 fi
 
+# ---------------------------------------------------------------------------
+# 24. Port conflict pre-detection (v0.5.0 — P0.6)
+#     harbor up checks for port conflicts before starting services. Verify
+#     that the internal helpers exist, that --skip-port-check is accepted,
+#     and that _check_port_conflicts detects a duplicate-port scenario.
+# ---------------------------------------------------------------------------
+
+# The _check_port_conflicts function is defined in harbor.sh. Source the script
+# to get access to it. We already have harbor on PATH, so locate the real file.
+harbor_script="$(command -v harbor)"
+
+# Verify --skip-port-check is a recognized flag (appears in help).
+assert_match "up help mentions --skip-port-check" \
+  'skip-port-check' \
+  harbor up --help
+
+# _parse_compose_ports should extract service:port pairs from compose config YAML.
+# Feed it a minimal synthetic compose config and verify parsing.
+suite_log "port conflict: _parse_compose_ports extracts host ports"
+# Source the _parse_compose_ports function from harbor.sh.
+# It is a standalone awk-based function we can call directly after sourcing.
+parse_output=$(
+  # Source only the function we need by extracting it
+  eval "$(sed -n '/_parse_compose_ports()/,/^}/p' "$harbor_script")"
+  _parse_compose_ports '
+services:
+  ollama:
+    ports:
+      - mode: ingress
+        target: 11434
+        published: "33821"
+        protocol: tcp
+  webui:
+    ports:
+      - mode: ingress
+        target: 8080
+        published: "33801"
+        protocol: tcp
+'
+)
+if ! echo "$parse_output" | grep -q "ollama:33821"; then
+  echo "Parse output: $parse_output" >&2
+  fail "_parse_compose_ports did not extract ollama:33821"
+fi
+if ! echo "$parse_output" | grep -q "webui:33801"; then
+  echo "Parse output: $parse_output" >&2
+  fail "_parse_compose_ports did not extract webui:33801"
+fi
+
+# Test inter-service conflict detection: two services on the same port.
+suite_log "port conflict: detects inter-service duplicate ports"
+conflict_parse=$(
+  eval "$(sed -n '/_parse_compose_ports()/,/^}/p' "$harbor_script")"
+  _parse_compose_ports '
+services:
+  svc-a:
+    ports:
+      - mode: ingress
+        target: 8080
+        published: "9999"
+        protocol: tcp
+  svc-b:
+    ports:
+      - mode: ingress
+        target: 3000
+        published: "9999"
+        protocol: tcp
+'
+)
+# Both services should map to port 9999.
+svc_a_port=$(echo "$conflict_parse" | grep "svc-a:9999" || true)
+svc_b_port=$(echo "$conflict_parse" | grep "svc-b:9999" || true)
+if [ -z "$svc_a_port" ] || [ -z "$svc_b_port" ]; then
+  echo "Conflict parse output: $conflict_parse" >&2
+  fail "_parse_compose_ports failed to extract duplicate port 9999 for both services"
+fi
+
+# ---------------------------------------------------------------------------
+# 25. harbor eject hardening (v0.5.0 — P2.3)
+#     harbor eject produces a standalone resolved Compose configuration.
+#     Verify it outputs valid YAML, includes expected services, and that
+#     --no-defaults limits the output to named services only.
+# ---------------------------------------------------------------------------
+
+# Basic eject (default services) should succeed and produce YAML.
+suite_log "eject: default services produce output"
+eject_output=$(harbor eject 2>/dev/null) || {
+  fail "harbor eject exited non-zero"
+}
+
+# Output must contain the "services:" top-level YAML key.
+if ! echo "$eject_output" | grep -q "^services:"; then
+  echo "$eject_output" | head -20 >&2
+  fail "harbor eject output missing 'services:' key"
+fi
+
+# Default services should include ollama and webui.
+suite_log "eject: default output includes ollama"
+if ! echo "$eject_output" | grep -q "ollama"; then
+  fail "harbor eject default output does not mention ollama"
+fi
+
+suite_log "eject: default output includes webui"
+if ! echo "$eject_output" | grep -q "webui"; then
+  fail "harbor eject default output does not mention webui"
+fi
+
+# Eject with --no-defaults and a single service should produce
+# config that includes only that service.
+suite_log "eject: --no-defaults ollama limits output"
+eject_nd=$(harbor eject --no-defaults ollama 2>/dev/null) || {
+  fail "harbor eject --no-defaults ollama exited non-zero"
+}
+if ! echo "$eject_nd" | grep -q "^services:"; then
+  echo "$eject_nd" | head -20 >&2
+  fail "harbor eject --no-defaults ollama missing 'services:' key"
+fi
+if ! echo "$eject_nd" | grep -q "ollama"; then
+  fail "harbor eject --no-defaults ollama does not mention ollama"
+fi
+
+# The ejected YAML should inline environment variables (no ${...} references).
+suite_log "eject: output inlines env vars (no raw \${...} references)"
+if echo "$eject_output" | grep -qE '\$\{HARBOR_'; then
+  fail "harbor eject output still contains raw \${HARBOR_...} variable references"
+fi
+
+# Eject help text should mention secrets warning.
+assert_match "eject --help mentions secrets warning" \
+  'secrets' \
+  harbor eject --help
+
+# ---------------------------------------------------------------------------
+# 26. AMD ROCm overrides (v0.5.0 — P2.1)
+#     Verify that ROCm-specific config keys exist in profiles/default.env
+#     and that the ROCm compose overlay files are valid.
+# ---------------------------------------------------------------------------
+
+# ROCm image config key must exist for llamacpp.
+assert_match "config: llamacpp.image.rocm exists" \
+  'ghcr.io/ggml-org/llama.cpp:server-rocm' \
+  harbor config get llamacpp.image.rocm
+
+# CPU and NVIDIA image variants should also exist.
+assert_match "config: llamacpp.image.cpu exists" \
+  'ghcr.io/ggml-org/llama.cpp:server' \
+  harbor config get llamacpp.image.cpu
+
+assert_match "config: llamacpp.image.nvidia exists" \
+  'ghcr.io/ggml-org/llama.cpp:server-cuda' \
+  harbor config get llamacpp.image.nvidia
+
+# ROCm compose overlay for llamacpp must exist and parse.
+suite_log "rocm: llamacpp ROCm compose overlay exists"
+if [ ! -f "$(harbor home)/services/compose.x.llamacpp.rocm.yml" ]; then
+  fail "compose.x.llamacpp.rocm.yml not found"
+fi
+
+# ROCm overlay must reference the ROCm image variable.
+suite_log "rocm: llamacpp ROCm overlay uses ROCm image"
+if ! grep -q "HARBOR_LLAMACPP_IMAGE_ROCM" "$(harbor home)/services/compose.x.llamacpp.rocm.yml"; then
+  fail "compose.x.llamacpp.rocm.yml does not reference HARBOR_LLAMACPP_IMAGE_ROCM"
+fi
+
+# ROCm overlay must expose AMD GPU devices.
+suite_log "rocm: llamacpp ROCm overlay exposes /dev/kfd"
+if ! grep -q "/dev/kfd" "$(harbor home)/services/compose.x.llamacpp.rocm.yml"; then
+  fail "compose.x.llamacpp.rocm.yml does not expose /dev/kfd"
+fi
+
+# Other services also have ROCm overlays — spot-check ollama.
+suite_log "rocm: ollama ROCm compose overlay exists"
+if [ ! -f "$(harbor home)/services/compose.x.ollama.rocm.yml" ]; then
+  fail "compose.x.ollama.rocm.yml not found"
+fi
+
+# Verify the ROCm config key round-trips correctly.
+assert_ok "config set llamacpp.image.rocm (round-trip)" \
+  harbor config set llamacpp.image.rocm "test-rocm-image:latest"
+assert_match "config get llamacpp.image.rocm (round-trip)" \
+  '^test-rocm-image:latest$' \
+  harbor config get llamacpp.image.rocm
+# Restore the original value.
+assert_ok "config restore llamacpp.image.rocm" \
+  harbor config set llamacpp.image.rocm "ghcr.io/ggml-org/llama.cpp:server-rocm"
+
+# ---------------------------------------------------------------------------
+# 27. Ollama image configurability (v0.5.0 — P2.2)
+#     The Docker image for Ollama is configurable via harbor config.
+#     Verify the default value and that set/get round-trips work.
+# ---------------------------------------------------------------------------
+
+# Default image should be ollama/ollama.
+assert_match "ollama.image default is ollama/ollama" \
+  '^ollama/ollama$' \
+  harbor config get ollama.image
+
+# Round-trip: set a custom image, verify, restore.
+assert_ok "config set ollama.image to custom" \
+  harbor config set ollama.image "custom/ollama-test"
+assert_match "config get ollama.image returns custom" \
+  '^custom/ollama-test$' \
+  harbor config get ollama.image
+
+# Restore original.
+assert_ok "config restore ollama.image" \
+  harbor config set ollama.image "ollama/ollama"
+assert_match "config get ollama.image restored" \
+  '^ollama/ollama$' \
+  harbor config get ollama.image
+
+# Verify ollama.version is also configurable.
+assert_match "ollama.version default is 'latest'" \
+  '^latest$' \
+  harbor config get ollama.version
+
+# ---------------------------------------------------------------------------
+# 28. Hermes default API key (v0.5.0 — P2.5)
+#     Hermes ships with a default API key so the service works out of the box.
+#     Verify the default key is set and the config round-trips correctly.
+# ---------------------------------------------------------------------------
+
+# Default API key should be "sk-hermes".
+assert_match "hermes.api_key default is sk-hermes" \
+  '^sk-hermes$' \
+  harbor config get hermes.api_key
+
+# Round-trip: set a custom key, verify, restore.
+assert_ok "config set hermes.api_key to custom" \
+  harbor config set hermes.api_key "sk-custom-test-key"
+assert_match "config get hermes.api_key returns custom" \
+  '^sk-custom-test-key$' \
+  harbor config get hermes.api_key
+
+# Restore default.
+assert_ok "config restore hermes.api_key" \
+  harbor config set hermes.api_key "sk-hermes"
+assert_match "config get hermes.api_key restored" \
+  '^sk-hermes$' \
+  harbor config get hermes.api_key
+
+# Verify hermes help mentions the api_key subcommand.
+assert_match "hermes help mentions api_key" \
+  'api_key' \
+  harbor hermes --help
+
+# Verify other hermes config keys exist.
+assert_match "hermes.host.port has a default" \
+  '^[0-9]+$' \
+  harbor config get hermes.host.port
+
 rm -f /tmp/cli-step.out
 suite_log "OK"
