@@ -1,3 +1,4 @@
+- app > Harbor App setup gate shows heading 'Almost done' with status refresh-required when harbor doctor --check fails (Docker daemon down or not yet in group), with error text distinguishing the two sub-cases; there is no separate 'Environment issue' heading @spec @setup-gate-docker-down-copy @implemented
 # project
 
 ## domain
@@ -27,6 +28,9 @@
 - Harbor is a containerized LLM toolkit distributed as a Docker Compose project with a CLI and Tauri desktop app
 - label: the project is licensed under Apache 2.0
   command: head -1 LICENSE | grep -q 'Apache'
+- label: install.sh verifies the install with harbor doctor --check so non-critical doctor warnings do not fail setup
+  command: rg -q 'doctor --check' install.sh
+  tags: [implemented]
 
 # cli
 - label: harbor.sh is the main CLI entrypoint, a Bash script over 5000 lines
@@ -47,6 +51,9 @@
   tags: [implemented]
 - label: harbor.sh avoids Bash 4 case-conversion parameter expansion for macOS Bash 3 compatibility
   command: bash -n harbor.sh && ! rg -q '\$\{[^}]+(\^\^|,,)' harbor.sh
+  tags: [implemented]
+- label: harbor doctor --check exits nonzero only for critical environment issues
+  command: rg -q 'check_mode=true' harbor.sh && rg -q 'has_critical' harbor.sh
   tags: [implemented]
 - when compose_with_options fails in get_services, harbor ls exits nonzero instead of executing a bare 'config' word @get-services-guard @implemented
 
@@ -141,6 +148,13 @@
 - label: Harbor App close hides the window on desktop instead of quitting unless the user chooses Quit from the tray
   command: rg -q 'prevent_close' app/src-tauri/src/lib.rs
   tags: [implemented]
+- label: Harbor App setup detection reports ready only when harbor doctor --check passes
+  command: rg -q 'doctor --check' app/src-tauri/src/setup.rs
+  tags: [implemented]
+- Harbor App setup detection runs installer prerequisite blockers only when the CLI is not already installed @implemented
+- label: install.ps1 suppresses the PowerShell progress bar during the Docker Desktop installer download to avoid the PS 5.1 Invoke-WebRequest slowdown
+  command: rg -q "ProgressPreference = 'SilentlyContinue'" install.ps1
+  tags: [implemented]
 
 # boost
 - label: Boost is a FastAPI LLM proxy that exposes OpenAI chat completions and optional Anthropic and Responses compat layers
@@ -230,5 +244,11 @@
   command: rg -q 'install.sh' tests/suites/01-install.sh && rg -q 'harbor up --no-defaults llamacpp webui' tests/suites/01-install.sh
   tags: [implemented]
 - label: tests/app-native-setup.md documents verifiable native app first-run setup expectations
-  command: test -f tests/app-native-setup.md && rg -q 'HARBOR_APP_SETUP_SMOKE_OUTPUT' tests/app-native-setup.md
+  command: test -f tests/app-native-setup.md && rg -q 'harbor doctor --check' tests/app-native-setup.md && ! rg -q 'HARBOR_APP_SETUP_SMOKE' tests/app-native-setup.md
   tags: [implemented]
+
+# project > distribution
+- label: requirements.sh apt package availability checks verify real package metadata: every apt-cache show probe greps for ^Package: so empty-output false positives (e.g. docker-ce on Ubuntu 24.04 without the Docker repo) fall through to the docker.io / distro fallback
+  command: test $(grep -cE "apt-cache show (docker-ce|docker-compose-v2|docker-compose-plugin)" requirements.sh) -gt 0 && ! grep -E "apt-cache show (docker-ce|docker-compose-v2|docker-compose-plugin)" requirements.sh | grep -v "Package:" | grep -q .
+  tags: [spec, implemented]
+- On a clean Ubuntu 24.04 without the Docker APT repository, the Harbor App guided install completes end-to-end by installing docker.io, with no manual repo configuration required @spec @implemented

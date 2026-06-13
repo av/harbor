@@ -290,9 +290,9 @@ apt_install() {
         local compose_pkg="" docker_pkg=""
 
         if [ "$need_compose" = true ]; then
-            if apt-cache show docker-compose-v2 >/dev/null 2>&1; then
+            if apt-cache show docker-compose-v2 2>/dev/null | grep -q '^Package:'; then
                 compose_pkg="docker-compose-v2"
-            elif apt-cache show docker-compose-plugin >/dev/null 2>&1; then
+            elif apt-cache show docker-compose-plugin 2>/dev/null | grep -q '^Package:'; then
                 compose_pkg="docker-compose-plugin"
             else
                 log_error "Neither 'docker-compose-v2' nor 'docker-compose-plugin' is available via apt repositories."
@@ -305,7 +305,7 @@ apt_install() {
         if [ "$need_engine" = true ]; then
             # Prefer docker-ce (Docker's official package) if available;
             # fall back to docker.io (distro package).
-            if apt-cache show docker-ce >/dev/null 2>&1; then
+            if apt-cache show docker-ce 2>/dev/null | grep -q '^Package:'; then
                 docker_pkg="docker-ce"
             else
                 docker_pkg="docker.io"

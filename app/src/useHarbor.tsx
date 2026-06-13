@@ -9,24 +9,21 @@ import { buildNativeHarborArgs, buildWindowsWslArgs, buildWindowsWslHarborArgs }
 // Default timeout for most CLI commands (60 seconds)
 const DEFAULT_TIMEOUT_MS = 60_000;
 
-// Commands that are expected to take longer get extended timeouts
-const LONG_RUNNING_COMMANDS: Record<string, number> = {
-    up: 300_000,       // 5 minutes — pulling images can be slow
-    build: 600_000,    // 10 minutes — building containers
-    pull: 600_000,     // 10 minutes — pulling models
-    down: 120_000,     // 2 minutes — stopping containers
-    update: 300_000,   // 5 minutes — fetching + checkout + migration
-    restart: 300_000,  // 5 minutes — stop + start
-};
+// Commands with unbounded duration (image pulls, builds, migrations) run with
+// no timeout: killing the wrapper shell wouldn't stop the underlying
+// `docker compose`, so a timeout would report a false failure while the
+// operation keeps running in the background.
+const LONG_RUNNING_COMMANDS = new Set(["up", "build", "pull", "down", "update", "restart"]);
 
 /**
  * Determine the timeout for a given command based on the first argument.
+ * Returns null when the command should run without a timeout.
  */
-function resolveTimeout(args: string[], overrideMs?: number): number {
+function resolveTimeout(args: string[], overrideMs?: number): number | null {
     if (overrideMs !== undefined) return overrideMs;
     const subcommand = args[0]?.toLowerCase();
-    if (subcommand && subcommand in LONG_RUNNING_COMMANDS) {
-        return LONG_RUNNING_COMMANDS[subcommand];
+    if (subcommand && LONG_RUNNING_COMMANDS.has(subcommand)) {
+        return null;
     }
     return DEFAULT_TIMEOUT_MS;
 }
@@ -134,7 +131,7 @@ interface RunHarborOptions {
  * Use this when you need to inspect stdout/stderr regardless of exit status
  * (e.g., `harbor doctor` which exits non-zero when issues are found).
  *
- * Commands are killed after a timeout (default 60s, longer for up/build/pull).
+ * Short commands are killed after a timeout (default 60s); lifecycle commands (up/build/pull/down/update/restart) run untimed.
  */
 export async function runHarborRaw(args: string[], options?: RunHarborOptions) {
     const command = await isWindows()
@@ -146,6 +143,9 @@ export async function runHarborRaw(args: string[], options?: RunHarborOptions) {
     }
 
     const timeoutMs = resolveTimeout(args, options?.timeoutMs);
+    if (timeoutMs === null) {
+        return await command.execute();
+    }
     return await executeWithTimeout(command, timeoutMs);
 }
 
@@ -153,7 +153,7 @@ export async function runHarborRaw(args: string[], options?: RunHarborOptions) {
  * Run a harbor command. Throws if the command exits with a non-zero code.
  * Use this for commands where failure should surface as an error to the user.
  *
- * Commands are killed after a timeout (default 60s, longer for up/build/pull).
+ * Short commands are killed after a timeout (default 60s); lifecycle commands (up/build/pull/down/update/restart) run untimed.
  */
 export async function runHarbor(args: string[], options?: RunHarborOptions) {
     const result = await runHarborRaw(args, options);

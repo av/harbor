@@ -128,9 +128,7 @@ export const HarborSetupProvider: FC<{ children: ReactNode }> = ({ children }) =
           (event) => {
             setDetail(event.payload.detail);
             setRunning(false);
-            if (event.payload.error) {
-              setError(event.payload.error);
-            }
+            setError(event.payload.error ?? null);
             if (event.payload.detail.status === "ready") {
               setJustInstalled(true);
             }

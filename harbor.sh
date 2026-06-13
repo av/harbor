@@ -516,8 +516,17 @@ show_help() {
 }
 
 run_harbor_doctor() {
+    local check_mode=false
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+            --check) check_mode=true ;;
+        esac
+        shift
+    done
+
     log_info "Running Harbor Doctor..."
     local has_errors=false
+    local has_critical=false
     local docker_ok=false
 
     # Check if Docker is installed
@@ -550,11 +559,13 @@ run_harbor_doctor() {
                 fi
             fi
             has_errors=true
+            has_critical=true
         fi
     else
         log_error "${nok} Docker is not installed."
         log_error "  Install Docker: https://docs.docker.com/engine/install/"
         has_errors=true
+        has_critical=true
     fi
 
     # Only check Compose if Docker itself is working
@@ -566,6 +577,7 @@ run_harbor_doctor() {
             log_error "${nok} Docker Compose (v2) is not installed."
             log_error "  Install Docker Compose: https://docs.docker.com/compose/install/"
             has_errors=true
+            has_critical=true
         fi
 
         if ! has_modern_compose; then
@@ -574,6 +586,7 @@ run_harbor_doctor() {
             log_error "${nok} Docker Compose version ($installed_compose) is older than required ($desired_compose_major.$desired_compose_minor.$desired_compose_patch)."
             log_error "  Update Docker Compose: https://docs.docker.com/compose/install/"
             has_errors=true
+            has_critical=true
         else
             log_info "${ok} Docker Compose (v2) version is newer than $desired_compose_major.$desired_compose_minor.$desired_compose_patch"
         fi
@@ -643,6 +656,7 @@ run_harbor_doctor() {
         log_error "${nok} Harbor home does not exist or is not reachable at: $harbor_home"
         log_error "  Reinstall Harbor or set HARBOR_HOME to the correct path."
         has_errors=true
+        has_critical=true
     fi
 
     # Check prerequisites for 'harbor update'
@@ -680,6 +694,7 @@ run_harbor_doctor() {
         if [ "$wsl_ver" = "1" ]; then
             log_error "${nok} WSL1 does not support Docker natively. Upgrade to WSL2: wsl --set-version <distro> 2"
             has_errors=true
+            has_critical=true
         fi
 
         # Warn if harbor_home is on a Windows-mounted filesystem (slow IO)
@@ -718,7 +733,9 @@ run_harbor_doctor() {
                 if rpm -q container-selinux &>/dev/null; then
                     log_info "${ok} container-selinux is installed"
                 else
-                    log_warn "${nok} container-selinux is not installed. Install it: sudo dnf install -y container-selinux"
+                    log_error "${nok} container-selinux is not installed. Install it: sudo dnf install -y container-selinux"
+                    has_errors=true
+                    has_critical=true
                 fi
             fi
 
@@ -786,6 +803,7 @@ run_harbor_doctor() {
         log_error "${nok} Default profile is missing or not readable at: $default_profile"
         log_error "  This usually means the Harbor installation is incomplete. Try reinstalling: curl -fsSL https://raw.githubusercontent.com/av/harbor/main/install.sh | bash"
         has_errors=true
+        has_critical=true
     fi
 
     # Check if the .env file exists and is readable
@@ -859,6 +877,7 @@ run_harbor_doctor() {
         log_error "${nok} Current profile (.env) is missing or not readable."
         log_error "  Run 'harbor config update' to regenerate it from the default profile."
         has_errors=true
+        has_critical=true
     fi
 
     # Check Harbor home disk space (LLM models, configs, and caches live here)
@@ -887,10 +906,12 @@ run_harbor_doctor() {
                 log_error "${nok} CLI symlink is broken: $cli_path/$cli_name -> $link_target"
                 log_error "    The target no longer exists. Run 'harbor ln' to recreate."
                 has_errors=true
+                has_critical=true
             fi
         else
             log_error "${nok} CLI is not linked. Run 'harbor ln' to create a symlink."
             has_errors=true
+            has_critical=true
         fi
 
         # Verify cli_path is in PATH (symlink exists but won't be found if
@@ -925,6 +946,16 @@ run_harbor_doctor() {
         log_info "${ok} AMD GPU with ROCm support detected"
     elif [[ -e "/dev/kfd" ]]; then
         log_warn "${nok} AMD GPU hardware found (/dev/kfd) but ROCm support is incomplete. Check that amdgpu kernel module is loaded and /dev/dri/renderD* devices exist."
+    fi
+
+    if $check_mode; then
+        if $has_critical; then
+            log_error "Harbor Doctor: essential checks failed."
+            return 1
+        else
+            log_info "Harbor Doctor: essential checks passed."
+            return 0
+        fi
     fi
 
     if $has_errors; then

@@ -56,17 +56,7 @@ bun tauri dev
 bun tauri build
 ```
 
-### Native setup smoke
+### Native setup validation
 
-Native setup validation can run the app's Tauri setup backend directly from the
-app process:
-
-```bash
-HARBOR_APP_SETUP_SMOKE=1 \
-HARBOR_APP_SETUP_SMOKE_OUTPUT="$PWD/harbor-app-setup.json" \
-./path/to/Harbor
-```
-
-The process exits `0` when setup reaches `ready`, exits non-zero on setup
-failure, and writes JSON with `ok`, `detail`, and `error` fields. The detailed
-host scenarios live in `../tests/app-native-setup.md`.
+First-run guided setup is validated manually through the app UI on real hosts.
+The detailed host scenarios live in `../tests/app-native-setup.md`.

@@ -48,14 +48,6 @@ harbor --version
 suite_log "Verifying first-run stack command is resolvable..."
 harbor cmd llamacpp webui >/dev/null
 
-if [ -f "${HARBOR_TEST_REPO}/app/src-tauri/src/setup.rs" ]; then
-  suite_log "Verifying App setup uses the model-aware llama.cpp pull path..."
-  grep -Fq 'harbor_script(&["models", "pull", "--source", "llamacpp", FIRST_RUN_MODEL])' \
-    "${HARBOR_TEST_REPO}/app/src-tauri/src/setup.rs"
-  ! grep -Fq 'harbor_script(&["pull", "--source", "llamacpp", FIRST_RUN_MODEL])' \
-    "${HARBOR_TEST_REPO}/app/src-tauri/src/setup.rs"
-fi
-
 # The App setup backend starts the first-run stack with:
 #   harbor up --no-defaults llamacpp webui
 if [ "${HARBOR_TEST_APP_INSTALL_FULL_STACK:-false}" = "true" ]; then

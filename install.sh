@@ -437,8 +437,16 @@ main() {
         echo "You may want to restore it manually or delete it." >&2
       fi
       case "$_LAST_SETUP_STAGE" in
-        failed|blocked|refresh-required|ready) ;;
-        *) echo "HARBOR_SETUP_STAGE=failed" ;;
+        failed|blocked|refresh-required|ready|cancelled) ;;
+        *)
+          # Exit codes >= 128 mean death by signal (SIGHUP/SIGINT/SIGTERM)
+          # — i.e. the user or the app cancelled, not a failure.
+          if [ "$ec" -ge 128 ]; then
+            echo "HARBOR_SETUP_STAGE=cancelled"
+          else
+            echo "HARBOR_SETUP_STAGE=failed"
+          fi
+          ;;
       esac
     fi
   ' EXIT
@@ -458,6 +466,7 @@ main() {
     fi
   fi
 
+  setup_stage "checking-prerequisites"
   if [ "$INSTALL_REQUIREMENTS" = true ]; then
     setup_stage "installing-prerequisites"
     echo "Installing requirements..."
@@ -542,24 +551,29 @@ main() {
 
   echo ""
   setup_stage "verifying-cli"
-  if doctor_output=$(./harbor.sh doctor 2>&1); then
+  # --check prints the same diagnostics but only fails on critical issues
+  # (Docker unusable, broken install) — non-critical warnings like a missing
+  # NVIDIA toolkit or registry connectivity must not fail an otherwise good
+  # install. Older releases without --check ignore the flag and fall back to
+  # full-doctor exit semantics.
+  if doctor_output=$(./harbor.sh doctor --check 2>&1); then
     printf '%s\n' "$doctor_output"
   else
     printf '%s\n' "$doctor_output"
     if doctor_requires_blocked "$doctor_output"; then
       setup_stage "blocked"
-      echo "Harbor CLI is installed, but Docker is not reachable."
-      echo "Start Docker Desktop or the Docker daemon, then retry Harbor App setup."
+      echo "Docker is installed but doesn't seem to be running."
+      echo "Start Docker Desktop (or Docker), then click Retry in Harbor."
       exit 1
     fi
     if doctor_requires_refresh "$doctor_output"; then
       setup_stage "refresh-required"
-      echo "Harbor CLI is installed, but Docker access needs a refreshed shell session."
-      echo "Re-login or run 'newgrp docker', then retry Harbor App setup."
+      echo "Harbor is installed but needs a system refresh to access Docker."
+      echo "Log out of your computer and log back in, then reopen Harbor."
       exit 1
     fi
     setup_stage "failed"
-    echo "Error: Harbor verification failed. Resolve the doctor errors above, then retry setup."
+    echo "Setup couldn't verify everything is working. Click Retry or check the details above."
     exit 1
   fi
   setup_stage "ready"

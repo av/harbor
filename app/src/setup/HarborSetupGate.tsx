@@ -2,6 +2,8 @@ import { FC, FormEvent, ReactNode, useEffect, useRef, useState } from "react";
 import {
   IconBadgeCheck,
   IconExternalLink,
+  IconEye,
+  IconEyeOff,
   IconOctagonAlert,
   IconPlay,
   IconRotateCW,
@@ -35,44 +37,39 @@ interface StateGuidance {
 
 const stateGuidance: Record<string, StateGuidance> = {
   blocked: {
-    title: "Installation blocked",
+    title: "Can't install automatically",
     message:
-      "A prerequisite is missing that prevents Harbor from being installed.",
+      "Harbor needs additional software that isn't available on this computer.",
     actions: [
-      "Check the error details below for the specific issue",
-      "On macOS: install Docker Desktop from docker.com/products/docker-desktop",
-      "On Linux: ensure Docker Engine and a supported package manager (apt, dnf, pacman, apk, or zypper) are available",
-      "On Windows: enable WSL2 and install a supported Linux distro (Ubuntu, Debian, Fedora, openSUSE, Kali, or Arch)",
-      "After fixing the issue, click Redetect to try again",
+      "See the message below for what's needed",
+      "After installing it, click Redetect",
     ],
     level: "warning",
   },
   "refresh-required": {
-    title: "Almost there -- restart needed",
+    title: "Almost done",
     message:
-      "Harbor CLI is installed, but your session needs refreshing to access Docker.",
+      "Harbor was installed, but it can't fully connect to Docker yet.",
     actions: [
-      "Close and reopen the Harbor app",
-      "On Linux, you may need to log out and back in to pick up docker group membership",
-      "Alternatively, open a terminal and run: newgrp docker",
+      "Log out of your computer and log back in, then reopen Harbor",
+      "If that doesn't help, try restarting your computer",
+      "Click Redetect below to check again",
     ],
     level: "info",
   },
   failed: {
-    title: "Installation failed",
-    message: "The setup process encountered an error it could not recover from.",
+    title: "Installation didn't finish",
+    message: "Something went wrong during setup.",
     actions: [
-      "Expand the terminal output above to see the specific error",
-      "Check your internet connection (Harbor downloads ~50 MB during install)",
-      "If a package install failed, try installing Docker and git manually, then click Retry",
-      "If the problem persists, visit github.com/av/harbor/issues for help",
+      "Make sure you're connected to the internet and click Retry",
+      "If it keeps failing, visit github.com/av/harbor/issues for help",
     ],
     level: "error",
   },
   cancelled: {
     title: "Installation cancelled",
     message: "You stopped the installation before it completed.",
-    actions: ["Click Retry to start again when you are ready"],
+    actions: ["Click Retry when you're ready to try again"],
     level: "info",
   },
 };
@@ -89,7 +86,7 @@ const statusLabels: Record<string, string> = {
   blocked: "Blocked",
   failed: "Setup failed",
   cancelled: "Cancelled",
-  "refresh-required": "Restart required",
+  "refresh-required": "Almost done",
   "not-installed": "Not installed",
 };
 
@@ -151,6 +148,7 @@ export const HarborSetupGate: FC<{ children: ReactNode }> = ({ children }) => {
   const setup = useHarborSetup();
   const outputRef = useRef<HTMLDivElement>(null);
   const [input, setInput] = useState("");
+  const [showInput, setShowInput] = useState(false);
 
   useEffect(() => {
     if (outputRef.current) {
@@ -225,7 +223,7 @@ export const HarborSetupGate: FC<{ children: ReactNode }> = ({ children }) => {
             )}
 
             {displayError && (
-              <p className="max-w-md text-center text-sm text-error">
+              <p className={`max-w-md text-center text-sm ${status === "not-installed" ? "text-base-content/60" : "text-error"}`}>
                 {displayError}
               </p>
             )}
@@ -349,20 +347,31 @@ export const HarborSetupGate: FC<{ children: ReactNode }> = ({ children }) => {
           </div>
         </div>
 
-        {/* Input for sudo / installer prompts */}
+        {/* Input for installer prompts */}
         {setup.running && (
           <form className="flex gap-2" onSubmit={sendInput}>
             <div className="flex min-w-0 flex-1 flex-col gap-1">
-              <input
-                className="input input-sm input-bordered min-w-0 font-mono"
-                type="password"
-                value={input}
-                placeholder="sudo password"
-                autoComplete="off"
-                onChange={(e) => setInput(e.target.value)}
-              />
+              <div className="flex gap-1">
+                <input
+                  className="input input-sm input-bordered min-w-0 flex-1 font-mono"
+                  type={showInput ? "text" : "password"}
+                  value={input}
+                  placeholder="Respond to installer prompt"
+                  autoComplete="off"
+                  onChange={(e) => setInput(e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="btn btn-sm btn-ghost"
+                  onClick={() => setShowInput((v) => !v)}
+                  tabIndex={-1}
+                  aria-label={showInput ? "Hide input" : "Show input"}
+                >
+                  {showInput ? <IconEyeOff /> : <IconEye />}
+                </button>
+              </div>
               <span className="text-xs text-base-content/50">
-                Your system password — needed to install system packages
+                Sent to the installer — e.g. your password when prompted, or answers to other prompts
               </span>
             </div>
             <button

@@ -45,7 +45,9 @@ function Test-WslAvailable {
   } finally {
     $ErrorActionPreference = $prevEAP
   }
-  if ($output) { Write-Output $output }
+  # Write-Host routes to the PTY display without entering the output stream,
+  # keeping the return value a pure boolean.
+  if ($output) { Write-Host ($output -join "`n") }
   return $result
 }
 
@@ -155,6 +157,9 @@ function Start-DockerDesktop {
 }
 
 function Install-DockerDesktop {
+  $installerPath = Join-Path $env:TEMP "Docker Desktop Installer.exe"
+  Remove-Item -Path $installerPath -Force -ErrorAction SilentlyContinue
+
   if (Get-Command winget -ErrorAction SilentlyContinue) {
     Write-Output "Installing Docker Desktop with winget."
     & winget install --exact --id Docker.DockerDesktop --accept-package-agreements --accept-source-agreements
@@ -168,7 +173,13 @@ function Install-DockerDesktop {
   }
 
   Write-Output "Installing Docker Desktop with the official Docker Desktop installer."
-  $installerPath = Join-Path $env:TEMP "Docker Desktop Installer.exe"
+
+  # Suppress the progress bar for the duration of the download. Under
+  # Windows PowerShell 5.1 the progress bar makes Invoke-WebRequest orders
+  # of magnitude slower for large files. Function-scoped preference variables
+  # in PowerShell revert automatically when the function returns, so this
+  # does not leak to the caller's session.
+  $ProgressPreference = 'SilentlyContinue'
 
   # Retry the download up to 3 times. The installer is ~600MB and network
   # interruptions are common, especially on slower connections.
@@ -264,10 +275,12 @@ if (-not (Test-WslAvailable)) {
   & wsl.exe --install
   if ($LASTEXITCODE -ne 0) {
     Write-SetupStage "failed"
-    throw "WSL installation failed (exit code $LASTEXITCODE). Run 'wsl --install' manually from an elevated PowerShell prompt."
+    Write-Host "WSL installation failed (exit code $LASTEXITCODE). Run 'wsl --install' manually from an elevated PowerShell prompt."
+    exit 1
   }
   Write-SetupStage "refresh-required"
-  throw "WSL installation started. Restart Windows or complete distro first-run setup, then retry Harbor setup."
+  Write-Host "WSL installation started. Restart Windows or complete distro first-run setup, then retry Harbor setup."
+  exit 1
 }
 
 Write-SetupStage "checking-prerequisites"
@@ -324,7 +337,8 @@ if ([string]::IsNullOrWhiteSpace($Distro)) {
   }
   if ($wsl1Match) {
     Write-SetupStage "blocked"
-    throw "Found WSL1 distro '$wsl1Match' but Harbor requires WSL2. Upgrade it with: wsl --set-version $wsl1Match 2"
+    Write-Host "Found WSL1 distro '$wsl1Match' but Harbor requires WSL2. Upgrade it with: wsl --set-version $wsl1Match 2"
+    exit 1
   }
 
   Write-SetupStage "installing-prerequisites"
@@ -333,19 +347,23 @@ if ([string]::IsNullOrWhiteSpace($Distro)) {
   & wsl.exe --install -d Ubuntu
   if ($LASTEXITCODE -ne 0) {
     Write-SetupStage "failed"
-    throw "Ubuntu WSL installation failed (exit code $LASTEXITCODE). Run 'wsl --install -d Ubuntu' manually from an elevated PowerShell prompt."
+    Write-Host "Ubuntu WSL installation failed (exit code $LASTEXITCODE). Run 'wsl --install -d Ubuntu' manually from an elevated PowerShell prompt."
+    exit 1
   }
   Write-SetupStage "refresh-required"
-  throw "Ubuntu WSL installation started. Complete first-run account setup, then retry Harbor setup."
+  Write-Host "Ubuntu WSL installation started. Complete first-run account setup, then retry Harbor setup."
+  exit 1
 }
 
 # Verify the selected distro is actually WSL2.
 if ($distros -match "(?m)^\s*\*?\s*$([regex]::Escape($Distro))\s+.+\s+1\s*$") {
   Write-SetupStage "blocked"
-  throw "Selected distro '$Distro' is running under WSL1. Harbor requires WSL2. Upgrade it with: wsl --set-version $Distro 2"
+  Write-Host "Selected distro '$Distro' is running under WSL1. Harbor requires WSL2. Upgrade it with: wsl --set-version $Distro 2"
+  exit 1
 } elseif ($distros -notmatch "(?m)^\s*\*?\s*$([regex]::Escape($Distro))\s+.+\s+2\s*$") {
   Write-SetupStage "blocked"
-  throw "Selected distro '$Distro' is not a WSL2 distro or is not installed. Set HARBOR_WSL_DISTRO to a valid WSL2 distro name."
+  Write-Host "Selected distro '$Distro' is not a WSL2 distro or is not installed. Set HARBOR_WSL_DISTRO to a valid WSL2 distro name."
+  exit 1
 }
 
 try {
@@ -372,22 +390,32 @@ try {
   }
 } catch {
   Write-SetupStage "blocked"
-  throw "WSL distro '$Distro' cannot run basic commands (bash, curl). The distro may need a first-run setup (username/password creation) or may be corrupted. Run 'wsl -d $Distro' in a terminal to check, then retry."
+  Write-Host "WSL distro '$Distro' cannot run basic commands (bash, curl). The distro may need a first-run setup (username/password creation) or may be corrupted. Run 'wsl -d $Distro' in a terminal to check, then retry."
+  exit 1
 }
 
 Write-SetupStage "checking-prerequisites"
 if (-not (Test-DockerDesktopInstalled)) {
   Write-SetupStage "installing-prerequisites"
-  Install-DockerDesktop
-  Start-DockerDesktop
+  try {
+    Install-DockerDesktop
+    Start-DockerDesktop
+  } catch {
+    Write-SetupStage "failed"
+    # Emitted after the marker so the app surfaces it as the error detail.
+    Write-Output $_.Exception.Message
+    exit 1
+  }
   Write-SetupStage "refresh-required"
-  throw "Docker Desktop installation completed. Open Docker Desktop, accept required first-run prompts, enable WSL integration for '$Distro', then retry Harbor setup."
+  Write-Host "Docker Desktop installation completed. Open Docker Desktop, accept required first-run prompts, enable WSL integration for '$Distro', then retry Harbor setup."
+  exit 1
 }
 
 Start-DockerDesktop
 if (-not (Wait-WslDockerReady $Distro)) {
   Write-SetupStage "blocked"
-  throw "Docker Desktop did not become reachable inside WSL distro '$Distro' within 3 minutes. Possible causes: (1) Docker Desktop requires accepting the EULA/subscription agreement on first launch, (2) WSL integration is not enabled for '$Distro' in Docker Desktop Settings > Resources > WSL Integration, (3) Docker Desktop failed to start. Open Docker Desktop manually, complete any first-run prompts, then retry."
+  Write-Host "Docker Desktop did not become reachable inside WSL distro '$Distro' within 3 minutes. Possible causes: (1) Docker Desktop requires accepting the EULA/subscription agreement on first launch, (2) WSL integration is not enabled for '$Distro' in Docker Desktop Settings > Resources > WSL Integration, (3) Docker Desktop failed to start. Open Docker Desktop manually, complete any first-run prompts, then retry."
+  exit 1
 }
 
 Write-SetupStage "installing-cli"

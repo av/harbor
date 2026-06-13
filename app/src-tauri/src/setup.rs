@@ -17,6 +17,9 @@ const HARBOR_INSTALL_URL: &str =
 const HARBOR_WINDOWS_INSTALL_URL: &str =
     "https://raw.githubusercontent.com/av/harbor/refs/heads/main/install.ps1";
 const DETECT_TIMEOUT: Duration = Duration::from_secs(15);
+// Cold WSL VM boot after Windows startup can exceed 15s; commands that run
+// inside the distro (via wsl bash -c) need a longer ceiling.
+const WSL_COMMAND_TIMEOUT: Duration = Duration::from_secs(60);
 const PANIC_RECOVERY_MESSAGE: &str =
     "An unexpected internal error occurred during setup. Please try again, and if the problem persists, report it at github.com/av/harbor/issues";
 
@@ -32,6 +35,8 @@ pub struct SetupState {
 
 impl SetupState {
     pub fn kill_running_process(&self) {
+        let pid = self.current_pid.lock().ok().and_then(|g| *g);
+        kill_process_tree(pid);
         if let Ok(mut killer) = self.current_killer.lock() {
             if let Some(killer) = killer.as_mut() {
                 let _ = killer.kill();
@@ -39,6 +44,23 @@ impl SetupState {
             *killer = None;
         }
     }
+}
+
+/// On Windows, kill the process tree rooted at `pid` via `taskkill /T /F`.
+/// On other platforms this is a no-op (the PTY SIGHUP propagates to the group).
+fn kill_process_tree(pid: Option<u32>) {
+    #[cfg(target_os = "windows")]
+    if let Some(pid) = pid {
+        use std::process::{Command, Stdio};
+        let _ = Command::new("taskkill")
+            .args(["/PID", &pid.to_string(), "/T", "/F"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+    }
+    #[cfg(not(target_os = "windows"))]
+    let _ = pid;
 }
 
 #[derive(Clone, Serialize)]
@@ -201,23 +223,28 @@ fn run_capture_timeout(program: &str, args: &[&str], timeout: Duration) -> Proce
                         if started.elapsed() > timeout {
                             let _ = child.kill();
                             let _ = child.wait();
+                            // Don't join the reader: grandchildren can hold
+                            // the pipe's write end open after the child is
+                            // killed, blocking read_to_end forever.  Stdout
+                            // is unused on failure codes anyway.
+                            drop(stdout_reader);
                             return ProcessOutput {
                                 code: Some(124),
-                                stdout: join_reader(stdout_reader),
+                                stdout: String::new(),
                             };
                         }
                         std::thread::sleep(Duration::from_millis(100));
                     }
                     Err(_) => {
-                        // try_wait failed at the OS level.  Kill and
-                        // reap the child so we don't leak it, then
-                        // join the reader thread to avoid a dangling
-                        // background thread.
+                        // try_wait failed at the OS level.  Kill and reap
+                        // the child so we don't leak it; detach the reader
+                        // for the same grandchild-pipe reason as above.
                         let _ = child.kill();
                         let _ = child.wait();
+                        drop(stdout_reader);
                         return ProcessOutput {
                             code: Some(127),
-                            stdout: join_reader(stdout_reader),
+                            stdout: String::new(),
                         };
                     }
                 }
@@ -361,6 +388,11 @@ fn parse_wsl_distro_exists(output: &str, distro: &str) -> bool {
             return false;
         }
         let name_index = if parts.first() == Some(&"*") { 1 } else { 0 };
+        // Need at least one state token between name and version,
+        // matching the guard in parse_wsl2_supported_distro.
+        if parts.len() <= name_index + 2 {
+            return false;
+        }
         // Use the last element as the version column to handle
         // multi-word localized state names.
         parts.get(name_index) == Some(&distro) && parts.last() == Some(&"2")
@@ -474,6 +506,74 @@ fn emit_setup_failure(app: &AppHandle, status: &str, message: &str) {
     );
 }
 
+/// Strip ANSI escape sequences from `line` so stored error messages are clean.
+///
+/// Handles:
+/// - CSI sequences: `ESC [ <params> <final-byte>` (colors, cursor movement)
+/// - OSC sequences: `ESC ] <anything> BEL` or `ESC ] <anything> ESC \`
+/// - Two-character ESC sequences: `ESC <any single non-`[`/`]` char>`
+/// - Bare control characters (< 0x20, excluding \t) and BEL (\x07)
+fn strip_ansi(line: &str) -> String {
+    #[derive(PartialEq)]
+    enum State {
+        Normal,
+        Esc,
+        Csi,
+        Osc,
+        OscEsc,
+    }
+
+    let mut out = String::with_capacity(line.len());
+    let mut state = State::Normal;
+
+    for ch in line.chars() {
+        match state {
+            State::Normal => {
+                if ch == '\x1b' {
+                    state = State::Esc;
+                } else if ch == '\x07' || (ch < '\x20' && ch != '\t' && ch != '\n' && ch != '\r') {
+                    // skip bare control chars (BEL, etc.)
+                } else {
+                    out.push(ch);
+                }
+            }
+            State::Esc => {
+                if ch == '[' {
+                    state = State::Csi;
+                } else if ch == ']' {
+                    state = State::Osc;
+                } else {
+                    // Two-char ESC sequence — consume the second char and return.
+                    state = State::Normal;
+                }
+            }
+            State::Csi => {
+                // CSI ends at any byte in 0x40–0x7E.
+                if ch >= '@' && ch <= '~' {
+                    state = State::Normal;
+                }
+                // Otherwise consume parameter/intermediate bytes.
+            }
+            State::Osc => {
+                if ch == '\x07' {
+                    // BEL terminates OSC.
+                    state = State::Normal;
+                } else if ch == '\x1b' {
+                    // ESC may start the ST terminator (`ESC \`).
+                    state = State::OscEsc;
+                }
+                // Otherwise consume OSC data.
+            }
+            State::OscEsc => {
+                // Expect `\` as the second byte of ST; either way, OSC is done.
+                state = State::Normal;
+            }
+        }
+    }
+
+    out
+}
+
 fn parse_setup_stage_marker(line: &str) -> Option<String> {
     line.trim()
         .strip_prefix("HARBOR_SETUP_STAGE=")
@@ -487,10 +587,11 @@ fn emit_process_line(
     line: &str,
     pls: &ProcessLineState,
 ) {
+    let clean = strip_ansi(line.trim()).trim().to_string();
     if let Ok(mut last) = pls.last_line.lock() {
-        *last = Some(line.trim().to_string());
+        *last = Some(clean.clone());
     }
-    if let Some(marker) = parse_setup_stage_marker(line) {
+    if let Some(marker) = parse_setup_stage_marker(&clean) {
         emit_stage(app, &marker);
         if let Ok(mut current) = pls.marker.lock() {
             *current = Some(marker.clone());
@@ -633,7 +734,7 @@ fn run_logged(
         clear_running_state(state, true);
         return Err(SetupError {
             status: "cancelled".into(),
-            message: format!("{stage} cancelled"),
+            message: format!("Setup cancelled during '{stage}'"),
         });
     }
 
@@ -646,6 +747,28 @@ fn run_logged(
     }
     if let Ok(mut w) = state.current_writer.lock() {
         *w = Some(writer);
+    }
+
+    // Re-check after registration: a cancel that arrived between the first
+    // check and killer registration would have found killer=None and no-op'd.
+    // Now that the killer is registered, we can honour it.
+    if state
+        .cancel_requested
+        .lock()
+        .map(|c| *c)
+        .unwrap_or(false)
+    {
+        if let Ok(mut k) = state.current_killer.lock() {
+            if let Some(k) = k.as_mut() {
+                let _ = k.kill();
+            }
+        }
+        let _ = child.wait();
+        clear_running_state(state, true);
+        return Err(SetupError {
+            status: "cancelled".into(),
+            message: format!("Setup cancelled during '{stage}'"),
+        });
     }
 
     let pls = ProcessLineState {
@@ -726,7 +849,10 @@ fn run_logged(
                     // (SIGHUP on Unix, TerminateProcess on Windows) the
                     // process should exit quickly.
                     let _ = child.wait();
-                    break Err(SetupError::failed(format!("{stage} timed out")));
+                    let active_stage = current_setup_stage(state);
+                    break Err(SetupError::failed(format!(
+                        "Setup timed out during '{active_stage}'"
+                    )));
                 }
                 std::thread::sleep(Duration::from_millis(250));
             }
@@ -767,11 +893,13 @@ fn run_logged(
     if status.success() {
         Ok(())
     } else if was_cancelled {
+        let active_stage = current_setup_stage(state);
         Err(SetupError {
             status: "cancelled".into(),
-            message: format!("{stage} cancelled"),
+            message: format!("Setup cancelled during '{active_stage}'"),
         })
     } else {
+        let active_stage = current_setup_stage(state);
         let terminal_marker = pls.marker
             .lock()
             .ok()
@@ -789,21 +917,24 @@ fn run_logged(
                         .is_some_and(|s| s == marker)
                 });
 
-            let detail = last_output
-                .map(|l| format!("; {l}"))
-                .unwrap_or_default();
+            let message = match last_output {
+                Some(detail) => detail,
+                None => format!(
+                    "Setup failed during '{}' (exit code {})",
+                    active_stage,
+                    format_pty_exit(&status),
+                ),
+            };
 
             return Err(SetupError {
                 status: marker,
-                message: format!(
-                    "{stage} exited with code {}{detail}",
-                    format_pty_exit(&status),
-                ),
+                message,
             });
         }
 
         Err(SetupError::failed(format!(
-            "{stage} exited with code {}",
+            "Setup failed during '{}' (exit code {})",
+            active_stage,
             format_pty_exit(&status)
         )))
     }
@@ -875,12 +1006,15 @@ fn windows_install_script(distro: Option<&str>) -> String {
 
 // ── Detection ──────────────────────────────────────────
 
+// Returns true if detection should stop (status already set on `detail`).
 fn detect_windows_blocker(detail: &mut HarborSetupDetail) -> bool {
     let wsl_status = run_capture_timeout("wsl.exe", &["--status"], DETECT_TIMEOUT);
     if wsl_status.code != Some(0) {
-        detail.status = "blocked".into();
+        // WSL feature isn't enabled yet — the installer handles this via
+        // `wsl --install`, so surface as not-installed rather than blocked.
+        detail.status = "not-installed".into();
         detail.last_error =
-            Some("Windows Subsystem for Linux is not available.".into());
+            Some("WSL isn't set up yet — Harbor will install it for you (a Windows restart may be required).".into());
         return true;
     }
 
@@ -889,24 +1023,23 @@ fn detect_windows_blocker(detail: &mut HarborSetupDetail) -> bool {
         &["--list", "--verbose"],
         DETECT_TIMEOUT,
     );
-    if distros.code != Some(0) {
-        detail.status = "blocked".into();
-        detail.last_error =
-            Some("No WSL2 distro is available. Install one with: wsl --install -d Ubuntu".into());
-        return true;
-    }
 
     if let Some(distro) = selected_wsl_distro() {
-        if !parse_wsl_distro_exists(&distros.stdout, &distro) {
+        // An explicitly configured distro that doesn't exist is a user-config
+        // error the installer shouldn't paper over — report as blocked.
+        let exists = distros.code == Some(0)
+            && parse_wsl_distro_exists(&distros.stdout, &distro);
+        if !exists {
             detail.status = "blocked".into();
             detail.last_error =
-                Some(format!("Selected WSL distro '{distro}' is not a WSL2 distro or is not installed."));
+                Some(format!("The selected Linux environment ('{distro}') isn't set up correctly. Try removing it and reinstalling with: wsl --install"));
             return true;
         }
-    } else if preferred_wsl_distro().is_none() {
-        detail.status = "blocked".into();
+    } else if distros.code != Some(0) || preferred_wsl_distro().is_none() {
+        // No distro found — the installer will run `wsl --install -d Ubuntu`.
+        detail.status = "not-installed".into();
         detail.last_error =
-            Some("No supported WSL2 distro found (Ubuntu, Debian, Fedora, openSUSE, Kali, Arch). Install one with: wsl --install -d Ubuntu, or set HARBOR_WSL_DISTRO to use a custom distro.".into());
+            Some("Harbor will install Ubuntu (WSL2) for you automatically.".into());
         return true;
     }
 
@@ -916,6 +1049,9 @@ fn detect_windows_blocker(detail: &mut HarborSetupDetail) -> bool {
 /// Run the full detection logic, ignoring whether setup is active.
 /// Used internally after a successful install to verify the CLI is available.
 fn detect_harbor_status() -> HarborSetupDetail {
+    // The install may have created a different distro than the one cached
+    // before it ran (e.g. fresh Ubuntu install) — re-resolve from scratch.
+    clear_wsl_distro_cache();
     let mut detail = HarborSetupDetail::checking();
     detect_harbor_status_core(platform_name(), &mut detail);
     detail
@@ -942,52 +1078,16 @@ fn detect_harbor_setup_inner(state: &SetupState) -> HarborSetupDetail {
 }
 
 fn detect_harbor_status_core(platform: &str, detail: &mut HarborSetupDetail) {
-    match platform {
-        "linux" => {
-            let check = run_shell_timeout(
-                "command -v apt-get >/dev/null || command -v dnf >/dev/null || command -v pacman >/dev/null || command -v apk >/dev/null || command -v zypper >/dev/null",
-                DETECT_TIMEOUT,
-            );
-            if check.code != Some(0) {
-                detail.status = "blocked".into();
-                detail.last_error = Some(
-                    "No supported package manager found (apt, dnf, pacman, apk, or zypper). Harbor needs a package manager to install Docker and other dependencies. Install one of these, or install Docker manually and retry.".into(),
-                );
-                return;
-            }
-        }
-        "macos" => {
-            // On macOS, Docker Desktop must be installed separately (the install
-            // script cannot install it non-interactively). Detect early so users
-            // get actionable guidance instead of a cryptic install failure.
-            let docker_check = run_shell_timeout(
-                "command -v docker >/dev/null 2>&1",
-                DETECT_TIMEOUT,
-            );
-            if docker_check.code != Some(0) {
-                detail.status = "blocked".into();
-                detail.last_error = Some(
-                    "Docker is not installed. Please install Docker Desktop for Mac from https://docker.com/products/docker-desktop before setting up Harbor.".into(),
-                );
-                return;
-            }
-        }
-        "windows" => {}
-        _ => {
-            detail.status = "blocked".into();
-            detail.last_error = Some(format!("Unsupported platform: {platform}. Harbor supports Linux, macOS, and Windows (via WSL2)."));
-            return;
-        }
-    }
-
-    if platform == "windows" && detect_windows_blocker(detail) {
+    if !matches!(platform, "linux" | "macos" | "windows") {
+        detail.status = "blocked".into();
+        detail.last_error = Some(format!("Unsupported platform: {platform}. Harbor supports Linux, macOS, and Windows (via WSL2)."));
         return;
     }
 
     let version = if platform == "windows" {
         run_wsl_bash_timeout(
             "command -v harbor >/dev/null && harbor --version",
-            DETECT_TIMEOUT,
+            WSL_COMMAND_TIMEOUT,
         )
     } else {
         run_shell_timeout(
@@ -1000,7 +1100,6 @@ fn detect_harbor_status_core(platform: &str, detail: &mut HarborSetupDetail) {
     };
 
     if version.code == Some(0) {
-        detail.status = "ready".into();
         // `harbor --version` outputs "Harbor CLI version: X.Y.Z".
         // Use the last non-empty line to skip login-shell noise (MOTD,
         // profile banners) that may precede the version output.
@@ -1019,6 +1118,32 @@ fn detect_harbor_status_core(platform: &str, detail: &mut HarborSetupDetail) {
             .unwrap_or(last_line)
             .trim();
         detail.cli_version = Some(cleaned.to_string());
+
+        // CLI exists — now verify the environment is actually usable
+        // (Docker accessible, Compose installed, etc.) via doctor --check.
+        let doctor = if platform == "windows" {
+            run_wsl_bash_timeout(
+                "harbor doctor --check",
+                WSL_COMMAND_TIMEOUT,
+            )
+        } else {
+            run_shell_timeout(
+                &format!(
+                    "{}; harbor doctor --check",
+                    native_harbor_prelude()
+                ),
+                Duration::from_secs(30),
+            )
+        };
+
+        if doctor.code == Some(0) {
+            detail.status = "ready".into();
+        } else {
+            detail.status = "refresh-required".into();
+            detail.last_error = Some(
+                "Harbor is installed but can't connect to Docker yet. Try logging out and back in.".into(),
+            );
+        }
         return;
     }
 
@@ -1030,10 +1155,65 @@ fn detect_harbor_status_core(platform: &str, detail: &mut HarborSetupDetail) {
         if exists.code == Some(0) {
             detail.status = "refresh-required".into();
             detail.last_error = Some(
-                "Harbor is installed but not in PATH. Close and reopen this app, or open a new terminal and run 'harbor doctor' to verify.".into(),
+                "Harbor is installed but your system hasn't picked it up yet. Try closing and reopening Harbor.".into(),
             );
             return;
         }
+    }
+
+    // The CLI is not installed. Only now check installer prerequisites —
+    // they gate installation, not usage, so an existing working install
+    // (e.g. on a distro without a supported package manager) must never
+    // be reported as blocked by them.
+    match platform {
+        "linux" => {
+            let check = run_shell_timeout(
+                "command -v apt-get >/dev/null || command -v dnf >/dev/null || command -v pacman >/dev/null || command -v apk >/dev/null || command -v zypper >/dev/null",
+                DETECT_TIMEOUT,
+            );
+            if check.code != Some(0) {
+                detail.status = "blocked".into();
+                detail.last_error = Some(
+                    "Harbor can't install its dependencies automatically on this system. Please install Docker from docker.com, then click Redetect.".into(),
+                );
+                return;
+            }
+        }
+        "macos" => {
+            // On macOS, Docker Desktop must be installed separately (the install
+            // script cannot install it non-interactively). Detect early so users
+            // get actionable guidance instead of a cryptic install failure.
+            let docker_check = run_shell_timeout(
+                "command -v docker >/dev/null 2>&1",
+                DETECT_TIMEOUT,
+            );
+            if docker_check.code != Some(0) {
+                // Docker Desktop only creates /usr/local/bin/docker on first
+                // launch, so distinguish "installed but never opened" from
+                // "not installed at all" to give the right guidance.
+                let app_check = run_shell_timeout(
+                    "test -d /Applications/Docker.app -o -d \"$HOME/Applications/Docker.app\"",
+                    DETECT_TIMEOUT,
+                );
+                detail.status = "blocked".into();
+                if app_check.code == Some(0) {
+                    detail.last_error = Some(
+                        "Docker Desktop is installed but hasn't been launched yet. Open Docker Desktop once to finish its setup, then click Redetect.".into(),
+                    );
+                } else {
+                    detail.last_error = Some(
+                        "Docker is needed to run Harbor. Download it from docker.com/products/docker-desktop, install it, then click Redetect.".into(),
+                    );
+                }
+                return;
+            }
+        }
+        "windows" => {
+            if detect_windows_blocker(detail) {
+                return;
+            }
+        }
+        _ => unreachable!("platform validated above"),
     }
 
     detail.status = "not-installed".into();
@@ -1073,9 +1253,11 @@ pub fn start_harbor_setup(
         if *active {
             return Err("Harbor setup is already in progress.".into());
         }
+        // Reset the cancel flag while still holding the active lock, so a
+        // cancel arriving between activation and the reset can't be wiped.
+        reset_cancel(&state);
         *active = true;
     }
-    reset_cancel(&state);
 
     // Set initial stage so that redetect() during thread startup
     // returns a meaningful status instead of stale "checking".
@@ -1096,17 +1278,19 @@ pub fn start_harbor_setup(
                     run_logged_shell(
                         &app,
                         &state,
-                        "installing-cli",
+                        "checking-platform",
                         &windows_install_script(distro.as_deref()),
-                        Duration::from_secs(1800),
+                        // Windows path can include ~600 MB Docker Desktop
+                        // download + WSL distro install on slow links.
+                        Duration::from_secs(3600),
                     )
                 } else {
                     run_logged_shell(
                         &app,
                         &state,
-                        "installing-cli",
+                        "checking-platform",
                         &install_script(),
-                        Duration::from_secs(1800),
+                        Duration::from_secs(3600),
                     )
                 }
             }));
@@ -1179,12 +1363,18 @@ pub fn cancel_harbor_setup(state: State<'_, SetupState>) -> Result<(), String> {
     if let Ok(mut cancel) = state.cancel_requested.lock() {
         *cancel = true;
     }
-    let mut killer = state
-        .current_killer
-        .lock()
-        .map_err(|e| e.to_string())?;
-    if let Some(killer) = killer.as_mut() {
-        killer.kill().map_err(|e| e.to_string())
+    let pid = state.current_pid.lock().ok().and_then(|g| *g);
+    kill_process_tree(pid);
+    let mut killer = match state.current_killer.lock() {
+        Ok(g) => g,
+        // Mutex was poisoned by a prior panic. Recover the inner value so
+        // we can still attempt the kill rather than leaving the process alive.
+        Err(e) => e.into_inner(),
+    };
+    if let Some(k) = killer.as_mut() {
+        let result = k.kill().map_err(|e| e.to_string());
+        *killer = None;
+        result
     } else {
         Ok(())
     }
@@ -1206,4 +1396,55 @@ pub fn write_harbor_setup_input(
         .write_all(data.as_bytes())
         .and_then(|_| writer.flush())
         .map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn strip_ansi_plain_csi_color_codes() {
+        // Bold red text wrapped in SGR (Select Graphic Rendition) sequences.
+        let input = "\x1b[1;31mError: something went wrong\x1b[0m";
+        assert_eq!(strip_ansi(input), "Error: something went wrong");
+    }
+
+    #[test]
+    fn strip_ansi_stage_marker_wrapped_in_color() {
+        // A stage marker emitted with surrounding color codes should still parse.
+        let input = "\x1b[32mHARBOR_SETUP_STAGE=failed\x1b[0m";
+        let clean = strip_ansi(input.trim()).trim().to_string();
+        assert_eq!(clean, "HARBOR_SETUP_STAGE=failed");
+        assert_eq!(parse_setup_stage_marker(&clean), Some("failed".into()));
+    }
+
+    #[test]
+    fn strip_ansi_osc_title_sequence() {
+        // OSC 0 sets the terminal window/icon title; should be stripped entirely.
+        let input = "\x1b]0;My Terminal Title\x07Plain text after";
+        assert_eq!(strip_ansi(input), "Plain text after");
+    }
+
+    #[test]
+    fn parse_wsl_distro_exists_rejects_short_line() {
+        // A line with only name + version and no state token must not match.
+        let short = "Ubuntu 2\n";
+        assert!(!parse_wsl_distro_exists(short, "Ubuntu"));
+    }
+
+    #[test]
+    fn parse_wsl_distro_exists_accepts_valid_line() {
+        let valid = "Ubuntu Running 2\n";
+        assert!(parse_wsl_distro_exists(valid, "Ubuntu"));
+        assert!(!parse_wsl_distro_exists(valid, "Debian"));
+    }
+
+    #[test]
+    fn parse_wsl_distro_exists_handles_default_marker() {
+        // Lines starting with "*" have the name at index 1.
+        let starred = "* Ubuntu Running 2\n";
+        assert!(parse_wsl_distro_exists(starred, "Ubuntu"));
+        let short_starred = "* Ubuntu 2\n";
+        assert!(!parse_wsl_distro_exists(short_starred, "Ubuntu"));
+    }
 }
