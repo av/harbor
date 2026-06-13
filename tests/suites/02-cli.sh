@@ -596,5 +596,193 @@ assert_ok "integration: boost + omlx"    harbor cmd boost omlx
 # Cross-backend triple — satellite with two backends at once.
 assert_ok "integration: aider + llamacpp + dmr" harbor cmd aider llamacpp dmr
 
+# ---------------------------------------------------------------------------
+# 17. harbor pull smart routing (v0.5.0 — P0.4)
+#     `harbor pull` must distinguish between service names (docker image pull)
+#     and model identifiers (model download). We use a fake docker binary to
+#     intercept the actual compose pull and verify routing without network I/O.
+# ---------------------------------------------------------------------------
+
+# No-args case: should fail with usage showing both modes.
+suite_log "pull: no-args shows usage"
+if harbor pull >/tmp/cli-step.out 2>&1; then
+  cat /tmp/cli-step.out >&2
+  fail "harbor pull with no args unexpectedly succeeded"
+fi
+if ! grep -Fq 'harbor pull <service>' /tmp/cli-step.out || ! grep -Fq 'harbor pull <model>' /tmp/cli-step.out; then
+  cat /tmp/cli-step.out >&2
+  fail "harbor pull usage does not mention both service and model modes"
+fi
+
+# Set up a fake docker to intercept pull routing decisions.
+pull_fake_bin="$(mktemp -d -t harbor-pull.XXXXXX)"
+pull_fake_log="$(mktemp -t harbor-pull-log.XXXXXX)"
+cat >"$pull_fake_bin/docker" <<'FAKE_DOCKER'
+#!/usr/bin/env bash
+
+# compose version -- needed by _check_docker
+if [[ "$*" == *"compose version"* ]]; then
+  echo "Docker Compose version v2.30.0"
+  exit 0
+fi
+
+# compose config --services -- needed by get_services
+if [[ "$*" == *"config --services"* ]]; then
+  printf '%s\n' ollama webui llamacpp boost aider
+  exit 0
+fi
+
+# Log every compose invocation for later inspection
+if [ "$1" = "compose" ]; then
+  printf '%s\n' "$*" >>"$HARBOR_PULL_FAKE_LOG"
+  exit 0
+fi
+
+exit 0
+FAKE_DOCKER
+cat >"$pull_fake_bin/curl" <<'FAKE_CURL'
+#!/usr/bin/env bash
+# Model discovery may call curl -- just succeed with empty data
+printf '%s\n' '{"data":[]}'
+FAKE_CURL
+chmod +x "$pull_fake_bin/docker" "$pull_fake_bin/curl"
+
+# Test: known service name routes to docker compose pull.
+: >"$pull_fake_log"
+suite_log "pull: known service routes to docker image pull"
+if ! HARBOR_PULL_FAKE_LOG="$pull_fake_log" PATH="$pull_fake_bin:$PATH" harbor pull ollama >/tmp/cli-step.out 2>&1; then
+  cat /tmp/cli-step.out >&2
+  fail "harbor pull ollama (known service) failed"
+fi
+if ! grep -q 'pull' "$pull_fake_log"; then
+  cat "$pull_fake_log" >&2
+  fail "harbor pull ollama did not route to docker compose pull"
+fi
+
+# Test: multiple known services route to docker compose pull.
+: >"$pull_fake_log"
+suite_log "pull: multiple services route to docker image pull"
+if ! HARBOR_PULL_FAKE_LOG="$pull_fake_log" PATH="$pull_fake_bin:$PATH" harbor pull ollama webui >/tmp/cli-step.out 2>&1; then
+  cat /tmp/cli-step.out >&2
+  fail "harbor pull ollama webui (known services) failed"
+fi
+if ! grep -q 'pull' "$pull_fake_log"; then
+  cat "$pull_fake_log" >&2
+  fail "harbor pull ollama webui did not route to docker compose pull"
+fi
+
+# Test: model-like argument (no slash, has colon) routes to model pull.
+# This will fail since there's no real ollama to pull from, but the routing
+# itself is what we test -- it should NOT trigger docker compose pull.
+: >"$pull_fake_log"
+suite_log "pull: model name routes to model download (not docker pull)"
+HARBOR_PULL_FAKE_LOG="$pull_fake_log" PATH="$pull_fake_bin:$PATH" harbor pull qwen3:8b >/tmp/cli-step.out 2>&1 || true
+# The compose pull line should NOT appear in the log (model != service).
+if grep -q ' pull$' "$pull_fake_log"; then
+  cat "$pull_fake_log" >&2
+  fail "harbor pull qwen3:8b incorrectly routed to docker compose pull"
+fi
+
+# Test: unknown name without colon also routes to model pull, not docker pull.
+: >"$pull_fake_log"
+suite_log "pull: unknown name routes to model download"
+HARBOR_PULL_FAKE_LOG="$pull_fake_log" PATH="$pull_fake_bin:$PATH" harbor pull llama3.2 >/tmp/cli-step.out 2>&1 || true
+if grep -q ' pull$' "$pull_fake_log"; then
+  cat "$pull_fake_log" >&2
+  fail "harbor pull llama3.2 incorrectly routed to docker compose pull"
+fi
+
+rm -rf "$pull_fake_bin" "$pull_fake_log"
+
+# ---------------------------------------------------------------------------
+# 18. Fuzzy service name suggestions (v0.5.0 — P1.1)
+#     When a user types a misspelled service name, Harbor should suggest the
+#     closest match via "Did you mean: <correct>?" message. This exercises
+#     the levenshtein_distance and _suggest_service helpers.
+# ---------------------------------------------------------------------------
+
+# Close misspelling of "ollama" -> should suggest "ollama".
+suite_log "fuzzy: 'olllama' suggests 'ollama'"
+if harbor up --no-defaults olllama >/tmp/cli-step.out 2>&1; then
+  cat /tmp/cli-step.out >&2
+  fail "harbor up olllama unexpectedly succeeded"
+fi
+if ! grep -qi 'did you mean' /tmp/cli-step.out; then
+  cat /tmp/cli-step.out >&2
+  fail "harbor up olllama did not produce a 'Did you mean' suggestion"
+fi
+if ! grep -q 'ollama' /tmp/cli-step.out; then
+  cat /tmp/cli-step.out >&2
+  fail "harbor up olllama did not suggest 'ollama'"
+fi
+
+# Close misspelling of "webui" -> should suggest "webui".
+suite_log "fuzzy: 'webuii' suggests 'webui'"
+if harbor up --no-defaults webuii >/tmp/cli-step.out 2>&1; then
+  cat /tmp/cli-step.out >&2
+  fail "harbor up webuii unexpectedly succeeded"
+fi
+if ! grep -qi 'did you mean' /tmp/cli-step.out; then
+  cat /tmp/cli-step.out >&2
+  fail "harbor up webuii did not produce a 'Did you mean' suggestion"
+fi
+if ! grep -q 'webui' /tmp/cli-step.out; then
+  cat /tmp/cli-step.out >&2
+  fail "harbor up webuii did not suggest 'webui'"
+fi
+
+# Completely wrong name (levenshtein > 3) should NOT produce a suggestion.
+suite_log "fuzzy: 'zzzznotaservice' produces no suggestion"
+if harbor up --no-defaults zzzznotaservice >/tmp/cli-step.out 2>&1; then
+  cat /tmp/cli-step.out >&2
+  fail "harbor up zzzznotaservice unexpectedly succeeded"
+fi
+if grep -qi 'did you mean' /tmp/cli-step.out; then
+  cat /tmp/cli-step.out >&2
+  fail "harbor up zzzznotaservice unexpectedly produced a 'Did you mean' suggestion"
+fi
+# But it should still report the service as not found.
+if ! grep -q "not found" /tmp/cli-step.out; then
+  cat /tmp/cli-step.out >&2
+  fail "harbor up zzzznotaservice did not report service as not found"
+fi
+
+# ---------------------------------------------------------------------------
+# 19. Service name validation in harbor defaults add (v0.5.0 — P1.2)
+#     `harbor defaults add` should reject invalid/nonexistent service names
+#     and accept valid ones. This guards against config corruption from typos.
+# ---------------------------------------------------------------------------
+
+# Invalid service name should be rejected.
+suite_log "defaults add: rejects nonexistent service"
+if harbor defaults add nonexistent-service-xyz >/tmp/cli-step.out 2>&1; then
+  cat /tmp/cli-step.out >&2
+  fail "harbor defaults add nonexistent-service-xyz unexpectedly succeeded"
+fi
+if ! grep -q "not found" /tmp/cli-step.out; then
+  cat /tmp/cli-step.out >&2
+  fail "harbor defaults add nonexistent did not report service as not found"
+fi
+
+# Valid service name should succeed.
+assert_ok "defaults add: accepts valid service (boost)" harbor defaults add boost
+
+# Verify it was actually added.
+assert_match "defaults add: boost is in defaults" 'boost' harbor defaults ls
+
+# Duplicate add should succeed (idempotent, warns).
+assert_ok "defaults add: duplicate add is idempotent" harbor defaults add boost
+
+# Clean up: remove the service we added.
+assert_ok "defaults rm: remove boost" harbor defaults rm boost
+
+# Verify it was removed.
+suite_log "defaults rm: boost no longer in defaults"
+harbor defaults ls >/tmp/cli-step.out 2>&1 || true
+if grep -q 'boost' /tmp/cli-step.out; then
+  cat /tmp/cli-step.out >&2
+  fail "harbor defaults rm did not remove boost from defaults"
+fi
+
 rm -f /tmp/cli-step.out
 suite_log "OK"
