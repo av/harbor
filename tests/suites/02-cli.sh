@@ -423,5 +423,109 @@ assert_ok    "harbor ps"             harbor ps
 # 10. profile listing — exercises profiles/ walking.
 assert_ok    "harbor profile ls"     harbor profile ls
 
+# ---------------------------------------------------------------------------
+# 11. llamacpp is a default service (v0.5.0)
+#     The biggest user-facing change: `harbor up` with no args now starts
+#     llamacpp alongside ollama and webui. Verify the shipped profile and
+#     the live config both include it.
+# ---------------------------------------------------------------------------
+assert_match "default services include llamacpp (profile)" \
+  'llamacpp' \
+  grep 'HARBOR_SERVICES_DEFAULT' "$(harbor home)/profiles/default.env"
+
+assert_match "default services include llamacpp (config)" \
+  'llamacpp' \
+  harbor config get services.default
+
+assert_match "default services include ollama (profile)" \
+  'ollama' \
+  grep 'HARBOR_SERVICES_DEFAULT' "$(harbor home)/profiles/default.env"
+
+assert_match "default services include webui (profile)" \
+  'webui' \
+  grep 'HARBOR_SERVICES_DEFAULT' "$(harbor home)/profiles/default.env"
+
+# harbor cmd with no args should resolve the default services including llamacpp.
+assert_match "harbor cmd (defaults) includes llamacpp compose" \
+  'compose\.llamacpp\.yml' \
+  harbor cmd
+
+# ---------------------------------------------------------------------------
+# 12. harbor volumes CLI round-trip (v0.5.0)
+#     New CLI surface for managing custom host volume mounts per service.
+#     Exercises add, ls, rm, clear without needing a running container.
+# ---------------------------------------------------------------------------
+
+# ls on a clean service should succeed (no volumes yet).
+assert_ok "volumes ls ollama (initial)" harbor volumes ls ollama
+
+# Add a volume mount and verify it shows up in ls.
+assert_ok    "volumes add ollama /tmp/test-vol:/data" \
+  harbor volumes add ollama /tmp/test-vol:/data
+assert_match "volumes ls ollama (after add)" \
+  '/tmp/test-vol:/data' \
+  harbor volumes ls ollama
+
+# Remove by index 0 and verify it's gone.
+assert_ok "volumes rm ollama 0" harbor volumes rm ollama 0
+suite_log "volumes ls ollama (after rm)"
+harbor volumes ls ollama >/tmp/cli-step.out 2>&1 || true
+if grep -Fq '/tmp/test-vol:/data' /tmp/cli-step.out; then
+  cat /tmp/cli-step.out >&2
+  fail "volumes rm did not remove the entry"
+fi
+
+# Add two, clear all, verify empty.
+assert_ok "volumes add ollama /a:/b" harbor volumes add ollama /a:/b
+assert_ok "volumes add ollama /c:/d" harbor volumes add ollama /c:/d
+assert_match "volumes ls ollama (two entries)" '/a:/b' harbor volumes ls ollama
+assert_ok    "volumes clear ollama" harbor volumes clear ollama
+
+suite_log "volumes ls ollama (after clear)"
+harbor volumes ls ollama >/tmp/cli-step.out 2>&1 || true
+if grep -Fq '/a:/b' /tmp/cli-step.out || grep -Fq '/c:/d' /tmp/cli-step.out; then
+  cat /tmp/cli-step.out >&2
+  fail "volumes clear did not remove all entries"
+fi
+
+# ---------------------------------------------------------------------------
+# 13. harbor doctor --check mode (v0.5.0)
+#     CI/scripts use exit-code-only health check. In test rows, Docker and
+#     Compose are available, so --check should pass (exit 0).
+# ---------------------------------------------------------------------------
+assert_match "harbor doctor --check passes" \
+  'essential checks passed' \
+  harbor doctor --check
+
+# Plain doctor (already tested above in #8) also succeeds; --check is the
+# new surface we need to validate produces machine-friendly exit codes.
+
+# ---------------------------------------------------------------------------
+# 14. harbor skills command (v0.5.0)
+#     Agent-facing skill docs shipped with the CLI.
+# ---------------------------------------------------------------------------
+
+# List should find at least the built-in "harbor" skill.
+assert_match "harbor skills list" 'harbor' harbor skills list
+
+# Bare `harbor skills` is an alias for list.
+assert_match "harbor skills (bare)" 'harbor' harbor skills
+
+# Get a known skill — should output content.
+assert_ok "harbor skills get harbor" harbor skills get harbor
+
+# skills path should output a directory path.
+assert_ok "harbor skills path" harbor skills path
+
+# skills path <name> should also work for a known skill.
+assert_match "harbor skills path harbor" 'harbor' harbor skills path harbor
+
+# skills get of a nonexistent skill should fail.
+suite_log "harbor skills get nonexistent (should fail)"
+if harbor skills get nonexistent-skill-xyz >/tmp/cli-step.out 2>&1; then
+  cat /tmp/cli-step.out >&2
+  fail "harbor skills get nonexistent unexpectedly succeeded"
+fi
+
 rm -f /tmp/cli-step.out
 suite_log "OK"
