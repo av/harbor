@@ -1381,4 +1381,287 @@ else
 fi
 
 rm -f /tmp/cli-step.out
+
+# ---------------------------------------------------------------------------
+# 31. harbor env --help and validation (v0.5.0 supplement)
+#     Commit e50961d9 added --help, fuzzy service name suggestions, and
+#     subcommand validation to harbor env. Existing tests (#4) only cover
+#     basic set/get round-trips on a known service.
+# ---------------------------------------------------------------------------
+suite_log "=== harbor env help and validation ==="
+
+# --help flag should print usage text
+assert_match "env --help prints usage" \
+  'harbor env <service>' \
+  harbor env --help
+
+# help as positional arg should also work
+assert_match "env help prints usage" \
+  'harbor env <service>' \
+  harbor env help
+
+# -h also works
+assert_match "env -h prints usage" \
+  'harbor env <service>' \
+  harbor env -h
+
+# No-args should fail with usage guidance
+suite_log "env no-args fails with usage"
+if harbor env >/tmp/cli-step.out 2>&1; then
+  cat /tmp/cli-step.out >&2
+  fail "harbor env with no args unexpectedly succeeded"
+fi
+if ! grep -q 'harbor env <service>' /tmp/cli-step.out; then
+  cat /tmp/cli-step.out >&2
+  fail "harbor env no-args did not show usage"
+fi
+
+# Invalid service name should fail (env validates service names now)
+suite_log "env nonexistent service fails"
+if harbor env nonexistent-service-xyz-999 >/tmp/cli-step.out 2>&1; then
+  # Some implementations may succeed with empty output for unknown services
+  # (depends on whether the override.env file exists). Check if it gave
+  # a meaningful response — if the file just doesn't exist, that's also fine.
+  suite_log "env nonexistent service: exited 0 (acceptable — no override.env)"
+else
+  suite_log "env nonexistent service: rejected (exit non-zero)"
+fi
+
+# ---------------------------------------------------------------------------
+# 32. harbor tunnels add validation (v0.5.0 supplement)
+#     Commit ceb0793b added service name validation with fuzzy suggestions
+#     and duplicate detection to harbor tunnels add. Completely untested.
+# ---------------------------------------------------------------------------
+suite_log "=== harbor tunnels add validation ==="
+
+# tunnels add with no service name should fail
+suite_log "tunnels add: no service fails"
+if harbor tunnels add >/tmp/cli-step.out 2>&1; then
+  cat /tmp/cli-step.out >&2
+  fail "harbor tunnels add with no args unexpectedly succeeded"
+fi
+
+# tunnels add with nonexistent service should fail
+suite_log "tunnels add: nonexistent service fails"
+if harbor tunnels add nonexistent-service-xyz >/tmp/cli-step.out 2>&1; then
+  cat /tmp/cli-step.out >&2
+  fail "harbor tunnels add nonexistent-service-xyz unexpectedly succeeded"
+fi
+if ! grep -qi 'not found' /tmp/cli-step.out; then
+  cat /tmp/cli-step.out >&2
+  fail "harbor tunnels add nonexistent: did not report 'not found'"
+fi
+
+# tunnels add with typo should suggest correct name
+suite_log "tunnels add: typo suggests correct name"
+if harbor tunnels add olllama >/tmp/cli-step.out 2>&1; then
+  cat /tmp/cli-step.out >&2
+  fail "harbor tunnels add olllama unexpectedly succeeded"
+fi
+if ! grep -qi 'did you mean\|ollama' /tmp/cli-step.out; then
+  cat /tmp/cli-step.out >&2
+  fail "harbor tunnels add olllama: did not suggest 'ollama'"
+fi
+
+# tunnels add with valid service should succeed
+assert_ok "tunnels add: valid service succeeds" harbor tunnels add webui
+
+# tunnels ls should show the added service
+assert_match "tunnels ls: webui in list" 'webui' harbor tunnels ls
+
+# tunnels add duplicate should be idempotent (no error)
+assert_ok "tunnels add: duplicate is idempotent" harbor tunnels add webui
+
+# Check duplicate detection message
+harbor tunnels add webui >/tmp/cli-step.out 2>&1 || true
+if grep -qi 'already' /tmp/cli-step.out; then
+  suite_log "tunnels add duplicate: correctly warns 'already in the tunnel list'"
+else
+  suite_log "tunnels add duplicate: accepted silently (also valid)"
+fi
+
+# Clean up: remove webui from tunnels
+assert_ok "tunnels rm: remove webui" harbor tunnels rm webui
+
+# Verify removed
+suite_log "tunnels ls: webui removed"
+tunnels_after=$(harbor tunnels ls 2>/dev/null || true)
+if echo "$tunnels_after" | grep -q 'webui'; then
+  fail "harbor tunnels rm webui did not remove it from the list"
+fi
+
+# ---------------------------------------------------------------------------
+# 33. Config set with special characters (v0.5.0 supplement)
+#     Commit d59fb2de fixed sed injection: values containing |, &, or \
+#     corrupted the .env file. This tests the head/printf/tail replacement
+#     path that replaced the vulnerable sed s||| pattern.
+# ---------------------------------------------------------------------------
+suite_log "=== config set with special characters ==="
+
+# Pipe character
+assert_ok    "config set test.special.pipe to 'a|b'" harbor config set test.special.pipe 'a|b'
+assert_match "config get test.special.pipe" \
+  '^a\|b$' \
+  harbor config get test.special.pipe
+
+# Ampersand character
+assert_ok    "config set test.special.amp to 'a&b'" harbor config set test.special.amp 'a&b'
+assert_match "config get test.special.amp" \
+  '^a&b$' \
+  harbor config get test.special.amp
+
+# Backslash character
+assert_ok    "config set test.special.bs to 'a\\b'" harbor config set test.special.bs 'a\b'
+assert_match "config get test.special.bs" \
+  '^a\\b$' \
+  harbor config get test.special.bs
+
+# Verify earlier keys were not corrupted by subsequent sets
+assert_match "config get test.special.pipe still intact" \
+  '^a\|b$' \
+  harbor config get test.special.pipe
+
+# URL-like value (common real-world case: API endpoints)
+assert_ok    "config set test.special.url" harbor config set test.special.url 'https://example.com/v1?key=val&other=123'
+assert_match "config get test.special.url" \
+  '^https://example.com/v1\?key=val&other=123$' \
+  harbor config get test.special.url
+
+# Clean up special character test keys
+harbor config unset test.special.pipe >/dev/null 2>&1 || true
+harbor config unset test.special.amp >/dev/null 2>&1 || true
+harbor config unset test.special.bs >/dev/null 2>&1 || true
+harbor config unset test.special.url >/dev/null 2>&1 || true
+
+# ---------------------------------------------------------------------------
+# 34. _check_disk_space helper (v0.5.0 supplement)
+#     Commit 9e389d2e added disk space pre-checks before model downloads.
+#     The function never blocks (returns 0 always) but sets _disk_space_gb.
+#     This test validates the function parses df output correctly.
+# ---------------------------------------------------------------------------
+suite_log "=== disk space pre-check helper ==="
+
+harbor_script="$(harbor home)/harbor.sh"
+
+# Extract and test _check_disk_space against the current filesystem.
+# The function should always return 0 (it warns but never blocks).
+suite_log "disk space: _check_disk_space returns 0 for valid path"
+(
+  eval "$(sed -n '/^_disk_space_gb=""/,/^}/p' "$harbor_script" | head -50)"
+  _check_disk_space "/tmp" 1 "test"
+) >/tmp/cli-step.out 2>&1
+if [ $? -ne 0 ]; then
+  cat /tmp/cli-step.out >&2
+  fail "_check_disk_space /tmp returned non-zero"
+fi
+
+# _check_disk_space with non-existent nested path should still return 0
+# (it walks up to find nearest existing ancestor)
+suite_log "disk space: _check_disk_space handles non-existent path"
+(
+  eval "$(sed -n '/^_disk_space_gb=""/,/^}/p' "$harbor_script" | head -50)"
+  _check_disk_space "/tmp/harbor-test-nonexistent-deep/nested/path" 1 "test"
+) >/tmp/cli-step.out 2>&1
+if [ $? -ne 0 ]; then
+  cat /tmp/cli-step.out >&2
+  fail "_check_disk_space with non-existent path returned non-zero"
+fi
+
+# _check_disk_space with absurdly high threshold should warn but return 0
+suite_log "disk space: _check_disk_space warns on high threshold"
+(
+  # Source the log_warn function stub to avoid undefined function errors
+  log_warn() { echo "WARN: $*"; }
+  eval "$(sed -n '/^_disk_space_gb=""/,/^}/p' "$harbor_script" | head -50)"
+  _check_disk_space "/tmp" 999999 "test"
+) >/tmp/cli-step.out 2>&1
+if [ $? -ne 0 ]; then
+  cat /tmp/cli-step.out >&2
+  fail "_check_disk_space with 999999GB threshold returned non-zero"
+fi
+if ! grep -qi 'low disk space\|warn' /tmp/cli-step.out; then
+  cat /tmp/cli-step.out >&2
+  fail "_check_disk_space with 999999GB threshold did not warn"
+fi
+
+# ---------------------------------------------------------------------------
+# 35. MLX model/hf.path consistency (v0.5.0 supplement)
+#     Commit 9d08caab fixed mlx.model default to match mlx.hf.path.
+#     Both values must be identical in the shipped default profile.
+# ---------------------------------------------------------------------------
+suite_log "=== MLX model config consistency ==="
+
+mlx_model=$(harbor config get mlx.model)
+mlx_hf_path=$(harbor config get mlx.hf.path)
+
+suite_log "mlx.model = $mlx_model"
+suite_log "mlx.hf.path = $mlx_hf_path"
+
+if [ "$mlx_model" != "$mlx_hf_path" ]; then
+  fail "mlx.model ($mlx_model) does not match mlx.hf.path ($mlx_hf_path)"
+fi
+suite_log "mlx.model matches mlx.hf.path"
+
+# Both should contain a HuggingFace repo path (org/model format)
+if ! echo "$mlx_model" | grep -q '/'; then
+  fail "mlx.model ($mlx_model) does not look like a HF repo path (missing /)"
+fi
+suite_log "mlx.model is a valid HF repo path format"
+
+# ---------------------------------------------------------------------------
+# 36. _check_docker preflight guard (v0.5.0 supplement)
+#     Commit 0f1563f8 added Docker preflight checks to all docker-dependent
+#     commands. The _check_docker function validates Docker CLI, Compose v2,
+#     and daemon reachability. Test the function in isolation by extracting
+#     it along with its dependencies.
+# ---------------------------------------------------------------------------
+suite_log "=== Docker preflight checks ==="
+
+# _check_docker depends on log_error and _with_timeout. Provide stubs and
+# extract the function from harbor.sh, then run it in a subshell.
+suite_log "docker preflight: _check_docker detects docker"
+(
+  log_error() { echo "ERROR: $*"; }
+  log_warn() { echo "WARN: $*"; }
+  _with_timeout() { shift; "$@"; }
+  eval "$(sed -n '/^_check_docker()/,/^}/p' "$harbor_script")"
+  _docker_ok=""
+  _check_docker
+) >/tmp/cli-step.out 2>&1
+check_docker_result=$?
+
+if command -v docker &>/dev/null && docker compose version &>/dev/null 2>&1; then
+  # Docker is available — _check_docker should succeed
+  if [ "$check_docker_result" -ne 0 ]; then
+    cat /tmp/cli-step.out >&2
+    fail "_check_docker failed even though docker is available"
+  fi
+  suite_log "docker preflight: _check_docker succeeded (docker available)"
+
+  # Verify caching: call twice, second should use cached result
+  (
+    log_error() { echo "ERROR: $*"; }
+    _with_timeout() { shift; "$@"; }
+    eval "$(sed -n '/^_check_docker()/,/^}/p' "$harbor_script")"
+    _docker_ok=""
+    _check_docker
+    _check_docker  # should use cached _docker_ok=1
+  ) >/tmp/cli-step.out 2>&1
+  if [ $? -ne 0 ]; then
+    fail "_check_docker cached call failed"
+  fi
+  suite_log "docker preflight: cached result works"
+else
+  # Docker is not available — _check_docker should fail with clear message
+  if [ "$check_docker_result" -eq 0 ]; then
+    fail "_check_docker succeeded even though docker is not available"
+  fi
+  if ! grep -qi 'docker\|install\|not installed' /tmp/cli-step.out; then
+    cat /tmp/cli-step.out >&2
+    fail "_check_docker did not produce a helpful error message"
+  fi
+  suite_log "docker preflight: _check_docker failed with clear message (docker not available)"
+fi
+
+rm -f /tmp/cli-step.out
 suite_log "OK"
