@@ -191,6 +191,64 @@ harbor mcp <cmd>                       # MCP service config
 harbor hermes <cmd>                    # Hermes Agent config
 ```
 
+## Harbor Boost — Agentic Modules
+
+Harbor Boost is an LLM proxy (`harbor up boost`) that chains modules before the downstream completion. Agentic modules add web research, task anchoring, deliverable audits, and scope guards for coding agents. Full reference: `docs/5.2.3-Harbor-Boost-Modules.md`.
+
+### Modules
+
+| Module | Use when |
+|--------|----------|
+| `caveman` | Fast web research before answering — API docs, release notes, error lookups. Low latency (2 searches). Skips acks and implementation-only turns. |
+| `ponytail` | Deeper two-hop research — migrations, version comparisons, breaking changes. Higher budgets; structured brief with uncertainties. |
+| `keel` | Multi-turn coding where the model may drift — extracts a `TaskBrief` on turn 1, injects `<task_anchor>` reminders on later turns. |
+| `autocheck` | Quality gate on coding **deliverable** turns — draft → audit → optional revise. Explanations and short acks pass through. |
+| `sightline` | Scratch-pad agents using Boost `read_file`/`write_file` — enforces read-before-edit. Place **after** `tools`. |
+| `diffscope` | User states file scope (`only X`, `don't touch Y`) — compares cited paths in the draft against constraints; one revision hop if out of scope. |
+
+**Pairs:** `caveman` for speed, `ponytail` for depth. `keel` + `autocheck` for multi-turn coding. `sightline` / `diffscope` are opt-in hardening — not in built-in presets.
+
+### Workflow Presets
+
+Presets chain modules and register `tools` as a setup step. Use workflow-prefixed models (e.g. `shipyard-llama3.2`) or `@boost_workflow` metadata.
+
+| Preset | Chain | Use when |
+|--------|-------|----------|
+| `research-quick` | `tools`, `caveman`, `final` | Quick lookup before answering |
+| `research-deep` | `tools`, `ponytail`, `final` | Migration, API, or version comparison |
+| `code-check` | `tools`, `autocheck`, `final` | Audit code changes before delivery |
+| `shipyard` | `keel`, `caveman`, `tools`, `ponytail`, `autocheck`, `final` | Full multi-turn coding pipeline |
+
+### Setup
+
+```bash
+# Start Boost with backend
+harbor up ollama boost
+
+# Enable agentic modules
+harbor boost modules add tools caveman ponytail autocheck keel
+
+# Web research backend (pick one)
+harbor config set HARBOR_BOOST_SEARXNG_URL http://searxng:8080
+harbor up searxng
+# or
+harbor config set HARBOR_BOOST_TAVILY_API_KEY <key>
+
+# Workspace evidence for autocheck / diffscope path verification
+harbor config set HARBOR_BOOST_WORKSPACE_ROOT /path/to/project
+
+# Optional: scratch read-before-edit or scope guard (custom workflow)
+harbor config set HARBOR_BOOST_WORKFLOWS 'agent-code=tools,sightline,final;scope-check=tools,keel,autocheck,diffscope,final'
+harbor config update
+harbor restart boost
+
+# Point a coding agent at Boost
+harbor url boost   # OpenAI-compatible; model: shipyard-<backend-model>
+harbor launch --backend boost aider
+```
+
+**Notes:** `autocheck` triggers only on deliverable turns (≥2 signals, e.g. coding keyword + file path). `sightline` covers Boost scratch tools only — not IDE or `read_workspace_file`. Empty `HARBOR_BOOST_WORKFLOWS` loads built-in presets from `/boost/workflows.yaml`.
+
 ## Launching Service CLIs
 
 `harbor launch` starts a service CLI pre-configured to use running Harbor services.
