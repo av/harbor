@@ -571,7 +571,7 @@ run_harbor_doctor() {
     # Only check Compose if Docker itself is working
     if $docker_ok; then
         # Check if Docker Compose (v2) is installed
-        if docker compose version &>/dev/null; then
+        if _with_timeout 10 docker compose version &>/dev/null; then
             log_info "${ok} Docker Compose (v2) is installed"
         else
             log_error "${nok} Docker Compose (v2) is not installed."
@@ -591,6 +591,16 @@ run_harbor_doctor() {
             log_info "${ok} Docker Compose (v2) version is newer than $desired_compose_major.$desired_compose_minor.$desired_compose_patch"
         fi
 
+        if $check_mode; then
+            if $has_critical; then
+                log_error "Harbor Doctor: essential checks failed."
+                return 1
+            else
+                log_info "Harbor Doctor: essential checks passed."
+                return 0
+            fi
+        fi
+
         # Check Docker disk space (LLM models are large, disk exhaustion is common)
         local docker_root_dir data_space_gb
         docker_root_dir=$(echo "$docker_access_output" | grep "Docker Root Dir:" | sed 's/.*Docker Root Dir: *//')
@@ -603,48 +613,12 @@ run_harbor_doctor() {
                 log_info "${ok} Docker storage has ${data_space_gb}GB free"
             fi
         fi
-        # Check network/registry connectivity (non-destructive, fast, timeout-guarded)
-        log_info "  Checking registry connectivity..."
-
-        # Report proxy config if set (helps debug registry access issues)
-        local has_proxy=false
+        # Report proxy config if set (helps debug pull failures)
         for proxy_var in HTTP_PROXY HTTPS_PROXY http_proxy https_proxy NO_PROXY no_proxy; do
             if [ -n "${!proxy_var:-}" ]; then
                 log_info "  Proxy: $proxy_var=${!proxy_var}"
-                has_proxy=true
             fi
         done
-
-        # Use docker manifest inspect on a tiny image to test registry access
-        # without pulling or leaving images behind
-        local registry_output
-        if registry_output=$(_with_timeout 10 docker manifest inspect alpine:latest 2>&1); then
-            log_info "${ok} Docker Hub registry is reachable"
-        else
-            local reg_exit=$?
-            if [ "$reg_exit" -eq 124 ]; then
-                log_warn "${nok} Registry connectivity check timed out (10s). Possible slow network or proxy issue."
-                if $has_proxy; then
-                    log_warn "  Proxy is configured - verify proxy settings allow access to registry-1.docker.io"
-                fi
-            elif echo "$registry_output" | grep -qi "no such host\|could not resolve\|name resolution\|DNS"; then
-                log_error "${nok} Cannot resolve Docker Hub (DNS failure). Check your internet connection."
-                has_errors=true
-            elif echo "$registry_output" | grep -qi "connection refused\|connection timed out\|network is unreachable\|no route to host"; then
-                log_error "${nok} Cannot reach Docker Hub (network error). Check your internet connection."
-                if $has_proxy; then
-                    log_warn "  Proxy is configured - verify proxy settings allow access to registry-1.docker.io"
-                fi
-                has_errors=true
-            elif echo "$registry_output" | grep -qi "403\|forbidden\|denied\|unauthorized\|blocked"; then
-                log_warn "${nok} Docker Hub registry access is blocked or denied. A firewall or registry mirror may be interfering."
-                if $has_proxy; then
-                    log_warn "  Proxy is configured - verify proxy allows access to registry-1.docker.io"
-                fi
-            else
-                log_warn "${nok} Registry connectivity check failed: $(echo "$registry_output" | head -1)"
-            fi
-        fi
     else
         log_warn "  Skipping Compose, disk, and registry checks (Docker not reachable)"
     fi
@@ -946,16 +920,6 @@ run_harbor_doctor() {
         log_info "${ok} AMD GPU with ROCm support detected"
     elif [[ -e "/dev/kfd" ]]; then
         log_warn "${nok} AMD GPU hardware found (/dev/kfd) but ROCm support is incomplete. Check that amdgpu kernel module is loaded and /dev/dri/renderD* devices exist."
-    fi
-
-    if $check_mode; then
-        if $has_critical; then
-            log_error "Harbor Doctor: essential checks failed."
-            return 1
-        else
-            log_info "Harbor Doctor: essential checks passed."
-            return 0
-        fi
     fi
 
     if $has_errors; then
@@ -11612,7 +11576,7 @@ run_modularmax_command() {
 # ========================================================================
 
 # Globals
-version="0.5.0"
+version="0.5.1"
 harbor_repo_url="https://github.com/av/harbor.git"
 harbor_release_url="https://api.github.com/repos/av/harbor/releases/latest"
 delimiter="|"
