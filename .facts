@@ -56,6 +56,9 @@
   command: rg -q 'check_mode=true' harbor.sh && rg -q 'has_critical' harbor.sh
   tags: [implemented]
 - when compose_with_options fails in get_services, harbor ls exits nonzero instead of executing a bare 'config' word @get-services-guard @implemented
+- label: harbor doctor SELinux AVC probe reads audit logs instead of blocking on noninteractive stdin
+  command: timeout 5 bash -lc 'cd /home/everlier/code/harbor && tail -f /dev/null | harbor doctor >/tmp/harbor-doctor-stdin.out 2>/tmp/harbor-doctor-stdin.err'
+  tags: [spec, app-doctor-stdin, implemented]
 
 ## launch
 - label: harbor launch routes host tools codex, claude, opencode, pi, and others to OpenAI-compatible Harbor backends with optional --backend, --model, --config, and --web

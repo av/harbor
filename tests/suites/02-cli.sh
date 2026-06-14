@@ -439,6 +439,8 @@ rm -rf "$launch_fake_bin" "$launch_fake_curl_log" "$launch_fake_docker_state"
 #    checks (docker, compose v2 >= 2.23, git, curl) all pass against the
 #    row image we built.
 assert_ok    "harbor doctor"         harbor doctor
+assert_ok    "harbor doctor with noninteractive stdin" \
+  timeout 5 bash -lc 'tail -f /dev/null | harbor doctor >/tmp/cli-doctor-stdin.out 2>/tmp/cli-doctor-stdin.err'
 
 # 9. ps — lists harbor-prefixed containers; OK to be empty.
 assert_ok    "harbor ps"             harbor ps
@@ -885,8 +887,8 @@ fi
 # ---------------------------------------------------------------------------
 # 22. Config set/get round-trip and preservation (v0.5.0 — P1.5)
 #     `harbor config set` must preserve file permissions and not corrupt
-#     adjacent config values. This tests the head/tail line-replacement
-#     logic and the chmod permission-copy path.
+#     adjacent config values. This tests the in-place sed replacement path
+#     and that adjacent values survive an overwrite.
 # ---------------------------------------------------------------------------
 
 # Record .env permissions before the test.
@@ -935,6 +937,52 @@ fi
 # Clean up test keys.
 assert_ok "config unset test.perm"  harbor config unset test.perm
 assert_ok "config unset test.perm2" harbor config unset test.perm2
+
+# ---------------------------------------------------------------------------
+# 22b. An empty/degraded .env must self-repair, not collapse to a stub.
+#     Incident: an empty 0-byte .env (left e.g. by an interrupted write) was
+#     accepted by ensure_env_file because it only checked `[ ! -f ]`. The
+#     per-command startup writes (user.id/group.id/home.volume + passwords)
+#     then *appended* onto the empty file, and with several harbor processes
+#     firing at once — exactly what the app's CLI page does (ls, ls -a,
+#     defaults, doctor concurrently) — .env was left a tiny stub missing
+#     history.file/size, which crashed every later command in
+#     record_history_entry. The fix: ensure_env_file uses `[ ! -s ]` so an
+#     empty .env is repopulated from default.env before anything writes to it.
+#     Reproduce against an isolated HARBOR_HOME so the suite's .env is safe.
+repair_home="$(mktemp -d -t harbor-repair.XXXXXX)"
+mkdir -p "$repair_home/profiles"
+cp "$harbor_home_dir/profiles/default.env" "$repair_home/profiles/default.env"
+: > "$repair_home/.env"   # exists but empty — the degraded state to recover from
+
+# Fire several different commands concurrently, like the app on page load.
+HARBOR_HOME="$repair_home" harbor ls                  >/dev/null 2>&1 &
+HARBOR_HOME="$repair_home" harbor ls -a               >/dev/null 2>&1 &
+HARBOR_HOME="$repair_home" harbor defaults            >/dev/null 2>&1 &
+HARBOR_HOME="$repair_home" harbor config get history.file >/dev/null 2>&1 &
+wait
+
+# .env must have been repaired to the full default, not left a stub. The stub
+# in the incident had ~6 keys; a healthy default has hundreds.
+repair_keys=$(grep -c '=' "$repair_home/.env")
+suite_log "empty .env self-repaired to full config ($repair_keys keys)"
+if [ "$repair_keys" -lt 50 ]; then
+  fail "empty .env was not repaired — left $repair_keys keys (stub corruption regression)"
+fi
+
+# The key whose absence crashed every command must be present and readable.
+assert_match "empty .env repair: history.file present" '.' \
+  env HARBOR_HOME="$repair_home" harbor config get history.file
+
+# Repair must not have produced duplicate keys.
+suite_log "empty .env repair: no duplicate keys"
+repair_dupes=$(grep -v '^[[:space:]]*#' "$repair_home/.env" | grep '=' | sed 's/=.*//' | sort | uniq -d)
+if [ -n "$repair_dupes" ]; then
+  echo "$repair_dupes" >&2
+  fail "empty .env repair produced duplicate keys"
+fi
+
+rm -rf "$repair_home"
 
 # ---------------------------------------------------------------------------
 # 23. Daytona multi-container structure (v0.5.0 — P1.7)

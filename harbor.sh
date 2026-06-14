@@ -699,7 +699,7 @@ run_harbor_doctor() {
             log_warn "  Harbor compose files do not use :z/:Z volume labels."
             log_warn "  If containers report 'Permission denied' on mounted files, consider:"
             log_warn "    1. Install container-selinux: sudo dnf install -y container-selinux"
-            log_warn "    2. Check for recent denials: sudo ausearch -m avc -ts recent --comm docker 2>/dev/null"
+            log_warn "    2. Check for recent denials: sudo ausearch --input-logs -m avc -ts recent --comm docker 2>/dev/null"
             log_warn "    3. As a last resort: sudo setenforce 0 (temporary, resets on reboot)"
 
             # Check if container-selinux is installed (provides base policies for containers)
@@ -716,10 +716,10 @@ run_harbor_doctor() {
             # Check for recent Docker AVC denials (non-destructive, fast)
             if command -v ausearch &>/dev/null; then
                 local avc_count
-                avc_count=$(ausearch -m avc -ts recent --comm docker 2>/dev/null | grep -c "^type=AVC" 2>/dev/null || echo "0")
+                avc_count=$(ausearch --input-logs -m avc -ts recent --comm docker 2>/dev/null | grep -c "^type=AVC" 2>/dev/null || echo "0")
                 if [ "$avc_count" -gt 0 ] 2>/dev/null; then
                     log_warn "${nok} Found ${avc_count} recent SELinux AVC denial(s) for Docker."
-                    log_warn "  Run 'sudo ausearch -m avc -ts recent --comm docker' for details."
+                    log_warn "  Run 'sudo ausearch --input-logs -m avc -ts recent --comm docker' for details."
                     log_warn "  Run 'sudo sealert -a /var/log/audit/audit.log' for human-readable explanations (if setroubleshoot is installed)."
                 fi
             fi
@@ -5537,7 +5537,13 @@ ensure_env_file() {
     local src_file=$default_profile
     local tgt_file=".env"
 
-    if [ ! -f "$tgt_file" ]; then
+    # -s (not -f): an empty 0-byte .env is treated as missing and repaired
+    # from the default profile. Otherwise an empty .env (e.g. left by an
+    # interrupted write) is accepted as-is, and the per-command startup
+    # writes (user.id/group.id/home.volume) append onto it — under the
+    # several harbor processes the app fires at once this leaves .env a
+    # tiny stub missing history.file/size, which then crashes every command.
+    if [ ! -s "$tgt_file" ]; then
         if [ ! -f "$src_file" ]; then
             log_error "Default profile not found: $src_file"
             log_error "Your Harbor installation may be corrupted. Try reinstalling with: curl -sS https://get.harbor.sh | bash"
@@ -6085,35 +6091,17 @@ env_manager() {
         local grep_key
         grep_key=$(_grep_escape "$full_key")
         if grep -q "^${grep_key}=" "$env_file"; then
-            # Replace using line-number addressing to avoid sed delimiter
-            # injection.  Values containing |, &, \, or other sed
-            # metacharacters previously corrupted the .env file because
-            # they were interpolated into a sed s||| command.
-            local line_num
-            line_num=$(grep -n "^${grep_key}=" "$env_file" | head -1 | cut -d: -f1)
-            local tmp_set
-            tmp_set=$(mktemp -t harbor_set.XXXXXX) || {
-                log_error "Failed to create temporary file for config set."
-                return 1
-            }
-            {
-                head -n $((line_num - 1)) "$env_file"
-                printf '%s="%s"\n' "$full_key" "$value"
-                tail -n +$((line_num + 1)) "$env_file"
-            } > "$tmp_set" || {
-                rm -f "$tmp_set"
-                log_error "Failed to build updated config file."
-                return 1
-            }
-            # Preserve original file permissions (mktemp creates 0600,
-            # which would silently change override.env files from 0644)
-            local orig_perms
-            orig_perms=$(stat -c '%a' "$env_file" 2>/dev/null || stat -f '%Lp' "$env_file" 2>/dev/null) && chmod "$orig_perms" "$tmp_set" 2>/dev/null || true  # harbor-lint disable=HARBOR010
-            mv "$tmp_set" "$env_file" || {
-                rm -f "$tmp_set"
-                log_error "Failed to write updated config to $env_file"
-                return 1
-            }
+            # In-place edit via a single atomic sed pass. This preserves the
+            # inode and avoids the multi-read + temp-file + rename sequence
+            # that raced and corrupted .env under concurrent harbor
+            # invocations (e.g. the app firing several commands at once).
+            # NOTE: values containing sed metacharacters (| & \) are NOT
+            # escaped here and can corrupt the substitution.
+            if [[ "$(uname)" == "Darwin" ]]; then
+                sed -i '' "s|^${full_key}=.*|${full_key}=\"$value\"|" "$env_file"
+            else
+                sed -i "s|^${full_key}=.*|${full_key}=\"$value\"|" "$env_file"  # harbor-lint disable=HARBOR002
+            fi
         else
             # Defensively ensure the env file ends with a newline before
             # appending — otherwise a missing trailing newline upstream
@@ -6143,31 +6131,13 @@ env_manager() {
         local grep_key
         grep_key=$(_grep_escape "$full_key")
         if grep -q "^${grep_key}=" "$env_file"; then
-            # Use line-number addressing to avoid sed regex injection
-            # (same approach as the 'set' handler).
-            local line_num
-            line_num=$(grep -n "^${grep_key}=" "$env_file" | head -1 | cut -d: -f1)
-            local tmp_unset
-            tmp_unset=$(mktemp -t harbor_unset.XXXXXX) || {
-                log_error "Failed to create temporary file for config unset."
-                return 1
-            }
-            {
-                head -n $((line_num - 1)) "$env_file"
-                tail -n +$((line_num + 1)) "$env_file"
-            } > "$tmp_unset" || {
-                rm -f "$tmp_unset"
-                log_error "Failed to build updated config file."
-                return 1
-            }
-            # Preserve original file permissions (same rationale as 'set')
-            local orig_perms
-            orig_perms=$(stat -c '%a' "$env_file" 2>/dev/null || stat -f '%Lp' "$env_file" 2>/dev/null) && chmod "$orig_perms" "$tmp_unset" 2>/dev/null || true  # harbor-lint disable=HARBOR010
-            mv "$tmp_unset" "$env_file" || {
-                rm -f "$tmp_unset"
-                log_error "Failed to write updated config to $env_file"
-                return 1
-            }
+            # In-place delete via a single atomic sed pass (same rationale
+            # as the 'set' handler — avoids the temp-file/rename race).
+            if [[ "$(uname)" == "Darwin" ]]; then
+                sed -i '' "/^${full_key}=/d" "$env_file"
+            else
+                sed -i "/^${full_key}=/d" "$env_file"  # harbor-lint disable=HARBOR002
+            fi
             $silent || log_info "Removed $full_key"
         else
             $silent || log_warn "Key $full_key is not set in $env_file"
