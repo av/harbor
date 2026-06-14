@@ -14,6 +14,10 @@ class ResearchBrief(BaseModel):
   searches: list[ResearchSource] = Field(default_factory=list)
   pages: list[ResearchSource] = Field(default_factory=list)
   notes: list[str] = Field(default_factory=list)
+  facts: list[str] = Field(default_factory=list)
+  uncertainties: list[str] = Field(default_factory=list)
+  recommendation: str = ""
+  do_not_assume: list[str] = Field(default_factory=list)
 
   def add_search_results(self, query: str, results_text: str) -> None:
     if not self.query:
@@ -91,6 +95,27 @@ def render_to_system(brief: ResearchBrief) -> str:
     for idx, note in enumerate(brief.notes, start=1):
       sections.append(f"{idx}. {note}")
     sections.append("</notes>")
+
+  if brief.facts:
+    sections.append("<facts>")
+    for idx, fact in enumerate(brief.facts, start=1):
+      sections.append(f"{idx}. {fact}")
+    sections.append("</facts>")
+
+  if brief.uncertainties:
+    sections.append("<uncertainties>")
+    for idx, item in enumerate(brief.uncertainties, start=1):
+      sections.append(f"{idx}. {item}")
+    sections.append("</uncertainties>")
+
+  if brief.recommendation:
+    sections.append(f"<recommendation>{brief.recommendation}</recommendation>")
+
+  if brief.do_not_assume:
+    sections.append("<do_not_assume>")
+    for idx, item in enumerate(brief.do_not_assume, start=1):
+      sections.append(f"{idx}. {item}")
+    sections.append("</do_not_assume>")
 
   sections.append("</research_brief>")
   return "\n".join(sections)
