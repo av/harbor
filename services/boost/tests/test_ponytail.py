@@ -91,7 +91,7 @@ class TestPonytailQueryPlanning:
     llm.query_params = {}
     llm.model = "test-model"
 
-    with patch.object(ponytail, "_cheap_llm") as cheap_llm:
+    with patch("research.orchestrate.cheap_llm") as cheap_llm:
       cheap = MagicMock()
       cheap.chat_completion = AsyncMock(
         return_value={
@@ -142,8 +142,8 @@ class TestPonytailResearchLoop:
     )
 
     with (
-      patch("modules.ponytail.fetch.web_search", new=AsyncMock(return_value=search_text)) as web_search,
-      patch("modules.ponytail.fetch.read_url", new=AsyncMock(return_value="full page content")) as read_url,
+      patch("research.fetch.web_search", new=AsyncMock(return_value=search_text)) as web_search,
+      patch("research.fetch.read_url", new=AsyncMock(return_value="full page content")) as read_url,
       patch.object(ponytail, "detect_gaps", new=AsyncMock(return_value=gap)),
       patch.object(ponytail, "synthesize_brief", new=AsyncMock(side_effect=lambda _c, _l, _m, brief: (
         brief.__class__(
@@ -187,7 +187,7 @@ class TestPonytailResearchLoop:
     )
 
     with (
-      patch("modules.ponytail.fetch.web_search", new=AsyncMock(return_value="1. [Docs](https://a.example) (Date: N/A)\nSnippet")),
+      patch("research.fetch.web_search", new=AsyncMock(return_value="1. [Docs](https://a.example) (Date: N/A)\nSnippet")),
       patch.object(ponytail, "detect_gaps", new=AsyncMock(return_value=gap)),
       patch.object(ponytail, "synthesize_brief", new=AsyncMock(side_effect=lambda _c, _l, _m, brief: brief)),
     ):
@@ -254,8 +254,8 @@ class TestPonytailApply:
     llm.stream_final_completion = AsyncMock()
 
     with (
-      patch("modules.ponytail.fetch.web_search", new=AsyncMock(return_value="1. [Docs](https://k8s.example) (Date: N/A)\nSnippet")),
-      patch("modules.ponytail.fetch.read_url", new=AsyncMock(return_value="deprecation notes")),
+      patch("research.fetch.web_search", new=AsyncMock(return_value="1. [Docs](https://k8s.example) (Date: N/A)\nSnippet")),
+      patch("research.fetch.read_url", new=AsyncMock(return_value="deprecation notes")),
       patch.object(ponytail, "plan_search_queries", new=AsyncMock(return_value=["k8s 1.30 deprecations"])),
       patch.object(ponytail, "detect_gaps", new=AsyncMock(return_value=ponytail.GapAnalysis())),
       patch.object(

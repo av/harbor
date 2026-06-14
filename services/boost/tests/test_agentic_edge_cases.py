@@ -16,6 +16,7 @@ from modules import autocheck, caveman, diffscope, keel, ponytail
 from modules import workflows as workflow_presets
 from research.brief import RESEARCH_UNAVAILABLE_NOTE, ResearchBrief
 from research.budget import ResearchBudget
+import research.orchestrate as orchestrate
 
 
 SHIPYARD_MODULE_ORDER = [
@@ -92,14 +93,16 @@ class TestPonytailEdgeCases:
     )
 
     with patch(
-      "modules.ponytail.fetch.web_search",
+      "research.fetch.web_search",
       new=AsyncMock(return_value="1. [Docs](https://a.example) (Date: N/A)\nSnippet"),
     ) as web_search:
       brief = ResearchBrief(query="api migration")
-      await ponytail._run_searches(
+      await orchestrate.run_searches(
         ["api v1 docs", "api v2 docs", "api migration guide"],
         budget,
         brief,
+        module_id=ponytail.ID_PREFIX,
+        status_prefix="Ponytail research",
         phase="Ponytail hop 1",
       )
 
@@ -125,7 +128,7 @@ class TestPonytailEdgeCases:
 
     with (
       patch(
-        "modules.ponytail.fetch.web_search",
+        "research.fetch.web_search",
         new=AsyncMock(side_effect=RuntimeError("search provider down")),
       ),
       patch.object(ponytail, "detect_gaps", new=AsyncMock(return_value=ponytail.GapAnalysis())),
@@ -164,9 +167,9 @@ class TestPonytailEdgeCases:
     search_text = "1. [Docs](https://docs.example.com) (Date: N/A)\nSnippet"
 
     with (
-      patch("modules.ponytail.fetch.web_search", new=AsyncMock(return_value=search_text)),
+      patch("research.fetch.web_search", new=AsyncMock(return_value=search_text)),
       patch(
-        "modules.ponytail.fetch.read_url",
+        "research.fetch.read_url",
         new=AsyncMock(side_effect=ValueError("blocked by robots.txt")),
       ),
       patch.object(ponytail, "detect_gaps", new=AsyncMock(return_value=ponytail.GapAnalysis())),

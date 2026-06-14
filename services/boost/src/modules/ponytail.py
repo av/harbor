@@ -5,16 +5,15 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field
 
-import chat as ch
-import config
 import deliverable
 import log
 import research.brief as brief_mod
 import research.budget as budget_mod
-import research.fetch as fetch
+import research.orchestrate as orchestrate
 import research.workflow as workflow_mod
 
 if TYPE_CHECKING:
+  import chat as ch
   import llm
 
 ID_PREFIX = "ponytail"
@@ -73,18 +72,6 @@ docker run \\
 
 logger = log.setup_logger(ID_PREFIX)
 
-SKIP_MESSAGE_RE = re.compile(
-  r"^\s*(?:"
-  r"thanks?(?:\s+you)?|thank\s+you|thx|ok(?:ay)?|cool|great|perfect|sounds?\s+good|"
-  r"got\s+it|understood|yes|no|yep|nope|sure|continue|go\s+on|go\s+ahead|"
-  r"proceed|keep\s+going|lgtm|looks?\s+good|done|next|ship\s+it"
-  r")\s*[.!]?\s*$",
-  re.IGNORECASE,
-)
-CONTINUATION_RE = re.compile(
-  r"\b(?:continue|keep\s+going|go\s+on|proceed|carry\s+on|as\s+planned|same\s+as\s+before)\b",
-  re.IGNORECASE,
-)
 RESEARCH_HEAVY_RE = re.compile(
   r"\b(?:"
   r"migrat(?:e|ion|ing)|upgrade(?:\s+path|\s+guide)?|breaking\s+change|"
@@ -96,14 +83,6 @@ RESEARCH_HEAVY_RE = re.compile(
   r")\b",
   re.IGNORECASE,
 )
-RESEARCH_SIGNAL_RE = re.compile(
-  r"\b(?:"
-  r"latest|current|today|recent(?:ly)?|20\d{2}|version|release|"
-  r"documentat(?:ion|e)|lookup|search\s+for"
-  r")\b",
-  re.IGNORECASE,
-)
-
 QUERY_PLAN_PROMPT = """
 <instruction>
 Plan 2-4 focused web search queries to answer the user's latest message.
@@ -163,13 +142,7 @@ Only include claims supported by the research. Leave lists empty when nothing ap
 </research_summary>
 """.strip()
 
-
-class SearchQueryPlan(BaseModel):
-  queries: list[str] = Field(
-    description="Focused web search queries, ordered by usefulness.",
-    min_length=1,
-    max_length=4,
-  )
+STATUS_PREFIX = "Ponytail research"
 
 
 class GapAnalysis(BaseModel):
@@ -211,11 +184,6 @@ class StructuredBrief(BaseModel):
   )
 
 
-def _last_user_text(chat: "ch.Chat") -> str:
-  node = chat.match_one(role="user", index=-1)
-  return (node.content or "").strip() if node else ""
-
-
 def is_research_heavy(text: str) -> bool:
   text = (text or "").strip()
   if not text:
@@ -229,18 +197,14 @@ def is_research_heavy(text: str) -> bool:
   return False
 
 
-def has_research_signals(text: str) -> bool:
-  return deliverable.has_research_signals(text)
-
-
 def should_skip_research(chat: "ch.Chat") -> bool:
   """Pass through without web research on low-value follow-up turns."""
-  text = _last_user_text(chat)
+  text = orchestrate.last_user_text(chat)
   if not text or len(text) < 4:
     return True
   if deliverable.is_acknowledgment(text):
     return True
-  if CONTINUATION_RE.search(text) and len(text) < 120:
+  if orchestrate.CONTINUATION_RE.search(text) and len(text) < 120:
     return True
   return False
 
@@ -250,46 +214,16 @@ def needs_research(chat: "ch.Chat", llm: "llm.LLM") -> bool:
   if should_skip_research(chat):
     return False
 
-  text = _last_user_text(chat)
+  text = orchestrate.last_user_text(chat)
   if is_research_heavy(text):
     return True
 
   if getattr(llm, "module", None) == ID_PREFIX:
-    if deliverable.is_coding_deliverable(chat) and not has_research_signals(text):
+    if deliverable.is_coding_deliverable(chat) and not deliverable.has_research_signals(text):
       return False
-    return has_research_signals(text) and len(text) >= 20
+    return deliverable.has_research_signals(text) and len(text) >= 20
 
   return False
-
-
-def _cheap_llm(llm: "llm.LLM") -> "llm.LLM":
-  """Bare downstream client for inexpensive internal completions."""
-  import llm as llm_mod
-
-  return llm_mod.LLM(
-    url=llm.url,
-    headers=llm.headers,
-    query_params=llm.query_params,
-    model=llm.model,
-    params={},
-    messages=[{"role": "user", "content": ""}],
-    module=None,
-  )
-
-
-def _dedupe_queries(queries: list[str], *, limit: int) -> list[str]:
-  cleaned = []
-  seen = set()
-  for query in queries:
-    query = (query or "").strip()
-    if not query:
-      continue
-    key = query.lower()
-    if key in seen:
-      continue
-    seen.add(key)
-    cleaned.append(query)
-  return cleaned[:limit]
 
 
 async def plan_search_queries(
@@ -297,133 +231,19 @@ async def plan_search_queries(
   llm: "llm.LLM",
   message: str,
 ) -> list[str]:
-  intermediate = _cheap_llm(llm)
-  result = await intermediate.chat_completion(
+  return await orchestrate.plan_queries(
+    chat,
+    llm,
+    message,
     prompt=QUERY_PLAN_PROMPT,
-    conversation=chat,
-    message=message,
-    schema=SearchQueryPlan,
-    params={"temperature": 0.2},
-    resolve=True,
+    max_queries=4,
   )
-
-  queries = result.get("queries", []) if isinstance(result, dict) else []
-  return _dedupe_queries(queries, limit=4)
-
-
-def _page_read_char_limit(budget: budget_mod.ResearchBudget) -> int:
-  remaining = budget.remaining_chars()
-  if budget.max_url_reads <= 0:
-    return remaining
-  return max(1000, remaining // max(1, budget.max_url_reads))
 
 
 def _first_hop_search_limit(budget: budget_mod.ResearchBudget) -> int:
   if budget.max_searches <= 1:
     return budget.max_searches
   return max(1, budget.max_searches // 2)
-
-
-def _urls_from_brief(brief: brief_mod.ResearchBrief) -> list[str]:
-  urls = []
-  seen = set()
-  for source in [*brief.searches, *brief.pages]:
-    url = (source.url or "").strip()
-    if not url or url in seen:
-      continue
-    seen.add(url)
-    urls.append(url)
-  return urls
-
-
-async def _emit_research_status(llm: "llm.LLM | None", status: str) -> None:
-  if llm is not None:
-    await llm.emit_status(status)
-
-
-async def _run_searches(
-  queries: list[str],
-  budget: budget_mod.ResearchBudget,
-  brief: brief_mod.ResearchBrief,
-  *,
-  phase: str,
-  llm: "llm.LLM | None" = None,
-) -> None:
-  max_results = max(1, config.TOOLS_SEARCH_MAX_RESULTS.value)
-
-  for query in queries:
-    if not budget.can_search():
-      brief.add_note(f"{phase}: search budget exhausted before all queries ran.")
-      break
-
-    try:
-      budget.record_search()
-      logger.info(f"{phase}: searching '{query[:80]}'")
-      results_text = await fetch.web_search(query, max_results=max_results)
-      results_text = budget.trim_to_remaining(results_text)
-      brief.add_search_results(query, results_text)
-      if fetch.is_search_failure_result(results_text):
-        note = f"Search failed for '{query}': {results_text}"
-        brief.add_note(note)
-        await _emit_research_status(
-          llm,
-          f"Ponytail research: search unavailable for '{query[:60]}'...",
-        )
-    except budget_mod.BudgetExceeded as exc:
-      logger.warning(f"{ID_PREFIX}: {exc}")
-      brief.add_note(str(exc))
-      break
-    except Exception as exc:
-      logger.error(f"{ID_PREFIX}: search failed for '{query}': {exc}")
-      note = f"Search failed for '{query}': {exc}"
-      brief.add_note(note)
-      await _emit_research_status(
-        llm,
-        f"Ponytail research: search failed for '{query[:60]}'...",
-      )
-
-
-async def _read_urls(
-  urls: list[str],
-  budget: budget_mod.ResearchBudget,
-  brief: brief_mod.ResearchBrief,
-  *,
-  phase: str,
-  llm: "llm.LLM | None" = None,
-) -> None:
-  for url in urls:
-    if not budget.can_read_url():
-      break
-
-    try:
-      budget.record_url_read()
-      logger.info(f"{phase}: reading {url}")
-      page_text = await fetch.read_url(
-        url,
-        max_chars=_page_read_char_limit(budget),
-      )
-      page_text = budget.trim_to_remaining(page_text)
-      if fetch.is_read_failure_result(page_text):
-        brief.add_note(page_text)
-        await _emit_research_status(
-          llm,
-          f"Ponytail research: could not read {url[:60]}...",
-        )
-        continue
-
-      brief.add_page(url, page_text)
-    except budget_mod.BudgetExceeded as exc:
-      logger.warning(f"{ID_PREFIX}: {exc}")
-      brief.add_note(str(exc))
-      break
-    except Exception as exc:
-      logger.warning(f"{ID_PREFIX}: read_url failed for {url}: {exc}")
-      note = f"Could not read {url}: {exc}"
-      brief.add_note(note)
-      await _emit_research_status(
-        llm,
-        f"Ponytail research: could not read {url[:60]}...",
-      )
 
 
 def _render_research_summary(brief: brief_mod.ResearchBrief) -> str:
@@ -436,7 +256,7 @@ async def detect_gaps(
   message: str,
   brief: brief_mod.ResearchBrief,
 ) -> GapAnalysis:
-  intermediate = _cheap_llm(llm)
+  intermediate = orchestrate.cheap_llm(llm)
   result = await intermediate.chat_completion(
     prompt=GAP_DETECTION_PROMPT,
     message=message,
@@ -457,7 +277,7 @@ async def synthesize_brief(
   message: str,
   brief: brief_mod.ResearchBrief,
 ) -> brief_mod.ResearchBrief:
-  intermediate = _cheap_llm(llm)
+  intermediate = orchestrate.cheap_llm(llm)
   result = await intermediate.chat_completion(
     prompt=SYNTHESIS_PROMPT,
     message=message,
@@ -487,41 +307,73 @@ async def run_research_loop(
   brief = brief_mod.ResearchBrief(query=message)
 
   await llm.emit_status(
-    f"Ponytail research: hop 1 ({len(initial_queries)} quer"
+    f"{STATUS_PREFIX}: hop 1 ({len(initial_queries)} quer"
     f"{'y' if len(initial_queries) == 1 else 'ies'})..."
   )
   first_queries = initial_queries[:_first_hop_search_limit(budget)]
-  await _run_searches(first_queries, budget, brief, phase="Ponytail hop 1", llm=llm)
+  await orchestrate.run_searches(
+    first_queries,
+    budget,
+    brief,
+    module_id=ID_PREFIX,
+    status_prefix=STATUS_PREFIX,
+    phase="Ponytail hop 1",
+    llm=llm,
+  )
 
-  await llm.emit_status("Ponytail research: reading sources...")
-  first_urls = _urls_from_brief(brief)[: max(1, budget.max_url_reads // 2 or 1)]
-  await _read_urls(first_urls, budget, brief, phase="Ponytail hop 1", llm=llm)
+  await llm.emit_status(f"{STATUS_PREFIX}: reading sources...")
+  first_urls = orchestrate.urls_from_brief(brief)[: max(1, budget.max_url_reads // 2 or 1)]
+  await orchestrate.read_urls(
+    first_urls,
+    budget,
+    brief,
+    module_id=ID_PREFIX,
+    status_prefix=STATUS_PREFIX,
+    phase="Ponytail hop 1",
+    llm=llm,
+  )
 
-  await llm.emit_status("Ponytail research: detecting gaps...")
+  await llm.emit_status(f"{STATUS_PREFIX}: detecting gaps...")
   gap = await detect_gaps(chat, llm, message, brief)
   for gap_note in gap.gaps:
     brief.add_note(f"Gap: {gap_note}")
 
-  follow_up_queries = _dedupe_queries(gap.follow_up_queries, limit=3)
+  follow_up_queries = orchestrate.dedupe_queries(gap.follow_up_queries, limit=3)
   if follow_up_queries and budget.can_search():
-    await llm.emit_status("Ponytail research: hop 2 follow-up...")
-    await _run_searches(follow_up_queries, budget, brief, phase="Ponytail hop 2", llm=llm)
+    await llm.emit_status(f"{STATUS_PREFIX}: hop 2 follow-up...")
+    await orchestrate.run_searches(
+      follow_up_queries,
+      budget,
+      brief,
+      module_id=ID_PREFIX,
+      status_prefix=STATUS_PREFIX,
+      phase="Ponytail hop 2",
+      llm=llm,
+    )
 
     new_urls = [
-      url for url in _urls_from_brief(brief)
+      url for url in orchestrate.urls_from_brief(brief)
       if url not in first_urls
     ]
-    await _read_urls(new_urls, budget, brief, phase="Ponytail hop 2", llm=llm)
+    await orchestrate.read_urls(
+      new_urls,
+      budget,
+      brief,
+      module_id=ID_PREFIX,
+      status_prefix=STATUS_PREFIX,
+      phase="Ponytail hop 2",
+      llm=llm,
+    )
   elif follow_up_queries:
     brief.add_note("Second research hop skipped: search budget exhausted.")
 
-  await llm.emit_status("Ponytail research: synthesizing brief...")
+  await llm.emit_status(f"{STATUS_PREFIX}: synthesizing brief...")
   brief = brief_mod.finalize_brief(brief)
   return await synthesize_brief(chat, llm, message, brief)
 
 
 async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
-  message = _last_user_text(chat)
+  message = orchestrate.last_user_text(chat)
   if not message:
     logger.warning(f"{ID_PREFIX}: No user message found, passing through")
     return await workflow_mod.complete_or_defer(llm, config)
@@ -530,7 +382,7 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
     logger.debug(f"{ID_PREFIX}: Skipping research for: {message[:80]}...")
     return await workflow_mod.complete_or_defer(llm, config)
 
-  await llm.emit_status("Ponytail research: planning queries...")
+  await llm.emit_status(f"{STATUS_PREFIX}: planning queries...")
   budget = budget_mod.budget_from_config(ID_PREFIX)
 
   try:
@@ -540,7 +392,7 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
     brief = brief_mod.ResearchBrief(query=message)
     brief.add_note(f"Query planning failed: {exc}")
     brief = brief_mod.finalize_brief(brief)
-    await llm.emit_status("Ponytail research: query planning failed, continuing without live data...")
+    await llm.emit_status(f"{STATUS_PREFIX}: query planning failed, continuing without live data...")
     chat.system(brief_mod.render_to_system(brief))
     return await workflow_mod.complete_or_defer(llm, config)
 
@@ -555,13 +407,13 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
     brief = brief_mod.ResearchBrief(query=message)
     brief.add_note(f"Research loop failed: {exc}")
     brief = brief_mod.finalize_brief(brief)
-    await llm.emit_status("Ponytail research: research loop failed, continuing without live data...")
+    await llm.emit_status(f"{STATUS_PREFIX}: research loop failed, continuing without live data...")
 
   if not brief.query:
     brief.query = message
 
   if not brief_mod.has_usable_research(brief):
-    await llm.emit_status("Ponytail research: research unavailable, continuing without live data...")
+    await llm.emit_status(f"{STATUS_PREFIX}: research unavailable, continuing without live data...")
 
   chat.system(brief_mod.render_to_system(brief))
   await workflow_mod.complete_or_defer(llm, config)

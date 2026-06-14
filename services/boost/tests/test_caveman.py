@@ -70,7 +70,7 @@ class TestCavemanQueryExtraction:
     llm.query_params = {}
     llm.model = "test-model"
 
-    with patch.object(caveman, "_cheap_llm") as cheap_llm:
+    with patch("research.orchestrate.cheap_llm") as cheap_llm:
       cheap = MagicMock()
       cheap.chat_completion = AsyncMock(
         return_value={
@@ -99,7 +99,7 @@ class TestCavemanGatherResearch:
   async def test_gather_research_respects_search_budget(self):
     budget = ResearchBudget(max_searches=1, max_url_reads=0, max_chars=5000)
 
-    with patch("modules.caveman.fetch.web_search", new=AsyncMock(return_value="1. [A](https://a.example) (Date: N/A)\nSnippet")):
+    with patch("research.fetch.web_search", new=AsyncMock(return_value="1. [A](https://a.example) (Date: N/A)\nSnippet")):
       brief = await caveman.gather_research(["first query", "second query"], budget)
 
     assert budget.searches_used == 1
@@ -112,8 +112,8 @@ class TestCavemanGatherResearch:
     search_text = "1. [Docs](https://docs.example.com) (Date: N/A)\nSnippet"
 
     with (
-      patch("modules.caveman.fetch.web_search", new=AsyncMock(return_value=search_text)),
-      patch("modules.caveman.fetch.read_url", new=AsyncMock(return_value="full page content")) as read_url,
+      patch("research.fetch.web_search", new=AsyncMock(return_value=search_text)),
+      patch("research.fetch.read_url", new=AsyncMock(return_value="full page content")) as read_url,
     ):
       brief = await caveman.gather_research(["docs example"], budget)
 
@@ -130,7 +130,7 @@ class TestCavemanGatherResearch:
     llm.emit_status = AsyncMock()
 
     with patch(
-      "modules.caveman.fetch.web_search",
+      "research.fetch.web_search",
       new=AsyncMock(return_value="Web search failed: timeout"),
     ):
       brief = await caveman.gather_research(["docs example"], budget, llm)
@@ -146,8 +146,8 @@ class TestCavemanGatherResearch:
     search_text = "1. [Docs](https://docs.example.com) (Date: N/A)\nSnippet"
 
     with (
-      patch("modules.caveman.fetch.web_search", new=AsyncMock(return_value=search_text)),
-      patch("modules.caveman.fetch.read_url", new=AsyncMock(side_effect=ValueError("blocked"))),
+      patch("research.fetch.web_search", new=AsyncMock(return_value=search_text)),
+      patch("research.fetch.read_url", new=AsyncMock(side_effect=ValueError("blocked"))),
     ):
       brief = await caveman.gather_research(["docs example"], budget)
 

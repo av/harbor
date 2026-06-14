@@ -146,8 +146,10 @@ class TestShipyardWorkflowE2E:
     with (
       request_context(),
       patch.object(keel, "_cheap_llm", return_value=keel_cheap),
-      patch.object(caveman, "_cheap_llm", return_value=caveman_cheap),
-      patch.object(ponytail, "_cheap_llm", return_value=ponytail_cheap),
+      patch(
+        "research.orchestrate.cheap_llm",
+        side_effect=[caveman_cheap, ponytail_cheap, ponytail_cheap, ponytail_cheap],
+      ),
       patch.object(autocheck, "_cheap_llm", return_value=autocheck_cheap),
       patch("research.fetch.web_search", new=AsyncMock(return_value=MOCK_SEARCH_RESULT)),
       patch("research.fetch.read_url", new=AsyncMock(return_value=MOCK_PAGE_CONTENT)),

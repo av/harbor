@@ -1,20 +1,16 @@
 """Smash-and-grab pre-answer web research for Harbor Boost."""
 
-import re
 from typing import TYPE_CHECKING
 
-from pydantic import BaseModel, Field
-
-import chat as ch
-import config
 import deliverable
 import log
 import research.brief as brief_mod
 import research.budget as budget_mod
-import research.fetch as fetch
+import research.orchestrate as orchestrate
 import research.workflow as workflow_mod
 
 if TYPE_CHECKING:
+  import chat as ch
   import llm
 
 ID_PREFIX = "caveman"
@@ -73,18 +69,6 @@ docker run \\
 
 logger = log.setup_logger(ID_PREFIX)
 
-SKIP_MESSAGE_RE = re.compile(
-  r"^\s*(?:"
-  r"thanks?(?:\s+you)?|thank\s+you|thx|ok(?:ay)?|cool|great|perfect|sounds?\s+good|"
-  r"got\s+it|understood|yes|no|yep|nope|sure|continue|go\s+on|go\s+ahead|"
-  r"proceed|keep\s+going|lgtm|looks?\s+good|done|next|ship\s+it"
-  r")\s*[.!]?\s*$",
-  re.IGNORECASE,
-)
-CONTINUATION_RE = re.compile(
-  r"\b(?:continue|keep\s+going|go\s+on|proceed|carry\s+on|as\s+planned|same\s+as\s+before)\b",
-  re.IGNORECASE,
-)
 QUERY_EXTRACTION_PROMPT = """
 <instruction>
 Extract 1-3 concise web search queries that would help answer the user's latest message.
@@ -101,28 +85,17 @@ Do not repeat near-duplicate queries.
 </latest_user_message>
 """.strip()
 
-
-class SearchQueryPlan(BaseModel):
-  queries: list[str] = Field(
-    description="Focused web search queries, ordered by usefulness.",
-    min_length=1,
-    max_length=3,
-  )
-
-
-def _last_user_text(chat: "ch.Chat") -> str:
-  node = chat.match_one(role="user", index=-1)
-  return (node.content or "").strip() if node else ""
+STATUS_PREFIX = "Caveman research"
 
 
 def should_skip_research(chat: "ch.Chat") -> bool:
   """Pass through without web research on low-value follow-up turns."""
-  text = _last_user_text(chat)
+  text = orchestrate.last_user_text(chat)
   if not text or len(text) < 4:
     return True
   if deliverable.is_acknowledgment(text):
     return True
-  if CONTINUATION_RE.search(text) and len(text) < 120:
+  if orchestrate.CONTINUATION_RE.search(text) and len(text) < 120:
     return True
   if deliverable.is_coding_deliverable(chat) and not deliverable.has_research_signals(text):
     return True
@@ -135,7 +108,7 @@ def needs_research(chat: "ch.Chat", llm: "llm.LLM") -> bool:
     return False
   if getattr(llm, "module", None) == ID_PREFIX:
     return True
-  return research_heuristic(_last_user_text(chat))
+  return research_heuristic(orchestrate.last_user_text(chat))
 
 
 def research_heuristic(text: str) -> bool:
@@ -147,61 +120,18 @@ def research_heuristic(text: str) -> bool:
   return "?" in text and len(text) > 20
 
 
-def _cheap_llm(llm: "llm.LLM") -> "llm.LLM":
-  """Bare downstream client for inexpensive internal completions."""
-  import llm as llm_mod
-
-  return llm_mod.LLM(
-    url=llm.url,
-    headers=llm.headers,
-    query_params=llm.query_params,
-    model=llm.model,
-    params={},
-    messages=[{"role": "user", "content": ""}],
-    module=None,
-  )
-
-
 async def extract_search_queries(
   chat: "ch.Chat",
   llm: "llm.LLM",
   message: str,
 ) -> list[str]:
-  intermediate = _cheap_llm(llm)
-  result = await intermediate.chat_completion(
+  return await orchestrate.plan_queries(
+    chat,
+    llm,
+    message,
     prompt=QUERY_EXTRACTION_PROMPT,
-    conversation=chat,
-    message=message,
-    schema=SearchQueryPlan,
-    params={"temperature": 0.2},
-    resolve=True,
+    max_queries=3,
   )
-
-  queries = result.get("queries", []) if isinstance(result, dict) else []
-  cleaned = []
-  seen = set()
-  for query in queries:
-    query = (query or "").strip()
-    if not query:
-      continue
-    key = query.lower()
-    if key in seen:
-      continue
-    seen.add(key)
-    cleaned.append(query)
-  return cleaned[:3]
-
-
-def _page_read_char_limit(budget: budget_mod.ResearchBudget) -> int:
-  remaining = budget.remaining_chars()
-  if budget.max_url_reads <= 0:
-    return remaining
-  return max(1000, remaining // max(1, budget.max_url_reads))
-
-
-async def _emit_research_status(llm: "llm.LLM | None", status: str) -> None:
-  if llm is not None:
-    await llm.emit_status(status)
 
 
 async def gather_research(
@@ -209,80 +139,17 @@ async def gather_research(
   budget: budget_mod.ResearchBudget,
   llm: "llm.LLM | None" = None,
 ) -> brief_mod.ResearchBrief:
-  brief = brief_mod.ResearchBrief()
-  max_results = max(1, config.TOOLS_SEARCH_MAX_RESULTS.value)
-
-  for query in queries:
-    if not budget.can_search():
-      brief.add_note("Search budget exhausted before all queries ran.")
-      break
-
-    try:
-      budget.record_search()
-      awaitable_status = f"Searching: {query[:80]}"
-      logger.info(awaitable_status)
-      results_text = await fetch.web_search(query, max_results=max_results)
-      results_text = budget.trim_to_remaining(results_text)
-      brief.add_search_results(query, results_text)
-      if fetch.is_search_failure_result(results_text):
-        note = f"Search failed for '{query}': {results_text}"
-        brief.add_note(note)
-        await _emit_research_status(
-          llm,
-          f"Caveman research: search unavailable for '{query[:60]}'...",
-        )
-    except budget_mod.BudgetExceeded as exc:
-      logger.warning(f"{ID_PREFIX}: {exc}")
-      brief.add_note(str(exc))
-      break
-    except Exception as exc:
-      logger.error(f"{ID_PREFIX}: search failed for '{query}': {exc}")
-      note = f"Search failed for '{query}': {exc}"
-      brief.add_note(note)
-      await _emit_research_status(
-        llm,
-        f"Caveman research: search failed for '{query[:60]}'...",
-      )
-
-  for source in brief.searches:
-    if not source.url or not budget.can_read_url():
-      break
-
-    try:
-      budget.record_url_read()
-      logger.info(f"Reading URL: {source.url}")
-      page_text = await fetch.read_url(
-        source.url,
-        max_chars=_page_read_char_limit(budget),
-      )
-      page_text = budget.trim_to_remaining(page_text)
-      if fetch.is_read_failure_result(page_text):
-        brief.add_note(page_text)
-        await _emit_research_status(
-          llm,
-          f"Caveman research: could not read {source.url[:60]}...",
-        )
-        continue
-
-      brief.add_page(source.url, page_text, title=source.title)
-    except budget_mod.BudgetExceeded as exc:
-      logger.warning(f"{ID_PREFIX}: {exc}")
-      brief.add_note(str(exc))
-      break
-    except Exception as exc:
-      logger.warning(f"{ID_PREFIX}: read_url failed for {source.url}: {exc}")
-      note = f"Could not read {source.url}: {exc}"
-      brief.add_note(note)
-      await _emit_research_status(
-        llm,
-        f"Caveman research: could not read {source.url[:60]}...",
-      )
-
-  return brief_mod.finalize_brief(brief)
+  return await orchestrate.gather_one_hop(
+    queries,
+    budget,
+    module_id=ID_PREFIX,
+    status_prefix=STATUS_PREFIX,
+    llm=llm,
+  )
 
 
 async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
-  message = _last_user_text(chat)
+  message = orchestrate.last_user_text(chat)
   if not message:
     logger.warning(f"{ID_PREFIX}: No user message found, passing through")
     return await workflow_mod.complete_or_defer(llm, config)
@@ -291,7 +158,7 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
     logger.debug(f"{ID_PREFIX}: Skipping research for: {message[:80]}...")
     return await workflow_mod.complete_or_defer(llm, config)
 
-  await llm.emit_status("Caveman research: planning queries...")
+  await llm.emit_status(f"{STATUS_PREFIX}: planning queries...")
   budget = budget_mod.budget_from_config(ID_PREFIX)
 
   try:
@@ -301,7 +168,7 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
     brief = brief_mod.ResearchBrief(query=message)
     brief.add_note(f"Query extraction failed: {exc}")
     brief = brief_mod.finalize_brief(brief)
-    await llm.emit_status("Caveman research: query planning failed, continuing without live data...")
+    await llm.emit_status(f"{STATUS_PREFIX}: query planning failed, continuing without live data...")
     chat.system(brief_mod.render_to_system(brief))
     return await workflow_mod.complete_or_defer(llm, config)
 
@@ -309,13 +176,15 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
     logger.warning(f"{ID_PREFIX}: No queries extracted, passing through")
     return await workflow_mod.complete_or_defer(llm, config)
 
-  await llm.emit_status(f"Caveman research: {len(queries)} quer{'y' if len(queries) == 1 else 'ies'}...")
+  await llm.emit_status(
+    f"{STATUS_PREFIX}: {len(queries)} quer{'y' if len(queries) == 1 else 'ies'}..."
+  )
   brief = await gather_research(queries, budget, llm)
   if not brief.query:
     brief.query = message
 
   if not brief_mod.has_usable_research(brief):
-    await llm.emit_status("Caveman research: research unavailable, continuing without live data...")
+    await llm.emit_status(f"{STATUS_PREFIX}: research unavailable, continuing without live data...")
 
   chat.system(brief_mod.render_to_system(brief))
   await workflow_mod.complete_or_defer(llm, config)
