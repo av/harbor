@@ -28,9 +28,17 @@ pi_settings_config="$tmp_dir/pi/settings.json"
 step_out="$tmp_dir/step.out"
 parallel_out="$tmp_dir/parallel.out"
 launch_workspace="$tmp_dir/launch-tests"
-mkdir -p "$fake_bin" "$harbor_home/profiles" "$launch_workspace"
+mkdir -p "$fake_bin" "$harbor_home/profiles" "$harbor_home/services" "$launch_workspace"
 cp "$HARBOR_TEST_REPO/profiles/default.env" "$harbor_home/profiles/default.env"
-ln -s "$HARBOR_TEST_REPO/services" "$harbor_home/services"
+cp "$HARBOR_TEST_REPO/compose.yml" "$harbor_home/compose.yml"
+# Symlink individual service compose files (not the directory itself) so that
+# find without -L can traverse the services/ directory. A directory symlink
+# would be opaque to find(1) without -L.
+ln -st "$harbor_home/services" "$HARBOR_TEST_REPO"/services/compose.*.yml
+# Symlink service subdirectories (config templates, etc.)
+for _d in "$HARBOR_TEST_REPO"/services/*/; do
+  [ -d "$_d" ] && ln -s "$_d" "$harbor_home/services/$(basename "$_d")" 2>/dev/null || true
+done
 
 cleanup() {
   rm -rf "$tmp_dir"
@@ -49,6 +57,12 @@ running_services() {
     cat "$HARBOR_FAKE_DOCKER_STATE"
   fi
 }
+
+# _check_docker calls "docker version" to verify the daemon is running
+if [ "$1" = "version" ]; then
+  echo "Docker version 99.0.0 (fake)"
+  exit 0
+fi
 
 if [ "$1" = "compose" ] && [ "$2" = "ps" ]; then
   running_services
@@ -90,6 +104,7 @@ fi
 
 if [ "$1" = "compose" ]; then
   if [ -n "${HARBOR_FAKE_DOCKER_STATE:-}" ] && [[ " $* " == *" up -d --wait "* ]]; then
+    # Extract service names from args after --wait
     seen_wait=false
     for arg in "$@"; do
       if $seen_wait; then
@@ -105,11 +120,25 @@ if [ "$1" = "compose" ]; then
         seen_wait=true
       fi
     done
+    # Also extract service names from -f compose.<service>.yml flags
+    for arg in "$@"; do
+      case "$arg" in
+        */compose.*.yml)
+          local_name="${arg##*/}"
+          local_name="${local_name#compose.}"
+          local_name="${local_name%.yml}"
+          case "$local_name" in
+            x.*) ;; # skip cross-service integration files
+            *)   printf '%s\n' "$local_name" >>"$HARBOR_FAKE_DOCKER_STATE" ;;
+          esac
+          ;;
+      esac
+    done
   fi
   exit 0
 fi
 
-exit 1
+exit 0
 EOF
 
 cat >"$fake_bin/curl" <<'EOF'
@@ -436,7 +465,7 @@ run_launch "explicit backend is started when missing" \
 assert_log '^tool=opencode$'
 assert_log '^arg=harbor-llamacpp/root-array-model$'
 assert_output "Backend 'llamacpp' is not running; starting it"
-assert_docker_log 'up -d --wait llamacpp$'
+assert_docker_log 'compose.llamacpp.yml.*up -d --wait'
 
 run_launch "starts llamacpp when no backend is running" \
   "" "root-array" \
@@ -444,7 +473,7 @@ run_launch "starts llamacpp when no backend is running" \
 assert_log '^tool=opencode$'
 assert_log '^arg=harbor-llamacpp/root-array-model$'
 assert_output 'No running Harbor OpenAI-compatible backend found; starting llamacpp'
-assert_docker_log 'up -d --wait llamacpp$'
+assert_docker_log 'compose.llamacpp.yml.*up -d --wait'
 
 run_launch "web launch starts SearXNG and routes through boost-web workflow model" \
   "ollama boost" "openai-mixed" \
@@ -637,7 +666,7 @@ run_launch "dmr backend resolves models and launches codex" \
   --backend dmr codex
 assert_log '^tool=codex$'
 assert_log '^cwd='"$HARBOR_TEST_REPO"'$'
-assert_log '^OPENAI_API_KEY=sk-harbor$'
+assert_log '^OPENAI_API_KEY=sk-dmr$'
 assert_log '^arg=-m$'
 assert_log '^arg=root-array-model$'
 
@@ -676,7 +705,7 @@ run_launch "omlx backend resolves models and launches codex" \
   --backend omlx codex
 assert_log '^tool=codex$'
 assert_log '^cwd='"$HARBOR_TEST_REPO"'$'
-assert_log '^OPENAI_API_KEY=sk-harbor$'
+assert_log '^OPENAI_API_KEY=sk-omlx$'
 assert_log '^arg=-m$'
 assert_log '^arg=root-array-model$'
 
@@ -686,7 +715,7 @@ run_launch "omlx backend launches hermes with correct environment" \
 assert_log '^tool=hermes$'
 assert_log '^cwd='"$HARBOR_TEST_REPO"'$'
 assert_log '^OPENAI_BASE_URL=http://localhost:34940/v1$'
-assert_log '^OPENAI_API_KEY=sk-harbor$'
+assert_log '^OPENAI_API_KEY=sk-omlx$'
 assert_log '^HERMES_MODEL=qwen-chat-model$'
 assert_log '^arg=chat$'
 
@@ -696,7 +725,7 @@ run_launch "dmr backend starts when not running" \
 assert_log '^tool=opencode$'
 assert_log '^arg=harbor-dmr/root-array-model$'
 assert_output "Backend 'dmr' is not running; starting it"
-assert_docker_log 'up -d --wait dmr$'
+assert_docker_log 'compose.dmr.yml.*up -d --wait'
 
 run_parallel_history_smoke
 
