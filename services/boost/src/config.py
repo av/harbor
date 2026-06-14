@@ -742,6 +742,28 @@ KEEL_ENABLED = Config[bool](
     description="When false, the `keel` module passes through without task anchoring.",
 )
 
+# ---------------- SIGHTLINE -----------------
+
+SIGHTLINE_MODE = Config[str](
+    name="HARBOR_BOOST_SIGHTLINE_MODE",
+    type=str,
+    default="block",
+    description=(
+        "How `sightline` handles scratch writes/deletes without a prior `read_file`: "
+        "`block` rejects the tool call; `warn` streams a status and allows it."
+    ),
+)
+
+SIGHTLINE_ALLOW_CREATE = Config[bool](
+    name="HARBOR_BOOST_SIGHTLINE_ALLOW_CREATE",
+    type=bool,
+    default="true",
+    description=(
+        "When true, `sightline` allows the first write to a non-existent scratch path "
+        "without a prior read_file."
+    ),
+)
+
 # ------------------ KLMBR ------------------
 
 KLMBR_PERCENTAGE = Config[int](
