@@ -51,6 +51,7 @@ reads or tool calls during workspace exploration. Audit debug logs include
 - `max_passes` — maximum audit-and-revise passes. Default: `1`
 - `max_workspace_files` — workspace files read per request. Default: `5`
 - `workspace_file_max_chars` — characters per workspace file. Default: `50000`
+- `@boost_show_audit` — when true, append a brief audit footer to the final answer
 
 ```bash
 harbor boost modules add autocheck
@@ -82,21 +83,8 @@ logger = log.setup_logger(ID_PREFIX)
 MIN_DELIVERABLE_SIGNALS = 2
 MIN_AUTOCHECK_MESSAGE_CHARS = 12
 
-SKIP_MESSAGE_RE = re.compile(
-  r"^\s*(?:"
-  r"thanks?(?:\s+you)?|thank\s+you|thx|ok(?:ay)?|cool|great|perfect|sounds?\s+good|"
-  r"got\s+it|understood|yes|no|yep|nope|sure|continue|go\s+on|go\s+ahead|"
-  r"proceed|keep\s+going|lgtm|looks?\s+good|done|next|ship\s+it"
-  r")\s*[.!]?\s*$",
-  re.IGNORECASE,
-)
 CONTINUATION_RE = re.compile(
   r"\b(?:continue|keep\s+going|go\s+on|proceed|carry\s+on|as\s+planned|same\s+as\s+before)\b",
-  re.IGNORECASE,
-)
-
-BACKTICK_PATH_RE = re.compile(
-  r"`((?:[\w.-]+/)+[\w.-]+\.(?:py|ts|tsx|js|jsx|go|rs|java|rb|php|cs|cpp|c|h|hpp|swift|kt|scala|sql|yaml|yml|toml|json|md|sh|bash|zsh|dockerfile|makefile))`",
   re.IGNORECASE,
 )
 
@@ -248,10 +236,6 @@ def needs_autocheck(chat: "ch.Chat") -> bool:
   return autocheck_gate_reason(chat) == "triggered"
 
 
-def _normalize_path(raw: str) -> str:
-  return re.sub(r"^[\s`'\"(]+", "", (raw or "").strip()).rstrip("`'\"")
-
-
 def extract_workspace_paths(*texts: str) -> list[str]:
   """Collect unique repo-relative paths mentioned in draft or user text."""
   paths: list[str] = []
@@ -262,13 +246,13 @@ def extract_workspace_paths(*texts: str) -> list[str]:
       continue
 
     for match in deliverable.FILE_PATH_RE.finditer(text):
-      path = _normalize_path(match.group(0))
+      path = deliverable.normalize_repo_path(match.group(0))
       if path and path not in seen:
         seen.add(path)
         paths.append(path)
 
-    for match in BACKTICK_PATH_RE.finditer(text):
-      path = _normalize_path(match.group(1))
+    for match in deliverable.BACKTICK_PATH_RE.finditer(text):
+      path = deliverable.normalize_repo_path(match.group(1))
       if path and path not in seen:
         seen.add(path)
         paths.append(path)
@@ -399,6 +383,46 @@ def format_findings(audit: AuditResult) -> str:
   return "\n".join(lines)
 
 
+def format_audit_status(audit: AuditResult) -> str:
+  """Short status line for emit_status after an audit completes."""
+  finding_count = len(audit.findings)
+  noun = "finding" if finding_count == 1 else "findings"
+  return f"Autocheck: {audit.verdict} ({finding_count} {noun})"
+
+
+def format_audit_footer(audit: AuditResult) -> str:
+  """Brief footer appended to the final answer when show_audit is enabled."""
+  finding_count = len(audit.findings)
+  noun = "finding" if finding_count == 1 else "findings"
+  lines = [f"Autocheck: {audit.verdict} ({finding_count} {noun})"]
+
+  summary = (audit.summary or "").strip()
+  if summary:
+    if len(summary) > 120:
+      summary = summary[:117].rstrip() + "..."
+    lines.append(summary)
+
+  return "\n".join(lines)
+
+
+def show_audit_footer(llm: "llm.LLM") -> bool:
+  """Return True when @boost_show_audit requests an audit footer."""
+  value = llm.boost_params.get("show_audit")
+  if isinstance(value, bool):
+    return value
+  if value is None:
+    return False
+  return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def append_audit_footer(final_text: str, audit: AuditResult) -> str:
+  """Append a brief audit footer to the user-visible final answer."""
+  footer = format_audit_footer(audit)
+  if not footer:
+    return final_text
+  return f"{final_text.rstrip()}\n\n---\n*{footer}*"
+
+
 async def generate_draft(chat: "ch.Chat", llm: "llm.LLM") -> str:
   draft = await llm.stream_chat_completion(
     prompt=DRAFT_PROMPT,
@@ -427,14 +451,19 @@ async def gather_workspace_context(paths: list[str]) -> str:
   if not config.WORKSPACE_ROOT.value or not paths:
     return ""
 
-  from modules.tools import read_workspace_file
+  import research.fetch as fetch
+  from modules.tools import _workspace_path
 
   chunks: list[str] = []
   max_files = max(0, config.AUTOCHECK_MAX_WORKSPACE_FILES.value)
+  max_chars = max(0, config.AUTOCHECK_WORKSPACE_FILE_MAX_CHARS.value)
 
   for path in paths[:max_files]:
     try:
-      content = await read_workspace_file(path)
+      target = _workspace_path(path)
+      if not target.exists() or not target.is_file():
+        raise FileNotFoundError(path)
+      content = fetch.trim(target.read_text(encoding="utf-8"), max_chars)
       chunks.append(f'<file path="{path}">\n{content}\n</file>')
     except Exception as exc:
       logger.warning(f"{ID_PREFIX}: could not read workspace file '{path}': {exc}")
@@ -589,9 +618,11 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM"):
     )
   except Exception as exc:
     logger.error(f"{ID_PREFIX}: audit failed: {exc}")
-    await llm.emit_status("Autocheck: final answer...")
+    await llm.emit_status("Autocheck: audit failed — delivering draft")
     await emit_final(llm, draft)
     return draft
+
+  await llm.emit_status(format_audit_status(audit))
 
   final_text = draft
   passes_used = 0
@@ -610,9 +641,13 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM"):
         workspace_paths=paths,
         workspace_tool_calls=workspace_tool_calls,
       )
+      await llm.emit_status(format_audit_status(audit))
     except Exception as exc:
       logger.error(f"{ID_PREFIX}: revise pass failed: {exc}")
       break
+
+  if show_audit_footer(llm):
+    final_text = append_audit_footer(final_text, audit)
 
   await llm.emit_status("Autocheck: final answer...")
   await emit_final(llm, final_text)

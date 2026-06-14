@@ -146,6 +146,59 @@ class TestWorkspacePaths:
     assert "[critical] Missing import" in rendered
     assert "Add `import os`" in rendered
 
+  def test_format_audit_status_pass_with_no_findings(self):
+    audit = autocheck.AuditResult(verdict="pass", findings=[])
+    assert autocheck.format_audit_status(audit) == "Autocheck: pass (0 findings)"
+
+  def test_format_audit_status_revise_with_finding_count(self):
+    audit = autocheck.AuditResult(
+      verdict="revise",
+      findings=[
+        autocheck.AuditFinding(severity="major", message="Wrong path"),
+        autocheck.AuditFinding(severity="minor", message="Missing test"),
+      ],
+    )
+    assert autocheck.format_audit_status(audit) == "Autocheck: revise (2 findings)"
+
+  def test_format_audit_footer_includes_summary(self):
+    audit = autocheck.AuditResult(
+      verdict="pass",
+      summary="Ready to ship.",
+      findings=[],
+    )
+    footer = autocheck.format_audit_footer(audit)
+    assert "Autocheck: pass (0 findings)" in footer
+    assert "Ready to ship." in footer
+
+  def test_format_audit_footer_truncates_long_summary(self):
+    audit = autocheck.AuditResult(
+      verdict="revise",
+      summary="x" * 200,
+      findings=[autocheck.AuditFinding(severity="major", message="Issue")],
+    )
+    footer = autocheck.format_audit_footer(audit)
+    assert "..." in footer
+    assert len(footer.splitlines()[-1]) <= 120
+
+  def test_show_audit_footer_reads_boost_params(self):
+    llm = MagicMock()
+    llm.boost_params = {"show_audit": "true"}
+    assert autocheck.show_audit_footer(llm)
+
+    llm.boost_params = {"show_audit": "false"}
+    assert not autocheck.show_audit_footer(llm)
+
+    llm.boost_params = {}
+    assert not autocheck.show_audit_footer(llm)
+
+  def test_append_audit_footer_adds_markdown_block(self):
+    audit = autocheck.AuditResult(verdict="pass", summary="Ship it", findings=[])
+    rendered = autocheck.append_audit_footer("Final answer", audit)
+    assert rendered.startswith("Final answer")
+    assert "---" in rendered
+    assert "Autocheck: pass (0 findings)" in rendered
+    assert "Ship it" in rendered
+
 
 class TestWorkspaceContext:
   @pytest.mark.asyncio
@@ -165,6 +218,26 @@ class TestWorkspaceContext:
 
     assert 'path="src/widget.py"' in context
     assert "def widget():" in context
+
+  @pytest.mark.asyncio
+  async def test_gather_workspace_context_respects_autocheck_char_limit(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      root = Path(tmp)
+      target = root / "src" / "large.py"
+      target.parent.mkdir(parents=True)
+      target.write_text("x" * 200, encoding="utf-8")
+
+      original_root = config.WORKSPACE_ROOT.__value__
+      original_max = config.AUTOCHECK_WORKSPACE_FILE_MAX_CHARS.__value__
+      try:
+        config.WORKSPACE_ROOT.__value__ = str(root)
+        config.AUTOCHECK_WORKSPACE_FILE_MAX_CHARS.__value__ = 50
+        context = await autocheck.gather_workspace_context(["src/large.py"])
+      finally:
+        config.WORKSPACE_ROOT.__value__ = original_root
+        config.AUTOCHECK_WORKSPACE_FILE_MAX_CHARS.__value__ = original_max
+
+    assert "truncated to 50 characters" in context
 
   @pytest.mark.asyncio
   async def test_gather_workspace_context_empty_without_root(self):
@@ -409,6 +482,7 @@ class TestAutocheckApply:
       {"role": "user", "content": "Implement retry helper in services/boost/src/utils.py"},
     ])
     llm = MagicMock()
+    llm.boost_params = {}
     llm.emit_status = AsyncMock()
     llm.emit_message = AsyncMock()
     llm.stream_chat_completion = AsyncMock(return_value="Draft implementation")
@@ -424,6 +498,8 @@ class TestAutocheckApply:
       await autocheck.apply(chat, llm)
 
     revise.assert_not_called()
+    status_messages = [call.args[0] for call in llm.emit_status.await_args_list]
+    assert "Autocheck: pass (0 findings)" in status_messages
     llm.emit_message.assert_awaited_once_with("Draft implementation")
 
   @pytest.mark.asyncio
@@ -432,11 +508,16 @@ class TestAutocheckApply:
       {"role": "user", "content": "Implement retry helper in services/boost/src/utils.py"},
     ])
     llm = MagicMock()
+    llm.boost_params = {}
     llm.emit_status = AsyncMock()
     llm.emit_message = AsyncMock()
     llm.stream_chat_completion = AsyncMock(return_value="Draft implementation")
 
-    first_audit = autocheck.AuditResult(verdict="revise", summary="Fix imports")
+    first_audit = autocheck.AuditResult(
+      verdict="revise",
+      summary="Fix imports",
+      findings=[autocheck.AuditFinding(severity="major", message="Missing import")],
+    )
     second_audit = autocheck.AuditResult(verdict="pass", summary="Good now")
     first_debug = autocheck.AuditDebug(triggered=True, gate_reason="triggered", verdict="revise")
     second_debug = autocheck.AuditDebug(triggered=True, gate_reason="triggered", verdict="pass")
@@ -453,7 +534,35 @@ class TestAutocheckApply:
       await autocheck.apply(chat, llm)
 
     revise.assert_awaited_once()
+    status_messages = [call.args[0] for call in llm.emit_status.await_args_list]
+    assert "Autocheck: revise (1 finding)" in status_messages
+    assert "Autocheck: pass (0 findings)" in status_messages
     llm.emit_message.assert_awaited_once_with("Revised implementation")
+
+  @pytest.mark.asyncio
+  async def test_apply_appends_audit_footer_when_show_audit_enabled(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Implement retry helper in services/boost/src/utils.py"},
+    ])
+    llm = MagicMock()
+    llm.boost_params = {"show_audit": "true"}
+    llm.emit_status = AsyncMock()
+    llm.emit_message = AsyncMock()
+    llm.stream_chat_completion = AsyncMock(return_value="Draft implementation")
+
+    audit = autocheck.AuditResult(verdict="pass", summary="Ship it")
+    debug = autocheck.AuditDebug(triggered=True, gate_reason="triggered", verdict="pass")
+
+    with (
+      patch.object(autocheck, "gather_workspace_context", new=AsyncMock(return_value="")),
+      patch.object(autocheck, "run_audit", new=AsyncMock(return_value=(audit, debug))),
+    ):
+      await autocheck.apply(chat, llm)
+
+    emitted = llm.emit_message.await_args.args[0]
+    assert emitted.startswith("Draft implementation")
+    assert "Autocheck: pass (0 findings)" in emitted
+    assert "Ship it" in emitted
 
   @pytest.mark.asyncio
   async def test_apply_explores_workspace_when_root_configured(self):
@@ -494,6 +603,7 @@ class TestAutocheckApply:
       {"role": "user", "content": "Implement helper in services/boost/src/utils.py"},
     ])
     llm = MagicMock()
+    llm.boost_params = {}
     llm.emit_status = AsyncMock()
     llm.emit_message = AsyncMock()
     llm.stream_final_completion = AsyncMock()
@@ -505,5 +615,7 @@ class TestAutocheckApply:
     ):
       await autocheck.apply(chat, llm)
 
+    status_messages = [call.args[0] for call in llm.emit_status.await_args_list]
+    assert "Autocheck: audit failed — delivering draft" in status_messages
     llm.emit_message.assert_awaited_once_with("Draft implementation")
     llm.stream_final_completion.assert_not_called()
