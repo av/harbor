@@ -9,6 +9,10 @@ FILE_PATH_RE = re.compile(
   r"(?:^|[\s`'\"(])(?:[\w.-]+/)+[\w.-]+\.(?:py|ts|tsx|js|jsx|go|rs|java|rb|php|cs|cpp|c|h|hpp|swift|kt|scala|sql|yaml|yml|toml|json|md|sh|bash|zsh|dockerfile|makefile)\b",
   re.IGNORECASE,
 )
+BACKTICK_PATH_RE = re.compile(
+  r"`((?:[\w.-]+/)+[\w.-]+\.(?:py|ts|tsx|js|jsx|go|rs|java|rb|php|cs|cpp|c|h|hpp|swift|kt|scala|sql|yaml|yml|toml|json|md|sh|bash|zsh|dockerfile|makefile))`",
+  re.IGNORECASE,
+)
 CODING_KEYWORD_RE = re.compile(
   r"\b(?:implement|refactor|rewrite|debug|fix(?:\s+the)?\s+(?:bug|error|issue|test)|"
   r"write\s+(?:a\s+)?(?:function|class|module|script|test|code)|"
@@ -113,6 +117,11 @@ CODING_SESSION_TOOL_NAMES = frozenset({
 def _last_user_text(chat: "ch.Chat") -> str:
   node = chat.match_one(role="user", index=-1)
   return (node.content or "") if node else ""
+
+
+def normalize_repo_path(raw: str) -> str:
+  """Strip wrapping quotes/backticks from a repo-relative path mention."""
+  return re.sub(r"^[\s`'\"(]+", "", (raw or "").strip()).rstrip("`'\"")
 
 
 def has_explain_intent(text: str) -> bool:
