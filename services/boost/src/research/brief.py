@@ -2,6 +2,13 @@
 
 from pydantic import BaseModel, Field
 
+import research.fetch as fetch_mod
+
+RESEARCH_UNAVAILABLE_NOTE = (
+  "Research unavailable: live web search and URL reading could not be completed. "
+  "Answer from model knowledge and clearly state when facts could not be verified."
+)
+
 
 class ResearchSource(BaseModel):
   title: str = ""
@@ -59,6 +66,29 @@ class ResearchBrief(BaseModel):
   def add_note(self, note: str) -> None:
     if note.strip():
       self.notes.append(note.strip())
+
+
+def has_usable_research(brief: ResearchBrief) -> bool:
+  """Return True when the brief contains at least one non-failure search hit or page."""
+  for page in brief.pages:
+    if page.snippet and not fetch_mod.is_read_failure_result(page.snippet):
+      return True
+
+  for source in brief.searches:
+    if source.url:
+      return True
+    if source.snippet and not fetch_mod.is_search_failure_result(source.snippet):
+      return True
+
+  return False
+
+
+def finalize_brief(brief: ResearchBrief) -> ResearchBrief:
+  """Add a research-unavailable note when no usable live research was gathered."""
+  if not has_usable_research(brief):
+    if RESEARCH_UNAVAILABLE_NOTE not in brief.notes:
+      brief.add_note(RESEARCH_UNAVAILABLE_NOTE)
+  return brief
 
 
 def render_to_system(brief: ResearchBrief) -> str:

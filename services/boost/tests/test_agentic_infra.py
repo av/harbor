@@ -4,6 +4,8 @@ import os
 import sys
 import tempfile
 from pathlib import Path
+from unittest.mock import AsyncMock, patch
+
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
@@ -11,9 +13,22 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 import chat as ch
 import config
 import deliverable
-from research.brief import ResearchBrief, render_to_system
+from research.brief import (
+  RESEARCH_UNAVAILABLE_NOTE,
+  ResearchBrief,
+  finalize_brief,
+  has_usable_research,
+  render_to_system,
+)
 from research.budget import BudgetExceeded, ResearchBudget, budget_from_config
-from research.fetch import require_http_url, trim
+from research.fetch import (
+  is_read_failure_result,
+  is_search_failure_result,
+  read_url,
+  require_http_url,
+  trim,
+  web_search,
+)
 from modules import tools
 
 
@@ -30,6 +45,45 @@ class TestResearchFetch:
 
   def test_require_http_url_accepts_public_https(self):
     assert require_http_url("https://example.com/docs") == "https://example.com/docs"
+
+  def test_is_search_failure_result_detects_errors_and_empty(self):
+    assert is_search_failure_result("")
+    assert is_search_failure_result("No results found.")
+    assert is_search_failure_result("Web search failed: timeout")
+    assert is_search_failure_result("Web search unavailable: configure API key")
+    assert not is_search_failure_result("1. [Docs](https://example.com) (Date: N/A)\nSnippet")
+
+  def test_is_read_failure_result_detects_errors(self):
+    assert is_read_failure_result("Could not read URL: https://example.com: timeout")
+    assert not is_read_failure_result("Page body text")
+
+  @pytest.mark.asyncio
+  async def test_read_url_returns_failure_for_private_hosts(self):
+    result = await read_url("http://127.0.0.1/test")
+    assert is_read_failure_result(result)
+    assert "127.0.0.1" in result
+
+  @pytest.mark.asyncio
+  async def test_read_url_returns_failure_when_all_readers_fail(self):
+    with patch("research.fetch._read_with_jina", new=AsyncMock(side_effect=RuntimeError("jina down"))):
+      with patch("research.fetch._read_direct", new=AsyncMock(side_effect=RuntimeError("http down"))):
+        result = await read_url("https://example.com/docs")
+
+    assert is_read_failure_result(result)
+    assert "http down" in result
+
+  @pytest.mark.asyncio
+  async def test_web_search_returns_failure_message_on_provider_error(self):
+    with patch("research.fetch._search_tavily", new=AsyncMock(side_effect=RuntimeError("provider down"))):
+      original = config.TAVILY_API_KEY.__value__
+      try:
+        config.TAVILY_API_KEY.__value__ = "test-key"
+        result = await web_search("python asyncio")
+      finally:
+        config.TAVILY_API_KEY.__value__ = original
+
+    assert is_search_failure_result(result)
+    assert "provider down" in result
 
 
 class TestResearchBrief:
@@ -61,6 +115,26 @@ class TestResearchBrief:
     assert brief.searches[0].title == "Title"
     assert brief.searches[0].url == "https://example.com"
     assert brief.searches[0].snippet == "Snippet text"
+
+  def test_has_usable_research_false_when_only_failures_present(self):
+    brief = ResearchBrief()
+    brief.add_search_results("test query", "Web search failed: timeout")
+    assert not has_usable_research(brief)
+
+  def test_finalize_brief_adds_research_unavailable_note(self):
+    brief = ResearchBrief(query="python asyncio")
+    brief.add_search_results("python asyncio", "No results found.")
+    finalized = finalize_brief(brief)
+    assert RESEARCH_UNAVAILABLE_NOTE in finalized.notes
+
+  def test_finalize_brief_skips_note_when_usable_research_exists(self):
+    brief = ResearchBrief()
+    brief.add_search_results(
+      "python asyncio",
+      "1. [Docs](https://example.com) (Date: N/A)\nSnippet",
+    )
+    finalized = finalize_brief(brief)
+    assert RESEARCH_UNAVAILABLE_NOTE not in finalized.notes
 
 
 class TestResearchBudget:

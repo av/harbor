@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 import chat as ch
 import config
 from modules import ponytail
-from research.brief import ResearchBrief, render_to_system
+from research.brief import RESEARCH_UNAVAILABLE_NOTE, ResearchBrief, render_to_system
 from research.budget import ResearchBudget
 
 
@@ -251,6 +251,31 @@ class TestPonytailApply:
     assert statuses[0] == "Ponytail research: planning queries..."
     assert any("hop 1" in status for status in statuses)
     assert any("synthesizing brief" in status for status in statuses)
+
+  @pytest.mark.asyncio
+  async def test_apply_injects_research_unavailable_note_on_total_failure(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "How do I migrate from Stripe API 2023-10-16 to 2024-06-20?"},
+    ])
+    llm = MagicMock(module=ponytail.ID_PREFIX)
+    llm.emit_status = AsyncMock()
+    llm.stream_final_completion = AsyncMock()
+
+    brief = ResearchBrief(query="stripe api migration")
+    brief.add_note(RESEARCH_UNAVAILABLE_NOTE)
+
+    with (
+      patch.object(ponytail, "plan_search_queries", new=AsyncMock(return_value=["stripe api migration"])),
+      patch.object(ponytail, "run_research_loop", new=AsyncMock(return_value=brief)),
+      patch.object(ponytail.brief_mod, "has_usable_research", return_value=False),
+    ):
+      await ponytail.apply(chat, llm)
+
+    rendered = render_to_system(brief)
+    assert RESEARCH_UNAVAILABLE_NOTE in rendered
+    statuses = [call.args[0] for call in llm.emit_status.await_args_list]
+    assert any("research unavailable" in status for status in statuses)
+    llm.stream_final_completion.assert_awaited_once()
 
   @pytest.mark.asyncio
   async def test_apply_uses_config_budget(self):

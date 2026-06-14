@@ -324,12 +324,18 @@ def _urls_from_brief(brief: brief_mod.ResearchBrief) -> list[str]:
   return urls
 
 
+async def _emit_research_status(llm: "llm.LLM | None", status: str) -> None:
+  if llm is not None:
+    await llm.emit_status(status)
+
+
 async def _run_searches(
   queries: list[str],
   budget: budget_mod.ResearchBudget,
   brief: brief_mod.ResearchBrief,
   *,
   phase: str,
+  llm: "llm.LLM | None" = None,
 ) -> None:
   max_results = max(1, config.TOOLS_SEARCH_MAX_RESULTS.value)
 
@@ -344,13 +350,25 @@ async def _run_searches(
       results_text = await fetch.web_search(query, max_results=max_results)
       results_text = budget.trim_to_remaining(results_text)
       brief.add_search_results(query, results_text)
+      if fetch.is_search_failure_result(results_text):
+        note = f"Search failed for '{query}': {results_text}"
+        brief.add_note(note)
+        await _emit_research_status(
+          llm,
+          f"Ponytail research: search unavailable for '{query[:60]}'...",
+        )
     except budget_mod.BudgetExceeded as exc:
       logger.warning(f"{ID_PREFIX}: {exc}")
       brief.add_note(str(exc))
       break
     except Exception as exc:
       logger.error(f"{ID_PREFIX}: search failed for '{query}': {exc}")
-      brief.add_note(f"Search failed for '{query}': {exc}")
+      note = f"Search failed for '{query}': {exc}"
+      brief.add_note(note)
+      await _emit_research_status(
+        llm,
+        f"Ponytail research: search failed for '{query[:60]}'...",
+      )
 
 
 async def _read_urls(
@@ -359,6 +377,7 @@ async def _read_urls(
   brief: brief_mod.ResearchBrief,
   *,
   phase: str,
+  llm: "llm.LLM | None" = None,
 ) -> None:
   for url in urls:
     if not budget.can_read_url():
@@ -372,6 +391,14 @@ async def _read_urls(
         max_chars=_page_read_char_limit(budget),
       )
       page_text = budget.trim_to_remaining(page_text)
+      if fetch.is_read_failure_result(page_text):
+        brief.add_note(page_text)
+        await _emit_research_status(
+          llm,
+          f"Ponytail research: could not read {url[:60]}...",
+        )
+        continue
+
       brief.add_page(url, page_text)
     except budget_mod.BudgetExceeded as exc:
       logger.warning(f"{ID_PREFIX}: {exc}")
@@ -379,7 +406,12 @@ async def _read_urls(
       break
     except Exception as exc:
       logger.warning(f"{ID_PREFIX}: read_url failed for {url}: {exc}")
-      brief.add_note(f"Could not read {url}: {exc}")
+      note = f"Could not read {url}: {exc}"
+      brief.add_note(note)
+      await _emit_research_status(
+        llm,
+        f"Ponytail research: could not read {url[:60]}...",
+      )
 
 
 def _render_research_summary(brief: brief_mod.ResearchBrief) -> str:
@@ -447,11 +479,11 @@ async def run_research_loop(
     f"{'y' if len(initial_queries) == 1 else 'ies'})..."
   )
   first_queries = initial_queries[:_first_hop_search_limit(budget)]
-  await _run_searches(first_queries, budget, brief, phase="Ponytail hop 1")
+  await _run_searches(first_queries, budget, brief, phase="Ponytail hop 1", llm=llm)
 
   await llm.emit_status("Ponytail research: reading sources...")
   first_urls = _urls_from_brief(brief)[: max(1, budget.max_url_reads // 2 or 1)]
-  await _read_urls(first_urls, budget, brief, phase="Ponytail hop 1")
+  await _read_urls(first_urls, budget, brief, phase="Ponytail hop 1", llm=llm)
 
   await llm.emit_status("Ponytail research: detecting gaps...")
   gap = await detect_gaps(chat, llm, message, brief)
@@ -461,17 +493,18 @@ async def run_research_loop(
   follow_up_queries = _dedupe_queries(gap.follow_up_queries, limit=3)
   if follow_up_queries and budget.can_search():
     await llm.emit_status("Ponytail research: hop 2 follow-up...")
-    await _run_searches(follow_up_queries, budget, brief, phase="Ponytail hop 2")
+    await _run_searches(follow_up_queries, budget, brief, phase="Ponytail hop 2", llm=llm)
 
     new_urls = [
       url for url in _urls_from_brief(brief)
       if url not in first_urls
     ]
-    await _read_urls(new_urls, budget, brief, phase="Ponytail hop 2")
+    await _read_urls(new_urls, budget, brief, phase="Ponytail hop 2", llm=llm)
   elif follow_up_queries:
     brief.add_note("Second research hop skipped: search budget exhausted.")
 
   await llm.emit_status("Ponytail research: synthesizing brief...")
+  brief = brief_mod.finalize_brief(brief)
   return await synthesize_brief(chat, llm, message, brief)
 
 
@@ -494,6 +527,8 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
     logger.error(f"{ID_PREFIX}: query planning failed: {exc}")
     brief = brief_mod.ResearchBrief(query=message)
     brief.add_note(f"Query planning failed: {exc}")
+    brief = brief_mod.finalize_brief(brief)
+    await llm.emit_status("Ponytail research: query planning failed, continuing without live data...")
     chat.system(brief_mod.render_to_system(brief))
     return await workflow_mod.complete_or_defer(llm, config)
 
@@ -507,9 +542,14 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
     logger.error(f"{ID_PREFIX}: research loop failed: {exc}")
     brief = brief_mod.ResearchBrief(query=message)
     brief.add_note(f"Research loop failed: {exc}")
+    brief = brief_mod.finalize_brief(brief)
+    await llm.emit_status("Ponytail research: research loop failed, continuing without live data...")
 
   if not brief.query:
     brief.query = message
+
+  if not brief_mod.has_usable_research(brief):
+    await llm.emit_status("Ponytail research: research unavailable, continuing without live data...")
 
   chat.system(brief_mod.render_to_system(brief))
   await workflow_mod.complete_or_defer(llm, config)

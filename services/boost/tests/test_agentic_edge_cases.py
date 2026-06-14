@@ -14,7 +14,7 @@ import deliverable
 import workflows
 from modules import autocheck, caveman, diffscope, keel, ponytail
 from modules import workflows as workflow_presets
-from research.brief import ResearchBrief
+from research.brief import RESEARCH_UNAVAILABLE_NOTE, ResearchBrief
 from research.budget import ResearchBudget
 
 
@@ -138,7 +138,10 @@ class TestPonytailEdgeCases:
       )
 
     assert any("search failed" in note.lower() for note in brief.notes)
+    assert RESEARCH_UNAVAILABLE_NOTE in brief.notes
     assert brief.query == "Migrate from FastAPI 0.100 to 0.115"
+    statuses = [call.args[0] for call in llm.emit_status.await_args_list]
+    assert any("search failed" in status for status in statuses)
 
   @pytest.mark.asyncio
   async def test_read_failure_degrades_gracefully_in_research_loop(self):
@@ -177,6 +180,8 @@ class TestPonytailEdgeCases:
 
     assert brief.pages == []
     assert any("could not read" in note.lower() for note in brief.notes)
+    statuses = [call.args[0] for call in llm.emit_status.await_args_list]
+    assert any("could not read" in status for status in statuses)
 
 
 class TestAutocheckEdgeCases:

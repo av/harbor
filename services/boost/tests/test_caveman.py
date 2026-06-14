@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 import chat as ch
 import config
 from modules import caveman
-from research.brief import ResearchBrief, render_to_system
+from research.brief import RESEARCH_UNAVAILABLE_NOTE, ResearchBrief, render_to_system
 from research.budget import BudgetExceeded, ResearchBudget
 
 
@@ -122,6 +122,23 @@ class TestCavemanGatherResearch:
     assert brief.pages[0].snippet == "full page content"
 
   @pytest.mark.asyncio
+  async def test_gather_research_handles_search_failure_messages(self):
+    budget = ResearchBudget(max_searches=1, max_url_reads=0, max_chars=5000)
+    llm = MagicMock()
+    llm.emit_status = AsyncMock()
+
+    with patch(
+      "modules.caveman.fetch.web_search",
+      new=AsyncMock(return_value="Web search failed: timeout"),
+    ):
+      brief = await caveman.gather_research(["docs example"], budget, llm)
+
+    assert any("search failed" in note.lower() for note in brief.notes)
+    assert RESEARCH_UNAVAILABLE_NOTE in brief.notes
+    statuses = [call.args[0] for call in llm.emit_status.await_args_list]
+    assert any("search unavailable" in status for status in statuses)
+
+  @pytest.mark.asyncio
   async def test_gather_research_handles_read_failures(self):
     budget = ResearchBudget(max_searches=1, max_url_reads=1, max_chars=5000)
     search_text = "1. [Docs](https://docs.example.com) (Date: N/A)\nSnippet"
@@ -169,6 +186,31 @@ class TestCavemanApply:
 
     rendered = render_to_system(brief)
     assert rendered in chat.history()[0]["content"]
+    llm.stream_final_completion.assert_awaited_once()
+
+  @pytest.mark.asyncio
+  async def test_apply_injects_research_unavailable_note_on_total_failure(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "What are the latest Harbor Boost module patterns?"},
+    ])
+    llm = MagicMock(module=caveman.ID_PREFIX)
+    llm.emit_status = AsyncMock()
+    llm.stream_final_completion = AsyncMock()
+
+    brief = ResearchBrief(query="latest Harbor Boost module patterns")
+    brief.add_note(RESEARCH_UNAVAILABLE_NOTE)
+
+    with (
+      patch.object(caveman, "extract_search_queries", new=AsyncMock(return_value=["harbor boost modules"])),
+      patch.object(caveman, "gather_research", new=AsyncMock(return_value=brief)),
+      patch.object(caveman.brief_mod, "has_usable_research", return_value=False),
+    ):
+      await caveman.apply(chat, llm)
+
+    rendered = render_to_system(brief)
+    assert RESEARCH_UNAVAILABLE_NOTE in rendered
+    statuses = [call.args[0] for call in llm.emit_status.await_args_list]
+    assert any("research unavailable" in status for status in statuses)
     llm.stream_final_completion.assert_awaited_once()
 
   @pytest.mark.asyncio

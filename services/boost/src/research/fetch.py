@@ -16,6 +16,10 @@ logger = log.setup_logger(__name__)
 
 USER_AGENT = "Harbor Boost tools (+https://github.com/av/harbor)"
 
+SEARCH_FAILED_PREFIX = "Web search failed:"
+SEARCH_UNAVAILABLE_PREFIX = "Web search unavailable:"
+READ_FAILED_PREFIX = "Could not read URL:"
+
 
 def trim(text: str, max_chars: int) -> str:
   if len(text) <= max_chars:
@@ -74,6 +78,19 @@ async def _read_direct(url: str) -> str:
     if "html" in content_type:
       return _strip_html(response.text)
     return response.text
+
+
+def is_search_failure_result(text: str) -> bool:
+  """Return True when search output indicates failure, timeout, or no results."""
+  text = (text or "").strip()
+  if not text or text == "No results found.":
+    return True
+  return any(text.startswith(prefix) for prefix in (SEARCH_FAILED_PREFIX, SEARCH_UNAVAILABLE_PREFIX))
+
+
+def is_read_failure_result(text: str) -> bool:
+  """Return True when read_url returned an error message instead of page content."""
+  return (text or "").strip().startswith(READ_FAILED_PREFIX)
 
 
 def format_search_results(results: list[dict[str, Any]]) -> str:
@@ -159,13 +176,22 @@ async def read_url(url: str, *, max_chars: int | None = None) -> str:
     url (str): Absolute http or https URL to read.
     max_chars (int | None): Character cap. Defaults to TOOLS_READ_MAX_CHARS.
   """
-  url = require_http_url(url)
+  try:
+    url = require_http_url(url)
+  except ValueError as e:
+    logger.warning(f"read_url rejected {url}: {e}")
+    return f"{READ_FAILED_PREFIX} {url}: {e}"
+
   limit = max_chars or config.TOOLS_READ_MAX_CHARS.value
 
   try:
     content = await _read_with_jina(url)
   except Exception as e:
     logger.warning(f"Jina read failed for {url}: {e}; falling back to direct HTTP")
-    content = await _read_direct(url)
+    try:
+      content = await _read_direct(url)
+    except Exception as direct_error:
+      logger.error(f"read_url failed for {url}: {direct_error}")
+      return f"{READ_FAILED_PREFIX} {url}: {direct_error}"
 
   return trim(content, limit)

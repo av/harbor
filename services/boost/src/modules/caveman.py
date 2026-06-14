@@ -220,9 +220,15 @@ def _page_read_char_limit(budget: budget_mod.ResearchBudget) -> int:
   return max(1000, remaining // max(1, budget.max_url_reads))
 
 
+async def _emit_research_status(llm: "llm.LLM | None", status: str) -> None:
+  if llm is not None:
+    await llm.emit_status(status)
+
+
 async def gather_research(
   queries: list[str],
   budget: budget_mod.ResearchBudget,
+  llm: "llm.LLM | None" = None,
 ) -> brief_mod.ResearchBrief:
   brief = brief_mod.ResearchBrief()
   max_results = max(1, config.TOOLS_SEARCH_MAX_RESULTS.value)
@@ -239,13 +245,25 @@ async def gather_research(
       results_text = await fetch.web_search(query, max_results=max_results)
       results_text = budget.trim_to_remaining(results_text)
       brief.add_search_results(query, results_text)
+      if fetch.is_search_failure_result(results_text):
+        note = f"Search failed for '{query}': {results_text}"
+        brief.add_note(note)
+        await _emit_research_status(
+          llm,
+          f"Caveman research: search unavailable for '{query[:60]}'...",
+        )
     except budget_mod.BudgetExceeded as exc:
       logger.warning(f"{ID_PREFIX}: {exc}")
       brief.add_note(str(exc))
       break
     except Exception as exc:
       logger.error(f"{ID_PREFIX}: search failed for '{query}': {exc}")
-      brief.add_note(f"Search failed for '{query}': {exc}")
+      note = f"Search failed for '{query}': {exc}"
+      brief.add_note(note)
+      await _emit_research_status(
+        llm,
+        f"Caveman research: search failed for '{query[:60]}'...",
+      )
 
   for source in brief.searches:
     if not source.url or not budget.can_read_url():
@@ -259,6 +277,14 @@ async def gather_research(
         max_chars=_page_read_char_limit(budget),
       )
       page_text = budget.trim_to_remaining(page_text)
+      if fetch.is_read_failure_result(page_text):
+        brief.add_note(page_text)
+        await _emit_research_status(
+          llm,
+          f"Caveman research: could not read {source.url[:60]}...",
+        )
+        continue
+
       brief.add_page(source.url, page_text, title=source.title)
     except budget_mod.BudgetExceeded as exc:
       logger.warning(f"{ID_PREFIX}: {exc}")
@@ -266,9 +292,14 @@ async def gather_research(
       break
     except Exception as exc:
       logger.warning(f"{ID_PREFIX}: read_url failed for {source.url}: {exc}")
-      brief.add_note(f"Could not read {source.url}: {exc}")
+      note = f"Could not read {source.url}: {exc}"
+      brief.add_note(note)
+      await _emit_research_status(
+        llm,
+        f"Caveman research: could not read {source.url[:60]}...",
+      )
 
-  return brief
+  return brief_mod.finalize_brief(brief)
 
 
 async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
@@ -290,6 +321,8 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
     logger.error(f"{ID_PREFIX}: query extraction failed: {exc}")
     brief = brief_mod.ResearchBrief(query=message)
     brief.add_note(f"Query extraction failed: {exc}")
+    brief = brief_mod.finalize_brief(brief)
+    await llm.emit_status("Caveman research: query planning failed, continuing without live data...")
     chat.system(brief_mod.render_to_system(brief))
     return await workflow_mod.complete_or_defer(llm, config)
 
@@ -298,9 +331,12 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
     return await workflow_mod.complete_or_defer(llm, config)
 
   await llm.emit_status(f"Caveman research: {len(queries)} quer{'y' if len(queries) == 1 else 'ies'}...")
-  brief = await gather_research(queries, budget)
+  brief = await gather_research(queries, budget, llm)
   if not brief.query:
     brief.query = message
+
+  if not brief_mod.has_usable_research(brief):
+    await llm.emit_status("Caveman research: research unavailable, continuing without live data...")
 
   chat.system(brief_mod.render_to_system(brief))
   await workflow_mod.complete_or_defer(llm, config)
