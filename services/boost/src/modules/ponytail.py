@@ -138,9 +138,20 @@ search queries only when they would materially improve the answer.
 
 SYNTHESIS_PROMPT = """
 <instruction>
-Synthesize the research into a concise brief for the downstream assistant.
-List only claims supported by the research. Flag unresolved gaps as uncertainties.
-Give one practical recommendation and list assumptions the assistant must not make.
+Synthesize the research into a scannable brief for a coding agent that will implement
+or answer the user.
+
+Output rules:
+- facts: 3-8 bullets, max ~12 words each. One claim per bullet; no sub-bullets or prose.
+  Lead with the claim. Wrap version numbers, API names, and release dates in backticks
+  (e.g. `FastAPI 0.115`, `Stripe 2024-06-20`, `Python 3.12`).
+- uncertainties: 0-5 bullets framed as verification actions (e.g. "Verify X in official
+  docs before migrating Y"). State what to check and why it blocks progress.
+- recommendation: One sentence in imperative voice — the first action the agent should take.
+- do_not_assume: 2-6 bullets. Each must start with "Do not assume". List unverified
+  defaults, compatibility claims, or timelines not proven by the research.
+
+Only include claims supported by the research. Leave lists empty when nothing applies.
 </instruction>
 
 <user_question>
@@ -175,19 +186,27 @@ class GapAnalysis(BaseModel):
 
 class StructuredBrief(BaseModel):
   facts: list[str] = Field(
-    description="Verified facts supported by the gathered research.",
+    description=(
+      "Short verified claims (max ~12 words each). One fact per bullet. "
+      "Wrap version numbers, API names, and dates in backticks."
+    ),
     default_factory=list,
   )
   uncertainties: list[str] = Field(
-    description="Unresolved gaps, conflicts, or low-confidence claims.",
+    description=(
+      "Actionable verification steps for unresolved gaps "
+      "(e.g. 'Verify X in docs before changing Y')."
+    ),
     default_factory=list,
   )
   recommendation: str = Field(
-    description="Practical guidance for answering the user.",
+    description="One imperative sentence: the first action the coding agent should take.",
     default="",
   )
   do_not_assume: list[str] = Field(
-    description="Assumptions the downstream assistant must avoid.",
+    description=(
+      "Unverified assumptions; each bullet starts with 'Do not assume'."
+    ),
     default_factory=list,
   )
 

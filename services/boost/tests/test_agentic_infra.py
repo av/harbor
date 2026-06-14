@@ -18,6 +18,7 @@ from research.brief import (
   ResearchBrief,
   finalize_brief,
   has_usable_research,
+  highlight_versions,
   render_to_system,
 )
 from research.budget import BudgetExceeded, ResearchBudget, budget_from_config
@@ -135,6 +136,47 @@ class TestResearchBrief:
     )
     finalized = finalize_brief(brief)
     assert RESEARCH_UNAVAILABLE_NOTE not in finalized.notes
+
+  def test_render_to_system_uses_dash_bullets_for_synthesized_sections(self):
+    brief = ResearchBrief(
+      query="fastapi migration",
+      facts=["Routing hooks removed in 0.115"],
+      uncertainties=["Verify middleware order in official docs"],
+      do_not_assume=["Do not assume plugins support 0.115"],
+      recommendation="Pin FastAPI 0.115 and run the migration checklist.",
+    )
+
+    rendered = render_to_system(brief)
+
+    assert "<facts>\n- Routing hooks removed in `0.115`\n</facts>" in rendered
+    assert (
+      "<uncertainties>\n- Verify middleware order in official docs\n</uncertainties>"
+      in rendered
+    )
+    assert (
+      "<do_not_assume>\n- Do not assume plugins support `0.115`\n</do_not_assume>"
+      in rendered
+    )
+
+  def test_highlight_versions_wraps_semver_and_api_dates(self):
+    assert highlight_versions("Migrate from 0.100 to 0.115") == (
+      "Migrate from `0.100` to `0.115`"
+    )
+    assert highlight_versions("Stripe API 2024-06-20 changes checkout fields") == (
+      "Stripe API `2024-06-20` changes checkout fields"
+    )
+    assert highlight_versions("Already wrapped `1.2.3` stays intact") == (
+      "Already wrapped `1.2.3` stays intact"
+    )
+
+  def test_render_to_system_highlights_versions_in_recommendation(self):
+    brief = ResearchBrief(
+      recommendation="Upgrade to FastAPI 0.115 before changing middleware.",
+    )
+
+    rendered = render_to_system(brief)
+
+    assert "<recommendation>Upgrade to FastAPI `0.115` before changing middleware.</recommendation>" in rendered
 
 
 class TestResearchBudget:

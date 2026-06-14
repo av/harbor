@@ -15,6 +15,25 @@ from research.brief import RESEARCH_UNAVAILABLE_NOTE, ResearchBrief, render_to_s
 from research.budget import ResearchBudget
 
 
+class TestPonytailBriefSynthesis:
+  def test_synthesis_prompt_requires_scannable_agent_format(self):
+    prompt = ponytail.SYNTHESIS_PROMPT
+
+    assert "scannable brief" in prompt
+    assert "max ~12 words" in prompt
+    assert "backticks" in prompt
+    assert "Do not assume" in prompt
+    assert "verification" in prompt.lower()
+
+  def test_structured_brief_schema_describes_actionable_fields(self):
+    schema = ponytail.StructuredBrief.model_json_schema()["properties"]
+
+    assert "backticks" in schema["facts"]["description"]
+    assert "Verify" in schema["uncertainties"]["description"]
+    assert "Do not assume" in schema["do_not_assume"]["description"]
+    assert "imperative" in schema["recommendation"]["description"].lower()
+
+
 class TestPonytailHeuristics:
   def _chat(self, content: str) -> ch.Chat:
     return ch.Chat.from_conversation([{"role": "user", "content": content}])
