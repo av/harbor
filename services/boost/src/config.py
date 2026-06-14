@@ -635,6 +635,104 @@ JINA_READER_API_KEY = Config[str](
     description="Optional Jina Reader API key used by the `read_url` tool.",
 )
 
+WORKSPACE_ROOT = Config[str](
+    name="HARBOR_BOOST_WORKSPACE_ROOT",
+    type=str,
+    default="",
+    description="""
+Root directory for workspace file reads by agentic Boost modules and the
+`read_workspace_file` tool. When unset, workspace reads are disabled.
+
+Example:
+```bash
+HARBOR_BOOST_WORKSPACE_ROOT=/workspace/myproject
+```
+""".strip(),
+)
+
+WORKSPACE_FILE_MAX_CHARS = Config[int](
+    name="HARBOR_BOOST_WORKSPACE_FILE_MAX_CHARS",
+    type=int,
+    default="100000",
+    description="Maximum number of characters returned by `read_workspace_file`.",
+)
+
+# ----------------- CAVEMAN -----------------
+
+CAVEMAN_MAX_SEARCHES = Config[int](
+    name="HARBOR_BOOST_CAVEMAN_MAX_SEARCHES",
+    type=int,
+    default="2",
+    description="Maximum web searches performed by the `caveman` research module.",
+)
+
+CAVEMAN_MAX_URL_READS = Config[int](
+    name="HARBOR_BOOST_CAVEMAN_MAX_URL_READS",
+    type=int,
+    default="1",
+    description="Maximum full-page URL reads performed by the `caveman` research module.",
+)
+
+CAVEMAN_MAX_CHARS = Config[int](
+    name="HARBOR_BOOST_CAVEMAN_MAX_CHARS",
+    type=int,
+    default="30000",
+    description="Maximum research content characters retained by the `caveman` module.",
+)
+
+# ----------------- PONYTAIL -----------------
+
+PONYTAIL_MAX_SEARCHES = Config[int](
+    name="HARBOR_BOOST_PONYTAIL_MAX_SEARCHES",
+    type=int,
+    default="4",
+    description="Maximum web searches performed by the `ponytail` research module.",
+)
+
+PONYTAIL_MAX_URL_READS = Config[int](
+    name="HARBOR_BOOST_PONYTAIL_MAX_URL_READS",
+    type=int,
+    default="3",
+    description="Maximum full-page URL reads performed by the `ponytail` research module.",
+)
+
+PONYTAIL_MAX_CHARS = Config[int](
+    name="HARBOR_BOOST_PONYTAIL_MAX_CHARS",
+    type=int,
+    default="60000",
+    description="Maximum research content characters retained by the `ponytail` module.",
+)
+
+# ----------------- AUTOCHECK -----------------
+
+AUTOCHECK_ENABLED = Config[bool](
+    name="HARBOR_BOOST_AUTOCHECK_ENABLED",
+    type=bool,
+    default="true",
+    description="When false, the `autocheck` module passes through without auditing.",
+)
+
+AUTOCHECK_MAX_PASSES = Config[int](
+    name="HARBOR_BOOST_AUTOCHECK_MAX_PASSES",
+    type=int,
+    default="1",
+    description="Maximum audit-and-revise passes performed by the `autocheck` module.",
+)
+
+AUTOCHECK_MAX_WORKSPACE_FILES = Config[int](
+    name="HARBOR_BOOST_AUTOCHECK_MAX_WORKSPACE_FILES",
+    type=int,
+    default="5",
+    description="Maximum workspace files the `autocheck` module may read per request.",
+)
+
+AUTOCHECK_WORKSPACE_FILE_MAX_CHARS = Config[int](
+    name="HARBOR_BOOST_AUTOCHECK_WORKSPACE_FILE_MAX_CHARS",
+    type=int,
+    default="50000",
+    description="Maximum characters read from each workspace file during `autocheck` audits.",
+)
+
 # ------------------ KLMBR ------------------
 
 KLMBR_PERCENTAGE = Config[int](

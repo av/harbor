@@ -1,17 +1,11 @@
-import html
-import ipaddress
-import re
-import socket
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable
-from urllib.parse import parse_qs, urlparse
+from typing import Callable
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
-
-import httpx
 
 import config
 import log
+import research.fetch as fetch
 import tools.registry
 from middleware.request_id import request_id_var
 from state import request as request_state
@@ -55,7 +49,6 @@ docker run \\
 
 logger = log.setup_logger(ID_PREFIX)
 
-USER_AGENT = "Harbor Boost tools (+https://github.com/av/harbor)"
 DEFAULT_TOOLS = {
   'web_search',
   'read_url',
@@ -69,121 +62,6 @@ DEFAULT_TOOLS = {
   'clear_files',
   'finish',
 }
-
-
-def _trim(text: str, max_chars: int) -> str:
-  if len(text) <= max_chars:
-    return text
-  return f"{text[:max_chars]}\n\n[truncated to {max_chars} characters]"
-
-
-def _is_internal_address(hostname: str) -> bool:
-  try:
-    for info in socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM):
-      addr = ipaddress.ip_address(info[4][0])
-      if addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved:
-        return True
-  except (socket.gaierror, ValueError):
-    return True
-  return False
-
-
-def _require_http_url(url: str) -> str:
-  parsed = urlparse(url)
-  if parsed.scheme not in {'http', 'https'} or not parsed.netloc:
-    raise ValueError("URL must be absolute and use http or https")
-  hostname = parsed.hostname or ""
-  if _is_internal_address(hostname):
-    raise ValueError("URLs targeting internal or private network addresses are not allowed")
-  return url
-
-
-def _strip_html(raw: str) -> str:
-  text = re.sub(r"(?is)<(script|style|noscript).*?</\1>", " ", raw)
-  text = re.sub(r"(?s)<[^>]+>", " ", text)
-  text = html.unescape(text)
-  return re.sub(r"\s+", " ", text).strip()
-
-
-async def _read_with_jina(url: str) -> str:
-  if not config.JINA_READER_API_URL.value:
-    raise ValueError("Jina Reader API URL is not configured")
-
-  headers = {"X-Retain-Images": "none", "User-Agent": USER_AGENT}
-  if config.JINA_READER_API_KEY.value:
-    headers["Authorization"] = f"Bearer {config.JINA_READER_API_KEY.value}"
-
-  endpoint = f"{config.JINA_READER_API_URL.value.rstrip('/')}/{url}"
-  async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
-    response = await client.get(endpoint, headers=headers)
-    response.raise_for_status()
-    return response.text
-
-
-async def _read_direct(url: str) -> str:
-  async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
-    response = await client.get(url, headers={"User-Agent": USER_AGENT})
-    response.raise_for_status()
-    content_type = response.headers.get("content-type", "")
-    if "html" in content_type:
-      return _strip_html(response.text)
-    return response.text
-
-
-def _format_search_results(results: list[dict[str, Any]]) -> str:
-  if not results:
-    return "No results found."
-
-  lines = []
-  for idx, result in enumerate(results, start=1):
-    title = result.get("title") or "Untitled"
-    url = result.get("url") or result.get("link") or ""
-    snippet = result.get("content") or result.get("snippet") or result.get("description") or ""
-    published = result.get("published_date") or result.get("publishedDate") or "Date: N/A"
-    lines.append(f"{idx}. [{title}]({url}) ({published})\n{snippet}".strip())
-
-  return "\n".join(lines)
-
-
-async def _search_tavily(query: str, max_results: int) -> str:
-  payload = {
-    "api_key": config.TAVILY_API_KEY.value,
-    "query": query,
-    "max_results": max_results,
-    "include_answer": False,
-    "include_raw_content": False,
-  }
-
-  async with httpx.AsyncClient(timeout=30.0) as client:
-    response = await client.post("https://api.tavily.com/search", json=payload)
-    response.raise_for_status()
-    data = response.json()
-
-  return _format_search_results(data.get("results", []))
-
-
-async def _search_searxng(query: str, max_results: int) -> str:
-  if not config.SEARXNG_URL.value:
-    return "Web search unavailable: configure HARBOR_BOOST_TAVILY_API_KEY or HARBOR_BOOST_SEARXNG_URL."
-
-  params = {
-    "q": query,
-    "format": "json",
-    "language": "en",
-    "pageno": 1,
-    "results": max_results,
-  }
-  for key, values in parse_qs(config.SEARXNG_QUERY_PARAMS.value).items():
-    if values:
-      params[key] = values[-1]
-
-  endpoint = f"{config.SEARXNG_URL.value.rstrip('/')}/search"
-  async with httpx.AsyncClient(timeout=30.0) as client:
-    response = await client.get(endpoint, params=params)
-    response.raise_for_status()
-    data = response.json()
-
-  return _format_search_results(data.get("results", [])[:max_results])
 
 
 def _request_store(name: str, default):
@@ -225,15 +103,10 @@ async def web_search(query: str) -> str:
   Args:
     query (str): Search query.
   """
-  max_results = max(1, config.TOOLS_SEARCH_MAX_RESULTS.value)
-
-  try:
-    if config.TAVILY_API_KEY.value:
-      return await _search_tavily(query, max_results)
-    return await _search_searxng(query, max_results)
-  except Exception as e:
-    logger.error(f"web_search failed: {e}")
-    return f"Web search failed: {e}"
+  return await fetch.web_search(
+    query,
+    max_results=max(1, config.TOOLS_SEARCH_MAX_RESULTS.value),
+  )
 
 
 async def read_url(url: str) -> str:
@@ -245,15 +118,7 @@ async def read_url(url: str) -> str:
   Args:
     url (str): Absolute http or https URL to read.
   """
-  url = _require_http_url(url)
-
-  try:
-    content = await _read_with_jina(url)
-  except Exception as e:
-    logger.warning(f"Jina read failed for {url}: {e}; falling back to direct HTTP")
-    content = await _read_direct(url)
-
-  return _trim(content, config.TOOLS_READ_MAX_CHARS.value)
+  return await fetch.read_url(url, max_chars=config.TOOLS_READ_MAX_CHARS.value)
 
 
 async def current_time(timezone: str = "UTC") -> str:
@@ -321,7 +186,39 @@ async def read_file(file_path: str) -> str:
   target = _scratch_path(file_path)
   if not target.exists() or not target.is_file():
     raise FileNotFoundError(file_path)
-  return _trim(target.read_text(encoding="utf-8"), config.TOOLS_FILE_MAX_CHARS.value)
+  return fetch.trim(target.read_text(encoding="utf-8"), config.TOOLS_FILE_MAX_CHARS.value)
+
+
+def _workspace_path(file_path: str) -> Path:
+  if not config.WORKSPACE_ROOT.value:
+    raise ValueError("Workspace root is not configured (HARBOR_BOOST_WORKSPACE_ROOT)")
+
+  if not file_path or not file_path.strip():
+    raise ValueError("file_path is required")
+
+  base = Path(config.WORKSPACE_ROOT.value).resolve()
+  target = (base / file_path.lstrip("/")).resolve()
+  if base != target and base not in target.parents:
+    raise ValueError("file_path must stay inside the workspace root")
+
+  return target
+
+
+async def read_workspace_file(file_path: str) -> str:
+  """
+  Read a file from the configured workspace root.
+  Requires `HARBOR_BOOST_WORKSPACE_ROOT`. Paths are jailed to that directory.
+
+  Args:
+    file_path (str): Relative workspace file path.
+  """
+  target = _workspace_path(file_path)
+  if not target.exists() or not target.is_file():
+    raise FileNotFoundError(file_path)
+  return fetch.trim(
+    target.read_text(encoding="utf-8"),
+    config.WORKSPACE_FILE_MAX_CHARS.value,
+  )
 
 
 async def list_files() -> str:
@@ -388,6 +285,9 @@ def _selected_tools(configured_tools: list[str] | None = None) -> dict[str, Call
     'clear_files': clear_files,
     'finish': finish,
   }
+
+  if config.WORKSPACE_ROOT.value:
+    available['read_workspace_file'] = read_workspace_file
 
   configured = set(configured_tools) if configured_tools else set(config.TOOLS.value) if config.TOOLS.value else DEFAULT_TOOLS
   selected = {}
