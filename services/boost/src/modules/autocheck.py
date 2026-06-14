@@ -223,7 +223,7 @@ def autocheck_gate_reason(chat: "ch.Chat") -> str:
   text = _last_user_text(chat)
   if not text:
     return "empty_message"
-  if SKIP_MESSAGE_RE.match(text):
+  if deliverable.is_acknowledgment(text):
     return "acknowledgment"
   if len(text) < MIN_AUTOCHECK_MESSAGE_CHARS:
     return "short_message"

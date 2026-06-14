@@ -85,16 +85,6 @@ CONTINUATION_RE = re.compile(
   r"\b(?:continue|keep\s+going|go\s+on|proceed|carry\s+on|as\s+planned|same\s+as\s+before)\b",
   re.IGNORECASE,
 )
-RESEARCH_SIGNAL_RE = re.compile(
-  r"\b(?:"
-  r"latest|current|today|recent(?:ly)?|20\d{2}|version|release|changelog|"
-  r"documentat(?:ion|e)|api\s+reference|breaking\s+change|migrate|migration|"
-  r"compatibility|deprecat(?:e|ed|ion)|best\s+practice|compare|versus|vs\.?|"
-  r"benchmark|pricing|availability|error\s+code|stack\s*overflow|lookup|search\s+for"
-  r")\b",
-  re.IGNORECASE,
-)
-
 QUERY_EXTRACTION_PROMPT = """
 <instruction>
 Extract 1-3 concise web search queries that would help answer the user's latest message.
@@ -125,27 +115,16 @@ def _last_user_text(chat: "ch.Chat") -> str:
   return (node.content or "").strip() if node else ""
 
 
-def has_research_signals(text: str) -> bool:
-  text = (text or "").strip()
-  if not text:
-    return False
-  if "?" in text:
-    return True
-  if re.search(r"https?://", text, re.IGNORECASE):
-    return True
-  return bool(RESEARCH_SIGNAL_RE.search(text))
-
-
 def should_skip_research(chat: "ch.Chat") -> bool:
   """Pass through without web research on low-value follow-up turns."""
   text = _last_user_text(chat)
   if not text or len(text) < 4:
     return True
-  if SKIP_MESSAGE_RE.match(text):
+  if deliverable.is_acknowledgment(text):
     return True
   if CONTINUATION_RE.search(text) and len(text) < 120:
     return True
-  if deliverable.is_coding_deliverable(chat) and not has_research_signals(text):
+  if deliverable.is_coding_deliverable(chat) and not deliverable.has_research_signals(text):
     return True
   return False
 
@@ -163,7 +142,7 @@ def research_heuristic(text: str) -> bool:
   text = (text or "").strip()
   if not text or len(text) < 8:
     return False
-  if has_research_signals(text):
+  if deliverable.has_research_signals(text):
     return True
   return "?" in text and len(text) > 20
 

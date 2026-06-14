@@ -203,7 +203,7 @@ def is_research_heavy(text: str) -> bool:
     return False
   if RESEARCH_HEAVY_RE.search(text):
     return True
-  if "?" in text and RESEARCH_SIGNAL_RE.search(text) and len(text) > 30:
+  if "?" in text and deliverable.has_research_signals(text) and len(text) > 30:
     return bool(
       re.search(r"\b(?:migrat|version|api|endpoint|deprecat|compat|upgrade|compare)\b", text, re.I)
     )
@@ -211,14 +211,7 @@ def is_research_heavy(text: str) -> bool:
 
 
 def has_research_signals(text: str) -> bool:
-  text = (text or "").strip()
-  if not text:
-    return False
-  if "?" in text:
-    return True
-  if re.search(r"https?://", text, re.IGNORECASE):
-    return True
-  return bool(RESEARCH_SIGNAL_RE.search(text))
+  return deliverable.has_research_signals(text)
 
 
 def should_skip_research(chat: "ch.Chat") -> bool:
@@ -226,7 +219,7 @@ def should_skip_research(chat: "ch.Chat") -> bool:
   text = _last_user_text(chat)
   if not text or len(text) < 4:
     return True
-  if SKIP_MESSAGE_RE.match(text):
+  if deliverable.is_acknowledgment(text):
     return True
   if CONTINUATION_RE.search(text) and len(text) < 120:
     return True

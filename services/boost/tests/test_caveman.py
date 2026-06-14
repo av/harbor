@@ -22,6 +22,8 @@ class TestCavemanHeuristics:
   def test_skips_acknowledgments(self):
     assert caveman.should_skip_research(self._chat("thanks!"))
     assert caveman.should_skip_research(self._chat("ok"))
+    assert caveman.should_skip_research(self._chat("thanks for the help!"))
+    assert caveman.should_skip_research(self._chat("looks good, thanks"))
 
   def test_skips_short_continue(self):
     assert caveman.should_skip_research(self._chat("continue"))

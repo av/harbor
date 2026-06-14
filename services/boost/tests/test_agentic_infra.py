@@ -201,6 +201,88 @@ class TestDeliverableGate:
     assert deliverable.count_deliverable_signals(chat) >= 2
 
 
+class TestDeliverableBorderlineCases:
+  def _chat(self, content: str) -> ch.Chat:
+    return ch.Chat.from_conversation([{"role": "user", "content": content}])
+
+  @pytest.mark.parametrize(
+    "message",
+    [
+      "thanks for the help!",
+      "ok thanks",
+      "looks good, thanks",
+      "thank you so much",
+      "perfect, that works",
+    ],
+  )
+  def test_acknowledgments_are_not_deliverable(self, message: str):
+    assert deliverable.is_acknowledgment(message)
+    assert not deliverable.is_coding_deliverable(self._chat(message))
+    assert deliverable.deliverable_signals(message) == []
+
+  def test_ok_with_followup_request_is_not_acknowledgment(self):
+    message = "ok, but fix the timeout handling next"
+    assert not deliverable.is_acknowledgment(message)
+    assert deliverable.is_coding_deliverable(self._chat(message))
+
+  @pytest.mark.parametrize(
+    "message",
+    [
+      "Explain this function in services/boost/src/utils.py",
+      "What does this code do?\n```python\ndef retry():\n  pass\n```",
+      "Walk me through how services/boost/src/utils.py handles retries",
+      "Can you explain why this test fails?\n```python\ndef test_retry():\n  assert False\n```",
+    ],
+  )
+  def test_explain_code_is_not_deliverable(self, message: str):
+    assert deliverable.has_explain_intent(message)
+    assert not deliverable.is_coding_deliverable(self._chat(message))
+    assert deliverable.deliverable_signals(message) == []
+
+  @pytest.mark.parametrize(
+    "message",
+    [
+      "Fix this function in services/boost/src/utils.py",
+      "Debug the failing test in services/boost/tests/test_utils.py",
+      "services/boost/src/utils.py is broken — patch the retry loop",
+    ],
+  )
+  def test_fix_code_remains_deliverable(self, message: str):
+    assert deliverable.is_coding_deliverable(self._chat(message))
+
+  @pytest.mark.parametrize(
+    "message",
+    [
+      "What changed in Python 3.13 asyncio semantics?",
+      "Compare FastAPI 0.100 vs 0.115 migration paths",
+      "What is the Stripe checkout session API endpoint response format?",
+      "How do I migrate from Kubernetes 1.29 to 1.30?",
+    ],
+  )
+  def test_research_questions_are_not_deliverable(self, message: str):
+    assert deliverable.has_research_signals(message)
+    assert not deliverable.is_coding_deliverable(self._chat(message))
+
+  def test_implementation_with_research_signals_stays_deliverable(self):
+    message = (
+      "Implement OAuth against the latest Stripe API documentation for checkout sessions."
+    )
+    assert deliverable.has_research_signals(message)
+    assert deliverable.is_coding_deliverable(self._chat(message))
+
+  @pytest.mark.parametrize(
+    "message",
+    [
+      "latest Stripe API docs",
+      "Python 3.13 migration guide",
+      "FastAPI 0.115 breaking changes",
+      "v1.2.3 to v2.0.0 upgrade path",
+    ],
+  )
+  def test_research_signal_keywords_detected(self, message: str):
+    assert deliverable.has_research_signals(message)
+
+
 class TestWorkspaceFileTool:
   def _with_workspace_root(self, value: str):
     original = config.WORKSPACE_ROOT.__value__

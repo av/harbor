@@ -45,6 +45,12 @@ class TestCavemanEdgeCases:
     assert caveman.should_skip_research(chat)
     assert not caveman.needs_research(chat, llm)
 
+  def test_thanks_for_help_skips_research(self):
+    chat = self._chat("thanks for the help!")
+    llm = MagicMock(module=None)
+    assert caveman.should_skip_research(chat)
+    assert not caveman.needs_research(chat, llm)
+
   def test_version_question_triggers_research_without_module_prefix(self):
     chat = self._chat("What changed in Python 3.13 asyncio semantics?")
     llm = MagicMock(module=None)
@@ -192,6 +198,17 @@ class TestAutocheckEdgeCases:
     chat = self._chat("thanks")
     assert not autocheck.needs_autocheck(chat)
     assert autocheck.autocheck_gate_reason(chat) == "acknowledgment"
+
+  def test_thanks_for_help_does_not_trigger_autocheck(self):
+    chat = self._chat("thanks for the help!")
+    assert not autocheck.needs_autocheck(chat)
+    assert autocheck.autocheck_gate_reason(chat) == "acknowledgment"
+
+  def test_explain_code_does_not_trigger_autocheck_or_diffscope(self):
+    chat = self._chat("Explain this function in services/boost/src/utils.py")
+    assert not deliverable.is_coding_deliverable(chat)
+    assert not autocheck.needs_autocheck(chat)
+    assert not diffscope.needs_diffscope(chat)
 
   def test_two_signal_code_deliverable_triggers_autocheck(self):
     chat = self._chat("Implement retry helper in services/boost/src/utils.py")
