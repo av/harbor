@@ -306,7 +306,10 @@ async def apply(chat, llm, config: dict | None = None):
   configured_tools = cfg.get("tools")
 
   for name, tool in _selected_tools(configured_tools).items():
-    tools.registry.set_local_tool(name, tool)
+    try:
+      tools.registry.set_local_tool(name, tool)
+    except ValueError:
+      logger.debug(f"Tool '{name}' already registered, skipping")
 
   chat.system(
     "You may use the provided tools when they help answer accurately. "
