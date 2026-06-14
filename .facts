@@ -66,8 +66,8 @@
   tags: [spec, app-doctor-stdin, implemented]
 
 ## launch
-- label: harbor launch routes host tools codex, claude, opencode, pi, and others to OpenAI-compatible Harbor backends with optional --backend, --model, --config, and --web
-  command: rg -q 'launch_host_tool_command' harbor.sh && rg -q 'launch_detect_backend' harbor.sh && rg -q -- '--web' harbor.sh
+- label: harbor launch routes host tools codex, claude, opencode, pi, and others to OpenAI-compatible Harbor backends with optional --backend, --model, --config, --web, and --workflow
+  command: rg -q 'launch_host_tool_command' harbor.sh && rg -q 'launch_detect_backend' harbor.sh && rg -q -- '--web' harbor.sh && rg -q -- '--workflow' harbor.sh
   tags: [implemented]
 - label: harbor launch --service forces the containerized Harbor service instead of the host tool when names collide
   command: rg -q 'force_service_launch' harbor.sh && rg -q 'harbor launch --service opencode' docs/3.-Harbor-CLI-Reference.md
@@ -81,8 +81,11 @@
 - label: harbor launch validates the host tool binary before starting backend or Boost services
   command: rg -q 'started compose before validating the host binary' tests/suites/02-cli.sh
   tags: [implemented]
-- label: harbor launch exposes only --web as a Boost tool-group modifier and rejects removed groups such as --time and --notes
-  command: ./harbor.sh launch --help | rg -q -- '--web' && ! ./harbor.sh launch --help | rg -q -- '--time|--notes|--files|--scratch'
+- label: harbor launch exposes --web and --workflow as Boost routing modifiers and rejects removed groups such as --time and --notes
+  command: ./harbor.sh launch --help | rg -q -- '--web' && ./harbor.sh launch --help | rg -q -- '--workflow' && ! ./harbor.sh launch --help | rg -q -- '--time|--notes|--files|--scratch'
+  tags: [implemented]
+- label: harbor launch --workflow starts Boost with a builtin preset such as shipyard, starts SearXNG when required, and routes the tool to a workflow-prefixed model
+  command: rg -q 'launch_prepare_builtin_workflow' harbor.sh && rg -q 'launch_builtin_workflow_is_valid' harbor.sh && rg -q 'shipyard' harbor.sh
   tags: [implemented]
 
 ## models
