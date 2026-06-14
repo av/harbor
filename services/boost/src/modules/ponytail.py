@@ -30,6 +30,13 @@ completion.
 Unlike `caveman`, ponytail triggers selectively on research-heavy questions
 (migrations, version comparisons, API behavior) and uses higher default budgets.
 
+**When to use**
+
+- Migrations, version comparisons, breaking changes, and API behavior questions
+- When the first search pass may miss gaps — ponytail runs a targeted second hop
+- Prefer over `caveman` when accuracy matters more than latency (higher budgets)
+- Skips implementation-only and acknowledgment turns like `caveman`
+
 **Parameters**
 
 - `max_searches` — maximum web searches per request. Default: `4`
@@ -45,6 +52,11 @@ harbor config set HARBOR_BOOST_TAVILY_API_KEY <key>
 # or
 harbor config set HARBOR_BOOST_SEARXNG_URL http://searxng:8080
 ```
+
+**Workflow presets**
+
+- `research-deep` (`tools`, `ponytail`, `final`) — two-hop research for complex questions
+- `shipyard` — deeper implementation research after `caveman` ideation and `tools`
 
 **Standalone**
 

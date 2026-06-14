@@ -26,14 +26,19 @@ successful `write_file` or `delete_file`, another read is required before the
 next mutation. Creating a brand-new scratch file (path does not yet exist) is
 exempt when `allow_create` is enabled.
 
-**Limitation:** This thin guard only covers Boost scratch tools (`read_file`,
-`write_file`, `delete_file`). It does not guard `read_workspace_file`, IDE
-tools, or other external editors.
+**When to use**
+
+- Scratch-pad agent workflows using Boost `read_file`, `write_file`, and `delete_file`
+- Place **after** `tools` in the module chain so wrappers are registered first
+- Does not replace workspace or IDE guards — use `read_workspace_file` separately
+
+**Limitation:** This thin guard only covers Boost scratch tools. It does not
+guard `read_workspace_file`, IDE tools, or other external editors.
 
 **Parameters**
 
-- `mode` — `block` rejects mutations without a prior read; `warn` logs and
-  streams a status but allows the call. Default: `block`
+- `mode` — `block` rejects mutations without a prior read; `warn` streams a status
+  but allows the call. Default: `block`
 - `allow_create` — when true, first write to a non-existent scratch path is
   allowed without `read_file`. Default: `true`
 
@@ -43,11 +48,10 @@ harbor config set HARBOR_BOOST_SIGHTLINE_MODE block
 harbor config set HARBOR_BOOST_SIGHTLINE_ALLOW_CREATE true
 ```
 
-**Workflow example**
+**Workflow presets**
 
-```bash
-harbor config set HARBOR_BOOST_WORKFLOWS 'agent-code=tools,sightline,final'
-```
+- Not included in built-in presets; add manually when scratch read-before-edit is required
+- Ad hoc example: `agent-code=tools,sightline,final` via `HARBOR_BOOST_WORKFLOWS`
 
 **Standalone**
 

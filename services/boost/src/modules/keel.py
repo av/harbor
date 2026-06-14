@@ -29,8 +29,15 @@ the objective, constraints, and the next unmet acceptance criterion. Simple drif
 heuristics flag scope-expansion phrases. A landing checklist is injected when the
 user signals completion or when the model calls the `finish` tool.
 
-This is a minimal stub — not a full drift guard. Pair with `tools` or `autocheck`
-for agentic coding workflows.
+**When to use**
+
+- Multi-turn agentic coding where the model may drift from the original objective
+- Long-running tasks with acceptance criteria and in-scope path constraints
+- First substantive coding message extracts and stores a `TaskBrief`; later turns
+  receive a compact `<task_anchor>` reminder
+
+This is a minimal stub — not a full drift guard. Pair with `autocheck` for
+deliverable verification or `diffscope` for file-scope enforcement.
 
 **Parameters**
 
@@ -40,6 +47,10 @@ for agentic coding workflows.
 harbor boost modules add keel
 harbor config set HARBOR_BOOST_KEEL_ENABLED true
 ```
+
+**Workflow presets**
+
+- `shipyard` — first step: task grounding before `caveman`, `tools`, `ponytail`, and `autocheck`
 
 **Standalone**
 

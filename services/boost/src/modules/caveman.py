@@ -29,6 +29,13 @@ downstream completion.
 Pass-through turns (implementation edits, acknowledgments, short "continue"
 messages) skip research to keep latency low.
 
+**When to use**
+
+- Quick fact-finding before answering — API docs, release notes, error lookups
+- Default research module when latency matters more than depth
+- Prefer over `ponytail` for ideation passes and routine lookups
+- Pair with `tools` so the model can search again during the final completion
+
 **Parameters**
 
 - `max_searches` — maximum web searches per request. Default: `2`
@@ -44,6 +51,12 @@ harbor config set HARBOR_BOOST_TAVILY_API_KEY <key>
 # or
 harbor config set HARBOR_BOOST_SEARXNG_URL http://searxng:8080
 ```
+
+**Workflow presets**
+
+- `research-quick` (`tools`, `caveman`, `final`) — fast smash-and-grab research
+- `agent-research` (`tools`, `caveman`, `final`) — tool-enabled research during agentic sessions
+- `shipyard` — selective ideation research before deeper `ponytail` and `autocheck`
 
 **Standalone**
 

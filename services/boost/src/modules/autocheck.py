@@ -26,8 +26,22 @@ On deliverable turns the module drafts a response, audits it with a structured
 checklist (correctness, completeness, file-path grounding), optionally revises once,
 then emits the final answer.
 
-When `HARBOR_BOOST_WORKSPACE_ROOT` is set, the audit verifies referenced file
-paths against the workspace and may call `read_workspace_file` during exploration.
+**When to use**
+
+- Opt-in quality gate on **coding deliverable** turns — add via workflow or module list
+- Enable when you want draft→audit→revise before the user sees code changes
+- Safe to leave enabled in mixed chats: explanations and short acks pass through
+- Set `HARBOR_BOOST_WORKSPACE_ROOT` so path citations require workspace evidence
+
+Autocheck triggers only when the latest user message carries **at least two**
+deliverable signals (for example a coding keyword plus a repo-relative file path).
+Simple acknowledgments (`thanks`, `ok`, `continue`) and very short messages are
+always skipped.
+
+When `HARBOR_BOOST_WORKSPACE_ROOT` is set and paths are cited, the audit cannot
+return `pass` without workspace evidence — either direct `read_workspace_file`
+reads or tool calls during workspace exploration. Audit debug logs include
+`triggered`, `gate_reason`, `tool_calls`, and `verdict` for troubleshooting.
 
 **Parameters**
 
@@ -42,6 +56,11 @@ harbor config set HARBOR_BOOST_AUTOCHECK_ENABLED true
 harbor config set HARBOR_BOOST_AUTOCHECK_MAX_PASSES 1
 harbor config set HARBOR_BOOST_WORKSPACE_ROOT /workspace/myproject
 ```
+
+**Workflow presets**
+
+- `code-check` (`tools`, `autocheck`, `final`) — self-audit coding deliverables
+- `shipyard` — final audit step before the downstream completion
 
 **Standalone**
 

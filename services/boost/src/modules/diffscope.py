@@ -26,10 +26,15 @@ When `HARBOR_BOOST_WORKSPACE_ROOT` is set, cited workspace paths are verified
 with `read_workspace_file`. Out-of-scope or missing paths trigger a correction
 note and **one** revision hop before the answer is emitted.
 
+**When to use**
+
+- Coding deliverables where the user states file scope (`only X`, `don't touch Y`)
+- Post-deliverable guard: compares cited paths in the draft against recent constraints
+- Optional hardening atop `keel` anchoring or `sightline` scratch guards
+
 **Limitation:** Scope is inferred from user text heuristics only. Scratch file
 tools (`read_file`, `write_file`) are not tracked — only workspace reads verify
-repo paths. Pair with `keel` for multi-turn anchoring or `sightline` for
-scratch read-before-edit.
+repo paths.
 
 **Parameters**
 
@@ -42,6 +47,11 @@ harbor boost modules add diffscope
 harbor config set HARBOR_BOOST_DIFFSCOPE_ENABLED true
 harbor config set HARBOR_BOOST_WORKSPACE_ROOT /workspace/myproject
 ```
+
+**Workflow presets**
+
+- Not included in built-in presets; append after `autocheck` in a custom workflow
+- Example: `scope-check=tools,keel,autocheck,diffscope,final` via `HARBOR_BOOST_WORKFLOWS`
 
 **Standalone**
 
