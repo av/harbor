@@ -733,6 +733,15 @@ AUTOCHECK_WORKSPACE_FILE_MAX_CHARS = Config[int](
     description="Maximum characters read from each workspace file during `autocheck` audits.",
 )
 
+# ------------------- KEEL -------------------
+
+KEEL_ENABLED = Config[bool](
+    name="HARBOR_BOOST_KEEL_ENABLED",
+    type=bool,
+    default="true",
+    description="When false, the `keel` module passes through without task anchoring.",
+)
+
 # ------------------ KLMBR ------------------
 
 KLMBR_PERCENTAGE = Config[int](
