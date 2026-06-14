@@ -30,6 +30,7 @@ Harbor is a CLI and companion app that lets you spin up a complete local LLM sta
 
 ## News
 
+- **v0.5.3** - Harbor Boost agentic modules for web research, task anchoring, coding deliverable checks, and workflow presets including the `shipyard` pipeline
 - **v0.5.2** - Fixes `.env` corruption when several Harbor commands run at once and stops `harbor doctor` from hanging on non-interactive stdin
 - **v0.5.1** - Faster `harbor doctor` with timeout-guarded compose checks and early exit for `--check` mode
 - **v0.5.0** - DMR, MLX, oMLX, and Daytona services, llamacpp replaces Ollama as default backend, in-app guided install, agent skills CLI, tab completion, and port conflict detection
