@@ -7,6 +7,9 @@
 # Node
 node_modules/
 
+# Deno
+.deno-cache/
+
 # Open WebUI (old)
 open-webui/*
 open-webui/config.json

@@ -32,6 +32,11 @@
   command: rg -q 'doctor --check' install.sh
   tags: [implemented]
 
+## development
+- label: local Deno runtime caches under .deno-cache are ignored by Git
+  command: git check-ignore -q .deno-cache/latest.txt
+  tags: [spec, implemented]
+
 # cli
 - label: harbor.sh is the main CLI entrypoint, a Bash script over 5000 lines
   command: test -x harbor.sh && test $(wc -l < harbor.sh) -ge 5000
