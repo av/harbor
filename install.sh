@@ -230,7 +230,7 @@ install_or_update_project() {
 
     echo "Installing from local source path: $HARBOR_INSTALL_SOURCE_PATH"
     if [ -d "$HARBOR_INSTALL_PATH" ]; then
-      _BACKUP_DIR=$(mktemp -d)
+      _BACKUP_DIR=$(mktemp -d -t harbor.XXXXXX)
       backup_user_configs "$_BACKUP_DIR"
     fi
     rm -rf "$HARBOR_INSTALL_PATH"
@@ -313,7 +313,7 @@ install_or_update_project() {
   else
     if [ -d "$HARBOR_INSTALL_PATH" ]; then
       echo "Existing non-git installation found. Re-cloning..."
-      _BACKUP_DIR=$(mktemp -d)
+      _BACKUP_DIR=$(mktemp -d -t harbor.XXXXXX)
       backup_user_configs "$_BACKUP_DIR"
       rm -rf "$HARBOR_INSTALL_PATH"
     fi

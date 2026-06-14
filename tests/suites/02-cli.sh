@@ -891,7 +891,7 @@ fi
 
 # Record .env permissions before the test.
 harbor_home_dir="$(harbor home)"
-env_perms_before=$(stat -c '%a' "$harbor_home_dir/.env" 2>/dev/null || stat -f '%Lp' "$harbor_home_dir/.env" 2>/dev/null)
+env_perms_before=$(stat -c '%a' "$harbor_home_dir/.env" 2>/dev/null || stat -f '%Lp' "$harbor_home_dir/.env" 2>/dev/null) # harbor-lint disable=HARBOR010
 
 # Round-trip a fresh key.
 assert_ok    "config set test.perm to 'hello'" harbor config set test.perm hello
@@ -918,7 +918,7 @@ assert_match "config get test.perm2 still returns 'world'" \
   harbor config get test.perm2
 
 # Check permissions were preserved.
-env_perms_after=$(stat -c '%a' "$harbor_home_dir/.env" 2>/dev/null || stat -f '%Lp' "$harbor_home_dir/.env" 2>/dev/null)
+env_perms_after=$(stat -c '%a' "$harbor_home_dir/.env" 2>/dev/null || stat -f '%Lp' "$harbor_home_dir/.env" 2>/dev/null) # harbor-lint disable=HARBOR010
 suite_log "config set preserves .env permissions ($env_perms_before -> $env_perms_after)"
 if [ "$env_perms_before" != "$env_perms_after" ]; then
   fail "config set changed .env permissions from $env_perms_before to $env_perms_after"
@@ -2073,8 +2073,8 @@ if [ -z "$harbor_on_path" ]; then
 fi
 
 # Resolve symlinks to compare actual files
-harbor_resolved=$(readlink -f "$harbor_on_path" 2>/dev/null || realpath "$harbor_on_path" 2>/dev/null || echo "$harbor_on_path")
-harbor_home_script=$(readlink -f "$harbor_home_path/harbor.sh" 2>/dev/null || realpath "$harbor_home_path/harbor.sh" 2>/dev/null || echo "$harbor_home_path/harbor.sh")
+harbor_resolved=$(realpath "$harbor_on_path" 2>/dev/null || echo "$harbor_on_path")
+harbor_home_script=$(realpath "$harbor_home_path/harbor.sh" 2>/dev/null || echo "$harbor_home_path/harbor.sh")
 
 if [ "$harbor_resolved" != "$harbor_home_script" ]; then
   fail "harbor home: script on PATH ($harbor_resolved) does not match harbor home script ($harbor_home_script)"

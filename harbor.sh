@@ -3990,12 +3990,11 @@ unlink_cli() {
         if [ -f "$profile" ] && grep -qF "export PATH=\"\$PATH:$target_dir\"" "$profile"; then
             # Remove the exact line that link_cli added, preserving file permissions
             local temp_file
-            temp_file=$(mktemp)
+            temp_file=$(mktemp -t harbor.XXXXXX)
             grep -vF "export PATH=\"\$PATH:$target_dir\"" "$profile" > "$temp_file" || true
             # Preserve original file permissions (chmod --reference is GNU-only)
             local orig_perms
-            orig_perms=$(stat -c '%a' "$profile" 2>/dev/null || stat -f '%Lp' "$profile" 2>/dev/null) && \
-                chmod "$orig_perms" "$temp_file" 2>/dev/null || true
+            orig_perms=$(stat -c '%a' "$profile" 2>/dev/null || stat -f '%Lp' "$profile" 2>/dev/null) && chmod "$orig_perms" "$temp_file" 2>/dev/null || true  # harbor-lint disable=HARBOR010
             mv "$temp_file" "$profile"
             log_info "Removed PATH entry from $profile"
             cleaned_profile=true
@@ -4084,7 +4083,7 @@ _harbor_completions() {
         if [[ -f "$cache_file" ]]; then
             local now file_mtime age
             now=$(date +%s)
-            file_mtime=$(stat -c %Y "$cache_file" 2>/dev/null || stat -f %m "$cache_file" 2>/dev/null || echo 0)
+            file_mtime=$(stat -c %Y "$cache_file" 2>/dev/null || stat -f %m "$cache_file" 2>/dev/null || echo 0)  # harbor-lint disable=HARBOR010
             age=$((now - file_mtime))
             if ((age < cache_age)); then
                 cat "$cache_file"
@@ -4403,7 +4402,7 @@ _harbor() {
         if [[ -f "$cache_file" ]]; then
             local now file_mtime age
             now=$(date +%s)
-            file_mtime=$(stat -c %Y "$cache_file" 2>/dev/null || stat -f %m "$cache_file" 2>/dev/null || echo 0)
+            file_mtime=$(stat -c %Y "$cache_file" 2>/dev/null || stat -f %m "$cache_file" 2>/dev/null || echo 0)  # harbor-lint disable=HARBOR010
             age=$((now - file_mtime))
             if ((age < cache_age)); then
                 cat "$cache_file"
@@ -4662,7 +4661,7 @@ function __harbor_services
 
     if test -f $cache_file
         set -l now (date +%s)
-        set -l file_mtime (stat -c %Y $cache_file 2>/dev/null; or stat -f %m $cache_file 2>/dev/null; or echo 0)
+        set -l file_mtime (stat -c %Y $cache_file 2>/dev/null; or stat -f %m $cache_file 2>/dev/null; or echo 0)  # harbor-lint disable=HARBOR010
         set -l age (math $now - $file_mtime)
         if test $age -lt $cache_age
             cat $cache_file
@@ -5109,7 +5108,7 @@ _uninstall_completions() {
     fpath_line=$(printf 'fpath=(%s $fpath)' "$zsh_comp_dir")
     if [[ -f "$zshrc" ]] && grep -qxF "$fpath_line" "$zshrc"; then
         local temp_file
-        temp_file=$(mktemp)
+        temp_file=$(mktemp -t harbor.XXXXXX)
         # Use awk to remove the exact fpath line Harbor wrote and ONLY
         # a compinit line that immediately follows it (skip=1 means
         # "skip the next line if it matches the compinit pattern").
@@ -5127,8 +5126,7 @@ _uninstall_completions() {
             { skip = 0; print }
         ' "$zshrc" > "$temp_file" || true
         local orig_perms
-        orig_perms=$(stat -c '%a' "$zshrc" 2>/dev/null || stat -f '%Lp' "$zshrc" 2>/dev/null) && \
-            chmod "$orig_perms" "$temp_file" 2>/dev/null || true
+        orig_perms=$(stat -c '%a' "$zshrc" 2>/dev/null || stat -f '%Lp' "$zshrc" 2>/dev/null) && chmod "$orig_perms" "$temp_file" 2>/dev/null || true  # harbor-lint disable=HARBOR010
         mv "$temp_file" "$zshrc"
         log_info "Removed fpath entry from $zshrc"
     fi
@@ -5704,8 +5702,7 @@ merge_env_files() {
 
     # Preserve original file permissions before replacing
     local orig_perms
-    orig_perms=$(stat -c '%a' "$target_file" 2>/dev/null || stat -f '%Lp' "$target_file" 2>/dev/null) && \
-        chmod "$orig_perms" "$temp_file" 2>/dev/null || true
+    orig_perms=$(stat -c '%a' "$target_file" 2>/dev/null || stat -f '%Lp' "$target_file" 2>/dev/null) && chmod "$orig_perms" "$temp_file" 2>/dev/null || true  # harbor-lint disable=HARBOR010
 
     # Move the temporary file to replace the target file
     mv "$temp_file" "$target_file" || {
@@ -6147,8 +6144,7 @@ env_manager() {
             # Preserve original file permissions (mktemp creates 0600,
             # which would silently change override.env files from 0644)
             local orig_perms
-            orig_perms=$(stat -c '%a' "$env_file" 2>/dev/null || stat -f '%Lp' "$env_file" 2>/dev/null) && \
-                chmod "$orig_perms" "$tmp_set" 2>/dev/null || true
+            orig_perms=$(stat -c '%a' "$env_file" 2>/dev/null || stat -f '%Lp' "$env_file" 2>/dev/null) && chmod "$orig_perms" "$tmp_set" 2>/dev/null || true  # harbor-lint disable=HARBOR010
             mv "$tmp_set" "$env_file" || {
                 rm -f "$tmp_set"
                 log_error "Failed to write updated config to $env_file"
@@ -6202,8 +6198,7 @@ env_manager() {
             }
             # Preserve original file permissions (same rationale as 'set')
             local orig_perms
-            orig_perms=$(stat -c '%a' "$env_file" 2>/dev/null || stat -f '%Lp' "$env_file" 2>/dev/null) && \
-                chmod "$orig_perms" "$tmp_unset" 2>/dev/null || true
+            orig_perms=$(stat -c '%a' "$env_file" 2>/dev/null || stat -f '%Lp' "$env_file" 2>/dev/null) && chmod "$orig_perms" "$tmp_unset" 2>/dev/null || true  # harbor-lint disable=HARBOR010
             mv "$tmp_unset" "$env_file" || {
                 rm -f "$tmp_unset"
                 log_error "Failed to write updated config to $env_file"
@@ -6694,8 +6689,7 @@ override_yaml_value() {
 
     # Preserve original file permissions
     local orig_perms
-    orig_perms=$(stat -c '%a' "$file" 2>/dev/null || stat -f '%Lp' "$file" 2>/dev/null) && \
-        chmod "$orig_perms" "$temp_file" 2>/dev/null || true
+    orig_perms=$(stat -c '%a' "$file" 2>/dev/null || stat -f '%Lp' "$file" 2>/dev/null) && chmod "$orig_perms" "$temp_file" 2>/dev/null || true  # harbor-lint disable=HARBOR010
 
     if mv "$temp_file" "$file"; then
         log_info "Successfully updated '$key' in $file"
@@ -7578,7 +7572,7 @@ run_fixfs() {
         log_info "Dry run: would fix ownership to $uid:$gid for ${#unique_paths[@]} path(s):"
         for abs_path in "${unique_paths[@]}"; do
             local owner
-            owner=$(stat -c '%u:%g' "$abs_path" 2>/dev/null || stat -f '%u:%g' "$abs_path" 2>/dev/null || echo "?:?")
+            owner=$(stat -c '%u:%g' "$abs_path" 2>/dev/null || stat -f '%u:%g' "$abs_path" 2>/dev/null || echo "?:?")  # harbor-lint disable=HARBOR010
             if [[ "$owner" == "$uid:$gid" ]]; then
                 log_info "  $abs_path (already $uid:$gid)"
             else
