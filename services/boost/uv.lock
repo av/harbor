@@ -116,7 +116,7 @@ wheels = [
 
 [[package]]
 name = "boost"
-version = "0.4.19"
+version = "0.5.2"
 source = { virtual = "." }
 dependencies = [
     { name = "aiohttp" },

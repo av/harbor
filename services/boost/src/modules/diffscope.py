@@ -68,10 +68,6 @@ docker run \\
 
 logger = log.setup_logger(ID_PREFIX)
 
-BACKTICK_PATH_RE = re.compile(
-  r"`((?:[\w.-]+/)+[\w.-]+\.(?:py|ts|tsx|js|jsx|go|rs|java|rb|php|cs|cpp|c|h|hpp|swift|kt|scala|sql|yaml|yml|toml|json|md|sh|bash|zsh|dockerfile|makefile))`",
-  re.IGNORECASE,
-)
 DIFF_HEADER_RE = re.compile(r"^(?:---|\+\+\+)\s+[ab]/(?P<path>.+)$", re.MULTILINE)
 DIFF_GIT_RE = re.compile(r"^diff --git a/(?P<a>.+?) b/(?P<b>.+?)$", re.MULTILINE)
 FENCE_PATH_RE = re.compile(
@@ -141,10 +137,6 @@ def needs_diffscope(chat: "ch.Chat") -> bool:
   return deliverable.is_coding_deliverable(chat)
 
 
-def _normalize_path(raw: str) -> str:
-  return re.sub(r"^[\s`'\"(]+", "", (raw or "").strip()).rstrip("`'\"")
-
-
 def _collect_unique(paths: list[str]) -> list[str]:
   unique: list[str] = []
   seen: set[str] = set()
@@ -172,16 +164,16 @@ def extract_user_scope(chat: "ch.Chat") -> UserScope:
       continue
 
     for match in ONLY_RE.finditer(text):
-      allowed.append(_normalize_path(match.group(1)))
+      allowed.append(deliverable.normalize_repo_path(match.group(1)))
 
     for match in DONT_TOUCH_RE.finditer(text):
-      forbidden.append(_normalize_path(match.group(1)))
+      forbidden.append(deliverable.normalize_repo_path(match.group(1)))
 
     for match in deliverable.FILE_PATH_RE.finditer(text):
-      hinted.append(_normalize_path(match.group(0)))
+      hinted.append(deliverable.normalize_repo_path(match.group(0)))
 
-    for match in BACKTICK_PATH_RE.finditer(text):
-      hinted.append(_normalize_path(match.group(1)))
+    for match in deliverable.BACKTICK_PATH_RE.finditer(text):
+      hinted.append(deliverable.normalize_repo_path(match.group(1)))
 
   return UserScope(
     allowed=_collect_unique(allowed),
@@ -191,7 +183,7 @@ def extract_user_scope(chat: "ch.Chat") -> UserScope:
 
 
 def _add_path(paths: list[str], seen: set[str], raw: str) -> None:
-  path = _normalize_path(raw)
+  path = deliverable.normalize_repo_path(raw)
   if not path:
     return
   key = path.lower()
@@ -209,7 +201,7 @@ def extract_response_paths(text: str, chat: "ch.Chat | None" = None) -> list[str
       continue
     for match in deliverable.FILE_PATH_RE.finditer(source):
       _add_path(paths, seen, match.group(0))
-    for match in BACKTICK_PATH_RE.finditer(source):
+    for match in deliverable.BACKTICK_PATH_RE.finditer(source):
       _add_path(paths, seen, match.group(1))
     for match in DIFF_HEADER_RE.finditer(source):
       _add_path(paths, seen, match.group("path"))

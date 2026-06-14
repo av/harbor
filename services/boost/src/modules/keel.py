@@ -165,7 +165,7 @@ def detect_drift(text: str, brief: TaskBrief | None = None) -> bool:
     if mentioned:
       normalized_scope = {path.strip().lower() for path in brief.in_scope_paths}
       for raw in mentioned:
-        path = re.sub(r"^[\s`'\"(]+", "", raw.strip()).rstrip("`'\"").lower()
+        path = deliverable.normalize_repo_path(raw).lower()
         if path and path not in normalized_scope:
           return True
 
