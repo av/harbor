@@ -15,12 +15,21 @@ import workflows
 from modules import workflows as workflow_presets
 
 
-EXPECTED_PRESETS = {
+SIMPLE_PRESETS = {
   "research-quick": ("caveman", "Quick Research"),
   "research-deep": ("ponytail", "Deep Research"),
   "code-check": ("autocheck", "Code Check"),
   "agent-research": ("caveman", "Agent Research"),
 }
+
+SHIPYARD_MODULES = [
+  {"module": "keel", "continue": True, "config": {"defer_final": True}},
+  {"module": "caveman", "continue": True, "config": {"defer_final": True}},
+  {"module": "tools", "config": {"final": False}},
+  {"module": "ponytail", "continue": True, "config": {"defer_final": True}},
+  "autocheck",
+  "final",
+]
 
 
 @pytest.fixture(autouse=True)
@@ -32,11 +41,11 @@ def reset_workflow_registry():
 
 class TestWorkflowPresets:
   def test_presets_include_all_agentic_workflows(self):
-    assert set(workflow_presets.PRESETS) == set(EXPECTED_PRESETS)
+    assert set(workflow_presets.PRESETS) == set(SIMPLE_PRESETS) | {"shipyard"}
 
   @pytest.mark.parametrize(
     "workflow_id,module_name",
-    [(workflow_id, module_name) for workflow_id, (module_name, _name) in EXPECTED_PRESETS.items()],
+    [(workflow_id, module_name) for workflow_id, (module_name, _name) in SIMPLE_PRESETS.items()],
   )
   def test_preset_module_chain(self, workflow_id, module_name):
     preset = workflow_presets.PRESETS[workflow_id]
@@ -46,9 +55,18 @@ class TestWorkflowPresets:
     assert modules[1] == module_name
     assert modules[2] == "final"
 
+  def test_shipyard_preset_module_chain(self):
+    preset = workflow_presets.PRESETS["shipyard"]
+    assert preset["name"] == "Shipyard"
+    assert preset["modules"] == SHIPYARD_MODULES
+
+  def test_shipyard_shorthand_matches_module_chain(self):
+    shorthand = workflow_presets.SHORTHAND["shipyard"]
+    assert shorthand == "keel,caveman,tools,ponytail,autocheck,final"
+
   @pytest.mark.parametrize(
     "workflow_id,module_name",
-    [(workflow_id, module_name) for workflow_id, (module_name, _name) in EXPECTED_PRESETS.items()],
+    [(workflow_id, module_name) for workflow_id, (module_name, _name) in SIMPLE_PRESETS.items()],
   )
   def test_shorthand_matches_module_chain(self, workflow_id, module_name):
     shorthand = workflow_presets.SHORTHAND[workflow_id]
@@ -64,19 +82,19 @@ class TestWorkflowPresets:
     for workflow_id in workflow_presets.PRESETS:
       assert workflow_id not in mods.registry
 
-  @pytest.mark.parametrize("workflow_id", list(EXPECTED_PRESETS))
+  @pytest.mark.parametrize("workflow_id", list(SIMPLE_PRESETS) + ["shipyard"])
   def test_normalize_workflow_accepts_preset(self, workflow_id):
     normalized = workflows.normalize_workflow(workflow_presets.PRESETS[workflow_id], workflow_id)
     assert normalized is not None
     assert normalized["id"] == workflow_id
-    assert normalized["modules"][0] == {"module": "tools", "config": {"final": False}}
 
   def test_load_workflows_includes_builtin_presets(self, monkeypatch):
     monkeypatch.setattr(config.WORKFLOWS, "__value__", "")
     monkeypatch.setattr(workflows, "_load_file_definitions", lambda: [])
     loaded = workflows.load_workflows()
-    for workflow_id in EXPECTED_PRESETS:
+    for workflow_id in SIMPLE_PRESETS:
       assert workflow_id in loaded
+    assert "shipyard" in loaded
 
   def test_env_workflow_overrides_builtin_preset(self, monkeypatch):
     monkeypatch.setattr(config.WORKFLOWS, "__value__", "research-quick=tools,g1,final")
@@ -124,6 +142,22 @@ class TestApplyWorkflow:
     assert tools_call.args[0] == "tools"
     assert tools_call.args[1]["final"] is False
     assert mock_apply.await_args_list[1].args[0] == "caveman"
+    llm.stream_final_completion.assert_awaited_once()
+
+  @pytest.mark.asyncio
+  async def test_shipyard_runs_full_module_chain_before_final(self):
+    chat = MagicMock()
+    llm = MagicMock()
+    llm.is_final_stream = False
+    llm.stream_final_completion = AsyncMock()
+
+    with patch.object(workflows, "_apply_module", new_callable=AsyncMock) as mock_apply:
+      await workflows.apply_workflow(deepcopy(workflow_presets.PRESETS["shipyard"]), chat, llm)
+
+    applied = [call.args[0] for call in mock_apply.await_args_list]
+    assert applied == ["keel", "caveman", "tools", "ponytail", "autocheck"]
+    assert mock_apply.await_args_list[0].args[1]["defer_final"] is True
+    assert mock_apply.await_args_list[2].args[1]["final"] is False
     llm.stream_final_completion.assert_awaited_once()
 
   @pytest.mark.asyncio

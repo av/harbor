@@ -9,6 +9,7 @@ import chat as ch
 import config
 import deliverable
 import log
+import research.workflow as workflow_mod
 import tools.registry
 from state import request as request_state
 
@@ -384,15 +385,15 @@ def _register_finish_wrapper(brief: TaskBrief, drift_detected: bool) -> None:
     logger.debug(f"{ID_PREFIX}: finish tool already registered, skipping wrapper")
 
 
-async def apply(chat: "ch.Chat", llm: "llm.LLM"):
+async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
   message = _last_user_text(chat)
   if not message:
     logger.warning(f"{ID_PREFIX}: No user message found, passing through")
-    return await llm.stream_final_completion()
+    return await workflow_mod.complete_or_defer(llm, config)
 
   if not needs_keel(chat) and not get_stored_brief():
     logger.debug(f"{ID_PREFIX}: Pass-through — not a coding deliverable turn")
-    return await llm.stream_final_completion()
+    return await workflow_mod.complete_or_defer(llm, config)
 
   user_turns = count_user_turns(chat)
   drift_detected = False
@@ -403,7 +404,7 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM"):
     brief = await ensure_task_brief(chat, llm, message)
 
   if brief is None:
-    return await llm.stream_final_completion()
+    return await workflow_mod.complete_or_defer(llm, config)
 
   if user_turns >= 2:
     drift_detected = detect_drift(message, brief)
@@ -427,4 +428,4 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM"):
     chat.system(render_landing_checklist(brief, drift_detected=drift_detected))
 
   _register_finish_wrapper(brief, drift_detected)
-  return await llm.stream_final_completion()
+  return await workflow_mod.complete_or_defer(llm, config)

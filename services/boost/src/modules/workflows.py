@@ -26,16 +26,46 @@ PRESETS: dict[str, dict] = {
     "description": "Tool-enabled smash-and-grab research for agentic coding sessions.",
     "modules": [TOOLS_SETUP, "caveman", FINAL_STEP],
   },
+  "shipyard": {
+    "name": "Shipyard",
+    "description": (
+      "Full agentic coding pipeline: keel grounding, selective caveman ideation, "
+      "portable tools, ponytail implementation research, and autocheck audit."
+    ),
+    "modules": [
+      {"module": "keel", "continue": True, "config": {"defer_final": True}},
+      {"module": "caveman", "continue": True, "config": {"defer_final": True}},
+      TOOLS_SETUP,
+      {"module": "ponytail", "continue": True, "config": {"defer_final": True}},
+      "autocheck",
+      FINAL_STEP,
+    ],
+  },
 }
+
+
+def _module_name(module_config) -> str | None:
+  if isinstance(module_config, str):
+    return module_config
+  if isinstance(module_config, dict):
+    return module_config.get("module") or module_config.get("handle")
+  return None
+
+
+def shorthand_for(modules: list) -> str:
+  """Build env/@boost_workflow shorthand from a preset module chain."""
+  names = []
+  for module_config in modules:
+    name = _module_name(module_config)
+    if name:
+      names.append(name)
+  return ",".join(names)
+
 
 # Shorthand form used in HARBOR_BOOST_WORKFLOWS and @boost_workflow metadata.
 SHORTHAND: dict[str, str] = {
-  workflow_id: "tools,caveman,final"
-  if workflow_id in {"research-quick", "agent-research"}
-  else "tools,ponytail,final"
-  if workflow_id == "research-deep"
-  else "tools,autocheck,final"
-  for workflow_id in PRESETS
+  workflow_id: shorthand_for(preset["modules"])
+  for workflow_id, preset in PRESETS.items()
 }
 
 

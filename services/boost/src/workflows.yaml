@@ -38,3 +38,27 @@ workflows:
           final: false
       - module: caveman
       - module: final
+
+  shipyard:
+    name: Shipyard
+    description: >-
+      Full agentic coding pipeline: keel grounding, selective caveman ideation,
+      portable tools, ponytail implementation research, and autocheck audit.
+    modules:
+      - module: keel
+        continue: true
+        config:
+          defer_final: true
+      - module: caveman
+        continue: true
+        config:
+          defer_final: true
+      - module: tools
+        config:
+          final: false
+      - module: ponytail
+        continue: true
+        config:
+          defer_final: true
+      - module: autocheck
+      - module: final

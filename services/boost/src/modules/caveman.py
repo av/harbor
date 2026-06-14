@@ -12,6 +12,7 @@ import log
 import research.brief as brief_mod
 import research.budget as budget_mod
 import research.fetch as fetch
+import research.workflow as workflow_mod
 
 if TYPE_CHECKING:
   import llm
@@ -257,15 +258,15 @@ async def gather_research(
   return brief
 
 
-async def apply(chat: "ch.Chat", llm: "llm.LLM"):
+async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
   message = _last_user_text(chat)
   if not message:
     logger.warning(f"{ID_PREFIX}: No user message found, passing through")
-    return await llm.stream_final_completion()
+    return await workflow_mod.complete_or_defer(llm, config)
 
   if not needs_research(chat, llm):
     logger.debug(f"{ID_PREFIX}: Skipping research for: {message[:80]}...")
-    return await llm.stream_final_completion()
+    return await workflow_mod.complete_or_defer(llm, config)
 
   await llm.emit_status("Caveman research: planning queries...")
   budget = budget_mod.budget_from_config(ID_PREFIX)
@@ -277,11 +278,11 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM"):
     brief = brief_mod.ResearchBrief(query=message)
     brief.add_note(f"Query extraction failed: {exc}")
     chat.system(brief_mod.render_to_system(brief))
-    return await llm.stream_final_completion()
+    return await workflow_mod.complete_or_defer(llm, config)
 
   if not queries:
     logger.warning(f"{ID_PREFIX}: No queries extracted, passing through")
-    return await llm.stream_final_completion()
+    return await workflow_mod.complete_or_defer(llm, config)
 
   await llm.emit_status(f"Caveman research: {len(queries)} quer{'y' if len(queries) == 1 else 'ies'}...")
   brief = await gather_research(queries, budget)
@@ -289,4 +290,4 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM"):
     brief.query = message
 
   chat.system(brief_mod.render_to_system(brief))
-  await llm.stream_final_completion()
+  await workflow_mod.complete_or_defer(llm, config)
