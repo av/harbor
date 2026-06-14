@@ -764,6 +764,29 @@ SIGHTLINE_ALLOW_CREATE = Config[bool](
     ),
 )
 
+# ---------------- DIFFSCOPE -----------------
+
+DIFFSCOPE_ENABLED = Config[bool](
+    name="HARBOR_BOOST_DIFFSCOPE_ENABLED",
+    type=bool,
+    default="true",
+    description="When false, the `diffscope` module passes through without scope checks.",
+)
+
+DIFFSCOPE_MAX_USER_TURNS = Config[int](
+    name="HARBOR_BOOST_DIFFSCOPE_MAX_USER_TURNS",
+    type=int,
+    default="5",
+    description="Recent user messages scanned by `diffscope` for scope hints.",
+)
+
+DIFFSCOPE_MAX_WORKSPACE_FILES = Config[int](
+    name="HARBOR_BOOST_DIFFSCOPE_MAX_WORKSPACE_FILES",
+    type=int,
+    default="5",
+    description="Maximum workspace files `diffscope` verifies per request.",
+)
+
 # ------------------ KLMBR ------------------
 
 KLMBR_PERCENTAGE = Config[int](
