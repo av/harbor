@@ -33,6 +33,37 @@ def _last_user_text(chat: "ch.Chat") -> str:
   return (node.content or "") if node else ""
 
 
+def deliverable_signals(text: str, *, has_prior_code_block: bool = False) -> list[str]:
+  """
+  Return active deliverable signal names for the latest user text.
+
+  Used by selective modules (e.g. autocheck) that require multiple signals
+  before running expensive post-processing.
+  """
+  text = (text or "").strip()
+  signals: list[str] = []
+
+  if CODE_BLOCK_RE.search(text):
+    signals.append("code_block")
+  if FILE_PATH_RE.search(text):
+    signals.append("file_path")
+  if CODING_KEYWORD_RE.search(text):
+    signals.append("coding_keyword")
+  if has_prior_code_block and any(
+    marker in text.lower()
+    for marker in ("fix", "implement", "refactor", "add", "update", "patch")
+  ):
+    signals.append("prior_code_block")
+
+  return signals
+
+
+def count_deliverable_signals(chat: "ch.Chat") -> int:
+  """Count how many deliverable signals the latest user turn carries."""
+  text = _last_user_text(chat)
+  return len(deliverable_signals(text, has_prior_code_block=chat.has_substring("```")))
+
+
 def is_coding_deliverable(chat: "ch.Chat") -> bool:
   """
   Heuristic gate for agentic coding modules.

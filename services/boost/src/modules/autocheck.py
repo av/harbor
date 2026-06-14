@@ -1,5 +1,6 @@
 """Selective post-deliverable self-check for Harbor Boost."""
 
+import json
 import re
 from typing import TYPE_CHECKING, Literal
 
@@ -56,6 +57,22 @@ docker run \\
 """
 
 logger = log.setup_logger(ID_PREFIX)
+
+MIN_DELIVERABLE_SIGNALS = 2
+MIN_AUTOCHECK_MESSAGE_CHARS = 12
+
+SKIP_MESSAGE_RE = re.compile(
+  r"^\s*(?:"
+  r"thanks?(?:\s+you)?|thank\s+you|thx|ok(?:ay)?|cool|great|perfect|sounds?\s+good|"
+  r"got\s+it|understood|yes|no|yep|nope|sure|continue|go\s+on|go\s+ahead|"
+  r"proceed|keep\s+going|lgtm|looks?\s+good|done|next|ship\s+it"
+  r")\s*[.!]?\s*$",
+  re.IGNORECASE,
+)
+CONTINUATION_RE = re.compile(
+  r"\b(?:continue|keep\s+going|go\s+on|proceed|carry\s+on|as\s+planned|same\s+as\s+before)\b",
+  re.IGNORECASE,
+)
 
 BACKTICK_PATH_RE = re.compile(
   r"`((?:[\w.-]+/)+[\w.-]+\.(?:py|ts|tsx|js|jsx|go|rs|java|rb|php|cs|cpp|c|h|hpp|swift|kt|scala|sql|yaml|yml|toml|json|md|sh|bash|zsh|dockerfile|makefile))`",
@@ -167,16 +184,45 @@ class AuditResult(BaseModel):
   )
 
 
+class AuditDebug(BaseModel):
+  triggered: bool = False
+  gate_reason: str = ""
+  tool_calls: list[dict] = Field(default_factory=list)
+  verdict: Literal["pass", "revise", "skipped"] = "skipped"
+
+
 def _last_user_text(chat: "ch.Chat") -> str:
   node = chat.match_one(role="user", index=-1)
   return (node.content or "").strip() if node else ""
 
 
+def autocheck_gate_reason(chat: "ch.Chat") -> str:
+  """Explain why autocheck would or would not run on this turn."""
+  if not config.AUTOCHECK_ENABLED.value:
+    return "disabled"
+
+  text = _last_user_text(chat)
+  if not text:
+    return "empty_message"
+  if SKIP_MESSAGE_RE.match(text):
+    return "acknowledgment"
+  if len(text) < MIN_AUTOCHECK_MESSAGE_CHARS:
+    return "short_message"
+  if CONTINUATION_RE.search(text) and len(text) < 120:
+    return "continuation"
+  if not deliverable.is_coding_deliverable(chat):
+    return "not_deliverable"
+
+  signal_count = deliverable.count_deliverable_signals(chat)
+  if signal_count < MIN_DELIVERABLE_SIGNALS:
+    return "insufficient_signals"
+
+  return "triggered"
+
+
 def needs_autocheck(chat: "ch.Chat") -> bool:
   """Return True when this turn should run post-deliverable self-check."""
-  if not config.AUTOCHECK_ENABLED.value:
-    return False
-  return deliverable.is_coding_deliverable(chat)
+  return autocheck_gate_reason(chat) == "triggered"
 
 
 def _normalize_path(raw: str) -> str:
@@ -225,6 +271,98 @@ def _cheap_llm(llm: "llm.LLM") -> "llm.LLM":
 
 def should_revise(audit: AuditResult) -> bool:
   return audit.verdict == "revise"
+
+
+def successful_workspace_reads(workspace_context: str) -> list[str]:
+  """Return repo-relative paths successfully read from workspace context."""
+  if not workspace_context:
+    return []
+
+  reads: list[str] = []
+  for match in re.finditer(r'<file path="([^"]+)"(?:\s|>)', workspace_context):
+    path = match.group(1)
+    error_match = re.search(
+      rf'<file path="{re.escape(path)}" error="[^"]*"\s*/>',
+      workspace_context,
+    )
+    if not error_match:
+      reads.append(path)
+  return reads
+
+
+def extract_workspace_tool_calls(messages: list[dict]) -> list[dict]:
+  """Collect read_workspace_file tool calls from a chat history slice."""
+  calls: list[dict] = []
+  for message in messages:
+    for tool_call in message.get("tool_calls") or []:
+      function = tool_call.get("function") or {}
+      if function.get("name") != "read_workspace_file":
+        continue
+
+      args_raw = function.get("arguments") or "{}"
+      try:
+        args = json.loads(args_raw) if args_raw.strip() else {}
+      except json.JSONDecodeError:
+        args = {"raw_arguments": args_raw}
+
+      calls.append({
+        "name": "read_workspace_file",
+        "arguments": args,
+      })
+  return calls
+
+
+def workspace_evidence_paths(
+  workspace_context: str,
+  tool_calls: list[dict],
+) -> list[str]:
+  """Merge direct workspace reads and tool-call paths into evidence paths."""
+  paths = list(successful_workspace_reads(workspace_context))
+  seen = set(paths)
+
+  for call in tool_calls:
+    args = call.get("arguments") or {}
+    path = (args.get("path") or "").strip()
+    if path and path not in seen:
+      seen.add(path)
+      paths.append(path)
+
+  return paths
+
+
+def requires_workspace_evidence(paths: list[str]) -> bool:
+  return bool(config.WORKSPACE_ROOT.value and paths)
+
+
+def enforce_workspace_evidence(
+  audit: AuditResult,
+  paths: list[str],
+  evidence_paths: list[str],
+) -> AuditResult:
+  """
+  Downgrade pass verdicts that lack workspace grounding when paths were cited.
+  """
+  if audit.verdict != "pass" or not requires_workspace_evidence(paths):
+    return audit
+  if evidence_paths:
+    return audit
+
+  findings = list(audit.findings)
+  findings.append(
+    AuditFinding(
+      severity="major",
+      message="Audit passed without workspace file evidence for cited paths",
+      fix_hint="Read referenced workspace files before approving the draft.",
+    )
+  )
+  return AuditResult(
+    verdict="revise",
+    summary=(
+      audit.summary
+      or "Workspace verification is required before shipping path-grounded answers."
+    ),
+    findings=findings,
+  )
 
 
 def format_findings(audit: AuditResult) -> str:
@@ -286,13 +424,14 @@ async def explore_workspace_with_tools(
   llm: "llm.LLM",
   draft: str,
   paths: list[str],
-) -> str:
+) -> tuple[str, list[dict]]:
   """Let the model verify paths via read_workspace_file when workspace is configured."""
   if not paths or not _register_workspace_tool():
-    return ""
+    return "", []
 
   excerpt = draft[:4000]
   path_list = "\n".join(f"- {path}" for path in paths)
+  history_before = len(llm.chat.history()) if getattr(llm, "chat", None) else 0
 
   try:
     notes = await llm.stream_chat_completion(
@@ -302,10 +441,12 @@ async def explore_workspace_with_tools(
       emit=False,
       params={"temperature": 0},
     )
-    return (notes or "").strip()
+    history_after = llm.chat.history()[history_before:] if getattr(llm, "chat", None) else []
+    tool_calls = extract_workspace_tool_calls(history_after)
+    return (notes or "").strip(), tool_calls
   except Exception as exc:
     logger.warning(f"{ID_PREFIX}: workspace exploration failed: {exc}")
-    return f"Workspace exploration failed: {exc}"
+    return f"Workspace exploration failed: {exc}", []
 
 
 async def run_audit(
@@ -315,7 +456,9 @@ async def run_audit(
   *,
   workspace_context: str = "",
   workspace_exploration: str = "",
-) -> AuditResult:
+  workspace_paths: list[str] | None = None,
+  workspace_tool_calls: list[dict] | None = None,
+) -> tuple[AuditResult, AuditDebug]:
   intermediate = _cheap_llm(llm)
   result = await intermediate.chat_completion(
     prompt=AUDIT_PROMPT,
@@ -329,8 +472,23 @@ async def run_audit(
   )
 
   if isinstance(result, dict):
-    return AuditResult(**result)
-  return AuditResult(verdict="pass", summary="Audit returned no structured result.")
+    audit = AuditResult(**result)
+  else:
+    audit = AuditResult(verdict="pass", summary="Audit returned no structured result.")
+
+  paths = workspace_paths or []
+  tool_calls = workspace_tool_calls or []
+  evidence_paths = workspace_evidence_paths(workspace_context, tool_calls)
+  audit = enforce_workspace_evidence(audit, paths, evidence_paths)
+
+  debug = AuditDebug(
+    triggered=True,
+    gate_reason="triggered",
+    tool_calls=tool_calls,
+    verdict=audit.verdict,
+  )
+  logger.debug(f"{ID_PREFIX}: audit debug {debug.model_dump()}")
+  return audit, debug
 
 
 async def revise_draft(
@@ -358,8 +516,10 @@ async def emit_final(llm: "llm.LLM", final_text: str) -> None:
 
 
 async def apply(chat: "ch.Chat", llm: "llm.LLM"):
-  if not needs_autocheck(chat):
-    logger.debug(f"{ID_PREFIX}: Pass-through — not a coding deliverable turn")
+  gate_reason = autocheck_gate_reason(chat)
+  if gate_reason != "triggered":
+    debug = AuditDebug(triggered=False, gate_reason=gate_reason, verdict="skipped")
+    logger.debug(f"{ID_PREFIX}: Pass-through — {gate_reason} ({debug.model_dump()})")
     return await llm.stream_final_completion()
 
   message = _last_user_text(chat)
@@ -385,17 +545,24 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM"):
 
   await llm.emit_status("Autocheck: auditing...")
   workspace_exploration = ""
+  workspace_tool_calls: list[dict] = []
   if config.WORKSPACE_ROOT.value and paths:
     await llm.emit_status("Autocheck: verifying workspace paths...")
-    workspace_exploration = await explore_workspace_with_tools(llm, draft, paths)
+    workspace_exploration, workspace_tool_calls = await explore_workspace_with_tools(
+      llm,
+      draft,
+      paths,
+    )
 
   try:
-    audit = await run_audit(
+    audit, debug = await run_audit(
       chat,
       llm,
       draft,
       workspace_context=workspace_context,
       workspace_exploration=workspace_exploration,
+      workspace_paths=paths,
+      workspace_tool_calls=workspace_tool_calls,
     )
   except Exception as exc:
     logger.error(f"{ID_PREFIX}: audit failed: {exc}")
@@ -411,12 +578,14 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM"):
     await llm.emit_status(f"Autocheck: revising ({passes_used}/{max_passes})...")
     try:
       final_text = await revise_draft(chat, llm, final_text, audit)
-      audit = await run_audit(
+      audit, debug = await run_audit(
         chat,
         llm,
         final_text,
         workspace_context=workspace_context,
         workspace_exploration=workspace_exploration,
+        workspace_paths=paths,
+        workspace_tool_calls=workspace_tool_calls,
       )
     except Exception as exc:
       logger.error(f"{ID_PREFIX}: revise pass failed: {exc}")

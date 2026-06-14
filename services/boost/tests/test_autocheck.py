@@ -23,10 +23,12 @@ class TestAutocheckGate:
   def test_needs_autocheck_for_implementation_request(self):
     chat = self._chat("Implement a retry helper in services/boost/src/utils.py")
     assert autocheck.needs_autocheck(chat)
+    assert autocheck.autocheck_gate_reason(chat) == "triggered"
 
   def test_skips_explanatory_question(self):
     chat = self._chat("Explain what asyncio.gather does in plain English.")
     assert not autocheck.needs_autocheck(chat)
+    assert autocheck.autocheck_gate_reason(chat) == "not_deliverable"
 
   def test_skips_when_disabled(self):
     chat = self._chat("Implement foo in bar.py")
@@ -34,8 +36,29 @@ class TestAutocheckGate:
     try:
       config.AUTOCHECK_ENABLED.__value__ = False
       assert not autocheck.needs_autocheck(chat)
+      assert autocheck.autocheck_gate_reason(chat) == "disabled"
     finally:
       config.AUTOCHECK_ENABLED.__value__ = original
+
+  def test_skips_acknowledgments(self):
+    assert not autocheck.needs_autocheck(self._chat("thanks!"))
+    assert autocheck.autocheck_gate_reason(self._chat("ok")) == "acknowledgment"
+
+  def test_skips_short_messages(self):
+    chat = self._chat("fix it")
+    assert not autocheck.needs_autocheck(chat)
+    assert autocheck.autocheck_gate_reason(chat) == "short_message"
+
+  def test_skips_single_signal_deliverable(self):
+    chat = self._chat("Implement a retry helper")
+    assert deliverable.count_deliverable_signals(chat) == 1
+    assert not autocheck.needs_autocheck(chat)
+    assert autocheck.autocheck_gate_reason(chat) == "insufficient_signals"
+
+  def test_triggers_with_two_signals(self):
+    chat = self._chat("Implement retry helper in services/boost/src/utils.py")
+    assert deliverable.count_deliverable_signals(chat) >= 2
+    assert autocheck.needs_autocheck(chat)
 
   def test_should_revise_on_revise_verdict(self):
     audit = autocheck.AuditResult(verdict="revise", summary="Needs work")
@@ -110,6 +133,72 @@ class TestWorkspaceContext:
     assert context == ""
 
 
+class TestWorkspaceEvidence:
+  def test_successful_workspace_reads_ignores_errors(self):
+    context = (
+      '<file path="src/a.py">\nprint(1)\n</file>\n\n'
+      '<file path="src/missing.py" error="not found" />'
+    )
+    reads = autocheck.successful_workspace_reads(context)
+    assert reads == ["src/a.py"]
+
+  def test_workspace_evidence_merges_reads_and_tool_calls(self):
+    context = '<file path="src/a.py">\nprint(1)\n</file>'
+    tool_calls = [{"name": "read_workspace_file", "arguments": {"path": "src/b.py"}}]
+    evidence = autocheck.workspace_evidence_paths(context, tool_calls)
+    assert evidence == ["src/a.py", "src/b.py"]
+
+  def test_enforce_workspace_evidence_downgrades_pass_without_reads(self):
+    audit = autocheck.AuditResult(verdict="pass", summary="Looks good")
+    original = config.WORKSPACE_ROOT.__value__
+    try:
+      config.WORKSPACE_ROOT.__value__ = "/workspace"
+      enforced = autocheck.enforce_workspace_evidence(
+        audit,
+        ["src/main.py"],
+        [],
+      )
+    finally:
+      config.WORKSPACE_ROOT.__value__ = original
+
+    assert enforced.verdict == "revise"
+    assert any("workspace file evidence" in finding.message.lower() for finding in enforced.findings)
+
+  def test_enforce_workspace_evidence_allows_pass_with_reads(self):
+    audit = autocheck.AuditResult(verdict="pass", summary="Looks good")
+    original = config.WORKSPACE_ROOT.__value__
+    try:
+      config.WORKSPACE_ROOT.__value__ = "/workspace"
+      enforced = autocheck.enforce_workspace_evidence(
+        audit,
+        ["src/main.py"],
+        ["src/main.py"],
+      )
+    finally:
+      config.WORKSPACE_ROOT.__value__ = original
+
+    assert enforced.verdict == "pass"
+
+  def test_extract_workspace_tool_calls_from_history(self):
+    history = [
+      {
+        "role": "assistant",
+        "content": "",
+        "tool_calls": [{
+          "id": "call_1",
+          "type": "function",
+          "function": {
+            "name": "read_workspace_file",
+            "arguments": '{"path": "src/main.py"}',
+          },
+        }],
+      }
+    ]
+    calls = autocheck.extract_workspace_tool_calls(history)
+    assert len(calls) == 1
+    assert calls[0]["arguments"]["path"] == "src/main.py"
+
+
 class TestAuditAndRevise:
   @pytest.mark.asyncio
   async def test_run_audit_parses_structured_result(self):
@@ -139,11 +228,89 @@ class TestAuditAndRevise:
       )
       cheap_llm.return_value = cheap
 
-      audit = await autocheck.run_audit(chat, llm, "draft text")
+      audit, debug = await autocheck.run_audit(chat, llm, "draft text")
 
     assert audit.verdict == "revise"
     assert len(audit.findings) == 1
     assert audit.findings[0].fix_hint == "Use existing module path"
+    assert debug.triggered is True
+    assert debug.gate_reason == "triggered"
+    assert debug.verdict == "revise"
+
+  @pytest.mark.asyncio
+  async def test_run_audit_includes_debug_payload(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Fix bug in services/boost/src/main.py"},
+    ])
+    llm = MagicMock()
+    llm.url = "http://example.com"
+    llm.headers = {}
+    llm.query_params = {}
+    llm.model = "test-model"
+    original_root = config.WORKSPACE_ROOT.__value__
+
+    try:
+      config.WORKSPACE_ROOT.__value__ = "/workspace"
+      with patch.object(autocheck, "_cheap_llm") as cheap_llm:
+        cheap = MagicMock()
+        cheap.chat_completion = AsyncMock(
+          return_value={"verdict": "pass", "summary": "Ship it", "findings": []},
+        )
+        cheap_llm.return_value = cheap
+
+        audit, debug = await autocheck.run_audit(
+          chat,
+          llm,
+          "draft text",
+          workspace_context='<file path="services/boost/src/main.py">\nprint(1)\n</file>',
+          workspace_paths=["services/boost/src/main.py"],
+          workspace_tool_calls=[{
+            "name": "read_workspace_file",
+            "arguments": {"path": "services/boost/src/main.py"},
+          }],
+        )
+    finally:
+      config.WORKSPACE_ROOT.__value__ = original_root
+
+    assert audit.verdict == "pass"
+    assert debug.triggered is True
+    assert debug.gate_reason == "triggered"
+    assert debug.tool_calls[0]["arguments"]["path"] == "services/boost/src/main.py"
+    assert debug.verdict == "pass"
+
+  @pytest.mark.asyncio
+  async def test_run_audit_downgrades_pass_without_workspace_evidence(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Fix bug in services/boost/src/main.py"},
+    ])
+    llm = MagicMock()
+    llm.url = "http://example.com"
+    llm.headers = {}
+    llm.query_params = {}
+    llm.model = "test-model"
+    original_root = config.WORKSPACE_ROOT.__value__
+
+    try:
+      config.WORKSPACE_ROOT.__value__ = "/workspace"
+      with patch.object(autocheck, "_cheap_llm") as cheap_llm:
+        cheap = MagicMock()
+        cheap.chat_completion = AsyncMock(
+          return_value={"verdict": "pass", "summary": "Ship it", "findings": []},
+        )
+        cheap_llm.return_value = cheap
+
+        audit, debug = await autocheck.run_audit(
+          chat,
+          llm,
+          "draft text",
+          workspace_paths=["services/boost/src/main.py"],
+          workspace_tool_calls=[],
+        )
+    finally:
+      config.WORKSPACE_ROOT.__value__ = original_root
+
+    assert audit.verdict == "revise"
+    assert debug.verdict == "revise"
 
   @pytest.mark.asyncio
   async def test_revise_draft_returns_revised_text(self):
@@ -203,10 +370,11 @@ class TestAutocheckApply:
     llm.stream_chat_completion = AsyncMock(return_value="Draft implementation")
 
     audit = autocheck.AuditResult(verdict="pass", summary="Ship it")
+    debug = autocheck.AuditDebug(triggered=True, gate_reason="triggered", verdict="pass")
 
     with (
       patch.object(autocheck, "gather_workspace_context", new=AsyncMock(return_value="")),
-      patch.object(autocheck, "run_audit", new=AsyncMock(return_value=audit)),
+      patch.object(autocheck, "run_audit", new=AsyncMock(return_value=(audit, debug))),
       patch.object(autocheck, "revise_draft", new=AsyncMock()) as revise,
     ):
       await autocheck.apply(chat, llm)
@@ -226,10 +394,16 @@ class TestAutocheckApply:
 
     first_audit = autocheck.AuditResult(verdict="revise", summary="Fix imports")
     second_audit = autocheck.AuditResult(verdict="pass", summary="Good now")
+    first_debug = autocheck.AuditDebug(triggered=True, gate_reason="triggered", verdict="revise")
+    second_debug = autocheck.AuditDebug(triggered=True, gate_reason="triggered", verdict="pass")
 
     with (
       patch.object(autocheck, "gather_workspace_context", new=AsyncMock(return_value="")),
-      patch.object(autocheck, "run_audit", new=AsyncMock(side_effect=[first_audit, second_audit])),
+      patch.object(
+        autocheck,
+        "run_audit",
+        new=AsyncMock(side_effect=[(first_audit, first_debug), (second_audit, second_debug)]),
+      ),
       patch.object(autocheck, "revise_draft", new=AsyncMock(return_value="Revised implementation")) as revise,
     ):
       await autocheck.apply(chat, llm)
@@ -258,7 +432,7 @@ class TestAutocheckApply:
         patch.object(
           autocheck,
           "explore_workspace_with_tools",
-          new=AsyncMock(return_value="- main.py exists"),
+          new=AsyncMock(return_value=("- main.py exists", [])),
         ) as explore,
         patch.object(autocheck, "run_audit", new=AsyncMock(return_value=audit)) as run_audit,
       ):
@@ -266,6 +440,7 @@ class TestAutocheckApply:
 
       explore.assert_awaited_once()
       assert run_audit.await_args.kwargs["workspace_exploration"] == "- main.py exists"
+      assert run_audit.await_args.kwargs["workspace_tool_calls"] == []
     finally:
       config.WORKSPACE_ROOT.__value__ = original_root
 

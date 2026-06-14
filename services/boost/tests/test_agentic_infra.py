@@ -117,6 +117,15 @@ class TestDeliverableGate:
       self._chat("Explain what asyncio.gather does in plain English.")
     )
 
+  def test_deliverable_signals_count_multiple_markers(self):
+    chat = self._chat("Implement retry helper in services/boost/src/utils.py")
+    signals = deliverable.deliverable_signals(
+      chat.match_one(role="user", index=-1).content,
+    )
+    assert "coding_keyword" in signals
+    assert "file_path" in signals
+    assert deliverable.count_deliverable_signals(chat) >= 2
+
 
 class TestWorkspaceFileTool:
   def _with_workspace_root(self, value: str):
