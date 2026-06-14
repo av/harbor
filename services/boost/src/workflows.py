@@ -184,10 +184,27 @@ def normalize_workflow(definition: Any, default_id: str | None = None) -> dict |
   }
 
 
+def _load_builtin_presets() -> dict:
+  try:
+    from modules.workflows import definitions
+
+    return definitions()
+  except Exception as e:
+    logger.warning(f"Failed to load built-in workflow presets: {e}")
+    return {}
+
+
 def load_workflows() -> dict[str, dict]:
   loaded = {}
 
   sources = []
+  try:
+    presets = _load_builtin_presets()
+    if presets:
+      sources.append(presets)
+  except Exception as e:
+    logger.warning(f"Failed to load built-in workflow presets: {e}")
+
   try:
     sources.append(_load_file_definitions())
   except Exception as e:

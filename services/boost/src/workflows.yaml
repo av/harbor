@@ -1,0 +1,40 @@
+workflows:
+  research-quick:
+    name: Quick Research
+    description: Register portable tools, run fast caveman web research, then answer.
+    modules:
+      - module: tools
+        config:
+          final: false
+      - module: caveman
+      - module: final
+
+  research-deep:
+    name: Deep Research
+    description: Register portable tools, run two-hop ponytail research, then answer.
+    modules:
+      - module: tools
+        config:
+          final: false
+      - module: ponytail
+      - module: final
+
+  code-check:
+    name: Code Check
+    description: Register portable tools, audit coding deliverables with autocheck, then answer.
+    modules:
+      - module: tools
+        config:
+          final: false
+      - module: autocheck
+      - module: final
+
+  agent-research:
+    name: Agent Research
+    description: Tool-enabled smash-and-grab research for agentic coding sessions.
+    modules:
+      - module: tools
+        config:
+          final: false
+      - module: caveman
+      - module: final
