@@ -244,7 +244,10 @@ harbor restart boost
 
 # Point a coding agent at Boost
 harbor url boost   # OpenAI-compatible; model: shipyard-<backend-model>
-harbor launch --backend boost aider
+
+# One-shot agentic coding via builtin shipyard preset (starts boost + searxng)
+harbor launch --workflow shipyard --backend ollama --model qwen2.5-coder:7b codex
+harbor launch --workflow shipyard --backend ollama --model qwen2.5-coder:7b opencode
 ```
 
 **Notes:** `autocheck` triggers only on deliverable turns (≥2 signals, e.g. coding keyword + file path). `sightline` covers Boost scratch tools only — not IDE or `read_workspace_file`. Empty `HARBOR_BOOST_WORKFLOWS` loads built-in presets from `/boost/workflows.yaml`.
@@ -257,6 +260,8 @@ harbor launch --backend boost aider
 harbor launch <tool> [args]            # Launch with auto-detected backends
 harbor launch --backend <svc> <tool>   # Override backend
 harbor launch --model <model> <tool>   # Override model
+harbor launch --workflow <preset> <tool>  # Builtin Boost preset (e.g. shipyard)
+harbor launch --web <tool>             # Generated boost-web workflow + SearXNG
 
 # Direct CLI shortcuts (service must be running)
 harbor aider                           # Aider coding assistant

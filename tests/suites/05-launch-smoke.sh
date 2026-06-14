@@ -500,6 +500,48 @@ assert_output '^model=boost-web-qwen-chat-model$'
 assert_output '^OPENAI_API_KEY=sk-boost$'
 assert_output 'base_url="http://localhost:8004/v1"'
 
+run_launch "workflow launch starts SearXNG and routes through shipyard workflow model" \
+  "ollama boost" "openai-mixed" \
+  --workflow shipyard --backend ollama codex --sandbox workspace-write
+assert_log '^tool=codex$'
+assert_log '^arg=model_providers\.harbor_launch\.base_url="http://localhost:8004/v1"$'
+assert_log '^arg=-m$'
+assert_log '^arg=shipyard-qwen-chat-model$'
+assert_docker_log 'up -d --wait boost searxng$'
+assert_output "Starting Boost workflow 'shipyard' for backend 'ollama'"
+
+run_launch "already-prefixed shipyard workflow model is not prefixed again" \
+  "ollama boost" "openai-mixed" \
+  --workflow shipyard --backend ollama --model shipyard-qwen-chat-model codex
+assert_log '^tool=codex$'
+assert_log '^arg=-m$'
+assert_log '^arg=shipyard-qwen-chat-model$'
+
+run_launch "launch --workflow shipyard config prints boosted model and Boost API settings" \
+  "ollama boost" "openai-mixed" \
+  --workflow shipyard --backend ollama --config codex
+assert_output '^backend=boost$'
+assert_output '^model=shipyard-qwen-chat-model$'
+assert_output '^OPENAI_API_KEY=sk-boost$'
+assert_output 'base_url="http://localhost:8004/v1"'
+
+suite_log "unsupported workflow preset is rejected"
+if env \
+  HARBOR_LEGACY_CLI=true \
+  HARBOR_CAPABILITIES_AUTODETECT=false \
+  HARBOR_HOME="$harbor_home" \
+  HARBOR_FAKE_RUNNING_SERVICES="ollama boost" \
+  HARBOR_FAKE_DOCKER_LOG="$docker_log" \
+  HARBOR_FAKE_DOCKER_STATE="$docker_state" \
+  HARBOR_FAKE_MODELS_SCHEMA="openai-mixed" \
+  PATH="$fake_bin:$PATH" \
+  harbor launch --workflow unknown --backend ollama --config codex >"$step_out" 2>&1; then
+  cat "$step_out" >&2
+  fail "unsupported workflow preset should exit non-zero"
+fi
+assert_output "Unsupported launch workflow 'unknown'"
+assert_output 'Supported builtin workflows:'
+
 run_launch "launch codex warns about llama.cpp Responses API tool compatibility" \
   "llamacpp" "root-array" \
   --backend llamacpp --model root-array-model codex --sandbox read-only

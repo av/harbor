@@ -2739,6 +2739,46 @@ launch_tool_group_services() {
     esac
 }
 
+launch_builtin_workflows() {
+    echo "research-quick research-deep code-check agent-research shipyard"
+}
+
+launch_builtin_workflow_is_valid() {
+    case "$1" in
+    research-quick | research-deep | code-check | agent-research | shipyard)
+        return 0
+        ;;
+    *)
+        return 1
+        ;;
+    esac
+}
+
+launch_builtin_workflow_services() {
+    case "$1" in
+    research-quick | research-deep | agent-research | shipyard)
+        echo "searxng"
+        ;;
+    esac
+}
+
+launch_prepare_builtin_workflow() {
+    local target_backend="$1"
+    local workflow_id="$2"
+    shift 2
+    local compose_services=("$target_backend" boost)
+    local start_services=(boost)
+    local service
+
+    log_info "Starting Boost workflow '$workflow_id' for backend '$target_backend'..."
+    for service in "$@"; do
+        launch_append_unique compose_services "$service"
+        launch_append_unique start_services "$service"
+    done
+
+    $(compose_with_options --no-defaults "${compose_services[@]}") up -d --wait "${start_services[@]}"
+}
+
 launch_workflow_model_name() {
     local workflow_id="$1"
     local model="$2"
@@ -3182,6 +3222,7 @@ launch_host_tool_command() {
     local model=""
     local models=""
     local config_only=false
+    local launch_workflow=""
     local boost_tool_groups=()
     local boost_tools=()
     local boost_services=()
@@ -3232,6 +3273,22 @@ launch_host_tool_command() {
             launch_append_unique boost_tool_groups "web"
             shift
             ;;
+        --workflow)
+            if launch_option_value_missing "${2-}"; then
+                log_error "Usage: harbor launch $tool --workflow <preset>"
+                return 1
+            fi
+            launch_workflow="$2"
+            shift 2
+            ;;
+        --workflow=*)
+            launch_workflow="${1#--workflow=}"
+            if launch_option_value_missing "$launch_workflow"; then
+                log_error "Usage: harbor launch $tool --workflow <preset>"
+                return 1
+            fi
+            shift
+            ;;
         --)
             shift
             tool_args+=("$@")
@@ -3244,8 +3301,13 @@ launch_host_tool_command() {
         esac
     done
 
-    if [ ${#boost_tool_groups[@]} -gt 0 ] && [ "$tool" = "claude" ]; then
-        log_error "harbor launch $tool does not support --web because Claude Code uses the Anthropic Messages API, not OpenAI Chat Completions."
+    if [ ${#boost_tool_groups[@]} -gt 0 ] && [ -n "$launch_workflow" ]; then
+        log_error "harbor launch does not support --web and --workflow together."
+        return 1
+    fi
+
+    if { [ ${#boost_tool_groups[@]} -gt 0 ] || [ -n "$launch_workflow" ]; } && [ "$tool" = "claude" ]; then
+        log_error "harbor launch $tool does not support Boost workflow routing because Claude Code uses the Anthropic Messages API, not OpenAI Chat Completions."
         log_info "Use an OpenAI-compatible host tool such as codex, opencode, copilot, droid, openclaw, pi, pool, or hermes."
         return 1
     fi
@@ -3282,38 +3344,54 @@ launch_host_tool_command() {
         models="$model"
     fi
 
-    if [ ${#boost_tool_groups[@]} -gt 0 ]; then
+    if [ ${#boost_tool_groups[@]} -gt 0 ] || [ -n "$launch_workflow" ]; then
         local target_backend="$backend"
         local target_model="$model"
         local target_models="$models"
         local workflow_id
         local workflow_json
+        local workflow_services
         local group
         local group_tools
         local tool_name
         local group_services
         local service_name
 
-        for group in "${boost_tool_groups[@]}"; do
-            if ! group_tools=$(launch_tool_group_tools "$group"); then
-                log_error "Unsupported launch tool group '$group'."
+        if [ ${#boost_tool_groups[@]} -gt 0 ]; then
+            for group in "${boost_tool_groups[@]}"; do
+                if ! group_tools=$(launch_tool_group_tools "$group"); then
+                    log_error "Unsupported launch tool group '$group'."
+                    return 1
+                fi
+                for tool_name in $group_tools; do
+                    launch_append_unique boost_tools "$tool_name"
+                done
+
+                group_services=$(launch_tool_group_services "$group")
+                for service_name in $group_services; do
+                    launch_append_unique boost_services "$service_name"
+                done
+            done
+
+            workflow_id=$(launch_workflow_id_for_groups "${boost_tool_groups[@]}")
+            workflow_json=$(launch_boost_workflow_json "$workflow_id" "${boost_tools[@]}")
+
+            if ! $config_only; then
+                launch_prepare_boost_workflow "$target_backend" "$workflow_id" "$workflow_json" "${boost_services[@]}" || return 1
+            fi
+        else
+            if ! launch_builtin_workflow_is_valid "$launch_workflow"; then
+                log_error "Unsupported launch workflow '$launch_workflow'."
+                log_info "Supported builtin workflows: $(launch_builtin_workflows)"
                 return 1
             fi
-            for tool_name in $group_tools; do
-                launch_append_unique boost_tools "$tool_name"
-            done
 
-            group_services=$(launch_tool_group_services "$group")
-            for service_name in $group_services; do
-                launch_append_unique boost_services "$service_name"
-            done
-        done
+            workflow_id="$launch_workflow"
+            workflow_services=$(launch_builtin_workflow_services "$launch_workflow")
 
-        workflow_id=$(launch_workflow_id_for_groups "${boost_tool_groups[@]}")
-        workflow_json=$(launch_boost_workflow_json "$workflow_id" "${boost_tools[@]}")
-
-        if ! $config_only; then
-            launch_prepare_boost_workflow "$target_backend" "$workflow_id" "$workflow_json" "${boost_services[@]}" || return 1
+            if ! $config_only; then
+                launch_prepare_builtin_workflow "$target_backend" "$workflow_id" $workflow_services || return 1
+            fi
         fi
 
         backend="boost"
@@ -3452,10 +3530,14 @@ run_launch_command() {
         echo "When an inference backend is already running, backend-specific compose"
         echo "overlays are included the same way they are for direct service CLI commands."
         echo "Host tool adapters accept launch options before the tool name: --backend,"
-        echo "--model, --config, and --web."
+        echo "--model, --config, --web, and --workflow."
         echo "Every argument after the tool name is passed to the launched tool unchanged."
         echo "--web starts Boost with web_search and read_url tools, starts SearXNG,"
         echo "and routes the tool to a generated boost-web-... workflow model."
+        echo "--workflow <preset> starts Boost with a builtin workflow preset such as shipyard,"
+        echo "starts SearXNG when web research modules are required, and routes the tool to"
+        echo "a workflow-prefixed model such as shipyard-qwen3.5:4b."
+        echo "Builtin workflow presets: $(launch_builtin_workflows)"
         echo "If no backend is running, host tool adapters start llamacpp by default."
         echo "Use --service before the handle to bypass host tool adapters for name-colliding services."
         echo
@@ -3467,6 +3549,7 @@ run_launch_command() {
         echo
         echo "Examples:"
         echo "  harbor launch --web --backend ollama --model qwen3.5:4b codex"
+        echo "  harbor launch --workflow shipyard --backend ollama --model qwen3.5:4b codex"
         echo "  harbor launch --backend ollama --model qwen3.5:4b codex"
         echo "  harbor launch --backend ollama --model qwen3.5:4b mi"
         echo "  harbor launch --model qwen3.5:4b claude -p \"explain this repo\""
@@ -3503,6 +3586,22 @@ run_launch_command() {
             shift
             ;;
         --config | --web)
+            launch_options+=("$1")
+            shift
+            ;;
+        --workflow)
+            if launch_option_value_missing "${2-}"; then
+                log_error "Usage: harbor launch --workflow <preset> <tool> [args]"
+                return 1
+            fi
+            launch_options+=("$1" "$2")
+            shift 2
+            ;;
+        --workflow=*)
+            if launch_option_value_missing "${1#--workflow=}"; then
+                log_error "Usage: harbor launch --workflow <preset> <tool> [args]"
+                return 1
+            fi
             launch_options+=("$1")
             shift
             ;;
