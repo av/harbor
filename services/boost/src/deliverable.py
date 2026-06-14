@@ -87,9 +87,27 @@ PRIOR_CODE_ACTION_RE = re.compile(
   r"\b(?:fix|implement|refactor|add|update|patch|debug|change|modify|create|write)\b",
   re.IGNORECASE,
 )
+EXPLICIT_DONE_SIGNAL_RE = re.compile(
+  r"\b(?:"
+  r"we(?:'re| are)\s+done|ship\s+it|looks?\s+good|lgtm|"
+  r"done|finished|finish\s+up|ready\s+to\s+ship|that(?:'s| is)\s+all|"
+  r"good\s+to\s+go|complete(?:d)?|wrap\s+up|call\s+it\s+done"
+  r")\b",
+  re.IGNORECASE,
+)
 
 MAX_ACKNOWLEDGMENT_CHARS = 120
 MAX_SHORT_ACK_CHARS = 80
+RECENT_FINISH_TOOL_LOOKBACK = 12
+FINISH_TOOL_NAME = "finish"
+CODING_SESSION_TOOL_NAMES = frozenset({
+  "finish",
+  "read_workspace_file",
+  "write_file",
+  "read_file",
+  "list_files",
+  "delete_file",
+})
 
 
 def _last_user_text(chat: "ch.Chat") -> str:
@@ -128,6 +146,94 @@ def has_research_signals(text: str) -> bool:
   if re.search(r"https?://", text, re.IGNORECASE):
     return True
   return bool(RESEARCH_SIGNAL_RE.search(text))
+
+
+def has_explicit_done_signal(text: str) -> bool:
+  """Return True when the user explicitly signals the coding task is complete."""
+  return bool(EXPLICIT_DONE_SIGNAL_RE.search((text or "").strip()))
+
+
+def _tool_call_name(tool_call: dict) -> str:
+  function = tool_call.get("function") or {}
+  return (function.get("name") or "").strip()
+
+
+def has_recent_finish_tool_call(
+  chat: "ch.Chat",
+  *,
+  lookback_messages: int = RECENT_FINISH_TOOL_LOOKBACK,
+) -> bool:
+  """Return True when the finish tool was invoked in recent chat history."""
+  history = chat.history()
+  if not history:
+    return False
+
+  recent = history[-lookback_messages:] if lookback_messages else history
+  for message in recent:
+    for tool_call in message.get("tool_calls") or []:
+      if _tool_call_name(tool_call) == FINISH_TOOL_NAME:
+        return True
+  return False
+
+
+def has_prior_coding_context(chat: "ch.Chat") -> bool:
+  """
+  Return True when earlier turns indicate an active coding deliverable session.
+
+  Used to distinguish completion signals (``ship it`` after implementation work)
+  from casual chat (``looks good`` with no prior coding context).
+  """
+  messages = chat.history()
+  if len(messages) <= 1:
+    return False
+
+  for message in messages[:-1]:
+    role = message.get("role")
+    content = message.get("content") or ""
+
+    if role == "user":
+      text = content.strip()
+      if not text or is_acknowledgment(text):
+        continue
+      if (
+        has_coding_action_intent(text)
+        or has_problem_indicator(text)
+        or FILE_PATH_RE.search(text)
+        or CODE_BLOCK_RE.search(text)
+        or CODING_KEYWORD_RE.search(text)
+      ):
+        return True
+
+    if role == "assistant":
+      if CODE_BLOCK_RE.search(content) or FILE_PATH_RE.search(content):
+        return True
+      for tool_call in message.get("tool_calls") or []:
+        if _tool_call_name(tool_call) in CODING_SESSION_TOOL_NAMES:
+          return True
+
+    if role == "tool" and content.strip():
+      return True
+
+  return chat.has_substring("```") and any(
+    message.get("role") == "assistant" for message in messages[:-1]
+  )
+
+
+def is_completion_trigger(chat: "ch.Chat") -> bool:
+  """
+  Return True when autocheck should run on explicit finish/done signals.
+
+  Triggers on a recent ``finish`` tool call or on explicit user completion
+  phrases when the conversation already contains coding deliverable context.
+  """
+  if has_recent_finish_tool_call(chat):
+    return True
+
+  text = _last_user_text(chat).strip()
+  if text and has_explicit_done_signal(text) and has_prior_coding_context(chat):
+    return True
+
+  return False
 
 
 def is_acknowledgment(text: str) -> bool:

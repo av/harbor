@@ -75,14 +75,6 @@ SKIP_MESSAGE_RE = re.compile(
   re.IGNORECASE,
 )
 
-DONE_SIGNAL_RE = re.compile(
-  r"\b(?:"
-  r"done|finished|finish\s+up|ship\s+it|ready\s+to\s+ship|that(?:'s| is)\s+all|"
-  r"we(?:'re| are)\s+done|good\s+to\s+go|complete(?:d)?|wrap\s+up|call\s+it\s+done"
-  r")\b",
-  re.IGNORECASE,
-)
-
 DRIFT_PHRASE_RE = re.compile(
   r"\b(?:"
   r"also\s+add|while\s+you(?:'re| are)\s+at\s+it|might\s+as\s+well|"
@@ -157,7 +149,7 @@ def is_substantive_message(text: str) -> bool:
 
 
 def is_done_signal(text: str) -> bool:
-  return bool(DONE_SIGNAL_RE.search((text or "").strip()))
+  return deliverable.has_explicit_done_signal(text)
 
 
 def detect_drift(text: str, brief: TaskBrief | None = None) -> bool:

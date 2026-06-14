@@ -60,6 +60,50 @@ class TestAutocheckGate:
     assert deliverable.count_deliverable_signals(chat) >= 2
     assert autocheck.needs_autocheck(chat)
 
+  def test_triggers_on_explicit_done_signal_with_prior_coding_context(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Implement retry helper in services/boost/src/utils.py"},
+      {"role": "assistant", "content": "Added retry helper with three attempts."},
+      {"role": "user", "content": "We're done — ship it."},
+    ])
+    assert autocheck.needs_autocheck(chat)
+    assert autocheck.autocheck_gate_reason(chat) == "triggered"
+
+  def test_triggers_on_looks_good_after_coding_session(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Fix bug in services/boost/src/main.py"},
+      {"role": "assistant", "content": "Patched the retry loop in main.py."},
+      {"role": "user", "content": "Looks good."},
+    ])
+    assert autocheck.needs_autocheck(chat)
+    assert autocheck.autocheck_gate_reason(chat) == "triggered"
+
+  def test_triggers_on_recent_finish_tool_call(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Add logging to services/boost/src/utils.py"},
+      {
+        "role": "assistant",
+        "content": "",
+        "tool_calls": [{
+          "id": "call_finish",
+          "type": "function",
+          "function": {
+            "name": "finish",
+            "arguments": '{"answer": "Logging added."}',
+          },
+        }],
+      },
+      {"role": "tool", "content": "Logging added.", "tool_call_id": "call_finish"},
+      {"role": "user", "content": "thanks"},
+    ])
+    assert autocheck.needs_autocheck(chat)
+    assert autocheck.autocheck_gate_reason(chat) == "triggered"
+
+  def test_skips_casual_done_signal_without_coding_context(self):
+    chat = self._chat("Ship it")
+    assert not autocheck.needs_autocheck(chat)
+    assert autocheck.autocheck_gate_reason(chat) == "acknowledgment"
+
   def test_should_revise_on_revise_verdict(self):
     audit = autocheck.AuditResult(verdict="revise", summary="Needs work")
     assert autocheck.should_revise(audit)

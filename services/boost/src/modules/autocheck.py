@@ -33,10 +33,12 @@ then emits the final answer.
 - Safe to leave enabled in mixed chats: explanations and short acks pass through
 - Set `HARBOR_BOOST_WORKSPACE_ROOT` so path citations require workspace evidence
 
-Autocheck triggers only when the latest user message carries **at least two**
-deliverable signals (for example a coding keyword plus a repo-relative file path).
-Simple acknowledgments (`thanks`, `ok`, `continue`) and very short messages are
-always skipped.
+Autocheck triggers when the latest user message carries **at least two**
+deliverable signals (for example a coding keyword plus a repo-relative file path),
+when the ``finish`` tool was called in recent chat history, or when the user sends
+an explicit completion signal (`we're done`, `ship it`, `looks good`) after prior
+coding work. Simple acknowledgments (`thanks`, `ok`, `continue`) and very short
+messages are always skipped.
 
 When `HARBOR_BOOST_WORKSPACE_ROOT` is set and paths are cited, the audit cannot
 return `pass` without workspace evidence — either direct `read_workspace_file`
@@ -223,6 +225,8 @@ def autocheck_gate_reason(chat: "ch.Chat") -> str:
   text = _last_user_text(chat)
   if not text:
     return "empty_message"
+  if deliverable.is_completion_trigger(chat):
+    return "triggered"
   if deliverable.is_acknowledgment(text):
     return "acknowledgment"
   if len(text) < MIN_AUTOCHECK_MESSAGE_CHARS:

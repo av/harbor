@@ -27,6 +27,7 @@ class TestKeelHeuristics:
 
   def test_is_done_signal_detects_completion_phrases(self):
     assert keel.is_done_signal("We're done, ship it.")
+    assert keel.is_done_signal("Looks good.")
     assert not keel.is_done_signal("Implement the helper next.")
 
   def test_count_user_turns(self):

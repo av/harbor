@@ -242,6 +242,43 @@ class TestDeliverableGate:
     assert "file_path" in signals
     assert deliverable.count_deliverable_signals(chat) >= 2
 
+  def test_explicit_done_signal_detects_completion_phrases(self):
+    assert deliverable.has_explicit_done_signal("We're done, ship it.")
+    assert deliverable.has_explicit_done_signal("Looks good.")
+    assert not deliverable.has_explicit_done_signal("Implement the helper next.")
+
+  def test_completion_trigger_requires_prior_coding_context(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Implement helper in services/boost/src/utils.py"},
+      {"role": "assistant", "content": "Done."},
+      {"role": "user", "content": "Looks good."},
+    ])
+    assert deliverable.has_prior_coding_context(chat)
+    assert deliverable.is_completion_trigger(chat)
+
+  def test_completion_trigger_false_for_casual_done_phrase(self):
+    chat = self._chat("Ship it")
+    assert not deliverable.has_prior_coding_context(chat)
+    assert not deliverable.is_completion_trigger(chat)
+
+  def test_recent_finish_tool_call_detected_in_history(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Add tests in services/boost/tests/test_utils.py"},
+      {
+        "role": "assistant",
+        "content": "",
+        "tool_calls": [{
+          "id": "call_finish",
+          "type": "function",
+          "function": {"name": "finish", "arguments": "{}"},
+        }],
+      },
+      {"role": "tool", "content": "Tests added.", "tool_call_id": "call_finish"},
+      {"role": "user", "content": "ok"},
+    ])
+    assert deliverable.has_recent_finish_tool_call(chat)
+    assert deliverable.is_completion_trigger(chat)
+
 
 class TestDeliverableBorderlineCases:
   def _chat(self, content: str) -> ch.Chat:
