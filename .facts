@@ -193,6 +193,45 @@
 - label: Boost BackendError forwards rate-limit headers to clients on 429 in both streaming and non-streaming paths
   command: rg -q 'RATE_LIMIT_FORWARD_HEADERS' services/boost/src/compat_utils.py && rg -q 'BackendError' services/boost/tests/test_streaming_backend_error.py
   tags: [implemented]
+- label: caveman performs budget-capped web research on research turns: extracts search queries, runs web_search, optionally reads top pages, injects a research_brief system block, then streams the final completion; acknowledgments and short continuation messages pass through without research
+  command: cd services/boost && uv run pytest tests/test_caveman.py -q --tb=no
+  tags: [spec]
+- label: ponytail performs two-hop web research on research-heavy turns (migrations, version comparisons, API behavior): initial search, page reads, gap detection, targeted second search, then injects a structured research_brief before the final answer
+  command: cd services/boost && uv run pytest tests/test_ponytail.py::TestPonytailResearchLoop -q --tb=no
+  tags: [spec]
+- label: autocheck audits coding deliverable drafts with a structured checklist (correctness, completeness, file-path grounding) and revises at most once when the audit verdict is revise; non-deliverable turns pass through unchanged
+  command: cd services/boost && uv run pytest tests/test_autocheck.py::TestAutocheckApply -q --tb=no
+  tags: [spec]
+- label: keel extracts a TaskBrief on the first substantive coding turn, injects a task_anchor system block on later turns with the next unmet acceptance criterion, and prepends a landing checklist when the user signals completion
+  command: cd services/boost && uv run pytest tests/test_keel.py::TestKeelApply -q --tb=no
+  tags: [spec]
+- label: sightline enforces read-before-edit on scratch tools read_file write_file and delete_file: in block mode mutations without a prior read on the same path are rejected and a fresh read is required after each write or delete
+  command: cd services/boost && uv run pytest tests/test_sightline.py::TestSightlineGuards -q --tb=no
+  tags: [spec]
+- label: diffscope compares cited file paths in coding deliverable drafts against user-stated scope from recent messages, verifies workspace paths when HARBOR_BOOST_WORKSPACE_ROOT is set, and revises once on out-of-scope or missing paths
+  command: cd services/boost && uv run pytest tests/test_diffscope.py::TestDiffscopeApply -q --tb=no
+  tags: [spec]
+- label: research-quick workflow registers portable tools then runs caveman then final completion
+  command: cd services/boost && uv run pytest 'tests/test_workflows.py::TestWorkflowPresets::test_preset_module_chain[research-quick-caveman]' -q --tb=no
+  tags: [spec]
+- label: research-deep workflow registers portable tools then runs ponytail then final completion
+  command: cd services/boost && uv run pytest 'tests/test_workflows.py::TestWorkflowPresets::test_preset_module_chain[research-deep-ponytail]' -q --tb=no
+  tags: [spec]
+- label: code-check workflow registers portable tools then runs autocheck then final completion
+  command: cd services/boost && uv run pytest 'tests/test_workflows.py::TestWorkflowPresets::test_preset_module_chain[code-check-autocheck]' -q --tb=no
+  tags: [spec]
+- label: shipyard workflow chains keel caveman tools ponytail and autocheck before final, with defer_final on intermediate grounding and research steps
+  command: cd services/boost && uv run pytest tests/test_workflows.py::TestWorkflowPresets::test_shipyard_preset_module_chain -q --tb=no
+  tags: [spec]
+- label: deliverable heuristics gate agentic modules: coding implementation requests with file paths or code blocks trigger post-processing while purely explanatory questions pass through
+  command: cd services/boost && uv run pytest tests/test_agentic_infra.py::TestDeliverableGate -q --tb=no
+  tags: [spec]
+- label: read_workspace_file is exposed as a portable tool only when HARBOR_BOOST_WORKSPACE_ROOT is set and rejects paths outside the workspace root
+  command: cd services/boost && uv run pytest tests/test_agentic_infra.py::TestWorkspaceFileTool -q --tb=no
+  tags: [spec]
+- label: shared research package enforces per-request search URL-read and character budgets and renders gathered results into a research_brief system block
+  command: cd services/boost && uv run pytest tests/test_agentic_infra.py::TestResearchBudget tests/test_agentic_infra.py::TestResearchBrief -q --tb=no
+  tags: [spec]
 
 # testing
 - label: tests use a Deno orchestrator running sequential bash suites across containerized distros
