@@ -1494,6 +1494,69 @@ class TestAuditAndRevise:
     assert audit.verdict == "revise"
     assert debug.verdict == "revise"
 
+  def test_audit_llm_keeps_request_model_when_unset(self):
+    llm = MagicMock()
+    llm.model = "request-model"
+    cheap = MagicMock()
+    cheap.model = "request-model"
+    original = config.AUTOCHECK_AUDIT_MODEL.__value__
+
+    try:
+      config.AUTOCHECK_AUDIT_MODEL.__value__ = ""
+      with patch("research.orchestrate.cheap_llm", return_value=cheap) as cheap_llm:
+        result = autocheck.audit_llm(llm)
+    finally:
+      config.AUTOCHECK_AUDIT_MODEL.__value__ = original
+
+    cheap_llm.assert_called_once_with(llm)
+    assert result is cheap
+    assert result.model == "request-model"
+
+  def test_audit_llm_overrides_model_when_configured(self):
+    llm = MagicMock()
+    llm.model = "request-model"
+    cheap = MagicMock()
+    cheap.model = "request-model"
+    original = config.AUTOCHECK_AUDIT_MODEL.__value__
+
+    try:
+      config.AUTOCHECK_AUDIT_MODEL.__value__ = "  gpt-4o-mini  "
+      with patch("research.orchestrate.cheap_llm", return_value=cheap):
+        result = autocheck.audit_llm(llm)
+    finally:
+      config.AUTOCHECK_AUDIT_MODEL.__value__ = original
+
+    assert result.model == "gpt-4o-mini"
+
+  @pytest.mark.asyncio
+  async def test_run_audit_uses_audit_model_override(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Implement helper in utils.py"},
+    ])
+    llm = MagicMock()
+    llm.url = "http://example.com"
+    llm.headers = {}
+    llm.query_params = {}
+    llm.model = "request-model"
+    cheap = MagicMock()
+    cheap.model = "request-model"
+    cheap.chat_completion = AsyncMock(
+      return_value={"verdict": "pass", "summary": "Ship it", "findings": []},
+    )
+    original = config.AUTOCHECK_AUDIT_MODEL.__value__
+
+    try:
+      config.AUTOCHECK_AUDIT_MODEL.__value__ = "audit-model"
+      with patch("research.orchestrate.cheap_llm", return_value=cheap) as cheap_llm:
+        audit, debug = await autocheck.run_audit(chat, llm, "draft text")
+    finally:
+      config.AUTOCHECK_AUDIT_MODEL.__value__ = original
+
+    cheap_llm.assert_called_once_with(llm)
+    assert cheap.model == "audit-model"
+    assert audit.verdict == "pass"
+    assert debug.verdict == "pass"
+
   @pytest.mark.asyncio
   async def test_revise_draft_returns_revised_text(self):
     chat = ch.Chat.from_conversation([

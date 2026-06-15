@@ -892,6 +892,16 @@ AUTOCHECK_STRICT = Config[bool](
     ),
 )
 
+AUTOCHECK_AUDIT_MODEL = Config[str](
+    name="HARBOR_BOOST_AUTOCHECK_AUDIT_MODEL",
+    type=str,
+    default="",
+    description=(
+        "Model used for the `autocheck` structured audit sub-call. When empty, "
+        "autocheck uses the same model as the incoming request."
+    ),
+)
+
 # ------------------- KEEL -------------------
 
 KEEL_ENABLED = Config[bool](

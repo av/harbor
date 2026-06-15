@@ -84,6 +84,8 @@ for troubleshooting.
   request via `@boost_show_audit`.
 - `strict` — when true, prepend a warning banner when critical or major findings
   remain after all revise passes. Default: `false`.
+- `audit_model` — model for the structured audit sub-call. Default: empty (same as
+  the request model). Set via `HARBOR_BOOST_AUTOCHECK_AUDIT_MODEL`.
 
 ```bash
 harbor boost modules add autocheck
@@ -92,6 +94,7 @@ harbor config set HARBOR_BOOST_AUTOCHECK_MAX_PASSES 1
 harbor config set HARBOR_BOOST_AUTOCHECK_MAX_REVISE_PASSES 1
 harbor config set HARBOR_BOOST_AUTOCHECK_SHOW_AUDIT true
 harbor config set HARBOR_BOOST_AUTOCHECK_STRICT true
+harbor config set HARBOR_BOOST_AUTOCHECK_AUDIT_MODEL gpt-4o-mini
 harbor config set HARBOR_BOOST_WORKSPACE_ROOT /workspace/myproject
 ```
 
@@ -1350,6 +1353,15 @@ async def explore_workspace_with_tools(
     return f"Workspace exploration failed: {exc}", []
 
 
+def audit_llm(llm: "llm.LLM") -> "llm.LLM":
+  """Return the inexpensive client used for structured autocheck audits."""
+  intermediate = orchestrate.cheap_llm(llm)
+  audit_model = (boost_config.AUTOCHECK_AUDIT_MODEL.value or "").strip()
+  if audit_model:
+    intermediate.model = audit_model
+  return intermediate
+
+
 async def run_audit(
   chat: "ch.Chat",
   llm: "llm.LLM",
@@ -1367,7 +1379,7 @@ async def run_audit(
     git_diff_context=git_diff_context,
     mechanical_findings=mechanical_findings,
   )
-  intermediate = orchestrate.cheap_llm(llm)
+  intermediate = audit_llm(llm)
   result = await intermediate.chat_completion(
     prompt=AUDIT_PROMPT,
     conversation=str(chat),
