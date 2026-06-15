@@ -636,6 +636,37 @@ class TestDiffscopeApply:
     )
 
   @pytest.mark.asyncio
+  async def test_apply_replaces_prior_draft_when_defer_final(self):
+    """Pre-revision assistant draft must not remain in chat for downstream autocheck."""
+    violating = "Also edited services/boost/src/config.py for flags."
+    scoped = "Only updated services/boost/src/utils.py."
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Only change services/boost/src/utils.py"},
+      {"role": "assistant", "content": violating},
+    ])
+    llm = MagicMock()
+    llm.emit_status = AsyncMock()
+    llm.emit_message = AsyncMock()
+    llm.stream_chat_completion = AsyncMock(return_value=violating)
+
+    with (
+      patch.object(diffscope, "verify_workspace_paths", new=AsyncMock(return_value=[])),
+      patch.object(
+        diffscope,
+        "revise_with_correction",
+        new=AsyncMock(return_value=scoped),
+      ),
+    ):
+      await diffscope.apply(chat, llm, config={"defer_final": True})
+
+    assistants = [
+      msg.get("content") or ""
+      for msg in chat.history()
+      if msg.get("role") == "assistant"
+    ]
+    assert assistants == [scoped]
+
+  @pytest.mark.asyncio
   async def test_apply_uses_git_diff_paths_for_scope_check(self):
     chat = ch.Chat.from_conversation([
       {"role": "user", "content": "Only change services/boost/src/utils.py"},

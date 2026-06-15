@@ -1543,6 +1543,7 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
       extra_calls=extra_calls,
     )
     await llm.emit_status(format_skipped_status("audit_failed"))
+    workflow_mod.anchor_deferred_draft(chat, draft, module_cfg)
     await emit_final(llm, draft)
     return draft
 
@@ -1593,5 +1594,6 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
     final_text = append_audit_footer(final_text, audit)
 
   await llm.emit_status("Autocheck: final answer...")
+  workflow_mod.anchor_deferred_draft(chat, final_text, module_cfg)
   await emit_final(llm, final_text)
   return final_text

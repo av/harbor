@@ -1610,6 +1610,48 @@ class TestAutocheckApply:
     llm.emit_status.assert_awaited_once_with("Autocheck: skipped (not_deliverable)")
     llm.stream_final_completion.assert_not_called()
 
+  @pytest.mark.asyncio
+  async def test_apply_anchors_revised_draft_when_defer_final(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Implement retry helper in services/boost/src/utils.py"},
+      {"role": "assistant", "content": "Draft implementation"},
+    ])
+    llm = MagicMock()
+    llm.boost_params = {}
+    llm.emit_status = AsyncMock()
+    llm.emit_message = AsyncMock()
+    llm.stream_chat_completion = AsyncMock(return_value="Draft implementation")
+
+    first_audit = autocheck.AuditResult(
+      verdict="revise",
+      summary="Fix imports",
+      findings=[autocheck.AuditFinding(severity="major", message="Missing import")],
+    )
+    second_audit = autocheck.AuditResult(verdict="pass", summary="Good now")
+    first_debug = autocheck.AuditDebug(triggered=True, gate_reason="triggered", verdict="revise")
+    second_debug = autocheck.AuditDebug(triggered=True, gate_reason="triggered", verdict="pass")
+    revised = "Revised implementation"
+
+    with (
+      patch.object(autocheck, "gather_workspace_context", new=AsyncMock(return_value="")),
+      patch.object(
+        autocheck,
+        "run_audit",
+        new=AsyncMock(side_effect=[(first_audit, first_debug), (second_audit, second_debug)]),
+      ),
+      patch.object(autocheck, "revise_draft", new=AsyncMock(return_value=revised)),
+    ):
+      await autocheck.apply(chat, llm, config={"defer_final": True})
+
+    assistants = [
+      msg.get("content") or ""
+      for msg in chat.history()
+      if msg.get("role") == "assistant"
+    ]
+    assert assistants == [revised]
+    llm.emit_message.assert_awaited_once_with(revised)
+    llm.stream_final_completion.assert_not_called()
+
   @pytest.mark.parametrize(
     "gate_reason",
     [

@@ -644,11 +644,7 @@ def anchor_scoped_draft(
   module_cfg: dict,
 ) -> None:
   """Record a scoped draft in chat history for downstream workflow modules."""
-  if not module_cfg.get("defer_final"):
-    return
-  text = (final_text or "").strip()
-  if text:
-    chat.assistant(text)
+  workflow_mod.anchor_deferred_draft(chat, final_text, module_cfg)
 
 
 async def emit_final(llm: "llm.LLM", final_text: str) -> None:

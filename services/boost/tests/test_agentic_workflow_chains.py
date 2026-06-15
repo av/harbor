@@ -331,6 +331,13 @@ class TestScopeGuardWorkflowChain:
     contents = [msg.get("content") or "" for msg in history]
     assert any("provided tools" in content for content in contents)
     assert any("outside the user's stated scope" in content for content in contents)
+    assistant_contents = [
+      msg.get("content") or ""
+      for msg in history
+      if msg.get("role") == "assistant"
+    ]
+    assert autocheck_draft in assistant_contents
+    assert draft_with_violation not in assistant_contents
 
 
 class TestResearchQuickWorkflowChain:
