@@ -182,6 +182,7 @@ class TestCavemanLlmTrigger:
   async def test_apply_llm_trigger_skips_when_classifier_says_no(self, caveman_trigger_mode):
     chat = self._chat("Refactor the retry helper in services/boost/src/utils.py")
     llm = MagicMock(module=caveman.ID_PREFIX)
+    llm.emit_status = AsyncMock()
     llm.stream_final_completion = AsyncMock()
     config.CAVEMAN_TRIGGER.__value__ = "llm"
 
@@ -414,17 +415,43 @@ class TestCavemanBriefCache:
     assert render_to_system(second_brief) in second_chat.history()[0]["content"]
 
 
+class TestCavemanStatusFormatting:
+  def test_format_skipped_status_includes_gate_reason(self):
+    assert caveman.format_skipped_status("acknowledgment") == (
+      "Caveman research: skipped (acknowledgment)"
+    )
+    assert caveman.format_skipped_status("coding_no_research_signals") == (
+      "Caveman research: skipped (coding_no_research_signals)"
+    )
+
+  def test_format_query_status_matches_ponytail_style(self):
+    assert caveman.format_query_status(1) == "Caveman research: (1 query)..."
+    assert caveman.format_query_status(3) == "Caveman research: (3 queries)..."
+
+  def test_format_gathered_status_includes_query_and_url_counts(self):
+    assert caveman.format_gathered_status(query_count=2, pages_read=1) == (
+      "Caveman research: 2 queries, read 1 URL..."
+    )
+    assert caveman.format_gathered_status(query_count=1, pages_read=0) == (
+      "Caveman research: 1 query, read 0 URLs..."
+    )
+
+
 class TestCavemanApply:
   @pytest.mark.asyncio
   async def test_apply_passes_through_on_skip(self):
     chat = ch.Chat.from_conversation([{"role": "user", "content": "thanks"}])
     llm = MagicMock(module=caveman.ID_PREFIX)
+    llm.emit_status = AsyncMock()
     llm.stream_final_completion = AsyncMock()
 
     with patch.object(caveman, "extract_search_queries", new=AsyncMock()) as extract:
       await caveman.apply(chat, llm)
 
     extract.assert_not_called()
+    llm.emit_status.assert_awaited_once_with(
+      "Caveman research: skipped (acknowledgment)"
+    )
     llm.stream_final_completion.assert_awaited_once()
 
   @pytest.mark.asyncio
@@ -447,6 +474,10 @@ class TestCavemanApply:
 
     rendered = render_to_system(brief)
     assert rendered in chat.history()[0]["content"]
+    statuses = [call.args[0] for call in llm.emit_status.await_args_list]
+    assert "Caveman research: planning queries..." in statuses
+    assert "Caveman research: (1 query)..." in statuses
+    assert "Caveman research: 1 query, read 0 URLs..." in statuses
     llm.stream_final_completion.assert_awaited_once()
 
   @pytest.mark.asyncio

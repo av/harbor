@@ -107,6 +107,32 @@ Do not repeat near-duplicate queries. Return at most 3 queries.
 STATUS_PREFIX = "Caveman research"
 BRIEF_CACHE_KEY = "caveman_brief_cache"
 
+
+def format_skipped_status(gate_reason: str) -> str:
+  """Short status line for emit_status when caveman passes through."""
+  reason = (gate_reason or "unknown").strip()
+  return f"{STATUS_PREFIX}: skipped ({reason})"
+
+
+def format_query_status(query_count: int) -> str:
+  """Status line before one-hop research, matching ponytail query-count style."""
+  noun = "query" if query_count == 1 else "queries"
+  return f"{STATUS_PREFIX}: ({query_count} {noun})..."
+
+
+def format_gathered_status(
+  *,
+  query_count: int,
+  pages_read: int,
+) -> str:
+  """Status line after gather completes with query and URL-read counts."""
+  query_noun = "query" if query_count == 1 else "queries"
+  url_noun = "URL" if pages_read == 1 else "URLs"
+  return (
+    f"{STATUS_PREFIX}: {query_count} {query_noun}, "
+    f"read {pages_read} {url_noun}..."
+  )
+
 TRIGGER_CLASSIFIER_PROMPT = """
 <instruction>
 Does this question need external web research to answer accurately?
@@ -318,6 +344,7 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
   message = orchestrate.last_user_text(chat)
   if not message:
     logger.warning(f"{ID_PREFIX}: No user message found, passing through")
+    await llm.emit_status(format_skipped_status("empty_message"))
     _record_debug(
       debug_metrics.skipped_payload("empty_message", duration_ms=timer.elapsed_ms()),
     )
@@ -327,6 +354,7 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
   if _uses_llm_trigger():
     extra_calls += 1
   if gate_reason != "triggered":
+    await llm.emit_status(format_skipped_status(gate_reason))
     _record_debug(
       debug_metrics.skipped_payload(
         gate_reason,
@@ -377,6 +405,7 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
 
   if not queries:
     logger.warning(f"{ID_PREFIX}: No queries extracted, passing through")
+    await llm.emit_status(format_skipped_status("no_queries_extracted"))
     _record_debug(
       debug_metrics.triggered_payload(
         "no_queries_extracted",
@@ -386,10 +415,14 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
     )
     return await workflow_mod.complete_or_defer(llm, config)
 
-  await llm.emit_status(
-    f"{STATUS_PREFIX}: {len(queries)} quer{'y' if len(queries) == 1 else 'ies'}..."
-  )
+  await llm.emit_status(format_query_status(len(queries)))
   brief = await gather_research(queries, budget, llm)
+  await llm.emit_status(
+    format_gathered_status(
+      query_count=len(queries),
+      pages_read=len(brief.pages),
+    )
+  )
   if not brief.query:
     brief.query = message
 

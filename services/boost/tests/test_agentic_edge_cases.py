@@ -71,14 +71,18 @@ class TestCavemanEdgeCases:
 
   @pytest.mark.asyncio
   async def test_apply_passes_through_on_continue(self):
-    chat = self._chat("continue")
+    chat = self._chat("carry on as planned")
     llm = MagicMock(module=caveman.ID_PREFIX)
+    llm.emit_status = AsyncMock()
     llm.stream_final_completion = AsyncMock()
 
     with patch.object(caveman, "extract_search_queries", new=AsyncMock()) as extract:
       await caveman.apply(chat, llm)
 
     extract.assert_not_called()
+    llm.emit_status.assert_awaited_once_with(
+      "Caveman research: skipped (continuation)"
+    )
     llm.stream_final_completion.assert_awaited_once()
 
 
