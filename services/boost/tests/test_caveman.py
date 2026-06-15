@@ -494,6 +494,29 @@ class TestCavemanApply:
     llm.stream_final_completion.assert_awaited_once()
 
   @pytest.mark.asyncio
+  async def test_apply_passes_through_when_no_queries_extracted(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "What is the Stripe checkout session API response format in 2024?"},
+    ])
+    llm = MagicMock(module=caveman.ID_PREFIX)
+    llm.emit_status = AsyncMock()
+    llm.stream_final_completion = AsyncMock()
+
+    with (
+      patch.object(caveman, "extract_search_queries", new=AsyncMock(return_value=[])),
+      patch.object(caveman, "gather_research", new=AsyncMock()) as gather,
+    ):
+      await caveman.apply(chat, llm)
+
+    gather.assert_not_called()
+    statuses = [call.args[0] for call in llm.emit_status.await_args_list]
+    assert statuses == [
+      "Caveman research: planning queries...",
+      "Caveman research: skipped (no_queries_extracted)",
+    ]
+    llm.stream_final_completion.assert_awaited_once()
+
+  @pytest.mark.asyncio
   async def test_apply_injects_brief_and_completes(self):
     chat = ch.Chat.from_conversation([
       {"role": "user", "content": "What are the latest Harbor Boost module patterns?"},
