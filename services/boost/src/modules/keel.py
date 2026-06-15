@@ -35,9 +35,11 @@ restarts. Later requests re-hydrate from that marker when request state is empty
 On later turns it injects a compact `<task_anchor>` system block with the
 objective, constraints, and the next unmet acceptance criterion. Anchor injection
 is throttled to every N user turns (see `HARBOR_BOOST_KEEL_ANCHOR_EVERY`). Simple
-drift heuristics flag scope-expansion phrases. A landing checklist with
-acceptance-criteria checkboxes is injected when the user signals completion or
-when the model calls the `finish` tool. When `HARBOR_BOOST_WORKSPACE_ROOT` is a
+drift heuristics flag scope-expansion phrases. Assistant messages are scanned for
+simple keyword matches against each acceptance criterion; matched items show as
+`[x]` in the landing checklist. A landing checklist with acceptance-criteria
+checkboxes is injected when the user signals completion or when the model calls
+the `finish` tool. When `HARBOR_BOOST_WORKSPACE_ROOT` is a
 git repo, the checklist also lists `git diff --name-only` paths so the model can
 compare workspace changes against acceptance criteria and in-scope paths.
 
@@ -107,6 +109,56 @@ DRIFT_PHRASE_RE = re.compile(
   r"extra\s+feature|one\s+more\s+thing|can\s+you\s+also|throw\s+in|"
   r"since\s+you(?:'re| are)\s+here|while\s+we(?:'re| are)\s+at\s+it"
   r")\b",
+  re.IGNORECASE,
+)
+
+CRITERION_STOP_WORDS = frozenset({
+  "a",
+  "an",
+  "and",
+  "are",
+  "as",
+  "at",
+  "be",
+  "by",
+  "can",
+  "each",
+  "for",
+  "from",
+  "has",
+  "have",
+  "in",
+  "into",
+  "is",
+  "it",
+  "its",
+  "of",
+  "on",
+  "or",
+  "should",
+  "that",
+  "the",
+  "their",
+  "them",
+  "then",
+  "this",
+  "to",
+  "was",
+  "were",
+  "when",
+  "where",
+  "which",
+  "with",
+  "without",
+  "must",
+  "all",
+  "any",
+  "not",
+  "no",
+})
+
+CRITERION_TOKEN_RE = re.compile(
+  r"[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+",
   re.IGNORECASE,
 )
 
@@ -226,7 +278,11 @@ def get_stored_brief() -> TaskBrief | None:
 
 
 def store_brief(brief: TaskBrief) -> None:
-  _request_store("keel_task_brief", brief.model_dump())
+  request = request_state.get()
+  if request is None:
+    return
+
+  setattr(request.state, "keel_task_brief", brief.model_dump())
 
 
 def clear_brief_state() -> None:
@@ -376,7 +432,60 @@ def get_met_criteria() -> set[int]:
 
 
 def store_met_criteria(indices: set[int]) -> None:
-  _request_store("keel_met_criteria", sorted(indices))
+  request = request_state.get()
+  if request is None:
+    return
+
+  setattr(request.state, "keel_met_criteria", sorted(indices))
+
+
+def criterion_keywords(criterion: str) -> list[str]:
+  """Extract significant tokens from an acceptance criterion for keyword matching."""
+  text = (criterion or "").strip().lower()
+  if not text:
+    return []
+
+  keywords: list[str] = []
+  seen: set[str] = set()
+
+  for match in deliverable.FILE_PATH_RE.finditer(text):
+    path = deliverable.normalize_repo_path(match.group(0)).lower()
+    if path and path not in seen:
+      seen.add(path)
+      keywords.append(path)
+
+  for token in CRITERION_TOKEN_RE.findall(text):
+    token = token.lower()
+    if token.isdigit():
+      if token not in seen:
+        seen.add(token)
+        keywords.append(token)
+      continue
+    if len(token) < 3 or token in CRITERION_STOP_WORDS:
+      continue
+    if token not in seen:
+      seen.add(token)
+      keywords.append(token)
+
+  return keywords
+
+
+def criterion_met_in_text(criterion: str, text: str) -> bool:
+  """Return True when assistant text satisfies a criterion via substring or keywords."""
+  criterion = (criterion or "").strip()
+  text = (text or "").lower()
+  if not criterion or not text:
+    return False
+
+  needle = criterion.lower()
+  if len(needle) >= 12 and needle in text:
+    return True
+
+  keywords = criterion_keywords(criterion)
+  if not keywords:
+    return False
+
+  return all(keyword in text for keyword in keywords)
 
 
 def update_met_criteria_from_history(chat: "ch.Chat", brief: TaskBrief) -> set[int]:
@@ -387,17 +496,29 @@ def update_met_criteria_from_history(chat: "ch.Chat", brief: TaskBrief) -> set[i
   assistant_text = " ".join(
     (node.content or "")
     for node in chat.match(role="assistant")
-  ).lower()
+  )
 
+  changed = False
   for index, criterion in enumerate(brief.acceptance_criteria):
     if index in met:
       continue
-    needle = criterion.strip().lower()
-    if len(needle) >= 12 and needle in assistant_text:
+    if criterion_met_in_text(criterion, assistant_text):
       met.add(index)
+      changed = True
 
   store_met_criteria(met)
+  if changed:
+    logger.debug(
+      f"{ID_PREFIX}: met criteria updated to {sorted(met)} "
+      f"({len(met)}/{len(brief.acceptance_criteria)})"
+    )
   return met
+
+
+def sync_met_criteria_marker(chat: "ch.Chat", brief: TaskBrief) -> None:
+  """Persist met-criteria progress into the hidden brief marker when present."""
+  if chat_has_brief_marker(chat):
+    replace_brief_marker(chat, brief)
 
 
 def next_unmet_criterion(brief: TaskBrief, met: set[int]) -> str | None:
@@ -592,9 +713,11 @@ async def ensure_task_brief(
   return brief
 
 
-def _register_finish_wrapper(brief: TaskBrief, drift_detected: bool) -> None:
-  checklist = render_landing_checklist(brief, drift_detected=drift_detected)
-
+def _register_finish_wrapper(
+  chat: "ch.Chat",
+  brief: TaskBrief,
+  drift_detected: bool,
+) -> None:
   async def finish(answer: str) -> str:
     """
     Return the final answer when the model is done using tools.
@@ -603,6 +726,9 @@ def _register_finish_wrapper(brief: TaskBrief, drift_detected: bool) -> None:
     Args:
       answer (str): Final answer to provide to the user.
     """
+    update_met_criteria_from_history(chat, brief)
+    sync_met_criteria_marker(chat, brief)
+    checklist = render_landing_checklist(brief, drift_detected=drift_detected)
     logger.info(f"{ID_PREFIX}: landing checklist on finish")
     return f"{checklist}\n\n{answer}"
 
@@ -683,14 +809,15 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
     )
     return await workflow_mod.complete_or_defer(llm, config)
 
+  met = update_met_criteria_from_history(chat, brief)
+  sync_met_criteria_marker(chat, brief)
+
   if user_turns >= 2:
     drift_detected = detect_drift(message, brief)
     if drift_detected:
       logger.warning(f"{ID_PREFIX}: scope drift detected on turn {user_turns}")
       await llm.emit_status(DRIFT_STATUS)
       chat.system(DRIFT_WARNING)
-
-    met = update_met_criteria_from_history(chat, brief)
 
     if should_inject_anchor(user_turns):
       next_criterion = next_unmet_criterion(brief, met)
@@ -707,11 +834,13 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
       )
 
   if is_done_signal(message):
+    met = update_met_criteria_from_history(chat, brief)
+    sync_met_criteria_marker(chat, brief)
     logger.info(f"{ID_PREFIX}: done signal detected, injecting landing checklist")
     chat.system(render_landing_checklist(brief, drift_detected=drift_detected))
     landing_injected = True
 
-  _register_finish_wrapper(brief, drift_detected)
+  _register_finish_wrapper(chat, brief, drift_detected)
   _record_debug(
     debug_metrics.triggered_payload(
       "triggered",

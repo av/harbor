@@ -277,6 +277,9 @@
 - label: keel supports per-request @boost_keel_refresh (keel_refresh boost param): when true re-extracts TaskBrief from the current conversation, replaces the hidden keel_brief marker, clears met acceptance-criteria tracking, and emits Keel: refreshing task brief status
   command: cd services/boost && uv run pytest tests/test_keel.py::TestKeelRefreshParam tests/test_keel.py::TestKeelApply::test_apply_refresh_reextracts_and_replaces_marker -q --tb=no
   tags: [implemented]
+- label: keel tracks met acceptance criteria by keyword-matching assistant messages against each criterion and renders landing checklist checkboxes as [x]/[ ] with a met count; progress syncs into the hidden keel_brief marker
+  command: cd services/boost && uv run pytest tests/test_keel.py::TestKeelMetCriteria tests/test_keel.py::TestKeelApply::test_apply_landing_checklist_marks_met_criteria_from_assistant_history tests/test_keel.py::TestKeelApply::test_finish_wrapper_prepends_checklist -q --tb=no
+  tags: [implemented]
 - label: research orchestration parallelizes multi-query web_search calls and multi-URL page reads with concurrency caps while respecting per-request search and read budgets
   command: cd services/boost && uv run pytest tests/test_orchestrate.py::TestOrchestrateParallelFetch -q --tb=no
   tags: [spec, implemented]

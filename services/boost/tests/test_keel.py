@@ -4,6 +4,7 @@ import os
 import subprocess
 import sys
 import tempfile
+from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -14,6 +15,18 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 import chat as ch
 import config
 from modules import keel
+from state import request as request_state
+
+
+@contextmanager
+def request_context():
+  req = MagicMock()
+  req.state = type("State", (), {})()
+  token_req = request_state.set(req)
+  try:
+    yield req
+  finally:
+    request_state.reset(token_req)
 
 
 class TestKeelHeuristics:
@@ -59,6 +72,82 @@ class TestKeelHeuristics:
       assert not keel.needs_keel(chat)
     finally:
       config.KEEL_ENABLED.__value__ = original
+
+
+class TestKeelMetCriteria:
+  def test_criterion_keywords_extracts_significant_tokens(self):
+    keywords = keel.criterion_keywords("Helper retries 3 times on transient errors")
+    assert "helper" in keywords
+    assert "retries" in keywords
+    assert "3" in keywords
+    assert "times" in keywords
+    assert "transient" in keywords
+    assert "errors" in keywords
+    assert "on" not in keywords
+
+  def test_criterion_keywords_includes_repo_paths(self):
+    keywords = keel.criterion_keywords("Update services/boost/src/utils.py with retry logic")
+    assert "services/boost/src/utils.py" in keywords
+    assert "retry" in keywords
+
+  def test_criterion_met_in_text_matches_full_substring(self):
+    criterion = "Helper retries 3 times on transient errors"
+    text = "Implemented helper retries 3 times on transient errors in utils."
+    assert keel.criterion_met_in_text(criterion, text)
+
+  def test_criterion_met_in_text_matches_keywords_without_exact_phrase(self):
+    criterion = "Helper retries 3 times"
+    text = "The helper now retries up to 3 times on failure."
+    assert keel.criterion_met_in_text(criterion, text)
+
+  def test_criterion_met_in_text_rejects_missing_keywords(self):
+    criterion = "Add tests for retry helper"
+    text = "Implemented the retry helper with three attempts."
+    assert not keel.criterion_met_in_text(criterion, text)
+
+  def test_update_met_criteria_from_history_marks_matching_assistant_messages(self):
+    brief = keel.TaskBrief(
+      objective="Add retry helper",
+      acceptance_criteria=["Helper retries 3 times", "Add tests for retry helper"],
+    )
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Implement retry helper"},
+      {"role": "assistant", "content": "The helper now retries up to 3 times on failure."},
+      {"role": "user", "content": "Add tests next."},
+    ])
+
+    with patch.object(keel, "get_met_criteria", return_value=set()):
+      met = keel.update_met_criteria_from_history(chat, brief)
+
+    assert met == {0}
+
+  def test_render_landing_checklist_reflects_history_keyword_matches(self):
+    brief = keel.TaskBrief(
+      objective="Add retry helper",
+      acceptance_criteria=["Helper retries 3 times", "Add tests for retry helper"],
+    )
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Implement retry helper"},
+      {"role": "assistant", "content": "The helper now retries up to 3 times on failure."},
+      {"role": "user", "content": "We're done."},
+    ])
+
+    met_state: set[int] = set()
+
+    def _store_met(indices: set[int]) -> None:
+      met_state.clear()
+      met_state.update(indices)
+
+    with (
+      patch.object(keel, "get_met_criteria", side_effect=lambda: set(met_state)),
+      patch.object(keel, "store_met_criteria", side_effect=_store_met),
+    ):
+      keel.update_met_criteria_from_history(chat, brief)
+      rendered = keel.render_landing_checklist(brief)
+
+    assert 'status="1/2 met"' in rendered
+    assert "[x] Helper retries 3 times" in rendered
+    assert "[ ] Add tests for retry helper" in rendered
 
 
 class TestKeelBriefRendering:
@@ -379,7 +468,7 @@ class TestKeelApply:
       await keel.apply(chat, llm)
 
     ensure.assert_awaited_once()
-    register_finish.assert_called_once_with(brief, False)
+    register_finish.assert_called_once_with(chat, brief, False)
     llm.stream_final_completion.assert_awaited_once()
 
   @pytest.mark.asyncio
@@ -604,11 +693,52 @@ class TestKeelApply:
       objective="Add retry helper",
       acceptance_criteria=["Helper retries 3 times"],
     )
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Implement retry helper"},
+      {"role": "assistant", "content": "The helper now retries up to 3 times on failure."},
+      {"role": "user", "content": "Ship it."},
+    ])
 
-    with patch("modules.keel.tools.registry.set_local_tool") as set_tool:
-      keel._register_finish_wrapper(brief, drift_detected=False)
-
-    finish_tool = set_tool.call_args.args[1]
-    result = await finish_tool("Final answer body.")
+    with (
+      request_context(),
+      patch("modules.keel.tools.registry.set_local_tool") as set_tool,
+    ):
+      keel._register_finish_wrapper(chat, brief, drift_detected=False)
+      finish_tool = set_tool.call_args.args[1]
+      result = await finish_tool("Final answer body.")
     assert "<landing_checklist>" in result
+    assert "[x] Helper retries 3 times" in result
     assert "Final answer body." in result
+
+  @pytest.mark.asyncio
+  async def test_apply_landing_checklist_marks_met_criteria_from_assistant_history(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Implement retry helper in services/boost/src/utils.py"},
+      {"role": "assistant", "content": "The helper now retries up to 3 times on failure."},
+      {"role": "user", "content": "Looks good, we're done."},
+    ])
+    llm = MagicMock()
+    llm.emit_status = AsyncMock()
+    llm.stream_final_completion = AsyncMock()
+
+    brief = keel.TaskBrief(
+      objective="Add retry helper",
+      acceptance_criteria=["Helper retries 3 times", "Add tests for retry helper"],
+    )
+
+    with (
+      request_context(),
+      patch.object(keel, "get_stored_brief", return_value=brief),
+      patch.object(keel, "_register_finish_wrapper"),
+    ):
+      await keel.apply(chat, llm)
+
+    history = chat.history()
+    checklist_messages = [
+      msg.get("content") or ""
+      for msg in history
+      if "<landing_checklist>" in (msg.get("content") or "")
+    ]
+    assert len(checklist_messages) == 1
+    assert "[x] Helper retries 3 times" in checklist_messages[0]
+    assert "[ ] Add tests for retry helper" in checklist_messages[0]
