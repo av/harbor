@@ -13,6 +13,7 @@ import log
 import research.orchestrate as orchestrate
 import research.workflow as workflow_mod
 import tools.registry
+from modules.diffscope import is_git_workspace, run_git_diff
 from state import request as request_state
 
 if TYPE_CHECKING:
@@ -35,7 +36,9 @@ objective, constraints, and the next unmet acceptance criterion. Anchor injectio
 is throttled to every N user turns (see `HARBOR_BOOST_KEEL_ANCHOR_EVERY`). Simple
 drift heuristics flag scope-expansion phrases. A landing checklist with
 acceptance-criteria checkboxes is injected when the user signals completion or
-when the model calls the `finish` tool.
+when the model calls the `finish` tool. When `HARBOR_BOOST_WORKSPACE_ROOT` is a
+git repo, the checklist also lists `git diff --name-only` paths so the model can
+compare workspace changes against acceptance criteria and in-scope paths.
 
 **When to use**
 
@@ -374,6 +377,29 @@ def render_anchor_block(brief: TaskBrief, next_criterion: str | None = None) -> 
   return "\n".join(lines)
 
 
+def collect_landing_git_changes() -> str:
+  """Return git diff --name-only block for the landing checklist when workspace is a git repo."""
+  root = boost_config.WORKSPACE_ROOT.value
+  if not root or not is_git_workspace(root):
+    return ""
+
+  result = run_git_diff(root)
+  if result is None:
+    return ""
+
+  paths, _stat = result
+  if not paths:
+    return ""
+
+  lines = [
+    "<git_changed_files>",
+    "Workspace changes (git diff --name-only) — compare against acceptance criteria:",
+  ]
+  lines.extend(f"- {path}" for path in paths)
+  lines.append("</git_changed_files>")
+  return "\n".join(lines)
+
+
 def render_landing_checklist(brief: TaskBrief, *, drift_detected: bool = False) -> str:
   criteria = brief.acceptance_criteria or ["Task completed as requested."]
   met = get_met_criteria()
@@ -392,6 +418,10 @@ def render_landing_checklist(brief: TaskBrief, *, drift_detected: bool = False) 
     lines.append(f"- [{mark}] {criterion}")
 
   lines.append("</acceptance_criteria>")
+
+  git_changes = collect_landing_git_changes()
+  if git_changes:
+    lines.append(git_changes)
 
   if brief.in_scope_paths:
     lines.append("<in_scope_paths>")

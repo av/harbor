@@ -1,7 +1,10 @@
 """Unit tests for the keel Boost module."""
 
 import os
+import subprocess
 import sys
+import tempfile
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -97,6 +100,89 @@ class TestKeelBriefRendering:
     assert "[x] Add API route" in rendered
     assert "[ ] Add tests" in rendered
     assert "<drift_warning>" in rendered
+
+  def test_render_landing_checklist_includes_git_changed_paths(self):
+    brief = keel.TaskBrief(
+      objective="Ship feature",
+      acceptance_criteria=["Add API route"],
+    )
+    with (
+      patch.object(keel, "is_git_workspace", return_value=True),
+      patch.object(keel, "run_git_diff", return_value=(["src/api.py", "tests/test_api.py"], "")),
+      patch.object(config.WORKSPACE_ROOT, "__value__", "/workspace"),
+    ):
+      rendered = keel.render_landing_checklist(brief)
+
+    assert "<git_changed_files>" in rendered
+    assert "git diff --name-only" in rendered
+    assert "- src/api.py" in rendered
+    assert "- tests/test_api.py" in rendered
+
+  def test_render_landing_checklist_omits_git_section_without_repo(self):
+    brief = keel.TaskBrief(
+      objective="Ship feature",
+      acceptance_criteria=["Add API route"],
+    )
+    with (
+      patch.object(keel, "is_git_workspace", return_value=False),
+      patch.object(config.WORKSPACE_ROOT, "__value__", "/workspace"),
+    ):
+      rendered = keel.render_landing_checklist(brief)
+
+    assert "<git_changed_files>" not in rendered
+
+  def test_render_landing_checklist_omits_git_section_when_diff_fails(self):
+    brief = keel.TaskBrief(
+      objective="Ship feature",
+      acceptance_criteria=["Add API route"],
+    )
+    with (
+      patch.object(keel, "is_git_workspace", return_value=True),
+      patch.object(keel, "run_git_diff", return_value=None),
+      patch.object(config.WORKSPACE_ROOT, "__value__", "/workspace"),
+    ):
+      rendered = keel.render_landing_checklist(brief)
+
+    assert "<git_changed_files>" not in rendered
+
+  def test_collect_landing_git_changes_from_real_repo(self):
+    with tempfile.TemporaryDirectory() as workspace:
+      root = Path(workspace)
+      target = root / "src" / "widget.py"
+      target.parent.mkdir(parents=True)
+      target.write_text("print(1)\n", encoding="utf-8")
+
+      subprocess.run(["git", "init"], cwd=root, check=True, capture_output=True)
+      subprocess.run(
+        ["git", "config", "user.email", "test@example.com"],
+        cwd=root,
+        check=True,
+        capture_output=True,
+      )
+      subprocess.run(
+        ["git", "config", "user.name", "Test User"],
+        cwd=root,
+        check=True,
+        capture_output=True,
+      )
+      subprocess.run(["git", "add", "."], cwd=root, check=True, capture_output=True)
+      subprocess.run(
+        ["git", "commit", "-m", "init"],
+        cwd=root,
+        check=True,
+        capture_output=True,
+      )
+      target.write_text("print(2)\n", encoding="utf-8")
+
+      original = config.WORKSPACE_ROOT.__value__
+      try:
+        config.WORKSPACE_ROOT.__value__ = str(root)
+        rendered = keel.collect_landing_git_changes()
+      finally:
+        config.WORKSPACE_ROOT.__value__ = original
+
+    assert "<git_changed_files>" in rendered
+    assert "src/widget.py" in rendered
 
 
 class TestKeelBriefPersistence:
