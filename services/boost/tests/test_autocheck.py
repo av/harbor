@@ -57,52 +57,84 @@ class TestAutocheckGate:
     assert not autocheck.needs_autocheck(chat)
     assert autocheck.autocheck_gate_reason(chat) == "short_message"
 
-  def test_skips_single_signal_deliverable(self):
-    chat = self._chat("Implement a retry helper")
-    assert deliverable.count_deliverable_signals(chat) == 1
-    assert not autocheck.needs_autocheck(chat)
-    assert autocheck.autocheck_gate_reason(chat) == "insufficient_signals"
-
-  def test_triggers_with_two_signals(self):
-    chat = self._chat("Implement retry helper in services/boost/src/utils.py")
-    assert deliverable.count_deliverable_signals(chat) >= 2
-    assert autocheck.needs_autocheck(chat)
-
-  def test_triggers_on_explicit_done_signal_with_prior_coding_context(self):
-    chat = ch.Chat.from_conversation([
-      {"role": "user", "content": "Implement retry helper in services/boost/src/utils.py"},
-      {"role": "assistant", "content": "Added retry helper with three attempts."},
-      {"role": "user", "content": "We're done — ship it."},
-    ])
-    assert autocheck.needs_autocheck(chat)
-    assert autocheck.autocheck_gate_reason(chat) == "triggered"
+  @pytest.mark.parametrize(
+    "conversation,expected_needs_autocheck,expected_gate_reason,expected_signal_count",
+    [
+      pytest.param(
+        [{"role": "user", "content": "The retry loop is broken and users cannot sign in"}],
+        False,
+        "insufficient_signals",
+        0,
+        id="zero_signals_skip",
+      ),
+      pytest.param(
+        [{"role": "user", "content": "Implement a retry helper"}],
+        False,
+        "insufficient_signals",
+        1,
+        id="one_signal_skip",
+      ),
+      pytest.param(
+        [{"role": "user", "content": "Implement retry helper in services/boost/src/utils.py"}],
+        True,
+        "triggered",
+        2,
+        id="two_signals_trigger",
+      ),
+      pytest.param(
+        [
+          {"role": "user", "content": "Add logging to services/boost/src/utils.py"},
+          {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [{
+              "id": "call_finish",
+              "type": "function",
+              "function": {
+                "name": "finish",
+                "arguments": '{"answer": "Logging added."}',
+              },
+            }],
+          },
+          {"role": "tool", "content": "Logging added.", "tool_call_id": "call_finish"},
+          {"role": "user", "content": "thanks"},
+        ],
+        True,
+        "triggered",
+        None,
+        id="finish_tool_triggers",
+      ),
+      pytest.param(
+        [
+          {"role": "user", "content": "Implement retry helper in services/boost/src/utils.py"},
+          {"role": "assistant", "content": "Added retry helper with three attempts."},
+          {"role": "user", "content": "We're done — ship it."},
+        ],
+        True,
+        "triggered",
+        None,
+        id="explicit_done_triggers",
+      ),
+    ],
+  )
+  def test_deliverable_gate(
+    self,
+    conversation,
+    expected_needs_autocheck,
+    expected_gate_reason,
+    expected_signal_count,
+  ):
+    chat = ch.Chat.from_conversation(conversation)
+    if expected_signal_count is not None:
+      assert deliverable.count_deliverable_signals(chat) == expected_signal_count
+    assert autocheck.needs_autocheck(chat) == expected_needs_autocheck
+    assert autocheck.autocheck_gate_reason(chat) == expected_gate_reason
 
   def test_triggers_on_looks_good_after_coding_session(self):
     chat = ch.Chat.from_conversation([
       {"role": "user", "content": "Fix bug in services/boost/src/main.py"},
       {"role": "assistant", "content": "Patched the retry loop in main.py."},
       {"role": "user", "content": "Looks good."},
-    ])
-    assert autocheck.needs_autocheck(chat)
-    assert autocheck.autocheck_gate_reason(chat) == "triggered"
-
-  def test_triggers_on_recent_finish_tool_call(self):
-    chat = ch.Chat.from_conversation([
-      {"role": "user", "content": "Add logging to services/boost/src/utils.py"},
-      {
-        "role": "assistant",
-        "content": "",
-        "tool_calls": [{
-          "id": "call_finish",
-          "type": "function",
-          "function": {
-            "name": "finish",
-            "arguments": '{"answer": "Logging added."}',
-          },
-        }],
-      },
-      {"role": "tool", "content": "Logging added.", "tool_call_id": "call_finish"},
-      {"role": "user", "content": "thanks"},
     ])
     assert autocheck.needs_autocheck(chat)
     assert autocheck.autocheck_gate_reason(chat) == "triggered"
