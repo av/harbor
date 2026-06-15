@@ -12,14 +12,15 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 import chat as ch
+import config
 import deliverable
 import workflows
 from middleware.request_id import request_id_var
 from modules import autocheck, caveman, keel, ponytail
 from modules import workflows as workflow_presets
-from modules.keel import TaskBrief, inject_brief_marker, store_brief
+from modules.keel import TaskBrief, inject_brief_marker, render_brief_marker, store_brief
 from state import request as request_state
-from helpers import mock_cheap_llm
+from helpers import mock_autocheck_cheap_llm, mock_cheap_llm
 
 
 SHIPYARD_MODULE_ORDER = [
@@ -400,3 +401,247 @@ class TestShipyardWorkflowE2E:
 
     run_audit.assert_not_called()
     assert llm.stream_final_completion.await_count == 1
+
+class TestShipyardEdgeCases:
+  @pytest.mark.asyncio
+  async def test_shipyard_keel_refresh_replaces_brief_marker_on_multi_turn_pivot(self):
+    """Multi-turn pivot with @boost_keel_refresh replaces the hidden brief marker once."""
+    old_brief = _implementation_brief()
+    refreshed_brief = TaskBrief(
+      objective="Add timeout helper",
+      acceptance_criteria=["Helper times out after 5s"],
+      in_scope_paths=["services/boost/src/timeouts.py"],
+    )
+    chat = ch.Chat.from_conversation([
+      {"role": "system", "content": render_brief_marker(old_brief, met_criteria={0})},
+      {"role": "user", "content": SHIPYARD_USER_MESSAGE},
+      {"role": "assistant", "content": "Started migration work."},
+      {
+        "role": "user",
+        "content": "Pivot: implement timeout helper in services/boost/src/timeouts.py",
+      },
+    ])
+    llm = _make_llm()
+    llm.boost_params = {"keel_refresh": "true"}
+
+    async def tracked_final(**_kwargs):
+      llm.is_final_stream = True
+      return "Final answer after pivot."
+
+    llm.stream_final_completion = AsyncMock(side_effect=tracked_final)
+
+    ponytail_cheap = _cheap_llm_mock(
+      AsyncMock(
+        side_effect=[
+          {"queries": ["Stripe timeout helper patterns"]},
+          {"gaps": [], "follow_up_queries": []},
+          {
+            "facts": ["Use bounded timeouts for checkout session polling"],
+            "uncertainties": [],
+            "recommendation": "Add explicit timeout handling.",
+            "do_not_assume": [],
+          },
+        ]
+      )
+    )
+    autocheck_cheap = mock_autocheck_cheap_llm(
+      draft_response="Timeout helper draft.",
+      audit_response={
+        "verdict": "pass",
+        "summary": "Timeout plan looks sound.",
+        "findings": [],
+      },
+    )
+
+    with (
+      request_context(),
+      patch.object(keel, "extract_task_brief", new=AsyncMock(return_value=refreshed_brief)),
+      patch(
+        "research.orchestrate.cheap_llm",
+        side_effect=[ponytail_cheap, ponytail_cheap, ponytail_cheap, autocheck_cheap, autocheck_cheap],
+      ),
+      patch("research.fetch.web_search", new=AsyncMock(return_value=MOCK_SEARCH_RESULT)),
+      patch("research.fetch.read_url", new=AsyncMock(return_value=MOCK_PAGE_CONTENT)),
+      patch.object(autocheck, "gather_workspace_context", new=AsyncMock(return_value="")),
+      patch.object(
+        autocheck,
+        "run_mechanical_preaudit",
+        new=AsyncMock(return_value=("", [])),
+      ),
+    ):
+      await workflows.apply_workflow(
+        deepcopy(workflow_presets.PRESETS["shipyard"]),
+        chat,
+        llm,
+      )
+
+    marker_messages = [
+      msg.get("content") or ""
+      for msg in chat.history()
+      if "<keel_brief hidden=\"true\">" in (msg.get("content") or "")
+    ]
+    assert len(marker_messages) == 1
+    parsed = keel.parse_brief_marker(marker_messages[0])
+    assert parsed is not None
+    restored, met = parsed
+    assert restored.objective == "Add timeout helper"
+    assert restored.in_scope_paths == ["services/boost/src/timeouts.py"]
+    assert met == set()
+    llm.emit_status.assert_any_await("Keel: refreshing task brief...")
+
+  @pytest.mark.asyncio
+  async def test_shipyard_ponytail_reuses_cached_brief_on_repeat_research_turn(self):
+    """Second shipyard run on the same research question reuses ponytail brief cache."""
+    original_cache = config.PONYTAIL_CACHE_BRIEF.__value__
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": RESEARCH_ONLY_MESSAGE},
+    ])
+    llm = _make_llm()
+
+    async def tracked_final(**_kwargs):
+      llm.is_final_stream = True
+      return "Research answer."
+
+    llm.stream_final_completion = AsyncMock(side_effect=tracked_final)
+
+    async def shared_chat_completion(**kwargs):
+      schema = kwargs.get("schema")
+      fields = getattr(schema, "model_fields", {})
+      if "queries" in fields:
+        return {"queries": ["Stripe checkout session API response format 2024"]}
+      if "follow_up_queries" in fields:
+        return {"gaps": [], "follow_up_queries": []}
+      if "facts" in fields:
+        return {
+          "facts": ["Response includes id, url, and status fields"],
+          "uncertainties": [],
+          "recommendation": "Use official Stripe docs.",
+          "do_not_assume": [],
+        }
+      return {}
+
+    shared_cheap = _cheap_llm_mock(AsyncMock(side_effect=shared_chat_completion))
+
+    try:
+      config.PONYTAIL_CACHE_BRIEF.__value__ = True
+
+      with (
+        request_context(),
+        patch("research.orchestrate.cheap_llm", return_value=shared_cheap),
+        patch("research.fetch.web_search", new=AsyncMock(return_value=MOCK_SEARCH_RESULT)),
+        patch("research.fetch.read_url", new=AsyncMock(return_value=MOCK_PAGE_CONTENT)),
+      ):
+        await workflows.apply_workflow(
+          deepcopy(workflow_presets.PRESETS["shipyard"]),
+          chat,
+          llm,
+        )
+        completions_after_first = shared_cheap.chat_completion.await_count
+        await workflows.apply_workflow(
+          deepcopy(workflow_presets.PRESETS["shipyard"]),
+          chat,
+          llm,
+        )
+        completions_after_second = shared_cheap.chat_completion.await_count
+    finally:
+      config.PONYTAIL_CACHE_BRIEF.__value__ = original_cache
+
+    assert completions_after_first == 4
+    assert completions_after_second == completions_after_first + 1
+    statuses = [call.args[0] for call in llm.emit_status.await_args_list]
+    assert any("using cached brief" in status for status in statuses)
+    assert llm.stream_final_completion.await_count == 2
+
+  @pytest.mark.asyncio
+  async def test_shipyard_autocheck_defer_final_anchors_revised_draft_on_multi_turn(self):
+    """Multi-turn shipyard anchors autocheck revised draft before the explicit final step."""
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": SHIPYARD_USER_MESSAGE},
+      {"role": "assistant", "content": "Pre-audit draft missing edge cases."},
+      {
+        "role": "user",
+        "content": (
+          "Implement Stripe checkout session auth migration in services/boost/src/auth.py "
+          "with explicit error handling and retry logic for failed API calls."
+        ),
+      },
+    ])
+    llm = _make_llm()
+    stream_calls: list[str] = []
+
+    async def tracked_final(**_kwargs):
+      stream_calls.append("final")
+      llm.is_final_stream = True
+      return "Final streamed answer."
+
+    llm.stream_final_completion = AsyncMock(side_effect=tracked_final)
+
+    revise_audit = autocheck.AuditResult(
+      verdict="revise",
+      summary="Add explicit error handling",
+      findings=[autocheck.AuditFinding(severity="major", message="Missing error path")],
+    )
+    pass_audit = autocheck.AuditResult(verdict="pass", summary="Looks good now.")
+    revise_debug = autocheck.AuditDebug(
+      triggered=True,
+      gate_reason="triggered",
+      verdict="revise",
+    )
+    pass_debug = autocheck.AuditDebug(
+      triggered=True,
+      gate_reason="triggered",
+      verdict="pass",
+    )
+    revised_draft = "Revised auth migration with explicit error handling."
+    original_revise = config.AUTOCHECK_MAX_REVISE_PASSES.__value__
+    revise = AsyncMock(return_value=revised_draft)
+    run_audit = AsyncMock(
+      side_effect=[(revise_audit, revise_debug), (pass_audit, pass_debug)],
+    )
+
+    try:
+      config.AUTOCHECK_MAX_REVISE_PASSES.__value__ = 2
+
+      with (
+        request_context(),
+        patch.object(keel, "get_stored_brief", return_value=_implementation_brief()),
+        patch.object(
+          ponytail,
+          "research_gate_reason",
+          new=AsyncMock(return_value=("implementation_turn", 0)),
+        ),
+        patch.object(autocheck, "generate_draft", new=AsyncMock(return_value="Autocheck draft.")),
+        patch.object(autocheck, "gather_workspace_context", new=AsyncMock(return_value="")),
+        patch.object(
+          autocheck,
+          "run_mechanical_preaudit",
+          new=AsyncMock(return_value=("", [])),
+        ),
+        patch.object(autocheck, "run_audit", new=run_audit),
+        patch.object(autocheck, "revise_draft", new=revise),
+      ):
+        await workflows.apply_workflow(
+          deepcopy(workflow_presets.PRESETS["shipyard"]),
+          chat,
+          llm,
+        )
+    finally:
+      config.AUTOCHECK_MAX_REVISE_PASSES.__value__ = original_revise
+
+    assistants = [
+      msg.get("content") or ""
+      for msg in chat.history()
+      if msg.get("role") == "assistant"
+    ]
+    assert assistants == [
+      "Pre-audit draft missing edge cases.",
+      revised_draft,
+    ]
+    assert "Autocheck draft." not in assistants
+    contents = [msg.get("content") or "" for msg in chat.history()]
+    assert any("<task_anchor>" in content for content in contents)
+    revise.assert_awaited_once()
+    assert run_audit.await_count == 2
+    assert stream_calls == ["final"]
+    llm.emit_message.assert_awaited_once_with(revised_draft)
+
