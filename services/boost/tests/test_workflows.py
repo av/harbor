@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+import yaml
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
@@ -14,6 +15,29 @@ import config
 import mods
 import workflows
 from modules import workflows as workflow_presets
+
+WORKFLOWS_YAML = Path(__file__).resolve().parent.parent / "src" / "workflows.yaml"
+EXPECTED_PRESET_IDS = {
+  "research-quick",
+  "research-deep",
+  "code-check",
+  "scope-guard",
+  "agent-research",
+  "agent-code",
+  "shipyard",
+}
+
+
+def _load_yaml_presets() -> dict[str, dict]:
+  raw = yaml.safe_load(WORKFLOWS_YAML.read_text(encoding="utf-8")) or {}
+  workflows_block = raw.get("workflows", raw)
+  if not isinstance(workflows_block, dict):
+    raise ValueError("workflows.yaml must define a workflows mapping")
+  return workflows_block
+
+
+def _normalize_description(description: str) -> str:
+  return " ".join((description or "").split())
 
 
 SIMPLE_PRESETS = {
@@ -57,11 +81,26 @@ def reset_workflow_registry():
 
 class TestWorkflowPresets:
   def test_presets_include_all_agentic_workflows(self):
+    assert set(workflow_presets.PRESETS) == EXPECTED_PRESET_IDS
     assert set(workflow_presets.PRESETS) == set(SIMPLE_PRESETS) | {
       "scope-guard",
       "agent-code",
       "shipyard",
     }
+
+  def test_workflows_yaml_matches_python_presets(self):
+    yaml_presets = _load_yaml_presets()
+    assert set(yaml_presets) == set(workflow_presets.PRESETS) == EXPECTED_PRESET_IDS
+
+    for workflow_id in sorted(EXPECTED_PRESET_IDS):
+      python_preset = workflow_presets.PRESETS[workflow_id]
+      yaml_preset = yaml_presets[workflow_id]
+
+      assert yaml_preset["name"] == python_preset["name"]
+      assert _normalize_description(yaml_preset["description"]) == _normalize_description(
+        python_preset["description"]
+      )
+      assert yaml_preset["modules"] == python_preset["modules"]
 
   @pytest.mark.parametrize(
     "workflow_id,module_name",
@@ -170,9 +209,8 @@ class TestWorkflowPresets:
       assert parsed["modules"] == [name for name in shorthand.split(",")]
 
   def test_workflows_yaml_agent_code_sightline_defers_final(self, monkeypatch):
-    workflows_file = Path(__file__).resolve().parent.parent / "src" / "workflows.yaml"
     monkeypatch.setattr(config.WORKFLOWS, "__value__", "")
-    monkeypatch.setattr(config.WORKFLOWS_FILE, "__value__", str(workflows_file))
+    monkeypatch.setattr(config.WORKFLOWS_FILE, "__value__", str(WORKFLOWS_YAML))
 
     loaded = workflows.load_workflows()
     modules = loaded["agent-code"]["modules"]
@@ -184,9 +222,8 @@ class TestWorkflowPresets:
     assert sightline["config"]["final"] is False
 
   def test_workflows_yaml_shipyard_keeps_defer_final_on_prep_modules(self, monkeypatch):
-    workflows_file = Path(__file__).resolve().parent.parent / "src" / "workflows.yaml"
     monkeypatch.setattr(config.WORKFLOWS, "__value__", "")
-    monkeypatch.setattr(config.WORKFLOWS_FILE, "__value__", str(workflows_file))
+    monkeypatch.setattr(config.WORKFLOWS_FILE, "__value__", str(WORKFLOWS_YAML))
 
     loaded = workflows.load_workflows()
     for module_name in ("keel", "caveman", "ponytail", "autocheck"):

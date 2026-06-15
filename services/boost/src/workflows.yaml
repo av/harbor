@@ -6,8 +6,8 @@ workflows:
       - module: tools
         config:
           final: false
-      - module: caveman
-      - module: final
+      - caveman
+      - final
 
   research-deep:
     name: Deep Research
@@ -16,8 +16,8 @@ workflows:
       - module: tools
         config:
           final: false
-      - module: ponytail
-      - module: final
+      - ponytail
+      - final
 
   code-check:
     name: Code Check
@@ -26,8 +26,8 @@ workflows:
       - module: tools
         config:
           final: false
-      - module: autocheck
-      - module: final
+      - autocheck
+      - final
 
   scope-guard:
     name: Scope Guard
@@ -38,9 +38,9 @@ workflows:
       - module: tools
         config:
           final: false
-      - module: diffscope
-      - module: autocheck
-      - module: final
+      - diffscope
+      - autocheck
+      - final
 
   agent-research:
     name: Agent Research
@@ -49,8 +49,8 @@ workflows:
       - module: tools
         config:
           final: false
-      - module: caveman
-      - module: final
+      - caveman
+      - final
 
   agent-code:
     name: Agent Code
@@ -64,9 +64,9 @@ workflows:
       - module: sightline
         config:
           final: false
-      - module: diffscope
-      - module: autocheck
-      - module: final
+      - diffscope
+      - autocheck
+      - final
 
   shipyard:
     name: Shipyard
@@ -93,4 +93,4 @@ workflows:
         continue: true
         config:
           defer_final: true
-      - module: final
+      - final
