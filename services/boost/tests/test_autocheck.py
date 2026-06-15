@@ -1830,7 +1830,7 @@ class TestAutocheckApply:
     llm.emit_message.assert_awaited_once_with("Revised implementation")
 
   @pytest.mark.asyncio
-  async def test_apply_autocheck_strict_prepends_warning_after_max_revise_passes(self):
+  async def test_apply_prepends_strict_warning_when_blockers_remain(self):
     chat = ch.Chat.from_conversation([
       {"role": "user", "content": "Implement retry helper in services/boost/src/utils.py"},
     ])
