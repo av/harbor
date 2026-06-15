@@ -25,6 +25,7 @@ EXPECTED_PRESET_IDS = {
   "research-quick",
   "research-deep",
   "code-check",
+  "scope-guard",
   "agent-research",
   "agent-code",
   "shipyard",

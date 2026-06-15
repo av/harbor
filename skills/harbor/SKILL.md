@@ -206,7 +206,7 @@ Harbor Boost is an LLM proxy (`harbor up boost`) that chains modules before the 
 | `sightline` | Scratch-pad agents using Boost `read_file`/`write_file` — enforces read-before-edit. Place **after** `tools`. |
 | `diffscope` | User states file scope (`only X`, `don't touch Y`) — compares cited paths in the draft against constraints; one revision hop if out of scope. |
 
-**Pairs:** `caveman` for speed, `ponytail` for depth. `keel` + `autocheck` for multi-turn coding. `agent-code` bundles `sightline`, `diffscope`, and `autocheck` for sandbox sessions.
+**Pairs:** `caveman` for speed, `ponytail` for depth. `keel` + `autocheck` for multi-turn coding. `scope-guard` bundles `diffscope` + `autocheck` for scoped bugfixes. `agent-code` bundles `sightline`, `diffscope`, and `autocheck` for sandbox sessions.
 
 ### Workflow Presets
 
@@ -217,6 +217,7 @@ Presets chain modules and register `tools` as a setup step. Use workflow-prefixe
 | `research-quick` | `tools`, `caveman`, `final` | Quick lookup before answering |
 | `research-deep` | `tools`, `ponytail`, `final` | Migration, API, or version comparison |
 | `code-check` | `tools`, `autocheck`, `final` | Audit code changes before delivery |
+| `scope-guard` | `tools`, `diffscope`, `autocheck`, `final` | Focused bugfix with user-stated file scope |
 | `agent-code` | `tools`, `sightline`, `diffscope`, `autocheck`, `final` | Sandbox coding with workspace tools and hardening |
 | `shipyard` | `keel`, `caveman`, `tools`, `ponytail`, `autocheck`, `final` | Full multi-turn coding pipeline |
 

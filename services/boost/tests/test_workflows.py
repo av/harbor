@@ -22,6 +22,13 @@ SIMPLE_PRESETS = {
   "agent-research": ("caveman", "Agent Research"),
 }
 
+SCOPE_GUARD_MODULES = [
+  {"module": "tools", "config": {"final": False}},
+  "diffscope",
+  "autocheck",
+  "final",
+]
+
 AGENT_CODE_MODULES = [
   {"module": "tools", "config": {"final": False}},
   "sightline",
@@ -49,7 +56,11 @@ def reset_workflow_registry():
 
 class TestWorkflowPresets:
   def test_presets_include_all_agentic_workflows(self):
-    assert set(workflow_presets.PRESETS) == set(SIMPLE_PRESETS) | {"agent-code", "shipyard"}
+    assert set(workflow_presets.PRESETS) == set(SIMPLE_PRESETS) | {
+      "scope-guard",
+      "agent-code",
+      "shipyard",
+    }
 
   @pytest.mark.parametrize(
     "workflow_id,module_name",
@@ -62,6 +73,15 @@ class TestWorkflowPresets:
     assert modules[0] == {"module": "tools", "config": {"final": False}}
     assert modules[1] == module_name
     assert modules[2] == "final"
+
+  def test_scope_guard_preset_module_chain(self):
+    preset = workflow_presets.PRESETS["scope-guard"]
+    assert preset["name"] == "Scope Guard"
+    assert preset["modules"] == SCOPE_GUARD_MODULES
+
+  def test_scope_guard_shorthand_matches_module_chain(self):
+    shorthand = workflow_presets.SHORTHAND["scope-guard"]
+    assert shorthand == "tools,diffscope,autocheck,final"
 
   def test_agent_code_preset_module_chain(self):
     preset = workflow_presets.PRESETS["agent-code"]
@@ -99,7 +119,10 @@ class TestWorkflowPresets:
     for workflow_id in workflow_presets.PRESETS:
       assert workflow_id not in mods.registry
 
-  @pytest.mark.parametrize("workflow_id", list(SIMPLE_PRESETS) + ["agent-code", "shipyard"])
+  @pytest.mark.parametrize(
+    "workflow_id",
+    list(SIMPLE_PRESETS) + ["scope-guard", "agent-code", "shipyard"],
+  )
   def test_normalize_workflow_accepts_preset(self, workflow_id):
     normalized = workflows.normalize_workflow(workflow_presets.PRESETS[workflow_id], workflow_id)
     assert normalized is not None
@@ -111,6 +134,7 @@ class TestWorkflowPresets:
     loaded = workflows.load_workflows()
     for workflow_id in SIMPLE_PRESETS:
       assert workflow_id in loaded
+    assert "scope-guard" in loaded
     assert "agent-code" in loaded
     assert "shipyard" in loaded
 
@@ -160,6 +184,25 @@ class TestApplyWorkflow:
     assert tools_call.args[0] == "tools"
     assert tools_call.args[1]["final"] is False
     assert mock_apply.await_args_list[1].args[0] == "caveman"
+    llm.stream_final_completion.assert_awaited_once()
+
+  @pytest.mark.asyncio
+  async def test_scope_guard_runs_full_module_chain_before_final(self):
+    chat = MagicMock()
+    llm = MagicMock()
+    llm.is_final_stream = False
+    llm.stream_final_completion = AsyncMock()
+
+    with patch.object(workflows, "_apply_module", new_callable=AsyncMock) as mock_apply:
+      await workflows.apply_workflow(
+        deepcopy(workflow_presets.PRESETS["scope-guard"]),
+        chat,
+        llm,
+      )
+
+    applied = [call.args[0] for call in mock_apply.await_args_list]
+    assert applied == ["tools", "diffscope", "autocheck"]
+    assert mock_apply.await_args_list[0].args[1]["final"] is False
     llm.stream_final_completion.assert_awaited_once()
 
   @pytest.mark.asyncio

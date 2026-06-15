@@ -22,10 +22,15 @@ from state import request as request_state
 
 
 CODE_CHECK_MODULE_ORDER = ["tools", "autocheck", "final"]
+SCOPE_GUARD_MODULE_ORDER = ["tools", "diffscope", "autocheck", "final"]
 RESEARCH_QUICK_MODULE_ORDER = ["tools", "caveman", "final"]
 
 CODE_CHECK_USER_MESSAGE = (
   "Implement retry helper with exponential backoff in services/boost/src/utils.py"
+)
+
+SCOPE_GUARD_USER_MESSAGE = (
+  "Fix the bug in services/boost/src/utils.py only — do not touch other files"
 )
 
 RESEARCH_QUICK_USER_MESSAGE = (
@@ -141,6 +146,65 @@ class TestCodeCheckWorkflowChain:
     contents = [msg.get("content") or "" for msg in history]
     assert any("provided tools" in content for content in contents)
     llm.emit_message.assert_awaited_once_with("Draft implementation plan.")
+
+
+class TestScopeGuardWorkflowChain:
+  @pytest.mark.asyncio
+  async def test_scope_guard_runs_diffscope_autocheck_on_scoped_deliverable(self):
+    """scope-guard: tools → diffscope → autocheck → final on scoped deliverable."""
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": SCOPE_GUARD_USER_MESSAGE},
+    ])
+    llm = _make_llm()
+    execution_order: list[str] = []
+    real_apply_module = workflows._apply_module
+
+    async def tracking_apply_module(module_name, module_cfg, chat_obj, llm_obj):
+      execution_order.append(module_name)
+      return await real_apply_module(module_name, module_cfg, chat_obj, llm_obj)
+
+    draft_response = "Updated services/boost/src/utils.py with the null check."
+
+    async def stream_final_side_effect(**kwargs):
+      if kwargs.get("emit", True) is False:
+        return draft_response
+      execution_order.append("final")
+      llm.is_final_stream = True
+      return "Final scoped fix."
+
+    llm.stream_final_completion = AsyncMock(side_effect=stream_final_side_effect)
+
+    audit = autocheck.AuditResult(verdict="pass", summary="Scoped fix looks correct.")
+    debug = autocheck.AuditDebug(triggered=True, gate_reason="triggered", verdict="pass")
+
+    with (
+      request_context(),
+      patch.object(diffscope, "verify_workspace_paths", new=AsyncMock(return_value=[])),
+      patch.object(autocheck, "gather_workspace_context", new=AsyncMock(return_value="")),
+      patch.object(
+        autocheck,
+        "run_mechanical_preaudit",
+        new=AsyncMock(return_value=("", [])),
+      ),
+      patch.object(autocheck, "run_audit", new=AsyncMock(return_value=(audit, debug))) as run_audit,
+      patch.object(workflows, "_apply_module", new=tracking_apply_module),
+    ):
+      await workflows.apply_workflow(
+        deepcopy(workflow_presets.PRESETS["scope-guard"]),
+        chat,
+        llm,
+      )
+
+    assert execution_order == SCOPE_GUARD_MODULE_ORDER
+    assert diffscope.needs_diffscope(chat)
+    assert autocheck.needs_autocheck(chat)
+    run_audit.assert_awaited_once()
+    # diffscope drafts via stream_final_completion(emit=False); workflow final streams once.
+    assert llm.stream_final_completion.await_count == 2
+
+    history = chat.history()
+    contents = [msg.get("content") or "" for msg in history]
+    assert any("provided tools" in content for content in contents)
 
 
 class TestResearchQuickWorkflowChain:

@@ -82,6 +82,7 @@ harbor config set HARBOR_BOOST_WORKSPACE_ROOT /workspace/myproject
 **Workflow presets**
 
 - `code-check` (`tools`, `autocheck`, `final`) — self-audit coding deliverables
+- `scope-guard` (`tools`, `diffscope`, `autocheck`, `final`) — scoped bugfix deliverable audit
 - `agent-code` (`tools`, `sightline`, `diffscope`, `autocheck`, `final`) — sandbox deliverable audit
 - `shipyard` — final audit step before the downstream completion
 

@@ -29,6 +29,19 @@ workflows:
       - module: autocheck
       - module: final
 
+  scope-guard:
+    name: Scope Guard
+    description: >-
+      Lightweight bugfix workflow: register portable tools, enforce user-stated
+      file scope with diffscope, audit deliverables with autocheck, then answer.
+    modules:
+      - module: tools
+        config:
+          final: false
+      - module: diffscope
+      - module: autocheck
+      - module: final
+
   agent-research:
     name: Agent Research
     description: Tool-enabled smash-and-grab research for agentic coding sessions.

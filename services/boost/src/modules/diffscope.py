@@ -59,6 +59,7 @@ harbor config set HARBOR_BOOST_WORKSPACE_ROOT /workspace/myproject
 
 **Workflow presets**
 
+- `scope-guard` (`tools`, `diffscope`, `autocheck`, `final`) — lightweight scope enforcement for focused bugfixes
 - `agent-code` (`tools`, `sightline`, `diffscope`, `autocheck`, `final`) — sandbox scope enforcement
 - Custom example: `scope-check=tools,keel,autocheck,diffscope,final` via `HARBOR_BOOST_WORKFLOWS`
 

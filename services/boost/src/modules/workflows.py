@@ -21,6 +21,14 @@ PRESETS: dict[str, dict] = {
     "description": "Register portable tools, audit coding deliverables with autocheck, then answer.",
     "modules": [TOOLS_SETUP, "autocheck", FINAL_STEP],
   },
+  "scope-guard": {
+    "name": "Scope Guard",
+    "description": (
+      "Lightweight bugfix workflow: register portable tools, enforce user-stated "
+      "file scope with diffscope, audit deliverables with autocheck, then answer."
+    ),
+    "modules": [TOOLS_SETUP, "diffscope", "autocheck", FINAL_STEP],
+  },
   "agent-research": {
     "name": "Agent Research",
     "description": "Tool-enabled smash-and-grab research for agentic coding sessions.",
