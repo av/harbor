@@ -235,8 +235,9 @@ harbor up searxng
 # or
 harbor config set HARBOR_BOOST_TAVILY_API_KEY <key>
 
-# Workspace evidence for autocheck / diffscope path verification
-harbor config set HARBOR_BOOST_WORKSPACE_ROOT /path/to/project
+# Workspace bind mount + in-container jail root (Boost runs in Docker)
+harbor config set boost.workspace "$(pwd)"
+harbor config set boost.workspace.root /workspace
 
 # Workspace tools for agent-code sandbox sessions
 harbor config set HARBOR_BOOST_TOOLS 'read_workspace_file;grep_workspace;list_workspace_files;write_workspace_file'

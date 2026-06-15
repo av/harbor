@@ -644,9 +644,14 @@ Root directory for workspace file reads and writes by agentic Boost modules and
 the `read_workspace_file`, `grep_workspace`, `list_workspace_files`, and opt-in
 `write_workspace_file` tools. When unset, workspace file tools are disabled.
 
+In Harbor Compose, bind-mount a host folder with `HARBOR_BOOST_WORKSPACE` (or
+`harbor volumes add boost <host>:/workspace`) and set this to the in-container
+mount point, typically `/workspace`.
+
 Example:
 ```bash
-HARBOR_BOOST_WORKSPACE_ROOT=/workspace/myproject
+HARBOR_BOOST_WORKSPACE=/path/to/myproject
+HARBOR_BOOST_WORKSPACE_ROOT=/workspace
 ```
 """.strip(),
 )

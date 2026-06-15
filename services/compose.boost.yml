@@ -18,6 +18,7 @@ services:
     volumes:
       - ./services/boost/src:/boost
       - /boost/.venv
+      - ${HARBOR_BOOST_WORKSPACE:-./services/boost/workspace}:/workspace
       - ${HARBOR_OLLAMA_CACHE}:/root/.ollama
       - ${HARBOR_HF_CACHE:-./services/boost/.hf-cache}:/root/.cache/huggingface
       - ${HARBOR_LLAMACPP_CACHE}:/root/.cache/llama.cpp
