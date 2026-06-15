@@ -42,8 +42,11 @@ case "$AGENTIC_MODE" in
     suite_log "Boost image: ${boost_image}"
 
     suite_log "Running agentic pytest battery (timeout: ${PYTEST_TIMEOUT_SECONDS}s)..."
-    timeout "${PYTEST_TIMEOUT_SECONDS}" \
-      run_boost_agentic_pytest container "${BOOST_DIR}" "${boost_image}"
+    # timeout(1) cannot invoke shell functions directly; run via a sourced bash -s.
+    timeout "${PYTEST_TIMEOUT_SECONDS}" bash -euo pipefail -s <<EOF
+source "${HARBOR_TEST_REPO}/tests/lib/boost-agentic.sh"
+run_boost_agentic_pytest container "${BOOST_DIR}" "${boost_image}"
+EOF
     ;;
   host)
     suite_log "mode=host (uv run pytest from ${BOOST_DIR})"
