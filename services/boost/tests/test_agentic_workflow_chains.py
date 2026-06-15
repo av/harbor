@@ -44,6 +44,11 @@ SCOPE_GUARD_VIOLATION_USER_MESSAGE = (
   "Fix the bug but only edit src/foo.py — do not touch other files"
 )
 
+SCOPE_GUARD_FORBIDDEN_USER_MESSAGE = (
+  "Fix the bug in services/boost/src/utils.py — "
+  "don't touch services/boost/src/config.py"
+)
+
 AGENT_CODE_USER_MESSAGE = (
   "Implement retry helper with exponential backoff but only edit src/foo.py — "
   "do not touch other files"
@@ -222,6 +227,90 @@ class TestCodeCheckWorkflowChain:
     contents = [msg.get("content") or "" for msg in history]
     assert any("provided tools" in content for content in contents)
     llm.emit_message.assert_awaited_once_with("Draft implementation plan.")
+
+  @pytest.mark.asyncio
+  async def test_code_check_stops_autocheck_after_max_revise_passes(self):
+    """code-check: AUTOCHECK_MAX_REVISE_PASSES=1 stops after one revise loop."""
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": CODE_CHECK_USER_MESSAGE},
+    ])
+    llm = _make_llm()
+    execution_order: list[str] = []
+    real_apply_module = workflows._apply_module
+
+    async def tracking_apply_module(module_name, module_cfg, chat_obj, llm_obj):
+      execution_order.append(module_name)
+      return await real_apply_module(module_name, module_cfg, chat_obj, llm_obj)
+
+    async def tracked_final(**_kwargs):
+      execution_order.append("final")
+      llm.is_final_stream = True
+      return "Final answer after single revise pass."
+
+    llm.stream_final_completion = AsyncMock(side_effect=tracked_final)
+
+    revise_audit = autocheck.AuditResult(
+      verdict="revise",
+      summary="Fix imports",
+      findings=[autocheck.AuditFinding(severity="major", message="Missing import")],
+    )
+    revise_debug = autocheck.AuditDebug(
+      triggered=True,
+      gate_reason="triggered",
+      verdict="revise",
+    )
+
+    original_revise = config.AUTOCHECK_MAX_REVISE_PASSES.__value__
+    original_strict = config.AUTOCHECK_STRICT.__value__
+
+    try:
+      config.AUTOCHECK_MAX_REVISE_PASSES.__value__ = 1
+      config.AUTOCHECK_STRICT.__value__ = False
+
+      with (
+        request_context(),
+        patch(
+          "research.orchestrate.cheap_llm",
+          return_value=mock_autocheck_cheap_llm(draft_response="Draft implementation plan."),
+        ),
+        patch.object(autocheck, "gather_workspace_context", new=AsyncMock(return_value="")),
+        patch.object(
+          autocheck,
+          "run_mechanical_preaudit",
+          new=AsyncMock(return_value=("", [])),
+        ),
+        patch.object(
+          autocheck,
+          "run_audit",
+          new=AsyncMock(
+            side_effect=[
+              (revise_audit, revise_debug),
+              (revise_audit, revise_debug),
+            ],
+          ),
+        ),
+        patch.object(
+          autocheck,
+          "revise_draft",
+          new=AsyncMock(return_value="Revised implementation plan."),
+        ) as revise,
+        patch.object(workflows, "_apply_module", new=tracking_apply_module),
+      ):
+        await workflows.apply_workflow(
+          deepcopy(workflow_presets.PRESETS["code-check"]),
+          chat,
+          llm,
+        )
+    finally:
+      config.AUTOCHECK_MAX_REVISE_PASSES.__value__ = original_revise
+      config.AUTOCHECK_STRICT.__value__ = original_strict
+
+    assert execution_order == CODE_CHECK_MODULE_ORDER
+    revise.assert_awaited_once()
+    status_messages = [call.args[0] for call in llm.emit_status.await_args_list]
+    assert "Autocheck: revising (1/1)..." in status_messages
+    assert "Autocheck: revising (2/2)..." not in status_messages
+    llm.emit_message.assert_awaited_once_with("Revised implementation plan.")
 
   @pytest.mark.asyncio
   async def test_code_check_skips_autocheck_on_research_question(self):
@@ -408,6 +497,85 @@ class TestScopeGuardWorkflowChain:
     ]
     assert autocheck_draft in assistant_contents
     assert draft_with_violation not in assistant_contents
+
+  @pytest.mark.asyncio
+  async def test_scope_guard_revises_when_draft_touches_forbidden_path(self):
+    """scope-guard: draft touches a forbidden path; diffscope revises before autocheck."""
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": SCOPE_GUARD_FORBIDDEN_USER_MESSAGE},
+    ])
+    llm = _make_llm()
+    execution_order: list[str] = []
+    real_apply_module = workflows._apply_module
+    captured_correction = ""
+
+    async def tracking_apply_module(module_name, module_cfg, chat_obj, llm_obj):
+      execution_order.append(module_name)
+      return await real_apply_module(module_name, module_cfg, chat_obj, llm_obj)
+
+    draft_with_forbidden = (
+      "Updated `services/boost/src/utils.py` and tweaked "
+      "`services/boost/src/config.py` for logging."
+    )
+    revised_answer = "Only updated `services/boost/src/utils.py`."
+    autocheck_draft = "Scoped null-check fix in `services/boost/src/utils.py`."
+
+    async def capture_revise(_chat, _llm, _draft, correction, **_kwargs):
+      nonlocal captured_correction
+      captured_correction = correction
+      return revised_answer
+
+    async def stream_final_side_effect(**_kwargs):
+      execution_order.append("final")
+      llm.is_final_stream = True
+      return "Final scoped fix after forbidden-path revision."
+
+    llm.stream_chat_completion = AsyncMock(return_value=draft_with_forbidden)
+    llm.stream_final_completion = AsyncMock(side_effect=stream_final_side_effect)
+
+    audit = autocheck.AuditResult(verdict="pass", summary="Scoped fix looks correct.")
+    debug = autocheck.AuditDebug(triggered=True, gate_reason="triggered", verdict="pass")
+
+    with (
+      request_context(),
+      patch(
+        "research.orchestrate.cheap_llm",
+        return_value=mock_autocheck_cheap_llm(draft_response=autocheck_draft),
+      ),
+      patch.object(diffscope, "verify_workspace_paths", new=AsyncMock(return_value=[])),
+      patch.object(
+        diffscope,
+        "revise_with_correction",
+        new=AsyncMock(side_effect=capture_revise),
+      ) as revise,
+      patch.object(autocheck, "gather_workspace_context", new=AsyncMock(return_value="")),
+      patch.object(
+        autocheck,
+        "run_mechanical_preaudit",
+        new=AsyncMock(return_value=("", [])),
+      ),
+      patch.object(autocheck, "run_audit", new=AsyncMock(return_value=(audit, debug))) as run_audit,
+      patch.object(workflows, "_apply_module", new=tracking_apply_module),
+    ):
+      await workflows.apply_workflow(
+        deepcopy(workflow_presets.PRESETS["scope-guard"]),
+        chat,
+        llm,
+      )
+
+    scope = diffscope.extract_user_scope(chat)
+    assert "services/boost/src/config.py" in scope.forbidden
+    assert execution_order == SCOPE_GUARD_MODULE_ORDER
+    revise.assert_awaited_once()
+    run_audit.assert_awaited_once()
+    assert "FORBIDDEN" in captured_correction
+    assert "services/boost/src/config.py" in captured_correction
+    emitted_messages = [call.args[0] for call in llm.emit_message.await_args_list]
+    assert revised_answer in emitted_messages
+
+    history = chat.history()
+    contents = [msg.get("content") or "" for msg in history]
+    assert any("outside the user's stated scope" in content for content in contents)
 
 
 class TestResearchQuickWorkflowChain:
@@ -950,6 +1118,65 @@ class TestDiffscopeDeliverableChain:
     assert applied == ["tools", "diffscope"]
     revise.assert_awaited_once()
     llm.emit_message.assert_awaited_once_with(revised_answer)
+
+    history = chat.history()
+    contents = [msg.get("content") or "" for msg in history]
+    assert any("outside the user's stated scope" in content for content in contents)
+
+  @pytest.mark.asyncio
+  async def test_diffscope_allowed_only_revises_despite_collateral_enabled(self):
+    """diffscope chain: only-edit scope blocks extra files even when collateral is allowed."""
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Implement retry helper but only edit src/foo.py"},
+    ])
+    llm = _make_llm()
+
+    draft_with_extra = (
+      "Updated `src/foo.py` and `src/bar.py` for consistency."
+    )
+    revised_answer = "Only updated `src/foo.py`."
+
+    async def draft_final(**kwargs):
+      llm.is_final_stream = True
+      return await llm.stream_chat_completion(**kwargs)
+
+    llm.stream_final_completion = AsyncMock(side_effect=draft_final)
+    llm.stream_chat_completion = AsyncMock(return_value=draft_with_extra)
+
+    workflow = {
+      "id": "allowed-only-check",
+      "modules": [
+        {"module": "tools", "config": {"final": False}},
+        "diffscope",
+      ],
+    }
+
+    original = config.DIFFSCOPE_ALLOW_COLLATERAL.__value__
+    try:
+      config.DIFFSCOPE_ALLOW_COLLATERAL.__value__ = True
+      with (
+        request_context(),
+        patch.object(diffscope, "verify_workspace_paths", new=AsyncMock(return_value=[])),
+        patch.object(
+          diffscope,
+          "revise_with_correction",
+          new=AsyncMock(return_value=revised_answer),
+        ) as revise,
+        patch.object(workflows, "_apply_module", wraps=workflows._apply_module) as apply_module,
+      ):
+        await workflows.apply_workflow(deepcopy(workflow), chat, llm)
+    finally:
+      config.DIFFSCOPE_ALLOW_COLLATERAL.__value__ = original
+
+    scope = diffscope.extract_user_scope(chat)
+    assert scope.allowed_only
+    applied = [call.args[0] for call in apply_module.await_args_list]
+    assert applied == ["tools", "diffscope"]
+    revise.assert_awaited_once()
+    llm.emit_message.assert_awaited_once_with(revised_answer)
+
+    statuses = [call.args[0] for call in llm.emit_status.await_args_list]
+    assert not any("collateral" in status.lower() for status in statuses)
 
     history = chat.history()
     contents = [msg.get("content") or "" for msg in history]

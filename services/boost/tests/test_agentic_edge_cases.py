@@ -10,6 +10,7 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 import chat as ch
+import config
 import deliverable
 import workflows
 from modules import autocheck, caveman, diffscope, keel, ponytail
@@ -313,6 +314,49 @@ class TestKeelEdgeCases:
     history = chat.history()
     assert any(keel.DRIFT_WARNING in (msg.get("content") or "") for msg in history)
     llm.emit_status.assert_awaited_with(keel.DRIFT_STATUS)
+
+  @pytest.mark.asyncio
+  async def test_apply_anchor_respects_keel_max_constraints_config(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Implement retry helper in services/boost/src/utils.py"},
+      {"role": "assistant", "content": "Added retry helper with three attempts."},
+      {"role": "user", "content": "Add logging around retries."},
+    ])
+    llm = MagicMock()
+    llm.boost_params = {}
+    llm.emit_status = AsyncMock()
+    llm.stream_final_completion = AsyncMock()
+
+    brief = keel.TaskBrief(
+      objective="Add retry helper",
+      acceptance_criteria=["Helper retries 3 times"],
+      in_scope_paths=["services/boost/src/utils.py"],
+      constraints=[f"Constraint {index}" for index in range(5)],
+    )
+
+    original = config.KEEL_MAX_CONSTRAINTS.__value__
+    try:
+      config.KEEL_MAX_CONSTRAINTS.__value__ = 2
+      with (
+        patch.object(keel, "get_stored_brief", return_value=brief),
+        patch.object(keel, "update_met_criteria_from_history", return_value=set()),
+        patch.object(keel, "_register_finish_wrapper"),
+      ):
+        await keel.apply(chat, llm)
+    finally:
+      config.KEEL_MAX_CONSTRAINTS.__value__ = original
+
+    history = chat.history()
+    anchor_blocks = [
+      msg.get("content") or ""
+      for msg in history
+      if "<task_anchor>" in (msg.get("content") or "")
+    ]
+    assert len(anchor_blocks) == 1
+    assert "Constraint 0" in anchor_blocks[0]
+    assert "Constraint 1" in anchor_blocks[0]
+    assert "Constraint 2" not in anchor_blocks[0]
+    assert "+3 more" in anchor_blocks[0]
 
 
 class TestDiffscopeEdgeCases:

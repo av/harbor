@@ -11,7 +11,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 import chat as ch
 import config
+import workflows
+from copy import deepcopy
 from modules import autocheck, caveman, diffscope, keel, ponytail, sightline
+from modules import workflows as workflow_presets
 from research import debug_metrics, workflow as workflow_mod
 from research.brief import ResearchBrief
 from state import request as request_state
@@ -572,6 +575,97 @@ class TestDiffscopeDebugMetrics:
       assert stored.extra_calls == 1
       assert stored.extra["outcome"] == "scope_ok"
       assert stored.extra["grounding_mode"] == "heuristic"
+
+
+class TestWorkflowDebugMetrics:
+  REQUIRED_DEBUG_KEYS = {
+    "triggered",
+    "skipped",
+    "reason",
+    "duration_ms",
+    "extra_calls",
+    "extra",
+  }
+
+  @pytest.mark.asyncio
+  async def test_scope_guard_workflow_collects_module_debug_payload_shape(self):
+    """scope-guard workflow stores diffscope + autocheck debug payloads on request.state."""
+    chat = ch.Chat.from_conversation([
+      {
+        "role": "user",
+        "content": (
+          "Fix the bug in services/boost/src/utils.py only — "
+          "do not touch other files"
+        ),
+      },
+    ])
+    llm = MagicMock()
+    llm.url = "http://example.com"
+    llm.headers = {}
+    llm.query_params = {}
+    llm.model = "test-model"
+    llm.module = None
+    llm.is_final_stream = False
+    llm.boost_params = {"debug": "true"}
+    llm.emit_status = AsyncMock()
+    llm.emit_message = AsyncMock()
+    llm.stream_chat_completion = AsyncMock(
+      return_value="Updated services/boost/src/utils.py with the null check.",
+    )
+    llm.stream_final_completion = AsyncMock(return_value="Final scoped fix.")
+
+    audit = autocheck.AuditResult(verdict="pass", summary="Scoped fix looks correct.")
+    audit_debug = autocheck.AuditDebug(
+      triggered=True,
+      gate_reason="triggered",
+      verdict="pass",
+    )
+
+    with (
+      request_context(),
+      patch(
+        "research.orchestrate.cheap_llm",
+        return_value=mock_autocheck_cheap_llm(
+          draft_response="Scoped null-check fix in services/boost/src/utils.py.",
+        ),
+      ),
+      patch.object(diffscope, "verify_workspace_paths", new=AsyncMock(return_value=[])),
+      patch.object(autocheck, "gather_workspace_context", new=AsyncMock(return_value="")),
+      patch.object(
+        autocheck,
+        "run_mechanical_preaudit",
+        new=AsyncMock(return_value=("", [])),
+      ),
+      patch.object(
+        autocheck,
+        "run_audit",
+        new=AsyncMock(return_value=(audit, audit_debug)),
+      ),
+    ):
+      await workflows.apply_workflow(
+        deepcopy(workflow_presets.PRESETS["scope-guard"]),
+        chat,
+        llm,
+      )
+
+      collected = debug_metrics.collect_all()
+      assert set(collected) == {"diffscope", "autocheck"}
+      for module_id, payload in collected.items():
+        assert set(payload) == self.REQUIRED_DEBUG_KEYS
+        assert isinstance(payload["extra"], dict)
+        assert payload["duration_ms"] >= 0
+
+      assert collected["diffscope"]["triggered"] is True
+      assert collected["diffscope"]["extra"]["outcome"] == "scope_ok"
+      assert collected["autocheck"]["triggered"] is True
+      assert collected["autocheck"]["extra"]["verdict"] == "pass"
+
+      summary = debug_metrics.format_compact_summary(collected)
+      assert summary.startswith("Debug:")
+      assert "diffscope triggered" in summary
+      assert "autocheck triggered" in summary
+      assert "outcome=scope_ok" in summary
+      assert "verdict=pass" in summary
 
 
 class TestDebugSummaryHelpers:
