@@ -319,6 +319,12 @@
 - label: shared research fetch retries web_search and read_url once after transient HTTP failures (timeout or connect error) with a one second backoff and does not retry non-transient errors
   command: cd services/boost && uv run pytest tests/test_agentic_infra.py::TestResearchFetch::test_web_search_retries_once_on_transient_failure tests/test_agentic_infra.py::TestResearchFetch::test_web_search_does_not_retry_non_transient_failures tests/test_agentic_infra.py::TestResearchFetch::test_read_url_retries_jina_once_on_transient_failure tests/test_agentic_infra.py::TestResearchFetch::test_read_url_retries_direct_once_on_transient_failure -q --tb=no
   tags: [implemented]
+- label: caveman research_heuristic delegates to deliverable.has_research_signals: heuristic mode no longer triggers on bare questions with only a question mark and no research keyword version package or URL (CAV-002/DEL-001)
+  command: cd services/boost && uv run pytest tests/test_caveman.py::TestCavemanHeuristics::test_research_heuristic_rejects_bare_questions_without_research_signals tests/test_agentic_infra.py::TestDeliverableBorderlineCases::test_bare_questions_without_research_context_are_not_research_signals -q --tb=no
+  tags: [implemented, bughunt]
+- label: diffscope anchor_scoped_draft records the scoped or revised draft in chat history when defer_final is set so downstream autocheck in scope-guard and agent-code workflow chains audits the in-scope answer not the pre-revision draft (DIF-003)
+  command: cd services/boost && uv run pytest tests/test_diffscope.py::TestDiffscopeApply::test_apply_anchors_scoped_draft_when_defer_final -q --tb=no
+  tags: [implemented, bughunt]
 
 # testing
 - label: tests use a Deno orchestrator running sequential bash suites across containerized distros
