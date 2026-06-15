@@ -376,6 +376,24 @@
 - label: agent-research workflow registers portable tools then runs caveman then final completion for agent sessions that need quick web research before answering
   command: cd services/boost && uv run pytest 'tests/test_workflows.py::TestWorkflowPresets::test_preset_module_chain[agent-research-caveman]' tests/test_workflows.py::TestWorkflowPresets::test_presets_include_all_agentic_workflows tests/test_agentic_workflow_chains.py::TestAgentResearchWorkflowChain::test_agent_research_skips_caveman_on_implementation_turn -q --tb=no
   tags: [spec, implemented]
+- label: sightline supports HARBOR_BOOST_SIGHTLINE_MODE: block rejects scratch write/delete without prior read_file with structured errors; warn streams Sightline status and allows the mutation
+  command: cd services/boost && uv run pytest tests/test_sightline.py::TestSightlineGuards::test_write_blocked_without_prior_read tests/test_sightline.py::TestSightlineGuards::test_warn_mode_allows_mutation tests/test_sightline.py::TestSightlineModeIntegration::test_sightline_mode_warn_allows_write_without_read_and_emits_status -q --tb=no
+  tags: [spec, implemented]
+- label: sightline supports HARBOR_BOOST_SIGHTLINE_ALLOW_CREATE: when true the first write to a non-existent scratch path is exempt from read-before-edit; when false new-file creates require read_file first
+  command: cd services/boost && uv run pytest tests/test_sightline.py::TestSightlineExemptions::test_create_exempt_for_missing_scratch_file tests/test_sightline.py::TestSightlineExemptions::test_create_not_exempt_when_file_exists tests/test_sightline.py::TestSightlineExemptions::test_create_not_exempt_when_disabled -q --tb=no
+  tags: [spec, implemented]
+- label: sightline supports HARBOR_BOOST_SIGHTLINE_WORKSPACE: when true with HARBOR_BOOST_WORKSPACE_ROOT set install_guards wraps read_workspace_file and write_workspace_file; when false workspace tools stay unwrapped and workspace_guard_skip_reason is workspace_guard_disabled
+  command: cd services/boost && uv run pytest tests/test_sightline.py::TestSightlineWorkspace tests/test_agentic_logging.py::TestSightlineGateLogging::test_workspace_guard_skip_reason_when_disabled -q --tb=no
+  tags: [spec, implemented]
+- label: autocheck supports HARBOR_BOOST_AUTOCHECK_ENABLED: when false needs_autocheck is false and autocheck_gate_reason returns disabled so deliverable turns pass through without audit
+  command: cd services/boost && uv run pytest tests/test_autocheck.py::TestAutocheckGate::test_skips_when_disabled -q --tb=no
+  tags: [spec, implemented]
+- label: keel supports HARBOR_BOOST_KEEL_ENABLED: when false needs_keel is false and keel_gate_reason returns disabled so coding deliverables pass through without task anchoring
+  command: cd services/boost && uv run pytest tests/test_keel.py::TestKeelHeuristics::test_needs_keel_skips_when_disabled tests/test_agentic_logging.py::TestKeelGateReason::test_disabled -q --tb=no
+  tags: [spec, implemented]
+- label: diffscope supports HARBOR_BOOST_DIFFSCOPE_ENABLED: when false needs_diffscope is false and diffscope_gate_reason returns disabled so scoped deliverables pass through without scope revision
+  command: cd services/boost && uv run pytest tests/test_diffscope.py::TestDiffscopeGate::test_skips_when_disabled -q --tb=no
+  tags: [spec, implemented]
 
 # testing
 - label: tests use a Deno orchestrator running sequential bash suites across containerized distros
@@ -440,6 +458,11 @@
 - label: tests/app-native-setup.md documents verifiable native app first-run setup expectations
   command: test -f tests/app-native-setup.md && rg -q 'harbor doctor --check' tests/app-native-setup.md && ! rg -q 'HARBOR_APP_SETUP_SMOKE' tests/app-native-setup.md
   tags: [implemented]
+
+## fix-tests
+- label: scripts/specs/fix-tests.md documents the test-run disk exhaustion incident as problem analysis only
+  command: test -f scripts/specs/fix-tests.md && grep -q '## Root Cause' scripts/specs/fix-tests.md && grep -q 'No remediation is specified here' scripts/specs/fix-tests.md
+  tags: [spec, implemented]
 
 # project > distribution
 - label: requirements.sh apt package availability checks verify real package metadata: every apt-cache show probe greps for ^Package: so empty-output false positives (e.g. docker-ce on Ubuntu 24.04 without the Docker repo) fall through to the docker.io / distro fallback
