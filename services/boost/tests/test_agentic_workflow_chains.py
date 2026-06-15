@@ -27,6 +27,7 @@ SCOPE_GUARD_MODULE_ORDER = ["tools", "diffscope", "autocheck", "final"]
 AGENT_CODE_MODULE_ORDER = ["tools", "sightline", "diffscope", "autocheck", "final"]
 RESEARCH_QUICK_MODULE_ORDER = ["tools", "caveman", "final"]
 RESEARCH_DEEP_MODULE_ORDER = ["tools", "ponytail", "final"]
+AGENT_RESEARCH_MODULE_ORDER = ["tools", "caveman", "final"]
 
 CODE_CHECK_USER_MESSAGE = (
   "Implement retry helper with exponential backoff in services/boost/src/utils.py"
@@ -51,6 +52,15 @@ RESEARCH_QUICK_USER_MESSAGE = (
 
 RESEARCH_DEEP_USER_MESSAGE = (
   "Migrate from Django 4.2 to 5.0 — what breaking changes affect django.utils.six?"
+)
+
+AGENT_RESEARCH_USER_MESSAGE = (
+  "Before wiring the Stripe webhook handler in services/boost/src/payments.py, "
+  "what's the checkout session API endpoint response format in 2024?"
+)
+
+AGENT_RESEARCH_IMPLEMENTATION_MESSAGE = (
+  "Fix the retry helper in services/boost/src/utils.py"
 )
 
 MOCK_SEARCH_RESULT = (
@@ -530,6 +540,126 @@ class TestResearchDeepWorkflowChain:
     statuses = [call.args[0] for call in llm.emit_status.await_args_list]
     assert any("hop 1 (" in status for status in statuses)
     assert any("hop 2 (" in status for status in statuses)
+
+
+class TestAgentResearchWorkflowChain:
+  @pytest.mark.asyncio
+  async def test_agent_research_runs_tools_caveman_final_with_fetch(self):
+    """agent-research: tools → caveman → final; fetch runs, tools stay registered."""
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": AGENT_RESEARCH_USER_MESSAGE},
+    ])
+    llm = _make_llm()
+    execution_order: list[str] = []
+    real_apply_module = workflows._apply_module
+
+    async def tracking_apply_module(module_name, module_cfg, chat_obj, llm_obj):
+      execution_order.append(module_name)
+      return await real_apply_module(module_name, module_cfg, chat_obj, llm_obj)
+
+    async def tracked_final(**_kwargs):
+      execution_order.append("final")
+      llm.is_final_stream = True
+      return "Final agent-research answer."
+
+    llm.stream_final_completion = AsyncMock(side_effect=tracked_final)
+
+    caveman_cheap = _cheap_llm_mock(
+      AsyncMock(
+        return_value={
+          "queries": ["Stripe checkout session API response format 2024"],
+        },
+      )
+    )
+
+    with (
+      request_context(),
+      patch(
+        "research.orchestrate.cheap_llm",
+        return_value=caveman_cheap,
+      ),
+      patch("research.fetch.web_search", new=AsyncMock(return_value=MOCK_SEARCH_RESULT)) as web_search,
+      patch("research.fetch.read_url", new=AsyncMock(return_value=MOCK_PAGE_CONTENT)) as read_url,
+      patch.object(autocheck, "run_audit", new=AsyncMock()) as run_audit,
+      patch.object(workflows, "_apply_module", new=tracking_apply_module),
+    ):
+      await workflows.apply_workflow(
+        deepcopy(workflow_presets.PRESETS["agent-research"]),
+        chat,
+        llm,
+      )
+      assert tool_registry.get_local_tool("web_search") is not None
+
+    assert execution_order == AGENT_RESEARCH_MODULE_ORDER
+    assert await caveman.needs_research(chat, llm)
+    assert not autocheck.needs_autocheck(chat)
+    run_audit.assert_not_called()
+    caveman_cheap.chat_completion.assert_awaited_once()
+    web_search.assert_awaited_once()
+    read_url.assert_awaited_once()
+    assert llm.stream_final_completion.await_count == 1
+
+    history = chat.history()
+    contents = [msg.get("content") or "" for msg in history]
+    assert any("provided tools" in content for content in contents)
+    assert any("<research_brief>" in content for content in contents)
+
+  @pytest.mark.asyncio
+  async def test_agent_research_skips_caveman_on_implementation_turn(self):
+    """agent-research: tools → caveman → final; pure edit skips caveman fetch."""
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": AGENT_RESEARCH_IMPLEMENTATION_MESSAGE},
+    ])
+    llm = _make_llm()
+    execution_order: list[str] = []
+    real_apply_module = workflows._apply_module
+
+    async def tracking_apply_module(module_name, module_cfg, chat_obj, llm_obj):
+      execution_order.append(module_name)
+      return await real_apply_module(module_name, module_cfg, chat_obj, llm_obj)
+
+    async def tracked_final(**_kwargs):
+      execution_order.append("final")
+      llm.is_final_stream = True
+      return "Final implementation answer."
+
+    llm.stream_final_completion = AsyncMock(side_effect=tracked_final)
+
+    caveman_cheap = _cheap_llm_mock(AsyncMock())
+
+    with (
+      request_context(),
+      patch(
+        "research.orchestrate.cheap_llm",
+        return_value=caveman_cheap,
+      ),
+      patch("research.fetch.web_search", new=AsyncMock()) as web_search,
+      patch("research.fetch.read_url", new=AsyncMock()) as read_url,
+      patch.object(autocheck, "run_audit", new=AsyncMock()) as run_audit,
+      patch.object(workflows, "_apply_module", new=tracking_apply_module),
+    ):
+      await workflows.apply_workflow(
+        deepcopy(workflow_presets.PRESETS["agent-research"]),
+        chat,
+        llm,
+      )
+      assert tool_registry.get_local_tool("web_search") is not None
+
+    assert execution_order == AGENT_RESEARCH_MODULE_ORDER
+    assert caveman.research_skip_reason(chat) == "implementation_turn"
+    assert not await caveman.needs_research(chat, llm)
+    assert not autocheck.needs_autocheck(chat)
+    run_audit.assert_not_called()
+    caveman_cheap.chat_completion.assert_not_called()
+    web_search.assert_not_called()
+    read_url.assert_not_called()
+    assert llm.stream_final_completion.await_count == 1
+    llm.emit_status.assert_any_await("Caveman research: skipped (implementation_turn)")
+
+    history = chat.history()
+    contents = [msg.get("content") or "" for msg in history]
+    assert any("provided tools" in content for content in contents)
+    assert not any("<research_brief>" in content for content in contents)
 
 
 class TestAgentCodeWorkflowChain:
