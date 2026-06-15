@@ -10,6 +10,8 @@ boost_agentic_test_targets() {
 tests/test_agentic_infra.py
 tests/test_agentic_integration.py
 tests/test_agentic_edge_cases.py
+tests/test_agentic_logging.py
+tests/test_agentic_debug_metrics.py
 tests/test_agentic_workflow_chains.py
 tests/test_shipyard_workflow.py
 tests/test_workflows.py

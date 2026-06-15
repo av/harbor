@@ -228,3 +228,14 @@ class TestPonytailEarlyExit:
     assert any("early exit" in note.lower() for note in brief.notes)
     statuses = [call.args[0] for call in llm.emit_status.await_args_list]
     assert any("skipping hop 2" in status for status in statuses)
+
+
+class TestUsesLlmTrigger:
+  def test_defaults_to_heuristic_mode(self):
+    assert not orchestrate.uses_llm_trigger(None)
+    assert not orchestrate.uses_llm_trigger("")
+    assert not orchestrate.uses_llm_trigger("heuristic")
+
+  def test_enables_llm_classifier_mode(self):
+    assert orchestrate.uses_llm_trigger("llm")
+    assert orchestrate.uses_llm_trigger(" LLM ")

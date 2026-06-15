@@ -15,8 +15,7 @@ import research.orchestrate as orchestrate
 import research.workflow as workflow_mod
 import tools.registry
 from modules.diffscope import is_git_workspace, run_git_diff
-from state import request as request_state
-from state import request_store
+from state import request_set, request_store
 
 if TYPE_CHECKING:
   import llm
@@ -268,21 +267,13 @@ def get_stored_brief() -> TaskBrief | None:
 
 
 def store_brief(brief: TaskBrief) -> None:
-  request = request_state.get()
-  if request is None:
-    return
-
-  setattr(request.state, "keel_task_brief", brief.model_dump())
+  request_set("keel_task_brief", brief.model_dump())
 
 
 def clear_brief_state() -> None:
   """Drop stored brief and met-criteria progress for a forced refresh."""
-  request = request_state.get()
-  if request is None:
-    return
-
-  setattr(request.state, "keel_task_brief", None)
-  setattr(request.state, "keel_met_criteria", [])
+  request_set("keel_task_brief", None)
+  request_set("keel_met_criteria", [])
 
 
 def should_refresh_brief(llm: "llm.LLM") -> bool:
@@ -417,11 +408,7 @@ def get_met_criteria() -> set[int]:
 
 
 def store_met_criteria(indices: set[int]) -> None:
-  request = request_state.get()
-  if request is None:
-    return
-
-  setattr(request.state, "keel_met_criteria", sorted(indices))
+  request_set("keel_met_criteria", sorted(indices))
 
 
 def criterion_keywords(criterion: str) -> list[str]:
