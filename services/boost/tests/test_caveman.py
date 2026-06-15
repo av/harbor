@@ -367,7 +367,9 @@ class TestCavemanBriefCache:
 
   def test_question_hash_ignores_surrounding_whitespace(self):
     message = "What changed in Python 3.13 asyncio semantics?"
-    assert caveman._question_hash(message) == caveman._question_hash(f"  {message}  ")
+    import research.brief_cache as brief_cache
+
+    assert brief_cache.question_hash(message) == brief_cache.question_hash(f"  {message}  ")
 
   @pytest.mark.asyncio
   async def test_cache_disabled_runs_research_each_time(self, caveman_cache_mode):

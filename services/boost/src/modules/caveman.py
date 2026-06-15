@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field
 
-import config
+import config as boost_config
 import deliverable
 import log
 from modules import keel
@@ -156,38 +156,11 @@ class ResearchTriggerDecision(BaseModel):
   )
 
 
-def _uses_llm_trigger() -> bool:
-  return orchestrate.uses_llm_trigger(config.CAVEMAN_TRIGGER.value)
-
-
-_question_hash = brief_cache.question_hash
-
-
-def _get_cached_brief(message: str) -> brief_mod.ResearchBrief | None:
-  return brief_cache.get_cached_brief(
-    BRIEF_CACHE_KEY,
-    message,
-    enabled=config.CAVEMAN_CACHE_BRIEF.value,
-  )
-
-
-def _store_cached_brief(message: str, brief: brief_mod.ResearchBrief) -> None:
-  brief_cache.store_cached_brief(
-    BRIEF_CACHE_KEY,
-    message,
-    brief,
-    enabled=config.CAVEMAN_CACHE_BRIEF.value,
-  )
-
-
 def research_skip_reason(chat: "ch.Chat") -> str | None:
   """Return a pass-through reason when research should be skipped, else None."""
-  low_value = orchestrate.low_value_skip_reason(chat)
-  if low_value:
-    return low_value
-
-  if deliverable.is_implementation_turn(chat):
-    return "implementation_turn"
+  skip = orchestrate.research_skip_reason(chat)
+  if skip:
+    return skip
 
   brief = keel.get_stored_brief() or keel.hydrate_brief_from_chat(chat)
   if (
@@ -244,7 +217,7 @@ async def research_gate_reason(chat: "ch.Chat", llm: "llm.LLM") -> tuple[str, in
   if getattr(llm, "module", None) == ID_PREFIX:
     return "triggered", 0
 
-  if _uses_llm_trigger():
+  if orchestrate.uses_llm_trigger(boost_config.CAVEMAN_TRIGGER.value):
     if await classify_needs_research(chat, llm, text):
       return "triggered", 1
     return "llm_classifier_no", 1
@@ -275,7 +248,7 @@ async def extract_search_queries(
     llm,
     message,
     prompt=QUERY_EXTRACTION_PROMPT,
-    max_queries=config.CAVEMAN_MAX_QUERIES.value,
+    max_queries=boost_config.CAVEMAN_MAX_QUERIES.value,
   )
 
 
@@ -323,7 +296,11 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
     )
     return await workflow_mod.complete_or_defer(llm, config)
 
-  cached_brief = _get_cached_brief(message)
+  cached_brief = brief_cache.get_cached_brief(
+    BRIEF_CACHE_KEY,
+    message,
+    enabled=boost_config.CAVEMAN_CACHE_BRIEF.value,
+  )
   if cached_brief is not None:
     logger.debug(f"{ID_PREFIX}: Reusing cached brief for same question")
     await llm.emit_status(f"{STATUS_PREFIX}: using cached brief...")
@@ -394,7 +371,12 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
   if not brief_mod.has_usable_research(brief):
     await llm.emit_status(f"{STATUS_PREFIX}: research unavailable, continuing without live data...")
 
-  _store_cached_brief(message, brief)
+  brief_cache.store_cached_brief(
+    BRIEF_CACHE_KEY,
+    message,
+    brief,
+    enabled=boost_config.CAVEMAN_CACHE_BRIEF.value,
+  )
   chat.system(brief_mod.render_to_system(brief))
   debug_metrics.record_module(
     ID_PREFIX,

@@ -14,7 +14,7 @@ import research.debug_metrics as debug_metrics
 import research.orchestrate as orchestrate
 import research.workflow as workflow_mod
 import tools.registry
-from modules.diffscope import is_git_workspace, run_git_diff
+from modules.diffscope import git_changed_paths, is_git_workspace
 from state import request_set, request_store
 
 if TYPE_CHECKING:
@@ -559,11 +559,7 @@ def collect_landing_git_changes() -> str:
   if not root or not is_git_workspace(root):
     return ""
 
-  result = run_git_diff(root)
-  if result is None:
-    return ""
-
-  paths, _stat = result
+  paths = git_changed_paths(root)
   if not paths:
     return ""
 

@@ -150,7 +150,8 @@ CODING_SESSION_TOOL_NAMES = frozenset({
 })
 
 
-def _last_user_text(chat: "ch.Chat") -> str:
+def last_user_text(chat: "ch.Chat") -> str:
+  """Return the latest user message text, or an empty string."""
   node = chat.match_one(role="user", index=-1)
   return (node.content or "") if node else ""
 
@@ -214,7 +215,7 @@ def is_research_only_turn(chat: "ch.Chat") -> bool:
   Used by shipyard modules (especially autocheck) to skip deliverable audit on
   research-only turns while still allowing caveman/ponytail to gather context.
   """
-  text = _last_user_text(chat).strip()
+  text = last_user_text(chat).strip()
   if not text or is_acknowledgment(text):
     return False
   if is_coding_deliverable(chat):
@@ -239,7 +240,7 @@ def is_implementation_turn(chat: "ch.Chat") -> bool:
   Requires an implementation action (implement/fix/add/patch), a file path
   mention, and no research signals on the user message.
   """
-  text = _last_user_text(chat).strip()
+  text = last_user_text(chat).strip()
   if not text or is_acknowledgment(text):
     return False
   if has_research_signals(text) or IMPLEMENTATION_RESEARCH_INTENT_RE.search(text):
@@ -354,7 +355,7 @@ def is_completion_trigger(chat: "ch.Chat") -> bool:
   if has_recent_finish_tool_call(chat):
     return True
 
-  text = _last_user_text(chat).strip()
+  text = last_user_text(chat).strip()
   if text and has_explicit_done_signal(text) and has_prior_coding_context(chat):
     return True
 
@@ -435,7 +436,7 @@ def deliverable_signals(text: str, *, has_prior_code_block: bool = False) -> lis
 
 def count_deliverable_signals(chat: "ch.Chat") -> int:
   """Count how many deliverable signals the latest user turn carries."""
-  text = _last_user_text(chat)
+  text = last_user_text(chat)
   return len(deliverable_signals(text, has_prior_code_block=chat.has_substring("```")))
 
 
@@ -446,7 +447,7 @@ def is_coding_deliverable(chat: "ch.Chat") -> bool:
   Returns True when the latest user message likely expects code, patches,
   or repo-grounded implementation work rather than a purely explanatory answer.
   """
-  text = _last_user_text(chat).strip()
+  text = last_user_text(chat).strip()
   if not text:
     return False
 

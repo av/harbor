@@ -16,7 +16,7 @@ import research.debug_metrics as debug_metrics
 import research.orchestrate as orchestrate
 import research.workflow as workflow_mod
 import tools.registry
-from modules.diffscope import is_git_workspace, run_git_diff
+from modules.diffscope import git_changed_paths, is_git_workspace
 
 if TYPE_CHECKING:
   import llm
@@ -528,20 +528,6 @@ def draft_has_code_blocks(text: str) -> bool:
   return bool(deliverable.CODE_BLOCK_RE.search(text))
 
 
-def collect_git_changed_paths() -> list[str]:
-  """Return repo-relative paths from git diff when workspace is a git repo."""
-  root = boost_config.WORKSPACE_ROOT.value
-  if not root or not is_git_workspace(root):
-    return []
-
-  result = run_git_diff(root)
-  if result is None:
-    return []
-
-  paths, _stat = result
-  return paths
-
-
 async def collect_git_diff_context() -> str:
   """Return git diff summary for audit context when workspace is a git repo."""
   root = boost_config.WORKSPACE_ROOT.value
@@ -584,7 +570,7 @@ def merge_anchor_paths(cited_paths: list[str], git_paths: list[str] | None = Non
   """Merge cited draft paths with git diff paths for nearby test discovery."""
   merged: list[str] = []
   seen: set[str] = set()
-  for path in [*cited_paths, *(git_paths or collect_git_changed_paths())]:
+  for path in [*cited_paths, *(git_paths or git_changed_paths())]:
     norm = deliverable.normalize_repo_path(path) or path
     if norm and norm not in seen:
       seen.add(norm)

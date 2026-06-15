@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field
 
-import config
+import config as boost_config
 import deliverable
 import log
 import research.brief as brief_mod
@@ -275,40 +275,7 @@ def is_research_heavy(text: str) -> bool:
   return False
 
 
-def _uses_llm_trigger() -> bool:
-  return orchestrate.uses_llm_trigger(config.PONYTAIL_TRIGGER.value)
-
-
-_question_hash = brief_cache.question_hash
-
-
-def _get_cached_brief(message: str) -> brief_mod.ResearchBrief | None:
-  return brief_cache.get_cached_brief(
-    BRIEF_CACHE_KEY,
-    message,
-    enabled=config.PONYTAIL_CACHE_BRIEF.value,
-  )
-
-
-def _store_cached_brief(message: str, brief: brief_mod.ResearchBrief) -> None:
-  brief_cache.store_cached_brief(
-    BRIEF_CACHE_KEY,
-    message,
-    brief,
-    enabled=config.PONYTAIL_CACHE_BRIEF.value,
-  )
-
-
-def research_skip_reason(chat: "ch.Chat") -> str | None:
-  """Return a pass-through reason when research should be skipped, else None."""
-  low_value = orchestrate.low_value_skip_reason(chat)
-  if low_value:
-    return low_value
-
-  if deliverable.is_implementation_turn(chat):
-    return "implementation_turn"
-
-  return None
+research_skip_reason = orchestrate.research_skip_reason
 
 
 def should_skip_research(chat: "ch.Chat") -> bool:
@@ -363,7 +330,7 @@ async def research_gate_reason(chat: "ch.Chat", llm: "llm.LLM") -> tuple[str, in
       return "triggered", 0
     return "module_prefix_no_research_signals", 0
 
-  if _uses_llm_trigger():
+  if orchestrate.uses_llm_trigger(boost_config.PONYTAIL_TRIGGER.value):
     if await classify_needs_deep_research(chat, llm, text):
       return "triggered", 1
     return "llm_classifier_no", 1
@@ -389,7 +356,7 @@ async def plan_search_queries(
     llm,
     message,
     prompt=QUERY_PLAN_PROMPT,
-    max_queries=config.PONYTAIL_MAX_QUERIES.value,
+    max_queries=boost_config.PONYTAIL_MAX_QUERIES.value,
   )
 
 
@@ -432,7 +399,7 @@ async def synthesize_brief(
     message=message,
     research_summary=brief_mod.render_for_synthesis(
       brief,
-      max_chars=config.PONYTAIL_SYNTHESIS_MAX_CHARS.value,
+      max_chars=boost_config.PONYTAIL_SYNTHESIS_MAX_CHARS.value,
     ),
     schema=StructuredBrief,
     params={"temperature": 0.2},
@@ -493,7 +460,7 @@ async def run_research_loop(
     )
   )
 
-  early_exit_chars = config.PONYTAIL_EARLY_EXIT_CHARS.value
+  early_exit_chars = boost_config.PONYTAIL_EARLY_EXIT_CHARS.value
   gathered_chars = orchestrate.content_chars_in_brief(brief)
   if early_exit_chars > 0 and gathered_chars >= early_exit_chars:
     brief.add_note(
@@ -593,7 +560,11 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
     )
     return await workflow_mod.complete_or_defer(llm, config)
 
-  cached_brief = _get_cached_brief(message)
+  cached_brief = brief_cache.get_cached_brief(
+    BRIEF_CACHE_KEY,
+    message,
+    enabled=boost_config.PONYTAIL_CACHE_BRIEF.value,
+  )
   if cached_brief is not None:
     logger.debug(f"{ID_PREFIX}: Reusing cached brief for same question")
     await llm.emit_status(f"{STATUS_PREFIX}: using cached brief...")
@@ -665,7 +636,12 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
   if not brief_mod.has_usable_research(brief):
     await llm.emit_status(f"{STATUS_PREFIX}: research unavailable, continuing without live data...")
 
-  _store_cached_brief(message, brief)
+  brief_cache.store_cached_brief(
+    BRIEF_CACHE_KEY,
+    message,
+    brief,
+    enabled=boost_config.PONYTAIL_CACHE_BRIEF.value,
+  )
   chat.system(brief_mod.render_to_system(brief))
   debug_metrics.record_module(
     ID_PREFIX,

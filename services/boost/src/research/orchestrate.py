@@ -31,8 +31,17 @@ CONTINUATION_RE = re.compile(
 
 
 def last_user_text(chat: "ch.Chat") -> str:
-  node = chat.match_one(role="user", index=-1)
-  return (node.content or "").strip() if node else ""
+  return deliverable.last_user_text(chat).strip()
+
+
+def research_skip_reason(chat: "ch.Chat") -> str | None:
+  """Return a pass-through reason shared by caveman and ponytail, else None."""
+  low_value = low_value_skip_reason(chat)
+  if low_value:
+    return low_value
+  if deliverable.is_implementation_turn(chat):
+    return "implementation_turn"
+  return None
 
 
 def low_value_skip_reason(chat: "ch.Chat") -> str | None:

@@ -237,7 +237,7 @@ class TestKeelBriefRendering:
     )
     with (
       patch.object(keel, "is_git_workspace", return_value=True),
-      patch.object(keel, "run_git_diff", return_value=(["src/api.py", "tests/test_api.py"], "")),
+      patch.object(keel, "git_changed_paths", return_value=["src/api.py", "tests/test_api.py"]),
       patch.object(config.WORKSPACE_ROOT, "__value__", "/workspace"),
     ):
       rendered = keel.render_landing_checklist(brief)
@@ -267,7 +267,7 @@ class TestKeelBriefRendering:
     )
     with (
       patch.object(keel, "is_git_workspace", return_value=True),
-      patch.object(keel, "run_git_diff", return_value=None),
+      patch.object(keel, "git_changed_paths", return_value=[]),
       patch.object(config.WORKSPACE_ROOT, "__value__", "/workspace"),
     ):
       rendered = keel.render_landing_checklist(brief)

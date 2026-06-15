@@ -357,6 +357,20 @@ def extract_response_paths(text: str, chat: "ch.Chat | None" = None) -> list[str
   return paths
 
 
+def git_changed_paths(root: str | Path | None = None) -> list[str]:
+  """Return repo-relative paths from git diff when the workspace is a git repo."""
+  resolved = Path(root or config.WORKSPACE_ROOT.value or "")
+  if not resolved.is_dir() or not is_git_workspace(resolved):
+    return []
+
+  result = run_git_diff(resolved)
+  if result is None:
+    return []
+
+  paths, _stat = result
+  return paths
+
+
 def is_git_workspace(root: str | Path | None = None) -> bool:
   """Return True when the workspace root is inside a git repository."""
   resolved = Path(root or config.WORKSPACE_ROOT.value or "")

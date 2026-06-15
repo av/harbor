@@ -649,7 +649,9 @@ class TestPonytailBriefCache:
 
   def test_question_hash_ignores_surrounding_whitespace(self):
     message = "Compare Python 3.12 vs 3.13 asyncio API behavior"
-    assert ponytail._question_hash(message) == ponytail._question_hash(f"  {message}  ")
+    import research.brief_cache as brief_cache
+
+    assert brief_cache.question_hash(message) == brief_cache.question_hash(f"  {message}  ")
 
   @pytest.mark.asyncio
   async def test_cache_disabled_runs_research_each_time(self, ponytail_cache_mode):
