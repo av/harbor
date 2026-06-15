@@ -169,6 +169,14 @@ class TestResearchBrief:
       "Already wrapped `1.2.3` stays intact"
     )
 
+  def test_highlight_versions_preserves_dotted_filenames(self):
+    assert highlight_versions("Deploy artifact v1.2.3.py to staging") == (
+      "Deploy artifact v1.2.3.py to staging"
+    )
+    assert highlight_versions("Pin requirements.txt to 2.1.0") == (
+      "Pin requirements.txt to `2.1.0`"
+    )
+
   def test_render_to_system_highlights_versions_in_recommendation(self):
     brief = ResearchBrief(
       recommendation="Upgrade to FastAPI 0.115 before changing middleware.",
@@ -556,5 +564,73 @@ class TestWorkspaceFileTool:
     try:
       selected = tools._selected_tools()
       assert "write_workspace_file" not in selected
+    finally:
+      config.WORKSPACE_ROOT.__value__ = original
+
+  def test_list_workspace_files_lists_files(self):
+    with tempfile.TemporaryDirectory() as workspace:
+      src = Path(workspace) / "src"
+      src.mkdir(parents=True)
+      (src / "main.py").write_text("print(1)", encoding="utf-8")
+      (src / "util.py").write_text("print(2)", encoding="utf-8")
+      (Path(workspace) / "README.md").write_text("hi", encoding="utf-8")
+
+      original_root = self._with_workspace_root(workspace)
+      try:
+        import asyncio
+        result = asyncio.run(tools.list_workspace_files(path="src", glob="*.py"))
+      finally:
+        config.WORKSPACE_ROOT.__value__ = original_root
+
+    assert "src/main.py" in result
+    assert "src/util.py" in result
+    assert "README.md" not in result
+
+  def test_list_workspace_files_respects_max_entries(self):
+    with tempfile.TemporaryDirectory() as workspace:
+      for index in range(5):
+        (Path(workspace) / f"file{index}.txt").write_text("x", encoding="utf-8")
+
+      original_root = self._with_workspace_root(workspace)
+      try:
+        import asyncio
+        result = asyncio.run(tools.list_workspace_files(max_entries=3))
+      finally:
+        config.WORKSPACE_ROOT.__value__ = original_root
+
+    assert result.count(".txt") == 3
+    assert "truncated to 3 entries" in result
+
+  def test_list_workspace_files_path_jail(self):
+    with tempfile.TemporaryDirectory() as workspace:
+      original = self._with_workspace_root(workspace)
+      try:
+        with pytest.raises(ValueError, match="stay inside the workspace root"):
+          tools._workspace_search_path("../outside")
+      finally:
+        config.WORKSPACE_ROOT.__value__ = original
+
+  def test_list_workspace_files_requires_workspace_root(self):
+    original = self._with_workspace_root("")
+    try:
+      import asyncio
+      with pytest.raises(ValueError, match="Workspace root is not configured"):
+        asyncio.run(tools.list_workspace_files())
+    finally:
+      config.WORKSPACE_ROOT.__value__ = original
+
+  def test_selected_tools_includes_list_when_configured(self):
+    original = self._with_workspace_root("/workspace")
+    try:
+      selected = tools._selected_tools(["list_workspace_files"])
+      assert "list_workspace_files" in selected
+    finally:
+      config.WORKSPACE_ROOT.__value__ = original
+
+  def test_selected_tools_omits_list_when_unconfigured(self):
+    original = self._with_workspace_root("")
+    try:
+      selected = tools._selected_tools(["list_workspace_files"])
+      assert "list_workspace_files" not in selected
     finally:
       config.WORKSPACE_ROOT.__value__ = original

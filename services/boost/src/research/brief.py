@@ -7,9 +7,9 @@ from pydantic import BaseModel, Field
 import research.fetch as fetch_mod
 
 _VERSION_RE = re.compile(
-  r"(?<![`\w])"
+  r"(?<![`.\w])"
   r"(v?\d+(?:\.\d+)+[a-z0-9]*|20\d{2}-\d{2}-\d{2})"
-  r"(?![`\w])",
+  r"(?![`.\w])",
   re.IGNORECASE,
 )
 

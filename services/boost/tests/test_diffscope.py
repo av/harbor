@@ -217,8 +217,47 @@ class TestGitDiffGrounding:
         config.WORKSPACE_ROOT.__value__ = original
 
     assert snapshot.mode == "git"
-    assert snapshot.paths == ["services/boost/src/utils.py"]
+    assert snapshot.paths == [
+      "services/boost/src/utils.py",
+      "services/boost/src/config.py",
+    ]
     assert "utils.py" in snapshot.stat
+
+  def test_collect_changed_paths_merges_draft_paths_when_git_diff_empty(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      root = Path(tmp)
+      (root / ".git").mkdir()
+      original = config.WORKSPACE_ROOT.__value__
+      try:
+        config.WORKSPACE_ROOT.__value__ = str(root)
+        with patch.object(diffscope, "run_git_diff", return_value=([], "")):
+          snapshot = diffscope.collect_changed_paths(
+            "Updated services/foo.py and services/bar.py for consistency.",
+          )
+      finally:
+        config.WORKSPACE_ROOT.__value__ = original
+
+    assert snapshot.mode == "git"
+    assert snapshot.paths == ["services/foo.py", "services/bar.py"]
+
+  def test_extract_paths_from_write_workspace_file_tool_calls(self):
+    chat = ch.Chat.from_conversation([
+      {
+        "role": "assistant",
+        "content": "",
+        "tool_calls": [{
+          "id": "call_1",
+          "type": "function",
+          "function": {
+            "name": "write_workspace_file",
+            "arguments": json.dumps({"file_path": "src/widget.py", "content": "x"}),
+          },
+        }],
+      },
+      {"role": "user", "content": "Save widget"},
+    ])
+    paths = diffscope.extract_response_paths("Saved widget.", chat)
+    assert "src/widget.py" in paths
 
   def test_collect_changed_paths_falls_back_to_heuristic(self):
     text = "Changed `services/boost/src/utils.py`."

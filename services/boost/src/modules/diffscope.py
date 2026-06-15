@@ -100,6 +100,7 @@ FILE_TOOL_NAMES = frozenset({
   "read_file",
   "delete_file",
   "read_workspace_file",
+  "write_workspace_file",
 })
 
 GIT_DIFF_TIMEOUT = 5.0
@@ -309,18 +310,20 @@ def run_git_diff(
 
 
 def collect_changed_paths(text: str, chat: "ch.Chat | None" = None) -> ChangedPathsSnapshot:
-  """Prefer workspace git diff; fall back to response path heuristics."""
+  """Prefer workspace git diff; merge draft paths so scope checks stay grounded."""
+  heuristic_paths = extract_response_paths(text, chat)
   root = config.WORKSPACE_ROOT.value
   if root and is_git_workspace(root):
     result = run_git_diff(root)
     if result is not None:
       paths, stat = result
+      merged = _collect_unique([*paths, *heuristic_paths])
       logger.debug(
-        f"{ID_PREFIX}: git mode — {len(paths)} changed path(s)"
+        f"{ID_PREFIX}: git mode — {len(paths)} git path(s), "
+        f"{len(heuristic_paths)} draft path(s), {len(merged)} merged"
       )
-      return ChangedPathsSnapshot(paths=paths, stat=stat, mode="git")
+      return ChangedPathsSnapshot(paths=merged, stat=stat, mode="git")
 
-  heuristic_paths = extract_response_paths(text, chat)
   logger.debug(
     f"{ID_PREFIX}: heuristic mode — {len(heuristic_paths)} path(s) from response"
   )

@@ -84,9 +84,11 @@ SKIP_MESSAGE_RE = re.compile(
 )
 
 BRIEF_MARKER_TAG = "keel_brief"
+BRIEF_MARKER_OPEN = f'<{BRIEF_MARKER_TAG} hidden="true">'
+BRIEF_MARKER_CLOSE = f"</{BRIEF_MARKER_TAG}>"
 BRIEF_MARKER_RE = re.compile(
-  rf"<{BRIEF_MARKER_TAG}\s+hidden=\"true\">\s*(\{{.*?\}})\s*</{BRIEF_MARKER_TAG}>",
-  re.IGNORECASE | re.DOTALL,
+  rf"<{BRIEF_MARKER_TAG}\s+hidden=\"true\">",
+  re.IGNORECASE,
 )
 
 DRIFT_PHRASE_RE = re.compile(
@@ -210,13 +212,28 @@ def render_brief_marker(brief: TaskBrief, met_criteria: set[int] | None = None) 
   )
 
 
+def _brief_marker_payload(content: str) -> str | None:
+  """Extract the JSON payload between hidden keel brief tags."""
+  text = content or ""
+  open_match = BRIEF_MARKER_RE.search(text)
+  if not open_match:
+    return None
+
+  start = open_match.end()
+  close_idx = text.lower().find(BRIEF_MARKER_CLOSE.lower(), start)
+  if close_idx < 0:
+    return None
+
+  return text[start:close_idx].strip()
+
+
 def parse_brief_marker(content: str) -> tuple[TaskBrief, set[int]] | None:
-  match = BRIEF_MARKER_RE.search(content or "")
-  if not match:
+  payload_text = _brief_marker_payload(content)
+  if not payload_text:
     return None
 
   try:
-    payload = json.loads(match.group(1))
+    payload = json.loads(payload_text)
   except json.JSONDecodeError:
     logger.warning(f"{ID_PREFIX}: invalid brief marker JSON")
     return None
@@ -241,7 +258,7 @@ def parse_brief_marker(content: str) -> tuple[TaskBrief, set[int]] | None:
 
 def chat_has_brief_marker(chat: "ch.Chat") -> bool:
   for node in chat.plain():
-    if node.role == "system" and BRIEF_MARKER_RE.search(node.content or ""):
+    if node.role == "system" and _brief_marker_payload(node.content or ""):
       return True
   return False
 

@@ -119,6 +119,21 @@ class TestKeelBriefPersistence:
     assert restored.in_scope_paths == brief.in_scope_paths
     assert met == {0}
 
+  def test_parse_brief_marker_handles_braces_in_constraints(self):
+    brief = keel.TaskBrief(
+      objective="Fix template rendering",
+      constraints=["Escape } in Jinja templates", "Also handle { braces"],
+      acceptance_criteria=["Tests pass"],
+      in_scope_paths=["src/templates.py"],
+    )
+    marker = keel.render_brief_marker(brief, met_criteria={0})
+
+    parsed = keel.parse_brief_marker(marker)
+    assert parsed is not None
+    restored, met = parsed
+    assert restored.constraints == brief.constraints
+    assert met == {0}
+
   def test_hydrate_brief_from_chat_restores_request_state(self):
     brief = keel.TaskBrief(
       objective="Add retry helper",
