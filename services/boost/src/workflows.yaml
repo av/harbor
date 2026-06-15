@@ -62,6 +62,8 @@ workflows:
         config:
           final: false
       - module: sightline
+        config:
+          final: false
       - module: diffscope
       - module: autocheck
       - module: final

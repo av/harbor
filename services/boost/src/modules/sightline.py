@@ -467,4 +467,5 @@ async def apply(chat: "ch.Chat", llm: "llm_mod.LLM", config: dict | None = None)
   else:
     logger.debug(f"{ID_PREFIX}: no file tools registered to guard")
 
-  return await workflow_mod.complete_or_defer(llm, {**cfg, "defer_final": not cfg_final})
+  defer_final = cfg.get("defer_final", not cfg_final)
+  return await workflow_mod.complete_or_defer(llm, {**cfg, "defer_final": defer_final})

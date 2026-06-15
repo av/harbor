@@ -437,3 +437,20 @@ class TestSightlineApply:
       await sightline.apply(chat, llm)
 
     llm.stream_final_completion.assert_awaited_once()
+
+  @pytest.mark.asyncio
+  async def test_apply_respects_workflow_injected_defer_final(self):
+    """Workflow chains inject defer_final when final is unset; sightline must not stream."""
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Edit scratch notes carefully."},
+    ])
+    llm = MagicMock()
+    llm.stream_final_completion = AsyncMock()
+
+    with request_context():
+      tool_registry.set_local_tool("write_file", tools_module.write_file)
+      tool_registry.set_local_tool("read_file", tools_module.read_file)
+
+      await sightline.apply(chat, llm, config={"defer_final": True})
+
+    llm.stream_final_completion.assert_not_awaited()

@@ -3,6 +3,7 @@
 import os
 import sys
 from copy import deepcopy
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -167,6 +168,35 @@ class TestWorkflowPresets:
       assert parsed is not None
       assert parsed["id"] == workflow_id
       assert parsed["modules"] == [name for name in shorthand.split(",")]
+
+  def test_workflows_yaml_agent_code_sightline_defers_final(self, monkeypatch):
+    workflows_file = Path(__file__).resolve().parent.parent / "src" / "workflows.yaml"
+    monkeypatch.setattr(config.WORKFLOWS, "__value__", "")
+    monkeypatch.setattr(config.WORKFLOWS_FILE, "__value__", str(workflows_file))
+
+    loaded = workflows.load_workflows()
+    modules = loaded["agent-code"]["modules"]
+    sightline = next(
+      module
+      for module in modules
+      if (module.get("module") if isinstance(module, dict) else module) == "sightline"
+    )
+    assert sightline["config"]["final"] is False
+
+  def test_workflows_yaml_shipyard_keeps_defer_final_on_prep_modules(self, monkeypatch):
+    workflows_file = Path(__file__).resolve().parent.parent / "src" / "workflows.yaml"
+    monkeypatch.setattr(config.WORKFLOWS, "__value__", "")
+    monkeypatch.setattr(config.WORKFLOWS_FILE, "__value__", str(workflows_file))
+
+    loaded = workflows.load_workflows()
+    for module_name in ("keel", "caveman", "ponytail", "autocheck"):
+      module = next(
+        item
+        for item in loaded["shipyard"]["modules"]
+        if (item.get("module") if isinstance(item, dict) else item) == module_name
+      )
+      assert module.get("continue") is True
+      assert module["config"]["defer_final"] is True
 
 
 class TestApplyWorkflow:
