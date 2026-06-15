@@ -19,19 +19,38 @@ def failure_brief(query: str, note: str) -> brief_mod.ResearchBrief:
 def anchor_deferred_draft(chat, text: str, config: dict | None = None) -> None:
   """Record a deferred draft in chat for downstream workflow modules.
 
-  When the tail is already an assistant message (for example from a
-  ``stream_chat_completion(emit=False)`` draft), replace it so downstream
-  modules audit the scoped or revised answer rather than a pre-revision draft.
+  When the current workflow step already left an assistant draft after the
+  latest user turn (for example from ``stream_chat_completion(emit=False)``),
+  replace that draft so downstream modules audit the scoped or revised answer.
+  Assistant messages from earlier user turns are preserved; only in-turn drafts
+  between the latest user message and ``chat.tail`` are replaced.
   """
   if not config or not config.get("defer_final"):
     return
   anchored = (text or "").strip()
   if not anchored:
     return
-  if chat.tail.role == "assistant":
-    chat.tail.content = anchored
-  else:
+
+  latest_user = None
+  node = chat.tail
+  while node is not None:
+    if node.role == "user":
+      latest_user = node
+      break
+    node = node.parent
+
+  if latest_user is None:
     chat.assistant(anchored)
+    return
+
+  node = chat.tail
+  while node is not None and node is not latest_user:
+    if node.role == "assistant":
+      node.content = anchored
+      return
+    node = node.parent
+
+  chat.assistant(anchored)
 
 
 def format_skipped_status(module_label: str, gate_reason: str) -> str:
