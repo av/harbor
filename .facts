@@ -84,8 +84,8 @@
 - label: harbor launch exposes --web and --workflow as Boost routing modifiers and rejects removed groups such as --time and --notes
   command: ./harbor.sh launch --help | rg -q -- '--web' && ./harbor.sh launch --help | rg -q -- '--workflow' && ! ./harbor.sh launch --help | rg -q -- '--time|--notes|--files|--scratch'
   tags: [implemented]
-- label: harbor launch --workflow starts Boost with a builtin preset such as agent-code or shipyard, starts SearXNG when required, and routes the tool to a workflow-prefixed model
-  command: rg -q 'launch_prepare_builtin_workflow' harbor.sh && rg -q 'launch_builtin_workflow_is_valid' harbor.sh && rg -q 'agent-code' harbor.sh && rg -q 'shipyard' harbor.sh
+- label: harbor launch --workflow starts Boost with a builtin preset such as scope-guard, agent-code, or shipyard, starts SearXNG when required, and routes the tool to a workflow-prefixed model
+  command: rg -q 'launch_prepare_builtin_workflow' harbor.sh && rg -q 'launch_builtin_workflow_is_valid' harbor.sh && rg -q 'scope-guard' harbor.sh && rg -q 'agent-code' harbor.sh && rg -q 'shipyard' harbor.sh
   tags: [implemented]
 
 ## models
