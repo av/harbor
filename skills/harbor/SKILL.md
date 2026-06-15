@@ -1,6 +1,6 @@
 ---
 name: harbor
-description: CLI toolkit for managing containerized LLM services. Use when the user wants to start, stop, configure, or manage AI/LLM services like Ollama, Open WebUI, llama.cpp, vLLM, LiteLLM, ComfyUI, and 250+ others. Triggers on requests to "run a model", "start ollama", "set up an LLM", "configure harbor", "manage services", "check what's running", or any Docker-based AI service management task.
+description: CLI toolkit for managing containerized LLM services. Use when the user wants to start, stop, configure, or manage AI/LLM services like Ollama, Open WebUI, llama.cpp, vLLM, LiteLLM, ComfyUI, and 250+ others. Triggers on requests to "run a model", "start ollama", "set up an LLM", "configure harbor", "manage services", "check what's running", "harbor launch", Boost workflow presets (research-quick, code-check, scope-guard, agent-code, shipyard), or any Docker-based AI service management task.
 allowed-tools: Bash(harbor:*), Bash(docker:*)
 ---
 
@@ -210,16 +210,40 @@ Harbor Boost is an LLM proxy (`harbor up boost`) that chains modules before the 
 
 ### Workflow Presets
 
-Presets chain modules and register `tools` as a setup step. Use workflow-prefixed models (e.g. `shipyard-llama3.2`) or `@boost_workflow` metadata.
+Built-in presets chain modules and register `tools` as a setup step (`final: false`). Enable via `harbor launch --workflow <preset>`, workflow-prefixed models (e.g. `shipyard-llama3.2`), or `@boost_workflow` in request metadata.
 
-| Preset | Chain | Use when |
-|--------|-------|----------|
-| `research-quick` | `tools`, `caveman`, `final` | Quick lookup before answering |
-| `research-deep` | `tools`, `ponytail`, `final` | Migration, API, or version comparison |
-| `code-check` | `tools`, `autocheck`, `final` | Audit code changes before delivery |
-| `scope-guard` | `tools`, `diffscope`, `autocheck`, `final` | Focused bugfix with user-stated file scope |
-| `agent-code` | `tools`, `sightline`, `diffscope`, `autocheck`, `final` | Sandbox coding with workspace tools and hardening |
-| `shipyard` | `keel`, `caveman`, `tools`, `ponytail`, `autocheck`, `final` | Full multi-turn coding pipeline |
+| Task | Preset | Chain |
+|------|--------|-------|
+| Quick doc/error lookup | `research-quick` | `tools`, `caveman`, `final` |
+| Audit code before delivery | `code-check` | `tools`, `autocheck`, `final` |
+| Scoped bugfix (`only X`, `don't touch Y`) | `scope-guard` | `tools`, `diffscope`, `autocheck`, `final` |
+| Sandbox coding with workspace tools | `agent-code` | `tools`, `sightline`, `diffscope`, `autocheck`, `final` |
+| Full multi-turn coding pipeline | `shipyard` | `keel`, `caveman`, `tools`, `ponytail`, `autocheck`, `final` |
+
+Also available: `research-deep` (`ponytail`), `agent-research` (`caveman` for tool-enabled agent sessions).
+
+### `harbor launch --workflow`
+
+One-shot wiring for Boost workflow presets. Put launch options **before** the tool name; everything after the tool name passes through unchanged.
+
+| Behavior | Detail |
+|----------|--------|
+| Starts | Boost + `--backend` (default: first running backend, else `llamacpp`) |
+| Routes tool to | `<preset>-<model>` (e.g. `shipyard-qwen2.5-coder:7b`) |
+| Auto-starts SearXNG | `research-quick`, `shipyard` (web research modules) |
+| No SearXNG | `code-check`, `scope-guard`, `agent-code` |
+
+`--web` and `--workflow` cannot be combined. `claude` does not support Boost workflows (Anthropic API); use OpenAI-compatible host tools (`codex`, `opencode`, `copilot`, `droid`, `hermes`, `mi`, `openclaw`, `pi`, `pool`).
+
+```bash
+harbor launch --workflow research-quick --backend ollama --model qwen2.5-coder:7b codex
+harbor launch --workflow code-check --backend ollama --model qwen2.5-coder:7b opencode
+harbor launch --workflow scope-guard --backend ollama --model qwen2.5-coder:7b codex -p "Fix auth in src/api.ts only"
+harbor launch --workflow agent-code --backend ollama --model qwen2.5-coder:7b codex --sandbox workspace-write
+harbor launch --workflow shipyard --backend ollama --model qwen2.5-coder:7b opencode
+```
+
+Coding presets (`code-check`, `scope-guard`, `agent-code`, `shipyard`) need a workspace bind mount (see Setup). For `agent-code`, add `write_workspace_file` to `HARBOR_BOOST_TOOLS` and pass `--sandbox workspace-write` to Codex.
 
 ### Setup
 
@@ -245,13 +269,8 @@ harbor config set HARBOR_BOOST_TOOLS 'read_workspace_file;grep_workspace;list_wo
 harbor config update
 harbor restart boost
 
-# Point a coding agent at Boost
-harbor url boost   # OpenAI-compatible; model: agent-code-<backend-model>
-
-# One-shot sandbox coding via builtin agent-code preset
-harbor launch --workflow agent-code --backend ollama --model qwen2.5-coder:7b codex \
-  --sandbox workspace-write
-harbor launch --workflow shipyard --backend ollama --model qwen2.5-coder:7b opencode
+# Point a coding agent at Boost (manual config)
+harbor url boost   # OpenAI-compatible; model: <preset>-<backend-model>
 ```
 
 **Notes:** `autocheck` triggers only on deliverable turns (≥2 signals, e.g. coding keyword + file path). `sightline` guards Boost scratch and workspace file tools when `HARBOR_BOOST_WORKSPACE_ROOT` is set. Empty `HARBOR_BOOST_WORKFLOWS` loads built-in presets from `/boost/workflows.yaml`.
@@ -306,14 +325,15 @@ Each segment is one module: `triggered` or `skipped`, optional `(reason)`, wall-
 
 ## Launching Service CLIs
 
-`harbor launch` starts a service CLI pre-configured to use running Harbor services.
+`harbor launch` starts a service CLI pre-configured to use running Harbor services. Runs from the directory you invoke it (preserves project context).
 
 ```bash
 harbor launch <tool> [args]            # Launch with auto-detected backends
 harbor launch --backend <svc> <tool>   # Override backend
 harbor launch --model <model> <tool>   # Override model
-harbor launch --workflow <preset> <tool>  # Builtin Boost preset (e.g. shipyard)
-harbor launch --web <tool>             # Generated boost-web workflow + SearXNG
+harbor launch --workflow <preset> <tool>  # Builtin Boost preset — see Harbor Boost section
+harbor launch --web <tool>             # Generated boost-web workflow + SearXNG (mutually exclusive with --workflow)
+harbor launch --config <tool>          # Print/write config without starting tool
 
 # Direct CLI shortcuts (service must be running)
 harbor aider                           # Aider coding assistant
@@ -428,8 +448,8 @@ harbor lmeval <cmd>                    # LM Evaluation Harness
 harbor up ollama
 harbor pull qwen2.5-coder:7b
 harbor launch --model qwen2.5-coder:7b aider
-harbor launch --model qwen2.5-coder:7b gptme
-harbor launch --model qwen2.5-coder:7b opint
+harbor launch --workflow shipyard --backend ollama --model qwen2.5-coder:7b codex
+harbor launch --workflow agent-code --backend ollama --model qwen2.5-coder:7b opencode
 ```
 
 ## Important Notes
