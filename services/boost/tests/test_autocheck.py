@@ -4,6 +4,7 @@ import os
 import subprocess
 import sys
 import tempfile
+from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -14,7 +15,22 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 import chat as ch
 import config
 import deliverable
+import tools.registry as tool_registry
 from modules import autocheck, tools
+from state import request as request_state
+
+
+@contextmanager
+def request_context():
+  req = MagicMock()
+  req.state = type("State", (), {})()
+  token_req = request_state.set(req)
+  try:
+    yield req
+  finally:
+    request_state.reset(token_req)
+    if hasattr(req.state, "local_tools"):
+      delattr(req.state, "local_tools")
 
 
 class TestAutocheckGate:
@@ -525,6 +541,87 @@ class TestWorkspaceContext:
     finally:
       config.WORKSPACE_ROOT.__value__ = original
     assert context == ""
+
+
+class TestWorkspaceExploration:
+  @pytest.mark.asyncio
+  async def test_explore_workspace_with_tools_calls_read_and_grep_for_draft_paths(self):
+    draft = (
+      "Update `services/boost/src/main.py` and verify `retry_helper` exists."
+    )
+    paths = ["services/boost/src/main.py"]
+
+    with tempfile.TemporaryDirectory() as workspace:
+      original_root = config.WORKSPACE_ROOT.__value__
+      try:
+        config.WORKSPACE_ROOT.__value__ = workspace
+        chat = ch.Chat.from_conversation([
+          {"role": "user", "content": "Fix retry in services/boost/src/main.py"},
+        ])
+        llm = MagicMock()
+        llm.chat = chat
+
+        mock_read = AsyncMock(return_value="def retry_helper():\n  pass\n")
+        mock_grep = AsyncMock(
+          return_value="services/boost/src/main.py:10:def retry_helper()\n",
+        )
+
+        async def simulate_exploration(**kwargs):
+          read_tool = tool_registry.get_local_tool("read_workspace_file")
+          grep_tool = tool_registry.get_local_tool("grep_workspace")
+          await read_tool("services/boost/src/main.py")
+          await grep_tool("retry_helper", glob="*.py")
+
+          chat.tool_call({
+            "id": "call_read",
+            "type": "function",
+            "function": {
+              "name": "read_workspace_file",
+              "arguments": '{"path": "services/boost/src/main.py"}',
+            },
+          })
+          chat.tool("call_read", "def retry_helper():\n  pass\n")
+          chat.tool_call({
+            "id": "call_grep",
+            "type": "function",
+            "function": {
+              "name": "grep_workspace",
+              "arguments": '{"pattern": "retry_helper", "glob": "*.py"}',
+            },
+          })
+          chat.tool("call_grep", "services/boost/src/main.py:10:def retry_helper()\n")
+          chat.assistant("- services/boost/src/main.py contains retry_helper")
+          return "- services/boost/src/main.py contains retry_helper"
+
+        llm.stream_chat_completion = AsyncMock(side_effect=simulate_exploration)
+
+        with (
+          request_context(),
+          patch("modules.tools.read_workspace_file", mock_read),
+          patch("modules.tools.grep_workspace", mock_grep),
+        ):
+          notes, tool_calls = await autocheck.explore_workspace_with_tools(
+            llm,
+            draft,
+            paths,
+          )
+
+        mock_read.assert_awaited_once_with("services/boost/src/main.py")
+        mock_grep.assert_awaited_once_with("retry_helper", glob="*.py")
+        assert "retry_helper" in notes
+        assert len(tool_calls) == 2
+        assert tool_calls[0]["name"] == "read_workspace_file"
+        assert tool_calls[0]["arguments"]["path"] == "services/boost/src/main.py"
+        assert tool_calls[1]["name"] == "grep_workspace"
+        assert tool_calls[1]["arguments"]["pattern"] == "retry_helper"
+
+        explore_kwargs = llm.stream_chat_completion.await_args.kwargs
+        assert explore_kwargs["prompt"] == autocheck.WORKSPACE_EXPLORE_PROMPT
+        assert "services/boost/src/main.py" in explore_kwargs["paths"]
+        assert explore_kwargs["draft_excerpt"] == draft[:4000]
+        assert explore_kwargs["emit"] is False
+      finally:
+        config.WORKSPACE_ROOT.__value__ = original_root
 
 
 class TestWorkspaceEvidence:
