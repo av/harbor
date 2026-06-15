@@ -199,6 +199,9 @@
 - label: caveman performs budget-capped web research on research turns: extracts search queries, runs web_search, optionally reads top pages, injects a research_brief system block, then streams the final completion; acknowledgments and short continuation messages pass through without research
   command: cd services/boost && uv run pytest tests/test_caveman.py -q --tb=no
   tags: [implemented]
+- label: caveman supports HARBOR_BOOST_CAVEMAN_TRIGGER llm mode: a cheap LLM classifier decides whether external research is needed, skips the classifier when already inside a caveman-prefixed module turn, and falls back to heuristic mode on classifier failure
+  command: cd services/boost && uv run pytest tests/test_caveman.py::TestCavemanLlmTrigger -q --tb=no
+  tags: [spec, implemented]
 - label: ponytail performs two-hop web research on research-heavy turns (migrations, version comparisons, API behavior): initial search, page reads, gap detection, targeted second search, then injects a structured research_brief before the final answer
   command: cd services/boost && uv run pytest tests/test_ponytail.py::TestPonytailResearchLoop -q --tb=no
   tags: [implemented]
@@ -226,9 +229,15 @@
 - label: shipyard workflow chains keel caveman tools ponytail and autocheck before final, with defer_final on intermediate grounding and research steps
   command: cd services/boost && uv run pytest tests/test_workflows.py::TestWorkflowPresets::test_shipyard_preset_module_chain -q --tb=no
   tags: [implemented]
+- label: shipyard turn-type hardening skips caveman ideation research when keel anchors an implementation brief, skips autocheck on research-only turns, and defers final streaming until the explicit final step
+  command: cd services/boost && uv run pytest tests/test_shipyard_workflow.py::TestShipyardTurnTypes tests/test_shipyard_workflow.py::TestShipyardDeferFinal -q --tb=no
+  tags: [spec, implemented]
+- label: scope-guard workflow chains tools diffscope and autocheck before final for focused bugfix deliverables with user-stated file scope
+  command: cd services/boost && uv run pytest tests/test_workflows.py::TestWorkflowPresets::test_scope_guard_preset_module_chain tests/test_workflows.py::TestApplyWorkflow::test_scope_guard_runs_full_module_chain_before_final -q --tb=no
+  tags: [spec, implemented]
 - label: agent-code workflow chains tools sightline diffscope and autocheck before final for sandbox coding sessions
   command: cd services/boost && uv run pytest tests/test_workflows.py::TestWorkflowPresets::test_agent_code_preset_module_chain -q --tb=no
-  tags: [implemented]
+  tags: [spec, implemented]
 - label: deliverable heuristics gate agentic modules: coding implementation requests with file paths or code blocks trigger post-processing while purely explanatory questions pass through
   command: cd services/boost && uv run pytest tests/test_agentic_infra.py::TestDeliverableGate -q --tb=no
   tags: [implemented]
@@ -240,6 +249,12 @@
   tags: [implemented]
 - label: grep_workspace is an opt-in portable tool when HARBOR_BOOST_WORKSPACE_ROOT is set: searches workspace files with optional glob and max_matches caps and rejects paths outside the workspace root
   command: cd services/boost && uv run pytest tests/test_agentic_infra.py::TestWorkspaceFileTool::test_grep_workspace_finds_pattern tests/test_agentic_infra.py::TestWorkspaceFileTool::test_grep_workspace_respects_max_matches tests/test_agentic_infra.py::TestWorkspaceFileTool::test_grep_workspace_path_jail tests/test_agentic_infra.py::TestWorkspaceFileTool::test_selected_tools_includes_grep_when_configured -q --tb=no
+  tags: [spec, implemented]
+- label: list_workspace_files is an opt-in portable tool when HARBOR_BOOST_WORKSPACE_ROOT is set: lists workspace files with optional glob and max_entries caps and rejects paths outside the workspace root
+  command: cd services/boost && uv run pytest tests/test_agentic_infra.py::TestWorkspaceFileTool::test_list_workspace_files_lists_files tests/test_agentic_infra.py::TestWorkspaceFileTool::test_list_workspace_files_respects_max_entries tests/test_agentic_infra.py::TestWorkspaceFileTool::test_list_workspace_files_path_jail tests/test_agentic_infra.py::TestWorkspaceFileTool::test_selected_tools_includes_list_when_configured -q --tb=no
+  tags: [spec, implemented]
+- label: Boost compose bind-mounts the host folder from HARBOR_BOOST_WORKSPACE to /workspace in the container so workspace tools jail paths under HARBOR_BOOST_WORKSPACE_ROOT
+  command: rg -q '\$\{HARBOR_BOOST_WORKSPACE' services/compose.boost.yml && rg -q '^HARBOR_BOOST_WORKSPACE=' profiles/default.env && rg -q '^HARBOR_BOOST_WORKSPACE_ROOT=' profiles/default.env
   tags: [spec, implemented]
 - label: write_workspace_file is an opt-in portable tool not in the default tool list when HARBOR_BOOST_WORKSPACE_ROOT is set: writes files inside the workspace root with a size cap and rejects paths outside the root
   command: cd services/boost && uv run pytest tests/test_agentic_infra.py::TestWorkspaceFileTool::test_write_workspace_file_writes_file tests/test_agentic_infra.py::TestWorkspaceFileTool::test_write_workspace_file_enforces_size_cap tests/test_agentic_infra.py::TestWorkspaceFileTool::test_default_tools_omits_workspace_writer -q --tb=no
