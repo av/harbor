@@ -911,6 +911,26 @@ AUTOCHECK_AUDIT_MODEL = Config[str](
     ),
 )
 
+AUTOCHECK_DRAFT_MODEL = Config[str](
+    name="HARBOR_BOOST_AUTOCHECK_DRAFT_MODEL",
+    type=str,
+    default="",
+    description=(
+        "Model used for the `autocheck` draft sub-call. When empty, autocheck "
+        "uses the same model as the incoming request."
+    ),
+)
+
+AUTOCHECK_REVISE_MODEL = Config[str](
+    name="HARBOR_BOOST_AUTOCHECK_REVISE_MODEL",
+    type=str,
+    default="",
+    description=(
+        "Model used for the `autocheck` revise sub-call. When empty, autocheck "
+        "uses the same model as the incoming request."
+    ),
+)
+
 # ------------------- KEEL -------------------
 
 KEEL_ENABLED = Config[bool](

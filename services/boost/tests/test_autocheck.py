@@ -1528,6 +1528,98 @@ class TestAuditAndRevise:
 
     assert result.model == "gpt-4o-mini"
 
+  def test_draft_llm_keeps_request_model_when_unset(self):
+    llm = MagicMock()
+    llm.model = "request-model"
+    cheap = MagicMock()
+    cheap.model = "request-model"
+    original = config.AUTOCHECK_DRAFT_MODEL.__value__
+
+    try:
+      config.AUTOCHECK_DRAFT_MODEL.__value__ = ""
+      with patch("research.orchestrate.cheap_llm", return_value=cheap) as cheap_llm:
+        result = autocheck.draft_llm(llm)
+    finally:
+      config.AUTOCHECK_DRAFT_MODEL.__value__ = original
+
+    cheap_llm.assert_called_once_with(llm)
+    assert result is cheap
+    assert result.model == "request-model"
+
+  def test_draft_llm_overrides_model_when_configured(self):
+    llm = MagicMock()
+    llm.model = "request-model"
+    cheap = MagicMock()
+    cheap.model = "request-model"
+    original = config.AUTOCHECK_DRAFT_MODEL.__value__
+
+    try:
+      config.AUTOCHECK_DRAFT_MODEL.__value__ = "  gpt-4o  "
+      with patch("research.orchestrate.cheap_llm", return_value=cheap):
+        result = autocheck.draft_llm(llm)
+    finally:
+      config.AUTOCHECK_DRAFT_MODEL.__value__ = original
+
+    assert result.model == "gpt-4o"
+
+  def test_revise_llm_keeps_request_model_when_unset(self):
+    llm = MagicMock()
+    llm.model = "request-model"
+    cheap = MagicMock()
+    cheap.model = "request-model"
+    original = config.AUTOCHECK_REVISE_MODEL.__value__
+
+    try:
+      config.AUTOCHECK_REVISE_MODEL.__value__ = ""
+      with patch("research.orchestrate.cheap_llm", return_value=cheap) as cheap_llm:
+        result = autocheck.revise_llm(llm)
+    finally:
+      config.AUTOCHECK_REVISE_MODEL.__value__ = original
+
+    cheap_llm.assert_called_once_with(llm)
+    assert result is cheap
+    assert result.model == "request-model"
+
+  def test_revise_llm_overrides_model_when_configured(self):
+    llm = MagicMock()
+    llm.model = "request-model"
+    cheap = MagicMock()
+    cheap.model = "request-model"
+    original = config.AUTOCHECK_REVISE_MODEL.__value__
+
+    try:
+      config.AUTOCHECK_REVISE_MODEL.__value__ = "  gpt-4o  "
+      with patch("research.orchestrate.cheap_llm", return_value=cheap):
+        result = autocheck.revise_llm(llm)
+    finally:
+      config.AUTOCHECK_REVISE_MODEL.__value__ = original
+
+    assert result.model == "gpt-4o"
+
+  @pytest.mark.asyncio
+  async def test_generate_draft_uses_draft_model_override(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Implement helper in utils.py"},
+    ])
+    llm = MagicMock()
+    llm.model = "request-model"
+    cheap = MagicMock()
+    cheap.model = "request-model"
+    cheap.stream_chat_completion = AsyncMock(return_value="Draft answer")
+    original = config.AUTOCHECK_DRAFT_MODEL.__value__
+
+    try:
+      config.AUTOCHECK_DRAFT_MODEL.__value__ = "draft-model"
+      with patch("research.orchestrate.cheap_llm", return_value=cheap) as cheap_llm:
+        draft = await autocheck.generate_draft(chat, llm)
+    finally:
+      config.AUTOCHECK_DRAFT_MODEL.__value__ = original
+
+    cheap_llm.assert_called_once_with(llm)
+    assert cheap.model == "draft-model"
+    assert draft == "Draft answer"
+    cheap.stream_chat_completion.assert_awaited_once()
+
   @pytest.mark.asyncio
   async def test_run_audit_uses_audit_model_override(self):
     chat = ch.Chat.from_conversation([
@@ -1556,6 +1648,40 @@ class TestAuditAndRevise:
     assert cheap.model == "audit-model"
     assert audit.verdict == "pass"
     assert debug.verdict == "pass"
+
+  @pytest.mark.asyncio
+  async def test_revise_draft_uses_revise_model_override(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Implement helper in utils.py"},
+    ])
+    llm = MagicMock()
+    llm.model = "request-model"
+    cheap = MagicMock()
+    cheap.model = "request-model"
+    cheap.chat_completion = AsyncMock(return_value="Revised answer with correct path.")
+    audit = autocheck.AuditResult(
+      verdict="revise",
+      summary="Fix path",
+      findings=[
+        autocheck.AuditFinding(
+          severity="major",
+          message="Wrong file",
+          fix_hint="Use services/boost/src/utils.py",
+        )
+      ],
+    )
+    original = config.AUTOCHECK_REVISE_MODEL.__value__
+
+    try:
+      config.AUTOCHECK_REVISE_MODEL.__value__ = "revise-model"
+      with patch("research.orchestrate.cheap_llm", return_value=cheap) as cheap_llm:
+        revised = await autocheck.revise_draft(chat, llm, "Original draft", audit)
+    finally:
+      config.AUTOCHECK_REVISE_MODEL.__value__ = original
+
+    cheap_llm.assert_called_once_with(llm)
+    assert cheap.model == "revise-model"
+    assert revised == "Revised answer with correct path."
 
   @pytest.mark.asyncio
   async def test_revise_draft_returns_revised_text(self):

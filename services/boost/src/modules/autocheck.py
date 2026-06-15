@@ -86,6 +86,10 @@ for troubleshooting.
   remain after all revise passes. Default: `false`.
 - `audit_model` — model for the structured audit sub-call. Default: empty (same as
   the request model). Set via `HARBOR_BOOST_AUTOCHECK_AUDIT_MODEL`.
+- `draft_model` — model for the initial draft sub-call. Default: empty (same as
+  the request model). Set via `HARBOR_BOOST_AUTOCHECK_DRAFT_MODEL`.
+- `revise_model` — model for the revise sub-call. Default: empty (same as
+  the request model). Set via `HARBOR_BOOST_AUTOCHECK_REVISE_MODEL`.
 
 ```bash
 harbor boost modules add autocheck
@@ -95,6 +99,8 @@ harbor config set HARBOR_BOOST_AUTOCHECK_MAX_REVISE_PASSES 1
 harbor config set HARBOR_BOOST_AUTOCHECK_SHOW_AUDIT true
 harbor config set HARBOR_BOOST_AUTOCHECK_STRICT true
 harbor config set HARBOR_BOOST_AUTOCHECK_AUDIT_MODEL gpt-4o-mini
+harbor config set HARBOR_BOOST_AUTOCHECK_DRAFT_MODEL gpt-4o
+harbor config set HARBOR_BOOST_AUTOCHECK_REVISE_MODEL gpt-4o
 harbor config set HARBOR_BOOST_WORKSPACE_ROOT /workspace/myproject
 ```
 
@@ -1222,8 +1228,33 @@ async def emit_audit_artifact(llm: "llm.LLM", audit: AuditResult) -> None:
   await llm.emit_artifact(format_audit_artifact_html(audit), wait=False)
 
 
+def autocheck_subcall_llm(llm: "llm.LLM", model_config: str) -> "llm.LLM":
+  """Return inexpensive client for autocheck sub-calls with optional model override."""
+  intermediate = orchestrate.cheap_llm(llm)
+  model = (model_config or "").strip()
+  if model:
+    intermediate.model = model
+  return intermediate
+
+
+def draft_llm(llm: "llm.LLM") -> "llm.LLM":
+  """Return the client used for autocheck draft generation."""
+  return autocheck_subcall_llm(llm, boost_config.AUTOCHECK_DRAFT_MODEL.value)
+
+
+def audit_llm(llm: "llm.LLM") -> "llm.LLM":
+  """Return the inexpensive client used for structured autocheck audits."""
+  return autocheck_subcall_llm(llm, boost_config.AUTOCHECK_AUDIT_MODEL.value)
+
+
+def revise_llm(llm: "llm.LLM") -> "llm.LLM":
+  """Return the client used for autocheck revise passes."""
+  return autocheck_subcall_llm(llm, boost_config.AUTOCHECK_REVISE_MODEL.value)
+
+
 async def generate_draft(chat: "ch.Chat", llm: "llm.LLM") -> str:
-  draft = await llm.stream_chat_completion(
+  intermediate = draft_llm(llm)
+  draft = await intermediate.stream_chat_completion(
     prompt=DRAFT_PROMPT,
     conversation=str(chat),
     emit=False,
@@ -1353,15 +1384,6 @@ async def explore_workspace_with_tools(
     return f"Workspace exploration failed: {exc}", []
 
 
-def audit_llm(llm: "llm.LLM") -> "llm.LLM":
-  """Return the inexpensive client used for structured autocheck audits."""
-  intermediate = orchestrate.cheap_llm(llm)
-  audit_model = (boost_config.AUTOCHECK_AUDIT_MODEL.value or "").strip()
-  if audit_model:
-    intermediate.model = audit_model
-  return intermediate
-
-
 async def run_audit(
   chat: "ch.Chat",
   llm: "llm.LLM",
@@ -1427,7 +1449,7 @@ async def revise_draft(
     audit,
     mechanical_findings,
   )
-  intermediate = orchestrate.cheap_llm(llm)
+  intermediate = revise_llm(llm)
   revised = await intermediate.chat_completion(
     prompt=REVISE_PROMPT,
     conversation=str(chat),
