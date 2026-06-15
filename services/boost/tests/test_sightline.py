@@ -374,6 +374,36 @@ class TestSightlineWorkspace:
         config.SIGHTLINE_WORKSPACE.__value__ = original_workspace
 
 
+class TestSightlineModeIntegration:
+  @pytest.mark.asyncio
+  async def test_sightline_mode_warn_allows_write_without_read_and_emits_status(self):
+    """HARBOR_BOOST_SIGHTLINE_MODE=warn allows mutations but streams status."""
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Edit scratch notes carefully."},
+    ])
+    llm = MagicMock()
+    llm.emit_status = AsyncMock()
+    llm.stream_final_completion = AsyncMock()
+
+    original_mode = config.SIGHTLINE_MODE.__value__
+    try:
+      config.SIGHTLINE_MODE.__value__ = "warn"
+      with request_context():
+        await tools_module.write_file("warn-config.txt", "seed")
+        tool_registry.set_local_tool("write_file", tools_module.write_file)
+
+        await sightline.apply(chat, llm, config={"final": False})
+
+        write_tool = tool_registry.get_local_tool("write_file")
+        result = await write_tool("warn-config.txt", "allowed without read")
+
+        assert "Wrote" in result
+        llm.emit_status.assert_awaited_once()
+        assert "read_file required" in llm.emit_status.await_args.args[0]
+    finally:
+      config.SIGHTLINE_MODE.__value__ = original_mode
+
+
 class TestSightlineApply:
   @pytest.mark.asyncio
   async def test_apply_wraps_tools_and_streams_final(self):
