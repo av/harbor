@@ -15,6 +15,13 @@ from research.brief import RESEARCH_UNAVAILABLE_NOTE, ResearchBrief, render_to_s
 from research.budget import BudgetExceeded, ResearchBudget
 
 
+@pytest.fixture
+def caveman_trigger_mode():
+  original = config.CAVEMAN_TRIGGER.__value__
+  yield
+  config.CAVEMAN_TRIGGER.__value__ = original
+
+
 class TestCavemanHeuristics:
   def _chat(self, content: str) -> ch.Chat:
     return ch.Chat.from_conversation([{"role": "user", "content": content}])
@@ -38,26 +45,124 @@ class TestCavemanHeuristics:
     )
     assert not caveman.should_skip_research(chat)
 
-  def test_needs_research_when_module_prefix_used(self):
+  @pytest.mark.asyncio
+  async def test_needs_research_when_module_prefix_used(self):
     chat = self._chat("Summarize how Harbor Boost modules are loaded.")
     llm = MagicMock(module=caveman.ID_PREFIX)
-    assert caveman.needs_research(chat, llm)
+    assert await caveman.needs_research(chat, llm)
 
-  def test_skips_implementation_edit_even_with_module_prefix(self):
+  @pytest.mark.asyncio
+  async def test_skips_implementation_edit_even_with_module_prefix(self):
     chat = self._chat("Implement the helper in utils.py")
     llm = MagicMock(module=caveman.ID_PREFIX)
-    assert not caveman.needs_research(chat, llm)
+    assert not await caveman.needs_research(chat, llm)
 
-  def test_needs_research_false_for_ack_when_prefix_used(self):
+  @pytest.mark.asyncio
+  async def test_needs_research_false_for_ack_when_prefix_used(self):
     chat = self._chat("thanks")
     llm = MagicMock(module=caveman.ID_PREFIX)
-    assert not caveman.needs_research(chat, llm)
+    assert not await caveman.needs_research(chat, llm)
 
   def test_research_heuristic_detects_questions(self):
     assert caveman.research_heuristic("What changed in Python 3.13 asyncio semantics?")
 
   def test_research_heuristic_rejects_short_messages(self):
     assert not caveman.research_heuristic("hi")
+
+
+class TestCavemanLlmTrigger:
+  def _chat(self, content: str) -> ch.Chat:
+    return ch.Chat.from_conversation([{"role": "user", "content": content}])
+
+  @pytest.mark.asyncio
+  async def test_llm_trigger_yes_runs_classifier(self, caveman_trigger_mode):
+    chat = self._chat("What changed in Python 3.13 asyncio semantics?")
+    llm = MagicMock(module=None)
+    config.CAVEMAN_TRIGGER.__value__ = "llm"
+
+    with patch("research.orchestrate.cheap_llm") as cheap_llm:
+      cheap = MagicMock()
+      cheap.chat_completion = AsyncMock(
+        return_value={"needs_external_research": True},
+      )
+      cheap_llm.return_value = cheap
+
+      assert await caveman.needs_research(chat, llm)
+
+    cheap.chat_completion.assert_awaited_once()
+
+  @pytest.mark.asyncio
+  async def test_llm_trigger_no_skips_research(self, caveman_trigger_mode):
+    chat = self._chat("Refactor the retry helper in services/boost/src/utils.py")
+    llm = MagicMock(module=None)
+    config.CAVEMAN_TRIGGER.__value__ = "llm"
+
+    with patch("research.orchestrate.cheap_llm") as cheap_llm:
+      cheap = MagicMock()
+      cheap.chat_completion = AsyncMock(
+        return_value={"needs_external_research": False},
+      )
+      cheap_llm.return_value = cheap
+
+      assert not await caveman.needs_research(chat, llm)
+
+  @pytest.mark.asyncio
+  async def test_llm_trigger_skips_classifier_with_module_prefix(self, caveman_trigger_mode):
+    chat = self._chat("Summarize how Harbor Boost modules are loaded.")
+    llm = MagicMock(module=caveman.ID_PREFIX)
+    config.CAVEMAN_TRIGGER.__value__ = "llm"
+
+    with patch("research.orchestrate.cheap_llm") as cheap_llm:
+      assert await caveman.needs_research(chat, llm)
+
+    cheap_llm.assert_not_called()
+
+  @pytest.mark.asyncio
+  async def test_llm_trigger_falls_back_to_heuristic_on_failure(self, caveman_trigger_mode):
+    chat = self._chat("What changed in Python 3.13 asyncio semantics?")
+    llm = MagicMock(module=None)
+    config.CAVEMAN_TRIGGER.__value__ = "llm"
+
+    with patch("research.orchestrate.cheap_llm") as cheap_llm:
+      cheap = MagicMock()
+      cheap.chat_completion = AsyncMock(side_effect=RuntimeError("classifier down"))
+      cheap_llm.return_value = cheap
+
+      assert await caveman.needs_research(chat, llm)
+
+  @pytest.mark.asyncio
+  async def test_heuristic_mode_does_not_call_classifier(self, caveman_trigger_mode):
+    chat = self._chat("What changed in Python 3.13 asyncio semantics?")
+    llm = MagicMock(module=None)
+    config.CAVEMAN_TRIGGER.__value__ = "heuristic"
+
+    with patch("research.orchestrate.cheap_llm") as cheap_llm:
+      assert await caveman.needs_research(chat, llm)
+
+    cheap_llm.assert_not_called()
+
+  @pytest.mark.asyncio
+  async def test_apply_llm_trigger_skips_when_classifier_says_no(self, caveman_trigger_mode):
+    chat = self._chat("Refactor the retry helper in services/boost/src/utils.py")
+    llm = MagicMock(module=caveman.ID_PREFIX)
+    llm.stream_final_completion = AsyncMock()
+    config.CAVEMAN_TRIGGER.__value__ = "llm"
+
+    with (
+      patch("research.orchestrate.cheap_llm") as cheap_llm,
+      patch.object(caveman, "extract_search_queries", new=AsyncMock()) as extract,
+    ):
+      cheap = MagicMock()
+      cheap.chat_completion = AsyncMock(
+        return_value={"needs_external_research": False},
+      )
+      cheap_llm.return_value = cheap
+      llm.module = None
+
+      await caveman.apply(chat, llm)
+
+    extract.assert_not_called()
+    llm.stream_final_completion.assert_awaited_once()
 
 
 class TestCavemanQueryExtraction:

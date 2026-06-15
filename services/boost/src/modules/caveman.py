@@ -2,6 +2,9 @@
 
 from typing import TYPE_CHECKING
 
+from pydantic import BaseModel, Field
+
+import config
 import deliverable
 import log
 import research.brief as brief_mod
@@ -37,12 +40,14 @@ messages) skip research to keep latency low.
 - `max_searches` — maximum web searches per request. Default: `2`
 - `max_url_reads` — maximum full-page URL reads per request. Default: `1`
 - `max_chars` — maximum research content characters retained. Default: `30000`
+- `trigger` — research gate: `heuristic` (default) or `llm` (cheap yes/no classifier)
 
 ```bash
 harbor boost modules add caveman
 harbor config set HARBOR_BOOST_CAVEMAN_MAX_SEARCHES 2
 harbor config set HARBOR_BOOST_CAVEMAN_MAX_URL_READS 1
 harbor config set HARBOR_BOOST_CAVEMAN_MAX_CHARS 30000
+harbor config set HARBOR_BOOST_CAVEMAN_TRIGGER heuristic
 harbor config set HARBOR_BOOST_TAVILY_API_KEY <key>
 # or
 harbor config set HARBOR_BOOST_SEARXNG_URL http://searxng:8080
@@ -87,6 +92,32 @@ Do not repeat near-duplicate queries.
 
 STATUS_PREFIX = "Caveman research"
 
+TRIGGER_CLASSIFIER_PROMPT = """
+<instruction>
+Does this question need external web research to answer accurately?
+Answer yes for API docs, release notes, version facts, error lookups, or other live facts.
+Answer no for pure implementation edits, acknowledgments, or questions answerable from the conversation alone.
+</instruction>
+
+<conversation>
+{conversation}
+</conversation>
+
+<latest_user_message>
+{message}
+</latest_user_message>
+""".strip()
+
+
+class ResearchTriggerDecision(BaseModel):
+  needs_external_research: bool = Field(
+    description="True when the latest user message needs external web research.",
+  )
+
+
+def _uses_llm_trigger() -> bool:
+  return (config.CAVEMAN_TRIGGER.value or "heuristic").strip().lower() == "llm"
+
 
 def should_skip_research(chat: "ch.Chat") -> bool:
   """Pass through without web research on low-value follow-up turns."""
@@ -102,13 +133,46 @@ def should_skip_research(chat: "ch.Chat") -> bool:
   return False
 
 
-def needs_research(chat: "ch.Chat", llm: "llm.LLM") -> bool:
+async def classify_needs_research(
+  chat: "ch.Chat",
+  llm: "llm.LLM",
+  message: str,
+) -> bool:
+  """Cheap yes/no LLM gate for whether external web research is needed."""
+  if not message:
+    return False
+
+  intermediate = orchestrate.cheap_llm(llm)
+  try:
+    result = await intermediate.chat_completion(
+      prompt=TRIGGER_CLASSIFIER_PROMPT,
+      conversation=chat,
+      message=message,
+      schema=ResearchTriggerDecision,
+      params={"temperature": 0},
+      resolve=True,
+    )
+    if isinstance(result, dict):
+      return bool(result.get("needs_external_research"))
+  except Exception as exc:
+    logger.warning(
+      f"{ID_PREFIX}: trigger classifier failed, falling back to heuristic: {exc}"
+    )
+
+  return research_heuristic(message)
+
+
+async def needs_research(chat: "ch.Chat", llm: "llm.LLM") -> bool:
   """Return True when this turn should run smash-and-grab web research."""
   if should_skip_research(chat):
     return False
   if getattr(llm, "module", None) == ID_PREFIX:
     return True
-  return research_heuristic(orchestrate.last_user_text(chat))
+
+  text = orchestrate.last_user_text(chat)
+  if _uses_llm_trigger():
+    return await classify_needs_research(chat, llm, text)
+  return research_heuristic(text)
 
 
 def research_heuristic(text: str) -> bool:
@@ -154,7 +218,7 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
     logger.warning(f"{ID_PREFIX}: No user message found, passing through")
     return await workflow_mod.complete_or_defer(llm, config)
 
-  if not needs_research(chat, llm):
+  if not await needs_research(chat, llm):
     logger.debug(f"{ID_PREFIX}: Skipping research for: {message[:80]}...")
     return await workflow_mod.complete_or_defer(llm, config)
 

@@ -40,30 +40,34 @@ class TestCavemanEdgeCases:
   def _chat(self, content: str) -> ch.Chat:
     return ch.Chat.from_conversation([{"role": "user", "content": content}])
 
-  def test_continue_skips_research_without_module_prefix(self):
+  @pytest.mark.asyncio
+  async def test_continue_skips_research_without_module_prefix(self):
     chat = self._chat("continue")
     llm = MagicMock(module=None)
     assert caveman.should_skip_research(chat)
-    assert not caveman.needs_research(chat, llm)
+    assert not await caveman.needs_research(chat, llm)
 
-  def test_thanks_for_help_skips_research(self):
+  @pytest.mark.asyncio
+  async def test_thanks_for_help_skips_research(self):
     chat = self._chat("thanks for the help!")
     llm = MagicMock(module=None)
     assert caveman.should_skip_research(chat)
-    assert not caveman.needs_research(chat, llm)
+    assert not await caveman.needs_research(chat, llm)
 
-  def test_version_question_triggers_research_without_module_prefix(self):
+  @pytest.mark.asyncio
+  async def test_version_question_triggers_research_without_module_prefix(self):
     chat = self._chat("What changed in Python 3.13 asyncio semantics?")
     llm = MagicMock(module=None)
     assert not caveman.should_skip_research(chat)
-    assert caveman.needs_research(chat, llm)
+    assert await caveman.needs_research(chat, llm)
 
-  def test_api_endpoint_question_triggers_research(self):
+  @pytest.mark.asyncio
+  async def test_api_endpoint_question_triggers_research(self):
     chat = self._chat(
       "What is the Stripe checkout session API endpoint response format?"
     )
     llm = MagicMock(module=caveman.ID_PREFIX)
-    assert caveman.needs_research(chat, llm)
+    assert await caveman.needs_research(chat, llm)
 
   @pytest.mark.asyncio
   async def test_apply_passes_through_on_continue(self):

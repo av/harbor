@@ -188,7 +188,7 @@ class TestResearchQuickWorkflowChain:
       )
 
     assert execution_order == RESEARCH_QUICK_MODULE_ORDER
-    assert caveman.needs_research(chat, llm)
+    assert await caveman.needs_research(chat, llm)
     caveman_cheap.chat_completion.assert_awaited_once()
     web_search.assert_awaited_once()
     read_url.assert_awaited_once()

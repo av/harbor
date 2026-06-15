@@ -698,6 +698,17 @@ CAVEMAN_MAX_CHARS = Config[int](
     description="Maximum research content characters retained by the `caveman` module.",
 )
 
+CAVEMAN_TRIGGER = Config[str](
+    name="HARBOR_BOOST_CAVEMAN_TRIGGER",
+    type=str,
+    default="heuristic",
+    description=(
+        "How `caveman` decides whether to run web research: "
+        "`heuristic` (keyword/question rules) or `llm` (cheap yes/no classifier). "
+        "Module-prefixed requests always research regardless of mode."
+    ),
+)
+
 # ----------------- PONYTAIL -----------------
 
 PONYTAIL_MAX_SEARCHES = Config[int](
