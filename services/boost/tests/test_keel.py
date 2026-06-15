@@ -481,6 +481,34 @@ class TestKeelApply:
     assert any("<landing_checklist>" in (msg.get("content") or "") for msg in history)
 
   @pytest.mark.asyncio
+  async def test_apply_emits_drift_status_on_also_refactor(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Implement retry helper in services/boost/src/utils.py"},
+      {"role": "assistant", "content": "Added retry helper."},
+      {"role": "user", "content": "Can you also refactor the auth module?"},
+    ])
+    llm = MagicMock()
+    llm.emit_status = AsyncMock()
+    llm.stream_final_completion = AsyncMock()
+
+    brief = keel.TaskBrief(
+      objective="Add retry helper",
+      acceptance_criteria=["Helper retries 3 times"],
+      in_scope_paths=["services/boost/src/utils.py"],
+    )
+
+    with (
+      patch.object(keel, "get_stored_brief", return_value=brief),
+      patch.object(keel, "update_met_criteria_from_history", return_value=set()),
+      patch.object(keel, "_register_finish_wrapper"),
+    ):
+      await keel.apply(chat, llm)
+
+    llm.emit_status.assert_awaited_with(keel.DRIFT_STATUS)
+    history = chat.history()
+    assert any(keel.DRIFT_WARNING in (msg.get("content") or "") for msg in history)
+
+  @pytest.mark.asyncio
   async def test_finish_wrapper_prepends_checklist(self):
     brief = keel.TaskBrief(
       objective="Add retry helper",

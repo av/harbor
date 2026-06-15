@@ -86,6 +86,14 @@ BRIEF_MARKER_RE = re.compile(
   re.IGNORECASE,
 )
 
+DRIFT_STATUS = "keel: scope expansion detected — deferring"
+DRIFT_WARNING = (
+  "<drift_warning>Scope expansion detected — stay on the anchored task.</drift_warning>"
+)
+LANDING_DRIFT_WARNING = (
+  "<drift_warning>Scope expansion detected — confirm in-scope work only.</drift_warning>"
+)
+
 DRIFT_PHRASE_RE = re.compile(
   r"\b(?:"
   r"also\s+add|while\s+you(?:'re| are)\s+at\s+it|might\s+as\s+well|"
@@ -429,9 +437,7 @@ def render_landing_checklist(brief: TaskBrief, *, drift_detected: bool = False) 
     lines.append("</in_scope_paths>")
 
   if drift_detected:
-    lines.append(
-      "<drift_warning>Scope expansion was detected earlier — confirm only in-scope work shipped.</drift_warning>"
-    )
+    lines.append(LANDING_DRIFT_WARNING)
 
   lines.extend([
     "<reminder>Verify each acceptance criterion before finishing.</reminder>",
@@ -562,10 +568,8 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
     drift_detected = detect_drift(message, brief)
     if drift_detected:
       logger.warning(f"{ID_PREFIX}: scope drift detected on turn {user_turns}")
-      chat.system(
-        "<drift_warning>Stay within the anchored task scope. "
-        "Confirm scope changes with the user before expanding work.</drift_warning>"
-      )
+      await llm.emit_status(DRIFT_STATUS)
+      chat.system(DRIFT_WARNING)
 
     met = update_met_criteria_from_history(chat, brief)
 

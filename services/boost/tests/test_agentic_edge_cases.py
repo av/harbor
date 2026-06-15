@@ -307,7 +307,8 @@ class TestKeelEdgeCases:
       await keel.apply(chat, llm)
 
     history = chat.history()
-    assert any("<drift_warning>" in (msg.get("content") or "") for msg in history)
+    assert any(keel.DRIFT_WARNING in (msg.get("content") or "") for msg in history)
+    llm.emit_status.assert_awaited_with(keel.DRIFT_STATUS)
 
 
 class TestDiffscopeEdgeCases:
