@@ -2073,12 +2073,19 @@ class TestAutocheckApply:
     )
     original_revise = config.AUTOCHECK_MAX_REVISE_PASSES.__value__
     original_strict = config.AUTOCHECK_STRICT.__value__
+    original_root = config.WORKSPACE_ROOT.__value__
 
     try:
       config.AUTOCHECK_MAX_REVISE_PASSES.__value__ = 1
       config.AUTOCHECK_STRICT.__value__ = True
+      config.WORKSPACE_ROOT.__value__ = "/workspace"
       with (
         patch.object(autocheck, "gather_workspace_context", new=AsyncMock(return_value="")),
+        patch.object(
+          autocheck,
+          "explore_workspace_with_tools",
+          new=AsyncMock(return_value=("", [])),
+        ),
         patch.object(
           autocheck,
           "run_audit",
@@ -2100,6 +2107,7 @@ class TestAutocheckApply:
     finally:
       config.AUTOCHECK_MAX_REVISE_PASSES.__value__ = original_revise
       config.AUTOCHECK_STRICT.__value__ = original_strict
+      config.WORKSPACE_ROOT.__value__ = original_root
 
     assert revise.await_count == 2
     status_messages = [call.args[0] for call in llm.emit_status.await_args_list]
@@ -2189,12 +2197,19 @@ class TestAutocheckApply:
     third_debug = autocheck.AuditDebug(triggered=True, gate_reason="triggered", verdict="revise")
     original_strict = config.AUTOCHECK_STRICT.__value__
     original_revise = config.AUTOCHECK_MAX_REVISE_PASSES.__value__
+    original_root = config.WORKSPACE_ROOT.__value__
 
     try:
       config.AUTOCHECK_MAX_REVISE_PASSES.__value__ = 1
       config.AUTOCHECK_STRICT.__value__ = True
+      config.WORKSPACE_ROOT.__value__ = "/workspace"
       with (
         patch.object(autocheck, "gather_workspace_context", new=AsyncMock(return_value="")),
+        patch.object(
+          autocheck,
+          "explore_workspace_with_tools",
+          new=AsyncMock(return_value=("", [])),
+        ),
         patch.object(
           autocheck,
           "run_audit",
@@ -2216,6 +2231,7 @@ class TestAutocheckApply:
     finally:
       config.AUTOCHECK_STRICT.__value__ = original_strict
       config.AUTOCHECK_MAX_REVISE_PASSES.__value__ = original_revise
+      config.WORKSPACE_ROOT.__value__ = original_root
 
     assert revise.await_count == 2
     status_messages = [call.args[0] for call in llm.emit_status.await_args_list]
