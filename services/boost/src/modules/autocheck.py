@@ -1450,10 +1450,11 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
   if not message:
     logger.warning(f"{ID_PREFIX}: No user message found, passing through")
     record_audit_debug(
-      AuditDebug(triggered=True, gate_reason="triggered", verdict="skipped"),
+      AuditDebug(triggered=True, gate_reason="empty_message", verdict="skipped"),
       duration_ms=timer.elapsed_ms(),
       extra_calls=extra_calls,
     )
+    await llm.emit_status(format_skipped_status("empty_message"))
     return await workflow_mod.complete_or_defer(llm, module_cfg)
 
   max_passes = effective_max_revise_passes()
@@ -1465,19 +1466,25 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
   except Exception as exc:
     logger.error(f"{ID_PREFIX}: draft generation failed: {exc}")
     record_audit_debug(
-      AuditDebug(triggered=True, gate_reason="triggered", verdict="skipped"),
+      AuditDebug(
+        triggered=True,
+        gate_reason="draft_generation_failed",
+        verdict="skipped",
+      ),
       duration_ms=timer.elapsed_ms(),
       extra_calls=extra_calls,
     )
+    await llm.emit_status(format_skipped_status("draft_generation_failed"))
     return await workflow_mod.complete_or_defer(llm, module_cfg)
 
   if not draft:
     logger.warning(f"{ID_PREFIX}: Empty draft, passing through")
     record_audit_debug(
-      AuditDebug(triggered=True, gate_reason="triggered", verdict="skipped"),
+      AuditDebug(triggered=True, gate_reason="empty_draft", verdict="skipped"),
       duration_ms=timer.elapsed_ms(),
       extra_calls=extra_calls,
     )
+    await llm.emit_status(format_skipped_status("empty_draft"))
     return await workflow_mod.complete_or_defer(llm, module_cfg)
 
   paths = extract_workspace_paths(message, draft)
@@ -1528,14 +1535,14 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
     record_audit_debug(
       AuditDebug(
         triggered=True,
-        gate_reason="triggered",
+        gate_reason="audit_failed",
         tool_calls=workspace_tool_calls,
         verdict="skipped",
       ),
       duration_ms=timer.elapsed_ms(),
       extra_calls=extra_calls,
     )
-    await llm.emit_status("Autocheck: audit failed — delivering draft")
+    await llm.emit_status(format_skipped_status("audit_failed"))
     await emit_final(llm, draft)
     return draft
 

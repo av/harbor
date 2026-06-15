@@ -240,6 +240,12 @@ class TestWorkspacePaths:
     assert autocheck.format_skipped_status("acknowledgment") == (
       "Autocheck: skipped (acknowledgment)"
     )
+    assert autocheck.format_skipped_status("draft_generation_failed") == (
+      "Autocheck: skipped (draft_generation_failed)"
+    )
+    assert autocheck.format_skipped_status("audit_failed") == (
+      "Autocheck: skipped (audit_failed)"
+    )
 
   def test_format_audit_status_pass_with_no_findings(self):
     audit = autocheck.AuditResult(verdict="pass", findings=[])
@@ -1475,6 +1481,96 @@ class TestAutocheckApply:
     llm.emit_status.assert_awaited_once_with("Autocheck: skipped (not_deliverable)")
     llm.stream_final_completion.assert_not_called()
 
+  @pytest.mark.parametrize(
+    "gate_reason",
+    [
+      "disabled",
+      "empty_message",
+      "research_only",
+      "acknowledgment",
+      "short_message",
+      "continuation",
+      "not_deliverable",
+      "insufficient_signals",
+    ],
+  )
+  @pytest.mark.asyncio
+  async def test_apply_emits_skipped_status_for_all_gate_reasons(self, gate_reason):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Implement retry helper in services/boost/src/utils.py"},
+    ])
+    llm = MagicMock()
+    llm.emit_status = AsyncMock()
+    llm.stream_final_completion = AsyncMock()
+
+    with (
+      patch.object(autocheck, "autocheck_gate_reason", return_value=gate_reason),
+      patch.object(autocheck, "generate_draft", new=AsyncMock()) as draft,
+    ):
+      await autocheck.apply(chat, llm)
+
+    draft.assert_not_called()
+    llm.emit_status.assert_awaited_once_with(
+      autocheck.format_skipped_status(gate_reason)
+    )
+
+  @pytest.mark.asyncio
+  async def test_apply_emits_skipped_status_on_empty_message_after_gate(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Implement retry helper in services/boost/src/utils.py"},
+    ])
+    llm = MagicMock()
+    llm.emit_status = AsyncMock()
+    llm.stream_final_completion = AsyncMock()
+
+    with (
+      patch.object(autocheck, "autocheck_gate_reason", return_value="triggered"),
+      patch("modules.autocheck.orchestrate.last_user_text", return_value=""),
+      patch.object(autocheck, "generate_draft", new=AsyncMock()) as draft,
+    ):
+      await autocheck.apply(chat, llm)
+
+    draft.assert_not_called()
+    llm.emit_status.assert_awaited_once_with("Autocheck: skipped (empty_message)")
+
+  @pytest.mark.asyncio
+  async def test_apply_emits_skipped_status_on_draft_generation_failure(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Implement retry helper in services/boost/src/utils.py"},
+    ])
+    llm = MagicMock()
+    llm.emit_status = AsyncMock()
+    llm.stream_final_completion = AsyncMock()
+
+    with patch.object(
+      autocheck,
+      "generate_draft",
+      new=AsyncMock(side_effect=RuntimeError("draft down")),
+    ):
+      await autocheck.apply(chat, llm)
+
+    status_messages = [call.args[0] for call in llm.emit_status.await_args_list]
+    assert "Autocheck: drafting..." in status_messages
+    assert "Autocheck: skipped (draft_generation_failed)" in status_messages
+    llm.stream_final_completion.assert_awaited_once()
+
+  @pytest.mark.asyncio
+  async def test_apply_emits_skipped_status_on_empty_draft(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Implement retry helper in services/boost/src/utils.py"},
+    ])
+    llm = MagicMock()
+    llm.emit_status = AsyncMock()
+    llm.stream_final_completion = AsyncMock()
+
+    with patch.object(autocheck, "generate_draft", new=AsyncMock(return_value="")):
+      await autocheck.apply(chat, llm)
+
+    status_messages = [call.args[0] for call in llm.emit_status.await_args_list]
+    assert "Autocheck: drafting..." in status_messages
+    assert "Autocheck: skipped (empty_draft)" in status_messages
+    llm.stream_final_completion.assert_awaited_once()
+
   @pytest.mark.asyncio
   async def test_apply_runs_mechanical_preaudit_before_llm_audit(self):
     chat = ch.Chat.from_conversation([
@@ -1960,6 +2056,6 @@ class TestAutocheckApply:
       await autocheck.apply(chat, llm)
 
     status_messages = [call.args[0] for call in llm.emit_status.await_args_list]
-    assert "Autocheck: audit failed — delivering draft" in status_messages
+    assert "Autocheck: skipped (audit_failed)" in status_messages
     llm.emit_message.assert_awaited_once_with("Draft implementation")
     llm.stream_final_completion.assert_not_called()

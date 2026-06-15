@@ -96,6 +96,37 @@ class TestAutocheckDebugMetrics:
       assert stored.extra["verdict"] == "skipped"
 
   @pytest.mark.asyncio
+  async def test_apply_records_draft_failure_skip_metrics(self):
+    chat = self._chat("Implement retry helper in services/boost/src/utils.py")
+    llm = MagicMock()
+    llm.boost_params = {}
+    llm.emit_status = AsyncMock()
+
+    with request_context():
+      with (
+        patch.object(
+          autocheck,
+          "generate_draft",
+          new=AsyncMock(side_effect=RuntimeError("draft down")),
+        ),
+        patch(
+          "modules.autocheck.workflow_mod.complete_or_defer",
+          new=AsyncMock(return_value="ok"),
+        ),
+      ):
+        await autocheck.apply(chat, llm)
+
+      stored = debug_metrics.get(autocheck.ID_PREFIX)
+      assert stored is not None
+      assert stored.triggered is True
+      assert stored.skipped is True
+      assert stored.reason == "draft_generation_failed"
+      assert stored.extra["verdict"] == "skipped"
+
+    status_messages = [call.args[0] for call in llm.emit_status.await_args_list]
+    assert "Autocheck: skipped (draft_generation_failed)" in status_messages
+
+  @pytest.mark.asyncio
   async def test_apply_records_trigger_metrics_with_extra_calls(self):
     chat = self._chat("Implement retry helper in services/boost/src/utils.py")
     llm = MagicMock()
