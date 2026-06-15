@@ -192,6 +192,7 @@ class TestPonytailLlmTrigger:
   async def test_apply_llm_trigger_skips_when_classifier_says_no(self, ponytail_trigger_mode):
     chat = self._chat("Refactor the retry helper in services/boost/src/utils.py")
     llm = MagicMock(module=ponytail.ID_PREFIX)
+    llm.emit_status = AsyncMock()
     llm.stream_final_completion = AsyncMock()
     config.PONYTAIL_TRIGGER.__value__ = "llm"
 
@@ -209,6 +210,9 @@ class TestPonytailLlmTrigger:
       await ponytail.apply(chat, llm)
 
     plan.assert_not_called()
+    llm.emit_status.assert_awaited_once_with(
+      "Ponytail research: skipped (llm_classifier_no)"
+    )
     llm.stream_final_completion.assert_awaited_once()
 
 
@@ -390,7 +394,8 @@ class TestPonytailGapDetection:
     assert any("Gap: No explicit Django 5.0 release notes cited" in note for note in brief.notes)
     statuses = [call.args[0] for call in llm.emit_status.await_args_list]
     assert any("detecting gaps" in status for status in statuses)
-    assert any("hop 2 follow-up" in status for status in statuses)
+    assert any("hop 2 (2 queries)" in status for status in statuses)
+    assert any("hop 2, 2 queries, read" in status for status in statuses)
 
   @pytest.mark.asyncio
   async def test_run_research_loop_skips_hop2_on_early_exit(self):
@@ -435,8 +440,9 @@ class TestPonytailGapDetection:
     detect_gaps.assert_not_called()
     assert any("early exit" in note.lower() for note in brief.notes)
     statuses = [call.args[0] for call in llm.emit_status.await_args_list]
+    assert any("early exit" in status for status in statuses)
     assert any("skipping hop 2" in status for status in statuses)
-    assert not any("hop 2 follow-up" in status for status in statuses)
+    assert not any("hop 2 (" in status for status in statuses)
 
   @pytest.mark.asyncio
   async def test_run_research_loop_skips_hop2_when_gap_has_no_follow_up_queries(self):
@@ -472,7 +478,8 @@ class TestPonytailGapDetection:
     detect_gaps.assert_awaited_once()
     assert web_search.await_count == 2
     statuses = [call.args[0] for call in llm.emit_status.await_args_list]
-    assert not any("hop 2 follow-up" in status for status in statuses)
+    assert not any("hop 2 (" in status for status in statuses)
+    assert any("hop 1, 2 queries, read" in status for status in statuses)
     assert any("Gap: Minor wording differences only" in note for note in brief.notes)
 
 
@@ -654,17 +661,56 @@ class TestPonytailBriefCache:
     assert render_to_system(second_brief) in second_chat.history()[0]["content"]
 
 
+class TestPonytailStatusFormatting:
+  def test_format_skipped_status_includes_gate_reason(self):
+    assert ponytail.format_skipped_status("acknowledgment") == (
+      "Ponytail research: skipped (acknowledgment)"
+    )
+    assert ponytail.format_skipped_status("not_research_heavy") == (
+      "Ponytail research: skipped (not_research_heavy)"
+    )
+
+  def test_format_hop_query_status_matches_caveman_style(self):
+    assert ponytail.format_hop_query_status(1, 1) == (
+      "Ponytail research: hop 1 (1 query)..."
+    )
+    assert ponytail.format_hop_query_status(2, 3) == (
+      "Ponytail research: hop 2 (3 queries)..."
+    )
+
+  def test_format_hop_gathered_status_includes_hop_query_and_url_counts(self):
+    assert ponytail.format_hop_gathered_status(hop=1, query_count=2, pages_read=1) == (
+      "Ponytail research: hop 1, 2 queries, read 1 URL..."
+    )
+    assert ponytail.format_hop_gathered_status(hop=2, query_count=1, pages_read=0) == (
+      "Ponytail research: hop 2, 1 query, read 0 URLs..."
+    )
+
+  def test_format_early_exit_status_includes_gathered_chars_and_threshold(self):
+    assert ponytail.format_early_exit_status(
+      gathered_chars=15000,
+      threshold=15000,
+    ) == (
+      "Ponytail research: early exit (hop 1 gathered 15000 chars, "
+      "threshold 15000), skipping hop 2..."
+    )
+
+
 class TestPonytailApply:
   @pytest.mark.asyncio
   async def test_apply_passes_through_on_skip(self):
     chat = ch.Chat.from_conversation([{"role": "user", "content": "thanks"}])
     llm = MagicMock(module=ponytail.ID_PREFIX)
+    llm.emit_status = AsyncMock()
     llm.stream_final_completion = AsyncMock()
 
     with patch.object(ponytail, "plan_search_queries", new=AsyncMock()) as plan:
       await ponytail.apply(chat, llm)
 
     plan.assert_not_called()
+    llm.emit_status.assert_awaited_once_with(
+      "Ponytail research: skipped (acknowledgment)"
+    )
     llm.stream_final_completion.assert_awaited_once()
 
   @pytest.mark.asyncio
@@ -719,7 +765,8 @@ class TestPonytailApply:
 
     statuses = [call.args[0] for call in llm.emit_status.await_args_list]
     assert statuses[0] == "Ponytail research: planning queries..."
-    assert any("hop 1" in status for status in statuses)
+    assert any("hop 1 (1 query)" in status for status in statuses)
+    assert any("hop 1, 1 query, read" in status for status in statuses)
     assert any("synthesizing brief" in status for status in statuses)
 
   @pytest.mark.asyncio

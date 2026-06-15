@@ -156,6 +156,45 @@ Only include claims supported by the research. Leave lists empty when nothing ap
 STATUS_PREFIX = "Ponytail research"
 BRIEF_CACHE_KEY = "ponytail_brief_cache"
 
+
+def format_skipped_status(gate_reason: str) -> str:
+  """Short status line for emit_status when ponytail passes through."""
+  reason = (gate_reason or "unknown").strip()
+  return f"{STATUS_PREFIX}: skipped ({reason})"
+
+
+def format_hop_query_status(hop: int, query_count: int) -> str:
+  """Status line before a research hop, matching caveman parenthesized query-count style."""
+  noun = "query" if query_count == 1 else "queries"
+  return f"{STATUS_PREFIX}: hop {hop} ({query_count} {noun})..."
+
+
+def format_hop_gathered_status(
+  *,
+  hop: int,
+  query_count: int,
+  pages_read: int,
+) -> str:
+  """Status line after a hop completes with query and URL-read counts."""
+  query_noun = "query" if query_count == 1 else "queries"
+  url_noun = "URL" if pages_read == 1 else "URLs"
+  return (
+    f"{STATUS_PREFIX}: hop {hop}, {query_count} {query_noun}, "
+    f"read {pages_read} {url_noun}..."
+  )
+
+
+def format_early_exit_status(
+  *,
+  gathered_chars: int,
+  threshold: int,
+) -> str:
+  """Status line when hop 1 gathered enough content to skip hop 2."""
+  return (
+    f"{STATUS_PREFIX}: early exit (hop 1 gathered {gathered_chars} chars, "
+    f"threshold {threshold}), skipping hop 2..."
+  )
+
 TRIGGER_CLASSIFIER_PROMPT = """
 <instruction>
 Does this question need deep two-hop web research to answer accurately?
@@ -434,11 +473,10 @@ async def run_research_loop(
   brief = brief_mod.ResearchBrief(query=message)
   extra_calls = 0
 
-  await llm.emit_status(
-    f"{STATUS_PREFIX}: hop 1 ({len(initial_queries)} quer"
-    f"{'y' if len(initial_queries) == 1 else 'ies'})..."
-  )
   first_queries = initial_queries[:_first_hop_search_limit(budget)]
+  await llm.emit_status(format_hop_query_status(1, len(first_queries)))
+  searches_before_hop1 = len(brief.searches)
+  pages_before_hop1 = len(brief.pages)
   await orchestrate.run_searches(
     first_queries,
     budget,
@@ -459,6 +497,15 @@ async def run_research_loop(
     phase="Ponytail hop 1",
     llm=llm,
   )
+  hop1_queries = len(brief.searches) - searches_before_hop1
+  hop1_pages = len(brief.pages) - pages_before_hop1
+  await llm.emit_status(
+    format_hop_gathered_status(
+      hop=1,
+      query_count=hop1_queries,
+      pages_read=hop1_pages,
+    )
+  )
 
   early_exit_chars = config.PONYTAIL_EARLY_EXIT_CHARS.value
   gathered_chars = orchestrate.content_chars_in_brief(brief)
@@ -468,7 +515,10 @@ async def run_research_loop(
       f"{gathered_chars} chars (threshold {early_exit_chars}); skipping second hop."
     )
     await llm.emit_status(
-      f"{STATUS_PREFIX}: sufficient research gathered ({gathered_chars} chars), skipping hop 2..."
+      format_early_exit_status(
+        gathered_chars=gathered_chars,
+        threshold=early_exit_chars,
+      )
     )
     await llm.emit_status(f"{STATUS_PREFIX}: synthesizing brief...")
     brief = brief_mod.finalize_brief(brief)
@@ -483,7 +533,9 @@ async def run_research_loop(
 
   follow_up_queries = orchestrate.dedupe_queries(gap.follow_up_queries, limit=3)
   if follow_up_queries and budget.can_search():
-    await llm.emit_status(f"{STATUS_PREFIX}: hop 2 follow-up...")
+    await llm.emit_status(format_hop_query_status(2, len(follow_up_queries)))
+    searches_before_hop2 = len(brief.searches)
+    pages_before_hop2 = len(brief.pages)
     await orchestrate.run_searches(
       follow_up_queries,
       budget,
@@ -506,6 +558,15 @@ async def run_research_loop(
       status_prefix=STATUS_PREFIX,
       phase="Ponytail hop 2",
       llm=llm,
+    )
+    hop2_queries = len(brief.searches) - searches_before_hop2
+    hop2_pages = len(brief.pages) - pages_before_hop2
+    await llm.emit_status(
+      format_hop_gathered_status(
+        hop=2,
+        query_count=hop2_queries,
+        pages_read=hop2_pages,
+      )
     )
   elif follow_up_queries:
     brief.add_note("Second research hop skipped: search budget exhausted.")
@@ -536,6 +597,7 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
   message = orchestrate.last_user_text(chat)
   if not message:
     logger.warning(f"{ID_PREFIX}: No user message found, passing through")
+    await llm.emit_status(format_skipped_status("empty_message"))
     _record_debug(
       debug_metrics.skipped_payload("empty_message", duration_ms=timer.elapsed_ms()),
     )
@@ -545,6 +607,7 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
   if _uses_llm_trigger():
     extra_calls += 1
   if gate_reason != "triggered":
+    await llm.emit_status(format_skipped_status(gate_reason))
     _record_debug(
       debug_metrics.skipped_payload(
         gate_reason,
@@ -595,6 +658,7 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
 
   if not queries:
     logger.warning(f"{ID_PREFIX}: No queries planned, passing through")
+    await llm.emit_status(format_skipped_status("no_queries_planned"))
     _record_debug(
       debug_metrics.triggered_payload(
         "no_queries_planned",
