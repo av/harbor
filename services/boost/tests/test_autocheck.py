@@ -207,6 +207,36 @@ class TestAutocheckGate:
       config.AUTOCHECK_MAX_REVISE_PASSES.__value__ = original_revise
       config.AUTOCHECK_STRICT.__value__ = original_strict
 
+  def test_strict_mode_requires_workspace_root_gate_reason(self):
+    chat = self._chat("Implement retry helper in services/boost/src/utils.py")
+    original_strict = config.AUTOCHECK_STRICT.__value__
+    original_root = config.WORKSPACE_ROOT.__value__
+    try:
+      config.AUTOCHECK_STRICT.__value__ = True
+      config.WORKSPACE_ROOT.__value__ = ""
+      assert autocheck.autocheck_gate_reason(chat) == "workspace_unconfigured"
+      assert not autocheck.needs_autocheck(chat)
+
+      config.WORKSPACE_ROOT.__value__ = "/workspace"
+      assert autocheck.autocheck_gate_reason(chat) == "triggered"
+      assert autocheck.needs_autocheck(chat)
+    finally:
+      config.AUTOCHECK_STRICT.__value__ = original_strict
+      config.WORKSPACE_ROOT.__value__ = original_root
+
+  def test_non_strict_mode_allows_missing_workspace_root(self):
+    chat = self._chat("Implement retry helper in services/boost/src/utils.py")
+    original_strict = config.AUTOCHECK_STRICT.__value__
+    original_root = config.WORKSPACE_ROOT.__value__
+    try:
+      config.AUTOCHECK_STRICT.__value__ = False
+      config.WORKSPACE_ROOT.__value__ = ""
+      assert autocheck.autocheck_gate_reason(chat) == "triggered"
+      assert autocheck.needs_autocheck(chat)
+    finally:
+      config.AUTOCHECK_STRICT.__value__ = original_strict
+      config.WORKSPACE_ROOT.__value__ = original_root
+
 
 class TestNormalizeRepoPath:
   def test_strips_dot_slash_prefix(self):
@@ -293,6 +323,9 @@ class TestWorkspacePaths:
     )
     assert autocheck.format_skipped_status("audit_failed") == (
       "Autocheck: skipped (audit_failed)"
+    )
+    assert autocheck.format_skipped_status("workspace_unconfigured") == (
+      "Autocheck: skipped (workspace_unconfigured)"
     )
 
   def test_format_audit_status_pass_with_no_findings(self):
@@ -1579,6 +1612,39 @@ class TestAuditAndRevise:
 
 class TestAutocheckApply:
   @pytest.mark.asyncio
+  async def test_apply_strict_skips_audit_when_workspace_unconfigured(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Implement retry helper in services/boost/src/utils.py"},
+    ])
+    llm = MagicMock()
+    llm.emit_status = AsyncMock()
+    llm.stream_final_completion = AsyncMock()
+
+    original_strict = config.AUTOCHECK_STRICT.__value__
+    original_root = config.WORKSPACE_ROOT.__value__
+    try:
+      config.AUTOCHECK_STRICT.__value__ = True
+      config.WORKSPACE_ROOT.__value__ = ""
+
+      with (
+        patch.object(autocheck, "generate_draft", new=AsyncMock()) as draft,
+        patch.object(autocheck.logger, "error") as log_error,
+      ):
+        await autocheck.apply(chat, llm)
+
+      draft.assert_not_called()
+      log_error.assert_called_once()
+      assert "HARBOR_BOOST_AUTOCHECK_STRICT" in log_error.call_args.args[0]
+      assert "HARBOR_BOOST_WORKSPACE_ROOT" in log_error.call_args.args[0]
+      llm.emit_status.assert_awaited_once_with(
+        "Autocheck: skipped (workspace_unconfigured)",
+      )
+      llm.stream_final_completion.assert_awaited_once()
+    finally:
+      config.AUTOCHECK_STRICT.__value__ = original_strict
+      config.WORKSPACE_ROOT.__value__ = original_root
+
+  @pytest.mark.asyncio
   async def test_apply_passes_through_non_deliverable(self):
     chat = ch.Chat.from_conversation([
       {"role": "user", "content": "Explain Python dataclasses briefly."},
@@ -1663,6 +1729,7 @@ class TestAutocheckApply:
       "continuation",
       "not_deliverable",
       "insufficient_signals",
+      "workspace_unconfigured",
     ],
   )
   @pytest.mark.asyncio

@@ -333,6 +333,9 @@ def autocheck_gate_reason(chat: "ch.Chat") -> str:
   if signal_count < MIN_DELIVERABLE_SIGNALS:
     return "insufficient_signals"
 
+  if boost_config.AUTOCHECK_STRICT.value and not boost_config.WORKSPACE_ROOT.value:
+    return "workspace_unconfigured"
+
   return "triggered"
 
 
@@ -1432,6 +1435,11 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
   extra_calls = 0
   gate_reason = autocheck_gate_reason(chat)
   if gate_reason != "triggered":
+    if gate_reason == "workspace_unconfigured":
+      logger.error(
+        f"{ID_PREFIX}: HARBOR_BOOST_AUTOCHECK_STRICT requires "
+        "HARBOR_BOOST_WORKSPACE_ROOT; skipping audit",
+      )
     debug = AuditDebug(triggered=False, gate_reason=gate_reason, verdict="skipped")
     record_audit_debug(debug, duration_ms=timer.elapsed_ms(), extra_calls=extra_calls)
     logger.debug(f"{ID_PREFIX}: Pass-through — {gate_reason}")
