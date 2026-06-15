@@ -286,6 +286,9 @@
 - label: ponytail skips the second research hop when the first hop gathers enough characters per HARBOR_BOOST_PONYTAIL_EARLY_EXIT_CHARS
   command: cd services/boost && uv run pytest tests/test_orchestrate.py::TestPonytailEarlyExit -q --tb=no
   tags: [spec, implemented]
+- label: ponytail respects HARBOR_BOOST_PONYTAIL_SYNTHESIS_MAX_CHARS when synthesizing the research brief: truncates gathered research passed to the synthesis step to the configured limit (default 8000); set to 0 to disable truncation
+  command: cd services/boost && uv run pytest tests/test_ponytail.py::TestPonytailBriefSynthesis::test_synthesize_brief_truncates_oversized_research_summary -q --tb=no
+  tags: [implemented]
 - label: autocheck runs mechanical pre-audit before the LLM audit on deliverable turns: flags code without cited paths or missing workspace paths, includes git diff stat context, and forces revise when blockers are found
   command: cd services/boost && uv run pytest tests/test_autocheck.py::TestMechanicalPreaudit -q --tb=no
   tags: [spec, implemented]
