@@ -45,10 +45,14 @@ tests/
 - **Row** — a Containerfile under `containers/`. Each row image boots
   systemd as PID 1, runs dockerd nested inside, and has curl + git + jq +
   httpYac pre-installed.
-- **Orchestrator** — `run.ts`. Probes the host, builds row images,
-  launches privileged systemd containers, waits for the nested dockerd,
-  execs each suite, captures output to both tty and a logfile, tears
-  down. Reports a results matrix.
+- **Orchestrator** — `run.ts`. Probes the host, materializes a bounded
+  git-tracked repo artifact once per run (`tests/stage-repo.ts` via
+  `git ls-files` — untracked/gitignored local blobs never enter the matrix),
+  builds row images, launches privileged systemd containers, mounts the
+  artifact read-only at `/opt/harbor-test/repo`, waits for the nested
+  dockerd, execs each suite, captures output to both tty and a logfile,
+  tears down. Reports a results matrix. The host working tree is never
+  bind-mounted into rows.
 
 ## Adding a row
 
@@ -100,9 +104,13 @@ the Boost image so the battery matches production dependencies without baking
 test tools into the service image.
 
 ```bash
-harbor dev test --suite boost-agentic-smoke
+harbor dev test --suite boost-agentic-smoke   # defaults to fedora-43, --jobs 1
 HARBOR_TEST_AGENTIC_MODE=host bash tests/suites/06-boost-agentic-smoke.sh
 ```
+
+The orchestrator materializes a git-tracked repo artifact once per run
+(`git ls-files` — local gitignored blobs never enter rows). Regression:
+`deno test --allow-read --allow-write --allow-run tests/run-stage.test.ts`.
 
 Shared helpers live in `tests/lib/boost-agentic.sh`.
 

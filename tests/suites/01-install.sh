@@ -4,12 +4,10 @@
 # Installs Harbor into the running row and verifies `harbor --version` works.
 #
 # Install source is picked from $HARBOR_TEST_INSTALL_SOURCE:
-#   - "local"  (default inside the orchestrator's privileged rows): reuse the
-#              bind-mounted repo at /opt/harbor-test/repo — tests the shipped
-#              requirements.sh/harbor.sh against this row's distro without
-#              touching the network. This is what catches the `tr '[:lower:]'`
-#              class of bugs: the code that runs is the code in the working
-#              tree, not a stale release on GitHub.
+#   - "local"  (default inside the orchestrator's privileged rows): install from
+#              the git-tracked staged artifact at /opt/harbor-test/repo (not
+#              the host working tree). Tests requirements.sh/harbor.sh against
+#              this row's distro without touching the network.
 #   - "github": curl the published install.sh — exercises the release artefact
 #              plus the one-shot upgrade path a real user takes.
 set -euo pipefail
@@ -21,7 +19,7 @@ HARBOR_TEST_INSTALL_SOURCE="${HARBOR_TEST_INSTALL_SOURCE:-local}"
 
 case "$HARBOR_TEST_INSTALL_SOURCE" in
   local)
-    suite_log "source=local (bind-mounted repo at ${HARBOR_TEST_REPO})"
+    suite_log "source=local (staged git-tracked repo at ${HARBOR_TEST_REPO})"
     suite_log "Running programmatic app installer path via install.sh..."
     HARBOR_INSTALL_SOURCE_PATH="${HARBOR_TEST_REPO}" \
       HARBOR_REQUIREMENTS_PATH="${HARBOR_TEST_REPO}/requirements.sh" \

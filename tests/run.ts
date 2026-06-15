@@ -176,6 +176,12 @@ Examples:
 `);
 }
 
+import {
+  applyHeavySuiteDefaults,
+  assertDiskHeadroom,
+  materializeTrackedRepo,
+} from "./stage-repo.ts";
+
 // ── Paths and identity ───────────────────────────────────────────────────────
 
 const REPO_ROOT = Deno.cwd();
@@ -513,9 +519,8 @@ async function sha256Hex(data: Uint8Array): Promise<string> {
 // Hash the inputs that determine an image's content. Everything that the
 // `docker build` step actually sees: the row's Containerfile, the shared
 // base.Containerfile, and the daemon.json that base.Containerfile bakes in.
-// Suite scripts and lib helpers are bind-mounted at runtime — they are NOT
-// baked into the image, so they must NOT contribute to the hash. (If that
-// ever changes, this is the function to update.)
+// Suite scripts and lib helpers ship in the per-run staged repo artifact —
+// they are NOT baked into the image, so they must NOT contribute to the hash.
 async function rowContentHash(row: string): Promise<string> {
   const inputs = [
     `${CONTAINERS_DIR}/${row}.Containerfile`,
@@ -658,7 +663,10 @@ function dockerRunArgs(
   image: string,
   containerName: string,
   hostArtifactsDir: string,
+  stagedRepoDir: string,
 ): string[] {
+  // Mount only the bounded git-tracked artifact — never the host working tree.
+  const repoMount = `${stagedRepoDir}:/opt/harbor-test/repo:ro${probe.mountFlag}`;
   const flags: string[] = [
     probe.runtime,
     "run",
@@ -669,7 +677,7 @@ function dockerRunArgs(
     "--tmpfs", "/run",
     "--tmpfs", "/run/lock",
     "-v", "/sys/fs/cgroup:/sys/fs/cgroup:rw",
-    "-v", `${REPO_ROOT}:/opt/harbor-test/repo${probe.mountFlag}`,
+    "-v", repoMount,
     "-v", `${hostArtifactsDir}:/opt/harbor-test/artifacts${probe.mountFlag}`,
   ];
   if (probe.securityLabelDisable) {
@@ -766,67 +774,23 @@ type RowOutcome = {
   suites: SuiteOutcome[];
 };
 
-// Stage a per-row writable harbor home at /opt/harbor-test/work via an
-// overlayfs mount. lowerdir is the bind-mounted host repo (read-only
-// from the overlay's perspective); upperdir is in-container scratch
-// where writes land. Without this, every `harbor config set/unset/
-// update` call inside a row writes through the bind mount onto the
-// host repo — clobbering ownership (root inside container vs. the host
-// user) and racing with other rows.
-//
-// Overlayfs (vs. a directory of symlinks) gives nested containers a
-// proper view: `harbor dev <script>` runs `docker run -v
-// $harbor_home:$harbor_home denoland/deno:distroless …`. A symlink-tree
-// dangles inside that nested container because the symlink targets
-// (/opt/harbor-test/repo) are not mounted there. An overlay merge
-// presents real directory entries that the inner bind-mount carries
-// through.
-async function stageHarborWork(
+// Per-row writable harbor home. The staged repo at /opt/harbor-test/repo is
+// read-only; harbor state (.env, overrides, compose cache) lands here.
+// 01-install.sh copies the bounded staged tree into work when install runs.
+async function prepareHarborWork(
   runtime: string,
   container: string,
   row: string,
 ): Promise<void> {
-  log(row, "staging /opt/harbor-test/work (selective copy of bind-mounted repo)...");
-  // Real (non-hardlink, non-symlink) copy of the parts of the repo harbor
-  // needs at runtime, into per-row writable scratch. Skips vendored trees
-  // and host-only data:
-  //   - services/webui (~900 MB): vendored Open WebUI source; harbor never
-  //     reads it, only its compose.*.yml at services/ root.
-  //   - app/: Tauri GUI sources, irrelevant to CLI tests.
-  //   - docs/: markdown only.
-  //   - tests/artifacts/: prior-run logs (huge, never read).
-  //   - .env: stale state from the host; harbor.sh will recreate from
-  //     profiles/default.env on first invocation.
-  //   - node_modules/: vendored bytecode; nested deno fetches its own deps.
-  //
-  // `tar | tar` is the cheapest portable selective-copy: a single pass,
-  // honours --exclude, preserves perms/ownership, and crosses the
-  // device boundary (bind-mount → container layer) that defeated `cp -al`.
-  //
-  // Tear down any leftover from a `--keep` re-run before re-cloning.
-  const excludes = [
-    "./.env",
-    "./.git",
-    "./.history",
-    "./app",
-    "./docs",
-    "./node_modules",
-    "./services/webui",
-    "./tests/artifacts",
-  ].map((p) => `--exclude='${p}'`).join(" ");
-  const setup = [
-    "set -e",
-    "rm -rf /opt/harbor-test/work",
-    "mkdir -p /opt/harbor-test/work",
-    `tar -C /opt/harbor-test/repo -cf - ${excludes} . | tar -C /opt/harbor-test/work -xf -`,
-  ].join(" && ");
+  log(row, "preparing empty /opt/harbor-test/work (writable harbor home)...");
+  const setup = "set -e && rm -rf /opt/harbor-test/work && mkdir -p /opt/harbor-test/work";
   const r = await run(
     [runtime, "exec", container, "bash", "-c", setup],
     { silent: true },
   );
   if (r.code !== 0) {
     throw new Error(
-      `${row}: failed to stage harbor work overlay: ${r.stderr.trim() || r.stdout.trim()}`,
+      `${row}: failed to prepare harbor work dir: ${r.stderr.trim() || r.stdout.trim()}`,
     );
   }
 }
@@ -845,9 +809,7 @@ async function execSuite(
     "exec",
     "-e", `HARBOR_TEST_INSTALL_SOURCE=${installSource}`,
     "-e", "HARBOR_TEST_REPO=/opt/harbor-test/repo",
-    // Per-row writable harbor home — see stageHarborWork above. harbor.sh
-    // honours $HARBOR_HOME (line 5340-ish) and writes .env / compose cache
-    // there instead of into the bind-mounted repo.
+    // Per-row writable harbor home — see prepareHarborWork above.
     "-e", "HARBOR_HOME=/opt/harbor-test/work",
     // harbor ln drops a symlink into ${HARBOR_CLI_PATH} (default ~/.local/bin).
     // docker exec is non-interactive and does not source profile/.bashrc, so we
@@ -873,6 +835,7 @@ async function runRow(
   row: string,
   suites: Suite[],
   runId: string,
+  stagedRepoDir: string,
   opts: {
     keep: boolean;
     rebuild: boolean;
@@ -911,7 +874,14 @@ async function runRow(
   // Clean up any stale container under the same name (previous --keep run).
   await run([probe.runtime, "rm", "-f", container], { silent: true });
 
-  const runArgs = dockerRunArgs(probe, row, image, container, hostArtifactsDir);
+  const runArgs = dockerRunArgs(
+    probe,
+    row,
+    image,
+    container,
+    hostArtifactsDir,
+    stagedRepoDir,
+  );
   log(row, `starting container (${container})...`);
   const start = await run(runArgs, { silent: true });
   if (start.code !== 0) {
@@ -941,7 +911,7 @@ async function runRow(
   try {
     await waitForSystemReady(probe.runtime, container, row, isOpenRc);
     await waitForInnerDocker(probe.runtime, container, row, isOpenRc);
-    await stageHarborWork(probe.runtime, container, row);
+    await prepareHarborWork(probe.runtime, container, row);
 
     for (const suite of suites) {
       const logPath = `${hostArtifactsDir}/${suite.short}.log`;
@@ -1149,8 +1119,10 @@ async function main() {
   let rows: string[];
   let suites: Suite[];
   try {
-    rows = await discoverRows(args.distros);
     suites = await discoverSuites(args.suites);
+    const allSuiteShorts = (await discoverSuites(null)).map((s) => s.short);
+    applyHeavySuiteDefaults(args, Deno.args, allSuiteShorts);
+    rows = await discoverRows(args.distros);
   } catch (e) {
     console.error(`[test] ${e instanceof Error ? e.message : e}`);
     Deno.exit(2);
@@ -1170,6 +1142,21 @@ async function main() {
   log("test", `suites: ${suites.map((s) => s.short).join(", ")}`);
   log("test", `jobs=${args.jobs} install-source=${args.installSource}`);
 
+  const stagedRepoDir = `${ARTIFACTS_DIR}/${runId}/staged-repo`;
+  log("test", `staging git-tracked repo → ${stagedRepoDir}`);
+  let stagedStats;
+  try {
+    stagedStats = await materializeTrackedRepo(REPO_ROOT, stagedRepoDir);
+    await assertDiskHeadroom(ARTIFACTS_DIR, args.jobs, stagedStats.totalBytes);
+  } catch (e) {
+    console.error(`[test] ${e instanceof Error ? e.message : e}`);
+    Deno.exit(1);
+  }
+  log(
+    "test",
+    `staged ${stagedStats.fileCount} tracked files (${(stagedStats.totalBytes / (1024 * 1024)).toFixed(1)} MiB)`,
+  );
+
   // Build the shared base image once, up front. Rows reference it via
   // `FROM harbor-test/base AS harbor-base`, so it must exist before any
   // row build is launched in parallel.
@@ -1181,7 +1168,7 @@ async function main() {
   }
 
   const outcomes = await runInPool(rows, args.jobs, (row) =>
-    runRow(probe, row, suites, runId, {
+    runRow(probe, row, suites, runId, stagedRepoDir, {
       keep: args.keep,
       rebuild: args.rebuild,
       installSource: args.installSource,
