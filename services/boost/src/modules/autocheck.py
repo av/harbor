@@ -75,6 +75,8 @@ for troubleshooting.
 
 - `enabled` — when false, pass through without auditing. Default: `true`
 - `max_passes` — maximum audit-and-revise passes. Default: `1`
+- `max_revise_passes` — maximum revise passes after a revise verdict. Default: `1`,
+  max `2`. Strict mode allows one extra revise (capped at 2).
 - `max_workspace_files` — workspace files read per request. Default: `5`
 - `workspace_file_max_chars` — characters per workspace file. Default: `50000`
 - `show_audit` — when true, append a brief audit footer to the final answer and emit
@@ -87,6 +89,7 @@ for troubleshooting.
 harbor boost modules add autocheck
 harbor config set HARBOR_BOOST_AUTOCHECK_ENABLED true
 harbor config set HARBOR_BOOST_AUTOCHECK_MAX_PASSES 1
+harbor config set HARBOR_BOOST_AUTOCHECK_MAX_REVISE_PASSES 1
 harbor config set HARBOR_BOOST_AUTOCHECK_SHOW_AUDIT true
 harbor config set HARBOR_BOOST_AUTOCHECK_STRICT true
 harbor config set HARBOR_BOOST_WORKSPACE_ROOT /workspace/myproject
@@ -146,6 +149,7 @@ SYMBOL_STOPWORDS = frozenset({
 })
 
 BLOCKING_SEVERITIES = frozenset({"critical", "major"})
+MAX_REVISE_PASSES_CAP = 2
 
 DRAFT_PROMPT = """
 <instruction>
@@ -397,6 +401,23 @@ def should_revise(audit: AuditResult) -> bool:
   return audit.verdict == "revise"
 
 
+def clamp_max_revise_passes(value: int) -> int:
+  """Clamp configured revise passes to the supported range."""
+  return max(0, min(value, MAX_REVISE_PASSES_CAP))
+
+
+def effective_max_revise_passes() -> int:
+  """
+  Return the revise-pass budget for the current autocheck request.
+
+  Strict mode grants one extra revise attempt (still capped at 2).
+  """
+  base = clamp_max_revise_passes(boost_config.AUTOCHECK_MAX_REVISE_PASSES.value)
+  if boost_config.AUTOCHECK_STRICT.value:
+    return min(base + 1, MAX_REVISE_PASSES_CAP)
+  return base
+
+
 def blocking_findings(audit: AuditResult) -> list[AuditFinding]:
   """Return critical and major findings that block shipping."""
   return [
@@ -520,30 +541,27 @@ def collect_git_changed_paths() -> list[str]:
   return paths
 
 
-def collect_git_diff_context() -> str:
-  """Return git diff --stat summary for audit context when workspace is a git repo."""
+async def collect_git_diff_context() -> str:
+  """Return git diff summary for audit context when workspace is a git repo."""
   root = boost_config.WORKSPACE_ROOT.value
   if not root or not is_git_workspace(root):
     return ""
 
-  result = run_git_diff(root)
-  if result is None:
+  from modules.tools import git_diff_workspace
+
+  try:
+    raw = (await git_diff_workspace()).strip()
+  except ValueError:
     return ""
 
-  paths, stat = result
-  if not stat and not paths:
+  if (
+    not raw
+    or raw.startswith("Git diff unavailable")
+    or raw.startswith("No changes in working tree")
+  ):
     return ""
 
-  lines = ["<git_diff_stat>"]
-  if stat:
-    lines.append(stat)
-  if paths:
-    lines.append("")
-    lines.append("Changed files:")
-    for path in paths:
-      lines.append(f"- {path}")
-  lines.append("</git_diff_stat>")
-  return "\n".join(lines)
+  return raw
 
 
 def is_test_file(path: str) -> bool:
@@ -932,7 +950,7 @@ async def run_mechanical_preaudit(
   paths: list[str],
 ) -> tuple[str, list[AuditFinding]]:
   """Run no-LLM pre-audit checks and return git context plus blocker findings."""
-  git_context = collect_git_diff_context()
+  git_context = await collect_git_diff_context()
   findings: list[AuditFinding] = []
 
   findings.extend(check_code_blocks_without_paths(draft, paths))
@@ -1454,7 +1472,7 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
     )
     return await workflow_mod.complete_or_defer(llm, module_cfg)
 
-  max_passes = max(0, boost_config.AUTOCHECK_MAX_PASSES.value)
+  max_passes = effective_max_revise_passes()
 
   await llm.emit_status("Autocheck: drafting...")
   try:

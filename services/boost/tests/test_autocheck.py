@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 import chat as ch
 import config
 import deliverable
-from modules import autocheck
+from modules import autocheck, tools
 
 
 class TestAutocheckGate:
@@ -632,7 +632,8 @@ class TestMechanicalPreaudit:
     )
     assert findings == []
 
-  def test_collect_git_diff_context_includes_stat(self):
+  @pytest.mark.asyncio
+  async def test_collect_git_diff_context_includes_stat(self):
     with tempfile.TemporaryDirectory() as workspace:
       root = Path(workspace)
       target = root / "src" / "widget.py"
@@ -664,23 +665,69 @@ class TestMechanicalPreaudit:
       original = config.WORKSPACE_ROOT.__value__
       try:
         config.WORKSPACE_ROOT.__value__ = str(root)
-        context = autocheck.collect_git_diff_context()
+        context = await autocheck.collect_git_diff_context()
       finally:
         config.WORKSPACE_ROOT.__value__ = original
 
     assert "<git_diff_stat>" in context
+    assert "<git_diff_name_only>" in context
     assert "src/widget.py" in context
 
-  def test_collect_git_diff_context_empty_without_git_repo(self):
+  @pytest.mark.asyncio
+  async def test_collect_git_diff_context_empty_without_git_repo(self):
     with tempfile.TemporaryDirectory() as workspace:
       original = config.WORKSPACE_ROOT.__value__
       try:
         config.WORKSPACE_ROOT.__value__ = workspace
-        context = autocheck.collect_git_diff_context()
+        context = await autocheck.collect_git_diff_context()
       finally:
         config.WORKSPACE_ROOT.__value__ = original
 
     assert context == ""
+
+  @pytest.mark.asyncio
+  async def test_run_mechanical_preaudit_uses_git_diff_workspace_when_repo_mocked_as_git(
+    self,
+  ):
+    with tempfile.TemporaryDirectory() as workspace:
+      root = Path(workspace)
+      (root / ".git").mkdir()
+      target = root / "src" / "widget.py"
+      target.parent.mkdir(parents=True)
+      target.write_text("print(2)\n", encoding="utf-8")
+
+      def fake_run(cmd, **kwargs):
+        if cmd[:3] == ["git", "diff", "--name-only"]:
+          return subprocess.CompletedProcess(cmd, 0, "src/widget.py\n", "")
+        if cmd[:3] == ["git", "diff", "--stat"]:
+          return subprocess.CompletedProcess(
+            cmd,
+            0,
+            " src/widget.py | 1 +\n 1 file changed, 1 insertion(+), 1 deletion(-)\n",
+            "",
+          )
+        raise AssertionError(f"unexpected git command: {cmd}")
+
+      original = config.WORKSPACE_ROOT.__value__
+      try:
+        config.WORKSPACE_ROOT.__value__ = str(root)
+        with patch("modules.diffscope.subprocess.run", side_effect=fake_run):
+          with patch(
+            "modules.tools.git_diff_workspace",
+            wraps=tools.git_diff_workspace,
+          ) as git_diff_workspace:
+            git_context, findings = await autocheck.run_mechanical_preaudit(
+              "Update src/widget.py with a helper.",
+              ["src/widget.py"],
+            )
+      finally:
+        config.WORKSPACE_ROOT.__value__ = original
+
+    git_diff_workspace.assert_awaited_once()
+    assert "<git_diff_stat>" in git_context
+    assert "<git_diff_name_only>" in git_context
+    assert "src/widget.py" in git_context
+    assert findings == []
 
   @pytest.mark.asyncio
   async def test_verify_draft_paths_exist_flags_missing_paths(self):
