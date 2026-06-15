@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field
 
+import config
 import deliverable
 import log
 import research.brief as brief_mod
@@ -41,12 +42,14 @@ Unlike `caveman`, ponytail triggers selectively on research-heavy questions
 - `max_searches` — maximum web searches per request. Default: `4`
 - `max_url_reads` — maximum full-page URL reads per request. Default: `3`
 - `max_chars` — maximum research content characters retained. Default: `60000`
+- `early_exit_chars` — skip hop 2 when hop 1 gathers this many characters. Default: `15000` (`0` disables)
 
 ```bash
 harbor boost modules add ponytail
 harbor config set HARBOR_BOOST_PONYTAIL_MAX_SEARCHES 4
 harbor config set HARBOR_BOOST_PONYTAIL_MAX_URL_READS 3
 harbor config set HARBOR_BOOST_PONYTAIL_MAX_CHARS 60000
+harbor config set HARBOR_BOOST_PONYTAIL_EARLY_EXIT_CHARS 15000
 harbor config set HARBOR_BOOST_TAVILY_API_KEY <key>
 # or
 harbor config set HARBOR_BOOST_SEARXNG_URL http://searxng:8080
@@ -321,7 +324,6 @@ async def run_research_loop(
     llm=llm,
   )
 
-  await llm.emit_status(f"{STATUS_PREFIX}: reading sources...")
   first_urls = orchestrate.urls_from_brief(brief)[: max(1, budget.max_url_reads // 2 or 1)]
   await orchestrate.read_urls(
     first_urls,
@@ -332,6 +334,20 @@ async def run_research_loop(
     phase="Ponytail hop 1",
     llm=llm,
   )
+
+  early_exit_chars = config.PONYTAIL_EARLY_EXIT_CHARS.value
+  gathered_chars = orchestrate.content_chars_in_brief(brief)
+  if early_exit_chars > 0 and gathered_chars >= early_exit_chars:
+    brief.add_note(
+      "Early exit: first research hop gathered "
+      f"{gathered_chars} chars (threshold {early_exit_chars}); skipping second hop."
+    )
+    await llm.emit_status(
+      f"{STATUS_PREFIX}: sufficient research gathered ({gathered_chars} chars), skipping hop 2..."
+    )
+    await llm.emit_status(f"{STATUS_PREFIX}: synthesizing brief...")
+    brief = brief_mod.finalize_brief(brief)
+    return await synthesize_brief(chat, llm, message, brief)
 
   await llm.emit_status(f"{STATUS_PREFIX}: detecting gaps...")
   gap = await detect_gaps(chat, llm, message, brief)

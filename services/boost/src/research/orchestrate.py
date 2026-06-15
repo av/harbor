@@ -1,7 +1,8 @@
 """Shared research orchestration for agentic Boost modules."""
 
+import asyncio
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Awaitable, TypeVar
 
 from pydantic import BaseModel, Field
 
@@ -16,6 +17,11 @@ if TYPE_CHECKING:
   import llm
 
 logger = log.setup_logger(__name__)
+
+SEARCH_CONCURRENCY = 2
+URL_READ_CONCURRENCY = 3
+
+_T = TypeVar("_T")
 
 CONTINUATION_RE = re.compile(
   r"\b(?:continue|keep\s+going|go\s+on|proceed|carry\s+on|as\s+planned|same\s+as\s+before)\b",
@@ -70,6 +76,28 @@ async def emit_research_status(llm: "llm.LLM | None", status: str) -> None:
     await llm.emit_status(status)
 
 
+def content_chars_in_brief(brief: brief_mod.ResearchBrief) -> int:
+  """Return total snippet characters gathered from searches and page reads."""
+  return sum(len(source.snippet or "") for source in [*brief.searches, *brief.pages])
+
+
+async def _gather_with_concurrency(
+  coros: list[Awaitable[_T]],
+  *,
+  limit: int,
+) -> list[_T]:
+  if not coros:
+    return []
+
+  semaphore = asyncio.Semaphore(max(1, limit))
+
+  async def _run(coro: Awaitable[_T]) -> _T:
+    async with semaphore:
+      return await coro
+
+  return await asyncio.gather(*[_run(coro) for coro in coros])
+
+
 def urls_from_brief(brief: brief_mod.ResearchBrief) -> list[str]:
   urls = []
   seen = set()
@@ -121,39 +149,88 @@ async def run_searches(
   status_prefix: str,
   phase: str = "",
   llm: "llm.LLM | None" = None,
+  parallel: bool = True,
 ) -> None:
+  if not queries:
+    return
+
   max_results = max(1, config.TOOLS_SEARCH_MAX_RESULTS.value)
   phase_label = f"{phase}: " if phase else ""
+  use_parallel = parallel and len(queries) > 1
 
-  for query in queries:
-    if not budget.can_search():
-      brief.add_note(f"{phase_label}search budget exhausted before all queries ran.".lstrip())
-      break
+  if use_parallel:
+    await emit_research_status(
+      llm,
+      (
+        f"{status_prefix}: {phase_label}searching {len(queries)} queries "
+        f"(up to {SEARCH_CONCURRENCY} parallel)..."
+      ).replace(":: ", ": "),
+    )
+
+  budget_lock = asyncio.Lock()
+
+  async def _search_one(query: str) -> dict:
+    async with budget_lock:
+      if not budget.can_search():
+        return {"kind": "exhausted", "query": query}
+
+      budget.record_search()
 
     try:
-      budget.record_search()
       logger.info(f"{phase_label}searching '{query[:80]}'")
       results_text = await fetch.web_search(query, max_results=max_results)
-      results_text = budget.trim_to_remaining(results_text)
-      brief.add_search_results(query, results_text)
-      if fetch.is_search_failure_result(results_text):
-        note = f"Search failed for '{query}': {results_text}"
-        brief.add_note(note)
-        await emit_research_status(
-          llm,
-          f"{status_prefix}: search unavailable for '{query[:60]}'...",
-        )
+      async with budget_lock:
+        results_text = budget.trim_to_remaining(results_text)
+      return {"kind": "ok", "query": query, "results_text": results_text}
     except budget_mod.BudgetExceeded as exc:
       logger.warning(f"{module_id}: {exc}")
-      brief.add_note(str(exc))
-      break
+      return {"kind": "budget_error", "query": query, "error": str(exc)}
     except Exception as exc:
       logger.error(f"{module_id}: search failed for '{query}': {exc}")
-      note = f"Search failed for '{query}': {exc}"
+      return {"kind": "error", "query": query, "error": str(exc)}
+
+  if use_parallel:
+    outcomes = await _gather_with_concurrency(
+      [_search_one(query) for query in queries],
+      limit=SEARCH_CONCURRENCY,
+    )
+  else:
+    outcomes = [await _search_one(query) for query in queries]
+
+  budget_exhausted = False
+  for outcome in outcomes:
+    kind = outcome["kind"]
+    query = outcome.get("query", "")
+
+    if kind == "exhausted":
+      if not budget_exhausted:
+        brief.add_note(
+          f"{phase_label}search budget exhausted before all queries ran.".lstrip()
+        )
+        budget_exhausted = True
+      continue
+
+    if kind == "budget_error":
+      brief.add_note(outcome["error"])
+      break
+
+    if kind == "error":
+      note = f"Search failed for '{query}': {outcome['error']}"
       brief.add_note(note)
       await emit_research_status(
         llm,
         f"{status_prefix}: search failed for '{query[:60]}'...",
+      )
+      continue
+
+    results_text = outcome["results_text"]
+    brief.add_search_results(query, results_text)
+    if fetch.is_search_failure_result(results_text):
+      note = f"Search failed for '{query}': {results_text}"
+      brief.add_note(note)
+      await emit_research_status(
+        llm,
+        f"{status_prefix}: search unavailable for '{query[:60]}'...",
       )
 
 
@@ -167,43 +244,91 @@ async def read_urls(
   phase: str = "",
   llm: "llm.LLM | None" = None,
   titles: dict[str, str] | None = None,
+  parallel: bool = True,
 ) -> None:
-  phase_label = f"{phase}: " if phase else ""
+  if not urls:
+    return
 
+  phase_label = f"{phase}: " if phase else ""
+  scheduled_urls = []
   for url in urls:
     if not budget.can_read_url():
       break
+    scheduled_urls.append(url)
+
+  if not scheduled_urls:
+    return
+
+  use_parallel = parallel and len(scheduled_urls) > 1
+  if use_parallel:
+    await emit_research_status(
+      llm,
+      (
+        f"{status_prefix}: {phase_label}reading {len(scheduled_urls)} sources "
+        f"(up to {URL_READ_CONCURRENCY} parallel)..."
+      ).replace(":: ", ": "),
+    )
+
+  budget_lock = asyncio.Lock()
+
+  async def _read_one(url: str) -> dict:
+    async with budget_lock:
+      if not budget.can_read_url():
+        return {"kind": "exhausted", "url": url}
+
+      budget.record_url_read()
+      char_limit = page_read_char_limit(budget)
 
     try:
-      budget.record_url_read()
       logger.info(f"{phase_label}reading {url}")
-      page_text = await fetch.read_url(
-        url,
-        max_chars=page_read_char_limit(budget),
-      )
-      page_text = budget.trim_to_remaining(page_text)
-      if fetch.is_read_failure_result(page_text):
-        brief.add_note(page_text)
-        await emit_research_status(
-          llm,
-          f"{status_prefix}: could not read {url[:60]}...",
-        )
-        continue
-
-      title = (titles or {}).get(url, "")
-      brief.add_page(url, page_text, title=title)
+      page_text = await fetch.read_url(url, max_chars=char_limit)
+      async with budget_lock:
+        page_text = budget.trim_to_remaining(page_text)
+      return {"kind": "ok", "url": url, "page_text": page_text}
     except budget_mod.BudgetExceeded as exc:
       logger.warning(f"{module_id}: {exc}")
-      brief.add_note(str(exc))
-      break
+      return {"kind": "budget_error", "url": url, "error": str(exc)}
     except Exception as exc:
       logger.warning(f"{module_id}: read_url failed for {url}: {exc}")
-      note = f"Could not read {url}: {exc}"
+      return {"kind": "error", "url": url, "error": str(exc)}
+
+  if use_parallel:
+    outcomes = await _gather_with_concurrency(
+      [_read_one(url) for url in scheduled_urls],
+      limit=URL_READ_CONCURRENCY,
+    )
+  else:
+    outcomes = [await _read_one(url) for url in scheduled_urls]
+
+  for outcome in outcomes:
+    kind = outcome["kind"]
+    url = outcome.get("url", "")
+
+    if kind in {"exhausted", "budget_error"}:
+      if kind == "budget_error":
+        brief.add_note(outcome["error"])
+      break
+
+    if kind == "error":
+      note = f"Could not read {url}: {outcome['error']}"
       brief.add_note(note)
       await emit_research_status(
         llm,
         f"{status_prefix}: could not read {url[:60]}...",
       )
+      continue
+
+    page_text = outcome["page_text"]
+    if fetch.is_read_failure_result(page_text):
+      brief.add_note(page_text)
+      await emit_research_status(
+        llm,
+        f"{status_prefix}: could not read {url[:60]}...",
+      )
+      continue
+
+    title = (titles or {}).get(url, "")
+    brief.add_page(url, page_text, title=title)
 
 
 async def gather_one_hop(

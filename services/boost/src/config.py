@@ -710,6 +710,16 @@ PONYTAIL_MAX_CHARS = Config[int](
     description="Maximum research content characters retained by the `ponytail` module.",
 )
 
+PONYTAIL_EARLY_EXIT_CHARS = Config[int](
+    name="HARBOR_BOOST_PONYTAIL_EARLY_EXIT_CHARS",
+    type=int,
+    default="15000",
+    description=(
+        "When the first ponytail research hop gathers at least this many characters, "
+        "skip the second hop. Set to 0 to disable early exit."
+    ),
+)
+
 # ----------------- AUTOCHECK -----------------
 
 AUTOCHECK_ENABLED = Config[bool](
@@ -747,6 +757,16 @@ KEEL_ENABLED = Config[bool](
     type=bool,
     default="true",
     description="When false, the `keel` module passes through without task anchoring.",
+)
+
+KEEL_ANCHOR_EVERY = Config[int](
+    name="HARBOR_BOOST_KEEL_ANCHOR_EVERY",
+    type=int,
+    default="2",
+    description=(
+        "Inject `<task_anchor>` every N user turns in `keel` (turn 1 never). "
+        "Set to 1 to anchor on every turn after the first."
+    ),
 )
 
 # ---------------- SIGHTLINE -----------------
