@@ -764,6 +764,17 @@ SIGHTLINE_ALLOW_CREATE = Config[bool](
     ),
 )
 
+SIGHTLINE_WORKSPACE = Config[bool](
+    name="HARBOR_BOOST_SIGHTLINE_WORKSPACE",
+    type=bool,
+    default="true",
+    description=(
+        "When true and `HARBOR_BOOST_WORKSPACE_ROOT` is set, `sightline` tracks "
+        "`read_workspace_file` and guards `write_workspace_file` when that tool is "
+        "registered. Defaults to enabled whenever a workspace root is configured."
+    ),
+)
+
 # ---------------- DIFFSCOPE -----------------
 
 DIFFSCOPE_ENABLED = Config[bool](

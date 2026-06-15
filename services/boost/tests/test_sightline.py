@@ -4,8 +4,10 @@ import asyncio
 import json
 import os
 import sys
+import tempfile
 import uuid
 from contextlib import contextmanager
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -199,6 +201,179 @@ class TestSightlineGuards:
       assert read_gen > write_gen
 
 
+class TestSightlineWorkspace:
+  def test_workspace_guard_disabled_without_root(self):
+    original_root = config.WORKSPACE_ROOT.__value__
+    original_workspace = config.SIGHTLINE_WORKSPACE.__value__
+    try:
+      config.WORKSPACE_ROOT.__value__ = ""
+      config.SIGHTLINE_WORKSPACE.__value__ = True
+      assert not sightline.workspace_guard_enabled()
+      assert not sightline.workspace_guard_enabled(workspace=True)
+    finally:
+      config.WORKSPACE_ROOT.__value__ = original_root
+      config.SIGHTLINE_WORKSPACE.__value__ = original_workspace
+
+  def test_workspace_guard_enabled_when_root_configured(self):
+    original_root = config.WORKSPACE_ROOT.__value__
+    original_workspace = config.SIGHTLINE_WORKSPACE.__value__
+    try:
+      config.WORKSPACE_ROOT.__value__ = "/workspace"
+      config.SIGHTLINE_WORKSPACE.__value__ = True
+      assert sightline.workspace_guard_enabled()
+    finally:
+      config.WORKSPACE_ROOT.__value__ = original_root
+      config.SIGHTLINE_WORKSPACE.__value__ = original_workspace
+
+  def test_workspace_guard_respects_config_flag(self):
+    original_root = config.WORKSPACE_ROOT.__value__
+    original_workspace = config.SIGHTLINE_WORKSPACE.__value__
+    try:
+      config.WORKSPACE_ROOT.__value__ = "/workspace"
+      config.SIGHTLINE_WORKSPACE.__value__ = False
+      assert not sightline.workspace_guard_enabled()
+      assert sightline.workspace_guard_enabled(workspace=True)
+    finally:
+      config.WORKSPACE_ROOT.__value__ = original_root
+      config.SIGHTLINE_WORKSPACE.__value__ = original_workspace
+
+  def test_workspace_canonical_path_uses_prefix(self):
+    with tempfile.TemporaryDirectory() as workspace:
+      target = Path(workspace) / "src" / "main.py"
+      target.parent.mkdir(parents=True)
+      target.write_text("print('ok')", encoding="utf-8")
+
+      original_root = config.WORKSPACE_ROOT.__value__
+      try:
+        config.WORKSPACE_ROOT.__value__ = workspace
+        canonical = sightline.workspace_canonical_path("src/main.py")
+      finally:
+        config.WORKSPACE_ROOT.__value__ = original_root
+
+    assert canonical == "workspace:src/main.py"
+
+  def test_workspace_block_message_uses_workspace_tools(self):
+    message = sightline.block_message("src/main.py", 2, 1, kind="workspace")
+    payload = json.loads(message)
+    assert payload["required_tool"] == "read_workspace_file"
+    assert payload["tool_kind"] == "workspace"
+    assert payload["canonical_path"] == "workspace:src/main.py"
+
+  @pytest.mark.asyncio
+  async def test_read_workspace_file_records_generation(self):
+    with tempfile.TemporaryDirectory() as workspace:
+      target = Path(workspace) / "tracked.py"
+      target.write_text("version 1", encoding="utf-8")
+
+      original_root = config.WORKSPACE_ROOT.__value__
+      try:
+        config.WORKSPACE_ROOT.__value__ = workspace
+        with request_context():
+          llm = MagicMock()
+          llm.emit_status = AsyncMock()
+          tool_registry.set_local_tool(
+            "read_workspace_file",
+            tools_module.read_workspace_file,
+          )
+          sightline.install_guards(llm)
+
+          read_tool = tool_registry.get_local_tool("read_workspace_file")
+          await read_tool("tracked.py")
+
+          path = sightline.workspace_canonical_path("tracked.py")
+          read_gen, write_gen = sightline.get_generations(path)
+          assert read_gen > write_gen
+      finally:
+        config.WORKSPACE_ROOT.__value__ = original_root
+
+  @pytest.mark.asyncio
+  async def test_write_workspace_file_blocked_without_prior_read(self):
+    async def write_workspace_file(file_path: str, content: str) -> str:
+      target = tools_module._workspace_path(file_path)
+      target.parent.mkdir(parents=True, exist_ok=True)
+      target.write_text(content, encoding="utf-8")
+      return f"Wrote {len(content)} characters to {file_path}."
+
+    with tempfile.TemporaryDirectory() as workspace:
+      target = Path(workspace) / "blocked.py"
+      target.write_text("seed", encoding="utf-8")
+
+      original_root = config.WORKSPACE_ROOT.__value__
+      try:
+        config.WORKSPACE_ROOT.__value__ = workspace
+        with request_context():
+          llm = MagicMock()
+          llm.emit_status = AsyncMock()
+          tool_registry.set_local_tool("write_workspace_file", write_workspace_file)
+          sightline.install_guards(llm)
+
+          write_tool = tool_registry.get_local_tool("write_workspace_file")
+          with pytest.raises(ValueError, match="sightline_read_required"):
+            await write_tool("blocked.py", "content")
+
+          llm.emit_status.assert_awaited_once()
+          assert "read_workspace_file required" in llm.emit_status.await_args.args[0]
+      finally:
+        config.WORKSPACE_ROOT.__value__ = original_root
+
+  @pytest.mark.asyncio
+  async def test_write_workspace_file_allowed_after_read(self):
+    async def write_workspace_file(file_path: str, content: str) -> str:
+      target = tools_module._workspace_path(file_path)
+      target.parent.mkdir(parents=True, exist_ok=True)
+      target.write_text(content, encoding="utf-8")
+      return f"Wrote {len(content)} characters to {file_path}."
+
+    with tempfile.TemporaryDirectory() as workspace:
+      original_root = config.WORKSPACE_ROOT.__value__
+      try:
+        config.WORKSPACE_ROOT.__value__ = workspace
+        with request_context():
+          llm = MagicMock()
+          llm.emit_status = AsyncMock()
+          tool_registry.set_local_tool(
+            "read_workspace_file",
+            tools_module.read_workspace_file,
+          )
+          tool_registry.set_local_tool("write_workspace_file", write_workspace_file)
+          sightline.install_guards(llm)
+
+          write_tool = tool_registry.get_local_tool("write_workspace_file")
+          read_tool = tool_registry.get_local_tool("read_workspace_file")
+
+          await write_tool("draft.py", "first version")
+          await read_tool("draft.py")
+          result = await write_tool("draft.py", "second version")
+
+          assert "second version" in result or "Wrote" in result
+      finally:
+        config.WORKSPACE_ROOT.__value__ = original_root
+
+  @pytest.mark.asyncio
+  async def test_workspace_guards_skipped_when_disabled(self):
+    with tempfile.TemporaryDirectory() as workspace:
+      original_root = config.WORKSPACE_ROOT.__value__
+      original_workspace = config.SIGHTLINE_WORKSPACE.__value__
+      try:
+        config.WORKSPACE_ROOT.__value__ = workspace
+        config.SIGHTLINE_WORKSPACE.__value__ = False
+        with request_context():
+          llm = MagicMock()
+          llm.emit_status = AsyncMock()
+          tool_registry.set_local_tool(
+            "read_workspace_file",
+            tools_module.read_workspace_file,
+          )
+          wrapped = sightline.install_guards(llm, workspace=False)
+
+          assert "read_workspace_file" not in wrapped
+          read_tool = tool_registry.get_local_tool("read_workspace_file")
+          assert not getattr(read_tool, "_sightline_wrapped", False)
+      finally:
+        config.WORKSPACE_ROOT.__value__ = original_root
+        config.SIGHTLINE_WORKSPACE.__value__ = original_workspace
+
+
 class TestSightlineApply:
   @pytest.mark.asyncio
   async def test_apply_wraps_tools_and_streams_final(self):
@@ -219,6 +394,35 @@ class TestSightlineApply:
 
     history = chat.history()
     assert any("read_file" in (msg.get("content") or "") for msg in history)
+    llm.stream_final_completion.assert_awaited_once()
+
+  @pytest.mark.asyncio
+  async def test_apply_wraps_workspace_reader_when_configured(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Inspect workspace files carefully."},
+    ])
+    llm = MagicMock()
+    llm.stream_final_completion = AsyncMock()
+
+    with tempfile.TemporaryDirectory() as workspace:
+      original_root = config.WORKSPACE_ROOT.__value__
+      try:
+        config.WORKSPACE_ROOT.__value__ = workspace
+        with request_context():
+          tool_registry.set_local_tool(
+            "read_workspace_file",
+            tools_module.read_workspace_file,
+          )
+
+          await sightline.apply(chat, llm, config={"final": True})
+
+          read_tool = tool_registry.get_local_tool("read_workspace_file")
+          assert getattr(read_tool, "_sightline_wrapped", False)
+      finally:
+        config.WORKSPACE_ROOT.__value__ = original_root
+
+    history = chat.history()
+    assert any("read_workspace_file" in (msg.get("content") or "") for msg in history)
     llm.stream_final_completion.assert_awaited_once()
 
   @pytest.mark.asyncio
