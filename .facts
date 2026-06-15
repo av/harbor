@@ -202,8 +202,14 @@
 - label: caveman supports HARBOR_BOOST_CAVEMAN_TRIGGER llm mode: a cheap LLM classifier decides whether external research is needed, skips the classifier when already inside a caveman-prefixed module turn, and falls back to heuristic mode on classifier failure
   command: cd services/boost && uv run pytest tests/test_caveman.py::TestCavemanLlmTrigger -q --tb=no
   tags: [spec, implemented]
+- label: caveman supports HARBOR_BOOST_CAVEMAN_CACHE_BRIEF (experimental): when enabled reuses the last research brief for the same normalized user question within a request session, skipping extract and gather on cache hits and emitting a using cached brief status
+  command: cd services/boost && uv run pytest tests/test_caveman.py::TestCavemanBriefCache -q --tb=no
+  tags: [implemented]
 - label: ponytail performs two-hop web research on research-heavy turns (migrations, version comparisons, API behavior): initial search, page reads, gap detection, targeted second search, then injects a structured research_brief before the final answer
   command: cd services/boost && uv run pytest tests/test_ponytail.py::TestPonytailResearchLoop -q --tb=no
+  tags: [implemented]
+- label: ponytail supports HARBOR_BOOST_PONYTAIL_CACHE_BRIEF (experimental): when enabled reuses the last two-hop research brief for the same normalized user question within a request session, skipping plan and run_research_loop on cache hits
+  command: cd services/boost && uv run pytest tests/test_ponytail.py::TestPonytailBriefCache -q --tb=no
   tags: [implemented]
 - label: autocheck audits coding deliverable drafts with a structured checklist (correctness, completeness, file-path grounding) and revises at most once when the audit verdict is revise; non-deliverable turns pass through unchanged
   command: cd services/boost && uv run pytest tests/test_autocheck.py::TestAutocheckApply -q --tb=no
@@ -268,6 +274,9 @@
 - label: keel persists TaskBrief state across stateless turns via a hidden keel_brief system marker that round-trips through chat history and hydrates stored brief state on subsequent requests
   command: cd services/boost && uv run pytest tests/test_keel.py::TestKeelBriefPersistence -q --tb=no
   tags: [spec, implemented]
+- label: keel supports per-request @boost_keel_refresh (keel_refresh boost param): when true re-extracts TaskBrief from the current conversation, replaces the hidden keel_brief marker, clears met acceptance-criteria tracking, and emits Keel: refreshing task brief status
+  command: cd services/boost && uv run pytest tests/test_keel.py::TestKeelRefreshParam tests/test_keel.py::TestKeelApply::test_apply_refresh_reextracts_and_replaces_marker -q --tb=no
+  tags: [implemented]
 - label: research orchestration parallelizes multi-query web_search calls and multi-URL page reads with concurrency caps while respecting per-request search and read budgets
   command: cd services/boost && uv run pytest tests/test_orchestrate.py::TestOrchestrateParallelFetch -q --tb=no
   tags: [spec, implemented]
@@ -277,6 +286,9 @@
 - label: autocheck runs mechanical pre-audit before the LLM audit on deliverable turns: flags code without cited paths or missing workspace paths, includes git diff stat context, and forces revise when blockers are found
   command: cd services/boost && uv run pytest tests/test_autocheck.py::TestMechanicalPreaudit -q --tb=no
   tags: [spec, implemented]
+- label: autocheck mechanical pre-audit emits non-blocking linter hints when eslint or ruff configs appear near cited or changed paths: walks up from anchor paths to discover configs, suggests runnable npx eslint or ruff check commands, and includes warn findings in run_mechanical_preaudit
+  command: cd services/boost && uv run pytest tests/test_autocheck.py::TestLinterHint -q --tb=no
+  tags: [implemented]
 - label: git_diff_workspace is an opt-in portable tool when HARBOR_BOOST_WORKSPACE_ROOT is set on a git repo: returns git diff --name-only and --stat for workspace paths with optional path scoping jail and 5 second timeout
   command: cd services/boost && uv run pytest tests/test_agentic_infra.py::TestWorkspaceFileTool::test_git_diff_workspace_returns_stat_and_name_only tests/test_agentic_infra.py::TestWorkspaceFileTool::test_git_diff_workspace_scopes_path tests/test_agentic_infra.py::TestWorkspaceFileTool::test_git_diff_workspace_path_jail tests/test_agentic_infra.py::TestWorkspaceFileTool::test_selected_tools_includes_git_diff_when_git_workspace -q --tb=no
   tags: [implemented]
