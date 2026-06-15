@@ -294,101 +294,48 @@ def _wrap_read_workspace_file(
   return guarded_read_workspace_file
 
 
-def _wrap_write_file(
+def _wrap_mutation(
   base_fn: Callable[..., Awaitable[str]],
   llm: "llm_mod.LLM",
   *,
+  tool_name: str,
+  required_read_tool: str,
   mode: str | None = None,
   allow_create: bool | None = None,
+  kind: ToolKind = "scratch",
+  check_create_exempt: bool = False,
 ) -> Callable[..., Awaitable[str]]:
-  async def guarded_write_file(file_path: str, content: str) -> str:
-    path = canonical_path(file_path)
+  """Wrap a write or delete tool with read-before-edit guards."""
+
+  async def guarded(*args: str) -> str:
+    file_path = args[0]
+    path = tracking_path(file_path, kind=kind)
     read_gen, write_gen = get_generations(path)
 
-    if not is_create_exempt(file_path, allow_create=allow_create) and not can_mutate(path):
-      message = block_message(file_path, read_gen, write_gen)
-      logger.warning(f"{ID_PREFIX}: blocked write_file for {path}")
-      await llm.emit_status(f"Sightline: blocked write_file on {path} — read_file required")
-      if (mode or config.SIGHTLINE_MODE.value).lower() == "warn":
-        logger.warning(f"{ID_PREFIX}: warn mode allowing write_file on {path}")
-      else:
-        raise ValueError(message)
-
-    result = await base_fn(file_path, content)
-    record_write(path)
-    return result
-
-  guarded_write_file.__name__ = "write_file"
-  guarded_write_file.__doc__ = base_fn.__doc__
-  guarded_write_file._sightline_wrapped = True
-  guarded_write_file._sightline_unwrapped = base_fn
-  return guarded_write_file
-
-
-def _wrap_write_workspace_file(
-  base_fn: Callable[..., Awaitable[str]],
-  llm: "llm_mod.LLM",
-  *,
-  mode: str | None = None,
-  allow_create: bool | None = None,
-) -> Callable[..., Awaitable[str]]:
-  async def guarded_write_workspace_file(file_path: str, content: str) -> str:
-    path = workspace_canonical_path(file_path)
-    read_gen, write_gen = get_generations(path)
-
-    if (
-      not is_create_exempt(file_path, allow_create=allow_create, kind="workspace")
-      and not can_mutate(path)
-    ):
-      message = block_message(file_path, read_gen, write_gen, kind="workspace")
-      logger.warning(f"{ID_PREFIX}: blocked write_workspace_file for {path}")
+    exempt = (
+      check_create_exempt
+      and is_create_exempt(file_path, allow_create=allow_create, kind=kind)
+    )
+    if not exempt and not can_mutate(path):
+      message = block_message(file_path, read_gen, write_gen, kind=kind)
+      logger.warning(f"{ID_PREFIX}: blocked {tool_name} for {path}")
       await llm.emit_status(
-        f"Sightline: blocked write_workspace_file on {path} — read_workspace_file required"
+        f"Sightline: blocked {tool_name} on {path} — {required_read_tool} required"
       )
       if (mode or config.SIGHTLINE_MODE.value).lower() == "warn":
-        logger.warning(f"{ID_PREFIX}: warn mode allowing write_workspace_file on {path}")
+        logger.warning(f"{ID_PREFIX}: warn mode allowing {tool_name} on {path}")
       else:
         raise ValueError(message)
 
-    result = await base_fn(file_path, content)
+    result = await base_fn(*args)
     record_write(path)
     return result
 
-  guarded_write_workspace_file.__name__ = "write_workspace_file"
-  guarded_write_workspace_file.__doc__ = base_fn.__doc__
-  guarded_write_workspace_file._sightline_wrapped = True
-  guarded_write_workspace_file._sightline_unwrapped = base_fn
-  return guarded_write_workspace_file
-
-
-def _wrap_delete_file(
-  base_fn: Callable[..., Awaitable[str]],
-  llm: "llm_mod.LLM",
-  *,
-  mode: str | None = None,
-) -> Callable[..., Awaitable[str]]:
-  async def guarded_delete_file(file_path: str) -> str:
-    path = canonical_path(file_path)
-    read_gen, write_gen = get_generations(path)
-
-    if not can_mutate(path):
-      message = block_message(file_path, read_gen, write_gen)
-      logger.warning(f"{ID_PREFIX}: blocked delete_file for {path}")
-      await llm.emit_status(f"Sightline: blocked delete_file on {path} — read_file required")
-      if (mode or config.SIGHTLINE_MODE.value).lower() == "warn":
-        logger.warning(f"{ID_PREFIX}: warn mode allowing delete_file on {path}")
-      else:
-        raise ValueError(message)
-
-    result = await base_fn(file_path)
-    record_write(path)
-    return result
-
-  guarded_delete_file.__name__ = "delete_file"
-  guarded_delete_file.__doc__ = base_fn.__doc__
-  guarded_delete_file._sightline_wrapped = True
-  guarded_delete_file._sightline_unwrapped = base_fn
-  return guarded_delete_file
+  guarded.__name__ = tool_name
+  guarded.__doc__ = base_fn.__doc__
+  guarded._sightline_wrapped = True
+  guarded._sightline_unwrapped = base_fn
+  return guarded
 
 
 def install_guards(
@@ -410,7 +357,16 @@ def install_guards(
   if write_base is not None:
     _replace_local_tool(
       "write_file",
-      _wrap_write_file(write_base, llm, mode=mode, allow_create=allow_create),
+      _wrap_mutation(
+        write_base,
+        llm,
+        tool_name="write_file",
+        required_read_tool="read_file",
+        mode=mode,
+        allow_create=allow_create,
+        kind="scratch",
+        check_create_exempt=True,
+      ),
     )
     wrapped.append("write_file")
 
@@ -418,7 +374,14 @@ def install_guards(
   if delete_base is not None:
     _replace_local_tool(
       "delete_file",
-      _wrap_delete_file(delete_base, llm, mode=mode),
+      _wrap_mutation(
+        delete_base,
+        llm,
+        tool_name="delete_file",
+        required_read_tool="read_file",
+        mode=mode,
+        kind="scratch",
+      ),
     )
     wrapped.append("delete_file")
 
@@ -435,11 +398,15 @@ def install_guards(
     if write_workspace_base is not None:
       _replace_local_tool(
         "write_workspace_file",
-        _wrap_write_workspace_file(
+        _wrap_mutation(
           write_workspace_base,
           llm,
+          tool_name="write_workspace_file",
+          required_read_tool="read_workspace_file",
           mode=mode,
           allow_create=allow_create,
+          kind="workspace",
+          check_create_exempt=True,
         ),
       )
       wrapped.append("write_workspace_file")
