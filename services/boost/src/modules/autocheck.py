@@ -11,6 +11,7 @@ import chat as ch
 import config as boost_config
 import deliverable
 import log
+import research.orchestrate as orchestrate
 import research.workflow as workflow_mod
 import tools.registry
 from modules.diffscope import is_git_workspace, run_git_diff
@@ -55,6 +56,9 @@ is configured:
 - **Git diff context** — in a git repo, `git diff --stat` is included in audit context
 - **Path existence** — cited draft paths are verified with `read_workspace_file`
 - **Code block grounding** — drafts with fenced code but zero file paths are flagged
+- **Test hint** — when test files exist near changed paths, a non-blocking warning
+  suggests running tests with a command inferred from `pyproject.toml` or
+  `package.json` scripts when detectable
 
 Mechanical findings are structured blockers merged into the audit before delivery.
 Audit debug logs include `triggered`, `gate_reason`, `tool_calls`, and `verdict`
@@ -98,11 +102,6 @@ logger = log.setup_logger(ID_PREFIX)
 
 MIN_DELIVERABLE_SIGNALS = 2
 MIN_AUTOCHECK_MESSAGE_CHARS = 12
-
-CONTINUATION_RE = re.compile(
-  r"\b(?:continue|keep\s+going|go\s+on|proceed|carry\s+on|as\s+planned|same\s+as\s+before)\b",
-  re.IGNORECASE,
-)
 
 WORKSPACE_TOOL_NAMES = frozenset({
   "read_workspace_file",
@@ -216,7 +215,7 @@ Return only the revised answer for the user.
 
 
 class AuditFinding(BaseModel):
-  severity: Literal["critical", "major", "minor", "info"] = Field(
+  severity: Literal["critical", "major", "minor", "info", "warn"] = Field(
     description="How blocking the issue is for shipping the answer.",
   )
   message: str = Field(description="What is wrong or risky in the draft.")
@@ -247,17 +246,12 @@ class AuditDebug(BaseModel):
   verdict: Literal["pass", "revise", "skipped"] = "skipped"
 
 
-def _last_user_text(chat: "ch.Chat") -> str:
-  node = chat.match_one(role="user", index=-1)
-  return (node.content or "").strip() if node else ""
-
-
 def autocheck_gate_reason(chat: "ch.Chat") -> str:
   """Explain why autocheck would or would not run on this turn."""
   if not boost_config.AUTOCHECK_ENABLED.value:
     return "disabled"
 
-  text = _last_user_text(chat)
+  text = orchestrate.last_user_text(chat)
   if not text:
     return "empty_message"
   if deliverable.is_completion_trigger(chat):
@@ -268,7 +262,7 @@ def autocheck_gate_reason(chat: "ch.Chat") -> str:
     return "acknowledgment"
   if len(text) < MIN_AUTOCHECK_MESSAGE_CHARS:
     return "short_message"
-  if CONTINUATION_RE.search(text) and len(text) < 120:
+  if orchestrate.CONTINUATION_RE.search(text) and len(text) < 120:
     return "continuation"
   if not deliverable.is_coding_deliverable(chat):
     return "not_deliverable"
@@ -339,21 +333,6 @@ def extract_audit_symbols(*texts: str, limit: int = 8) -> list[str]:
 
 def _workspace_tool_path(args: dict) -> str:
   return (args.get("path") or args.get("file_path") or "").strip()
-
-
-def _cheap_llm(llm: "llm.LLM") -> "llm.LLM":
-  """Bare downstream client for inexpensive internal completions."""
-  import llm as llm_mod
-
-  return llm_mod.LLM(
-    url=llm.url,
-    headers=llm.headers,
-    query_params=llm.query_params,
-    model=llm.model,
-    params={},
-    messages=[{"role": "user", "content": ""}],
-    module=None,
-  )
 
 
 def should_revise(audit: AuditResult) -> bool:
@@ -448,6 +427,20 @@ def draft_has_code_blocks(text: str) -> bool:
   return bool(deliverable.CODE_BLOCK_RE.search(text))
 
 
+def collect_git_changed_paths() -> list[str]:
+  """Return repo-relative paths from git diff when workspace is a git repo."""
+  root = boost_config.WORKSPACE_ROOT.value
+  if not root or not is_git_workspace(root):
+    return []
+
+  result = run_git_diff(root)
+  if result is None:
+    return []
+
+  paths, _stat = result
+  return paths
+
+
 def collect_git_diff_context() -> str:
   """Return git diff --stat summary for audit context when workspace is a git repo."""
   root = boost_config.WORKSPACE_ROOT.value
@@ -472,6 +465,208 @@ def collect_git_diff_context() -> str:
       lines.append(f"- {path}")
   lines.append("</git_diff_stat>")
   return "\n".join(lines)
+
+
+def is_test_file(path: str) -> bool:
+  """Return True when a repo-relative path looks like a test file."""
+  normalized = path.replace("\\", "/")
+  name = Path(normalized).name.lower()
+  if name.startswith("test_") and name.endswith(".py"):
+    return True
+  if name.endswith("_test.py"):
+    return True
+  if ".test." in name or ".spec." in name:
+    return True
+  if "/__tests__/" in normalized or normalized.startswith("__tests__/"):
+    return True
+  return False
+
+
+def merge_anchor_paths(cited_paths: list[str], git_paths: list[str] | None = None) -> list[str]:
+  """Merge cited draft paths with git diff paths for nearby test discovery."""
+  merged: list[str] = []
+  seen: set[str] = set()
+  for path in [*cited_paths, *(git_paths or collect_git_changed_paths())]:
+    norm = deliverable.normalize_repo_path(path) or path
+    if norm and norm not in seen:
+      seen.add(norm)
+      merged.append(norm)
+  return merged
+
+
+def _nearby_test_candidates(anchor: str) -> list[Path]:
+  """Build heuristic candidate paths for tests related to an anchor file."""
+  anchor_path = Path(anchor)
+  stem = anchor_path.stem
+  parent = anchor_path.parent
+  candidates = [
+    parent / f"test_{stem}.py",
+    parent / f"{stem}_test.py",
+    parent / "tests" / f"test_{stem}.py",
+    parent / f"{stem}.test.ts",
+    parent / f"{stem}.test.js",
+    parent / f"{stem}.spec.ts",
+    parent / f"{stem}.spec.js",
+  ]
+
+  parts = list(anchor_path.parts)
+  if "src" in parts:
+    src_index = parts.index("src")
+    swapped = parts[:src_index] + ["tests"] + [f"test_{stem}.py"]
+    candidates.append(Path(*swapped))
+
+  tests_index = next((index for index, part in enumerate(parts) if part == "tests"), None)
+  if tests_index is not None and tests_index + 1 < len(parts):
+    module_stem = Path(parts[-1]).stem
+    if module_stem.startswith("test_"):
+      module_stem = module_stem[5:]
+    source_parts = parts[:tests_index] + ["src"] + parts[tests_index + 1 : -1] + [
+      f"{module_stem}.py",
+    ]
+    candidates.append(Path(*source_parts))
+
+  return candidates
+
+
+def find_nearby_test_files(anchor_paths: list[str], workspace_root: Path) -> list[str]:
+  """Heuristically locate test files near changed or cited paths."""
+  found: list[str] = []
+  seen: set[str] = set()
+
+  for anchor in anchor_paths:
+    normalized = deliverable.normalize_repo_path(anchor) or anchor
+    if is_test_file(normalized):
+      target = workspace_root / normalized
+      if target.is_file() and normalized not in seen:
+        seen.add(normalized)
+        found.append(normalized)
+      continue
+
+    for candidate in _nearby_test_candidates(normalized):
+      rel = candidate.as_posix()
+      if rel in seen:
+        continue
+      if (workspace_root / candidate).is_file():
+        seen.add(rel)
+        found.append(rel)
+
+  return found
+
+
+def _pyproject_has_pytest(content: str) -> bool:
+  lowered = content.lower()
+  return "[tool.pytest" in lowered or "pytest" in lowered
+
+
+def _package_json_test_script(package_json: Path) -> str | None:
+  try:
+    data = json.loads(package_json.read_text(encoding="utf-8"))
+  except (OSError, json.JSONDecodeError):
+    return None
+
+  scripts = data.get("scripts") or {}
+  test_script = scripts.get("test")
+  if not isinstance(test_script, str) or not test_script.strip():
+    return None
+  return test_script.strip()
+
+
+def _search_roots_for_paths(
+  anchor_paths: list[str],
+  test_files: list[str],
+  workspace_root: Path,
+) -> list[Path]:
+  roots: list[Path] = []
+  seen: set[str] = set()
+
+  for rel_path in [*anchor_paths, *test_files]:
+    current = (workspace_root / rel_path).parent
+    while True:
+      try:
+        current.relative_to(workspace_root)
+      except ValueError:
+        break
+      key = str(current)
+      if key not in seen:
+        seen.add(key)
+        roots.append(current)
+      if current == workspace_root:
+        break
+      current = current.parent
+
+  if workspace_root not in roots:
+    roots.append(workspace_root)
+  return roots
+
+
+def suggest_test_command(
+  test_files: list[str],
+  anchor_paths: list[str],
+  workspace_root: Path,
+) -> str:
+  """Infer a runnable test command from nearby pyproject.toml or package.json."""
+  if not test_files:
+    return ""
+
+  search_roots = _search_roots_for_paths(anchor_paths, test_files, workspace_root)
+
+  for start in search_roots:
+    for parent in [start, *start.parents]:
+      try:
+        parent.relative_to(workspace_root)
+      except ValueError:
+        break
+
+      package_json = parent / "package.json"
+      if package_json.is_file() and _package_json_test_script(package_json):
+        rel_parent = parent.relative_to(workspace_root)
+        if rel_parent == Path("."):
+          return "npm test"
+        return f"cd {rel_parent.as_posix()} && npm test"
+
+      pyproject = parent / "pyproject.toml"
+      if pyproject.is_file():
+        try:
+          content = pyproject.read_text(encoding="utf-8")
+        except OSError:
+          content = ""
+        if _pyproject_has_pytest(content):
+          targets = " ".join(test_files[:3])
+          rel_parent = parent.relative_to(workspace_root)
+          if rel_parent == Path("."):
+            return f"pytest {targets}"
+          return f"cd {rel_parent.as_posix()} && pytest {targets}"
+
+  return f"pytest {' '.join(test_files[:3])}"
+
+
+def suggest_running_tests(cited_paths: list[str]) -> list[AuditFinding]:
+  """Return a non-blocking warning when tests appear near changed paths."""
+  root = boost_config.WORKSPACE_ROOT.value
+  if not root:
+    return []
+
+  workspace_root = Path(root)
+  anchor_paths = merge_anchor_paths(cited_paths)
+  if not anchor_paths:
+    return []
+
+  test_files = find_nearby_test_files(anchor_paths, workspace_root)
+  if not test_files:
+    return []
+
+  command = suggest_test_command(test_files, anchor_paths, workspace_root)
+  preview = ", ".join(test_files[:3])
+  if len(test_files) > 3:
+    preview = f"{preview}, ..."
+
+  return [
+    AuditFinding(
+      severity="warn",
+      message=f"Consider running tests near changed paths ({preview})",
+      fix_hint=f"Run: {command}" if command else "Run the project's test suite before shipping.",
+    ),
+  ]
 
 
 def check_code_blocks_without_paths(
@@ -528,6 +723,7 @@ async def run_mechanical_preaudit(
 
   findings.extend(check_code_blocks_without_paths(draft, paths))
   findings.extend(await verify_draft_paths_exist(paths))
+  findings.extend(suggest_running_tests(paths))
 
   return git_context, findings
 
@@ -792,7 +988,7 @@ async def run_audit(
     git_diff_context=git_diff_context,
     mechanical_findings=mechanical_findings,
   )
-  intermediate = _cheap_llm(llm)
+  intermediate = orchestrate.cheap_llm(llm)
   result = await intermediate.chat_completion(
     prompt=AUDIT_PROMPT,
     conversation=str(chat),
@@ -835,7 +1031,7 @@ async def revise_draft(
   draft: str,
   audit: AuditResult,
 ) -> str:
-  intermediate = _cheap_llm(llm)
+  intermediate = orchestrate.cheap_llm(llm)
   revised = await intermediate.chat_completion(
     prompt=REVISE_PROMPT,
     conversation=str(chat),
@@ -861,7 +1057,7 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
     logger.debug(f"{ID_PREFIX}: Pass-through — {gate_reason} ({debug.model_dump()})")
     return await workflow_mod.complete_or_defer(llm, module_cfg)
 
-  message = _last_user_text(chat)
+  message = orchestrate.last_user_text(chat)
   if not message:
     logger.warning(f"{ID_PREFIX}: No user message found, passing through")
     return await workflow_mod.complete_or_defer(llm, module_cfg)

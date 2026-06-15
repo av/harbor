@@ -202,14 +202,7 @@ def is_research_heavy(text: str) -> bool:
 
 def should_skip_research(chat: "ch.Chat") -> bool:
   """Pass through without web research on low-value follow-up turns."""
-  text = orchestrate.last_user_text(chat)
-  if not text or len(text) < 4:
-    return True
-  if deliverable.is_acknowledgment(text):
-    return True
-  if orchestrate.CONTINUATION_RE.search(text) and len(text) < 120:
-    return True
-  return False
+  return orchestrate.should_skip_low_value_turn(chat)
 
 
 def needs_research(chat: "ch.Chat", llm: "llm.LLM") -> bool:
@@ -249,10 +242,6 @@ def _first_hop_search_limit(budget: budget_mod.ResearchBudget) -> int:
   return max(1, budget.max_searches // 2)
 
 
-def _render_research_summary(brief: brief_mod.ResearchBrief) -> str:
-  return brief_mod.render_to_system(brief)
-
-
 async def detect_gaps(
   chat: "ch.Chat",
   llm: "llm.LLM",
@@ -263,7 +252,7 @@ async def detect_gaps(
   result = await intermediate.chat_completion(
     prompt=GAP_DETECTION_PROMPT,
     message=message,
-    research_summary=_render_research_summary(brief),
+    research_summary=brief_mod.render_to_system(brief),
     schema=GapAnalysis,
     params={"temperature": 0.2},
     resolve=True,
@@ -284,7 +273,7 @@ async def synthesize_brief(
   result = await intermediate.chat_completion(
     prompt=SYNTHESIS_PROMPT,
     message=message,
-    research_summary=_render_research_summary(brief),
+    research_summary=brief_mod.render_to_system(brief),
     schema=StructuredBrief,
     params={"temperature": 0.2},
     resolve=True,
@@ -405,9 +394,7 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
     queries = await plan_search_queries(chat, llm, message)
   except Exception as exc:
     logger.error(f"{ID_PREFIX}: query planning failed: {exc}")
-    brief = brief_mod.ResearchBrief(query=message)
-    brief.add_note(f"Query planning failed: {exc}")
-    brief = brief_mod.finalize_brief(brief)
+    brief = workflow_mod.failure_brief(message, f"Query planning failed: {exc}")
     await llm.emit_status(f"{STATUS_PREFIX}: query planning failed, continuing without live data...")
     chat.system(brief_mod.render_to_system(brief))
     return await workflow_mod.complete_or_defer(llm, config)
@@ -420,9 +407,7 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
     brief = await run_research_loop(chat, llm, message, queries, budget)
   except Exception as exc:
     logger.error(f"{ID_PREFIX}: research loop failed: {exc}")
-    brief = brief_mod.ResearchBrief(query=message)
-    brief.add_note(f"Research loop failed: {exc}")
-    brief = brief_mod.finalize_brief(brief)
+    brief = workflow_mod.failure_brief(message, f"Research loop failed: {exc}")
     await llm.emit_status(f"{STATUS_PREFIX}: research loop failed, continuing without live data...")
 
   if not brief.query:

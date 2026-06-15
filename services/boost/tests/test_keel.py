@@ -192,7 +192,7 @@ class TestKeelExtraction:
     llm.query_params = {}
     llm.model = "test-model"
 
-    with patch.object(keel, "_cheap_llm") as cheap_llm:
+    with patch("research.orchestrate.cheap_llm") as cheap_llm:
       cheap = MagicMock()
       cheap.chat_completion = AsyncMock(
         return_value={

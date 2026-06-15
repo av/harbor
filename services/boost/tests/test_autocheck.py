@@ -604,6 +604,152 @@ class TestMechanicalPreaudit:
     assert "<mechanical_preaudit>" in enriched
     assert "Missing path" in enriched
 
+  def test_apply_mechanical_findings_keeps_pass_for_warn_only(self):
+    audit = autocheck.AuditResult(verdict="pass", summary="Looks good", findings=[])
+    warn_only = [
+      autocheck.AuditFinding(
+        severity="warn",
+        message="Consider running tests near changed paths (tests/test_widget.py)",
+        fix_hint="Run: pytest tests/test_widget.py",
+      )
+    ]
+    merged = autocheck.apply_mechanical_findings(audit, warn_only)
+    assert merged.verdict == "pass"
+    assert merged.findings[0].severity == "warn"
+
+
+class TestTestHint:
+  def test_is_test_file_detects_common_patterns(self):
+    assert autocheck.is_test_file("tests/test_widget.py")
+    assert autocheck.is_test_file("widget_test.py")
+    assert autocheck.is_test_file("src/widget.test.ts")
+    assert autocheck.is_test_file("src/__tests__/widget.spec.js")
+    assert not autocheck.is_test_file("src/widget.py")
+
+  def test_find_nearby_test_files_uses_src_to_tests_swap(self):
+    with tempfile.TemporaryDirectory() as workspace:
+      root = Path(workspace)
+      module = root / "services" / "boost" / "src" / "modules" / "widget.py"
+      test_file = root / "services" / "boost" / "tests" / "test_widget.py"
+      module.parent.mkdir(parents=True)
+      test_file.parent.mkdir(parents=True)
+      module.write_text("def widget():\n  return 1\n", encoding="utf-8")
+      test_file.write_text("def test_widget():\n  assert True\n", encoding="utf-8")
+
+      found = autocheck.find_nearby_test_files(
+        ["services/boost/src/modules/widget.py"],
+        root,
+      )
+
+    assert found == ["services/boost/tests/test_widget.py"]
+
+  def test_find_nearby_test_files_accepts_direct_test_paths(self):
+    with tempfile.TemporaryDirectory() as workspace:
+      root = Path(workspace)
+      test_file = root / "tests" / "test_widget.py"
+      test_file.parent.mkdir(parents=True)
+      test_file.write_text("def test_widget():\n  assert True\n", encoding="utf-8")
+
+      found = autocheck.find_nearby_test_files(["tests/test_widget.py"], root)
+
+    assert found == ["tests/test_widget.py"]
+
+  def test_suggest_test_command_from_pyproject_pytest(self):
+    with tempfile.TemporaryDirectory() as workspace:
+      root = Path(workspace)
+      (root / "pyproject.toml").write_text(
+        "[tool.pytest.ini_options]\ntestpaths = [\"tests\"]\n",
+        encoding="utf-8",
+      )
+      command = autocheck.suggest_test_command(
+        ["tests/test_widget.py"],
+        ["src/widget.py"],
+        root,
+      )
+
+    assert command == "pytest tests/test_widget.py"
+
+  def test_suggest_test_command_from_package_json_script(self):
+    with tempfile.TemporaryDirectory() as workspace:
+      root = Path(workspace)
+      app_dir = root / "app"
+      app_dir.mkdir()
+      (app_dir / "package.json").write_text(
+        '{"scripts": {"test": "vitest run"}}',
+        encoding="utf-8",
+      )
+      command = autocheck.suggest_test_command(
+        ["app/src/widget.test.ts"],
+        ["app/src/widget.ts"],
+        root,
+      )
+
+    assert command == "cd app && npm test"
+
+  def test_suggest_running_tests_emits_warn_finding(self):
+    with tempfile.TemporaryDirectory() as workspace:
+      root = Path(workspace)
+      module = root / "src" / "widget.py"
+      test_file = root / "tests" / "test_widget.py"
+      module.parent.mkdir(parents=True)
+      test_file.parent.mkdir(parents=True)
+      module.write_text("def widget():\n  return 1\n", encoding="utf-8")
+      test_file.write_text("def test_widget():\n  assert True\n", encoding="utf-8")
+      (root / "pyproject.toml").write_text(
+        "[tool.pytest.ini_options]\ntestpaths = [\"tests\"]\n",
+        encoding="utf-8",
+      )
+
+      original = config.WORKSPACE_ROOT.__value__
+      try:
+        config.WORKSPACE_ROOT.__value__ = str(root)
+        findings = autocheck.suggest_running_tests(["src/widget.py"])
+      finally:
+        config.WORKSPACE_ROOT.__value__ = original
+
+    assert len(findings) == 1
+    assert findings[0].severity == "warn"
+    assert "consider running tests" in findings[0].message.lower()
+    assert "pytest tests/test_widget.py" in findings[0].fix_hint
+
+  def test_suggest_running_tests_empty_without_workspace(self):
+    original = config.WORKSPACE_ROOT.__value__
+    try:
+      config.WORKSPACE_ROOT.__value__ = ""
+      findings = autocheck.suggest_running_tests(["src/widget.py"])
+    finally:
+      config.WORKSPACE_ROOT.__value__ = original
+
+    assert findings == []
+
+  @pytest.mark.asyncio
+  async def test_run_mechanical_preaudit_includes_test_hint(self):
+    with tempfile.TemporaryDirectory() as workspace:
+      root = Path(workspace)
+      module = root / "src" / "widget.py"
+      test_file = root / "tests" / "test_widget.py"
+      module.parent.mkdir(parents=True)
+      test_file.parent.mkdir(parents=True)
+      module.write_text("def widget():\n  return 1\n", encoding="utf-8")
+      test_file.write_text("def test_widget():\n  assert True\n", encoding="utf-8")
+      (root / "pyproject.toml").write_text(
+        "[tool.pytest.ini_options]\ntestpaths = [\"tests\"]\n",
+        encoding="utf-8",
+      )
+
+      original = config.WORKSPACE_ROOT.__value__
+      try:
+        config.WORKSPACE_ROOT.__value__ = str(root)
+        _git_context, findings = await autocheck.run_mechanical_preaudit(
+          "Update src/widget.py with a helper.",
+          ["src/widget.py"],
+        )
+      finally:
+        config.WORKSPACE_ROOT.__value__ = original
+
+    assert any(finding.severity == "warn" for finding in findings)
+    assert any("consider running tests" in finding.message.lower() for finding in findings)
+
 
 class TestAuditAndRevise:
   @pytest.mark.asyncio
@@ -617,7 +763,7 @@ class TestAuditAndRevise:
     llm.query_params = {}
     llm.model = "test-model"
 
-    with patch.object(autocheck, "_cheap_llm") as cheap_llm:
+    with patch("research.orchestrate.cheap_llm") as cheap_llm:
       cheap = MagicMock()
       cheap.chat_completion = AsyncMock(
         return_value={
@@ -657,7 +803,7 @@ class TestAuditAndRevise:
 
     try:
       config.WORKSPACE_ROOT.__value__ = "/workspace"
-      with patch.object(autocheck, "_cheap_llm") as cheap_llm:
+      with patch("research.orchestrate.cheap_llm") as cheap_llm:
         cheap = MagicMock()
         cheap.chat_completion = AsyncMock(
           return_value={"verdict": "pass", "summary": "Ship it", "findings": []},
@@ -701,7 +847,7 @@ class TestAuditAndRevise:
       )
     ]
 
-    with patch.object(autocheck, "_cheap_llm") as cheap_llm:
+    with patch("research.orchestrate.cheap_llm") as cheap_llm:
       cheap = MagicMock()
       cheap.chat_completion = AsyncMock(
         return_value={"verdict": "pass", "summary": "Ship it", "findings": []},
@@ -737,7 +883,7 @@ class TestAuditAndRevise:
 
     try:
       config.WORKSPACE_ROOT.__value__ = "/workspace"
-      with patch.object(autocheck, "_cheap_llm") as cheap_llm:
+      with patch("research.orchestrate.cheap_llm") as cheap_llm:
         cheap = MagicMock()
         cheap.chat_completion = AsyncMock(
           return_value={"verdict": "pass", "summary": "Ship it", "findings": []},
@@ -779,7 +925,7 @@ class TestAuditAndRevise:
       ],
     )
 
-    with patch.object(autocheck, "_cheap_llm") as cheap_llm:
+    with patch("research.orchestrate.cheap_llm") as cheap_llm:
       cheap = MagicMock()
       cheap.chat_completion = AsyncMock(return_value="Revised answer with correct path.")
       cheap_llm.return_value = cheap

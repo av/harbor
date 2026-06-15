@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Awaitable, TypeVar
 from pydantic import BaseModel, Field
 
 import config
+import deliverable
 import log
 import research.brief as brief_mod
 import research.budget as budget_mod
@@ -32,6 +33,16 @@ CONTINUATION_RE = re.compile(
 def last_user_text(chat: "ch.Chat") -> str:
   node = chat.match_one(role="user", index=-1)
   return (node.content or "").strip() if node else ""
+
+
+def should_skip_low_value_turn(chat: "ch.Chat") -> bool:
+  """Skip research and similar modules on acks and short continuations."""
+  text = last_user_text(chat)
+  if not text or len(text) < 4:
+    return True
+  if deliverable.is_acknowledgment(text):
+    return True
+  return bool(CONTINUATION_RE.search(text) and len(text) < 120)
 
 
 def cheap_llm(llm: "llm.LLM") -> "llm.LLM":

@@ -10,6 +10,7 @@ import chat as ch
 import config as boost_config
 import deliverable
 import log
+import research.orchestrate as orchestrate
 import research.workflow as workflow_mod
 import tools.registry
 from state import request as request_state
@@ -73,15 +74,6 @@ docker run \\
 """
 
 logger = log.setup_logger(ID_PREFIX)
-
-SKIP_MESSAGE_RE = re.compile(
-  r"^\s*(?:"
-  r"thanks?(?:\s+you)?|thank\s+you|thx|ok(?:ay)?|cool|great|perfect|sounds?\s+good|"
-  r"got\s+it|understood|yes|no|yep|nope|sure|continue|go\s+on|go\s+ahead|"
-  r"proceed|keep\s+going|lgtm|looks?\s+good|next"
-  r")\s*[.!]?\s*$",
-  re.IGNORECASE,
-)
 
 BRIEF_MARKER_TAG = "keel_brief"
 BRIEF_MARKER_OPEN = f'<{BRIEF_MARKER_TAG} hidden="true">'
@@ -171,11 +163,6 @@ def _request_store(name: str, default):
   return getattr(request.state, name)
 
 
-def _last_user_text(chat: "ch.Chat") -> str:
-  node = chat.match_one(role="user", index=-1)
-  return (node.content or "").strip() if node else ""
-
-
 def count_user_turns(chat: "ch.Chat") -> int:
   return len(chat.match(role="user"))
 
@@ -184,7 +171,7 @@ def is_substantive_message(text: str) -> bool:
   text = (text or "").strip()
   if not text or len(text) < 4:
     return False
-  if SKIP_MESSAGE_RE.match(text):
+  if deliverable.is_acknowledgment(text):
     return False
   return True
 
@@ -431,26 +418,12 @@ def needs_keel(chat: "ch.Chat") -> bool:
   return deliverable.is_coding_deliverable(chat)
 
 
-def _cheap_llm(llm: "llm.LLM") -> "llm.LLM":
-  import llm as llm_mod
-
-  return llm_mod.LLM(
-    url=llm.url,
-    headers=llm.headers,
-    query_params=llm.query_params,
-    model=llm.model,
-    params={},
-    messages=[{"role": "user", "content": ""}],
-    module=None,
-  )
-
-
 async def extract_task_brief(
   chat: "ch.Chat",
   llm: "llm.LLM",
   message: str,
 ) -> TaskBrief:
-  intermediate = _cheap_llm(llm)
+  intermediate = orchestrate.cheap_llm(llm)
   result = await intermediate.chat_completion(
     prompt=TASK_BRIEF_PROMPT,
     conversation=str(chat),
@@ -474,7 +447,7 @@ def _fallback_paths(message: str) -> list[str]:
   paths: list[str] = []
   seen: set[str] = set()
   for match in deliverable.FILE_PATH_RE.finditer(message):
-    path = re.sub(r"^[\s`'\"(]+", "", match.group(0).strip()).rstrip("`'\"")
+    path = deliverable.normalize_repo_path(match.group(0))
     if path and path not in seen:
       seen.add(path)
       paths.append(path)
@@ -534,7 +507,7 @@ def _register_finish_wrapper(brief: TaskBrief, drift_detected: bool) -> None:
 
 
 async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
-  message = _last_user_text(chat)
+  message = orchestrate.last_user_text(chat)
   if not message:
     logger.warning(f"{ID_PREFIX}: No user message found, passing through")
     return await workflow_mod.complete_or_defer(llm, config)

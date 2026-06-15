@@ -123,13 +123,10 @@ def _uses_llm_trigger() -> bool:
 
 def should_skip_research(chat: "ch.Chat") -> bool:
   """Pass through without web research on low-value follow-up turns."""
+  if orchestrate.should_skip_low_value_turn(chat):
+    return True
+
   text = orchestrate.last_user_text(chat)
-  if not text or len(text) < 4:
-    return True
-  if deliverable.is_acknowledgment(text):
-    return True
-  if orchestrate.CONTINUATION_RE.search(text) and len(text) < 120:
-    return True
   if deliverable.is_coding_deliverable(chat) and not deliverable.has_research_signals(text):
     return True
   brief = keel.get_stored_brief() or keel.hydrate_brief_from_chat(chat)
@@ -238,9 +235,7 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
     queries = await extract_search_queries(chat, llm, message)
   except Exception as exc:
     logger.error(f"{ID_PREFIX}: query extraction failed: {exc}")
-    brief = brief_mod.ResearchBrief(query=message)
-    brief.add_note(f"Query extraction failed: {exc}")
-    brief = brief_mod.finalize_brief(brief)
+    brief = workflow_mod.failure_brief(message, f"Query extraction failed: {exc}")
     await llm.emit_status(f"{STATUS_PREFIX}: query planning failed, continuing without live data...")
     chat.system(brief_mod.render_to_system(brief))
     return await workflow_mod.complete_or_defer(llm, config)
