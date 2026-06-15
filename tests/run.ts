@@ -666,7 +666,9 @@ function dockerRunArgs(
   stagedRepoDir: string,
 ): string[] {
   // Mount only the bounded git-tracked artifact — never the host working tree.
-  const repoMount = `${stagedRepoDir}:/opt/harbor-test/repo:ro${probe.mountFlag}`;
+  // Docker volume options are comma-separated (`ro,z`), not chained (`ro:z`).
+  const repoOpts = probe.mountFlag ? `ro,${probe.mountFlag.slice(1)}` : "ro";
+  const repoMount = `${stagedRepoDir}:/opt/harbor-test/repo:${repoOpts}`;
   const flags: string[] = [
     probe.runtime,
     "run",
