@@ -235,6 +235,30 @@
 - label: shared research package enforces per-request search URL-read and character budgets and renders gathered results into a research_brief system block
   command: cd services/boost && uv run pytest tests/test_agentic_infra.py::TestResearchBudget tests/test_agentic_infra.py::TestResearchBrief -q --tb=no
   tags: [implemented]
+- label: grep_workspace is an opt-in portable tool when HARBOR_BOOST_WORKSPACE_ROOT is set: searches workspace files with optional glob and max_matches caps and rejects paths outside the workspace root
+  command: cd services/boost && uv run pytest tests/test_agentic_infra.py::TestWorkspaceFileTool::test_grep_workspace_finds_pattern tests/test_agentic_infra.py::TestWorkspaceFileTool::test_grep_workspace_respects_max_matches tests/test_agentic_infra.py::TestWorkspaceFileTool::test_grep_workspace_path_jail tests/test_agentic_infra.py::TestWorkspaceFileTool::test_selected_tools_includes_grep_when_configured -q --tb=no
+  tags: [spec, implemented]
+- label: write_workspace_file is an opt-in portable tool not in the default tool list when HARBOR_BOOST_WORKSPACE_ROOT is set: writes files inside the workspace root with a size cap and rejects paths outside the root
+  command: cd services/boost && uv run pytest tests/test_agentic_infra.py::TestWorkspaceFileTool::test_write_workspace_file_writes_file tests/test_agentic_infra.py::TestWorkspaceFileTool::test_write_workspace_file_enforces_size_cap tests/test_agentic_infra.py::TestWorkspaceFileTool::test_default_tools_omits_workspace_writer -q --tb=no
+  tags: [spec, implemented]
+- label: diffscope grounds scope checks in git repos by collecting changed paths from git diff --name-only and git diff --stat with timeout and nonzero-exit fallback to cited draft paths
+  command: cd services/boost && uv run pytest tests/test_diffscope.py::TestGitDiffGrounding -q --tb=no
+  tags: [spec, implemented]
+- label: sightline applies read-before-edit guards to read_workspace_file and write_workspace_file when HARBOR_BOOST_WORKSPACE_ROOT is set and workspace guarding is enabled
+  command: cd services/boost && uv run pytest tests/test_sightline.py::TestSightlineWorkspace -q --tb=no
+  tags: [spec, implemented]
+- label: keel persists TaskBrief state across stateless turns via a hidden keel_brief system marker that round-trips through chat history and hydrates stored brief state on subsequent requests
+  command: cd services/boost && uv run pytest tests/test_keel.py::TestKeelBriefPersistence -q --tb=no
+  tags: [spec, implemented]
+- label: research orchestration parallelizes multi-query web_search calls and multi-URL page reads with concurrency caps while respecting per-request search and read budgets
+  command: cd services/boost && uv run pytest tests/test_orchestrate.py::TestOrchestrateParallelFetch -q --tb=no
+  tags: [spec, implemented]
+- label: ponytail skips the second research hop when the first hop gathers enough characters per HARBOR_BOOST_PONYTAIL_EARLY_EXIT_CHARS
+  command: cd services/boost && uv run pytest tests/test_orchestrate.py::TestPonytailEarlyExit -q --tb=no
+  tags: [spec, implemented]
+- label: autocheck runs mechanical pre-audit before the LLM audit on deliverable turns: flags code without cited paths or missing workspace paths, includes git diff stat context, and forces revise when blockers are found
+  command: cd services/boost && uv run pytest tests/test_autocheck.py::TestMechanicalPreaudit -q --tb=no
+  tags: [spec, implemented]
 
 # testing
 - label: tests use a Deno orchestrator running sequential bash suites across containerized distros
