@@ -16,8 +16,30 @@ BOOST_DIR="${HARBOR_TEST_REPO}/services/boost"
 AGENTIC_MODE="${HARBOR_TEST_AGENTIC_MODE:-container}"
 PYTEST_TIMEOUT_SECONDS="${HARBOR_TEST_AGENTIC_TIMEOUT:-600}"
 
+# Matrix rows run this suite without 01-install; bootstrap harbor when needed.
+ensure_harbor_cli() {
+  if command -v harbor >/dev/null 2>&1; then
+    return 0
+  fi
+  suite_log "harbor not on PATH; bootstrapping from staged repo (skip requirements)..."
+  HARBOR_INSTALL_SOURCE_PATH="${HARBOR_TEST_REPO}" \
+    HARBOR_REQUIREMENTS_PATH="${HARBOR_TEST_REPO}/requirements.sh" \
+    HARBOR_INSTALL_PATH="${HARBOR_HOME:-${HARBOR_TEST_REPO}}" \
+    HARBOR_INSTALL_VERSION=source \
+    bash "${HARBOR_TEST_REPO}/install.sh" --skip-requirements
+  hash -r || true
+  command -v harbor >/dev/null 2>&1 || {
+    echo "[boost-agentic-smoke] ERROR: harbor install did not place CLI on PATH" >&2
+    exit 1
+  }
+}
+
 # shellcheck source=../lib/boost-agentic.sh
 source "${HARBOR_TEST_REPO}/tests/lib/boost-agentic.sh"
+
+if [[ "${AGENTIC_MODE}" == "container" ]]; then
+  ensure_harbor_cli
+fi
 
 cleanup() {
   local rc=$?
