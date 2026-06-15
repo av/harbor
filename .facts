@@ -301,6 +301,21 @@
 - label: diffscope revise_with_correction prompt includes explicit allowed_paths forbidden_paths out_of_scope_paths and git_evidence sections built from user scope violations and workspace git diff
   command: cd services/boost && uv run pytest tests/test_diffscope.py::TestWorkspaceAndNotes::test_build_revise_scope_sections_lists_allowed_forbidden_and_git_evidence -q --tb=no
   tags: [implemented]
+- label: agentic modules record optional per-module debug payloads on request.state via research.debug_metrics: triggered or skipped status, reason, duration_ms, and module-specific extras under keys like caveman_debug
+  command: cd services/boost && uv run pytest tests/test_agentic_debug_metrics.py -q --tb=no
+  tags: [implemented]
+- label: autocheck supports HARBOR_BOOST_AUTOCHECK_MAX_REVISE_PASSES: configurable revise passes after audit verdict revise clamped to 0-2; HARBOR_BOOST_AUTOCHECK_STRICT true adds one extra pass still capped at 2
+  command: cd services/boost && uv run pytest tests/test_autocheck.py::TestAutocheckGate::test_clamp_max_revise_passes_caps_at_two tests/test_autocheck.py::TestAutocheckGate::test_effective_max_revise_passes_defaults_to_one tests/test_autocheck.py::TestAutocheckGate::test_effective_max_revise_passes_adds_one_in_strict_mode tests/test_autocheck.py::TestAutocheckGate::test_effective_max_revise_passes_stays_capped_when_strict_and_config_two -q --tb=no
+  tags: [implemented]
+- label: diffscope supports HARBOR_BOOST_DIFFSCOPE_ALLOW_COLLATERAL: when true out-of-scope files against hinted scope emit collateral warnings unless the user said only X; when false any out-of-scope path triggers a scope revision
+  command: cd services/boost && uv run pytest tests/test_diffscope.py::TestCollateralViolations::test_partition_treats_hinted_out_of_scope_as_collateral_by_default tests/test_diffscope.py::TestCollateralViolations::test_partition_blocks_hinted_out_of_scope_when_collateral_disabled tests/test_diffscope.py::TestCollateralViolations::test_apply_warns_on_collateral_without_revision tests/test_diffscope.py::TestCollateralViolations::test_apply_revises_hinted_out_of_scope_when_collateral_disabled -q --tb=no
+  tags: [implemented]
+- label: deliverable has_research_signals requires a research keyword plus question mark, a version pattern, a package or product mention, or a URL; bare questions such as What does this code do? do not trigger research modules
+  command: cd services/boost && uv run pytest tests/test_agentic_infra.py::TestDeliverableBorderlineCases::test_bare_questions_without_research_context_are_not_research_signals tests/test_agentic_infra.py::TestDeliverableBorderlineCases::test_research_signal_keywords_detected tests/test_agentic_infra.py::TestDeliverableBorderlineCases::test_research_signals_require_keyword_question_version_or_package -q --tb=no
+  tags: [implemented]
+- label: shared research fetch retries web_search and read_url once after transient HTTP failures (timeout or connect error) with a one second backoff and does not retry non-transient errors
+  command: cd services/boost && uv run pytest tests/test_agentic_infra.py::TestResearchFetch::test_web_search_retries_once_on_transient_failure tests/test_agentic_infra.py::TestResearchFetch::test_web_search_does_not_retry_non_transient_failures tests/test_agentic_infra.py::TestResearchFetch::test_read_url_retries_jina_once_on_transient_failure tests/test_agentic_infra.py::TestResearchFetch::test_read_url_retries_direct_once_on_transient_failure -q --tb=no
+  tags: [implemented]
 
 # testing
 - label: tests use a Deno orchestrator running sequential bash suites across containerized distros
