@@ -283,6 +283,9 @@
 - label: keel tracks met acceptance criteria by keyword-matching assistant messages against each criterion and renders landing checklist checkboxes as [x]/[ ] with a met count; progress syncs into the hidden keel_brief marker
   command: cd services/boost && uv run pytest tests/test_keel.py::TestKeelMetCriteria tests/test_keel.py::TestKeelApply::test_apply_landing_checklist_marks_met_criteria_from_assistant_history tests/test_keel.py::TestKeelApply::test_finish_wrapper_prepends_checklist -q --tb=no
   tags: [implemented]
+- label: keel respects HARBOR_BOOST_KEEL_MAX_CONSTRAINTS when rendering task_anchor constraints: limits how many constraints appear in the anchor block (default 6) and summarizes overflow as +N more
+  command: cd services/boost && uv run pytest tests/test_keel.py::TestKeelBriefRendering::test_render_anchor_block_truncates_constraints_list tests/test_keel.py::TestKeelBriefRendering::test_render_anchor_block_respects_max_constraints_config -q --tb=no
+  tags: [implemented]
 - label: research orchestration parallelizes multi-query web_search calls and multi-URL page reads with concurrency caps while respecting per-request search and read budgets
   command: cd services/boost && uv run pytest tests/test_orchestrate.py::TestOrchestrateParallelFetch -q --tb=no
   tags: [spec, implemented]
