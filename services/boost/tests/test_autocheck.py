@@ -1784,7 +1784,7 @@ class TestAutocheckApply:
     llm.emit_message.assert_awaited_once_with("Revised implementation")
 
   @pytest.mark.asyncio
-  async def test_apply_prepends_strict_warning_when_blockers_remain(self):
+  async def test_apply_autocheck_strict_prepends_warning_after_max_revise_passes(self):
     chat = ch.Chat.from_conversation([
       {"role": "user", "content": "Implement retry helper in services/boost/src/utils.py"},
     ])
@@ -1838,8 +1838,12 @@ class TestAutocheckApply:
       config.AUTOCHECK_MAX_REVISE_PASSES.__value__ = original_revise
 
     assert revise.await_count == 2
+    status_messages = [call.args[0] for call in llm.emit_status.await_args_list]
+    assert "Autocheck: revising (1/2)..." in status_messages
+    assert "Autocheck: revising (2/2)..." in status_messages
     emitted = llm.emit_message.await_args.args[0]
     assert emitted.startswith("> **Autocheck warning:**")
+    assert "Unresolved critical or major findings remain after revision" in emitted
     assert "Second revision" in emitted
     assert "[major] Missing import" in emitted
 
