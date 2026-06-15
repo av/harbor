@@ -54,6 +54,10 @@ deliverable verification or `diffscope` for file-scope enforcement.
 
 - `enabled` — when false, pass through without anchoring. Default: `true`
 - `anchor_every` — inject `<task_anchor>` every N user turns (turn 1 never). Default: `2`
+- `keel_refresh` — when true, re-extract the `TaskBrief` from the current
+  conversation and replace the hidden `<keel_brief>` marker. Resets met
+  acceptance-criteria tracking. Default: `false`. Overridable per request via
+  `@boost_keel_refresh`.
 
 ```bash
 harbor boost modules add keel
@@ -224,6 +228,26 @@ def store_brief(brief: TaskBrief) -> None:
   _request_store("keel_task_brief", brief.model_dump())
 
 
+def clear_brief_state() -> None:
+  """Drop stored brief and met-criteria progress for a forced refresh."""
+  request = request_state.get()
+  if request is None:
+    return
+
+  setattr(request.state, "keel_task_brief", None)
+  setattr(request.state, "keel_met_criteria", [])
+
+
+def should_refresh_brief(llm: "llm.LLM") -> bool:
+  """Return True when @boost_keel_refresh requests a brief re-extraction."""
+  value = llm.boost_params.get("keel_refresh")
+  if value is None:
+    return False
+  if isinstance(value, bool):
+    return value
+  return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
 def render_brief_marker(brief: TaskBrief, met_criteria: set[int] | None = None) -> str:
   payload = brief.model_dump()
   if met_criteria:
@@ -306,6 +330,22 @@ def hydrate_brief_from_chat(chat: "ch.Chat") -> TaskBrief | None:
   return None
 
 
+def replace_brief_marker(chat: "ch.Chat", brief: TaskBrief) -> bool:
+  """Replace an existing hidden brief marker in-place; return True when updated."""
+  for node in chat.plain():
+    if node.role != "system":
+      continue
+    if _brief_marker_payload(node.content or "") is None:
+      continue
+
+    met = get_met_criteria()
+    node.content = render_brief_marker(brief, met)
+    logger.debug(f"{ID_PREFIX}: replaced hidden brief marker in chat")
+    return True
+
+  return False
+
+
 def inject_brief_marker(chat: "ch.Chat", brief: TaskBrief) -> None:
   if chat_has_brief_marker(chat):
     return
@@ -313,6 +353,13 @@ def inject_brief_marker(chat: "ch.Chat", brief: TaskBrief) -> None:
   met = get_met_criteria()
   chat.system(render_brief_marker(brief, met))
   logger.debug(f"{ID_PREFIX}: injected hidden brief marker into chat")
+
+
+def upsert_brief_marker(chat: "ch.Chat", brief: TaskBrief, *, replace: bool = False) -> None:
+  if replace and replace_brief_marker(chat, brief):
+    return
+
+  inject_brief_marker(chat, brief)
 
 
 def should_inject_anchor(user_turns: int) -> bool:
@@ -494,10 +541,13 @@ async def ensure_task_brief(
   chat: "ch.Chat",
   llm: "llm.LLM",
   message: str,
+  *,
+  force_refresh: bool = False,
 ) -> TaskBrief | None:
-  existing = get_stored_brief()
-  if existing is not None:
-    return existing
+  if not force_refresh:
+    existing = get_stored_brief()
+    if existing is not None:
+      return existing
 
   if not is_substantive_message(message):
     return None
@@ -516,9 +566,15 @@ async def ensure_task_brief(
   if not brief.in_scope_paths:
     brief.in_scope_paths = _fallback_paths(message)
 
+  if force_refresh:
+    store_met_criteria(set())
+
   store_brief(brief)
-  inject_brief_marker(chat, brief)
-  logger.info(f"{ID_PREFIX}: stored task brief with {len(brief.acceptance_criteria)} criteria")
+  upsert_brief_marker(chat, brief, replace=force_refresh)
+  action = "refreshed" if force_refresh else "stored"
+  logger.info(
+    f"{ID_PREFIX}: {action} task brief with {len(brief.acceptance_criteria)} criteria"
+  )
   return brief
 
 
@@ -548,7 +604,12 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
     logger.warning(f"{ID_PREFIX}: No user message found, passing through")
     return await workflow_mod.complete_or_defer(llm, config)
 
-  brief = get_stored_brief() or hydrate_brief_from_chat(chat)
+  force_refresh = should_refresh_brief(llm)
+  if force_refresh:
+    clear_brief_state()
+    brief = None
+  else:
+    brief = get_stored_brief() or hydrate_brief_from_chat(chat)
 
   if not needs_keel(chat) and brief is None:
     logger.debug(f"{ID_PREFIX}: Pass-through — not a coding deliverable turn")
@@ -557,9 +618,12 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
   user_turns = count_user_turns(chat)
   drift_detected = False
 
-  if brief is None and is_substantive_message(message):
-    await llm.emit_status("Keel: extracting task brief...")
-    brief = await ensure_task_brief(chat, llm, message)
+  if (brief is None or force_refresh) and is_substantive_message(message):
+    if force_refresh:
+      await llm.emit_status("Keel: refreshing task brief...")
+    else:
+      await llm.emit_status("Keel: extracting task brief...")
+    brief = await ensure_task_brief(chat, llm, message, force_refresh=force_refresh)
 
   if brief is None:
     return await workflow_mod.complete_or_defer(llm, config)

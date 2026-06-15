@@ -185,6 +185,50 @@ class TestKeelBriefRendering:
     assert "src/widget.py" in rendered
 
 
+class TestKeelRefreshParam:
+  def test_should_refresh_brief_reads_boost_params(self):
+    llm = MagicMock()
+    llm.boost_params = {"keel_refresh": "true"}
+    assert keel.should_refresh_brief(llm)
+
+    llm.boost_params = {"keel_refresh": "false"}
+    assert not keel.should_refresh_brief(llm)
+
+    llm.boost_params = {}
+    assert not keel.should_refresh_brief(llm)
+
+  def test_replace_brief_marker_updates_existing_marker(self):
+    old_brief = keel.TaskBrief(
+      objective="Old objective",
+      acceptance_criteria=["Old criterion"],
+      in_scope_paths=["src/old.py"],
+    )
+    new_brief = keel.TaskBrief(
+      objective="New objective",
+      acceptance_criteria=["New criterion"],
+      in_scope_paths=["src/new.py"],
+    )
+    chat = ch.Chat.from_conversation([
+      {"role": "system", "content": keel.render_brief_marker(old_brief)},
+      {"role": "user", "content": "Pivot to a new task in src/new.py"},
+    ])
+
+    assert keel.replace_brief_marker(chat, new_brief)
+
+    history = chat.history()
+    marker_messages = [
+      msg.get("content") or ""
+      for msg in history
+      if "<keel_brief hidden=\"true\">" in (msg.get("content") or "")
+    ]
+    assert len(marker_messages) == 1
+    parsed = keel.parse_brief_marker(marker_messages[0])
+    assert parsed is not None
+    restored, _met = parsed
+    assert restored.objective == "New objective"
+    assert restored.in_scope_paths == ["src/new.py"]
+
+
 class TestKeelBriefPersistence:
   def test_render_and_parse_brief_marker_roundtrip(self):
     brief = keel.TaskBrief(
@@ -507,6 +551,52 @@ class TestKeelApply:
     llm.emit_status.assert_awaited_with(keel.DRIFT_STATUS)
     history = chat.history()
     assert any(keel.DRIFT_WARNING in (msg.get("content") or "") for msg in history)
+
+  @pytest.mark.asyncio
+  async def test_apply_refresh_reextracts_and_replaces_marker(self):
+    old_brief = keel.TaskBrief(
+      objective="Add retry helper",
+      acceptance_criteria=["Helper retries 3 times"],
+      in_scope_paths=["services/boost/src/utils.py"],
+    )
+    refreshed_brief = keel.TaskBrief(
+      objective="Add timeout helper",
+      acceptance_criteria=["Helper times out after 5s"],
+      in_scope_paths=["services/boost/src/timeouts.py"],
+    )
+    chat = ch.Chat.from_conversation([
+      {"role": "system", "content": keel.render_brief_marker(old_brief, met_criteria={0})},
+      {"role": "user", "content": "Implement retry helper in services/boost/src/utils.py"},
+      {"role": "assistant", "content": "Added retry helper."},
+      {"role": "user", "content": "Pivot: implement timeout helper in services/boost/src/timeouts.py"},
+    ])
+    llm = MagicMock()
+    llm.boost_params = {"keel_refresh": "true"}
+    llm.emit_status = AsyncMock()
+    llm.stream_final_completion = AsyncMock()
+
+    with (
+      patch.object(keel, "extract_task_brief", new=AsyncMock(return_value=refreshed_brief)) as extract,
+      patch.object(keel, "_register_finish_wrapper"),
+    ):
+      await keel.apply(chat, llm)
+
+    extract.assert_awaited_once()
+    llm.emit_status.assert_awaited_with("Keel: refreshing task brief...")
+
+    history = chat.history()
+    marker_messages = [
+      msg.get("content") or ""
+      for msg in history
+      if "<keel_brief hidden=\"true\">" in (msg.get("content") or "")
+    ]
+    assert len(marker_messages) == 1
+    parsed = keel.parse_brief_marker(marker_messages[0])
+    assert parsed is not None
+    restored, met = parsed
+    assert restored.objective == "Add timeout helper"
+    assert restored.in_scope_paths == ["services/boost/src/timeouts.py"]
+    assert met == set()
 
   @pytest.mark.asyncio
   async def test_finish_wrapper_prepends_checklist(self):
