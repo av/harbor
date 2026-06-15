@@ -23,6 +23,7 @@ from state import request as request_state
 
 CODE_CHECK_MODULE_ORDER = ["tools", "autocheck", "final"]
 SCOPE_GUARD_MODULE_ORDER = ["tools", "diffscope", "autocheck", "final"]
+AGENT_CODE_MODULE_ORDER = ["tools", "sightline", "diffscope", "autocheck", "final"]
 RESEARCH_QUICK_MODULE_ORDER = ["tools", "caveman", "final"]
 
 CODE_CHECK_USER_MESSAGE = (
@@ -35,6 +36,11 @@ SCOPE_GUARD_USER_MESSAGE = (
 
 SCOPE_GUARD_VIOLATION_USER_MESSAGE = (
   "Fix the bug but only edit src/foo.py — do not touch other files"
+)
+
+AGENT_CODE_USER_MESSAGE = (
+  "Implement retry helper with exponential backoff but only edit src/foo.py — "
+  "do not touch other files"
 )
 
 RESEARCH_QUICK_USER_MESSAGE = (
@@ -383,8 +389,88 @@ class TestAgentCodeWorkflowChain:
         llm,
       )
 
-    assert execution_order == ["tools", "sightline", "diffscope", "autocheck", "final"]
+    assert execution_order == AGENT_CODE_MODULE_ORDER
     assert llm.stream_final_completion.await_count == 1
+
+  @pytest.mark.asyncio
+  async def test_agent_code_e2e_sightline_diffscope_autocheck(self):
+    """agent-code E2E: sightline blocks writes, diffscope checks scope, autocheck audits."""
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": AGENT_CODE_USER_MESSAGE},
+    ])
+    llm = _make_llm()
+    execution_order: list[str] = []
+    real_apply_module = workflows._apply_module
+
+    async def tracking_apply_module(module_name, module_cfg, chat_obj, llm_obj):
+      execution_order.append(module_name)
+      return await real_apply_module(module_name, module_cfg, chat_obj, llm_obj)
+
+    draft_with_violation = (
+      "Updated `src/foo.py` and `src/bar.py` for consistency."
+    )
+    revised_answer = "Only updated `src/foo.py`."
+    autocheck_draft = "Scoped retry helper in `src/foo.py`."
+
+    async def stream_final_side_effect(**_kwargs):
+      execution_order.append("final")
+      llm.is_final_stream = True
+      return "Final agent-code answer."
+
+    llm.stream_chat_completion = AsyncMock(
+      side_effect=[draft_with_violation, autocheck_draft],
+    )
+    llm.stream_final_completion = AsyncMock(side_effect=stream_final_side_effect)
+
+    audit = autocheck.AuditResult(
+      verdict="pass",
+      summary="Retry helper looks correct.",
+    )
+    debug = autocheck.AuditDebug(triggered=True, gate_reason="triggered", verdict="pass")
+
+    with (
+      request_context(),
+      patch.object(diffscope, "verify_workspace_paths", new=AsyncMock(return_value=[])),
+      patch.object(
+        diffscope,
+        "revise_with_correction",
+        new=AsyncMock(return_value=revised_answer),
+      ) as revise,
+      patch.object(autocheck, "gather_workspace_context", new=AsyncMock(return_value="")),
+      patch.object(
+        autocheck,
+        "run_mechanical_preaudit",
+        new=AsyncMock(return_value=("", [])),
+      ),
+      patch.object(autocheck, "run_audit", new=AsyncMock(return_value=(audit, debug))) as run_audit,
+      patch.object(workflows, "_apply_module", new=tracking_apply_module),
+    ):
+      await tools_module.write_file("blocked.txt", "seed")
+      await workflows.apply_workflow(
+        deepcopy(workflow_presets.PRESETS["agent-code"]),
+        chat,
+        llm,
+      )
+
+      write_tool = tool_registry.get_local_tool("write_file")
+      assert getattr(write_tool, "_sightline_wrapped", False)
+
+      with pytest.raises(ValueError, match="sightline_read_required"):
+        await write_tool("blocked.txt", "unguarded edit")
+
+    assert execution_order == AGENT_CODE_MODULE_ORDER
+    assert diffscope.needs_diffscope(chat)
+    assert autocheck.needs_autocheck(chat)
+    revise.assert_awaited_once()
+    run_audit.assert_awaited_once()
+    assert llm.stream_final_completion.await_count == 1
+    llm.emit_message.assert_any_await(revised_answer)
+
+    history = chat.history()
+    contents = [msg.get("content") or "" for msg in history]
+    assert any("provided tools" in content for content in contents)
+    assert any("outside the user's stated scope" in content for content in contents)
+    assert any("read_file on the same path first" in content for content in contents)
 
 
 class TestSightlineToolsComposition:
