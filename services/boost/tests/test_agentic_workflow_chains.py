@@ -1,10 +1,12 @@
 """Integration tests for agentic workflow chains with mocked LLM."""
 
+import ast
 import os
 import sys
 import uuid
 from contextlib import contextmanager
 from copy import deepcopy
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -935,3 +937,74 @@ class TestDiffscopeDeliverableChain:
     history = chat.history()
     contents = [msg.get("content") or "" for msg in history]
     assert any("outside the user's stated scope" in content for content in contents)
+
+
+WORKFLOW_CHAIN_E2E_TEST_FILES = (
+  Path(__file__).resolve(),
+  Path(__file__).resolve().parent / "test_shipyard_workflow.py",
+)
+
+
+def _preset_ids_in_test_function(function: ast.AST) -> set[str]:
+  preset_ids: set[str] = set()
+  for node in ast.walk(function):
+    if not isinstance(node, ast.Subscript):
+      continue
+    value = node.value
+    if not (
+      isinstance(value, ast.Attribute)
+      and value.attr == "PRESETS"
+      and isinstance(value.value, ast.Name)
+      and value.value.id == "workflow_presets"
+    ):
+      continue
+    if not isinstance(node.slice, ast.Constant) or not isinstance(node.slice.value, str):
+      continue
+    preset_ids.add(node.slice.value)
+  return preset_ids
+
+
+def _builtin_preset_chain_e2e_coverage() -> dict[str, list[str]]:
+  """Map built-in preset IDs to chain/e2e test functions that exercise them."""
+  coverage: dict[str, list[str]] = {}
+  for test_file in WORKFLOW_CHAIN_E2E_TEST_FILES:
+    tree = ast.parse(test_file.read_text(encoding="utf-8"), filename=str(test_file))
+    for node in tree.body:
+      if not isinstance(node, ast.ClassDef):
+        continue
+      for child in node.body:
+        if not isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+          continue
+        if not child.name.startswith("test_"):
+          continue
+        for preset_id in sorted(_preset_ids_in_test_function(child)):
+          label = f"{test_file.stem}::{child.name}"
+          coverage.setdefault(preset_id, []).append(label)
+  return coverage
+
+
+def _format_preset_chain_e2e_coverage_report(coverage: dict[str, list[str]]) -> str:
+  lines = ["Built-in workflow preset chain/e2e coverage:"]
+  for preset_id in sorted(workflow_presets.PRESETS):
+    tests = coverage.get(preset_id, [])
+    if tests:
+      lines.append(f"  {preset_id}:")
+      for test_name in tests:
+        lines.append(f"    - {test_name}")
+    else:
+      lines.append(f"  {preset_id}: MISSING")
+  return "\n".join(lines)
+
+
+class TestBuiltinWorkflowPresetCoverage:
+  def test_every_builtin_preset_has_chain_or_e2e_test(self):
+    """Each built-in preset must be exercised in chain or shipyard e2e tests."""
+    builtin_ids = set(workflow_presets.PRESETS)
+    coverage = _builtin_preset_chain_e2e_coverage()
+    missing = sorted(builtin_ids - set(coverage))
+    assert not missing, (
+      "Built-in workflow presets without chain/e2e tests in "
+      "test_agentic_workflow_chains.py or test_shipyard_workflow.py: "
+      f"{', '.join(missing)}\n"
+      f"{_format_preset_chain_e2e_coverage_report(coverage)}"
+    )
