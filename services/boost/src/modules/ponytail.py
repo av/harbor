@@ -43,6 +43,7 @@ Unlike `caveman`, ponytail triggers selectively on research-heavy questions
 - `max_url_reads` — maximum full-page URL reads per request. Default: `3`
 - `max_chars` — maximum research content characters retained. Default: `60000`
 - `early_exit_chars` — skip hop 2 when hop 1 gathers this many characters. Default: `15000` (`0` disables)
+- `trigger` — deep-research gate: `heuristic` (default) or `llm` (cheap yes/no classifier)
 
 ```bash
 harbor boost modules add ponytail
@@ -50,6 +51,7 @@ harbor config set HARBOR_BOOST_PONYTAIL_MAX_SEARCHES 4
 harbor config set HARBOR_BOOST_PONYTAIL_MAX_URL_READS 3
 harbor config set HARBOR_BOOST_PONYTAIL_MAX_CHARS 60000
 harbor config set HARBOR_BOOST_PONYTAIL_EARLY_EXIT_CHARS 15000
+harbor config set HARBOR_BOOST_PONYTAIL_TRIGGER heuristic
 harbor config set HARBOR_BOOST_TAVILY_API_KEY <key>
 # or
 harbor config set HARBOR_BOOST_SEARXNG_URL http://searxng:8080
@@ -147,6 +149,31 @@ Only include claims supported by the research. Leave lists empty when nothing ap
 
 STATUS_PREFIX = "Ponytail research"
 
+TRIGGER_CLASSIFIER_PROMPT = """
+<instruction>
+Does this question need deep two-hop web research to answer accurately?
+Answer yes for migrations, version comparisons, breaking changes, API contract or
+endpoint behavior questions, compatibility checks, or multi-source verification that
+benefits from a targeted second search pass.
+Answer no for simple fact lookups, pure implementation edits, acknowledgments, or
+questions answerable from the conversation alone without migration/API-depth research.
+</instruction>
+
+<conversation>
+{conversation}
+</conversation>
+
+<latest_user_message>
+{message}
+</latest_user_message>
+""".strip()
+
+
+class DeepResearchTriggerDecision(BaseModel):
+  needs_deep_research: bool = Field(
+    description="True when the latest user message needs deep two-hop web research.",
+  )
+
 
 class GapAnalysis(BaseModel):
   gaps: list[str] = Field(
@@ -200,26 +227,62 @@ def is_research_heavy(text: str) -> bool:
   return False
 
 
+def _uses_llm_trigger() -> bool:
+  return (config.PONYTAIL_TRIGGER.value or "heuristic").strip().lower() == "llm"
+
+
 def should_skip_research(chat: "ch.Chat") -> bool:
   """Pass through without web research on low-value follow-up turns."""
   return orchestrate.should_skip_low_value_turn(chat)
 
 
-def needs_research(chat: "ch.Chat", llm: "llm.LLM") -> bool:
+def _needs_research_with_module_prefix(chat: "ch.Chat", text: str) -> bool:
+  if deliverable.is_coding_deliverable(chat) and not deliverable.has_research_signals(text):
+    return False
+  return deliverable.has_research_signals(text) and len(text) >= 20
+
+
+async def classify_needs_deep_research(
+  chat: "ch.Chat",
+  llm: "llm.LLM",
+  message: str,
+) -> bool:
+  """Cheap yes/no LLM gate for whether deep two-hop research is needed."""
+  if not message:
+    return False
+
+  intermediate = orchestrate.cheap_llm(llm)
+  try:
+    result = await intermediate.chat_completion(
+      prompt=TRIGGER_CLASSIFIER_PROMPT,
+      conversation=chat,
+      message=message,
+      schema=DeepResearchTriggerDecision,
+      params={"temperature": 0},
+      resolve=True,
+    )
+    if isinstance(result, dict):
+      return bool(result.get("needs_deep_research"))
+  except Exception as exc:
+    logger.warning(
+      f"{ID_PREFIX}: trigger classifier failed, falling back to heuristic: {exc}"
+    )
+
+  return is_research_heavy(message)
+
+
+async def needs_research(chat: "ch.Chat", llm: "llm.LLM") -> bool:
   """Return True when this turn should run deep two-hop web research."""
   if should_skip_research(chat):
     return False
 
   text = orchestrate.last_user_text(chat)
-  if is_research_heavy(text):
-    return True
-
   if getattr(llm, "module", None) == ID_PREFIX:
-    if deliverable.is_coding_deliverable(chat) and not deliverable.has_research_signals(text):
-      return False
-    return deliverable.has_research_signals(text) and len(text) >= 20
+    return _needs_research_with_module_prefix(chat, text)
 
-  return False
+  if _uses_llm_trigger():
+    return await classify_needs_deep_research(chat, llm, text)
+  return is_research_heavy(text)
 
 
 async def plan_search_queries(
@@ -383,7 +446,7 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
     logger.warning(f"{ID_PREFIX}: No user message found, passing through")
     return await workflow_mod.complete_or_defer(llm, config)
 
-  if not needs_research(chat, llm):
+  if not await needs_research(chat, llm):
     logger.debug(f"{ID_PREFIX}: Skipping research for: {message[:80]}...")
     return await workflow_mod.complete_or_defer(llm, config)
 

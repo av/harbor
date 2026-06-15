@@ -747,6 +747,17 @@ PONYTAIL_EARLY_EXIT_CHARS = Config[int](
     ),
 )
 
+PONYTAIL_TRIGGER = Config[str](
+    name="HARBOR_BOOST_PONYTAIL_TRIGGER",
+    type=str,
+    default="heuristic",
+    description=(
+        "How `ponytail` decides whether to run deep two-hop research: "
+        "`heuristic` (migration/version/API keyword rules) or `llm` (cheap yes/no classifier). "
+        "Module-prefixed requests always research when they carry research signals."
+    ),
+)
+
 # ----------------- AUTOCHECK -----------------
 
 AUTOCHECK_ENABLED = Config[bool](

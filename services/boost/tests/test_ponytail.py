@@ -39,6 +39,13 @@ class TestPonytailBriefSynthesis:
     assert "imperative" in schema["recommendation"]["description"].lower()
 
 
+@pytest.fixture
+def ponytail_trigger_mode():
+  original = config.PONYTAIL_TRIGGER.__value__
+  yield
+  config.PONYTAIL_TRIGGER.__value__ = original
+
+
 class TestPonytailHeuristics:
   def _chat(self, content: str) -> ch.Chat:
     return ch.Chat.from_conversation([{"role": "user", "content": content}])
@@ -63,25 +70,124 @@ class TestPonytailHeuristics:
   def test_rejects_generic_explanation(self):
     assert not ponytail.is_research_heavy("Explain what asyncio.gather does in plain English.")
 
-  def test_needs_research_for_migration_with_module_prefix(self):
+  @pytest.mark.asyncio
+  async def test_needs_research_for_migration_with_module_prefix(self):
     chat = self._chat("Plan a migration from Django 4.2 to 5.0 for our auth layer.")
     llm = MagicMock(module=ponytail.ID_PREFIX)
-    assert ponytail.needs_research(chat, llm)
+    assert await ponytail.needs_research(chat, llm)
 
-  def test_skips_implementation_without_research_signals_even_with_prefix(self):
+  @pytest.mark.asyncio
+  async def test_skips_implementation_without_research_signals_even_with_prefix(self):
     chat = self._chat("Implement the helper in utils.py")
     llm = MagicMock(module=ponytail.ID_PREFIX)
-    assert not ponytail.needs_research(chat, llm)
+    assert not await ponytail.needs_research(chat, llm)
 
-  def test_needs_research_without_prefix_only_for_research_heavy(self):
+  @pytest.mark.asyncio
+  async def test_needs_research_without_prefix_only_for_research_heavy(self):
     chat = self._chat("Summarize how Harbor Boost modules are loaded.")
     llm = MagicMock(module=None)
-    assert not ponytail.needs_research(chat, llm)
+    assert not await ponytail.needs_research(chat, llm)
 
-  def test_needs_research_without_prefix_for_version_compare(self):
+  @pytest.mark.asyncio
+  async def test_needs_research_without_prefix_for_version_compare(self):
     chat = self._chat("Compare React 18 vs 19 migration breaking changes")
     llm = MagicMock(module=None)
-    assert ponytail.needs_research(chat, llm)
+    assert await ponytail.needs_research(chat, llm)
+
+
+class TestPonytailLlmTrigger:
+  def _chat(self, content: str) -> ch.Chat:
+    return ch.Chat.from_conversation([{"role": "user", "content": content}])
+
+  @pytest.mark.asyncio
+  async def test_llm_trigger_yes_runs_classifier(self, ponytail_trigger_mode):
+    chat = self._chat("Compare Python 3.12 vs 3.13 asyncio API behavior")
+    llm = MagicMock(module=None)
+    config.PONYTAIL_TRIGGER.__value__ = "llm"
+
+    with patch("research.orchestrate.cheap_llm") as cheap_llm:
+      cheap = MagicMock()
+      cheap.chat_completion = AsyncMock(
+        return_value={"needs_deep_research": True},
+      )
+      cheap_llm.return_value = cheap
+
+      assert await ponytail.needs_research(chat, llm)
+
+    cheap.chat_completion.assert_awaited_once()
+
+  @pytest.mark.asyncio
+  async def test_llm_trigger_no_skips_research(self, ponytail_trigger_mode):
+    chat = self._chat("Refactor the retry helper in services/boost/src/utils.py")
+    llm = MagicMock(module=None)
+    config.PONYTAIL_TRIGGER.__value__ = "llm"
+
+    with patch("research.orchestrate.cheap_llm") as cheap_llm:
+      cheap = MagicMock()
+      cheap.chat_completion = AsyncMock(
+        return_value={"needs_deep_research": False},
+      )
+      cheap_llm.return_value = cheap
+
+      assert not await ponytail.needs_research(chat, llm)
+
+  @pytest.mark.asyncio
+  async def test_llm_trigger_skips_classifier_with_module_prefix(self, ponytail_trigger_mode):
+    chat = self._chat("Plan a migration from Django 4.2 to 5.0 for our auth layer.")
+    llm = MagicMock(module=ponytail.ID_PREFIX)
+    config.PONYTAIL_TRIGGER.__value__ = "llm"
+
+    with patch("research.orchestrate.cheap_llm") as cheap_llm:
+      assert await ponytail.needs_research(chat, llm)
+
+    cheap_llm.assert_not_called()
+
+  @pytest.mark.asyncio
+  async def test_llm_trigger_falls_back_to_heuristic_on_failure(self, ponytail_trigger_mode):
+    chat = self._chat("Compare Python 3.12 vs 3.13 asyncio API behavior")
+    llm = MagicMock(module=None)
+    config.PONYTAIL_TRIGGER.__value__ = "llm"
+
+    with patch("research.orchestrate.cheap_llm") as cheap_llm:
+      cheap = MagicMock()
+      cheap.chat_completion = AsyncMock(side_effect=RuntimeError("classifier down"))
+      cheap_llm.return_value = cheap
+
+      assert await ponytail.needs_research(chat, llm)
+
+  @pytest.mark.asyncio
+  async def test_heuristic_mode_does_not_call_classifier(self, ponytail_trigger_mode):
+    chat = self._chat("Compare Python 3.12 vs 3.13 asyncio API behavior")
+    llm = MagicMock(module=None)
+    config.PONYTAIL_TRIGGER.__value__ = "heuristic"
+
+    with patch("research.orchestrate.cheap_llm") as cheap_llm:
+      assert await ponytail.needs_research(chat, llm)
+
+    cheap_llm.assert_not_called()
+
+  @pytest.mark.asyncio
+  async def test_apply_llm_trigger_skips_when_classifier_says_no(self, ponytail_trigger_mode):
+    chat = self._chat("Refactor the retry helper in services/boost/src/utils.py")
+    llm = MagicMock(module=ponytail.ID_PREFIX)
+    llm.stream_final_completion = AsyncMock()
+    config.PONYTAIL_TRIGGER.__value__ = "llm"
+
+    with (
+      patch("research.orchestrate.cheap_llm") as cheap_llm,
+      patch.object(ponytail, "plan_search_queries", new=AsyncMock()) as plan,
+    ):
+      cheap = MagicMock()
+      cheap.chat_completion = AsyncMock(
+        return_value={"needs_deep_research": False},
+      )
+      cheap_llm.return_value = cheap
+      llm.module = None
+
+      await ponytail.apply(chat, llm)
+
+    plan.assert_not_called()
+    llm.stream_final_completion.assert_awaited_once()
 
 
 class TestPonytailQueryPlanning:
