@@ -1,5 +1,6 @@
 """Selective post-deliverable self-check for Harbor Boost."""
 
+import html
 import json
 import re
 from pathlib import Path
@@ -71,6 +72,7 @@ for troubleshooting.
 - `max_workspace_files` — workspace files read per request. Default: `5`
 - `workspace_file_max_chars` — characters per workspace file. Default: `50000`
 - `@boost_show_audit` — when true, append a brief audit footer to the final answer
+  and emit an HTML findings summary artifact for the UI
 
 ```bash
 harbor boost modules add autocheck
@@ -813,6 +815,12 @@ def format_findings(audit: AuditResult) -> str:
   return "\n".join(lines)
 
 
+def format_skipped_status(gate_reason: str) -> str:
+  """Short status line for emit_status when autocheck passes through."""
+  reason = (gate_reason or "unknown").strip()
+  return f"Autocheck: skipped ({reason})"
+
+
 def format_audit_status(audit: AuditResult) -> str:
   """Short status line for emit_status after an audit completes."""
   finding_count = len(audit.findings)
@@ -851,6 +859,91 @@ def append_audit_footer(final_text: str, audit: AuditResult) -> str:
   if not footer:
     return final_text
   return f"{final_text.rstrip()}\n\n---\n*{footer}*"
+
+
+def format_audit_artifact_html(audit: AuditResult) -> str:
+  """Render a minimal HTML summary table for emit_artifact."""
+  finding_count = len(audit.findings)
+  noun = "finding" if finding_count == 1 else "findings"
+  verdict_class = "verdict-pass" if audit.verdict == "pass" else "verdict-revise"
+  summary = (audit.summary or "").strip()
+
+  rows: list[str] = []
+  if audit.findings:
+    for finding in audit.findings:
+      severity = html.escape(finding.severity)
+      message = html.escape(finding.message)
+      fix_hint = html.escape(finding.fix_hint or "—")
+      rows.append(
+        "<tr>"
+        f'<td class="severity-{severity}">{severity}</td>'
+        f"<td>{message}</td>"
+        f"<td>{fix_hint}</td>"
+        "</tr>",
+      )
+  else:
+    rows.append('<tr><td colspan="3">No findings.</td></tr>')
+
+  summary_html = ""
+  if summary:
+    summary_html = f"<p>{html.escape(summary)}</p>"
+
+  return f"""
+<style>
+  .autocheck-audit {{
+    font-family: system-ui, -apple-system, sans-serif;
+    font-size: 14px;
+    line-height: 1.4;
+  }}
+  .autocheck-audit table {{
+    border-collapse: collapse;
+    width: 100%;
+    margin-top: 0.5rem;
+  }}
+  .autocheck-audit th,
+  .autocheck-audit td {{
+    border: 1px solid #d0d7de;
+    padding: 6px 8px;
+    text-align: left;
+    vertical-align: top;
+  }}
+  .autocheck-audit th {{
+    background: #f6f8fa;
+  }}
+  .autocheck-audit .verdict-pass {{ color: #1a7f37; font-weight: 600; }}
+  .autocheck-audit .verdict-revise {{ color: #b54708; font-weight: 600; }}
+  .autocheck-audit .severity-critical,
+  .autocheck-audit .severity-major {{ color: #cf222e; }}
+  .autocheck-audit .severity-warn {{ color: #9a6700; }}
+</style>
+<div class="autocheck-audit">
+  <p>
+    <strong>Autocheck:</strong>
+    <span class="{verdict_class}">{html.escape(audit.verdict)}</span>
+    ({finding_count} {noun})
+  </p>
+  {summary_html}
+  <table>
+    <thead>
+      <tr>
+        <th>Severity</th>
+        <th>Finding</th>
+        <th>Fix</th>
+      </tr>
+    </thead>
+    <tbody>
+      {"".join(rows)}
+    </tbody>
+  </table>
+</div>
+""".strip()
+
+
+async def emit_audit_artifact(llm: "llm.LLM", audit: AuditResult) -> None:
+  """Emit an HTML audit summary artifact when show_audit is enabled."""
+  if not show_audit_footer(llm):
+    return
+  await llm.emit_artifact(format_audit_artifact_html(audit), wait=False)
 
 
 async def generate_draft(chat: "ch.Chat", llm: "llm.LLM") -> str:
@@ -1056,6 +1149,7 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
   if gate_reason != "triggered":
     debug = AuditDebug(triggered=False, gate_reason=gate_reason, verdict="skipped")
     logger.debug(f"{ID_PREFIX}: Pass-through — {gate_reason} ({debug.model_dump()})")
+    await llm.emit_status(format_skipped_status(gate_reason))
     return await workflow_mod.complete_or_defer(llm, module_cfg)
 
   message = orchestrate.last_user_text(chat)
@@ -1154,6 +1248,7 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
       logger.error(f"{ID_PREFIX}: revise pass failed: {exc}")
       break
 
+  await emit_audit_artifact(llm, audit)
   if show_audit_footer(llm):
     final_text = append_audit_footer(final_text, audit)
 

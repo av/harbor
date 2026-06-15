@@ -154,6 +154,14 @@ class TestWorkspacePaths:
     assert "[critical] Missing import" in rendered
     assert "Add `import os`" in rendered
 
+  def test_format_skipped_status_includes_gate_reason(self):
+    assert autocheck.format_skipped_status("not_deliverable") == (
+      "Autocheck: skipped (not_deliverable)"
+    )
+    assert autocheck.format_skipped_status("acknowledgment") == (
+      "Autocheck: skipped (acknowledgment)"
+    )
+
   def test_format_audit_status_pass_with_no_findings(self):
     audit = autocheck.AuditResult(verdict="pass", findings=[])
     assert autocheck.format_audit_status(audit) == "Autocheck: pass (0 findings)"
@@ -206,6 +214,53 @@ class TestWorkspacePaths:
     assert "---" in rendered
     assert "Autocheck: pass (0 findings)" in rendered
     assert "Ship it" in rendered
+
+  def test_format_audit_artifact_html_renders_findings_table(self):
+    audit = autocheck.AuditResult(
+      verdict="revise",
+      summary="Fix imports before shipping.",
+      findings=[
+        autocheck.AuditFinding(
+          severity="major",
+          message='Missing import in `utils.py`',
+          fix_hint="Add `import os`",
+        ),
+        autocheck.AuditFinding(
+          severity="warn",
+          message="Consider running tests",
+          fix_hint="",
+        ),
+      ],
+    )
+    rendered = autocheck.format_audit_artifact_html(audit)
+    assert "<table>" in rendered
+    assert "Fix imports before shipping." in rendered
+    assert "Missing import in" in rendered
+    assert "Add `import os`" in rendered
+    assert "verdict-revise" in rendered
+    assert "<td>—</td>" in rendered
+
+  def test_format_audit_artifact_html_escapes_markup(self):
+    audit = autocheck.AuditResult(
+      verdict="pass",
+      summary="<script>alert(1)</script>",
+      findings=[
+        autocheck.AuditFinding(
+          severity="info",
+          message="<b>not bold</b>",
+          fix_hint='Use "quotes"',
+        ),
+      ],
+    )
+    rendered = autocheck.format_audit_artifact_html(audit)
+    assert "<script>" not in rendered
+    assert "&lt;script&gt;" in rendered
+    assert "&lt;b&gt;not bold&lt;/b&gt;" in rendered
+
+  def test_format_audit_artifact_html_shows_empty_findings_row(self):
+    audit = autocheck.AuditResult(verdict="pass", findings=[])
+    rendered = autocheck.format_audit_artifact_html(audit)
+    assert "No findings." in rendered
 
 
 class TestWorkspaceContext:
@@ -942,12 +997,14 @@ class TestAutocheckApply:
       {"role": "user", "content": "Explain Python dataclasses briefly."},
     ])
     llm = MagicMock()
+    llm.emit_status = AsyncMock()
     llm.stream_final_completion = AsyncMock()
 
     with patch.object(autocheck, "generate_draft", new=AsyncMock()) as draft:
       await autocheck.apply(chat, llm)
 
     draft.assert_not_called()
+    llm.emit_status.assert_awaited_once_with("Autocheck: skipped (not_deliverable)")
     llm.stream_final_completion.assert_awaited_once()
 
   @pytest.mark.asyncio
@@ -956,12 +1013,14 @@ class TestAutocheckApply:
       {"role": "user", "content": "Explain Python dataclasses briefly."},
     ])
     llm = MagicMock()
+    llm.emit_status = AsyncMock()
     llm.stream_final_completion = AsyncMock()
 
     with patch.object(autocheck, "generate_draft", new=AsyncMock()) as draft:
       await autocheck.apply(chat, llm, config={"defer_final": True})
 
     draft.assert_not_called()
+    llm.emit_status.assert_awaited_once_with("Autocheck: skipped (not_deliverable)")
     llm.stream_final_completion.assert_not_called()
 
   @pytest.mark.asyncio
@@ -1119,6 +1178,7 @@ class TestAutocheckApply:
     llm = MagicMock()
     llm.boost_params = {"show_audit": "true"}
     llm.emit_status = AsyncMock()
+    llm.emit_artifact = AsyncMock()
     llm.emit_message = AsyncMock()
     llm.stream_chat_completion = AsyncMock(return_value="Draft implementation")
 
@@ -1131,10 +1191,39 @@ class TestAutocheckApply:
     ):
       await autocheck.apply(chat, llm)
 
+    llm.emit_artifact.assert_awaited_once()
+    artifact_html = llm.emit_artifact.await_args.args[0]
+    assert "<table>" in artifact_html
+    assert "Ship it" in artifact_html
+    assert llm.emit_artifact.await_args.kwargs.get("wait") is False
+
     emitted = llm.emit_message.await_args.args[0]
     assert emitted.startswith("Draft implementation")
     assert "Autocheck: pass (0 findings)" in emitted
     assert "Ship it" in emitted
+
+  @pytest.mark.asyncio
+  async def test_apply_skips_audit_artifact_when_show_audit_disabled(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Implement retry helper in services/boost/src/utils.py"},
+    ])
+    llm = MagicMock()
+    llm.boost_params = {}
+    llm.emit_status = AsyncMock()
+    llm.emit_artifact = AsyncMock()
+    llm.emit_message = AsyncMock()
+    llm.stream_chat_completion = AsyncMock(return_value="Draft implementation")
+
+    audit = autocheck.AuditResult(verdict="pass", summary="Ship it")
+    debug = autocheck.AuditDebug(triggered=True, gate_reason="triggered", verdict="pass")
+
+    with (
+      patch.object(autocheck, "gather_workspace_context", new=AsyncMock(return_value="")),
+      patch.object(autocheck, "run_audit", new=AsyncMock(return_value=(audit, debug))),
+    ):
+      await autocheck.apply(chat, llm)
+
+    llm.emit_artifact.assert_not_called()
 
   @pytest.mark.asyncio
   async def test_apply_explores_workspace_when_root_configured(self):
