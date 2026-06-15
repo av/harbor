@@ -256,6 +256,54 @@ harbor launch --workflow shipyard --backend ollama --model qwen2.5-coder:7b open
 
 **Notes:** `autocheck` triggers only on deliverable turns (≥2 signals, e.g. coding keyword + file path). `sightline` guards Boost scratch and workspace file tools when `HARBOR_BOOST_WORKSPACE_ROOT` is set. Empty `HARBOR_BOOST_WORKFLOWS` loads built-in presets from `/boost/workflows.yaml`.
 
+### Debug Metrics (Troubleshooting)
+
+When agentic modules skip or trigger unexpectedly, enable compact per-module debug metrics. Boost emits a one-line summary **before** the final completion so you can see what each module did on that turn.
+
+**Global (all requests):**
+
+```bash
+harbor config set HARBOR_BOOST_DEBUG true
+harbor restart boost
+```
+
+**Per request** — overrides `HARBOR_BOOST_DEBUG` for a single completion:
+
+```bash
+# OpenAI-compatible body (harbor url boost)
+curl "$BOOST_URL/chat/completions" \
+  -H "Authorization: Bearer $BOOST_KEY" \
+  -d '{
+    "model": "shipyard-llama3.2",
+    "messages": [{"role": "user", "content": "Fix the auth bug in src/api.ts"}],
+    "@boost_debug": true
+  }'
+
+# Anthropic / Responses API — put @boost_ keys in metadata instead
+```
+
+Accepted truthy values: `true`, `1`, `yes`, `on`. Use `@boost_debug: false` to silence metrics when global debug is on.
+
+**Example status line:**
+
+```text
+Debug: caveman skipped (acknowledgment) 3ms | keel triggered 12ms +1calls [extracted_brief=True] | autocheck triggered 840ms +2calls [verdict=pass,outcome=delivered]
+```
+
+Each segment is one module: `triggered` or `skipped`, optional `(reason)`, wall-clock `duration_ms`, optional `+Ncalls` for extra LLM/tool hops, and `[key=value,...]` extras (e.g. `gate_reason`, `verdict`, `outcome`, `grounding_mode`).
+
+**Common skip reasons:**
+
+| Reason | Module | Meaning |
+|--------|--------|---------|
+| `acknowledgment` | caveman, ponytail | Short ack / non-research turn |
+| `non_substantive_message` | keel | Turn too thin for task anchoring |
+| `not_deliverable` | autocheck | Fewer than two deliverable signals |
+| `no_file_tools_registered` | sightline | Workspace tools not in chain |
+| `empty_message` | any | No user content to process |
+
+**Related:** `@boost_show_audit` (or `HARBOR_BOOST_AUTOCHECK_SHOW_AUDIT=true`) appends an autocheck audit footer and HTML findings artifact — use when you need full audit detail, not just the compact debug line.
+
 ## Launching Service CLIs
 
 `harbor launch` starts a service CLI pre-configured to use running Harbor services.
