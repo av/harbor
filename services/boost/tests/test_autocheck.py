@@ -17,6 +17,7 @@ import config
 import deliverable
 import tools.registry as tool_registry
 from modules import autocheck, tools
+from research import debug_metrics
 from state import request as request_state
 from helpers import mock_autocheck_cheap_llm
 
@@ -1810,6 +1811,62 @@ class TestAuditAndRevise:
     assert "cites no file paths" in kwargs["mechanical_findings"]
     assert "Wrong file" in kwargs["audit_findings"]
     assert "cites no file paths" not in kwargs["audit_findings"]
+
+
+class TestAutocheckIntegration:
+  @pytest.mark.asyncio
+  async def test_strict_without_workspace_root_skips_audit_on_deliverable(self):
+    """AUTOCHECK_STRICT=true without WORKSPACE_ROOT skips audit on deliverable turns."""
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Implement retry helper in services/boost/src/utils.py"},
+    ])
+    assert deliverable.is_coding_deliverable(chat)
+    assert deliverable.count_deliverable_signals(chat) >= 2
+
+    llm = MagicMock()
+    llm.emit_status = AsyncMock()
+    llm.stream_final_completion = AsyncMock()
+
+    original_enabled = config.AUTOCHECK_ENABLED.__value__
+    original_strict = config.AUTOCHECK_STRICT.__value__
+    original_root = config.WORKSPACE_ROOT.__value__
+    try:
+      config.AUTOCHECK_ENABLED.__value__ = True
+      config.AUTOCHECK_STRICT.__value__ = True
+      config.WORKSPACE_ROOT.__value__ = ""
+
+      assert autocheck.autocheck_gate_reason(chat) == "workspace_unconfigured"
+      assert not autocheck.needs_autocheck(chat)
+
+      with request_context():
+        with (
+          patch.object(autocheck, "generate_draft", new=AsyncMock()) as draft,
+          patch.object(autocheck, "run_audit", new=AsyncMock()) as run_audit,
+          patch.object(autocheck.logger, "error") as log_error,
+        ):
+          await autocheck.apply(chat, llm)
+
+        draft.assert_not_called()
+        run_audit.assert_not_called()
+        log_error.assert_called_once()
+        assert "HARBOR_BOOST_AUTOCHECK_STRICT" in log_error.call_args.args[0]
+        assert "HARBOR_BOOST_WORKSPACE_ROOT" in log_error.call_args.args[0]
+
+        stored = debug_metrics.get(autocheck.ID_PREFIX)
+        assert stored is not None
+        assert stored.triggered is False
+        assert stored.skipped is True
+        assert stored.reason == "workspace_unconfigured"
+        assert stored.extra["verdict"] == "skipped"
+    finally:
+      config.AUTOCHECK_ENABLED.__value__ = original_enabled
+      config.AUTOCHECK_STRICT.__value__ = original_strict
+      config.WORKSPACE_ROOT.__value__ = original_root
+
+    llm.emit_status.assert_awaited_once_with(
+      "Autocheck: skipped (workspace_unconfigured)",
+    )
+    llm.stream_final_completion.assert_awaited_once()
 
 
 class TestAutocheckApply:
