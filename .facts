@@ -253,6 +253,9 @@
 - label: shared research package enforces per-request search URL-read and character budgets and renders gathered results into a research_brief system block
   command: cd services/boost && uv run pytest tests/test_agentic_infra.py::TestResearchBudget tests/test_agentic_infra.py::TestResearchBrief -q --tb=no
   tags: [implemented]
+- label: shared research respects HARBOR_BOOST_RESEARCH_NOTES_MAX_CHARS when adding brief notes: trims each search or read failure note to the configured per-note character limit (default 4000); set to 0 to disable truncation
+  command: cd services/boost && uv run pytest tests/test_agentic_infra.py::TestResearchFetch::test_trim_note_uses_config_default tests/test_agentic_infra.py::TestResearchBrief::test_add_note_truncates_oversized_notes tests/test_orchestrate.py::TestOrchestrateParallelFetch::test_run_searches_truncates_long_failure_notes -q --tb=no
+  tags: [implemented]
 - label: grep_workspace is an opt-in portable tool when HARBOR_BOOST_WORKSPACE_ROOT is set: searches workspace files with optional glob and max_matches caps and rejects paths outside the workspace root
   command: cd services/boost && uv run pytest tests/test_agentic_infra.py::TestWorkspaceFileTool::test_grep_workspace_finds_pattern tests/test_agentic_infra.py::TestWorkspaceFileTool::test_grep_workspace_respects_max_matches tests/test_agentic_infra.py::TestWorkspaceFileTool::test_grep_workspace_path_jail tests/test_agentic_infra.py::TestWorkspaceFileTool::test_selected_tools_includes_grep_when_configured -q --tb=no
   tags: [spec, implemented]
@@ -303,6 +306,9 @@
   tags: [implemented]
 - label: autocheck supports HARBOR_BOOST_AUTOCHECK_STRICT: when true prepends a warning banner to deliverable answers when critical or major findings remain after all revise passes instead of silently shipping
   command: cd services/boost && uv run pytest tests/test_autocheck.py::TestWorkspacePaths::test_should_prepend_strict_warning_when_enabled_with_blockers tests/test_autocheck.py::TestWorkspacePaths::test_should_not_prepend_strict_warning_for_warn_only_findings tests/test_autocheck.py::TestAutocheckApply::test_apply_prepends_strict_warning_when_blockers_remain tests/test_autocheck.py::TestAutocheckApply::test_apply_skips_strict_warning_when_disabled -q --tb=no
+  tags: [implemented]
+- label: autocheck supports HARBOR_BOOST_AUTOCHECK_STRICT workspace_unconfigured skip: when true and HARBOR_BOOST_WORKSPACE_ROOT is unset, autocheck skips deliverable audit with workspace_unconfigured gate reason, logs a config error naming both keys, emits Autocheck: skipped (workspace_unconfigured) status, and streams final completion without audit; non-strict mode still triggers on deliverable turns without workspace root
+  command: cd services/boost && uv run pytest tests/test_autocheck.py::TestAutocheckGate::test_strict_mode_requires_workspace_root_gate_reason tests/test_autocheck.py::TestAutocheckGate::test_non_strict_mode_allows_missing_workspace_root tests/test_autocheck.py::TestWorkspacePaths::test_format_skipped_status_includes_gate_reason tests/test_autocheck.py::TestAutocheckApply::test_apply_strict_skips_audit_when_workspace_unconfigured -q --tb=no
   tags: [implemented]
 - label: diffscope revise_with_correction prompt includes explicit allowed_paths forbidden_paths out_of_scope_paths and git_evidence sections built from user scope violations and workspace git diff
   command: cd services/boost && uv run pytest tests/test_diffscope.py::TestWorkspaceAndNotes::test_build_revise_scope_sections_lists_allowed_forbidden_and_git_evidence -q --tb=no
