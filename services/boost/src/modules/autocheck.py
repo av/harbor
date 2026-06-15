@@ -203,9 +203,15 @@ Return a structured verdict: "pass" when ready to ship, "revise" when material i
 
 REVISE_PROMPT = """
 <instruction>
-Revise the draft to fix the audit findings. Keep the same intent and scope.
-Address every critical and major finding. Do not mention the audit process.
-Return only the revised answer for the user.
+Revise the draft to fix the audit findings below. This is your only revision pass.
+
+Rules:
+- Make a minimal edit: change ONLY the parts of the draft that the findings require.
+- Preserve the user's original intent, scope, and tone.
+- Keep every section that is already correct — do not rewrite, reorder, or shorten unaffected content.
+- Address every critical and major finding, including mechanical pre-audit blockers listed below.
+- Apply fix_hint guidance when provided.
+- Do not mention the audit process. Return only the revised answer for the user.
 </instruction>
 
 <conversation>
@@ -220,9 +226,13 @@ Return only the revised answer for the user.
 {audit_summary}
 </audit_summary>
 
-<findings>
-{findings}
-</findings>
+<mechanical_findings>
+{mechanical_findings}
+</mechanical_findings>
+
+<audit_findings>
+{audit_findings}
+</audit_findings>
 """.strip()
 
 
@@ -962,6 +972,32 @@ def format_findings(audit: AuditResult) -> str:
   return "\n".join(lines)
 
 
+def format_revise_findings_sections(
+  audit: AuditResult,
+  mechanical_findings: list[AuditFinding] | None = None,
+) -> tuple[str, str]:
+  """Split merged audit findings into mechanical pre-audit and LLM audit sections."""
+  mechanical = list(mechanical_findings or [])
+  mechanical_count = len(mechanical)
+  audit_only = (
+    audit.findings[mechanical_count:]
+    if mechanical_count
+    else list(audit.findings)
+  )
+
+  mechanical_text = (
+    format_findings(AuditResult(verdict="revise", findings=mechanical))
+    if mechanical
+    else "No mechanical pre-audit findings."
+  )
+  audit_text = (
+    format_findings(AuditResult(verdict="revise", findings=audit_only))
+    if audit_only
+    else "No additional LLM audit findings."
+  )
+  return mechanical_text, audit_text
+
+
 def format_skipped_status(gate_reason: str) -> str:
   """Short status line for emit_status when autocheck passes through."""
   reason = (gate_reason or "unknown").strip()
@@ -1283,14 +1319,21 @@ async def revise_draft(
   llm: "llm.LLM",
   draft: str,
   audit: AuditResult,
+  *,
+  mechanical_findings: list[AuditFinding] | None = None,
 ) -> str:
+  mechanical_text, audit_text = format_revise_findings_sections(
+    audit,
+    mechanical_findings,
+  )
   intermediate = orchestrate.cheap_llm(llm)
   revised = await intermediate.chat_completion(
     prompt=REVISE_PROMPT,
     conversation=str(chat),
     draft=draft,
     audit_summary=audit.summary or "Revise the draft to address audit findings.",
-    findings=format_findings(audit),
+    mechanical_findings=mechanical_text,
+    audit_findings=audit_text,
     resolve=True,
     params={"temperature": 0.2},
   )
@@ -1385,7 +1428,13 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
     passes_used += 1
     await llm.emit_status(f"Autocheck: revising ({passes_used}/{max_passes})...")
     try:
-      final_text = await revise_draft(chat, llm, final_text, audit)
+      final_text = await revise_draft(
+        chat,
+        llm,
+        final_text,
+        audit,
+        mechanical_findings=mechanical_findings,
+      )
       paths = extract_workspace_paths(message, final_text)
       git_diff_context, mechanical_findings = await run_mechanical_preaudit(
         final_text,

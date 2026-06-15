@@ -1150,6 +1150,90 @@ class TestAuditAndRevise:
 
     assert revised == "Revised answer with correct path."
 
+  def test_format_revise_findings_sections_splits_mechanical_from_audit(self):
+    mechanical = [
+      autocheck.AuditFinding(
+        severity="major",
+        message="Referenced file does not exist in workspace: src/missing.py",
+        fix_hint="Use an existing repo-relative path.",
+      )
+    ]
+    audit = autocheck.AuditResult(
+      verdict="revise",
+      summary="Fix paths and imports",
+      findings=[
+        *mechanical,
+        autocheck.AuditFinding(
+          severity="major",
+          message="Missing import",
+          fix_hint="Add `import os`",
+        ),
+      ],
+    )
+
+    mechanical_text, audit_text = autocheck.format_revise_findings_sections(
+      audit,
+      mechanical,
+    )
+
+    assert "does not exist in workspace" in mechanical_text
+    assert "Missing import" not in mechanical_text
+    assert "Missing import" in audit_text
+    assert "does not exist in workspace" not in audit_text
+
+  @pytest.mark.asyncio
+  async def test_revise_draft_prompt_targets_findings_and_preserves_correct_sections(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Implement helper in services/boost/src/utils.py"},
+    ])
+    llm = MagicMock()
+    llm.url = "http://example.com"
+    llm.headers = {}
+    llm.query_params = {}
+    llm.model = "test-model"
+    mechanical = [
+      autocheck.AuditFinding(
+        severity="major",
+        message="Draft contains code blocks but cites no file paths",
+        fix_hint="Name the target files for each code change.",
+      )
+    ]
+    audit = autocheck.AuditResult(
+      verdict="revise",
+      summary="Ground code changes in real paths",
+      findings=[
+        *mechanical,
+        autocheck.AuditFinding(
+          severity="major",
+          message="Wrong file",
+          fix_hint="Use services/boost/src/utils.py",
+        ),
+      ],
+    )
+
+    with patch("research.orchestrate.cheap_llm") as cheap_llm:
+      cheap = MagicMock()
+      cheap.chat_completion = AsyncMock(return_value="Revised answer with correct path.")
+      cheap_llm.return_value = cheap
+
+      await autocheck.revise_draft(
+        chat,
+        llm,
+        "Original draft",
+        audit,
+        mechanical_findings=mechanical,
+      )
+
+    kwargs = cheap.chat_completion.await_args.kwargs
+    assert kwargs["prompt"] == autocheck.REVISE_PROMPT
+    assert "minimal edit" in kwargs["prompt"].lower()
+    assert "preserve the user's original intent" in kwargs["prompt"].lower()
+    assert "already correct" in kwargs["prompt"].lower()
+    assert "mechanical pre-audit blockers" in kwargs["prompt"].lower()
+    assert "cites no file paths" in kwargs["mechanical_findings"]
+    assert "Wrong file" in kwargs["audit_findings"]
+    assert "cites no file paths" not in kwargs["audit_findings"]
+
 
 class TestAutocheckApply:
   @pytest.mark.asyncio
