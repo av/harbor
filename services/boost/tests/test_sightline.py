@@ -74,6 +74,28 @@ class TestSightlineGenerations:
     assert payload["path"] == "src/main.py"
     assert payload["read_generation"] == 3
     assert payload["write_generation"] == 1
+    assert payload["suggested_command"] == 'read_file(file_path="src/main.py")'
+    assert payload["suggested_command"] in payload["message"]
+
+  def test_suggested_read_command_escapes_special_characters(self):
+    path = 'src/"quoted".py'
+    command = sightline.suggested_read_command(path)
+    assert command == 'read_file(file_path="src/\\"quoted\\".py")'
+
+  def test_block_message_includes_suggested_command_in_guard_error(self):
+    with request_context():
+      llm = MagicMock()
+      llm.emit_status = AsyncMock()
+      asyncio.run(tools_module.write_file("blocked.txt", "seed"))
+      tool_registry.set_local_tool("write_file", tools_module.write_file)
+      sightline.install_guards(llm)
+
+      write_tool = tool_registry.get_local_tool("write_file")
+      with pytest.raises(ValueError) as exc_info:
+        asyncio.run(write_tool("blocked.txt", "content"))
+
+      payload = json.loads(str(exc_info.value))
+      assert payload["suggested_command"] == 'read_file(file_path="blocked.txt")'
 
 
 class TestSightlineExemptions:
@@ -258,6 +280,7 @@ class TestSightlineWorkspace:
     assert payload["required_tool"] == "read_workspace_file"
     assert payload["tool_kind"] == "workspace"
     assert payload["canonical_path"] == "workspace:src/main.py"
+    assert payload["suggested_command"] == 'read_workspace_file(file_path="src/main.py")'
 
   @pytest.mark.asyncio
   async def test_read_workspace_file_records_generation(self):

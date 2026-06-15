@@ -196,6 +196,16 @@ def is_create_exempt(
   return not scratch_file_exists(file_path)
 
 
+def suggested_read_command(
+  file_path: str,
+  *,
+  kind: ToolKind = "scratch",
+) -> str:
+  """Return a copy-pasteable tool call the model can issue before mutating."""
+  tool = "read_workspace_file" if kind == "workspace" else "read_file"
+  return f"{tool}(file_path={json.dumps(file_path)})"
+
+
 def block_message(
   file_path: str,
   read_gen: int,
@@ -212,17 +222,20 @@ def block_message(
     mutation_tools = "write_file or delete_file"
     canonical = canonical_path(file_path)
 
+  suggested_command = suggested_read_command(file_path, kind=kind)
   payload = {
     "error": "sightline_read_required",
     "message": (
       f"Call {required_tool} on this path before {mutation_tools}. "
-      "Sightline requires a fresh read after each successful mutation."
+      "Sightline requires a fresh read after each successful mutation. "
+      f"Suggested command: {suggested_command}"
     ),
     "path": file_path,
     "canonical_path": canonical,
     "read_generation": read_gen,
     "write_generation": write_gen,
     "required_tool": required_tool,
+    "suggested_command": suggested_command,
     "tool_kind": kind,
   }
   return json.dumps(payload, indent=2)
