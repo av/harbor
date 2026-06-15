@@ -603,6 +603,15 @@ RESEARCH_NOTES_MAX_CHARS = Config[int](
     ),
 )
 
+RESEARCH_FETCH_TIMEOUT_SECONDS = Config[int](
+    name="HARBOR_BOOST_RESEARCH_FETCH_TIMEOUT_SECONDS",
+    type=int,
+    default="30",
+    description=(
+        "HTTP timeout, in seconds, for `web_search` and `read_url` outbound requests."
+    ),
+)
+
 TOOLS_FILE_MAX_CHARS = Config[int](
     name="HARBOR_BOOST_TOOLS_FILE_MAX_CHARS",
     type=int,

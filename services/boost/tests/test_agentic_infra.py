@@ -4,7 +4,7 @@ import os
 import sys
 import tempfile
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
@@ -25,6 +25,9 @@ from research.brief import (
 )
 from research.budget import BudgetExceeded, ResearchBudget, budget_from_config
 from research.fetch import (
+  _read_direct,
+  _read_with_jina,
+  _search_tavily,
   is_read_failure_result,
   is_search_failure_result,
   read_url,
@@ -37,6 +40,66 @@ from modules import tools
 
 
 class TestResearchFetch:
+  def _mock_httpx_client(self):
+    mock_response = MagicMock()
+    mock_response.raise_for_status = MagicMock()
+    mock_response.json.return_value = {"results": []}
+    mock_response.text = "<html><body>page</body></html>"
+    mock_response.headers = {"content-type": "text/html"}
+
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(return_value=mock_response)
+    mock_client.post = AsyncMock(return_value=mock_response)
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=None)
+    return mock_client
+
+  def test_research_fetch_timeout_defaults_to_30_seconds(self):
+    assert config.RESEARCH_FETCH_TIMEOUT_SECONDS.name == "HARBOR_BOOST_RESEARCH_FETCH_TIMEOUT_SECONDS"
+    assert config.RESEARCH_FETCH_TIMEOUT_SECONDS.value == 30
+
+  @pytest.mark.asyncio
+  async def test_search_tavily_uses_configured_fetch_timeout(self):
+    mock_client = self._mock_httpx_client()
+    original_key = config.TAVILY_API_KEY.__value__
+    original_timeout = config.RESEARCH_FETCH_TIMEOUT_SECONDS.__value__
+    try:
+      config.TAVILY_API_KEY.__value__ = "test-key"
+      config.RESEARCH_FETCH_TIMEOUT_SECONDS.__value__ = 42
+      with patch("research.fetch.httpx.AsyncClient", return_value=mock_client) as client_ctor:
+        await _search_tavily("python asyncio", max_results=3)
+    finally:
+      config.TAVILY_API_KEY.__value__ = original_key
+      config.RESEARCH_FETCH_TIMEOUT_SECONDS.__value__ = original_timeout
+
+    client_ctor.assert_called_once_with(timeout=42.0)
+
+  @pytest.mark.asyncio
+  async def test_read_with_jina_uses_configured_fetch_timeout(self):
+    mock_client = self._mock_httpx_client()
+    original_timeout = config.RESEARCH_FETCH_TIMEOUT_SECONDS.__value__
+    try:
+      config.RESEARCH_FETCH_TIMEOUT_SECONDS.__value__ = 17
+      with patch("research.fetch.httpx.AsyncClient", return_value=mock_client) as client_ctor:
+        await _read_with_jina("https://example.com/docs")
+    finally:
+      config.RESEARCH_FETCH_TIMEOUT_SECONDS.__value__ = original_timeout
+
+    client_ctor.assert_called_once_with(timeout=17.0, follow_redirects=True)
+
+  @pytest.mark.asyncio
+  async def test_read_direct_uses_configured_fetch_timeout(self):
+    mock_client = self._mock_httpx_client()
+    original_timeout = config.RESEARCH_FETCH_TIMEOUT_SECONDS.__value__
+    try:
+      config.RESEARCH_FETCH_TIMEOUT_SECONDS.__value__ = 12
+      with patch("research.fetch.httpx.AsyncClient", return_value=mock_client) as client_ctor:
+        await _read_direct("https://example.com/docs")
+    finally:
+      config.RESEARCH_FETCH_TIMEOUT_SECONDS.__value__ = original_timeout
+
+    client_ctor.assert_called_once_with(timeout=12.0, follow_redirects=True)
+
   def test_trim_truncates_long_text(self):
     text = "x" * 20
     result = trim(text, 10)

@@ -28,6 +28,10 @@ _RETRY_BACKOFF_SECONDS = 1.0
 _T = TypeVar("_T")
 
 
+def _research_fetch_timeout() -> float:
+  return float(config.RESEARCH_FETCH_TIMEOUT_SECONDS.value)
+
+
 def _is_transient_failure(exc: BaseException) -> bool:
   return isinstance(exc, _TRANSIENT_HTTP_ERRORS)
 
@@ -104,14 +108,14 @@ async def _read_with_jina(url: str) -> str:
     headers["Authorization"] = f"Bearer {config.JINA_READER_API_KEY.value}"
 
   endpoint = f"{config.JINA_READER_API_URL.value.rstrip('/')}/{url}"
-  async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
+  async with httpx.AsyncClient(timeout=_research_fetch_timeout(), follow_redirects=True) as client:
     response = await client.get(endpoint, headers=headers)
     response.raise_for_status()
     return response.text
 
 
 async def _read_direct(url: str) -> str:
-  async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
+  async with httpx.AsyncClient(timeout=_research_fetch_timeout(), follow_redirects=True) as client:
     response = await client.get(url, headers={"User-Agent": USER_AGENT})
     response.raise_for_status()
     content_type = response.headers.get("content-type", "")
@@ -157,7 +161,7 @@ async def _search_tavily(query: str, max_results: int) -> str:
     "include_raw_content": False,
   }
 
-  async with httpx.AsyncClient(timeout=30.0) as client:
+  async with httpx.AsyncClient(timeout=_research_fetch_timeout()) as client:
     response = await client.post("https://api.tavily.com/search", json=payload)
     response.raise_for_status()
     data = response.json()
@@ -181,7 +185,7 @@ async def _search_searxng(query: str, max_results: int) -> str:
       params[key] = values[-1]
 
   endpoint = f"{config.SEARXNG_URL.value.rstrip('/')}/search"
-  async with httpx.AsyncClient(timeout=30.0) as client:
+  async with httpx.AsyncClient(timeout=_research_fetch_timeout()) as client:
     response = await client.get(endpoint, params=params)
     response.raise_for_status()
     data = response.json()
