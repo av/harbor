@@ -106,6 +106,10 @@ class TestCavemanHeuristics:
   def test_research_heuristic_rejects_short_messages(self):
     assert not caveman.research_heuristic("hi")
 
+  def test_research_heuristic_rejects_bare_questions_without_research_signals(self):
+    assert not caveman.research_heuristic("How should I structure this function?")
+    assert not caveman.research_heuristic("Can you explain what went wrong here?")
+
 
 class TestCavemanLlmTrigger:
   def _chat(self, content: str) -> ch.Chat:

@@ -605,6 +605,19 @@ async def revise_with_correction(
   return (revised or draft).strip()
 
 
+def anchor_scoped_draft(
+  chat: "ch.Chat",
+  final_text: str,
+  module_cfg: dict,
+) -> None:
+  """Record a scoped draft in chat history for downstream workflow modules."""
+  if not module_cfg.get("defer_final"):
+    return
+  text = (final_text or "").strip()
+  if text:
+    chat.assistant(text)
+
+
 async def emit_final(llm: "llm.LLM", final_text: str) -> None:
   if final_text:
     await llm.emit_message(final_text)
@@ -701,6 +714,7 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
         collateral_violations=len(collateral_violations),
       ),
     )
+    anchor_scoped_draft(chat, draft, module_cfg)
     await emit_final(llm, draft)
     return draft
 
@@ -750,5 +764,6 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
       collateral_violations=len(collateral_violations),
     ),
   )
+  anchor_scoped_draft(chat, final_text, module_cfg)
   await emit_final(llm, final_text)
   return final_text

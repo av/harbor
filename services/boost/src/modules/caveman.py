@@ -288,12 +288,8 @@ async def needs_research(chat: "ch.Chat", llm: "llm.LLM") -> bool:
 
 
 def research_heuristic(text: str) -> bool:
-  text = (text or "").strip()
-  if not text or len(text) < 8:
-    return False
-  if deliverable.has_research_signals(text):
-    return True
-  return "?" in text and len(text) > 20
+  """Return True when heuristic mode should run smash-and-grab research."""
+  return deliverable.has_research_signals((text or "").strip())
 
 
 async def extract_search_queries(
