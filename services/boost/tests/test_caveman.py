@@ -424,8 +424,8 @@ class TestCavemanStatusFormatting:
     assert caveman.format_skipped_status("acknowledgment") == (
       "Caveman research: skipped (acknowledgment)"
     )
-    assert caveman.format_skipped_status("coding_no_research_signals") == (
-      "Caveman research: skipped (coding_no_research_signals)"
+    assert caveman.format_skipped_status("implementation_turn") == (
+      "Caveman research: skipped (implementation_turn)"
     )
 
   def test_format_query_status_matches_ponytail_style(self):

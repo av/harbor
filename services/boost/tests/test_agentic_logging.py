@@ -60,7 +60,7 @@ class TestCavemanGateReason:
 
   def test_skip_reason_for_coding_without_research_signals(self):
     chat = self._chat("Implement retry helper in services/boost/src/utils.py")
-    assert caveman.research_skip_reason(chat) == "coding_no_research_signals"
+    assert caveman.research_skip_reason(chat) == "implementation_turn"
 
   @pytest.mark.asyncio
   async def test_gate_reason_heuristic_no_match(self):

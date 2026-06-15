@@ -107,6 +107,22 @@ PRIOR_CODE_ACTION_RE = re.compile(
   r"\b(?:fix|implement|refactor|add|update|patch|debug|change|modify|create|write)\b",
   re.IGNORECASE,
 )
+IMPLEMENTATION_ACTION_RE = re.compile(
+  r"\b(?:implement|fix|add|patch)\b",
+  re.IGNORECASE,
+)
+IMPLEMENTATION_RESEARCH_INTENT_RE = re.compile(
+  r"\b(?:"
+  r"latest|current|recent(?:ly)?|today|official|"
+  r"documentat(?:ion|e)|changelog|release\s+notes?|breaking\s+changes?|"
+  r"migrat(?:e|ion|ing)|upgrade(?:\s+path|\s+guide)?|deprecat(?:e|ed|ion)"
+  r")\b",
+  re.IGNORECASE,
+)
+BARE_FILENAME_RE = re.compile(
+  r"(?:^|[\s`'\"(,\[])(?:[\w.-]+/)*[\w.-]+\.(?:py|ts|tsx|js|jsx|go|rs|java|rb|php|cs|cpp|c|h|hpp|swift|kt|scala|sql|yaml|yml|toml|json|md|sh|bash|zsh|dockerfile|makefile)\b",
+  re.IGNORECASE,
+)
 EXPLICIT_DONE_SIGNAL_RE = re.compile(
   r"\b(?:"
   r"we(?:'re| are)\s+done|ship\s+it|looks?\s+good|lgtm|"
@@ -173,6 +189,33 @@ def is_research_only_turn(chat: "ch.Chat") -> bool:
   if is_coding_deliverable(chat):
     return False
   return has_research_signals(text)
+
+
+def has_file_path_mention(text: str) -> bool:
+  """Return True when the message names a repo-relative or bare source file."""
+  text = text or ""
+  return bool(
+    FILE_PATH_RE.search(text)
+    or BACKTICK_PATH_RE.search(text)
+    or BARE_FILENAME_RE.search(text)
+  )
+
+
+def is_implementation_turn(chat: "ch.Chat") -> bool:
+  """
+  Return True when the latest user turn is a concrete file edit, not research.
+
+  Requires an implementation action (implement/fix/add/patch), a file path
+  mention, and no research signals on the user message.
+  """
+  text = _last_user_text(chat).strip()
+  if not text or is_acknowledgment(text):
+    return False
+  if has_research_signals(text) or IMPLEMENTATION_RESEARCH_INTENT_RE.search(text):
+    return False
+  if not IMPLEMENTATION_ACTION_RE.search(text):
+    return False
+  return has_file_path_mention(text)
 
 
 def has_research_signals(text: str) -> bool:

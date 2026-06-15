@@ -213,9 +213,8 @@ def research_skip_reason(chat: "ch.Chat") -> str | None:
   if low_value:
     return low_value
 
-  text = orchestrate.last_user_text(chat)
-  if deliverable.is_coding_deliverable(chat) and not deliverable.has_research_signals(text):
-    return "coding_no_research_signals"
+  if deliverable.is_implementation_turn(chat):
+    return "implementation_turn"
 
   brief = keel.get_stored_brief() or keel.hydrate_brief_from_chat(chat)
   if (

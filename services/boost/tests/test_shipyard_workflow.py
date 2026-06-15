@@ -99,7 +99,68 @@ def _implementation_brief() -> TaskBrief:
   )
 
 
+IMPLEMENTATION_TURN_MESSAGE = (
+  "Fix the retry helper in services/boost/src/utils.py"
+)
+
+IMPLEMENTATION_WITH_RESEARCH_MESSAGE = (
+  "Implement OAuth against the latest Stripe API documentation for checkout sessions."
+)
+
+
 class TestShipyardTurnTypes:
+  def test_is_implementation_turn_detects_action_and_path_without_research(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": IMPLEMENTATION_TURN_MESSAGE},
+    ])
+    assert deliverable.is_implementation_turn(chat)
+    assert deliverable.has_file_path_mention(IMPLEMENTATION_TURN_MESSAGE)
+    assert not deliverable.has_research_signals(IMPLEMENTATION_TURN_MESSAGE)
+
+  def test_is_implementation_turn_detects_bare_filename_without_research(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Implement the helper in utils.py"},
+    ])
+    assert deliverable.is_implementation_turn(chat)
+
+  def test_is_implementation_turn_false_when_research_signals_present(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": IMPLEMENTATION_WITH_RESEARCH_MESSAGE},
+    ])
+    assert deliverable.has_research_signals(IMPLEMENTATION_WITH_RESEARCH_MESSAGE)
+    assert not deliverable.is_implementation_turn(chat)
+
+  def test_is_implementation_turn_false_for_shipyard_migration_with_docs(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": SHIPYARD_USER_MESSAGE},
+    ])
+    assert not deliverable.is_implementation_turn(chat)
+
+  def test_is_implementation_turn_false_for_research_only_question(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": RESEARCH_ONLY_MESSAGE},
+    ])
+    assert not deliverable.is_implementation_turn(chat)
+
+  @pytest.mark.asyncio
+  async def test_caveman_skips_implementation_turn_without_keel_brief(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": IMPLEMENTATION_TURN_MESSAGE},
+    ])
+    assert caveman.research_skip_reason(chat) == "implementation_turn"
+    assert caveman.should_skip_research(chat)
+    assert not await caveman.needs_research(chat, MagicMock(module=caveman.ID_PREFIX))
+
+  @pytest.mark.asyncio
+  async def test_ponytail_skips_implementation_turn(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": IMPLEMENTATION_TURN_MESSAGE},
+    ])
+    assert ponytail.research_skip_reason(chat) == "implementation_turn"
+    assert ponytail.should_skip_research(chat)
+    llm = MagicMock(module=ponytail.ID_PREFIX)
+    assert not await ponytail.needs_research(chat, llm)
+
   @pytest.mark.asyncio
   async def test_caveman_skips_when_keel_brief_is_implementation(self):
     chat = ch.Chat.from_conversation([

@@ -326,7 +326,14 @@ def _store_cached_brief(message: str, brief: brief_mod.ResearchBrief) -> None:
 
 def research_skip_reason(chat: "ch.Chat") -> str | None:
   """Return a pass-through reason when research should be skipped, else None."""
-  return orchestrate.low_value_skip_reason(chat)
+  low_value = orchestrate.low_value_skip_reason(chat)
+  if low_value:
+    return low_value
+
+  if deliverable.is_implementation_turn(chat):
+    return "implementation_turn"
+
+  return None
 
 
 def should_skip_research(chat: "ch.Chat") -> bool:
@@ -335,7 +342,7 @@ def should_skip_research(chat: "ch.Chat") -> bool:
 
 
 def _needs_research_with_module_prefix(chat: "ch.Chat", text: str) -> bool:
-  if deliverable.is_coding_deliverable(chat) and not deliverable.has_research_signals(text):
+  if deliverable.is_implementation_turn(chat):
     return False
   return deliverable.has_research_signals(text) and len(text) >= 20
 
