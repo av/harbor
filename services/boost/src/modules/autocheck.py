@@ -405,9 +405,14 @@ def effective_max_revise_passes() -> int:
   """
   Return the revise-pass budget for the current autocheck request.
 
+  ``HARBOR_BOOST_AUTOCHECK_MAX_REVISE_PASSES`` is canonical.
+  ``HARBOR_BOOST_AUTOCHECK_MAX_PASSES`` is a backward-compatible alias; the
+  higher of the two values wins when both are set.
   Strict mode grants one extra revise attempt (still capped at 2).
   """
-  base = clamp_max_revise_passes(boost_config.AUTOCHECK_MAX_REVISE_PASSES.value)
+  revise = clamp_max_revise_passes(boost_config.AUTOCHECK_MAX_REVISE_PASSES.value)
+  legacy = clamp_max_revise_passes(boost_config.AUTOCHECK_MAX_PASSES.value)
+  base = max(revise, legacy)
   if boost_config.AUTOCHECK_STRICT.value:
     return min(base + 1, MAX_REVISE_PASSES_CAP)
   return base

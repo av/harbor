@@ -190,35 +190,58 @@ class TestAutocheckGate:
 
   def test_effective_max_revise_passes_defaults_to_one(self):
     original_revise = config.AUTOCHECK_MAX_REVISE_PASSES.__value__
+    original_passes = config.AUTOCHECK_MAX_PASSES.__value__
     original_strict = config.AUTOCHECK_STRICT.__value__
     try:
       config.AUTOCHECK_MAX_REVISE_PASSES.__value__ = 1
+      config.AUTOCHECK_MAX_PASSES.__value__ = 1
       config.AUTOCHECK_STRICT.__value__ = False
       assert autocheck.effective_max_revise_passes() == 1
     finally:
       config.AUTOCHECK_MAX_REVISE_PASSES.__value__ = original_revise
+      config.AUTOCHECK_MAX_PASSES.__value__ = original_passes
+      config.AUTOCHECK_STRICT.__value__ = original_strict
+
+  def test_effective_max_revise_passes_honors_legacy_max_passes_alias(self):
+    original_revise = config.AUTOCHECK_MAX_REVISE_PASSES.__value__
+    original_passes = config.AUTOCHECK_MAX_PASSES.__value__
+    original_strict = config.AUTOCHECK_STRICT.__value__
+    try:
+      config.AUTOCHECK_MAX_REVISE_PASSES.__value__ = 1
+      config.AUTOCHECK_MAX_PASSES.__value__ = 2
+      config.AUTOCHECK_STRICT.__value__ = False
+      assert autocheck.effective_max_revise_passes() == 2
+    finally:
+      config.AUTOCHECK_MAX_REVISE_PASSES.__value__ = original_revise
+      config.AUTOCHECK_MAX_PASSES.__value__ = original_passes
       config.AUTOCHECK_STRICT.__value__ = original_strict
 
   def test_effective_max_revise_passes_adds_one_in_strict_mode(self):
     original_revise = config.AUTOCHECK_MAX_REVISE_PASSES.__value__
+    original_passes = config.AUTOCHECK_MAX_PASSES.__value__
     original_strict = config.AUTOCHECK_STRICT.__value__
     try:
       config.AUTOCHECK_MAX_REVISE_PASSES.__value__ = 1
+      config.AUTOCHECK_MAX_PASSES.__value__ = 1
       config.AUTOCHECK_STRICT.__value__ = True
       assert autocheck.effective_max_revise_passes() == 2
     finally:
       config.AUTOCHECK_MAX_REVISE_PASSES.__value__ = original_revise
+      config.AUTOCHECK_MAX_PASSES.__value__ = original_passes
       config.AUTOCHECK_STRICT.__value__ = original_strict
 
   def test_effective_max_revise_passes_stays_capped_when_strict_and_config_two(self):
     original_revise = config.AUTOCHECK_MAX_REVISE_PASSES.__value__
+    original_passes = config.AUTOCHECK_MAX_PASSES.__value__
     original_strict = config.AUTOCHECK_STRICT.__value__
     try:
       config.AUTOCHECK_MAX_REVISE_PASSES.__value__ = 2
+      config.AUTOCHECK_MAX_PASSES.__value__ = 2
       config.AUTOCHECK_STRICT.__value__ = True
       assert autocheck.effective_max_revise_passes() == 2
     finally:
       config.AUTOCHECK_MAX_REVISE_PASSES.__value__ = original_revise
+      config.AUTOCHECK_MAX_PASSES.__value__ = original_passes
       config.AUTOCHECK_STRICT.__value__ = original_strict
 
   def test_strict_mode_requires_workspace_root_gate_reason(self):
