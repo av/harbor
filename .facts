@@ -233,7 +233,7 @@
   command: cd services/boost && uv run pytest tests/test_shipyard_workflow.py::TestShipyardTurnTypes tests/test_shipyard_workflow.py::TestShipyardDeferFinal -q --tb=no
   tags: [spec, implemented]
 - label: scope-guard workflow chains tools diffscope and autocheck before final for focused bugfix deliverables with user-stated file scope
-  command: cd services/boost && uv run pytest tests/test_workflows.py::TestWorkflowPresets::test_scope_guard_preset_module_chain tests/test_workflows.py::TestApplyWorkflow::test_scope_guard_runs_full_module_chain_before_final -q --tb=no
+  command: cd services/boost && uv run pytest tests/test_workflows.py::TestWorkflowPresets::test_scope_guard_preset_module_chain tests/test_workflows.py::TestApplyWorkflow::test_scope_guard_runs_full_module_chain_before_final tests/test_agentic_workflow_chains.py::TestScopeGuardWorkflowChain -q --tb=no
   tags: [spec, implemented]
 - label: agent-code workflow chains tools sightline diffscope and autocheck before final for sandbox coding sessions
   command: cd services/boost && uv run pytest tests/test_workflows.py::TestWorkflowPresets::test_agent_code_preset_module_chain -q --tb=no
@@ -277,12 +277,24 @@
 - label: autocheck runs mechanical pre-audit before the LLM audit on deliverable turns: flags code without cited paths or missing workspace paths, includes git diff stat context, and forces revise when blockers are found
   command: cd services/boost && uv run pytest tests/test_autocheck.py::TestMechanicalPreaudit -q --tb=no
   tags: [spec, implemented]
+- label: git_diff_workspace is an opt-in portable tool when HARBOR_BOOST_WORKSPACE_ROOT is set on a git repo: returns git diff --name-only and --stat for workspace paths with optional path scoping jail and 5 second timeout
+  command: cd services/boost && uv run pytest tests/test_agentic_infra.py::TestWorkspaceFileTool::test_git_diff_workspace_returns_stat_and_name_only tests/test_agentic_infra.py::TestWorkspaceFileTool::test_git_diff_workspace_scopes_path tests/test_agentic_infra.py::TestWorkspaceFileTool::test_git_diff_workspace_path_jail tests/test_agentic_infra.py::TestWorkspaceFileTool::test_selected_tools_includes_git_diff_when_git_workspace -q --tb=no
+  tags: [implemented]
+- label: autocheck supports HARBOR_BOOST_AUTOCHECK_SHOW_AUDIT and per-request boost show_audit param: when enabled appends an audit footer to deliverable answers and emits an HTML findings summary artifact; show_audit overrides config
+  command: cd services/boost && uv run pytest tests/test_autocheck.py::TestWorkspacePaths::test_show_audit_footer_reads_boost_params tests/test_autocheck.py::TestWorkspacePaths::test_show_audit_footer_boost_param_overrides_config tests/test_autocheck.py::TestAutocheckApply::test_apply_appends_audit_footer_when_show_audit_enabled tests/test_autocheck.py::TestAutocheckApply::test_apply_skips_audit_artifact_when_show_audit_disabled -q --tb=no
+  tags: [implemented]
+- label: diffscope revise_with_correction prompt includes explicit allowed_paths forbidden_paths out_of_scope_paths and git_evidence sections built from user scope violations and workspace git diff
+  command: cd services/boost && uv run pytest tests/test_diffscope.py::TestWorkspaceAndNotes::test_build_revise_scope_sections_lists_allowed_forbidden_and_git_evidence -q --tb=no
+  tags: [implemented]
 
 # testing
 - label: tests use a Deno orchestrator running sequential bash suites across containerized distros
   command: test -f tests/run.ts && test -f tests/suites/01-install.sh && test -f tests/suites/05-launch-smoke.sh
 - label: harbor dev test runs the container test matrix documented in tests/README.md
   command: test -f tests/README.md && rg -q 'harbor dev test' tests/README.md
+- label: harbor dev test --suite boost-agentic-smoke runs the Boost agentic pytest battery via tests/suites/06-boost-agentic-smoke.sh with container or host mode through tests/lib/boost-agentic.sh
+  command: test -f tests/suites/06-boost-agentic-smoke.sh && test -f tests/lib/boost-agentic.sh && rg -q 'boost-agentic-smoke' tests/README.md
+  tags: [implemented]
 
 # lint
 - label: harbor dev lint runs a three-pass Deno orchestrator with HARBOR-prefixed bash rules under .scripts/lint
