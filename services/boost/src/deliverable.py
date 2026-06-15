@@ -109,6 +109,7 @@ CODING_SESSION_TOOL_NAMES = frozenset({
   "read_workspace_file",
   "write_workspace_file",
   "grep_workspace",
+  "list_workspace_files",
   "write_file",
   "read_file",
   "list_files",

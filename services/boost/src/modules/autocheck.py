@@ -44,7 +44,8 @@ messages are always skipped.
 
 When `HARBOR_BOOST_WORKSPACE_ROOT` is set and paths are cited, the audit cannot
 return `pass` without workspace evidence — either direct `read_workspace_file`
-reads, `grep_workspace` symbol checks, or tool calls during workspace exploration.
+reads, `grep_workspace` symbol checks, `list_workspace_files` directory scans, or
+tool calls during workspace exploration.
 
 Before the LLM audit, mechanical pre-checks (no model call) run when a workspace
 is configured:
@@ -103,6 +104,7 @@ CONTINUATION_RE = re.compile(
 WORKSPACE_TOOL_NAMES = frozenset({
   "read_workspace_file",
   "grep_workspace",
+  "list_workspace_files",
 })
 
 SYMBOL_DEF_RE = re.compile(r"^\s*(?:async\s+)?def\s+([A-Za-z_]\w+)", re.MULTILINE)
@@ -145,6 +147,7 @@ WORKSPACE_EXPLORE_PROMPT = """
 You are verifying a coding draft against the workspace.
 Use the `read_workspace_file` tool to inspect files referenced in the draft or user request.
 Use the `grep_workspace` tool to verify functions, classes, and identifiers exist in the codebase.
+Use the `list_workspace_files` tool to discover files under cited directories when paths are ambiguous.
 Read only paths that exist and are relevant to correctness checks.
 When done exploring, reply with a short bullet list of verified facts and mismatches.
 Do not rewrite the draft.
@@ -425,6 +428,8 @@ def workspace_evidence_satisfied(
       return True
     if name == "read_workspace_file" and _workspace_tool_path(args):
       return True
+    if name == "list_workspace_files":
+      return True
 
   return False
 
@@ -660,11 +665,12 @@ def _register_workspace_tools() -> bool:
   if not config.WORKSPACE_ROOT.value:
     return False
 
-  from modules.tools import grep_workspace, read_workspace_file
+  from modules.tools import grep_workspace, list_workspace_files, read_workspace_file
 
   for name, tool in (
     ("read_workspace_file", read_workspace_file),
     ("grep_workspace", grep_workspace),
+    ("list_workspace_files", list_workspace_files),
   ):
     try:
       tools.registry.set_local_tool(name, tool)

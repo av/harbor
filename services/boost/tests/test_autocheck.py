@@ -366,6 +366,52 @@ class TestWorkspaceEvidence:
     assert calls[0]["name"] == "grep_workspace"
     assert calls[0]["arguments"]["pattern"] == "retry_helper"
 
+  def test_enforce_workspace_evidence_allows_pass_with_list_tool_call(self):
+    audit = autocheck.AuditResult(verdict="pass", summary="Looks good")
+    original = config.WORKSPACE_ROOT.__value__
+    try:
+      config.WORKSPACE_ROOT.__value__ = "/workspace"
+      enforced = autocheck.enforce_workspace_evidence(
+        audit,
+        ["src/main.py"],
+        "",
+        [{
+          "name": "list_workspace_files",
+          "arguments": {"path": "src", "glob": "*.py"},
+        }],
+      )
+    finally:
+      config.WORKSPACE_ROOT.__value__ = original
+
+    assert enforced.verdict == "pass"
+
+  def test_workspace_evidence_satisfied_with_list_tool_call(self):
+    tool_calls = [{
+      "name": "list_workspace_files",
+      "arguments": {"path": "src"},
+    }]
+    assert autocheck.workspace_evidence_satisfied("", tool_calls) is True
+
+  def test_extract_workspace_tool_calls_includes_list(self):
+    history = [
+      {
+        "role": "assistant",
+        "content": "",
+        "tool_calls": [{
+          "id": "call_3",
+          "type": "function",
+          "function": {
+            "name": "list_workspace_files",
+            "arguments": '{"path": "src", "glob": "*.py"}',
+          },
+        }],
+      }
+    ]
+    calls = autocheck.extract_workspace_tool_calls(history)
+    assert len(calls) == 1
+    assert calls[0]["name"] == "list_workspace_files"
+    assert calls[0]["arguments"]["path"] == "src"
+
 
 class TestSymbolVerification:
   def test_extract_audit_symbols_from_code_blocks(self):

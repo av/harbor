@@ -641,8 +641,8 @@ WORKSPACE_ROOT = Config[str](
     default="",
     description="""
 Root directory for workspace file reads and writes by agentic Boost modules and
-the `read_workspace_file`, `grep_workspace`, and opt-in `write_workspace_file`
-tools. When unset, workspace file tools are disabled.
+the `read_workspace_file`, `grep_workspace`, `list_workspace_files`, and opt-in
+`write_workspace_file` tools. When unset, workspace file tools are disabled.
 
 Example:
 ```bash
@@ -666,6 +666,13 @@ WORKSPACE_GREP_MAX_MATCHES = Config[int](
     type=int,
     default="50",
     description="Maximum number of matches returned by `grep_workspace`.",
+)
+
+WORKSPACE_LIST_MAX_ENTRIES = Config[int](
+    name="HARBOR_BOOST_WORKSPACE_LIST_MAX_ENTRIES",
+    type=int,
+    default="200",
+    description="Maximum number of file paths returned by `list_workspace_files`.",
 )
 
 # ----------------- CAVEMAN -----------------

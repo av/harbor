@@ -25,8 +25,8 @@ them during the final completion and Boost will execute them inline.
 The module exposes web research tools (`web_search`, `read_url`) plus small
 scratchpad utilities (`add_note`, `read_notes`, scratch files, `current_time`,
 and `finish`). When `HARBOR_BOOST_WORKSPACE_ROOT` is set, workspace tools
-(`read_workspace_file`, `grep_workspace`, and opt-in `write_workspace_file`) are
-also available. Web search uses
+(`read_workspace_file`, `grep_workspace`, `list_workspace_files`, and opt-in
+`write_workspace_file`) are also available. Web search uses
 Tavily when `HARBOR_BOOST_TAVILY_API_KEY` is set, otherwise SearXNG via
 `HARBOR_BOOST_SEARXNG_URL`. URL reading uses Jina Reader first and falls back
 to direct HTTP text extraction.
@@ -418,6 +418,42 @@ async def grep_workspace(
   return output
 
 
+async def list_workspace_files(
+  path: str = ".",
+  glob: str | None = None,
+  max_entries: int | None = None,
+) -> str:
+  """
+  List files under the configured workspace root.
+  Requires `HARBOR_BOOST_WORKSPACE_ROOT`. Paths are jailed to that directory.
+
+  Args:
+    path (str): Relative workspace directory to list. Default: workspace root.
+    glob (str | None): Optional glob filter such as `*.py`.
+    max_entries (int | None): Maximum file paths to return. Defaults to config cap.
+  """
+  search_target = _workspace_search_path(path)
+  workspace_base = _workspace_base()
+  search_root = search_target if search_target.is_dir() else search_target.parent
+  cap = max(1, max_entries or config.WORKSPACE_LIST_MAX_ENTRIES.value)
+
+  entries: list[str] = []
+  for _file_path, rel_path in _iter_workspace_files(search_root, workspace_base, glob):
+    entries.append(rel_path)
+    if len(entries) >= cap:
+      break
+
+  if not entries:
+    scope = path or "."
+    glob_note = f" (glob={glob})" if glob else ""
+    return f"No files under `{scope}`{glob_note}."
+
+  output = "\n".join(sorted(entries))
+  if len(entries) >= cap:
+    output += f"\n\n(truncated to {cap} entries)"
+  return output
+
+
 async def list_files() -> str:
   """
   List request-scoped scratch files.
@@ -487,6 +523,7 @@ def _selected_tools(configured_tools: list[str] | None = None) -> dict[str, Call
     available['read_workspace_file'] = read_workspace_file
     available['write_workspace_file'] = write_workspace_file
     available['grep_workspace'] = grep_workspace
+    available['list_workspace_files'] = list_workspace_files
 
   configured = set(configured_tools) if configured_tools else set(config.TOOLS.value) if config.TOOLS.value else DEFAULT_TOOLS
   selected = {}
