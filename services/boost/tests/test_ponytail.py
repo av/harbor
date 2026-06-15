@@ -15,6 +15,11 @@ from research.brief import RESEARCH_UNAVAILABLE_NOTE, ResearchBrief, render_to_s
 from research.budget import ResearchBudget
 
 
+def web_search_hop2_queries(searched: list[str], follow_up: list[str]) -> bool:
+  """Return True when every follow-up query appears in the search call list."""
+  return all(query in searched for query in follow_up)
+
+
 class TestPonytailBriefSynthesis:
   def test_synthesis_prompt_requires_scannable_agent_format(self):
     prompt = ponytail.SYNTHESIS_PROMPT
@@ -117,6 +122,230 @@ class TestPonytailQueryPlanning:
       "Pydantic v2 validator changes",
       "Pydantic v2 config migration",
     ]
+
+
+class TestPonytailGapDetection:
+  def _sparse_hop1_brief(self, query: str) -> ResearchBrief:
+    """Hop-1 brief with general migration notes but no target version specifics."""
+    brief = ResearchBrief(query=query)
+    brief.add_search_results(
+      "django migration overview",
+      "1. [Guide](https://docs.djangoproject.com) (Date: N/A)\n"
+      "General upgrade tips without explicit 5.0 release notes.",
+    )
+    brief.add_page(
+      "https://docs.djangoproject.com",
+      "Describes migration steps but omits Django 5.0 breaking changes.",
+    )
+    return brief
+
+  @pytest.mark.asyncio
+  async def test_detect_gaps_returns_follow_up_queries_from_llm(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Migrate from Django 4.2 to 5.0"},
+    ])
+    llm = MagicMock()
+    brief = self._sparse_hop1_brief("Migrate from Django 4.2 to 5.0")
+    gap_payload = {
+      "gaps": [
+        "No explicit Django 5.0 release notes cited",
+        "Target version compatibility matrix missing",
+      ],
+      "follow_up_queries": [
+        "Django 5.0 release notes breaking changes",
+        "Django 4.2 to 5.0 migration guide official",
+        "django 5.0 release notes breaking changes",
+      ],
+    }
+
+    with patch("research.orchestrate.cheap_llm") as cheap_llm:
+      cheap = MagicMock()
+      cheap.chat_completion = AsyncMock(return_value=gap_payload)
+      cheap_llm.return_value = cheap
+
+      gap = await ponytail.detect_gaps(
+        chat, llm, "Migrate from Django 4.2 to 5.0", brief
+      )
+
+    assert gap.gaps == gap_payload["gaps"]
+    assert gap.follow_up_queries == gap_payload["follow_up_queries"]
+    cheap.chat_completion.assert_awaited_once()
+    kwargs = cheap.chat_completion.await_args.kwargs
+    assert kwargs["schema"] is ponytail.GapAnalysis
+    assert kwargs["prompt"] == ponytail.GAP_DETECTION_PROMPT
+    assert kwargs["message"] == "Migrate from Django 4.2 to 5.0"
+    assert "General upgrade tips" in kwargs["research_summary"]
+    assert "omits Django 5.0 breaking changes" in kwargs["research_summary"]
+
+  @pytest.mark.asyncio
+  async def test_detect_gaps_returns_empty_when_llm_response_not_dict(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Compare API v1 vs v2"},
+    ])
+    llm = MagicMock()
+    brief = ResearchBrief(query="Compare API v1 vs v2")
+
+    with patch("research.orchestrate.cheap_llm") as cheap_llm:
+      cheap = MagicMock()
+      cheap.chat_completion = AsyncMock(return_value=None)
+      cheap_llm.return_value = cheap
+
+      gap = await ponytail.detect_gaps(chat, llm, "Compare API v1 vs v2", brief)
+
+    assert gap.gaps == []
+    assert gap.follow_up_queries == []
+
+  @pytest.mark.asyncio
+  async def test_run_research_loop_triggers_hop2_for_missing_version_info(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Migrate from Django 4.2 to 5.0"},
+    ])
+    llm = MagicMock()
+    llm.emit_status = AsyncMock()
+    budget = ResearchBudget(max_searches=4, max_url_reads=2, max_chars=8000)
+
+    hop1_search = (
+      "1. [Guide](https://docs.djangoproject.com) (Date: N/A)\n"
+      "General upgrade tips without explicit 5.0 release notes."
+    )
+    hop2_search = (
+      "1. [Release notes](https://docs.djangoproject.com/en/5.0/releases/5.0/) "
+      "(Date: N/A)\nDjango 5.0 removes django.utils.six."
+    )
+    gap = ponytail.GapAnalysis(
+      gaps=[
+        "No explicit Django 5.0 release notes cited",
+        "Target version compatibility matrix missing",
+      ],
+      follow_up_queries=[
+        "Django 5.0 release notes breaking changes",
+        "Django 4.2 to 5.0 migration guide official",
+      ],
+    )
+
+    searched_queries: list[str] = []
+
+    async def track_search(query: str, **kwargs):
+      searched_queries.append(query)
+      return hop2_search if len(searched_queries) > 2 else hop1_search
+
+    original = config.PONYTAIL_EARLY_EXIT_CHARS.__value__
+    try:
+      config.PONYTAIL_EARLY_EXIT_CHARS.__value__ = 15_000
+
+      with (
+        patch("research.fetch.web_search", new=AsyncMock(side_effect=track_search)),
+        patch(
+          "research.fetch.read_url",
+          new=AsyncMock(return_value="Sparse page without version changelog."),
+        ),
+        patch.object(ponytail, "detect_gaps", new=AsyncMock(return_value=gap)) as detect_gaps,
+        patch.object(
+          ponytail,
+          "synthesize_brief",
+          new=AsyncMock(side_effect=lambda _c, _l, _m, brief: brief),
+        ),
+      ):
+        brief = await ponytail.run_research_loop(
+          chat,
+          llm,
+          "Migrate from Django 4.2 to 5.0",
+          ["django migration overview", "django upgrade guide"],
+          budget,
+        )
+    finally:
+      config.PONYTAIL_EARLY_EXIT_CHARS.__value__ = original
+
+    detect_gaps.assert_awaited_once()
+    assert web_search_hop2_queries(searched_queries, gap.follow_up_queries)
+    assert budget.searches_used == 4
+    assert any("Gap: No explicit Django 5.0 release notes cited" in note for note in brief.notes)
+    statuses = [call.args[0] for call in llm.emit_status.await_args_list]
+    assert any("detecting gaps" in status for status in statuses)
+    assert any("hop 2 follow-up" in status for status in statuses)
+
+  @pytest.mark.asyncio
+  async def test_run_research_loop_skips_hop2_on_early_exit(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Migrate from FastAPI 0.100 to 0.115"},
+    ])
+    llm = MagicMock()
+    llm.emit_status = AsyncMock()
+    budget = ResearchBudget(max_searches=4, max_url_reads=2, max_chars=50_000)
+
+    search_text = "1. [Docs](https://docs.example.com) (Date: N/A)\n" + ("x" * 8000)
+    gap = ponytail.GapAnalysis(
+      gaps=["Need explicit deprecation list"],
+      follow_up_queries=["FastAPI 0.115 deprecations"],
+    )
+
+    original = config.PONYTAIL_EARLY_EXIT_CHARS.__value__
+    try:
+      config.PONYTAIL_EARLY_EXIT_CHARS.__value__ = 10_000
+
+      with (
+        patch("research.fetch.web_search", new=AsyncMock(return_value=search_text)) as web_search,
+        patch("research.fetch.read_url", new=AsyncMock(return_value="y" * 5000)),
+        patch.object(ponytail, "detect_gaps", new=AsyncMock(return_value=gap)) as detect_gaps,
+        patch.object(
+          ponytail,
+          "synthesize_brief",
+          new=AsyncMock(side_effect=lambda _c, _l, _m, brief: brief),
+        ),
+      ):
+        brief = await ponytail.run_research_loop(
+          chat,
+          llm,
+          "Migrate from FastAPI 0.100 to 0.115",
+          ["fastapi migration", "fastapi 0.115 changelog"],
+          budget,
+        )
+    finally:
+      config.PONYTAIL_EARLY_EXIT_CHARS.__value__ = original
+
+    assert web_search.await_count == 2
+    detect_gaps.assert_not_called()
+    assert any("early exit" in note.lower() for note in brief.notes)
+    statuses = [call.args[0] for call in llm.emit_status.await_args_list]
+    assert any("skipping hop 2" in status for status in statuses)
+    assert not any("hop 2 follow-up" in status for status in statuses)
+
+  @pytest.mark.asyncio
+  async def test_run_research_loop_skips_hop2_when_gap_has_no_follow_up_queries(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Compare Stripe API 2023-10-16 vs 2024-06-20"},
+    ])
+    llm = MagicMock()
+    llm.emit_status = AsyncMock()
+    budget = ResearchBudget(max_searches=4, max_url_reads=2, max_chars=8000)
+    gap = ponytail.GapAnalysis(
+      gaps=["Minor wording differences only"],
+      follow_up_queries=[],
+    )
+
+    with (
+      patch("research.fetch.web_search", new=AsyncMock(return_value="1. [Docs](https://stripe.example) (Date: N/A)\nSnippet")) as web_search,
+      patch("research.fetch.read_url", new=AsyncMock(return_value="stripe changelog")),
+      patch.object(ponytail, "detect_gaps", new=AsyncMock(return_value=gap)) as detect_gaps,
+      patch.object(
+        ponytail,
+        "synthesize_brief",
+        new=AsyncMock(side_effect=lambda _c, _l, _m, brief: brief),
+      ),
+    ):
+      brief = await ponytail.run_research_loop(
+        chat,
+        llm,
+        "Compare Stripe API 2023-10-16 vs 2024-06-20",
+        ["stripe api 2024-06-20 changelog", "stripe api migration"],
+        budget,
+      )
+
+    detect_gaps.assert_awaited_once()
+    assert web_search.await_count == 2
+    statuses = [call.args[0] for call in llm.emit_status.await_args_list]
+    assert not any("hop 2 follow-up" in status for status in statuses)
+    assert any("Gap: Minor wording differences only" in note for note in brief.notes)
 
 
 class TestPonytailResearchLoop:
