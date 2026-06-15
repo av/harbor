@@ -11,6 +11,7 @@ import log
 from modules import keel
 import research.brief as brief_mod
 import research.budget as budget_mod
+import research.debug_metrics as debug_metrics
 import research.orchestrate as orchestrate
 import research.workflow as workflow_mod
 from state import request as request_state
@@ -297,15 +298,43 @@ async def gather_research(
   )
 
 
+def _record_debug(
+  payload: debug_metrics.ModuleDebug,
+  *,
+  gate_reason: str | None = None,
+) -> None:
+  debug_metrics.record(ID_PREFIX, payload)
+  if gate_reason is not None:
+    logger.debug(
+      f"{ID_PREFIX}: Pass-through — {gate_reason} ({payload.model_dump()})"
+    )
+  else:
+    logger.debug(f"{ID_PREFIX}: {payload.model_dump()}")
+
+
 async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
+  timer = debug_metrics.DebugTimer()
+  extra_calls = 0
   message = orchestrate.last_user_text(chat)
   if not message:
     logger.warning(f"{ID_PREFIX}: No user message found, passing through")
+    _record_debug(
+      debug_metrics.skipped_payload("empty_message", duration_ms=timer.elapsed_ms()),
+    )
     return await workflow_mod.complete_or_defer(llm, config)
 
   gate_reason = await research_gate_reason(chat, llm)
+  if _uses_llm_trigger():
+    extra_calls += 1
   if gate_reason != "triggered":
-    logger.debug(f"{ID_PREFIX}: Pass-through — {gate_reason}")
+    _record_debug(
+      debug_metrics.skipped_payload(
+        gate_reason,
+        duration_ms=timer.elapsed_ms(),
+        extra_calls=extra_calls,
+      ),
+      gate_reason=gate_reason,
+    )
     return await workflow_mod.complete_or_defer(llm, config)
 
   cached_brief = _get_cached_brief(message)
@@ -315,6 +344,14 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
     if not cached_brief.query:
       cached_brief.query = message
     chat.system(brief_mod.render_to_system(cached_brief))
+    _record_debug(
+      debug_metrics.triggered_payload(
+        "triggered",
+        duration_ms=timer.elapsed_ms(),
+        extra_calls=extra_calls,
+        cached_brief=True,
+      ),
+    )
     return await workflow_mod.complete_or_defer(llm, config)
 
   await llm.emit_status(f"{STATUS_PREFIX}: planning queries...")
@@ -322,15 +359,31 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
 
   try:
     queries = await extract_search_queries(chat, llm, message)
+    extra_calls += 1
   except Exception as exc:
     logger.error(f"{ID_PREFIX}: query extraction failed: {exc}")
     brief = workflow_mod.failure_brief(message, f"Query extraction failed: {exc}")
     await llm.emit_status(f"{STATUS_PREFIX}: query planning failed, continuing without live data...")
     chat.system(brief_mod.render_to_system(brief))
+    _record_debug(
+      debug_metrics.triggered_payload(
+        "triggered",
+        duration_ms=timer.elapsed_ms(),
+        extra_calls=extra_calls,
+        query_extraction_failed=True,
+      ),
+    )
     return await workflow_mod.complete_or_defer(llm, config)
 
   if not queries:
     logger.warning(f"{ID_PREFIX}: No queries extracted, passing through")
+    _record_debug(
+      debug_metrics.triggered_payload(
+        "no_queries_extracted",
+        duration_ms=timer.elapsed_ms(),
+        extra_calls=extra_calls,
+      ),
+    )
     return await workflow_mod.complete_or_defer(llm, config)
 
   await llm.emit_status(
@@ -345,4 +398,14 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
 
   _store_cached_brief(message, brief)
   chat.system(brief_mod.render_to_system(brief))
+  _record_debug(
+    debug_metrics.triggered_payload(
+      "triggered",
+      duration_ms=timer.elapsed_ms(),
+      extra_calls=extra_calls,
+      queries=len(queries),
+      searches=len(brief.searches),
+      pages=len(brief.pages),
+    ),
+  )
   await workflow_mod.complete_or_defer(llm, config)

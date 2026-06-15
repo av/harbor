@@ -12,6 +12,7 @@ import chat as ch
 import config as boost_config
 import deliverable
 import log
+import research.debug_metrics as debug_metrics
 import research.orchestrate as orchestrate
 import research.workflow as workflow_mod
 import tools.registry
@@ -269,6 +270,38 @@ class AuditDebug(BaseModel):
   gate_reason: str = ""
   tool_calls: list[dict] = Field(default_factory=list)
   verdict: Literal["pass", "revise", "skipped"] = "skipped"
+  duration_ms: int = 0
+  extra_calls: int = 0
+
+
+def module_debug_from_audit(debug: AuditDebug) -> debug_metrics.ModuleDebug:
+  """Map autocheck audit debug into the shared request.state payload."""
+  return debug_metrics.ModuleDebug(
+    triggered=debug.triggered,
+    skipped=not debug.triggered or debug.verdict == "skipped",
+    reason=debug.gate_reason,
+    duration_ms=debug.duration_ms,
+    extra_calls=debug.extra_calls,
+    extra={
+      "verdict": debug.verdict,
+      "tool_calls": debug.tool_calls,
+    },
+  )
+
+
+def record_audit_debug(
+  debug: AuditDebug,
+  *,
+  duration_ms: int,
+  extra_calls: int,
+) -> AuditDebug:
+  """Persist audit debug on request.state and return the enriched payload."""
+  enriched = debug.model_copy(
+    update={"duration_ms": duration_ms, "extra_calls": extra_calls},
+  )
+  debug_metrics.record(ID_PREFIX, module_debug_from_audit(enriched))
+  logger.debug(f"{ID_PREFIX}: audit debug {enriched.model_dump()}")
+  return enriched
 
 
 def autocheck_gate_reason(chat: "ch.Chat") -> str:
@@ -1365,7 +1398,6 @@ async def run_audit(
     tool_calls=tool_calls,
     verdict=audit.verdict,
   )
-  logger.debug(f"{ID_PREFIX}: audit debug {debug.model_dump()}")
   return audit, debug
 
 
@@ -1402,16 +1434,24 @@ async def emit_final(llm: "llm.LLM", final_text: str) -> None:
 
 async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
   module_cfg = config or {}  # workflow module config; shadows name only in this block
+  timer = debug_metrics.DebugTimer()
+  extra_calls = 0
   gate_reason = autocheck_gate_reason(chat)
   if gate_reason != "triggered":
     debug = AuditDebug(triggered=False, gate_reason=gate_reason, verdict="skipped")
-    logger.debug(f"{ID_PREFIX}: Pass-through — {gate_reason} ({debug.model_dump()})")
+    record_audit_debug(debug, duration_ms=timer.elapsed_ms(), extra_calls=extra_calls)
+    logger.debug(f"{ID_PREFIX}: Pass-through — {gate_reason}")
     await llm.emit_status(format_skipped_status(gate_reason))
     return await workflow_mod.complete_or_defer(llm, module_cfg)
 
   message = orchestrate.last_user_text(chat)
   if not message:
     logger.warning(f"{ID_PREFIX}: No user message found, passing through")
+    record_audit_debug(
+      AuditDebug(triggered=True, gate_reason="triggered", verdict="skipped"),
+      duration_ms=timer.elapsed_ms(),
+      extra_calls=extra_calls,
+    )
     return await workflow_mod.complete_or_defer(llm, module_cfg)
 
   max_passes = max(0, boost_config.AUTOCHECK_MAX_PASSES.value)
@@ -1419,12 +1459,23 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
   await llm.emit_status("Autocheck: drafting...")
   try:
     draft = await generate_draft(chat, llm)
+    extra_calls += 1
   except Exception as exc:
     logger.error(f"{ID_PREFIX}: draft generation failed: {exc}")
+    record_audit_debug(
+      AuditDebug(triggered=True, gate_reason="triggered", verdict="skipped"),
+      duration_ms=timer.elapsed_ms(),
+      extra_calls=extra_calls,
+    )
     return await workflow_mod.complete_or_defer(llm, module_cfg)
 
   if not draft:
     logger.warning(f"{ID_PREFIX}: Empty draft, passing through")
+    record_audit_debug(
+      AuditDebug(triggered=True, gate_reason="triggered", verdict="skipped"),
+      duration_ms=timer.elapsed_ms(),
+      extra_calls=extra_calls,
+    )
     return await workflow_mod.complete_or_defer(llm, module_cfg)
 
   paths = extract_workspace_paths(message, draft)
@@ -1449,6 +1500,7 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
         draft,
         paths,
       )
+      extra_calls += 1
       if exploration_notes:
         workspace_exploration = (
           f"{workspace_exploration}\n\n{exploration_notes}".strip()
@@ -1468,8 +1520,19 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
       mechanical_findings=mechanical_findings,
       git_diff_context=git_diff_context,
     )
+    extra_calls += 1
   except Exception as exc:
     logger.error(f"{ID_PREFIX}: audit failed: {exc}")
+    record_audit_debug(
+      AuditDebug(
+        triggered=True,
+        gate_reason="triggered",
+        tool_calls=workspace_tool_calls,
+        verdict="skipped",
+      ),
+      duration_ms=timer.elapsed_ms(),
+      extra_calls=extra_calls,
+    )
     await llm.emit_status("Autocheck: audit failed — delivering draft")
     await emit_final(llm, draft)
     return draft
@@ -1490,6 +1553,7 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
         audit,
         mechanical_findings=mechanical_findings,
       )
+      extra_calls += 1
       paths = extract_workspace_paths(message, final_text)
       git_diff_context, mechanical_findings = await run_mechanical_preaudit(
         final_text,
@@ -1506,11 +1570,13 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
         mechanical_findings=mechanical_findings,
         git_diff_context=git_diff_context,
       )
+      extra_calls += 1
       await llm.emit_status(format_audit_status(audit))
     except Exception as exc:
       logger.error(f"{ID_PREFIX}: revise pass failed: {exc}")
       break
 
+  record_audit_debug(debug, duration_ms=timer.elapsed_ms(), extra_calls=extra_calls)
   await emit_audit_artifact(llm, audit)
   if should_prepend_strict_warning(audit):
     final_text = prepend_strict_warning_banner(final_text, audit)
