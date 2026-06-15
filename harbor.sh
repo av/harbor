@@ -2740,12 +2740,12 @@ launch_tool_group_services() {
 }
 
 launch_builtin_workflows() {
-    echo "research-quick research-deep code-check agent-research shipyard"
+    echo "research-quick research-deep code-check agent-research agent-code shipyard"
 }
 
 launch_builtin_workflow_is_valid() {
     case "$1" in
-    research-quick | research-deep | code-check | agent-research | shipyard)
+    research-quick | research-deep | code-check | agent-research | agent-code | shipyard)
         return 0
         ;;
     *)

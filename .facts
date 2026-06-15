@@ -84,8 +84,8 @@
 - label: harbor launch exposes --web and --workflow as Boost routing modifiers and rejects removed groups such as --time and --notes
   command: ./harbor.sh launch --help | rg -q -- '--web' && ./harbor.sh launch --help | rg -q -- '--workflow' && ! ./harbor.sh launch --help | rg -q -- '--time|--notes|--files|--scratch'
   tags: [implemented]
-- label: harbor launch --workflow starts Boost with a builtin preset such as shipyard, starts SearXNG when required, and routes the tool to a workflow-prefixed model
-  command: rg -q 'launch_prepare_builtin_workflow' harbor.sh && rg -q 'launch_builtin_workflow_is_valid' harbor.sh && rg -q 'shipyard' harbor.sh
+- label: harbor launch --workflow starts Boost with a builtin preset such as agent-code or shipyard, starts SearXNG when required, and routes the tool to a workflow-prefixed model
+  command: rg -q 'launch_prepare_builtin_workflow' harbor.sh && rg -q 'launch_builtin_workflow_is_valid' harbor.sh && rg -q 'agent-code' harbor.sh && rg -q 'shipyard' harbor.sh
   tags: [implemented]
 
 ## models
@@ -225,6 +225,9 @@
   tags: [implemented]
 - label: shipyard workflow chains keel caveman tools ponytail and autocheck before final, with defer_final on intermediate grounding and research steps
   command: cd services/boost && uv run pytest tests/test_workflows.py::TestWorkflowPresets::test_shipyard_preset_module_chain -q --tb=no
+  tags: [implemented]
+- label: agent-code workflow chains tools sightline diffscope and autocheck before final for sandbox coding sessions
+  command: cd services/boost && uv run pytest tests/test_workflows.py::TestWorkflowPresets::test_agent_code_preset_module_chain -q --tb=no
   tags: [implemented]
 - label: deliverable heuristics gate agentic modules: coding implementation requests with file paths or code blocks trigger post-processing while purely explanatory questions pass through
   command: cd services/boost && uv run pytest tests/test_agentic_infra.py::TestDeliverableGate -q --tb=no

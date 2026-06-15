@@ -525,6 +525,31 @@ assert_output '^model=shipyard-qwen-chat-model$'
 assert_output '^OPENAI_API_KEY=sk-boost$'
 assert_output 'base_url="http://localhost:8004/v1"'
 
+run_launch "workflow launch routes through agent-code workflow model without SearXNG" \
+  "ollama boost" "openai-mixed" \
+  --workflow agent-code --backend ollama codex --sandbox workspace-write
+assert_log '^tool=codex$'
+assert_log '^arg=model_providers\.harbor_launch\.base_url="http://localhost:8004/v1"$'
+assert_log '^arg=-m$'
+assert_log '^arg=agent-code-qwen-chat-model$'
+assert_docker_log 'up -d --wait boost$'
+assert_output "Starting Boost workflow 'agent-code' for backend 'ollama'"
+
+run_launch "already-prefixed agent-code workflow model is not prefixed again" \
+  "ollama boost" "openai-mixed" \
+  --workflow agent-code --backend ollama --model agent-code-qwen-chat-model codex
+assert_log '^tool=codex$'
+assert_log '^arg=-m$'
+assert_log '^arg=agent-code-qwen-chat-model$'
+
+run_launch "launch --workflow agent-code config prints boosted model and Boost API settings" \
+  "ollama boost" "openai-mixed" \
+  --workflow agent-code --backend ollama --config codex
+assert_output '^backend=boost$'
+assert_output '^model=agent-code-qwen-chat-model$'
+assert_output '^OPENAI_API_KEY=sk-boost$'
+assert_output 'base_url="http://localhost:8004/v1"'
+
 suite_log "unsupported workflow preset is rejected"
 if env \
   HARBOR_LEGACY_CLI=true \
