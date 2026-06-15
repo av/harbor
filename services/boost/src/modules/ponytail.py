@@ -273,7 +273,8 @@ def is_research_heavy(text: str) -> bool:
   return False
 
 
-research_skip_reason = orchestrate.research_skip_reason
+def research_skip_reason(chat: "ch.Chat") -> str | None:
+  return orchestrate.research_skip_reason(chat)
 
 
 def should_skip_research(chat: "ch.Chat") -> bool:
