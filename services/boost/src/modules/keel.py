@@ -1,12 +1,13 @@
 """Task anchor for multi-turn coding sessions in Harbor Boost."""
 
+import json
 import re
 from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field
 
 import chat as ch
-import config
+import config as boost_config
 import deliverable
 import log
 import research.workflow as workflow_mod
@@ -24,10 +25,16 @@ original objective. On the first substantive coding message it extracts a compac
 `TaskBrief` (objective, constraints, acceptance criteria, in-scope paths) via a
 cheap structured completion and stores it in request-scoped state.
 
-On later turns (turn >= 2) it injects a compact `<task_anchor>` system block with
-the objective, constraints, and the next unmet acceptance criterion. Simple drift
-heuristics flag scope-expansion phrases. A landing checklist is injected when the
-user signals completion or when the model calls the `finish` tool.
+On first extract it also serializes the brief into the chat as a hidden
+`<keel_brief hidden="true">` system marker so the brief survives stateless proxy
+restarts. Later requests re-hydrate from that marker when request state is empty.
+
+On later turns it injects a compact `<task_anchor>` system block with the
+objective, constraints, and the next unmet acceptance criterion. Anchor injection
+is throttled to every N user turns (see `HARBOR_BOOST_KEEL_ANCHOR_EVERY`). Simple
+drift heuristics flag scope-expansion phrases. A landing checklist with
+acceptance-criteria checkboxes is injected when the user signals completion or
+when the model calls the `finish` tool.
 
 **When to use**
 
@@ -42,6 +49,7 @@ deliverable verification or `diffscope` for file-scope enforcement.
 **Parameters**
 
 - `enabled` — when false, pass through without anchoring. Default: `true`
+- `anchor_every` — inject `<task_anchor>` every N user turns (turn 1 never). Default: `2`
 
 ```bash
 harbor boost modules add keel
@@ -73,6 +81,12 @@ SKIP_MESSAGE_RE = re.compile(
   r"proceed|keep\s+going|lgtm|looks?\s+good|next"
   r")\s*[.!]?\s*$",
   re.IGNORECASE,
+)
+
+BRIEF_MARKER_TAG = "keel_brief"
+BRIEF_MARKER_RE = re.compile(
+  rf"<{BRIEF_MARKER_TAG}\s+hidden=\"true\">\s*(\{{.*?\}})\s*</{BRIEF_MARKER_TAG}>",
+  re.IGNORECASE | re.DOTALL,
 )
 
 DRIFT_PHRASE_RE = re.compile(
@@ -185,6 +199,89 @@ def store_brief(brief: TaskBrief) -> None:
   _request_store("keel_task_brief", brief.model_dump())
 
 
+def render_brief_marker(brief: TaskBrief, met_criteria: set[int] | None = None) -> str:
+  payload = brief.model_dump()
+  if met_criteria:
+    payload["met_criteria"] = sorted(met_criteria)
+  return (
+    f'<{BRIEF_MARKER_TAG} hidden="true">\n'
+    f"{json.dumps(payload, separators=(',', ':'))}\n"
+    f"</{BRIEF_MARKER_TAG}>"
+  )
+
+
+def parse_brief_marker(content: str) -> tuple[TaskBrief, set[int]] | None:
+  match = BRIEF_MARKER_RE.search(content or "")
+  if not match:
+    return None
+
+  try:
+    payload = json.loads(match.group(1))
+  except json.JSONDecodeError:
+    logger.warning(f"{ID_PREFIX}: invalid brief marker JSON")
+    return None
+
+  met_raw = payload.pop("met_criteria", [])
+  try:
+    brief = TaskBrief(**payload)
+  except Exception as exc:
+    logger.warning(f"{ID_PREFIX}: invalid brief marker payload: {exc}")
+    return None
+
+  met: set[int] = set()
+  if isinstance(met_raw, list):
+    for item in met_raw:
+      try:
+        met.add(int(item))
+      except (TypeError, ValueError):
+        continue
+
+  return brief, met
+
+
+def chat_has_brief_marker(chat: "ch.Chat") -> bool:
+  for node in chat.plain():
+    if node.role == "system" and BRIEF_MARKER_RE.search(node.content or ""):
+      return True
+  return False
+
+
+def hydrate_brief_from_chat(chat: "ch.Chat") -> TaskBrief | None:
+  for node in chat.plain():
+    if node.role != "system":
+      continue
+    parsed = parse_brief_marker(node.content or "")
+    if parsed is None:
+      continue
+
+    brief, met = parsed
+    store_brief(brief)
+    store_met_criteria(met)
+    logger.info(
+      f"{ID_PREFIX}: re-hydrated task brief from chat marker "
+      f"({len(brief.acceptance_criteria)} criteria)"
+    )
+    return brief
+
+  return None
+
+
+def inject_brief_marker(chat: "ch.Chat", brief: TaskBrief) -> None:
+  if chat_has_brief_marker(chat):
+    return
+
+  met = get_met_criteria()
+  chat.system(render_brief_marker(brief, met))
+  logger.debug(f"{ID_PREFIX}: injected hidden brief marker into chat")
+
+
+def should_inject_anchor(user_turns: int) -> bool:
+  every = boost_config.KEEL_ANCHOR_EVERY.value
+  if every < 1:
+    every = 1
+  return user_turns >= 2 and user_turns % every == 0
+
+
 def get_met_criteria() -> set[int]:
   stored = _request_store("keel_met_criteria", [])
   return set(stored)
@@ -249,14 +346,19 @@ def render_anchor_block(brief: TaskBrief, next_criterion: str | None = None) -> 
 
 
 def render_landing_checklist(brief: TaskBrief, *, drift_detected: bool = False) -> str:
+  criteria = brief.acceptance_criteria or ["Task completed as requested."]
+  met = get_met_criteria()
+  met_count = sum(1 for index in range(len(criteria)) if index in met)
+  total = len(criteria)
+
   lines = [
     "<landing_checklist>",
     f"<objective>{brief.objective}</objective>",
-    "<acceptance_criteria>",
+    f'<acceptance_criteria status="{met_count}/{total} met">',
+    "Before finishing, confirm each acceptance criterion:",
   ]
 
-  met = get_met_criteria()
-  for index, criterion in enumerate(brief.acceptance_criteria or ["Task completed as requested."]):
+  for index, criterion in enumerate(criteria):
     mark = "x" if index in met else " "
     lines.append(f"- [{mark}] {criterion}")
 
@@ -280,7 +382,7 @@ def render_landing_checklist(brief: TaskBrief, *, drift_detected: bool = False) 
 
 
 def needs_keel(chat: "ch.Chat") -> bool:
-  if not config.KEEL_ENABLED.value:
+  if not boost_config.KEEL_ENABLED.value:
     return False
   if getattr(chat, "llm", None) and getattr(chat.llm, "module", None) == ID_PREFIX:
     return True
@@ -364,6 +466,7 @@ async def ensure_task_brief(
     brief.in_scope_paths = _fallback_paths(message)
 
   store_brief(brief)
+  inject_brief_marker(chat, brief)
   logger.info(f"{ID_PREFIX}: stored task brief with {len(brief.acceptance_criteria)} criteria")
   return brief
 
@@ -394,14 +497,15 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
     logger.warning(f"{ID_PREFIX}: No user message found, passing through")
     return await workflow_mod.complete_or_defer(llm, config)
 
-  if not needs_keel(chat) and not get_stored_brief():
+  brief = get_stored_brief() or hydrate_brief_from_chat(chat)
+
+  if not needs_keel(chat) and brief is None:
     logger.debug(f"{ID_PREFIX}: Pass-through — not a coding deliverable turn")
     return await workflow_mod.complete_or_defer(llm, config)
 
   user_turns = count_user_turns(chat)
   drift_detected = False
 
-  brief = get_stored_brief()
   if brief is None and is_substantive_message(message):
     await llm.emit_status("Keel: extracting task brief...")
     brief = await ensure_task_brief(chat, llm, message)
@@ -419,12 +523,19 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
       )
 
     met = update_met_criteria_from_history(chat, brief)
-    next_criterion = next_unmet_criterion(brief, met)
-    chat.system(render_anchor_block(brief, next_criterion))
-    logger.debug(
-      f"{ID_PREFIX}: injected anchor on turn {user_turns}"
-      + (f", next criterion: {next_criterion[:60]}" if next_criterion else ", all criteria met")
-    )
+
+    if should_inject_anchor(user_turns):
+      next_criterion = next_unmet_criterion(brief, met)
+      chat.system(render_anchor_block(brief, next_criterion))
+      logger.debug(
+        f"{ID_PREFIX}: injected anchor on turn {user_turns}"
+        + (f", next criterion: {next_criterion[:60]}" if next_criterion else ", all criteria met")
+      )
+    else:
+      logger.debug(
+        f"{ID_PREFIX}: skipped anchor on turn {user_turns} "
+        f"(every {boost_config.KEEL_ANCHOR_EVERY.value} turns)"
+      )
 
   if is_done_signal(message):
     logger.info(f"{ID_PREFIX}: done signal detected, injecting landing checklist")

@@ -245,7 +245,7 @@ class TestKeelEdgeCases:
     assert keel.count_user_turns(chat) == 1
 
   @pytest.mark.asyncio
-  async def test_apply_injects_anchor_on_third_user_turn(self):
+  async def test_apply_skips_anchor_on_third_user_turn_with_default_throttle(self):
     chat = ch.Chat.from_conversation([
       {"role": "user", "content": "Implement retry helper in services/boost/src/utils.py"},
       {"role": "assistant", "content": "Added retry helper with three attempts."},
@@ -265,6 +265,7 @@ class TestKeelEdgeCases:
 
     with (
       patch.object(keel, "get_stored_brief", return_value=brief),
+      patch.object(keel, "hydrate_brief_from_chat", return_value=None),
       patch.object(keel, "update_met_criteria_from_history", return_value=set()),
       patch.object(keel, "_register_finish_wrapper"),
     ):
@@ -272,7 +273,7 @@ class TestKeelEdgeCases:
 
     assert keel.count_user_turns(chat) == 3
     history = chat.history()
-    assert any("<task_anchor>" in (msg.get("content") or "") for msg in history)
+    assert not any("<task_anchor>" in (msg.get("content") or "") for msg in history)
     llm.stream_final_completion.assert_awaited_once()
 
   @pytest.mark.asyncio

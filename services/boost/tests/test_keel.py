@@ -92,9 +92,77 @@ class TestKeelBriefRendering:
       rendered = keel.render_landing_checklist(brief, drift_detected=True)
 
     assert "<landing_checklist>" in rendered
+    assert 'status="1/2 met"' in rendered
+    assert "Before finishing, confirm each acceptance criterion:" in rendered
     assert "[x] Add API route" in rendered
     assert "[ ] Add tests" in rendered
     assert "<drift_warning>" in rendered
+
+
+class TestKeelBriefPersistence:
+  def test_render_and_parse_brief_marker_roundtrip(self):
+    brief = keel.TaskBrief(
+      objective="Add retry helper",
+      constraints=["Keep changes minimal"],
+      acceptance_criteria=["Helper retries 3 times", "Tests pass"],
+      in_scope_paths=["services/boost/src/utils.py"],
+    )
+    marker = keel.render_brief_marker(brief, met_criteria={0})
+
+    assert '<keel_brief hidden="true">' in marker
+    parsed = keel.parse_brief_marker(marker)
+    assert parsed is not None
+    restored, met = parsed
+    assert restored.objective == brief.objective
+    assert restored.constraints == brief.constraints
+    assert restored.acceptance_criteria == brief.acceptance_criteria
+    assert restored.in_scope_paths == brief.in_scope_paths
+    assert met == {0}
+
+  def test_hydrate_brief_from_chat_restores_request_state(self):
+    brief = keel.TaskBrief(
+      objective="Add retry helper",
+      acceptance_criteria=["Helper retries 3 times"],
+      in_scope_paths=["services/boost/src/utils.py"],
+    )
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Implement retry helper"},
+      {"role": "system", "content": keel.render_brief_marker(brief, met_criteria={0})},
+      {"role": "user", "content": "Add tests next."},
+    ])
+
+    with (
+      patch.object(keel, "store_brief") as store_brief,
+      patch.object(keel, "store_met_criteria") as store_met,
+      patch.object(keel, "get_stored_brief", return_value=None),
+    ):
+      restored = keel.hydrate_brief_from_chat(chat)
+
+    assert restored is not None
+    assert restored.objective == brief.objective
+    store_brief.assert_called_once()
+    store_met.assert_called_once_with({0})
+
+  def test_should_inject_anchor_throttles_by_turn(self):
+    original = config.KEEL_ANCHOR_EVERY.__value__
+    try:
+      config.KEEL_ANCHOR_EVERY.__value__ = 2
+      assert not keel.should_inject_anchor(1)
+      assert keel.should_inject_anchor(2)
+      assert not keel.should_inject_anchor(3)
+      assert keel.should_inject_anchor(4)
+    finally:
+      config.KEEL_ANCHOR_EVERY.__value__ = original
+
+  def test_should_inject_anchor_every_turn_when_set_to_one(self):
+    original = config.KEEL_ANCHOR_EVERY.__value__
+    try:
+      config.KEEL_ANCHOR_EVERY.__value__ = 1
+      assert not keel.should_inject_anchor(1)
+      assert keel.should_inject_anchor(2)
+      assert keel.should_inject_anchor(3)
+    finally:
+      config.KEEL_ANCHOR_EVERY.__value__ = original
 
 
 class TestKeelExtraction:
@@ -170,6 +238,62 @@ class TestKeelApply:
     llm.stream_final_completion.assert_awaited_once()
 
   @pytest.mark.asyncio
+  async def test_apply_injects_brief_marker_on_first_extract(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Implement retry helper in services/boost/src/utils.py"},
+    ])
+    llm = MagicMock()
+    llm.emit_status = AsyncMock()
+    llm.stream_final_completion = AsyncMock()
+
+    brief = keel.TaskBrief(
+      objective="Add retry helper",
+      acceptance_criteria=["Helper retries 3 times"],
+      in_scope_paths=["services/boost/src/utils.py"],
+    )
+
+    with (
+      patch.object(keel, "get_stored_brief", return_value=None),
+      patch.object(keel, "hydrate_brief_from_chat", return_value=None),
+      patch.object(keel, "extract_task_brief", new=AsyncMock(return_value=brief)),
+      patch.object(keel, "_register_finish_wrapper"),
+    ):
+      await keel.apply(chat, llm)
+
+    history = chat.history()
+    assert any("<keel_brief hidden=\"true\">" in (msg.get("content") or "") for msg in history)
+
+  @pytest.mark.asyncio
+  async def test_apply_hydrates_brief_when_request_state_empty(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Implement retry helper in services/boost/src/utils.py"},
+      {"role": "system", "content": keel.render_brief_marker(
+        keel.TaskBrief(
+          objective="Add retry helper",
+          acceptance_criteria=["Helper retries 3 times"],
+          in_scope_paths=["services/boost/src/utils.py"],
+        )
+      )},
+      {"role": "assistant", "content": "Added retry helper."},
+      {"role": "user", "content": "Add tests for the retry helper."},
+    ])
+    llm = MagicMock()
+    llm.emit_status = AsyncMock()
+    llm.stream_final_completion = AsyncMock()
+
+    with (
+      patch.object(keel, "get_stored_brief", return_value=None),
+      patch.object(keel, "ensure_task_brief", new=AsyncMock()) as ensure,
+      patch.object(keel, "update_met_criteria_from_history", return_value=set()),
+      patch.object(keel, "_register_finish_wrapper"),
+    ):
+      await keel.apply(chat, llm)
+
+    ensure.assert_not_called()
+    history = chat.history()
+    assert any("<task_anchor>" in (msg.get("content") or "") for msg in history)
+
+  @pytest.mark.asyncio
   async def test_apply_injects_anchor_on_second_turn(self):
     chat = ch.Chat.from_conversation([
       {"role": "user", "content": "Implement retry helper in services/boost/src/utils.py"},
@@ -189,6 +313,7 @@ class TestKeelApply:
 
     with (
       patch.object(keel, "get_stored_brief", return_value=brief),
+      patch.object(keel, "hydrate_brief_from_chat", return_value=None),
       patch.object(keel, "update_met_criteria_from_history", return_value=set()),
       patch.object(keel, "_register_finish_wrapper"),
     ):
@@ -197,6 +322,36 @@ class TestKeelApply:
     history = chat.history()
     assert any("<task_anchor>" in (msg.get("content") or "") for msg in history)
     llm.stream_final_completion.assert_awaited_once()
+
+  @pytest.mark.asyncio
+  async def test_apply_skips_anchor_on_third_turn_with_default_throttle(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Implement retry helper in services/boost/src/utils.py"},
+      {"role": "assistant", "content": "Added retry helper with three attempts."},
+      {"role": "user", "content": "Add logging around retries."},
+      {"role": "assistant", "content": "Added structured logging."},
+      {"role": "user", "content": "Tighten the timeout handling."},
+    ])
+    llm = MagicMock()
+    llm.emit_status = AsyncMock()
+    llm.stream_final_completion = AsyncMock()
+
+    brief = keel.TaskBrief(
+      objective="Add retry helper",
+      acceptance_criteria=["Helper retries 3 times", "Tests pass"],
+      in_scope_paths=["services/boost/src/utils.py"],
+    )
+
+    with (
+      patch.object(keel, "get_stored_brief", return_value=brief),
+      patch.object(keel, "hydrate_brief_from_chat", return_value=None),
+      patch.object(keel, "update_met_criteria_from_history", return_value=set()),
+      patch.object(keel, "_register_finish_wrapper"),
+    ):
+      await keel.apply(chat, llm)
+
+    history = chat.history()
+    assert not any("<task_anchor>" in (msg.get("content") or "") for msg in history)
 
   @pytest.mark.asyncio
   async def test_apply_injects_landing_checklist_on_done_signal(self):
