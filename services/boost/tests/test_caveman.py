@@ -180,6 +180,29 @@ class TestCavemanLlmTrigger:
     llm.stream_final_completion.assert_awaited_once()
 
 
+class TestCavemanQueryQuality:
+  def test_query_extraction_prompt_quotes_exact_error_strings(self):
+    prompt = caveman.QUERY_EXTRACTION_PROMPT
+
+    assert "exact error string" in prompt
+    assert "double quotes" in prompt
+    assert "error message" in prompt or "stack trace" in prompt
+
+  def test_query_extraction_prompt_includes_version_numbers(self):
+    prompt = caveman.QUERY_EXTRACTION_PROMPT
+
+    assert "version numbers" in prompt
+    assert "carry those" in prompt
+    assert "versions into relevant queries" in prompt
+
+  def test_query_extraction_prompt_prefers_official_docs(self):
+    prompt = caveman.QUERY_EXTRACTION_PROMPT
+
+    assert "site:docs.*" in prompt
+    assert "official documentation" in prompt.lower()
+    assert "docs" in prompt
+
+
 class TestCavemanQueryExtraction:
   @pytest.mark.asyncio
   async def test_extract_search_queries_dedupes_and_limits(self):

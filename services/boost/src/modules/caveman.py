@@ -80,7 +80,13 @@ QUERY_EXTRACTION_PROMPT = """
 <instruction>
 Extract 1-3 concise web search queries that would help answer the user's latest message.
 Use absolute dates for time-sensitive topics. Prefer specific product, API, or error terms.
-Do not repeat near-duplicate queries.
+When the user quotes an error message or stack trace, include the exact error string in at
+least one query (wrap the error text in double quotes).
+When the user mentions version numbers (e.g. Python 3.12, FastAPI 0.115), carry those
+versions into relevant queries.
+Prefer official documentation: use site:docs.* when a docs domain is known, or
+"<package> docs" / "<product> documentation" as the first query when applicable.
+Do not repeat near-duplicate queries. Return at most 3 queries.
 </instruction>
 
 <conversation>
