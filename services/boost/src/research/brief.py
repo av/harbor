@@ -1,5 +1,6 @@
 """Structured research briefs for agentic Boost modules."""
 
+import html
 import re
 
 from pydantic import BaseModel, Field
@@ -99,8 +100,16 @@ def highlight_versions(text: str) -> str:
   return _VERSION_RE.sub(r"`\1`", text)
 
 
+def _escape_brief_text(text: str) -> str:
+  """Escape user-controlled brief text before embedding in system-context markup."""
+  return html.escape(text, quote=False)
+
+
 def _render_bullet_list(items: list[str]) -> list[str]:
-  return [f"- {highlight_versions(item)}" for item in items if item.strip()]
+  return [
+    f"- {_escape_brief_text(highlight_versions(item))}"
+    for item in items if item.strip()
+  ]
 
 
 def finalize_brief(brief: ResearchBrief) -> ResearchBrief:
@@ -116,34 +125,34 @@ def render_to_system(brief: ResearchBrief) -> str:
   sections = ["<research_brief>"]
 
   if brief.query:
-    sections.append(f"<query>{brief.query}</query>")
+    sections.append(f"<query>{_escape_brief_text(brief.query)}</query>")
 
   if brief.searches:
     sections.append("<search_results>")
     for idx, source in enumerate(brief.searches, start=1):
-      header = f"{idx}. {source.title}"
+      header = f"{idx}. {_escape_brief_text(source.title)}"
       if source.url:
-        header += f" ({source.url})"
+        header += f" ({_escape_brief_text(source.url)})"
       sections.append(header)
       if source.snippet:
-        sections.append(source.snippet)
+        sections.append(_escape_brief_text(source.snippet))
     sections.append("</search_results>")
 
   if brief.pages:
     sections.append("<page_content>")
     for source in brief.pages:
-      header = source.title
+      header = _escape_brief_text(source.title)
       if source.url:
-        header += f" — {source.url}"
+        header += f" — {_escape_brief_text(source.url)}"
       sections.append(header)
       if source.snippet:
-        sections.append(source.snippet)
+        sections.append(_escape_brief_text(source.snippet))
     sections.append("</page_content>")
 
   if brief.notes:
     sections.append("<notes>")
     for idx, note in enumerate(brief.notes, start=1):
-      sections.append(f"{idx}. {note}")
+      sections.append(f"{idx}. {_escape_brief_text(note)}")
     sections.append("</notes>")
 
   if brief.facts:
@@ -157,7 +166,7 @@ def render_to_system(brief: ResearchBrief) -> str:
     sections.append("</uncertainties>")
 
   if brief.recommendation:
-    recommendation = highlight_versions(brief.recommendation.strip())
+    recommendation = _escape_brief_text(highlight_versions(brief.recommendation.strip()))
     sections.append(f"<recommendation>{recommendation}</recommendation>")
 
   if brief.do_not_assume:
