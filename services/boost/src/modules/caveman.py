@@ -9,9 +9,7 @@ import deliverable
 import log
 from modules import keel
 import research.brief as brief_mod
-import research.brief_cache as brief_cache
 import research.budget as budget_mod
-import research.debug_metrics as debug_metrics
 import research.orchestrate as orchestrate
 import research.workflow as workflow_mod
 
@@ -266,97 +264,13 @@ async def gather_research(
   )
 
 
-async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
-  timer = debug_metrics.DebugTimer()
-  extra_calls = 0
-  message = orchestrate.last_user_text(chat)
-  if not message:
-    logger.warning(f"{ID_PREFIX}: No user message found, passing through")
-    await llm.emit_status(format_skipped_status("empty_message"))
-    debug_metrics.record_module(
-      ID_PREFIX,
-      debug_metrics.skipped_payload("empty_message", duration_ms=timer.elapsed_ms()),
-      logger=logger,
-    )
-    return await workflow_mod.complete_or_defer(llm, config)
-
-  gate_reason, classifier_calls = await research_gate_reason(chat, llm)
-  extra_calls += classifier_calls
-  if gate_reason != "triggered":
-    await llm.emit_status(format_skipped_status(gate_reason))
-    debug_metrics.record_module(
-      ID_PREFIX,
-      debug_metrics.skipped_payload(
-        gate_reason,
-        duration_ms=timer.elapsed_ms(),
-        extra_calls=extra_calls,
-      ),
-      logger=logger,
-      gate_reason=gate_reason,
-    )
-    return await workflow_mod.complete_or_defer(llm, config)
-
-  cached_brief = brief_cache.get_cached_brief(
-    BRIEF_CACHE_KEY,
-    message,
-    enabled=boost_config.CAVEMAN_CACHE_BRIEF.value,
-  )
-  if cached_brief is not None:
-    logger.debug(f"{ID_PREFIX}: Reusing cached brief for same question")
-    await llm.emit_status(f"{STATUS_PREFIX}: using cached brief...")
-    if not cached_brief.query:
-      cached_brief.query = message
-    chat.system(brief_mod.render_to_system(cached_brief))
-    debug_metrics.record_module(
-      ID_PREFIX,
-      debug_metrics.triggered_payload(
-        "triggered",
-        duration_ms=timer.elapsed_ms(),
-        extra_calls=extra_calls,
-        cached_brief=True,
-      ),
-      logger=logger,
-    )
-    return await workflow_mod.complete_or_defer(llm, config)
-
-  await llm.emit_status(f"{STATUS_PREFIX}: planning queries...")
-  budget = budget_mod.budget_from_config(ID_PREFIX)
-
-  try:
-    queries = await extract_search_queries(chat, llm, message)
-    extra_calls += 1
-  except Exception as exc:
-    logger.error(f"{ID_PREFIX}: query extraction failed: {exc}")
-    brief = workflow_mod.failure_brief(message, f"Query extraction failed: {exc}")
-    await llm.emit_status(f"{STATUS_PREFIX}: query planning failed, continuing without live data...")
-    chat.system(brief_mod.render_to_system(brief))
-    debug_metrics.record_module(
-      ID_PREFIX,
-      debug_metrics.triggered_payload(
-        "triggered",
-        duration_ms=timer.elapsed_ms(),
-        extra_calls=extra_calls,
-        query_extraction_failed=True,
-      ),
-      logger=logger,
-    )
-    return await workflow_mod.complete_or_defer(llm, config)
-
-  if not queries:
-    logger.warning(f"{ID_PREFIX}: No queries extracted, passing through")
-    await llm.emit_status(format_skipped_status("no_queries_extracted"))
-    debug_metrics.record_module(
-      ID_PREFIX,
-      debug_metrics.skipped_payload(
-        "no_queries_extracted",
-        duration_ms=timer.elapsed_ms(),
-        extra_calls=extra_calls,
-      ),
-      logger=logger,
-      gate_reason="no_queries_extracted",
-    )
-    return await workflow_mod.complete_or_defer(llm, config)
-
+async def _execute_research(
+  chat: "ch.Chat",
+  llm: "llm.LLM",
+  message: str,
+  queries: list[str],
+  budget: budget_mod.ResearchBudget,
+) -> tuple[brief_mod.ResearchBrief, int]:
   await llm.emit_status(format_query_status(len(queries)))
   brief = await gather_research(queries, budget, llm)
   await llm.emit_status(
@@ -365,29 +279,27 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
       pages_read=len(brief.pages),
     )
   )
-  if not brief.query:
-    brief.query = message
+  return brief, 0
 
-  if not brief_mod.has_usable_research(brief):
-    await llm.emit_status(f"{STATUS_PREFIX}: research unavailable, continuing without live data...")
 
-  brief_cache.store_cached_brief(
-    BRIEF_CACHE_KEY,
-    message,
-    brief,
-    enabled=boost_config.CAVEMAN_CACHE_BRIEF.value,
-  )
-  chat.system(brief_mod.render_to_system(brief))
-  debug_metrics.record_module(
-    ID_PREFIX,
-    debug_metrics.triggered_payload(
-      "triggered",
-      duration_ms=timer.elapsed_ms(),
-      extra_calls=extra_calls,
-      queries=len(queries),
-      searches=len(brief.searches),
-      pages=len(brief.pages),
-    ),
+async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
+  await workflow_mod.apply_research_module(
+    chat,
+    llm,
+    config,
+    module_id=ID_PREFIX,
     logger=logger,
+    status_prefix=STATUS_PREFIX,
+    brief_cache_key=BRIEF_CACHE_KEY,
+    cache_brief_enabled=boost_config.CAVEMAN_CACHE_BRIEF.value,
+    format_skipped=format_skipped_status,
+    research_gate_reason=research_gate_reason,
+    plan_queries=extract_search_queries,
+    execute_research=_execute_research,
+    no_queries_reason="no_queries_extracted",
+    no_queries_log="No queries extracted, passing through",
+    query_failure_log="query extraction failed",
+    query_failure_note_label="Query extraction",
+    query_failure_status="query planning failed, continuing without live data...",
+    query_failure_metric_key="query_extraction_failed",
   )
-  await workflow_mod.complete_or_defer(llm, config)
