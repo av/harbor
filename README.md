@@ -103,6 +103,23 @@ harbor launch --service opencode --help
 
 Supported host tools include `claude`, `codex`, `copilot`, `droid`, `hermes`, `mi`, `openclaw`, `opencode`, `pi`, `pool`, and `vscode`.
 
+#### Agentic coding with Boost
+
+[Harbor Boost](./docs/5.2.-Harbor-Boost.md) chains agentic modules—web research, task anchoring, read-before-edit, scoped edits, and deliverable audits—into built-in [workflow presets](./docs/5.2.3-Harbor-Boost-Modules.md#harbor-launch-automation). [`harbor launch --workflow`](./docs/5.2.3-Harbor-Boost-Modules.md#harbor-launch-automation) routes coding agents through a preset instead of the raw backend model.
+
+```bash
+# Full pipeline: grounding, ideation, tools, research, and audit
+harbor launch --workflow shipyard --backend ollama --model qwen3.5:4b codex
+
+# Scoped coding with read-before-edit and deliverable audit
+harbor launch --workflow agent-code --backend ollama --model qwen3.5:4b claude
+
+# Fast web research before answering
+harbor launch --workflow research-quick --backend ollama --model qwen3.5:4b codex
+```
+
+Presets include `shipyard`, `agent-code`, `agent-research`, `research-quick`, `research-deep`, `code-check`, and `scope-guard`. Research presets auto-start SearXNG. Mount your project with `boost.workspace` so agents can verify real file paths—see [Boost configuration](./docs/5.2.2-Harbor-Boost-Configuration.md) and the [modules reference](./docs/5.2.3-Harbor-Boost-Modules.md).
+
 ####  Cutting Edge Inference
 
 Harbor supports most of the major inference engines as well as a few of the lesser-known ones. On macOS, [Docker Model Runner](./docs/2.2.22-Backend-Docker-Model-Runner.md), [MLX](./docs/2.2.23-Backend-MLX.md), and [oMLX](./docs/2.2.24-Backend-oMLX.md) run inference on the host with Metal acceleration — no containers needed for the compute.
