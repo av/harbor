@@ -156,8 +156,39 @@ def _last_user_text(chat: "ch.Chat") -> str:
 
 
 def normalize_repo_path(raw: str) -> str:
-  """Strip wrapping quotes/backticks from a repo-relative path mention."""
-  return re.sub(r"^[\s`'\"(]+", "", (raw or "").strip()).rstrip("`'\"")
+  """Strip wrapping quotes/backticks and ./ prefixes from a repo-relative path mention."""
+  path = re.sub(r"^[\s`'\"(]+", "", (raw or "").strip()).rstrip("`'\")")
+  return re.sub(r"^(?:\./)+", "", path)
+
+
+def append_mentioned_repo_path(
+  paths: list[str],
+  seen: set[str],
+  raw: str,
+) -> None:
+  """Append a normalized repo path when it is new."""
+  path = normalize_repo_path(raw)
+  if path and path not in seen:
+    seen.add(path)
+    paths.append(path)
+
+
+def extract_mentioned_repo_paths(*texts: str) -> list[str]:
+  """Collect unique repo-relative paths mentioned in free text."""
+  paths: list[str] = []
+  seen: set[str] = set()
+
+  for text in texts:
+    if not text:
+      continue
+
+    for match in FILE_PATH_RE.finditer(text):
+      append_mentioned_repo_path(paths, seen, match.group(0))
+
+    for match in BACKTICK_PATH_RE.finditer(text):
+      append_mentioned_repo_path(paths, seen, match.group(1))
+
+  return paths
 
 
 def has_explain_intent(text: str) -> bool:

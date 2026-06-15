@@ -160,6 +160,24 @@ class TestAutocheckGate:
       config.AUTOCHECK_STRICT.__value__ = original_strict
 
 
+class TestNormalizeRepoPath:
+  def test_strips_dot_slash_prefix(self):
+    assert deliverable.normalize_repo_path("./services/foo.py") == "services/foo.py"
+    assert deliverable.normalize_repo_path(" ./services/foo.py") == "services/foo.py"
+    assert deliverable.normalize_repo_path("././services/foo.py") == "services/foo.py"
+
+  def test_strips_wrapping_backticks(self):
+    assert deliverable.normalize_repo_path("`services/foo.py`") == "services/foo.py"
+    assert deliverable.normalize_repo_path("`./services/foo.py`") == "services/foo.py"
+
+  def test_strips_wrapping_quotes_and_parens(self):
+    assert deliverable.normalize_repo_path("'./services/foo.py'") == "services/foo.py"
+    assert deliverable.normalize_repo_path("(./services/foo.py)") == "services/foo.py"
+
+  def test_preserves_parent_relative_paths(self):
+    assert deliverable.normalize_repo_path("../outside/foo.py") == "../outside/foo.py"
+
+
 class TestWorkspacePaths:
   def test_extract_workspace_paths_from_user_and_draft(self):
     user = "Please update services/boost/src/main.py and add tests."
@@ -167,6 +185,28 @@ class TestWorkspacePaths:
     paths = autocheck.extract_workspace_paths(user, draft)
     assert "services/boost/src/main.py" in paths
     assert "services/boost/src/config.py" in paths
+
+  def test_extract_workspace_paths_normalizes_dot_slash_prefix(self):
+    user = "Fix ./services/boost/src/main.py and ./services/boost/src/utils.py"
+    paths = autocheck.extract_workspace_paths(user)
+    assert paths == [
+      "services/boost/src/main.py",
+      "services/boost/src/utils.py",
+    ]
+
+  def test_extract_workspace_paths_normalizes_backtick_dot_slash(self):
+    draft = "Edit `./services/boost/src/config.py` and `./services/boost/src/main.py`"
+    paths = autocheck.extract_workspace_paths(draft)
+    assert paths == [
+      "services/boost/src/config.py",
+      "services/boost/src/main.py",
+    ]
+
+  def test_extract_workspace_paths_dedupes_equivalent_paths(self):
+    user = "Update services/boost/src/main.py"
+    draft = "Also touch `./services/boost/src/main.py`"
+    paths = autocheck.extract_workspace_paths(user, draft)
+    assert paths == ["services/boost/src/main.py"]
 
   def test_extract_workspace_paths_respects_limit(self):
     original = config.AUTOCHECK_MAX_WORKSPACE_FILES.__value__
@@ -461,6 +501,12 @@ class TestWorkspaceEvidence:
   def test_workspace_evidence_merges_reads_and_tool_calls(self):
     context = '<file path="src/a.py">\nprint(1)\n</file>'
     tool_calls = [{"name": "read_workspace_file", "arguments": {"path": "src/b.py"}}]
+    evidence = autocheck.workspace_evidence_paths(context, tool_calls)
+    assert evidence == ["src/a.py", "src/b.py"]
+
+  def test_workspace_evidence_normalizes_dot_slash_tool_paths(self):
+    context = '<file path="./src/a.py">\nprint(1)\n</file>'
+    tool_calls = [{"name": "read_workspace_file", "arguments": {"path": "./src/b.py"}}]
     evidence = autocheck.workspace_evidence_paths(context, tool_calls)
     assert evidence == ["src/a.py", "src/b.py"]
 

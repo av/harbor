@@ -343,25 +343,7 @@ def needs_autocheck(chat: "ch.Chat") -> bool:
 
 def extract_workspace_paths(*texts: str) -> list[str]:
   """Collect unique repo-relative paths mentioned in draft or user text."""
-  paths: list[str] = []
-  seen: set[str] = set()
-
-  for text in texts:
-    if not text:
-      continue
-
-    for match in deliverable.FILE_PATH_RE.finditer(text):
-      path = deliverable.normalize_repo_path(match.group(0))
-      if path and path not in seen:
-        seen.add(path)
-        paths.append(path)
-
-    for match in deliverable.BACKTICK_PATH_RE.finditer(text):
-      path = deliverable.normalize_repo_path(match.group(1))
-      if path and path not in seen:
-        seen.add(path)
-        paths.append(path)
-
+  paths = deliverable.extract_mentioned_repo_paths(*texts)
   limit = max(0, boost_config.AUTOCHECK_MAX_WORKSPACE_FILES.value)
   return paths[:limit] if limit else []
 
@@ -394,7 +376,8 @@ def extract_audit_symbols(*texts: str, limit: int = 8) -> list[str]:
 
 
 def _workspace_tool_path(args: dict) -> str:
-  return (args.get("path") or args.get("file_path") or "").strip()
+  raw = (args.get("path") or args.get("file_path") or "").strip()
+  return deliverable.normalize_repo_path(raw)
 
 
 def should_revise(audit: AuditResult) -> bool:
@@ -444,12 +427,13 @@ def successful_workspace_reads(workspace_context: str) -> list[str]:
 
   reads: list[str] = []
   for match in re.finditer(r'<file path="([^"]+)"(?:\s|>)', workspace_context):
-    path = match.group(1)
+    raw_path = match.group(1)
+    path = deliverable.normalize_repo_path(raw_path)
     error_match = re.search(
-      rf'<file path="{re.escape(path)}" error="[^"]*"\s*/>',
+      rf'<file path="{re.escape(raw_path)}" error="[^"]*"\s*/>',
       workspace_context,
     )
-    if not error_match:
+    if path and not error_match:
       reads.append(path)
   return reads
 
