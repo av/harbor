@@ -59,8 +59,8 @@ harbor config set HARBOR_BOOST_WORKSPACE_ROOT /workspace/myproject
 
 **Workflow presets**
 
-- Not included in built-in presets; append after `autocheck` in a custom workflow
-- Example: `scope-check=tools,keel,autocheck,diffscope,final` via `HARBOR_BOOST_WORKFLOWS`
+- `agent-code` (`tools`, `sightline`, `diffscope`, `autocheck`, `final`) — sandbox scope enforcement
+- Custom example: `scope-check=tools,keel,autocheck,diffscope,final` via `HARBOR_BOOST_WORKFLOWS`
 
 **Standalone**
 

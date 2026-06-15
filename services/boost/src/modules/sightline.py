@@ -60,8 +60,7 @@ harbor config set HARBOR_BOOST_SIGHTLINE_WORKSPACE true
 
 **Workflow presets**
 
-- Not included in built-in presets; add manually when scratch read-before-edit is required
-- Ad hoc example: `agent-code=tools,sightline,final` via `HARBOR_BOOST_WORKFLOWS`
+- `agent-code` (`tools`, `sightline`, `diffscope`, `autocheck`, `final`) — sandbox read-before-edit
 
 **Standalone**
 

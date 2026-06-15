@@ -26,6 +26,14 @@ PRESETS: dict[str, dict] = {
     "description": "Tool-enabled smash-and-grab research for agentic coding sessions.",
     "modules": [TOOLS_SETUP, "caveman", FINAL_STEP],
   },
+  "agent-code": {
+    "name": "Agent Code",
+    "description": (
+      "Sandbox coding session: register portable and workspace tools, enforce "
+      "read-before-edit, scope constraints, and deliverable audit."
+    ),
+    "modules": [TOOLS_SETUP, "sightline", "diffscope", "autocheck", FINAL_STEP],
+  },
   "shipyard": {
     "name": "Shipyard",
     "description": (

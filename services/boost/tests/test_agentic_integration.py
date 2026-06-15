@@ -26,6 +26,7 @@ EXPECTED_PRESET_IDS = {
   "research-deep",
   "code-check",
   "agent-research",
+  "agent-code",
   "shipyard",
 }
 

@@ -39,6 +39,20 @@ workflows:
       - module: caveman
       - module: final
 
+  agent-code:
+    name: Agent Code
+    description: >-
+      Sandbox coding session: register portable and workspace tools, enforce
+      read-before-edit, scope constraints, and deliverable audit.
+    modules:
+      - module: tools
+        config:
+          final: false
+      - module: sightline
+      - module: diffscope
+      - module: autocheck
+      - module: final
+
   shipyard:
     name: Shipyard
     description: >-

@@ -206,7 +206,7 @@ Harbor Boost is an LLM proxy (`harbor up boost`) that chains modules before the 
 | `sightline` | Scratch-pad agents using Boost `read_file`/`write_file` — enforces read-before-edit. Place **after** `tools`. |
 | `diffscope` | User states file scope (`only X`, `don't touch Y`) — compares cited paths in the draft against constraints; one revision hop if out of scope. |
 
-**Pairs:** `caveman` for speed, `ponytail` for depth. `keel` + `autocheck` for multi-turn coding. `sightline` / `diffscope` are opt-in hardening — not in built-in presets.
+**Pairs:** `caveman` for speed, `ponytail` for depth. `keel` + `autocheck` for multi-turn coding. `agent-code` bundles `sightline`, `diffscope`, and `autocheck` for sandbox sessions.
 
 ### Workflow Presets
 
@@ -217,6 +217,7 @@ Presets chain modules and register `tools` as a setup step. Use workflow-prefixe
 | `research-quick` | `tools`, `caveman`, `final` | Quick lookup before answering |
 | `research-deep` | `tools`, `ponytail`, `final` | Migration, API, or version comparison |
 | `code-check` | `tools`, `autocheck`, `final` | Audit code changes before delivery |
+| `agent-code` | `tools`, `sightline`, `diffscope`, `autocheck`, `final` | Sandbox coding with workspace tools and hardening |
 | `shipyard` | `keel`, `caveman`, `tools`, `ponytail`, `autocheck`, `final` | Full multi-turn coding pipeline |
 
 ### Setup
@@ -237,20 +238,21 @@ harbor config set HARBOR_BOOST_TAVILY_API_KEY <key>
 # Workspace evidence for autocheck / diffscope path verification
 harbor config set HARBOR_BOOST_WORKSPACE_ROOT /path/to/project
 
-# Optional: scratch read-before-edit or scope guard (custom workflow)
-harbor config set HARBOR_BOOST_WORKFLOWS 'agent-code=tools,sightline,final;scope-check=tools,keel,autocheck,diffscope,final'
+# Workspace tools for agent-code sandbox sessions
+harbor config set HARBOR_BOOST_TOOLS 'read_workspace_file;grep_workspace;list_workspace_files;write_workspace_file'
 harbor config update
 harbor restart boost
 
 # Point a coding agent at Boost
-harbor url boost   # OpenAI-compatible; model: shipyard-<backend-model>
+harbor url boost   # OpenAI-compatible; model: agent-code-<backend-model>
 
-# One-shot agentic coding via builtin shipyard preset (starts boost + searxng)
-harbor launch --workflow shipyard --backend ollama --model qwen2.5-coder:7b codex
+# One-shot sandbox coding via builtin agent-code preset
+harbor launch --workflow agent-code --backend ollama --model qwen2.5-coder:7b codex \
+  --sandbox workspace-write
 harbor launch --workflow shipyard --backend ollama --model qwen2.5-coder:7b opencode
 ```
 
-**Notes:** `autocheck` triggers only on deliverable turns (≥2 signals, e.g. coding keyword + file path). `sightline` covers Boost scratch tools only — not IDE or `read_workspace_file`. Empty `HARBOR_BOOST_WORKFLOWS` loads built-in presets from `/boost/workflows.yaml`.
+**Notes:** `autocheck` triggers only on deliverable turns (≥2 signals, e.g. coding keyword + file path). `sightline` guards Boost scratch and workspace file tools when `HARBOR_BOOST_WORKSPACE_ROOT` is set. Empty `HARBOR_BOOST_WORKFLOWS` loads built-in presets from `/boost/workflows.yaml`.
 
 ## Launching Service CLIs
 
