@@ -747,6 +747,13 @@ CAVEMAN_CACHE_BRIEF = Config[bool](
 
 # ----------------- PONYTAIL -----------------
 
+PONYTAIL_MAX_QUERIES = Config[int](
+    name="HARBOR_BOOST_PONYTAIL_MAX_QUERIES",
+    type=int,
+    default="5",
+    description="Maximum search queries planned by the `ponytail` research module.",
+)
+
 PONYTAIL_MAX_SEARCHES = Config[int](
     name="HARBOR_BOOST_PONYTAIL_MAX_SEARCHES",
     type=int,

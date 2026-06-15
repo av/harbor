@@ -42,6 +42,7 @@ Unlike `caveman`, ponytail triggers selectively on research-heavy questions
 
 **Parameters**
 
+- `max_queries` — maximum search queries planned per request. Default: `5`
 - `max_searches` — maximum web searches per request. Default: `4`
 - `max_url_reads` — maximum full-page URL reads per request. Default: `3`
 - `max_chars` — maximum research content characters retained. Default: `60000`
@@ -52,6 +53,7 @@ Unlike `caveman`, ponytail triggers selectively on research-heavy questions
 
 ```bash
 harbor boost modules add ponytail
+harbor config set HARBOR_BOOST_PONYTAIL_MAX_QUERIES 5
 harbor config set HARBOR_BOOST_PONYTAIL_MAX_SEARCHES 4
 harbor config set HARBOR_BOOST_PONYTAIL_MAX_URL_READS 3
 harbor config set HARBOR_BOOST_PONYTAIL_MAX_CHARS 60000
@@ -413,7 +415,7 @@ async def plan_search_queries(
     llm,
     message,
     prompt=QUERY_PLAN_PROMPT,
-    max_queries=4,
+    max_queries=config.PONYTAIL_MAX_QUERIES.value,
   )
 
 

@@ -253,7 +253,47 @@ class TestPonytailQueryPlanning:
       "Pydantic v1 to v2 breaking changes",
       "Pydantic v2 validator changes",
       "Pydantic v2 config migration",
+      "ignored sixth query",
     ]
+
+  @pytest.mark.asyncio
+  async def test_plan_search_queries_uses_config_max_queries(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Migrate from Pydantic v1 to v2"},
+    ])
+    llm = MagicMock()
+    llm.url = "http://example.com"
+    llm.headers = {}
+    llm.query_params = {}
+    llm.model = "test-model"
+
+    original = config.PONYTAIL_MAX_QUERIES.__value__
+    try:
+      config.PONYTAIL_MAX_QUERIES.__value__ = 2
+
+      with patch("research.orchestrate.cheap_llm") as cheap_llm:
+        cheap = MagicMock()
+        cheap.chat_completion = AsyncMock(
+          return_value={
+            "queries": [
+              "Pydantic v2 migration guide",
+              "Pydantic v1 to v2 breaking changes",
+              "Pydantic v2 validator changes",
+            ]
+          }
+        )
+        cheap_llm.return_value = cheap
+
+        queries = await ponytail.plan_search_queries(
+          chat, llm, "Migrate from Pydantic v1 to v2"
+        )
+
+      assert queries == [
+        "Pydantic v2 migration guide",
+        "Pydantic v1 to v2 breaking changes",
+      ]
+    finally:
+      config.PONYTAIL_MAX_QUERIES.__value__ = original
 
 
 class TestPonytailGapDetection:
