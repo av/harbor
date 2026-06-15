@@ -120,6 +120,45 @@ class TestAutocheckGate:
     audit = autocheck.AuditResult(verdict="pass", summary="Looks good")
     assert not autocheck.should_revise(audit)
 
+  def test_clamp_max_revise_passes_caps_at_two(self):
+    assert autocheck.clamp_max_revise_passes(0) == 0
+    assert autocheck.clamp_max_revise_passes(1) == 1
+    assert autocheck.clamp_max_revise_passes(2) == 2
+    assert autocheck.clamp_max_revise_passes(5) == 2
+
+  def test_effective_max_revise_passes_defaults_to_one(self):
+    original_revise = config.AUTOCHECK_MAX_REVISE_PASSES.__value__
+    original_strict = config.AUTOCHECK_STRICT.__value__
+    try:
+      config.AUTOCHECK_MAX_REVISE_PASSES.__value__ = 1
+      config.AUTOCHECK_STRICT.__value__ = False
+      assert autocheck.effective_max_revise_passes() == 1
+    finally:
+      config.AUTOCHECK_MAX_REVISE_PASSES.__value__ = original_revise
+      config.AUTOCHECK_STRICT.__value__ = original_strict
+
+  def test_effective_max_revise_passes_adds_one_in_strict_mode(self):
+    original_revise = config.AUTOCHECK_MAX_REVISE_PASSES.__value__
+    original_strict = config.AUTOCHECK_STRICT.__value__
+    try:
+      config.AUTOCHECK_MAX_REVISE_PASSES.__value__ = 1
+      config.AUTOCHECK_STRICT.__value__ = True
+      assert autocheck.effective_max_revise_passes() == 2
+    finally:
+      config.AUTOCHECK_MAX_REVISE_PASSES.__value__ = original_revise
+      config.AUTOCHECK_STRICT.__value__ = original_strict
+
+  def test_effective_max_revise_passes_stays_capped_when_strict_and_config_two(self):
+    original_revise = config.AUTOCHECK_MAX_REVISE_PASSES.__value__
+    original_strict = config.AUTOCHECK_STRICT.__value__
+    try:
+      config.AUTOCHECK_MAX_REVISE_PASSES.__value__ = 2
+      config.AUTOCHECK_STRICT.__value__ = True
+      assert autocheck.effective_max_revise_passes() == 2
+    finally:
+      config.AUTOCHECK_MAX_REVISE_PASSES.__value__ = original_revise
+      config.AUTOCHECK_STRICT.__value__ = original_strict
+
 
 class TestWorkspacePaths:
   def test_extract_workspace_paths_from_user_and_draft(self):
@@ -1626,6 +1665,125 @@ class TestAutocheckApply:
       config.WORKSPACE_ROOT.__value__ = original_root
 
   @pytest.mark.asyncio
+  async def test_apply_strict_mode_allows_second_revise_pass(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Implement retry helper in services/boost/src/utils.py"},
+    ])
+    llm = MagicMock()
+    llm.boost_params = {}
+    llm.emit_status = AsyncMock()
+    llm.emit_message = AsyncMock()
+    llm.stream_chat_completion = AsyncMock(return_value="Draft implementation")
+
+    revise_audit = autocheck.AuditResult(
+      verdict="revise",
+      summary="Fix imports",
+      findings=[autocheck.AuditFinding(severity="major", message="Missing import")],
+    )
+    pass_audit = autocheck.AuditResult(verdict="pass", summary="Good now")
+    revise_debug = autocheck.AuditDebug(
+      triggered=True,
+      gate_reason="triggered",
+      verdict="revise",
+    )
+    pass_debug = autocheck.AuditDebug(
+      triggered=True,
+      gate_reason="triggered",
+      verdict="pass",
+    )
+    original_revise = config.AUTOCHECK_MAX_REVISE_PASSES.__value__
+    original_strict = config.AUTOCHECK_STRICT.__value__
+
+    try:
+      config.AUTOCHECK_MAX_REVISE_PASSES.__value__ = 1
+      config.AUTOCHECK_STRICT.__value__ = True
+      with (
+        patch.object(autocheck, "gather_workspace_context", new=AsyncMock(return_value="")),
+        patch.object(
+          autocheck,
+          "run_audit",
+          new=AsyncMock(
+            side_effect=[
+              (revise_audit, revise_debug),
+              (revise_audit, revise_debug),
+              (pass_audit, pass_debug),
+            ],
+          ),
+        ),
+        patch.object(
+          autocheck,
+          "revise_draft",
+          new=AsyncMock(side_effect=["First revision", "Second revision"]),
+        ) as revise,
+      ):
+        await autocheck.apply(chat, llm)
+    finally:
+      config.AUTOCHECK_MAX_REVISE_PASSES.__value__ = original_revise
+      config.AUTOCHECK_STRICT.__value__ = original_strict
+
+    assert revise.await_count == 2
+    status_messages = [call.args[0] for call in llm.emit_status.await_args_list]
+    assert "Autocheck: revising (1/2)..." in status_messages
+    assert "Autocheck: revising (2/2)..." in status_messages
+    llm.emit_message.assert_awaited_once_with("Second revision")
+
+  @pytest.mark.asyncio
+  async def test_apply_non_strict_stops_after_configured_revise_passes(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Implement retry helper in services/boost/src/utils.py"},
+    ])
+    llm = MagicMock()
+    llm.boost_params = {}
+    llm.emit_status = AsyncMock()
+    llm.emit_message = AsyncMock()
+    llm.stream_chat_completion = AsyncMock(return_value="Draft implementation")
+
+    revise_audit = autocheck.AuditResult(
+      verdict="revise",
+      summary="Fix imports",
+      findings=[autocheck.AuditFinding(severity="major", message="Missing import")],
+    )
+    revise_debug = autocheck.AuditDebug(
+      triggered=True,
+      gate_reason="triggered",
+      verdict="revise",
+    )
+    original_revise = config.AUTOCHECK_MAX_REVISE_PASSES.__value__
+    original_strict = config.AUTOCHECK_STRICT.__value__
+
+    try:
+      config.AUTOCHECK_MAX_REVISE_PASSES.__value__ = 1
+      config.AUTOCHECK_STRICT.__value__ = False
+      with (
+        patch.object(autocheck, "gather_workspace_context", new=AsyncMock(return_value="")),
+        patch.object(
+          autocheck,
+          "run_audit",
+          new=AsyncMock(
+            side_effect=[
+              (revise_audit, revise_debug),
+              (revise_audit, revise_debug),
+            ],
+          ),
+        ),
+        patch.object(
+          autocheck,
+          "revise_draft",
+          new=AsyncMock(return_value="Revised implementation"),
+        ) as revise,
+      ):
+        await autocheck.apply(chat, llm)
+    finally:
+      config.AUTOCHECK_MAX_REVISE_PASSES.__value__ = original_revise
+      config.AUTOCHECK_STRICT.__value__ = original_strict
+
+    revise.assert_awaited_once()
+    status_messages = [call.args[0] for call in llm.emit_status.await_args_list]
+    assert "Autocheck: revising (1/1)..." in status_messages
+    assert "Autocheck: revising (2/2)..." not in status_messages
+    llm.emit_message.assert_awaited_once_with("Revised implementation")
+
+  @pytest.mark.asyncio
   async def test_apply_prepends_strict_warning_when_blockers_remain(self):
     chat = ch.Chat.from_conversation([
       {"role": "user", "content": "Implement retry helper in services/boost/src/utils.py"},
@@ -1648,30 +1806,41 @@ class TestAutocheckApply:
     )
     first_debug = autocheck.AuditDebug(triggered=True, gate_reason="triggered", verdict="revise")
     second_debug = autocheck.AuditDebug(triggered=True, gate_reason="triggered", verdict="revise")
+    third_debug = autocheck.AuditDebug(triggered=True, gate_reason="triggered", verdict="revise")
     original_strict = config.AUTOCHECK_STRICT.__value__
+    original_revise = config.AUTOCHECK_MAX_REVISE_PASSES.__value__
 
     try:
+      config.AUTOCHECK_MAX_REVISE_PASSES.__value__ = 1
       config.AUTOCHECK_STRICT.__value__ = True
       with (
         patch.object(autocheck, "gather_workspace_context", new=AsyncMock(return_value="")),
         patch.object(
           autocheck,
           "run_audit",
-          new=AsyncMock(side_effect=[(first_audit, first_debug), (second_audit, second_debug)]),
+          new=AsyncMock(
+            side_effect=[
+              (first_audit, first_debug),
+              (second_audit, second_debug),
+              (second_audit, third_debug),
+            ],
+          ),
         ),
         patch.object(
           autocheck,
           "revise_draft",
-          new=AsyncMock(return_value="Revised implementation"),
-        ),
+          new=AsyncMock(side_effect=["First revision", "Second revision"]),
+        ) as revise,
       ):
         await autocheck.apply(chat, llm)
     finally:
       config.AUTOCHECK_STRICT.__value__ = original_strict
+      config.AUTOCHECK_MAX_REVISE_PASSES.__value__ = original_revise
 
+    assert revise.await_count == 2
     emitted = llm.emit_message.await_args.args[0]
     assert emitted.startswith("> **Autocheck warning:**")
-    assert "Revised implementation" in emitted
+    assert "Second revision" in emitted
     assert "[major] Missing import" in emitted
 
   @pytest.mark.asyncio

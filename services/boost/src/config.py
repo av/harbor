@@ -822,13 +822,27 @@ AUTOCHECK_SHOW_AUDIT = Config[bool](
     ),
 )
 
+AUTOCHECK_MAX_REVISE_PASSES = Config[int](
+    name="HARBOR_BOOST_AUTOCHECK_MAX_REVISE_PASSES",
+    type=int,
+    default="1",
+    description=(
+        "Maximum revise passes performed by the `autocheck` module after an audit "
+        "requests changes. Values above 2 are clamped to 2. When "
+        "`HARBOR_BOOST_AUTOCHECK_STRICT` is true, autocheck allows one additional "
+        "revise pass (still capped at 2 total)."
+    ),
+)
+
 AUTOCHECK_STRICT = Config[bool](
     name="HARBOR_BOOST_AUTOCHECK_STRICT",
     type=bool,
     default="false",
     description=(
-        "When true, the `autocheck` module prepends a warning banner to the final answer "
-        "when critical or major audit findings remain after all revise passes."
+        "When true, the `autocheck` module allows one extra revise pass (see "
+        "`HARBOR_BOOST_AUTOCHECK_MAX_REVISE_PASSES`) and prepends a warning banner "
+        "to the final answer when critical or major audit findings remain after all "
+        "revise passes."
     ),
 )
 
