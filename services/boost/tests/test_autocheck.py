@@ -205,7 +205,29 @@ class TestWorkspacePaths:
     assert not autocheck.show_audit_footer(llm)
 
     llm.boost_params = {}
-    assert not autocheck.show_audit_footer(llm)
+    original = config.AUTOCHECK_SHOW_AUDIT.__value__
+    try:
+      config.AUTOCHECK_SHOW_AUDIT.__value__ = False
+      assert not autocheck.show_audit_footer(llm)
+
+      config.AUTOCHECK_SHOW_AUDIT.__value__ = True
+      assert autocheck.show_audit_footer(llm)
+    finally:
+      config.AUTOCHECK_SHOW_AUDIT.__value__ = original
+
+  def test_show_audit_footer_boost_param_overrides_config(self):
+    llm = MagicMock()
+    original = config.AUTOCHECK_SHOW_AUDIT.__value__
+    try:
+      config.AUTOCHECK_SHOW_AUDIT.__value__ = True
+      llm.boost_params = {"show_audit": "false"}
+      assert not autocheck.show_audit_footer(llm)
+
+      config.AUTOCHECK_SHOW_AUDIT.__value__ = False
+      llm.boost_params = {"show_audit": "true"}
+      assert autocheck.show_audit_footer(llm)
+    finally:
+      config.AUTOCHECK_SHOW_AUDIT.__value__ = original
 
   def test_append_audit_footer_adds_markdown_block(self):
     audit = autocheck.AuditResult(verdict="pass", summary="Ship it", findings=[])

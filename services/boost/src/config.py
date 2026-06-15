@@ -788,6 +788,17 @@ AUTOCHECK_WORKSPACE_FILE_MAX_CHARS = Config[int](
     description="Maximum characters read from each workspace file during `autocheck` audits.",
 )
 
+AUTOCHECK_SHOW_AUDIT = Config[bool](
+    name="HARBOR_BOOST_AUTOCHECK_SHOW_AUDIT",
+    type=bool,
+    default="false",
+    description=(
+        "When true, the `autocheck` module appends an audit footer to the final answer "
+        "and emits an HTML findings summary artifact. Overridable per request via "
+        "`@boost_show_audit`."
+    ),
+)
+
 # ------------------- KEEL -------------------
 
 KEEL_ENABLED = Config[bool](

@@ -71,13 +71,15 @@ for troubleshooting.
 - `max_passes` — maximum audit-and-revise passes. Default: `1`
 - `max_workspace_files` — workspace files read per request. Default: `5`
 - `workspace_file_max_chars` — characters per workspace file. Default: `50000`
-- `@boost_show_audit` — when true, append a brief audit footer to the final answer
-  and emit an HTML findings summary artifact for the UI
+- `show_audit` — when true, append a brief audit footer to the final answer and emit
+  an HTML findings summary artifact for the UI. Default: `false`. Overridable per
+  request via `@boost_show_audit`.
 
 ```bash
 harbor boost modules add autocheck
 harbor config set HARBOR_BOOST_AUTOCHECK_ENABLED true
 harbor config set HARBOR_BOOST_AUTOCHECK_MAX_PASSES 1
+harbor config set HARBOR_BOOST_AUTOCHECK_SHOW_AUDIT true
 harbor config set HARBOR_BOOST_WORKSPACE_ROOT /workspace/myproject
 ```
 
@@ -844,12 +846,12 @@ def format_audit_footer(audit: AuditResult) -> str:
 
 
 def show_audit_footer(llm: "llm.LLM") -> bool:
-  """Return True when @boost_show_audit requests an audit footer."""
+  """Return True when show_audit is enabled via config or @boost_show_audit."""
   value = llm.boost_params.get("show_audit")
+  if value is None:
+    return boost_config.AUTOCHECK_SHOW_AUDIT.value
   if isinstance(value, bool):
     return value
-  if value is None:
-    return False
   return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
