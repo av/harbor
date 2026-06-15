@@ -9,9 +9,10 @@
 //   2. Compose pass — per compose rule, lint a fail.yml fixture and assert
 //      the rule fires `expect-hits` times; lint pass.yml and assert zero
 //      findings on the targeted rule.
-//   3. Shellcheck pass — single fixture pair. Skipped (with a clear note)
+//   3. Boost pass — zero-byte module guard (HARBOR011) with fixture pair.
+//   4. Shellcheck pass — single fixture pair. Skipped (with a clear note)
 //      when the shellcheck binary is unavailable.
-//   4. Orchestrator — help-text discoverability and exit-code contract.
+//   5. Orchestrator — help-text discoverability and exit-code contract.
 //
 // The harness exits non-zero on any mismatch in any section; SKIP rows are
 // not failures. Tightening a regex, loosening it, or breaking a downstream
@@ -21,6 +22,7 @@
 // and from CI (see .github/workflows/lint.yml).
 
 import { parse as parseYaml } from "https://deno.land/std/yaml/mod.ts";
+import { HARBOR011, runBoost } from "./passes/boost.ts";
 import { runBashRules } from "./passes/bash.ts";
 import { runCompose } from "./passes/compose.ts";
 import { runShellcheck } from "./passes/shellcheck.ts";
@@ -36,7 +38,14 @@ const RULES_PATH = `${REPO_ROOT}/.scripts/lint/rules.yaml`;
 const FIXTURES_ROOT = `${REPO_ROOT}/.scripts/lint/fixtures`;
 const COMPOSE_FIXTURES_ROOT = `${FIXTURES_ROOT}/compose`;
 const SHELLCHECK_FIXTURES_ROOT = `${FIXTURES_ROOT}/shellcheck`;
+const BOOST_FIXTURES_ROOT = `${FIXTURES_ROOT}/boost`;
 const RUN_TS = `${REPO_ROOT}/.scripts/lint/run.ts`;
+
+// Boost fixtures whose fail case is a zero-byte file cannot carry metadata
+// headers; keep expected rule/hit counts here.
+const BOOST_FIXTURE_RULES: Record<string, { rule: string; expectHits: number }> = {
+  "zero-byte": { rule: HARBOR011, expectHits: 1 },
+};
 
 async function loadRuleIds(): Promise<Map<string, string>> {
   const raw = await Deno.readTextFile(RULES_PATH);
@@ -388,6 +397,138 @@ function printComposeSection(rows: ComposeRow[]) {
   console.log();
 }
 
+// ── Boost section ────────────────────────────────────────────────────────────
+
+interface BoostRow {
+  rule: string;
+  failExpected: number;
+  failActual: number;
+  passActual: number;
+  ok: boolean;
+  notes: string[];
+}
+
+const BOOST_GLOB = ".scripts/lint/fixtures/boost/**/*.py";
+
+async function collectBoostHits(files: string[]): Promise<Map<string, Map<string, number>>> {
+  const findings = await runBoost({
+    root: REPO_ROOT,
+    fileFilter: files,
+    globs: [BOOST_GLOB],
+    exclude: [],
+  });
+  const out = new Map<string, Map<string, number>>();
+  for (const f of files) out.set(f, new Map());
+  for (const f of findings) {
+    const bucket = out.get(f.file);
+    if (!bucket) continue;
+    bucket.set(f.rule, (bucket.get(f.rule) ?? 0) + 1);
+  }
+  return out;
+}
+
+async function listBoostFixtureDirs(): Promise<string[]> {
+  const dirs: string[] = [];
+  try {
+    for await (const entry of Deno.readDir(BOOST_FIXTURES_ROOT)) {
+      if (entry.isDirectory) dirs.push(entry.name);
+    }
+  } catch {
+    // Directory may not exist — caller renders an empty section.
+  }
+  dirs.sort();
+  return dirs;
+}
+
+async function runBoostSection(): Promise<{ rows: BoostRow[]; failures: number }> {
+  const dirs = await listBoostFixtureDirs();
+  const rows: BoostRow[] = [];
+
+  const relPath = (p: string) =>
+    p.startsWith(REPO_ROOT + "/") ? p.slice(REPO_ROOT.length + 1) : p;
+
+  const fixtureFiles: string[] = [];
+  for (const dir of dirs) {
+    fixtureFiles.push(relPath(`${BOOST_FIXTURES_ROOT}/${dir}/fail.py`));
+    fixtureFiles.push(relPath(`${BOOST_FIXTURES_ROOT}/${dir}/pass.py`));
+  }
+  let hits: Map<string, Map<string, number>> | null = null;
+  let batchError: string | null = null;
+  try {
+    if (fixtureFiles.length > 0) hits = await collectBoostHits(fixtureFiles);
+  } catch (e) {
+    batchError = e instanceof Error ? e.message : String(e);
+  }
+
+  for (const dir of dirs) {
+    const failRel = relPath(`${BOOST_FIXTURES_ROOT}/${dir}/fail.py`);
+    const passRel = relPath(`${BOOST_FIXTURES_ROOT}/${dir}/pass.py`);
+    const notes: string[] = [];
+    const spec = BOOST_FIXTURE_RULES[dir];
+    if (!spec) notes.push(`no BOOST_FIXTURE_RULES entry for directory "${dir}"`);
+
+    const targetRule = spec?.rule ?? dir;
+    const failExpected = spec?.expectHits ?? 0;
+
+    if (batchError) notes.push(`batched boost run error: ${batchError}`);
+
+    const failActual = hits?.get(failRel)?.get(targetRule) ?? 0;
+    const passActual = hits?.get(passRel)?.get(targetRule) ?? 0;
+
+    const failOk = failActual === failExpected && failActual > 0;
+    const passOk = passActual === 0;
+    if (!failOk) notes.push(`fail.py expected ${failExpected} hits, got ${failActual}`);
+    if (!passOk) notes.push(`pass.py expected 0 hits, got ${passActual}`);
+
+    rows.push({
+      rule: targetRule,
+      failExpected,
+      failActual,
+      passActual,
+      ok: failOk && passOk && spec !== undefined && !batchError,
+      notes,
+    });
+  }
+
+  rows.sort((a, b) => a.rule.localeCompare(b.rule));
+  const failures = rows.filter((r) => !r.ok).length;
+  return { rows, failures };
+}
+
+function printBoostSection(rows: BoostRow[]) {
+  console.log("== Boost pass ==");
+  if (rows.length === 0) {
+    console.log("(no boost fixtures found at .scripts/lint/fixtures/boost/)");
+    console.log();
+    return;
+  }
+  const header = [
+    "Rule".padEnd(12),
+    "fail exp".padEnd(9),
+    "fail got".padEnd(9),
+    "pass got".padEnd(9),
+    "result",
+  ].join(" ");
+  console.log(header);
+  console.log("-".repeat(header.length));
+  for (const r of rows) {
+    const result = r.ok ? "PASS" : "FAIL";
+    console.log(
+      [
+        r.rule.padEnd(12),
+        String(r.failExpected).padEnd(9),
+        String(r.failActual).padEnd(9),
+        String(r.passActual).padEnd(9),
+        result,
+      ].join(" "),
+    );
+    for (const n of r.notes) {
+      console.log(`  - ${n}`);
+    }
+  }
+  console.log();
+}
+
 // ── Shellcheck section ───────────────────────────────────────────────────────
 
 interface ShellcheckRow {
@@ -508,7 +649,7 @@ async function runOrchestratorSection(): Promise<{ rows: OrchestratorRow[]; fail
   {
     const notes: string[] = [];
     if (helpRes.code !== 0) notes.push(`--help exited ${helpRes.code}, expected 0`);
-    const required = ["--shellcheck", "--rules", "--compose", "--files", "--json"];
+    const required = ["--shellcheck", "--rules", "--compose", "--boost", "--files", "--json"];
     for (const flag of required) {
       if (!helpRes.stdout.includes(flag)) notes.push(`help text missing flag mention: ${flag}`);
     }
@@ -549,22 +690,27 @@ function printOrchestratorSection(rows: OrchestratorRow[]) {
 async function main() {
   // Sections are independent; run in parallel so shellcheck + orchestrator
   // subprocess boots overlap with the bash glob expansion.
-  const [bash, compose, shellcheck, orch] = await Promise.all([
+  const [bash, compose, boost, shellcheck, orch] = await Promise.all([
     runBashSection(),
     runComposeSection(),
+    runBoostSection(),
     runShellcheckSection(),
     runOrchestratorSection(),
   ]);
 
   printBashSection(bash.rows);
   printComposeSection(compose.rows);
+  printBoostSection(boost.rows);
   printShellcheckSection(shellcheck.row);
   printOrchestratorSection(orch.rows);
 
-  const total = bash.failures + compose.failures + (shellcheck.failure ? 1 : 0) + orch.failures;
+  const total = bash.failures + compose.failures + boost.failures +
+    (shellcheck.failure ? 1 : 0) + orch.failures;
   if (total === 0) {
     const scNote = shellcheck.row.status === "SKIP" ? " (shellcheck SKIPPED)" : "";
-    console.log(`self-test green: ${bash.rows.length} bash rule(s), ${compose.rows.length} compose rule(s), 1 shellcheck row, ${orch.rows.length} orchestrator check(s)${scNote}.`);
+    console.log(
+      `self-test green: ${bash.rows.length} bash rule(s), ${compose.rows.length} compose rule(s), ${boost.rows.length} boost rule(s), 1 shellcheck row, ${orch.rows.length} orchestrator check(s)${scNote}.`,
+    );
     Deno.exit(0);
   }
   console.log(`${total} self-test row(s) failed; see notes above.`);

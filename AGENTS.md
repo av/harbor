@@ -12,7 +12,7 @@ Harbor is a containerized LLM toolkit — a large Docker Compose project with a 
 - `routines/` — CLI internals rewritten in Deno
 - `.scripts/` — dev scripts in Deno/Bash, run via `harbor dev <script>`
 - `tests/` — container-based test runner (suites, rows, orchestrator); see `tests/README.md`
-- `.scripts/lint/` — bash-compat lint rules (`HARBORxxx`), fixtures, and 3-pass orchestrator
+- `.scripts/lint/` — bash-compat lint rules (`HARBORxxx`), fixtures, and 4-pass orchestrator
 - `profiles/default.env` — default config distributed to users
 - `skills/harbor/SKILL.md` — agent-facing CLI skill (shipped via npm for Claude Code discovery)
 
@@ -52,7 +52,7 @@ harbor dev docs                         # regenerate docs
 harbor dev seed                         # seed test data
 harbor dev add-logos [--dry-run]        # resolve and write service logos
 harbor dev test [--suite ...] [--distros ...] [--json]    # container test matrix
-harbor dev lint [--shellcheck|--rules|--compose] [--json] # 3-pass source lint
+harbor dev lint [--shellcheck|--rules|--compose|--boost] [--json] # 4-pass source lint
 harbor dev lint-self-test               # validate lint rules against fixtures
 ```
 

@@ -3,12 +3,13 @@
 
 // Harbor lint orchestrator.
 //
-// Runs three independent passes and aggregates their findings:
+// Runs four independent passes and aggregates their findings:
 //   - shellcheck: general bash hygiene (SC codes).
 //   - bash:      Harbor-specific portability rules (HARBORxxx) loaded from
 //                .scripts/lint/rules.yaml.
 //   - compose:   Harbor compose-file conventions (container naming, env_file
 //                layout, networks, volumes, build context, …).
+//   - boost:     Boost module integrity (zero-byte `.py` files under load paths).
 //
 // By default every pass runs over every applicable file. Flags narrow the
 // scope:
@@ -20,6 +21,7 @@
 import { runShellcheck } from "./passes/shellcheck.ts";
 import { runBashRules } from "./passes/bash.ts";
 import { runCompose } from "./passes/compose.ts";
+import { runBoost } from "./passes/boost.ts";
 import type { Finding } from "./types.ts";
 
 // ── Arg parsing ──────────────────────────────────────────────────────────────
@@ -30,6 +32,7 @@ type Args = {
   shellcheck: boolean | null; // null = "unspecified"
   rules: boolean | null;
   compose: boolean | null;
+  boost: boolean | null;
   files: string[] | null;
   severity: Set<"error" | "warning">;
 };
@@ -41,6 +44,7 @@ function parseArgs(raw: string[]): Args {
     shellcheck: null,
     rules: null,
     compose: null,
+    boost: null,
     files: null,
     severity: new Set(["error", "warning"]),
   };
@@ -77,6 +81,9 @@ function parseArgs(raw: string[]): Args {
       case "compose":
         args.compose = true;
         break;
+      case "boost":
+        args.boost = true;
+        break;
       case "files": {
         const [v, ni] = takeValue(i, inline, rawKey);
         args.files = v.split(",").map((s) => s.trim()).filter(Boolean);
@@ -111,7 +118,8 @@ Options:
   --shellcheck              Run only the shellcheck pass.
   --rules                   Run only the bash project rules pass.
   --compose                 Run only the compose-file conventions pass.
-                            (default: run all three)
+  --boost                   Run only the Boost module integrity pass.
+                            (default: run all four)
   --files a.sh,b.sh,…       Limit all passes to the listed files
                             (repo-relative paths).
   --severity error[,warning]  Findings to report; default error+warning.
@@ -152,16 +160,23 @@ const RULES_PATH = `${REPO_ROOT}/.scripts/lint/rules.yaml`;
 
 // ── Reporting ────────────────────────────────────────────────────────────────
 
-function passesSelected(args: Args): { shellcheck: boolean; rules: boolean; compose: boolean } {
-  const anySelected = args.shellcheck === true || args.rules === true || args.compose === true;
+function passesSelected(args: Args): {
+  shellcheck: boolean;
+  rules: boolean;
+  compose: boolean;
+  boost: boolean;
+} {
+  const anySelected = args.shellcheck === true || args.rules === true ||
+    args.compose === true || args.boost === true;
   if (anySelected) {
     return {
       shellcheck: args.shellcheck === true,
       rules: args.rules === true,
       compose: args.compose === true,
+      boost: args.boost === true,
     };
   }
-  return { shellcheck: true, rules: true, compose: true };
+  return { shellcheck: true, rules: true, compose: true, boost: true };
 }
 
 function printHuman(findings: Finding[], severity: Set<"error" | "warning">) {
@@ -250,6 +265,15 @@ async function main() {
   if (sel.compose) {
     findings.push(
       ...(await runCompose({
+        root: REPO_ROOT,
+        fileFilter: args.files,
+      })),
+    );
+  }
+
+  if (sel.boost) {
+    findings.push(
+      ...(await runBoost({
         root: REPO_ROOT,
         fileFilter: args.files,
       })),

@@ -9,6 +9,8 @@ on:
       - 'install.sh'
       - 'requirements.sh'
       - 'services/**/*.sh'
+      - 'services/boost/src/modules/**/*.py'
+      - 'services/boost/src/custom_modules/**/*.py'
       - 'services/**/compose.*.yml'
       - 'shared/**/*.sh'
       - 'tests/**/*.sh'
@@ -24,6 +26,8 @@ on:
       - 'install.sh'
       - 'requirements.sh'
       - 'services/**/*.sh'
+      - 'services/boost/src/modules/**/*.py'
+      - 'services/boost/src/custom_modules/**/*.py'
       - 'services/**/compose.*.yml'
       - 'shared/**/*.sh'
       - 'tests/**/*.sh'
@@ -60,6 +64,17 @@ jobs:
 
       - name: Run lint (human output for logs)
         run: bash harbor.sh dev lint
+
+      - name: Assert boost pass is clean (no zero-byte modules)
+        run: |
+          bash harbor.sh dev lint --boost --json > boost.json
+          count=$(jq '.findings | length' boost.json)
+          if [ "$count" -ne 0 ]; then
+            echo "::error::harbor dev lint --boost reported $count finding(s); baseline is 0."
+            jq -r '.findings[] | "  \(.file) \(.severity) \(.rule) \(.message)"' boost.json
+            exit 1
+          fi
+          echo "boost pass clean: 0 findings."
 
       - name: Assert rules pass is clean (no warnings or errors)
         # Phase 6 baseline: services/** and shared/** are clean of HARBORxxx
