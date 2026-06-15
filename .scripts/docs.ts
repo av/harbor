@@ -25,6 +25,61 @@ const docgenTargets = {
   '/bin/bash ./harbor.sh run boost uv run mods.py': './docs/5.2.3-Harbor-Boost-Modules.md',
 }
 
+/** Manual sections in 5.2.3 — not emitted by mods.py; preserved across regen. */
+export const BOOST_MODULES_MANUAL_HEADINGS = [
+  'Web search requirement',
+  'Workspace bind mount',
+  'Agentic coding workflow presets',
+] as const;
+
+export function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+export function extractMarkdownSection(doc: string, heading: string): string | null {
+  const pattern = new RegExp(
+    `^## ${escapeRegExp(heading)}\\n([\\s\\S]*?)(?=^## |\\Z)`,
+    'm',
+  );
+  const match = doc.match(pattern);
+  if (!match) {
+    return null;
+  }
+
+  return `## ${heading}\n${match[1].trimEnd()}\n`;
+}
+
+export function extractManualSections(
+  doc: string,
+  headings: readonly string[] = BOOST_MODULES_MANUAL_HEADINGS,
+): string[] {
+  return headings
+    .map((heading) => extractMarkdownSection(doc, heading))
+    .filter((section): section is string => section !== null);
+}
+
+export function mergeBoostModulesManualSections(
+  generated: string,
+  manualSections: string[],
+  insertBeforeHeading = 'clarity',
+): string {
+  if (manualSections.length === 0) {
+    return generated;
+  }
+
+  const manualBlock = `\n${manualSections.join('\n')}\n`;
+  const insertBefore = new RegExp(`^## ${escapeRegExp(insertBeforeHeading)}\\n`, 'm');
+
+  if (!insertBefore.test(generated)) {
+    console.warn(
+      `Could not find "## ${insertBeforeHeading}" in generated Boost modules doc; appending manual sections.`,
+    );
+    return `${generated.trimEnd()}${manualBlock}`;
+  }
+
+  return generated.replace(insertBefore, `${manualBlock}\n## ${insertBeforeHeading}\n`);
+}
+
 if (import.meta.main) {
   main().catch(console.error);
 }
@@ -313,10 +368,26 @@ ${satellites.map(renderService).join("\n")}
   );
 }
 
+async function readExistingDoc(dest: string): Promise<string | null> {
+  try {
+    return await Deno.readTextFile(dest);
+  } catch (error) {
+    if (error instanceof Deno.errors.NotFound) {
+      return null;
+    }
+    throw error;
+  }
+}
+
 async function docgen() {
   await Promise.all(
     Object.entries(docgenTargets).map(async ([cmd, dest]) => {
       console.debug(`Rendering target: ${cmd} -> ${dest}`);
+      const existingDoc = await readExistingDoc(dest);
+      const manualSections = dest === './docs/5.2.3-Harbor-Boost-Modules.md' && existingDoc
+        ? extractManualSections(existingDoc)
+        : [];
+
       const commandParts = cmd.split(" ");
       const process = new Deno.Command(commandParts[0], {
         args: commandParts.slice(1),
@@ -332,13 +403,20 @@ async function docgen() {
         throw new Error(`Command failed: ${error}`);
       }
 
-      const output = new TextDecoder().decode(stdout).trim();
+      let output = new TextDecoder().decode(stdout).trim();
       if (!output) {
         console.warn(`No output from command "${cmd}"`);
         return;
       }
 
-      await Deno.writeTextFile(dest, output);
+      if (manualSections.length > 0) {
+        output = mergeBoostModulesManualSections(output, manualSections);
+        console.debug(
+          `Preserved ${manualSections.length} manual section(s) in ${dest}`,
+        );
+      }
+
+      await Deno.writeTextFile(dest, `${output}\n`);
       console.debug(`Rendered target: ${cmd} -> ${dest}`);
     })
   );

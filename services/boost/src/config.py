@@ -1239,6 +1239,10 @@ harbor config set boost.anthropic_compat true
 """.strip(),
 )
 
+def _format_default_for_docs(default: str) -> str:
+    return "*(empty)*" if default == "" else f"`{default}`"
+
+
 if __name__ == "__main__":
     # Render documentation
     configs = [item for item in globals().values() if isinstance(item, Config)]
@@ -1252,7 +1256,7 @@ Harbor Boost is configured using environment variables. Following options are av
     for config in configs:
         docs += f"\n\n## {config.name}\n"
         docs += f"> **Type**: `{config.type.__name__}`<br/>\n"
-        docs += f"> **Default**: `{config.default}`<br/>\n"
+        docs += f"> **Default**: {_format_default_for_docs(config.default)}<br/>\n"
 
         if config.description:
             docs += f"\n{config.description}\n"
