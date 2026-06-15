@@ -30,6 +30,7 @@ from research.fetch import (
   read_url,
   require_http_url,
   trim,
+  trim_note,
   web_search,
 )
 from modules import tools
@@ -41,6 +42,31 @@ class TestResearchFetch:
     result = trim(text, 10)
     assert result.startswith("x" * 10)
     assert "truncated" in result
+
+  def test_trim_note_truncates_when_over_limit(self):
+    note = "n" * 100
+    result = trim_note(note, max_chars=40)
+    assert result.startswith("n" * 40)
+    assert "[truncated to 40 characters]" in result
+
+  def test_trim_note_skips_truncation_when_under_limit(self):
+    note = "short failure note"
+    assert trim_note(note, max_chars=100) == note
+
+  def test_trim_note_zero_disables_truncation(self):
+    note = "z" * 10_000
+    assert trim_note(note, max_chars=0) == note
+
+  def test_trim_note_uses_config_default(self):
+    original = config.RESEARCH_NOTES_MAX_CHARS.__value__
+    try:
+      config.RESEARCH_NOTES_MAX_CHARS.__value__ = 25
+      result = trim_note("a" * 100)
+    finally:
+      config.RESEARCH_NOTES_MAX_CHARS.__value__ = original
+
+    assert result.startswith("a" * 25)
+    assert "[truncated to 25 characters]" in result
 
   def test_require_http_url_rejects_private_hosts(self):
     with pytest.raises(ValueError, match="internal or private"):
@@ -176,6 +202,24 @@ class TestResearchFetch:
 
 
 class TestResearchBrief:
+  def test_add_note_truncates_oversized_notes(self):
+    original = config.RESEARCH_NOTES_MAX_CHARS.__value__
+    try:
+      config.RESEARCH_NOTES_MAX_CHARS.__value__ = 30
+      brief = ResearchBrief()
+      brief.add_note("m" * 200)
+    finally:
+      config.RESEARCH_NOTES_MAX_CHARS.__value__ = original
+
+    assert len(brief.notes) == 1
+    assert brief.notes[0].startswith("m" * 30)
+    assert "[truncated to 30 characters]" in brief.notes[0]
+
+  def test_add_note_skips_empty_or_whitespace(self):
+    brief = ResearchBrief()
+    brief.add_note("   ")
+    assert brief.notes == []
+
   def test_render_to_system_includes_sections(self):
     brief = ResearchBrief(
       query="python asyncio",

@@ -56,6 +56,17 @@ def trim(text: str, max_chars: int) -> str:
   return f"{text[:max_chars]}\n\n[truncated to {max_chars} characters]"
 
 
+def trim_note(note: str, max_chars: int | None = None) -> str:
+  """Trim a research-brief note to the configured character limit."""
+  text = (note or "").strip()
+  if not text:
+    return ""
+  limit = config.RESEARCH_NOTES_MAX_CHARS.value if max_chars is None else max_chars
+  if limit <= 0:
+    return text
+  return trim(text, limit)
+
+
 def _is_internal_address(hostname: str) -> bool:
   try:
     for info in socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM):

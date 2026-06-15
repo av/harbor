@@ -74,8 +74,9 @@ class ResearchBrief(BaseModel):
     self.pages.append(ResearchSource(title=title or url, url=url, snippet=content))
 
   def add_note(self, note: str) -> None:
-    if note.strip():
-      self.notes.append(note.strip())
+    trimmed = fetch_mod.trim_note(note)
+    if trimmed:
+      self.notes.append(trimmed)
 
 
 def has_usable_research(brief: ResearchBrief) -> bool:

@@ -106,6 +106,36 @@ class TestOrchestrateParallelFetch:
     assert any("up to 3 parallel" in status for status in statuses)
 
   @pytest.mark.asyncio
+  async def test_run_searches_truncates_long_failure_notes(self):
+    from unittest.mock import patch
+
+    long_error = "e" * 10_000
+    budget = ResearchBudget(max_searches=2, max_url_reads=0, max_chars=5000)
+    brief = ResearchBrief()
+    original = config.RESEARCH_NOTES_MAX_CHARS.__value__
+
+    try:
+      config.RESEARCH_NOTES_MAX_CHARS.__value__ = 120
+      with patch(
+        "research.fetch.web_search",
+        new=AsyncMock(return_value=f"Web search failed: {long_error}"),
+      ):
+        await orchestrate.run_searches(
+          ["api docs"],
+          budget,
+          brief,
+          module_id="caveman",
+          status_prefix="Caveman research",
+        )
+    finally:
+      config.RESEARCH_NOTES_MAX_CHARS.__value__ = original
+
+    assert len(brief.notes) == 1
+    assert brief.notes[0].startswith("Search failed for 'api docs': Web search failed:")
+    assert "[truncated to 120 characters]" in brief.notes[0]
+    assert len(brief.notes[0]) < len(f"Search failed for 'api docs': Web search failed: {long_error}")
+
+  @pytest.mark.asyncio
   async def test_run_searches_respects_budget_under_parallelism(self):
     from unittest.mock import patch
 

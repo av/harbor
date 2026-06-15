@@ -593,6 +593,16 @@ TOOLS_READ_MAX_CHARS = Config[int](
     description="Maximum number of characters returned by the `read_url` tool.",
 )
 
+RESEARCH_NOTES_MAX_CHARS = Config[int](
+    name="HARBOR_BOOST_RESEARCH_NOTES_MAX_CHARS",
+    type=int,
+    default="4000",
+    description=(
+        "Maximum number of characters stored per note on a research brief "
+        "when fetch adds search or read failure messages."
+    ),
+)
+
 TOOLS_FILE_MAX_CHARS = Config[int](
     name="HARBOR_BOOST_TOOLS_FILE_MAX_CHARS",
     type=int,
