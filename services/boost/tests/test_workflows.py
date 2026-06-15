@@ -31,7 +31,7 @@ SCOPE_GUARD_MODULES = [
 
 AGENT_CODE_MODULES = [
   {"module": "tools", "config": {"final": False}},
-  "sightline",
+  {"module": "sightline", "config": {"final": False}},
   "diffscope",
   "autocheck",
   "final",
@@ -218,6 +218,7 @@ class TestApplyWorkflow:
     applied = [call.args[0] for call in mock_apply.await_args_list]
     assert applied == ["tools", "sightline", "diffscope", "autocheck"]
     assert mock_apply.await_args_list[0].args[1]["final"] is False
+    assert mock_apply.await_args_list[1].args[1]["final"] is False
     llm.stream_final_completion.assert_awaited_once()
 
   @pytest.mark.asyncio

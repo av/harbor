@@ -1133,6 +1133,11 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
     await llm.emit_status(f"Autocheck: revising ({passes_used}/{max_passes})...")
     try:
       final_text = await revise_draft(chat, llm, final_text, audit)
+      paths = extract_workspace_paths(message, final_text)
+      git_diff_context, mechanical_findings = await run_mechanical_preaudit(
+        final_text,
+        paths,
+      )
       audit, debug = await run_audit(
         chat,
         llm,

@@ -47,7 +47,7 @@ class TestDiffscopeGitDraftMerge:
     llm = MagicMock()
     llm.emit_status = AsyncMock()
     llm.emit_message = AsyncMock()
-    llm.stream_final_completion = AsyncMock(
+    llm.stream_chat_completion = AsyncMock(
       return_value="Updated services/foo.py and services/bar.py for consistency.",
     )
 

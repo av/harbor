@@ -363,6 +363,9 @@ async def apply_workflow(workflow_definition: Any, chat, llm):
     if module_name == "tools" and "final" not in module_cfg and not is_last:
       module_cfg["final"] = False
 
+    if not is_last and "defer_final" not in module_cfg and module_cfg.get("final") is not False:
+      module_cfg["defer_final"] = True
+
     was_final = llm.is_final_stream
     await _apply_module(module_name, module_cfg, chat, llm)
 

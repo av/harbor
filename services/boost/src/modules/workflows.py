@@ -3,6 +3,7 @@
 from copy import deepcopy
 
 TOOLS_SETUP = {"module": "tools", "config": {"final": False}}
+SIGHTLINE_SETUP = {"module": "sightline", "config": {"final": False}}
 FINAL_STEP = "final"
 
 PRESETS: dict[str, dict] = {
@@ -40,7 +41,7 @@ PRESETS: dict[str, dict] = {
       "Sandbox coding session: register portable and workspace tools, enforce "
       "read-before-edit, scope constraints, and deliverable audit."
     ),
-    "modules": [TOOLS_SETUP, "sightline", "diffscope", "autocheck", FINAL_STEP],
+    "modules": [TOOLS_SETUP, SIGHTLINE_SETUP, "diffscope", "autocheck", FINAL_STEP],
   },
   "shipyard": {
     "name": "Shipyard",

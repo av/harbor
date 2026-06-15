@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Awaitable, Callable, Literal
 
 import config
 import log
+import research.workflow as workflow_mod
 import tools.registry
 from modules import tools as tools_module
 from state import request as request_state
@@ -466,5 +467,4 @@ async def apply(chat: "ch.Chat", llm: "llm_mod.LLM", config: dict | None = None)
   else:
     logger.debug(f"{ID_PREFIX}: no file tools registered to guard")
 
-  if cfg_final:
-    await llm.stream_final_completion()
+  return await workflow_mod.complete_or_defer(llm, {**cfg, "defer_final": not cfg_final})

@@ -366,13 +366,13 @@ class TestDiffscopeApply:
     llm = MagicMock()
     llm.emit_status = AsyncMock()
     llm.emit_message = AsyncMock()
-    llm.stream_final_completion = AsyncMock(return_value="Changed `services/boost/src/utils.py`.")
+    llm.stream_chat_completion = AsyncMock(return_value="Changed `services/boost/src/utils.py`.")
 
     with patch.object(diffscope, "verify_workspace_paths", new=AsyncMock(return_value=[])):
       await diffscope.apply(chat, llm)
 
     llm.emit_message.assert_awaited_once_with("Changed `services/boost/src/utils.py`.")
-    llm.stream_final_completion.assert_awaited_once_with(emit=False)
+    llm.stream_chat_completion.assert_awaited_once_with(emit=False)
 
   @pytest.mark.asyncio
   async def test_apply_uses_git_diff_paths_for_scope_check(self):
@@ -382,7 +382,7 @@ class TestDiffscopeApply:
     llm = MagicMock()
     llm.emit_status = AsyncMock()
     llm.emit_message = AsyncMock()
-    llm.stream_final_completion = AsyncMock(
+    llm.stream_chat_completion = AsyncMock(
       return_value="Only updated services/boost/src/utils.py in the answer.",
     )
     snapshot = diffscope.ChangedPathsSnapshot(
@@ -413,7 +413,7 @@ class TestDiffscopeApply:
     llm = MagicMock()
     llm.emit_status = AsyncMock()
     llm.emit_message = AsyncMock()
-    llm.stream_final_completion = AsyncMock(
+    llm.stream_chat_completion = AsyncMock(
       return_value="Also edited services/boost/src/config.py for flags.",
     )
 

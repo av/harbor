@@ -332,7 +332,7 @@ class TestDiffscopeEdgeCases:
     llm = MagicMock()
     llm.emit_status = AsyncMock()
     llm.emit_message = AsyncMock()
-    llm.stream_final_completion = AsyncMock(
+    llm.stream_chat_completion = AsyncMock(
       return_value="Updated `src/foo.py` and `src/bar.py` for consistency.",
     )
 

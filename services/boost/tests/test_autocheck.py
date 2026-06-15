@@ -1062,6 +1062,56 @@ class TestAutocheckApply:
     llm.emit_message.assert_awaited_once_with("Revised implementation")
 
   @pytest.mark.asyncio
+  async def test_apply_reruns_mechanical_preaudit_after_revise(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Implement retry helper in services/boost/src/utils.py"},
+    ])
+    llm = MagicMock()
+    llm.boost_params = {}
+    llm.emit_status = AsyncMock()
+    llm.emit_message = AsyncMock()
+    llm.stream_chat_completion = AsyncMock(return_value="Draft implementation")
+
+    first_audit = autocheck.AuditResult(
+      verdict="revise",
+      summary="Fix paths",
+      findings=[autocheck.AuditFinding(severity="major", message="Wrong path")],
+    )
+    second_audit = autocheck.AuditResult(verdict="pass", summary="Good now")
+    first_debug = autocheck.AuditDebug(triggered=True, gate_reason="triggered", verdict="revise")
+    second_debug = autocheck.AuditDebug(triggered=True, gate_reason="triggered", verdict="pass")
+    stale_blocker = [
+      autocheck.AuditFinding(
+        severity="major",
+        message="Draft contains code blocks but cites no file paths",
+      ),
+    ]
+    refreshed = ([], [])
+
+    with (
+      patch.object(autocheck, "gather_workspace_context", new=AsyncMock(return_value="")),
+      patch.object(
+        autocheck,
+        "run_mechanical_preaudit",
+        new=AsyncMock(side_effect=[("", stale_blocker), refreshed]),
+      ) as preaudit,
+      patch.object(
+        autocheck,
+        "run_audit",
+        new=AsyncMock(side_effect=[(first_audit, first_debug), (second_audit, second_debug)]),
+      ) as run_audit,
+      patch.object(
+        autocheck,
+        "revise_draft",
+        new=AsyncMock(return_value="Revised with `services/boost/src/utils.py`."),
+      ),
+    ):
+      await autocheck.apply(chat, llm)
+
+    assert preaudit.await_count == 2
+    assert run_audit.await_args_list[1].kwargs["mechanical_findings"] == []
+
+  @pytest.mark.asyncio
   async def test_apply_appends_audit_footer_when_show_audit_enabled(self):
     chat = ch.Chat.from_conversation([
       {"role": "user", "content": "Implement retry helper in services/boost/src/utils.py"},

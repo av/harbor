@@ -11,6 +11,7 @@ import chat as ch
 import config
 import deliverable
 import log
+import research.workflow as workflow_mod
 
 if TYPE_CHECKING:
   import llm
@@ -463,27 +464,28 @@ async def emit_final(llm: "llm.LLM", final_text: str) -> None:
     await llm.emit_message(final_text)
 
 
-async def apply(chat: "ch.Chat", llm: "llm.LLM"):
+async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
+  module_cfg = config or {}
   if not needs_diffscope(chat):
     logger.debug(f"{ID_PREFIX}: pass-through — not a coding deliverable")
-    return await llm.stream_final_completion()
+    return await workflow_mod.complete_or_defer(llm, module_cfg)
 
   scope = extract_user_scope(chat)
   if not scope.has_constraints:
     logger.debug(f"{ID_PREFIX}: pass-through — no user scope constraints")
-    return await llm.stream_final_completion()
+    return await workflow_mod.complete_or_defer(llm, module_cfg)
 
   await llm.emit_status("Diffscope: drafting...")
   try:
-    draft = await llm.stream_final_completion(emit=False)
+    draft = await llm.stream_chat_completion(emit=False)
   except Exception as exc:
     logger.error(f"{ID_PREFIX}: draft failed: {exc}")
-    return await llm.stream_final_completion()
+    return await workflow_mod.complete_or_defer(llm, module_cfg)
 
   draft = (draft or "").strip()
   if not draft:
     logger.warning(f"{ID_PREFIX}: empty draft, passing through")
-    return await llm.stream_final_completion()
+    return await workflow_mod.complete_or_defer(llm, module_cfg)
 
   snapshot = collect_changed_paths(draft, chat)
   changed_paths = snapshot.paths
