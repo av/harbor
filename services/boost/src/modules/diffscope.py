@@ -90,17 +90,36 @@ FENCE_PATH_RE = re.compile(
   r"```(?:\d+:\d+:|[\w+.-]*:)(?P<path>(?:[\w.-]+/)+[\w.-]+)",
   re.IGNORECASE,
 )
+_REPO_PATH = r"(?:[\w.-]+/)*[\w.-]+\.[\w]+"
+_REPO_PATH_TOKEN_RE = re.compile(_REPO_PATH, re.IGNORECASE)
+
 ONLY_RE = re.compile(
   r"\b(?:only|just|limit(?:ed)?\s+to|stick\s+to|focus\s+on|change\s+only)\s+"
   r"(?:(?:change|edit|modify|update|fix|touch)\s+)?(?:the\s+)?[`'\"]?"
-  r"((?:[\w.-]+/)*[\w.-]+\.[\w]+)",
+  rf"({_REPO_PATH})",
   re.IGNORECASE,
 )
-DONT_TOUCH_RE = re.compile(
-  r"\b(?:don't\s+touch|do\s+not\s+(?:touch|modify|change|edit)|never\s+touch|leave\s+alone)\s+"
-  r"(?:the\s+)?[`'\"]?"
-  r"((?:[\w.-]+/)*[\w.-]+\.[\w]+)",
+DONT_TOUCH_PHRASE_RE = re.compile(
+  r"\b(?:don't\s+touch|dont\s+touch|do\s+not\s+(?:touch|modify|change|edit)|"
+  r"never\s+touch|without\s+touching)\s+"
+  rf"(?:the\s+)?(?:{_REPO_PATH})"
+  rf"(?:\s*(?:,|and|or)\s+(?:the\s+)?(?:{_REPO_PATH}))*",
   re.IGNORECASE,
+)
+LEAVE_ALONE_PHRASE_RE = re.compile(
+  rf"\bleave\s+(?:the\s+)?(?:{_REPO_PATH})"
+  rf"(?:\s*(?:,|and|or)\s+(?:the\s+)?(?:{_REPO_PATH}))*\s+alone\b",
+  re.IGNORECASE,
+)
+EXCEPT_PHRASE_RE = re.compile(
+  rf"\bexcept(?:\s+for)?\s+(?:the\s+)?(?:{_REPO_PATH})"
+  rf"(?:\s*(?:,|and|or)\s+(?:the\s+)?(?:{_REPO_PATH}))*",
+  re.IGNORECASE,
+)
+_FORBIDDEN_PHRASE_RES = (
+  DONT_TOUCH_PHRASE_RE,
+  LEAVE_ALONE_PHRASE_RE,
+  EXCEPT_PHRASE_RE,
 )
 FILE_TOOL_NAMES = frozenset({
   "write_file",
@@ -214,6 +233,21 @@ def recent_user_texts(chat: "ch.Chat", max_turns: int | None = None) -> list[str
   return [(node.content or "").strip() for node in users[-max(1, limit):]]
 
 
+def _paths_in_phrase_match(match: re.Match[str]) -> list[str]:
+  return [
+    deliverable.normalize_repo_path(path)
+    for path in _REPO_PATH_TOKEN_RE.findall(match.group(0))
+  ]
+
+
+def _extract_forbidden_paths(text: str) -> list[str]:
+  forbidden: list[str] = []
+  for pattern in _FORBIDDEN_PHRASE_RES:
+    for match in pattern.finditer(text):
+      forbidden.extend(_paths_in_phrase_match(match))
+  return forbidden
+
+
 def extract_user_scope(chat: "ch.Chat") -> UserScope:
   allowed: list[str] = []
   hinted: list[str] = []
@@ -226,8 +260,7 @@ def extract_user_scope(chat: "ch.Chat") -> UserScope:
     for match in ONLY_RE.finditer(text):
       allowed.append(deliverable.normalize_repo_path(match.group(1)))
 
-    for match in DONT_TOUCH_RE.finditer(text):
-      forbidden.append(deliverable.normalize_repo_path(match.group(1)))
+    forbidden.extend(_extract_forbidden_paths(text))
 
     for match in deliverable.FILE_PATH_RE.finditer(text):
       hinted.append(deliverable.normalize_repo_path(match.group(0)))

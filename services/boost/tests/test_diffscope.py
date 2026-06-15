@@ -56,6 +56,46 @@ class TestUserScope:
     scope = diffscope.extract_user_scope(chat)
     assert "services/boost/src/config.py" in scope.forbidden
 
+  def test_extract_forbidden_paths_from_leave_alone(self):
+    chat = self._chat(
+      "Fix the retry bug but leave services/boost/src/config.py alone.",
+    )
+    scope = diffscope.extract_user_scope(chat)
+    assert scope.forbidden == ["services/boost/src/config.py"]
+    assert scope.has_constraints
+
+  def test_extract_forbidden_paths_from_except(self):
+    chat = self._chat(
+      "Refactor the helper everywhere except services/boost/src/config.py.",
+    )
+    scope = diffscope.extract_user_scope(chat)
+    assert scope.forbidden == ["services/boost/src/config.py"]
+
+  def test_extract_forbidden_paths_from_except_for(self):
+    chat = self._chat("Change what you need except for config.py.")
+    scope = diffscope.extract_user_scope(chat)
+    assert scope.forbidden == ["config.py"]
+
+  def test_extract_multiple_forbidden_paths_from_dont_touch(self):
+    chat = self._chat(
+      "Patch utils.py but don't touch services/boost/src/config.py or main.py.",
+    )
+    scope = diffscope.extract_user_scope(chat)
+    assert scope.forbidden == [
+      "services/boost/src/config.py",
+      "main.py",
+    ]
+
+  def test_extract_multiple_forbidden_paths_from_leave_alone(self):
+    chat = self._chat("Leave foo.py and bar.py alone while fixing tests.")
+    scope = diffscope.extract_user_scope(chat)
+    assert scope.forbidden == ["foo.py", "bar.py"]
+
+  def test_extract_forbidden_without_apostrophe(self):
+    chat = self._chat("Fix utils.py and dont touch config.py.")
+    scope = diffscope.extract_user_scope(chat)
+    assert "config.py" in scope.forbidden
+
   def test_extract_hinted_paths_from_mentions(self):
     chat = self._chat("Update services/boost/src/main.py to log errors.")
     scope = diffscope.extract_user_scope(chat)
