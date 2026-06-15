@@ -16,7 +16,7 @@ import config
 import tools.registry as tool_registry
 import workflows
 from middleware.request_id import request_id_var
-from modules import autocheck, caveman, diffscope, sightline
+from modules import autocheck, caveman, diffscope, ponytail, sightline
 from modules import tools as tools_module
 from modules import workflows as workflow_presets
 from state import request as request_state
@@ -26,6 +26,7 @@ CODE_CHECK_MODULE_ORDER = ["tools", "autocheck", "final"]
 SCOPE_GUARD_MODULE_ORDER = ["tools", "diffscope", "autocheck", "final"]
 AGENT_CODE_MODULE_ORDER = ["tools", "sightline", "diffscope", "autocheck", "final"]
 RESEARCH_QUICK_MODULE_ORDER = ["tools", "caveman", "final"]
+RESEARCH_DEEP_MODULE_ORDER = ["tools", "ponytail", "final"]
 
 CODE_CHECK_USER_MESSAGE = (
   "Implement retry helper with exponential backoff in services/boost/src/utils.py"
@@ -48,11 +49,25 @@ RESEARCH_QUICK_USER_MESSAGE = (
   "What is the Stripe checkout session API endpoint response format in 2024?"
 )
 
+RESEARCH_DEEP_USER_MESSAGE = (
+  "Migrate from Django 4.2 to 5.0 — what breaking changes affect django.utils.six?"
+)
+
 MOCK_SEARCH_RESULT = (
   "1. [Stripe Checkout API](https://docs.stripe.com/checkout) (Date: N/A)\n"
   "Checkout session response includes id, url, and status fields."
 )
 MOCK_PAGE_CONTENT = "Stripe checkout session API reference for 2024-06-20."
+
+MOCK_PONYTAIL_HOP1_SEARCH = (
+  "1. [Django upgrade guide](https://docs.djangoproject.com) (Date: N/A)\n"
+  "General upgrade tips without explicit 5.0 release notes."
+)
+MOCK_PONYTAIL_HOP2_SEARCH = (
+  "1. [Django 5.0 release notes](https://docs.djangoproject.com/en/5.0/releases/5.0/) "
+  "(Date: N/A)\nDjango 5.0 removes django.utils.six."
+)
+MOCK_PONYTAIL_PAGE_CONTENT = "Sparse Django upgrade page without full changelog."
 
 
 @pytest.fixture(autouse=True)
@@ -104,6 +119,37 @@ def _cheap_llm_mock(chat_completion: AsyncMock) -> MagicMock:
   cheap = MagicMock()
   cheap.chat_completion = chat_completion
   return cheap
+
+
+def _ponytail_cheap_llm_mock() -> MagicMock:
+  async def chat_completion_side_effect(**kwargs):
+    schema = kwargs.get("schema")
+    fields = getattr(schema, "model_fields", {})
+    if "queries" in fields:
+      return {
+        "queries": [
+          "django 4.2 to 5.0 migration guide",
+          "django 5.0 breaking changes django.utils.six",
+        ],
+      }
+    if "follow_up_queries" in fields:
+      return {
+        "gaps": ["No explicit Django 5.0 release notes cited"],
+        "follow_up_queries": [
+          "Django 5.0 release notes breaking changes",
+          "django.utils.six removal django 5",
+        ],
+      }
+    if "facts" in fields:
+      return {
+        "facts": ["Django 5.0 removes `django.utils.six`"],
+        "uncertainties": ["Verify third-party deps support Django 5.0"],
+        "recommendation": "Read official Django 5.0 release notes before migrating.",
+        "do_not_assume": ["Do not assume django.utils.six shims still exist"],
+      }
+    return {}
+
+  return _cheap_llm_mock(AsyncMock(side_effect=chat_completion_side_effect))
 
 
 class TestCodeCheckWorkflowChain:
@@ -345,6 +391,93 @@ class TestResearchQuickWorkflowChain:
     contents = [msg.get("content") or "" for msg in history]
     assert any("provided tools" in content for content in contents)
     assert any("<research_brief>" in content for content in contents)
+
+
+class TestResearchDeepWorkflowChain:
+  @pytest.mark.asyncio
+  async def test_research_deep_runs_tools_ponytail_final_two_hop(self):
+    """research-deep: tools → ponytail → final; 2-hop research, caveman not in chain."""
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": RESEARCH_DEEP_USER_MESSAGE},
+    ])
+    llm = _make_llm()
+    execution_order: list[str] = []
+    real_apply_module = workflows._apply_module
+    searched_queries: list[str] = []
+
+    async def tracking_apply_module(module_name, module_cfg, chat_obj, llm_obj):
+      execution_order.append(module_name)
+      return await real_apply_module(module_name, module_cfg, chat_obj, llm_obj)
+
+    async def tracked_final(**_kwargs):
+      execution_order.append("final")
+      llm.is_final_stream = True
+      return "Final deep research answer."
+
+    async def track_search(query: str, **_kwargs):
+      searched_queries.append(query)
+      return (
+        MOCK_PONYTAIL_HOP2_SEARCH
+        if len(searched_queries) > 2
+        else MOCK_PONYTAIL_HOP1_SEARCH
+      )
+
+    llm.stream_final_completion = AsyncMock(side_effect=tracked_final)
+    ponytail_cheap = _ponytail_cheap_llm_mock()
+
+    original_early_exit = config.PONYTAIL_EARLY_EXIT_CHARS.__value__
+    try:
+      config.PONYTAIL_EARLY_EXIT_CHARS.__value__ = 15_000
+
+      with (
+        request_context(),
+        patch(
+          "research.orchestrate.cheap_llm",
+          return_value=ponytail_cheap,
+        ),
+        patch(
+          "research.fetch.web_search",
+          new=AsyncMock(side_effect=track_search),
+        ) as web_search,
+        patch(
+          "research.fetch.read_url",
+          new=AsyncMock(return_value=MOCK_PONYTAIL_PAGE_CONTENT),
+        ) as read_url,
+        patch.object(autocheck, "run_audit", new=AsyncMock()) as run_audit,
+        patch.object(workflows, "_apply_module", new=tracking_apply_module),
+      ):
+        await workflows.apply_workflow(
+          deepcopy(workflow_presets.PRESETS["research-deep"]),
+          chat,
+          llm,
+        )
+    finally:
+      config.PONYTAIL_EARLY_EXIT_CHARS.__value__ = original_early_exit
+
+    assert execution_order == RESEARCH_DEEP_MODULE_ORDER
+    assert "caveman" not in execution_order
+    assert await ponytail.needs_research(chat, llm)
+    assert not autocheck.needs_autocheck(chat)
+    run_audit.assert_not_called()
+    assert ponytail_cheap.chat_completion.await_count >= 3
+    assert web_search.await_count >= 3
+    read_url.assert_awaited()
+    assert any(
+      query in searched_queries
+      for query in [
+        "Django 5.0 release notes breaking changes",
+        "django.utils.six removal django 5",
+      ]
+    )
+    assert llm.stream_final_completion.await_count == 1
+
+    history = chat.history()
+    contents = [msg.get("content") or "" for msg in history]
+    assert any("provided tools" in content for content in contents)
+    assert any("<research_brief>" in content for content in contents)
+    statuses = [call.args[0] for call in llm.emit_status.await_args_list]
+    assert any("hop 1 (" in status for status in statuses)
+    assert any("hop 2 (" in status for status in statuses)
 
 
 class TestAgentCodeWorkflowChain:
