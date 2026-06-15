@@ -1057,8 +1057,7 @@ def format_revise_findings_sections(
 
 def format_skipped_status(gate_reason: str) -> str:
   """Short status line for emit_status when autocheck passes through."""
-  reason = (gate_reason or "unknown").strip()
-  return f"Autocheck: skipped ({reason})"
+  return workflow_mod.format_skipped_status("Autocheck", gate_reason)
 
 
 def format_audit_status(audit: AuditResult) -> str:
@@ -1088,9 +1087,7 @@ def show_audit_footer(llm: "llm.LLM") -> bool:
   value = llm.boost_params.get("show_audit")
   if value is None:
     return boost_config.AUTOCHECK_SHOW_AUDIT.value
-  if isinstance(value, bool):
-    return value
-  return str(value).strip().lower() in {"1", "true", "yes", "on"}
+  return debug_metrics.truthy_param(value)
 
 
 def append_audit_footer(final_text: str, audit: AuditResult) -> str:
@@ -1429,11 +1426,6 @@ async def revise_draft(
   return (revised or draft).strip()
 
 
-async def emit_final(llm: "llm.LLM", final_text: str) -> None:
-  if final_text:
-    await llm.emit_message(final_text)
-
-
 async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
   module_cfg = config or {}  # workflow module config; shadows name only in this block
   timer = debug_metrics.DebugTimer()
@@ -1544,7 +1536,7 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
     )
     await llm.emit_status(format_skipped_status("audit_failed"))
     workflow_mod.anchor_deferred_draft(chat, draft, module_cfg)
-    await emit_final(llm, draft)
+    await workflow_mod.emit_final(llm, draft)
     return draft
 
   await llm.emit_status(format_audit_status(audit))
@@ -1595,5 +1587,5 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
 
   await llm.emit_status("Autocheck: final answer...")
   workflow_mod.anchor_deferred_draft(chat, final_text, module_cfg)
-  await emit_final(llm, final_text)
+  await workflow_mod.emit_final(llm, final_text)
   return final_text

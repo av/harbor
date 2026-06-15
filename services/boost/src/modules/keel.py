@@ -16,6 +16,7 @@ import research.workflow as workflow_mod
 import tools.registry
 from modules.diffscope import is_git_workspace, run_git_diff
 from state import request as request_state
+from state import request_store
 
 if TYPE_CHECKING:
   import llm
@@ -220,17 +221,6 @@ def is_implementation_brief(brief: TaskBrief | None) -> bool:
   return False
 
 
-def _request_store(name: str, default):
-  request = request_state.get()
-  if request is None:
-    return default
-
-  if not hasattr(request.state, name):
-    setattr(request.state, name, default)
-
-  return getattr(request.state, name)
-
-
 def count_user_turns(chat: "ch.Chat") -> int:
   return len(chat.match(role="user"))
 
@@ -269,7 +259,7 @@ def detect_drift(text: str, brief: TaskBrief | None = None) -> bool:
 
 
 def get_stored_brief() -> TaskBrief | None:
-  stored = _request_store("keel_task_brief", None)
+  stored = request_store("keel_task_brief", None)
   if stored is None:
     return None
   if isinstance(stored, TaskBrief):
@@ -297,12 +287,7 @@ def clear_brief_state() -> None:
 
 def should_refresh_brief(llm: "llm.LLM") -> bool:
   """Return True when @boost_keel_refresh requests a brief re-extraction."""
-  value = llm.boost_params.get("keel_refresh")
-  if value is None:
-    return False
-  if isinstance(value, bool):
-    return value
-  return str(value).strip().lower() in {"1", "true", "yes", "on"}
+  return debug_metrics.truthy_param(llm.boost_params.get("keel_refresh"))
 
 
 def render_brief_marker(brief: TaskBrief, met_criteria: set[int] | None = None) -> str:
@@ -427,7 +412,7 @@ def should_inject_anchor(user_turns: int) -> bool:
 
 
 def get_met_criteria() -> set[int]:
-  stored = _request_store("keel_met_criteria", [])
+  stored = request_store("keel_met_criteria", [])
   return set(stored)
 
 
@@ -758,28 +743,16 @@ def _register_finish_wrapper(
     logger.debug(f"{ID_PREFIX}: finish tool already registered, skipping wrapper")
 
 
-def _record_debug(
-  payload: debug_metrics.ModuleDebug,
-  *,
-  gate_reason: str | None = None,
-) -> None:
-  debug_metrics.record(ID_PREFIX, payload)
-  if gate_reason is not None:
-    logger.debug(
-      f"{ID_PREFIX}: Pass-through — {gate_reason} ({payload.model_dump()})"
-    )
-  else:
-    logger.debug(f"{ID_PREFIX}: {payload.model_dump()}")
-
-
 async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
   timer = debug_metrics.DebugTimer()
   extra_calls = 0
   message = orchestrate.last_user_text(chat)
   if not message:
     logger.warning(f"{ID_PREFIX}: No user message found, passing through")
-    _record_debug(
+    debug_metrics.record_module(
+      ID_PREFIX,
       debug_metrics.skipped_payload("empty_message", duration_ms=timer.elapsed_ms()),
+      logger=logger,
     )
     return await workflow_mod.complete_or_defer(llm, config)
 
@@ -792,12 +765,14 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
 
   gate_reason = keel_gate_reason(chat, brief=brief)
   if gate_reason != "triggered":
-    _record_debug(
+    debug_metrics.record_module(
+      ID_PREFIX,
       debug_metrics.skipped_payload(
         gate_reason,
         duration_ms=timer.elapsed_ms(),
         extra_calls=extra_calls,
       ),
+      logger=logger,
       gate_reason=gate_reason,
     )
     return await workflow_mod.complete_or_defer(llm, config)
@@ -819,12 +794,14 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
       extra_calls += 1
 
   if brief is None:
-    _record_debug(
+    debug_metrics.record_module(
+      ID_PREFIX,
       debug_metrics.skipped_payload(
         "non_substantive_message",
         duration_ms=timer.elapsed_ms(),
         extra_calls=extra_calls,
       ),
+      logger=logger,
       gate_reason="non_substantive_message",
     )
     return await workflow_mod.complete_or_defer(llm, config)
@@ -861,7 +838,8 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
     landing_injected = True
 
   _register_finish_wrapper(chat, brief, drift_detected)
-  _record_debug(
+  debug_metrics.record_module(
+    ID_PREFIX,
     debug_metrics.triggered_payload(
       "triggered",
       duration_ms=timer.elapsed_ms(),
@@ -872,5 +850,6 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
       landing_injected=landing_injected,
       drift_detected=drift_detected,
     ),
+    logger=logger,
   )
   return await workflow_mod.complete_or_defer(llm, config)

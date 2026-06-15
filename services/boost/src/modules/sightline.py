@@ -11,6 +11,7 @@ import research.workflow as workflow_mod
 import tools.registry
 from modules import tools as tools_module
 from state import request as request_state
+from state import request_store
 
 if TYPE_CHECKING:
   import chat as ch
@@ -84,19 +85,8 @@ ToolKind = Literal["scratch", "workspace"]
 WORKSPACE_PATH_PREFIX = "workspace:"
 
 
-def _request_store(name: str, default):
-  request = request_state.get()
-  if request is None:
-    return default
-
-  if not hasattr(request.state, name):
-    setattr(request.state, name, default)
-
-  return getattr(request.state, name)
-
-
 def _path_state() -> PathState:
-  return _request_store("sightline_path_state", {})
+  return request_store("sightline_path_state", {})
 
 
 def _next_sequence() -> int:
@@ -449,20 +439,6 @@ def install_guards(
   return wrapped
 
 
-def _record_debug(
-  payload: debug_metrics.ModuleDebug,
-  *,
-  gate_reason: str | None = None,
-) -> None:
-  debug_metrics.record(ID_PREFIX, payload)
-  if gate_reason is not None:
-    logger.debug(
-      f"{ID_PREFIX}: Pass-through — {gate_reason} ({payload.model_dump()})"
-    )
-  else:
-    logger.debug(f"{ID_PREFIX}: {payload.model_dump()}")
-
-
 async def apply(chat: "ch.Chat", llm: "llm_mod.LLM", config: dict | None = None):
   timer = debug_metrics.DebugTimer()
   cfg = config or {}
@@ -493,21 +469,25 @@ async def apply(chat: "ch.Chat", llm: "llm_mod.LLM", config: dict | None = None)
         "After each write_workspace_file, call read_workspace_file again before the next edit."
       )
     chat.system(" ".join(messages))
-    _record_debug(
+    debug_metrics.record_module(
+      ID_PREFIX,
       debug_metrics.triggered_payload(
         "triggered",
         duration_ms=timer.elapsed_ms(),
         wrapped_tools=wrapped,
         workspace_guard=workspace_guard_enabled(workspace),
       ),
+      logger=logger,
     )
   else:
-    _record_debug(
+    debug_metrics.record_module(
+      ID_PREFIX,
       debug_metrics.skipped_payload(
         "no_file_tools_registered",
         duration_ms=timer.elapsed_ms(),
         workspace_skip=workspace_skip,
       ),
+      logger=logger,
       gate_reason="no_file_tools_registered",
     )
 

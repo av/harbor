@@ -12,6 +12,7 @@ import config
 import deliverable
 import log
 import research.debug_metrics as debug_metrics
+import research.orchestrate as orchestrate
 import research.workflow as workflow_mod
 
 if TYPE_CHECKING:
@@ -591,20 +592,6 @@ def build_revise_scope_sections(
   }
 
 
-def _cheap_llm(llm: "llm.LLM") -> "llm.LLM":
-  import llm as llm_mod
-
-  return llm_mod.LLM(
-    url=llm.url,
-    headers=llm.headers,
-    query_params=llm.query_params,
-    model=llm.model,
-    params={},
-    messages=[{"role": "user", "content": ""}],
-    module=None,
-  )
-
-
 async def revise_with_correction(
   chat: "ch.Chat",
   llm: "llm.LLM",
@@ -625,7 +612,7 @@ async def revise_with_correction(
       "git_evidence": "(scope details unavailable — rely on scope_correction)",
     }
   )
-  intermediate = _cheap_llm(llm)
+  intermediate = orchestrate.cheap_llm(llm)
   revised = await intermediate.chat_completion(
     prompt=REVISE_PROMPT,
     conversation=str(chat),
@@ -638,46 +625,20 @@ async def revise_with_correction(
   return (revised or draft).strip()
 
 
-def anchor_scoped_draft(
-  chat: "ch.Chat",
-  final_text: str,
-  module_cfg: dict,
-) -> None:
-  """Record a scoped draft in chat history for downstream workflow modules."""
-  workflow_mod.anchor_deferred_draft(chat, final_text, module_cfg)
-
-
-async def emit_final(llm: "llm.LLM", final_text: str) -> None:
-  if final_text:
-    await llm.emit_message(final_text)
-
-
-def _record_debug(
-  payload: debug_metrics.ModuleDebug,
-  *,
-  gate_reason: str | None = None,
-) -> None:
-  debug_metrics.record(ID_PREFIX, payload)
-  if gate_reason is not None:
-    logger.debug(
-      f"{ID_PREFIX}: Pass-through — {gate_reason} ({payload.model_dump()})"
-    )
-  else:
-    logger.debug(f"{ID_PREFIX}: {payload.model_dump()}")
-
-
 async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
   module_cfg = config or {}
   timer = debug_metrics.DebugTimer()
   extra_calls = 0
   gate_reason = diffscope_gate_reason(chat)
   if gate_reason != "triggered":
-    _record_debug(
+    debug_metrics.record_module(
+      ID_PREFIX,
       debug_metrics.skipped_payload(
         gate_reason,
         duration_ms=timer.elapsed_ms(),
         extra_calls=extra_calls,
       ),
+      logger=logger,
       gate_reason=gate_reason,
     )
     return await workflow_mod.complete_or_defer(llm, module_cfg)
@@ -690,26 +651,30 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
     extra_calls += 1
   except Exception as exc:
     logger.error(f"{ID_PREFIX}: draft failed: {exc}")
-    _record_debug(
+    debug_metrics.record_module(
+      ID_PREFIX,
       debug_metrics.triggered_payload(
         "triggered",
         duration_ms=timer.elapsed_ms(),
         extra_calls=extra_calls,
         outcome="draft_failed",
       ),
+      logger=logger,
     )
     return await workflow_mod.complete_or_defer(llm, module_cfg)
 
   draft = (draft or "").strip()
   if not draft:
     logger.warning(f"{ID_PREFIX}: empty draft, passing through")
-    _record_debug(
+    debug_metrics.record_module(
+      ID_PREFIX,
       debug_metrics.triggered_payload(
         "triggered",
         duration_ms=timer.elapsed_ms(),
         extra_calls=extra_calls,
         outcome="empty_draft",
       ),
+      logger=logger,
     )
     return await workflow_mod.complete_or_defer(llm, module_cfg)
 
@@ -732,7 +697,8 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
       collateral_paths = ", ".join(violation.path for violation in collateral_violations)
       status = f"{status} — collateral: {collateral_paths}"
     await llm.emit_status(status)
-    _record_debug(
+    debug_metrics.record_module(
+      ID_PREFIX,
       debug_metrics.triggered_payload(
         "triggered",
         duration_ms=timer.elapsed_ms(),
@@ -742,9 +708,10 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
         changed_paths=len(changed_paths),
         collateral_violations=len(collateral_violations),
       ),
+      logger=logger,
     )
-    anchor_scoped_draft(chat, draft, module_cfg)
-    await emit_final(llm, draft)
+    workflow_mod.anchor_deferred_draft(chat, draft, module_cfg)
+    await workflow_mod.emit_final(llm, draft)
     return draft
 
   correction = build_correction_note(
@@ -781,7 +748,8 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
     final_text = draft
     outcome = "revision_failed"
 
-  _record_debug(
+  debug_metrics.record_module(
+    ID_PREFIX,
     debug_metrics.triggered_payload(
       "triggered",
       duration_ms=timer.elapsed_ms(),
@@ -792,7 +760,8 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
       missing_paths=len(missing_paths),
       collateral_violations=len(collateral_violations),
     ),
+    logger=logger,
   )
-  anchor_scoped_draft(chat, final_text, module_cfg)
-  await emit_final(llm, final_text)
+  workflow_mod.anchor_deferred_draft(chat, final_text, module_cfg)
+  await workflow_mod.emit_final(llm, final_text)
   return final_text

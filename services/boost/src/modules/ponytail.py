@@ -1,6 +1,5 @@
 """Deep two-hop pre-answer web research for Harbor Boost."""
 
-import hashlib
 import re
 from typing import TYPE_CHECKING
 
@@ -10,11 +9,11 @@ import config
 import deliverable
 import log
 import research.brief as brief_mod
+import research.brief_cache as brief_cache
 import research.budget as budget_mod
 import research.debug_metrics as debug_metrics
 import research.orchestrate as orchestrate
 import research.workflow as workflow_mod
-from state import request as request_state
 
 if TYPE_CHECKING:
   import chat as ch
@@ -161,8 +160,7 @@ BRIEF_CACHE_KEY = "ponytail_brief_cache"
 
 def format_skipped_status(gate_reason: str) -> str:
   """Short status line for emit_status when ponytail passes through."""
-  reason = (gate_reason or "unknown").strip()
-  return f"{STATUS_PREFIX}: skipped ({reason})"
+  return workflow_mod.format_skipped_status(STATUS_PREFIX, gate_reason)
 
 
 def format_hop_query_status(hop: int, query_count: int) -> str:
@@ -276,53 +274,26 @@ def is_research_heavy(text: str) -> bool:
 
 
 def _uses_llm_trigger() -> bool:
-  return (config.PONYTAIL_TRIGGER.value or "heuristic").strip().lower() == "llm"
+  return orchestrate.uses_llm_trigger(config.PONYTAIL_TRIGGER.value)
 
 
-def _question_hash(text: str) -> str:
-  return hashlib.sha256((text or "").strip().encode()).hexdigest()
-
-
-def _request_store(name: str, default):
-  request = request_state.get()
-  if request is None:
-    return default
-
-  if not hasattr(request.state, name):
-    setattr(request.state, name, default)
-
-  return getattr(request.state, name)
+_question_hash = brief_cache.question_hash
 
 
 def _get_cached_brief(message: str) -> brief_mod.ResearchBrief | None:
-  if not config.PONYTAIL_CACHE_BRIEF.value:
-    return None
-
-  cached = _request_store(BRIEF_CACHE_KEY, None)
-  if not isinstance(cached, tuple) or len(cached) != 2:
-    return None
-
-  cached_hash, cached_brief = cached
-  if cached_hash != _question_hash(message):
-    return None
-  if not isinstance(cached_brief, brief_mod.ResearchBrief):
-    return None
-
-  return cached_brief.model_copy(deep=True)
+  return brief_cache.get_cached_brief(
+    BRIEF_CACHE_KEY,
+    message,
+    enabled=config.PONYTAIL_CACHE_BRIEF.value,
+  )
 
 
 def _store_cached_brief(message: str, brief: brief_mod.ResearchBrief) -> None:
-  if not config.PONYTAIL_CACHE_BRIEF.value:
-    return
-
-  request = request_state.get()
-  if request is None:
-    return
-
-  setattr(
-    request.state,
+  brief_cache.store_cached_brief(
     BRIEF_CACHE_KEY,
-    (_question_hash(message), brief.model_copy(deep=True)),
+    message,
+    brief,
+    enabled=config.PONYTAIL_CACHE_BRIEF.value,
   )
 
 
@@ -586,20 +557,6 @@ async def run_research_loop(
   return await synthesize_brief(chat, llm, message, brief), extra_calls
 
 
-def _record_debug(
-  payload: debug_metrics.ModuleDebug,
-  *,
-  gate_reason: str | None = None,
-) -> None:
-  debug_metrics.record(ID_PREFIX, payload)
-  if gate_reason is not None:
-    logger.debug(
-      f"{ID_PREFIX}: Pass-through — {gate_reason} ({payload.model_dump()})"
-    )
-  else:
-    logger.debug(f"{ID_PREFIX}: {payload.model_dump()}")
-
-
 async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
   timer = debug_metrics.DebugTimer()
   extra_calls = 0
@@ -607,8 +564,10 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
   if not message:
     logger.warning(f"{ID_PREFIX}: No user message found, passing through")
     await llm.emit_status(format_skipped_status("empty_message"))
-    _record_debug(
+    debug_metrics.record_module(
+      ID_PREFIX,
       debug_metrics.skipped_payload("empty_message", duration_ms=timer.elapsed_ms()),
+      logger=logger,
     )
     return await workflow_mod.complete_or_defer(llm, config)
 
@@ -617,12 +576,14 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
     extra_calls += 1
   if gate_reason != "triggered":
     await llm.emit_status(format_skipped_status(gate_reason))
-    _record_debug(
+    debug_metrics.record_module(
+      ID_PREFIX,
       debug_metrics.skipped_payload(
         gate_reason,
         duration_ms=timer.elapsed_ms(),
         extra_calls=extra_calls,
       ),
+      logger=logger,
       gate_reason=gate_reason,
     )
     return await workflow_mod.complete_or_defer(llm, config)
@@ -634,13 +595,15 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
     if not cached_brief.query:
       cached_brief.query = message
     chat.system(brief_mod.render_to_system(cached_brief))
-    _record_debug(
+    debug_metrics.record_module(
+      ID_PREFIX,
       debug_metrics.triggered_payload(
         "triggered",
         duration_ms=timer.elapsed_ms(),
         extra_calls=extra_calls,
         cached_brief=True,
       ),
+      logger=logger,
     )
     return await workflow_mod.complete_or_defer(llm, config)
 
@@ -655,25 +618,29 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
     brief = workflow_mod.failure_brief(message, f"Query planning failed: {exc}")
     await llm.emit_status(f"{STATUS_PREFIX}: query planning failed, continuing without live data...")
     chat.system(brief_mod.render_to_system(brief))
-    _record_debug(
+    debug_metrics.record_module(
+      ID_PREFIX,
       debug_metrics.triggered_payload(
         "triggered",
         duration_ms=timer.elapsed_ms(),
         extra_calls=extra_calls,
         query_planning_failed=True,
       ),
+      logger=logger,
     )
     return await workflow_mod.complete_or_defer(llm, config)
 
   if not queries:
     logger.warning(f"{ID_PREFIX}: No queries planned, passing through")
     await llm.emit_status(format_skipped_status("no_queries_planned"))
-    _record_debug(
+    debug_metrics.record_module(
+      ID_PREFIX,
       debug_metrics.triggered_payload(
         "no_queries_planned",
         duration_ms=timer.elapsed_ms(),
         extra_calls=extra_calls,
       ),
+      logger=logger,
     )
     return await workflow_mod.complete_or_defer(llm, config)
 
@@ -694,7 +661,8 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
 
   _store_cached_brief(message, brief)
   chat.system(brief_mod.render_to_system(brief))
-  _record_debug(
+  debug_metrics.record_module(
+    ID_PREFIX,
     debug_metrics.triggered_payload(
       "triggered",
       duration_ms=timer.elapsed_ms(),
@@ -703,5 +671,6 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
       searches=len(brief.searches),
       pages=len(brief.pages),
     ),
+    logger=logger,
   )
   await workflow_mod.complete_or_defer(llm, config)

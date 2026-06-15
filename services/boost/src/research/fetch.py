@@ -25,7 +25,7 @@ READ_FAILED_PREFIX = "Could not read URL:"
 _TRANSIENT_HTTP_ERRORS = (httpx.TimeoutException, httpx.ConnectError)
 _RETRY_BACKOFF_SECONDS = 1.0
 
-T = TypeVar("T")
+_T = TypeVar("_T")
 
 
 def _is_transient_failure(exc: BaseException) -> bool:
@@ -34,8 +34,8 @@ def _is_transient_failure(exc: BaseException) -> bool:
 
 async def _with_transient_retry(
   operation: str,
-  coro_fn: Callable[[], Awaitable[T]],
-) -> T:
+  coro_fn: Callable[[], Awaitable[_T]],
+) -> _T:
   """Run ``coro_fn`` once; on transient HTTP failure, wait and retry once."""
   try:
     return await coro_fn()

@@ -102,7 +102,8 @@ def triggered_payload(
   )
 
 
-def _truthy(value: Any) -> bool:
+def truthy_param(value: Any) -> bool:
+  """Interpret a config or @boost_* param as a boolean flag."""
   if value is None:
     return False
   if isinstance(value, bool):
@@ -114,8 +115,25 @@ def debug_enabled(llm) -> bool:
   """Return True when debug metrics should appear in the final status."""
   value = llm.boost_params.get("debug")
   if value is not None:
-    return _truthy(value)
+    return truthy_param(value)
   return boost_config.BOOST_DEBUG.value
+
+
+def record_module(
+  module_id: str,
+  payload: ModuleDebug,
+  *,
+  logger,
+  gate_reason: str | None = None,
+) -> None:
+  """Persist module debug and emit a matching logger line."""
+  record(module_id, payload)
+  if gate_reason is not None:
+    logger.debug(
+      f"{module_id}: Pass-through — {gate_reason} ({payload.model_dump()})"
+    )
+  else:
+    logger.debug(f"{module_id}: {payload.model_dump()}")
 
 
 def collect_all() -> dict[str, dict[str, Any]]:

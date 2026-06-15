@@ -15,7 +15,7 @@ import research.workflow as workflow_mod
 import tools.registry
 from modules.diffscope import GIT_DIFF_TIMEOUT, is_git_workspace, run_git_diff
 from middleware.request_id import request_id_var
-from state import request as request_state
+from state import request_store
 
 ID_PREFIX = 'tools'
 
@@ -73,17 +73,6 @@ DEFAULT_TOOLS = {
   'clear_files',
   'finish',
 }
-
-
-def _request_store(name: str, default):
-  request = request_state.get()
-  if request is None:
-    return default
-
-  if not hasattr(request.state, name):
-    setattr(request.state, name, default)
-
-  return getattr(request.state, name)
 
 
 def _scratch_base() -> Path:
@@ -154,7 +143,7 @@ async def add_note(note: str) -> str:
   Args:
     note (str): Note to remember during this completion.
   """
-  notes = _request_store("boost_tool_notes", [])
+  notes = request_store("boost_tool_notes", [])
   notes.append(note)
   return f"Added note {len(notes)}."
 
@@ -163,7 +152,7 @@ async def read_notes() -> str:
   """
   Read request-scoped scratch notes written during this completion.
   """
-  notes = _request_store("boost_tool_notes", [])
+  notes = request_store("boost_tool_notes", [])
   if not notes:
     return "No notes."
   return "\n".join(f"{idx}. {note}" for idx, note in enumerate(notes, start=1))

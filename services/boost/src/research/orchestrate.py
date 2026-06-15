@@ -47,9 +47,9 @@ def low_value_skip_reason(chat: "ch.Chat") -> str | None:
   return None
 
 
-def should_skip_low_value_turn(chat: "ch.Chat") -> bool:
-  """Skip research and similar modules on acks and short continuations."""
-  return low_value_skip_reason(chat) is not None
+def uses_llm_trigger(trigger_value: str | None) -> bool:
+  """Return True when a module's trigger mode is the cheap LLM classifier."""
+  return (trigger_value or "heuristic").strip().lower() == "llm"
 
 
 def cheap_llm(llm: "llm.LLM") -> "llm.LLM":

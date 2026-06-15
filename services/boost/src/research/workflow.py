@@ -1,7 +1,12 @@
 """Workflow helpers for agentic Boost modules."""
 
+from typing import TYPE_CHECKING
+
 import research.brief as brief_mod
 import research.debug_metrics as debug_metrics
+
+if TYPE_CHECKING:
+  import llm
 
 
 def failure_brief(query: str, note: str) -> brief_mod.ResearchBrief:
@@ -27,6 +32,18 @@ def anchor_deferred_draft(chat, text: str, config: dict | None = None) -> None:
     chat.tail.content = anchored
   else:
     chat.assistant(anchored)
+
+
+def format_skipped_status(module_label: str, gate_reason: str) -> str:
+  """Short status line for emit_status when a module passes through."""
+  reason = (gate_reason or "unknown").strip()
+  return f"{module_label}: skipped ({reason})"
+
+
+async def emit_final(llm: "llm.LLM", final_text: str) -> None:
+  """Emit the user-visible final answer when a module owns delivery."""
+  if final_text:
+    await llm.emit_message(final_text)
 
 
 async def complete_or_defer(llm, config: dict | None = None):

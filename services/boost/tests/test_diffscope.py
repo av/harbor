@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 import chat as ch
 import config
+import research.orchestrate as orchestrate
 from modules import diffscope
 
 
@@ -733,7 +734,7 @@ class TestDiffscopeApply:
     llm.query_params = {}
     llm.model = "test-model"
 
-    with patch.object(diffscope, "_cheap_llm") as cheap_llm:
+    with patch.object(orchestrate, "cheap_llm") as cheap_llm:
       cheap = MagicMock()
       cheap.chat_completion = AsyncMock(return_value="Scoped answer.")
       cheap_llm.return_value = cheap
@@ -770,7 +771,7 @@ class TestDiffscopeApply:
       diffscope.ScopeViolation("services/boost/src/config.py", "out_of_scope"),
     ]
 
-    with patch.object(diffscope, "_cheap_llm") as cheap_llm:
+    with patch.object(orchestrate, "cheap_llm") as cheap_llm:
       cheap = MagicMock()
       cheap.chat_completion = AsyncMock(return_value="Scoped answer.")
       cheap_llm.return_value = cheap
