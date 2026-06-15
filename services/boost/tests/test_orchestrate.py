@@ -174,7 +174,7 @@ class TestPonytailEarlyExit:
           new=AsyncMock(side_effect=lambda _c, _l, _m, brief: brief),
         ),
       ):
-        brief = await ponytail.run_research_loop(
+        brief, _ = await ponytail.run_research_loop(
           chat,
           llm,
           "Migrate from FastAPI 0.100 to 0.115",

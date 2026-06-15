@@ -10,6 +10,7 @@ import chat as ch
 import config as boost_config
 import deliverable
 import log
+import research.debug_metrics as debug_metrics
 import research.orchestrate as orchestrate
 import research.workflow as workflow_mod
 import tools.registry
@@ -611,10 +612,29 @@ def _register_finish_wrapper(brief: TaskBrief, drift_detected: bool) -> None:
     logger.debug(f"{ID_PREFIX}: finish tool already registered, skipping wrapper")
 
 
+def _record_debug(
+  payload: debug_metrics.ModuleDebug,
+  *,
+  gate_reason: str | None = None,
+) -> None:
+  debug_metrics.record(ID_PREFIX, payload)
+  if gate_reason is not None:
+    logger.debug(
+      f"{ID_PREFIX}: Pass-through — {gate_reason} ({payload.model_dump()})"
+    )
+  else:
+    logger.debug(f"{ID_PREFIX}: {payload.model_dump()}")
+
+
 async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
+  timer = debug_metrics.DebugTimer()
+  extra_calls = 0
   message = orchestrate.last_user_text(chat)
   if not message:
     logger.warning(f"{ID_PREFIX}: No user message found, passing through")
+    _record_debug(
+      debug_metrics.skipped_payload("empty_message", duration_ms=timer.elapsed_ms()),
+    )
     return await workflow_mod.complete_or_defer(llm, config)
 
   force_refresh = should_refresh_brief(llm)
@@ -626,11 +646,21 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
 
   gate_reason = keel_gate_reason(chat, brief=brief)
   if gate_reason != "triggered":
-    logger.debug(f"{ID_PREFIX}: Pass-through — {gate_reason}")
+    _record_debug(
+      debug_metrics.skipped_payload(
+        gate_reason,
+        duration_ms=timer.elapsed_ms(),
+        extra_calls=extra_calls,
+      ),
+      gate_reason=gate_reason,
+    )
     return await workflow_mod.complete_or_defer(llm, config)
 
   user_turns = count_user_turns(chat)
   drift_detected = False
+  extracted_brief = False
+  anchor_injected = False
+  landing_injected = False
 
   if (brief is None or force_refresh) and is_substantive_message(message):
     if force_refresh:
@@ -638,9 +668,19 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
     else:
       await llm.emit_status("Keel: extracting task brief...")
     brief = await ensure_task_brief(chat, llm, message, force_refresh=force_refresh)
+    if brief is not None:
+      extracted_brief = True
+      extra_calls += 1
 
   if brief is None:
-    logger.debug(f"{ID_PREFIX}: Pass-through — non_substantive_message")
+    _record_debug(
+      debug_metrics.skipped_payload(
+        "non_substantive_message",
+        duration_ms=timer.elapsed_ms(),
+        extra_calls=extra_calls,
+      ),
+      gate_reason="non_substantive_message",
+    )
     return await workflow_mod.complete_or_defer(llm, config)
 
   if user_turns >= 2:
@@ -655,6 +695,7 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
     if should_inject_anchor(user_turns):
       next_criterion = next_unmet_criterion(brief, met)
       chat.system(render_anchor_block(brief, next_criterion))
+      anchor_injected = True
       logger.debug(
         f"{ID_PREFIX}: injected anchor on turn {user_turns}"
         + (f", next criterion: {next_criterion[:60]}" if next_criterion else ", all criteria met")
@@ -668,6 +709,19 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
   if is_done_signal(message):
     logger.info(f"{ID_PREFIX}: done signal detected, injecting landing checklist")
     chat.system(render_landing_checklist(brief, drift_detected=drift_detected))
+    landing_injected = True
 
   _register_finish_wrapper(brief, drift_detected)
+  _record_debug(
+    debug_metrics.triggered_payload(
+      "triggered",
+      duration_ms=timer.elapsed_ms(),
+      extra_calls=extra_calls,
+      user_turns=user_turns,
+      extracted_brief=extracted_brief,
+      anchor_injected=anchor_injected,
+      landing_injected=landing_injected,
+      drift_detected=drift_detected,
+    ),
+  )
   return await workflow_mod.complete_or_defer(llm, config)

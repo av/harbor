@@ -142,7 +142,7 @@ class TestPonytailEdgeCases:
         new=AsyncMock(side_effect=lambda _c, _l, _m, brief: brief),
       ),
     ):
-      brief = await ponytail.run_research_loop(
+      brief, _ = await ponytail.run_research_loop(
         chat,
         llm,
         "Migrate from FastAPI 0.100 to 0.115",
@@ -183,7 +183,7 @@ class TestPonytailEdgeCases:
         new=AsyncMock(side_effect=lambda _c, _l, _m, brief: brief),
       ),
     ):
-      brief = await ponytail.run_research_loop(
+      brief, _ = await ponytail.run_research_loop(
         chat,
         llm,
         "Compare Kubernetes 1.29 vs 1.30 API deprecations",

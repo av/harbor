@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 import chat as ch
 import config
-from modules import autocheck, caveman
+from modules import autocheck, caveman, diffscope, keel, ponytail, sightline
 from research import debug_metrics
 from research.brief import ResearchBrief
 from state import request as request_state
@@ -215,3 +215,231 @@ class TestCavemanDebugMetrics:
         assert stored.extra_calls == 1
     finally:
       config.CAVEMAN_TRIGGER.__value__ = original_trigger
+
+
+class TestPonytailDebugMetrics:
+  def _chat(self, content: str) -> ch.Chat:
+    return ch.Chat.from_conversation([{"role": "user", "content": content}])
+
+  @pytest.mark.asyncio
+  async def test_apply_records_skip_metrics_on_request_state(self):
+    chat = self._chat("thanks")
+    llm = MagicMock()
+    llm.emit_status = AsyncMock()
+
+    with request_context():
+      with patch(
+        "modules.ponytail.workflow_mod.complete_or_defer",
+        new=AsyncMock(return_value="ok"),
+      ):
+        await ponytail.apply(chat, llm)
+
+      stored = debug_metrics.get(ponytail.ID_PREFIX)
+      assert stored is not None
+      assert stored.triggered is False
+      assert stored.skipped is True
+      assert stored.reason == "acknowledgment"
+      assert stored.extra_calls == 0
+
+  @pytest.mark.asyncio
+  async def test_apply_records_trigger_metrics_with_research_calls(self):
+    chat = self._chat(
+      "What are the breaking changes when migrating from FastAPI 0.100 to 0.115?"
+    )
+    llm = MagicMock(module=ponytail.ID_PREFIX)
+    llm.emit_status = AsyncMock()
+
+    brief = ResearchBrief(
+      query=chat.match_one(role="user", index=-1).content,
+      searches=[{
+        "title": "FastAPI migration",
+        "url": "https://fastapi.tiangolo.com/release-notes",
+        "snippet": "Breaking changes in 0.115",
+      }],
+    )
+
+    with request_context():
+      with (
+        patch.object(ponytail, "plan_search_queries", new=AsyncMock(return_value=["fastapi 0.115 migration"])),
+        patch.object(ponytail, "run_research_loop", new=AsyncMock(return_value=(brief, 2))),
+        patch(
+          "modules.ponytail.workflow_mod.complete_or_defer",
+          new=AsyncMock(return_value="ok"),
+        ),
+      ):
+        await ponytail.apply(chat, llm)
+
+      stored = debug_metrics.get(ponytail.ID_PREFIX)
+      assert stored is not None
+      assert stored.triggered is True
+      assert stored.skipped is False
+      assert stored.reason == "triggered"
+      assert stored.extra_calls == 3
+      assert stored.extra["queries"] == 1
+      assert stored.extra["searches"] == 1
+
+
+class TestKeelDebugMetrics:
+  def _chat(self, content: str) -> ch.Chat:
+    return ch.Chat.from_conversation([{"role": "user", "content": content}])
+
+  @pytest.mark.asyncio
+  async def test_apply_records_skip_metrics_on_request_state(self):
+    chat = self._chat("thanks")
+    llm = MagicMock()
+    llm.boost_params = {}
+    llm.emit_status = AsyncMock()
+
+    with request_context():
+      with patch(
+        "modules.keel.workflow_mod.complete_or_defer",
+        new=AsyncMock(return_value="ok"),
+      ):
+        await keel.apply(chat, llm)
+
+      stored = debug_metrics.get(keel.ID_PREFIX)
+      assert stored is not None
+      assert stored.triggered is False
+      assert stored.skipped is True
+      assert stored.reason == "not_coding_deliverable"
+      assert stored.extra_calls == 0
+
+  @pytest.mark.asyncio
+  async def test_apply_records_trigger_metrics_with_brief_extraction(self):
+    chat = self._chat("Implement retry helper in services/boost/src/utils.py")
+    llm = MagicMock(module=keel.ID_PREFIX)
+    llm.boost_params = {}
+    llm.emit_status = AsyncMock()
+
+    brief = keel.TaskBrief(
+      objective="Add retry helper",
+      acceptance_criteria=["Helper retries transient failures"],
+      in_scope_paths=["services/boost/src/utils.py"],
+    )
+
+    with request_context():
+      with (
+        patch.object(keel, "ensure_task_brief", new=AsyncMock(return_value=brief)),
+        patch(
+          "modules.keel.workflow_mod.complete_or_defer",
+          new=AsyncMock(return_value="ok"),
+        ),
+      ):
+        await keel.apply(chat, llm)
+
+      stored = debug_metrics.get(keel.ID_PREFIX)
+      assert stored is not None
+      assert stored.triggered is True
+      assert stored.skipped is False
+      assert stored.reason == "triggered"
+      assert stored.extra_calls == 1
+      assert stored.extra["extracted_brief"] is True
+      assert stored.extra["user_turns"] == 1
+
+
+class TestSightlineDebugMetrics:
+  def _chat(self, content: str) -> ch.Chat:
+    return ch.Chat.from_conversation([{"role": "user", "content": content}])
+
+  @pytest.mark.asyncio
+  async def test_apply_records_skip_metrics_when_no_tools_wrapped(self):
+    chat = self._chat("Edit src/main.py")
+    llm = MagicMock()
+
+    with request_context():
+      with (
+        patch.object(sightline, "install_guards", return_value=[]),
+        patch(
+          "modules.sightline.workflow_mod.complete_or_defer",
+          new=AsyncMock(return_value="ok"),
+        ),
+      ):
+        await sightline.apply(chat, llm)
+
+      stored = debug_metrics.get(sightline.ID_PREFIX)
+      assert stored is not None
+      assert stored.triggered is False
+      assert stored.skipped is True
+      assert stored.reason == "no_file_tools_registered"
+      assert stored.extra_calls == 0
+
+  @pytest.mark.asyncio
+  async def test_apply_records_trigger_metrics_with_wrapped_tools(self):
+    chat = self._chat("Edit src/main.py")
+    llm = MagicMock()
+    wrapped = ["read_file", "write_file", "delete_file"]
+
+    with request_context():
+      with (
+        patch.object(sightline, "install_guards", return_value=wrapped),
+        patch(
+          "modules.sightline.workflow_mod.complete_or_defer",
+          new=AsyncMock(return_value="ok"),
+        ),
+      ):
+        await sightline.apply(chat, llm)
+
+      stored = debug_metrics.get(sightline.ID_PREFIX)
+      assert stored is not None
+      assert stored.triggered is True
+      assert stored.skipped is False
+      assert stored.reason == "triggered"
+      assert stored.extra["wrapped_tools"] == wrapped
+
+
+class TestDiffscopeDebugMetrics:
+  def _chat(self, content: str) -> ch.Chat:
+    return ch.Chat.from_conversation([{"role": "user", "content": content}])
+
+  @pytest.mark.asyncio
+  async def test_apply_records_skip_metrics_on_request_state(self):
+    chat = self._chat("Implement a retry helper with exponential backoff for HTTP calls")
+    llm = MagicMock()
+    llm.emit_status = AsyncMock()
+
+    with request_context():
+      with patch(
+        "modules.diffscope.workflow_mod.complete_or_defer",
+        new=AsyncMock(return_value="ok"),
+      ):
+        await diffscope.apply(chat, llm)
+
+      stored = debug_metrics.get(diffscope.ID_PREFIX)
+      assert stored is not None
+      assert stored.triggered is False
+      assert stored.skipped is True
+      assert stored.reason == "no_scope_constraints"
+      assert stored.extra_calls == 0
+
+  @pytest.mark.asyncio
+  async def test_apply_records_trigger_metrics_on_scope_ok(self):
+    chat = self._chat(
+      "Fix the bug in services/boost/src/utils.py only — do not touch other files."
+    )
+    llm = MagicMock()
+    llm.emit_status = AsyncMock()
+    llm.emit_message = AsyncMock()
+    llm.stream_chat_completion = AsyncMock(
+      return_value="Updated services/boost/src/utils.py with the retry helper."
+    )
+
+    snapshot = diffscope.ChangedPathsSnapshot(
+      paths=["services/boost/src/utils.py"],
+      mode="heuristic",
+    )
+
+    with request_context():
+      with (
+        patch.object(diffscope, "collect_changed_paths", return_value=snapshot),
+        patch.object(diffscope, "verify_workspace_paths", new=AsyncMock(return_value=[])),
+      ):
+        await diffscope.apply(chat, llm)
+
+      stored = debug_metrics.get(diffscope.ID_PREFIX)
+      assert stored is not None
+      assert stored.triggered is True
+      assert stored.skipped is False
+      assert stored.reason == "triggered"
+      assert stored.extra_calls == 1
+      assert stored.extra["outcome"] == "scope_ok"
+      assert stored.extra["grounding_mode"] == "heuristic"

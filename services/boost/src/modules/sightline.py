@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Awaitable, Callable, Literal
 
 import config
 import log
+import research.debug_metrics as debug_metrics
 import research.workflow as workflow_mod
 import tools.registry
 from modules import tools as tools_module
@@ -448,7 +449,22 @@ def install_guards(
   return wrapped
 
 
+def _record_debug(
+  payload: debug_metrics.ModuleDebug,
+  *,
+  gate_reason: str | None = None,
+) -> None:
+  debug_metrics.record(ID_PREFIX, payload)
+  if gate_reason is not None:
+    logger.debug(
+      f"{ID_PREFIX}: Pass-through — {gate_reason} ({payload.model_dump()})"
+    )
+  else:
+    logger.debug(f"{ID_PREFIX}: {payload.model_dump()}")
+
+
 async def apply(chat: "ch.Chat", llm: "llm_mod.LLM", config: dict | None = None):
+  timer = debug_metrics.DebugTimer()
   cfg = config or {}
   cfg_final = cfg.get("final", True)
   mode = cfg.get("mode")
@@ -477,8 +493,23 @@ async def apply(chat: "ch.Chat", llm: "llm_mod.LLM", config: dict | None = None)
         "After each write_workspace_file, call read_workspace_file again before the next edit."
       )
     chat.system(" ".join(messages))
+    _record_debug(
+      debug_metrics.triggered_payload(
+        "triggered",
+        duration_ms=timer.elapsed_ms(),
+        wrapped_tools=wrapped,
+        workspace_guard=workspace_guard_enabled(workspace),
+      ),
+    )
   else:
-    logger.debug(f"{ID_PREFIX}: Pass-through — no_file_tools_registered")
+    _record_debug(
+      debug_metrics.skipped_payload(
+        "no_file_tools_registered",
+        duration_ms=timer.elapsed_ms(),
+        workspace_skip=workspace_skip,
+      ),
+      gate_reason="no_file_tools_registered",
+    )
 
   defer_final = cfg.get("defer_final", not cfg_final)
   return await workflow_mod.complete_or_defer(llm, {**cfg, "defer_final": defer_final})

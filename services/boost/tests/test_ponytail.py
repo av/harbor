@@ -374,7 +374,7 @@ class TestPonytailGapDetection:
           new=AsyncMock(side_effect=lambda _c, _l, _m, brief: brief),
         ),
       ):
-        brief = await ponytail.run_research_loop(
+        brief, _ = await ponytail.run_research_loop(
           chat,
           llm,
           "Migrate from Django 4.2 to 5.0",
@@ -421,7 +421,7 @@ class TestPonytailGapDetection:
           new=AsyncMock(side_effect=lambda _c, _l, _m, brief: brief),
         ),
       ):
-        brief = await ponytail.run_research_loop(
+        brief, _ = await ponytail.run_research_loop(
           chat,
           llm,
           "Migrate from FastAPI 0.100 to 0.115",
@@ -461,7 +461,7 @@ class TestPonytailGapDetection:
         new=AsyncMock(side_effect=lambda _c, _l, _m, brief: brief),
       ),
     ):
-      brief = await ponytail.run_research_loop(
+      brief, _ = await ponytail.run_research_loop(
         chat,
         llm,
         "Compare Stripe API 2023-10-16 vs 2024-06-20",
@@ -515,7 +515,7 @@ class TestPonytailResearchLoop:
         )
       ))),
     ):
-      brief = await ponytail.run_research_loop(
+      brief, _ = await ponytail.run_research_loop(
         chat,
         llm,
         "Migrate from FastAPI 0.100 to 0.115",
@@ -548,7 +548,7 @@ class TestPonytailResearchLoop:
       patch.object(ponytail, "detect_gaps", new=AsyncMock(return_value=gap)),
       patch.object(ponytail, "synthesize_brief", new=AsyncMock(side_effect=lambda _c, _l, _m, brief: brief)),
     ):
-      brief = await ponytail.run_research_loop(
+      brief, _ = await ponytail.run_research_loop(
         chat,
         llm,
         "Compare API v1 vs v2 behavior",
@@ -584,7 +584,7 @@ class TestPonytailBriefCache:
 
       with (
         patch.object(ponytail, "plan_search_queries", new=AsyncMock(return_value=["stripe api migration"])) as plan,
-        patch.object(ponytail, "run_research_loop", new=AsyncMock(return_value=brief)) as run_loop,
+        patch.object(ponytail, "run_research_loop", new=AsyncMock(return_value=(brief, 0))) as run_loop,
       ):
         await ponytail.apply(chat, llm)
         await ponytail.apply(chat, llm)
@@ -607,7 +607,7 @@ class TestPonytailBriefCache:
 
       with (
         patch.object(ponytail, "plan_search_queries", new=AsyncMock(return_value=["stripe api migration"])) as plan,
-        patch.object(ponytail, "run_research_loop", new=AsyncMock(return_value=brief)) as run_loop,
+        patch.object(ponytail, "run_research_loop", new=AsyncMock(return_value=(brief, 0))) as run_loop,
       ):
         await ponytail.apply(chat, llm)
         await ponytail.apply(chat, llm)
@@ -643,7 +643,7 @@ class TestPonytailBriefCache:
         patch.object(
           ponytail,
           "run_research_loop",
-          new=AsyncMock(side_effect=[first_brief, second_brief]),
+          new=AsyncMock(side_effect=[(first_brief, 0), (second_brief, 0)]),
         ) as run_loop,
       ):
         await ponytail.apply(first_chat, llm)
@@ -684,7 +684,7 @@ class TestPonytailApply:
 
     with (
       patch.object(ponytail, "plan_search_queries", new=AsyncMock(return_value=["stripe api migration"])),
-      patch.object(ponytail, "run_research_loop", new=AsyncMock(return_value=brief)),
+      patch.object(ponytail, "run_research_loop", new=AsyncMock(return_value=(brief, 0))),
     ):
       await ponytail.apply(chat, llm)
 
@@ -736,7 +736,7 @@ class TestPonytailApply:
 
     with (
       patch.object(ponytail, "plan_search_queries", new=AsyncMock(return_value=["stripe api migration"])),
-      patch.object(ponytail, "run_research_loop", new=AsyncMock(return_value=brief)),
+      patch.object(ponytail, "run_research_loop", new=AsyncMock(return_value=(brief, 0))),
       patch.object(ponytail.brief_mod, "has_usable_research", return_value=False),
     ):
       await ponytail.apply(chat, llm)
@@ -768,7 +768,7 @@ class TestPonytailApply:
 
       with (
         patch.object(ponytail, "plan_search_queries", new=AsyncMock(return_value=["openapi 3.1 changes"])),
-        patch.object(ponytail, "run_research_loop", new=AsyncMock(return_value=ResearchBrief())) as run_loop,
+        patch.object(ponytail, "run_research_loop", new=AsyncMock(return_value=(ResearchBrief(), 0))) as run_loop,
       ):
         await ponytail.apply(chat, llm)
 
