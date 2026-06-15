@@ -1,6 +1,7 @@
 """Unit tests for the autocheck Boost module."""
 
 import os
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -399,6 +400,158 @@ class TestSymbolVerification:
     assert "retry_helper" in context
 
 
+class TestMechanicalPreaudit:
+  def test_draft_has_code_blocks_detects_fences(self):
+    draft = "Use this helper:\n```python\ndef foo():\n    pass\n```"
+    assert autocheck.draft_has_code_blocks(draft)
+    assert not autocheck.draft_has_code_blocks("No fenced code here.")
+
+  def test_check_code_blocks_without_paths_flags_ungrounded_code(self):
+    draft = "Apply this patch:\n```python\nprint(1)\n```"
+    findings = autocheck.check_code_blocks_without_paths(draft, [])
+    assert len(findings) == 1
+    assert "no file paths" in findings[0].message.lower()
+
+  def test_check_code_blocks_without_paths_allows_cited_paths(self):
+    draft = "Update src/main.py:\n```python\nprint(1)\n```"
+    findings = autocheck.check_code_blocks_without_paths(
+      draft,
+      ["src/main.py"],
+    )
+    assert findings == []
+
+  def test_collect_git_diff_context_includes_stat(self):
+    with tempfile.TemporaryDirectory() as workspace:
+      root = Path(workspace)
+      target = root / "src" / "widget.py"
+      target.parent.mkdir(parents=True)
+      target.write_text("print(1)\n", encoding="utf-8")
+
+      subprocess.run(["git", "init"], cwd=root, check=True, capture_output=True)
+      subprocess.run(
+        ["git", "config", "user.email", "test@example.com"],
+        cwd=root,
+        check=True,
+        capture_output=True,
+      )
+      subprocess.run(
+        ["git", "config", "user.name", "Test User"],
+        cwd=root,
+        check=True,
+        capture_output=True,
+      )
+      subprocess.run(["git", "add", "."], cwd=root, check=True, capture_output=True)
+      subprocess.run(
+        ["git", "commit", "-m", "init"],
+        cwd=root,
+        check=True,
+        capture_output=True,
+      )
+      target.write_text("print(2)\n", encoding="utf-8")
+
+      original = config.WORKSPACE_ROOT.__value__
+      try:
+        config.WORKSPACE_ROOT.__value__ = str(root)
+        context = autocheck.collect_git_diff_context()
+      finally:
+        config.WORKSPACE_ROOT.__value__ = original
+
+    assert "<git_diff_stat>" in context
+    assert "src/widget.py" in context
+
+  def test_collect_git_diff_context_empty_without_git_repo(self):
+    with tempfile.TemporaryDirectory() as workspace:
+      original = config.WORKSPACE_ROOT.__value__
+      try:
+        config.WORKSPACE_ROOT.__value__ = workspace
+        context = autocheck.collect_git_diff_context()
+      finally:
+        config.WORKSPACE_ROOT.__value__ = original
+
+    assert context == ""
+
+  @pytest.mark.asyncio
+  async def test_verify_draft_paths_exist_flags_missing_paths(self):
+    with tempfile.TemporaryDirectory() as workspace:
+      original = config.WORKSPACE_ROOT.__value__
+      try:
+        config.WORKSPACE_ROOT.__value__ = workspace
+        findings = await autocheck.verify_draft_paths_exist(["src/missing.py"])
+      finally:
+        config.WORKSPACE_ROOT.__value__ = original
+
+    assert len(findings) == 1
+    assert "does not exist" in findings[0].message
+
+  @pytest.mark.asyncio
+  async def test_verify_draft_paths_exist_allows_existing_paths(self):
+    with tempfile.TemporaryDirectory() as workspace:
+      target = Path(workspace) / "src" / "main.py"
+      target.parent.mkdir(parents=True)
+      target.write_text("print(1)\n", encoding="utf-8")
+
+      original = config.WORKSPACE_ROOT.__value__
+      try:
+        config.WORKSPACE_ROOT.__value__ = workspace
+        findings = await autocheck.verify_draft_paths_exist(["src/main.py"])
+      finally:
+        config.WORKSPACE_ROOT.__value__ = original
+
+    assert findings == []
+
+  @pytest.mark.asyncio
+  async def test_run_mechanical_preaudit_flags_code_without_paths(self):
+    draft = "Patch:\n```python\nprint(1)\n```"
+    git_context, findings = await autocheck.run_mechanical_preaudit(draft, [])
+    assert git_context == ""
+    assert len(findings) == 1
+    assert "code blocks" in findings[0].message.lower()
+
+  @pytest.mark.asyncio
+  async def test_run_mechanical_preaudit_flags_missing_paths(self):
+    draft = "Update src/missing.py with a helper."
+    with tempfile.TemporaryDirectory() as workspace:
+      original = config.WORKSPACE_ROOT.__value__
+      try:
+        config.WORKSPACE_ROOT.__value__ = workspace
+        git_context, findings = await autocheck.run_mechanical_preaudit(
+          draft,
+          ["src/missing.py"],
+        )
+      finally:
+        config.WORKSPACE_ROOT.__value__ = original
+
+    assert git_context == ""
+    assert len(findings) == 1
+    assert "does not exist" in findings[0].message.lower()
+
+  def test_apply_mechanical_findings_forces_revise(self):
+    audit = autocheck.AuditResult(verdict="pass", summary="Looks good", findings=[])
+    mechanical = [
+      autocheck.AuditFinding(
+        severity="major",
+        message="Referenced file does not exist in workspace: src/missing.py",
+      )
+    ]
+    merged = autocheck.apply_mechanical_findings(audit, mechanical)
+    assert merged.verdict == "revise"
+    assert merged.findings[0].message == mechanical[0].message
+
+  def test_enrich_workspace_context_includes_git_and_mechanical_notes(self):
+    mechanical = [
+      autocheck.AuditFinding(severity="major", message="Missing path"),
+    ]
+    enriched = autocheck.enrich_workspace_context(
+      '<file path="src/a.py">\nprint(1)\n</file>',
+      git_diff_context="<git_diff_stat>\nsrc/a.py | 1 +\n</git_diff_stat>",
+      mechanical_findings=mechanical,
+    )
+    assert 'path="src/a.py"' in enriched
+    assert "<git_diff_stat>" in enriched
+    assert "<mechanical_preaudit>" in enriched
+    assert "Missing path" in enriched
+
+
 class TestAuditAndRevise:
   @pytest.mark.asyncio
   async def test_run_audit_parses_structured_result(self):
@@ -477,6 +630,45 @@ class TestAuditAndRevise:
     assert debug.gate_reason == "triggered"
     assert debug.tool_calls[0]["arguments"]["path"] == "services/boost/src/main.py"
     assert debug.verdict == "pass"
+
+  @pytest.mark.asyncio
+  async def test_run_audit_applies_mechanical_blockers_before_delivery(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Fix bug in services/boost/src/main.py"},
+    ])
+    llm = MagicMock()
+    llm.url = "http://example.com"
+    llm.headers = {}
+    llm.query_params = {}
+    llm.model = "test-model"
+    mechanical = [
+      autocheck.AuditFinding(
+        severity="major",
+        message="Draft contains code blocks but cites no file paths",
+      )
+    ]
+
+    with patch.object(autocheck, "_cheap_llm") as cheap_llm:
+      cheap = MagicMock()
+      cheap.chat_completion = AsyncMock(
+        return_value={"verdict": "pass", "summary": "Ship it", "findings": []},
+      )
+      cheap_llm.return_value = cheap
+
+      audit, debug = await autocheck.run_audit(
+        chat,
+        llm,
+        "```python\nprint(1)\n```",
+        mechanical_findings=mechanical,
+        git_diff_context="<git_diff_stat>\nsrc/main.py | 1 +\n</git_diff_stat>",
+      )
+
+    assert audit.verdict == "revise"
+    assert audit.findings[0].message == mechanical[0].message
+    assert debug.verdict == "revise"
+    prompt_context = cheap.chat_completion.await_args.kwargs["workspace_context"]
+    assert "<git_diff_stat>" in prompt_context
+    assert "<mechanical_preaudit>" in prompt_context
 
   @pytest.mark.asyncio
   async def test_run_audit_downgrades_pass_without_workspace_evidence(self):
@@ -558,6 +750,40 @@ class TestAutocheckApply:
 
     draft.assert_not_called()
     llm.stream_final_completion.assert_awaited_once()
+
+  @pytest.mark.asyncio
+  async def test_apply_runs_mechanical_preaudit_before_llm_audit(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Implement retry helper in services/boost/src/utils.py"},
+    ])
+    llm = MagicMock()
+    llm.boost_params = {}
+    llm.emit_status = AsyncMock()
+    llm.emit_message = AsyncMock()
+    llm.stream_chat_completion = AsyncMock(return_value="Draft implementation")
+
+    audit = autocheck.AuditResult(verdict="pass", summary="Ship it")
+    debug = autocheck.AuditDebug(triggered=True, gate_reason="triggered", verdict="pass")
+    mechanical = [
+      autocheck.AuditFinding(severity="major", message="Mechanical blocker"),
+    ]
+
+    with (
+      patch.object(autocheck, "gather_workspace_context", new=AsyncMock(return_value="")),
+      patch.object(
+        autocheck,
+        "run_mechanical_preaudit",
+        new=AsyncMock(return_value=("<git_diff_stat>changed</git_diff_stat>", mechanical)),
+      ) as preaudit,
+      patch.object(autocheck, "run_audit", new=AsyncMock(return_value=(audit, debug))) as run_audit,
+    ):
+      await autocheck.apply(chat, llm)
+
+    preaudit.assert_awaited_once()
+    assert run_audit.await_args.kwargs["mechanical_findings"] == mechanical
+    assert run_audit.await_args.kwargs["git_diff_context"] == "<git_diff_stat>changed</git_diff_stat>"
+    status_messages = [call.args[0] for call in llm.emit_status.await_args_list]
+    assert "Autocheck: pre-audit checks..." in status_messages
 
   @pytest.mark.asyncio
   async def test_apply_emits_draft_when_audit_passes(self):

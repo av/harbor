@@ -12,6 +12,7 @@ import config
 import deliverable
 import log
 import tools.registry
+from modules.diffscope import is_git_workspace, run_git_diff
 
 if TYPE_CHECKING:
   import llm
@@ -44,6 +45,15 @@ messages are always skipped.
 When `HARBOR_BOOST_WORKSPACE_ROOT` is set and paths are cited, the audit cannot
 return `pass` without workspace evidence — either direct `read_workspace_file`
 reads, `grep_workspace` symbol checks, or tool calls during workspace exploration.
+
+Before the LLM audit, mechanical pre-checks (no model call) run when a workspace
+is configured:
+
+- **Git diff context** — in a git repo, `git diff --stat` is included in audit context
+- **Path existence** — cited draft paths are verified with `read_workspace_file`
+- **Code block grounding** — drafts with fenced code but zero file paths are flagged
+
+Mechanical findings are structured blockers merged into the audit before delivery.
 Audit debug logs include `triggered`, `gate_reason`, `tool_calls`, and `verdict`
 for troubleshooting.
 
@@ -115,6 +125,8 @@ SYMBOL_STOPWORDS = frozenset({
   "float",
   "bytes",
 })
+
+BLOCKING_SEVERITIES = frozenset({"critical", "major"})
 
 DRAFT_PROMPT = """
 <instruction>
@@ -421,6 +433,136 @@ def requires_workspace_evidence(paths: list[str]) -> bool:
   return bool(config.WORKSPACE_ROOT.value and paths)
 
 
+def draft_has_code_blocks(text: str) -> bool:
+  """Return True when the draft contains fenced code blocks."""
+  return bool(deliverable.CODE_BLOCK_RE.search(text))
+
+
+def collect_git_diff_context() -> str:
+  """Return git diff --stat summary for audit context when workspace is a git repo."""
+  root = config.WORKSPACE_ROOT.value
+  if not root or not is_git_workspace(root):
+    return ""
+
+  result = run_git_diff(root)
+  if result is None:
+    return ""
+
+  paths, stat = result
+  if not stat and not paths:
+    return ""
+
+  lines = ["<git_diff_stat>"]
+  if stat:
+    lines.append(stat)
+  if paths:
+    lines.append("")
+    lines.append("Changed files:")
+    for path in paths:
+      lines.append(f"- {path}")
+  lines.append("</git_diff_stat>")
+  return "\n".join(lines)
+
+
+def check_code_blocks_without_paths(
+  draft: str,
+  paths: list[str],
+) -> list[AuditFinding]:
+  """Flag drafts that include code fences but cite no target file paths."""
+  if not draft_has_code_blocks(draft) or paths:
+    return []
+
+  return [
+    AuditFinding(
+      severity="major",
+      message="Draft contains code blocks but cites no file paths",
+      fix_hint="Name the target files for each code change.",
+    ),
+  ]
+
+
+async def verify_draft_paths_exist(paths: list[str]) -> list[AuditFinding]:
+  """Mechanically verify cited draft paths exist via read_workspace_file."""
+  if not config.WORKSPACE_ROOT.value or not paths:
+    return []
+
+  from modules.tools import read_workspace_file
+
+  findings: list[AuditFinding] = []
+  max_files = max(0, config.AUTOCHECK_MAX_WORKSPACE_FILES.value)
+
+  for path in paths[:max_files]:
+    try:
+      await read_workspace_file(path)
+    except FileNotFoundError:
+      findings.append(
+        AuditFinding(
+          severity="major",
+          message=f"Referenced file does not exist in workspace: {path}",
+          fix_hint="Use an existing repo-relative path or create the file explicitly.",
+        ),
+      )
+    except Exception as exc:
+      logger.debug(f"{ID_PREFIX}: skip path check for '{path}': {exc}")
+
+  return findings
+
+
+async def run_mechanical_preaudit(
+  draft: str,
+  paths: list[str],
+) -> tuple[str, list[AuditFinding]]:
+  """Run no-LLM pre-audit checks and return git context plus blocker findings."""
+  git_context = collect_git_diff_context()
+  findings: list[AuditFinding] = []
+
+  findings.extend(check_code_blocks_without_paths(draft, paths))
+  findings.extend(await verify_draft_paths_exist(paths))
+
+  return git_context, findings
+
+
+def apply_mechanical_findings(
+  audit: AuditResult,
+  mechanical_findings: list[AuditFinding],
+) -> AuditResult:
+  """Merge mechanical blockers into the audit result before delivery."""
+  if not mechanical_findings:
+    return audit
+
+  findings = list(mechanical_findings) + list(audit.findings)
+  verdict = audit.verdict
+  if any(finding.severity in BLOCKING_SEVERITIES for finding in mechanical_findings):
+    verdict = "revise"
+
+  summary = audit.summary
+  if verdict == "revise" and not summary:
+    summary = "Mechanical pre-audit found blocking issues."
+
+  return AuditResult(verdict=verdict, summary=summary, findings=findings)
+
+
+def enrich_workspace_context(
+  workspace_context: str,
+  *,
+  git_diff_context: str = "",
+  mechanical_findings: list[AuditFinding] | None = None,
+) -> str:
+  """Append git diff and mechanical pre-audit notes to workspace audit context."""
+  parts: list[str] = []
+  if workspace_context:
+    parts.append(workspace_context)
+  if git_diff_context:
+    parts.append(git_diff_context)
+  if mechanical_findings:
+    rendered = format_findings(
+      AuditResult(verdict="revise", findings=mechanical_findings),
+    )
+    parts.append(f"<mechanical_preaudit>\n{rendered}\n</mechanical_preaudit>")
+
+  return "\n\n".join(parts) if parts else ""
+
+
 def enforce_workspace_evidence(
   audit: AuditResult,
   paths: list[str],
@@ -631,13 +773,20 @@ async def run_audit(
   workspace_exploration: str = "",
   workspace_paths: list[str] | None = None,
   workspace_tool_calls: list[dict] | None = None,
+  mechanical_findings: list[AuditFinding] | None = None,
+  git_diff_context: str = "",
 ) -> tuple[AuditResult, AuditDebug]:
+  enriched_context = enrich_workspace_context(
+    workspace_context,
+    git_diff_context=git_diff_context,
+    mechanical_findings=mechanical_findings,
+  )
   intermediate = _cheap_llm(llm)
   result = await intermediate.chat_completion(
     prompt=AUDIT_PROMPT,
     conversation=str(chat),
     draft=draft,
-    workspace_context=workspace_context or "No workspace context available.",
+    workspace_context=enriched_context or "No workspace context available.",
     workspace_exploration=workspace_exploration or "No workspace exploration performed.",
     schema=AuditResult,
     params={"temperature": 0},
@@ -651,6 +800,7 @@ async def run_audit(
 
   paths = workspace_paths or []
   tool_calls = workspace_tool_calls or []
+  audit = apply_mechanical_findings(audit, mechanical_findings or [])
   audit = enforce_workspace_evidence(
     audit,
     paths,
@@ -720,6 +870,9 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM"):
   paths = extract_workspace_paths(message, draft)
   workspace_context = await gather_workspace_context(paths)
 
+  await llm.emit_status("Autocheck: pre-audit checks...")
+  git_diff_context, mechanical_findings = await run_mechanical_preaudit(draft, paths)
+
   await llm.emit_status("Autocheck: auditing...")
   workspace_exploration = ""
   workspace_tool_calls: list[dict] = []
@@ -752,6 +905,8 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM"):
       workspace_exploration=workspace_exploration,
       workspace_paths=paths,
       workspace_tool_calls=workspace_tool_calls,
+      mechanical_findings=mechanical_findings,
+      git_diff_context=git_diff_context,
     )
   except Exception as exc:
     logger.error(f"{ID_PREFIX}: audit failed: {exc}")
@@ -777,6 +932,8 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM"):
         workspace_exploration=workspace_exploration,
         workspace_paths=paths,
         workspace_tool_calls=workspace_tool_calls,
+        mechanical_findings=mechanical_findings,
+        git_diff_context=git_diff_context,
       )
       await llm.emit_status(format_audit_status(audit))
     except Exception as exc:
