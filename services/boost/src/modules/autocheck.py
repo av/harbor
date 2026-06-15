@@ -1568,9 +1568,7 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
       extra_calls=extra_calls,
     )
     await llm.emit_status(format_skipped_status("audit_failed"))
-    workflow_mod.anchor_deferred_draft(chat, draft, module_cfg)
-    await workflow_mod.emit_final(llm, draft)
-    return draft
+    return await workflow_mod.anchor_and_emit_final(llm, chat, draft, module_cfg)
 
   await llm.emit_status(format_audit_status(audit))
 

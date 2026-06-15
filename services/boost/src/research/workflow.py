@@ -65,6 +65,22 @@ async def emit_final(llm: "llm.LLM", final_text: str) -> None:
     await llm.emit_message(final_text)
 
 
+async def anchor_and_emit_final(
+  llm: "llm.LLM",
+  chat,
+  text: str,
+  config: dict | None = None,
+) -> str:
+  """Anchor a deferred draft and emit it unless the workflow defers final delivery."""
+  anchored = (text or "").strip()
+  anchor_deferred_draft(chat, anchored, config)
+  if config and config.get("defer_final"):
+    return anchored
+
+  await emit_final(llm, anchored)
+  return anchored
+
+
 async def complete_or_defer(llm, config: dict | None = None):
   """Stream the final completion unless the workflow defers it to a later step."""
   if config and config.get("defer_final"):

@@ -856,3 +856,48 @@ class TestAnchorDeferredDraft:
       if msg.get("role") == "assistant"
     ]
     assert assistants == ["Pre-revision draft"]
+
+
+class TestAnchorAndEmitFinal:
+  @pytest.mark.asyncio
+  async def test_emits_when_not_deferred(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Only change src/foo.py"},
+    ])
+    llm = MagicMock()
+    llm.emit_message = AsyncMock()
+
+    result = await workflow_mod.anchor_and_emit_final(
+      llm,
+      chat,
+      "Scoped fix.",
+      {"defer_final": False},
+    )
+
+    assert result == "Scoped fix."
+    llm.emit_message.assert_awaited_once_with("Scoped fix.")
+
+  @pytest.mark.asyncio
+  async def test_anchors_without_emit_when_deferred(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Only change src/foo.py"},
+      {"role": "assistant", "content": "Pre-audit draft"},
+    ])
+    llm = MagicMock()
+    llm.emit_message = AsyncMock()
+
+    result = await workflow_mod.anchor_and_emit_final(
+      llm,
+      chat,
+      "Scoped fix.",
+      {"defer_final": True},
+    )
+
+    assert result == "Scoped fix."
+    assistants = [
+      msg.get("content") or ""
+      for msg in chat.history()
+      if msg.get("role") == "assistant"
+    ]
+    assert assistants == ["Scoped fix."]
+    llm.emit_message.assert_not_called()

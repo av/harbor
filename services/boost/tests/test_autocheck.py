@@ -2595,3 +2595,36 @@ class TestAutocheckApply:
     assert "Autocheck: skipped (audit_failed)" in status_messages
     llm.emit_message.assert_awaited_once_with("Draft implementation")
     llm.stream_final_completion.assert_not_called()
+
+  @pytest.mark.asyncio
+  async def test_apply_audit_failed_defers_emit_when_configured(self):
+    """Workflow chains must anchor the draft without streaming on audit failure."""
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Implement helper in services/boost/src/utils.py"},
+      {"role": "assistant", "content": "Pre-audit draft"},
+    ])
+    llm = MagicMock()
+    llm.boost_params = {}
+    llm.emit_status = AsyncMock()
+    llm.emit_message = AsyncMock()
+    llm.stream_final_completion = AsyncMock()
+    draft = "Draft implementation"
+
+    with (
+      _patch_autocheck_draft_llm(draft),
+      patch.object(autocheck, "gather_workspace_context", new=AsyncMock(return_value="")),
+      patch.object(autocheck, "run_audit", new=AsyncMock(side_effect=RuntimeError("audit down"))),
+    ):
+      result = await autocheck.apply(chat, llm, config={"defer_final": True})
+
+    assert result == draft
+    assistants = [
+      msg.get("content") or ""
+      for msg in chat.history()
+      if msg.get("role") == "assistant"
+    ]
+    assert assistants == [draft]
+    status_messages = [call.args[0] for call in llm.emit_status.await_args_list]
+    assert "Autocheck: skipped (audit_failed)" in status_messages
+    llm.emit_message.assert_not_called()
+    llm.stream_final_completion.assert_not_called()

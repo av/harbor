@@ -577,6 +577,72 @@ class TestScopeGuardWorkflowChain:
     contents = [msg.get("content") or "" for msg in history]
     assert any("outside the user's stated scope" in content for content in contents)
 
+  @pytest.mark.asyncio
+  async def test_scope_guard_audit_failure_defers_emit_until_final(self):
+    """scope-guard: autocheck audit failure anchors draft; explicit final still streams."""
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": SCOPE_GUARD_USER_MESSAGE},
+    ])
+    llm = _make_llm()
+    execution_order: list[str] = []
+    real_apply_module = workflows._apply_module
+    draft_response = "Updated services/boost/src/utils.py with the null check."
+
+    async def tracking_apply_module(module_name, module_cfg, chat_obj, llm_obj):
+      execution_order.append(module_name)
+      return await real_apply_module(module_name, module_cfg, chat_obj, llm_obj)
+
+    async def stream_final_side_effect(**_kwargs):
+      execution_order.append("final")
+      llm.is_final_stream = True
+      return "Final scoped fix."
+
+    llm.stream_chat_completion = AsyncMock(return_value=draft_response)
+    llm.stream_final_completion = AsyncMock(side_effect=stream_final_side_effect)
+
+    with (
+      request_context(),
+      patch(
+        "research.orchestrate.cheap_llm",
+        return_value=mock_autocheck_cheap_llm(draft_response=draft_response),
+      ),
+      patch.object(diffscope, "verify_workspace_paths", new=AsyncMock(return_value=[])),
+      patch.object(autocheck, "gather_workspace_context", new=AsyncMock(return_value="")),
+      patch.object(
+        autocheck,
+        "run_mechanical_preaudit",
+        new=AsyncMock(return_value=("", [])),
+      ),
+      patch.object(
+        autocheck,
+        "run_audit",
+        new=AsyncMock(side_effect=RuntimeError("audit down")),
+      ) as run_audit,
+      patch.object(workflows, "_apply_module", new=tracking_apply_module),
+    ):
+      await workflows.apply_workflow(
+        deepcopy(workflow_presets.PRESETS["scope-guard"]),
+        chat,
+        llm,
+      )
+
+    assert execution_order == SCOPE_GUARD_MODULE_ORDER
+    run_audit.assert_awaited_once()
+    assert llm.stream_final_completion.await_count == 1
+    draft_emit_count = sum(
+      1
+      for call in llm.emit_message.await_args_list
+      if call.args and call.args[0] == draft_response
+    )
+    assert draft_emit_count == 1
+
+    assistants = [
+      msg.get("content") or ""
+      for msg in chat.history()
+      if msg.get("role") == "assistant"
+    ]
+    assert assistants == [draft_response]
+
 
 class TestResearchQuickWorkflowChain:
   @pytest.mark.asyncio
