@@ -2,6 +2,7 @@
 
 import json
 import re
+from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, Field
@@ -42,8 +43,9 @@ messages are always skipped.
 
 When `HARBOR_BOOST_WORKSPACE_ROOT` is set and paths are cited, the audit cannot
 return `pass` without workspace evidence — either direct `read_workspace_file`
-reads or tool calls during workspace exploration. Audit debug logs include
-`triggered`, `gate_reason`, `tool_calls`, and `verdict` for troubleshooting.
+reads, `grep_workspace` symbol checks, or tool calls during workspace exploration.
+Audit debug logs include `triggered`, `gate_reason`, `tool_calls`, and `verdict`
+for troubleshooting.
 
 **Parameters**
 
@@ -88,6 +90,32 @@ CONTINUATION_RE = re.compile(
   re.IGNORECASE,
 )
 
+WORKSPACE_TOOL_NAMES = frozenset({
+  "read_workspace_file",
+  "grep_workspace",
+})
+
+SYMBOL_DEF_RE = re.compile(r"^\s*(?:async\s+)?def\s+([A-Za-z_]\w+)", re.MULTILINE)
+SYMBOL_CLASS_RE = re.compile(r"^\s*class\s+([A-Za-z_]\w+)", re.MULTILINE)
+BACKTICK_SYMBOL_RE = re.compile(r"`([A-Za-z_]\w{2,})`")
+
+SYMBOL_STOPWORDS = frozenset({
+  "None",
+  "True",
+  "False",
+  "self",
+  "cls",
+  "str",
+  "int",
+  "bool",
+  "list",
+  "dict",
+  "set",
+  "tuple",
+  "float",
+  "bytes",
+})
+
 DRAFT_PROMPT = """
 <instruction>
 Draft a complete answer to the user's latest coding request.
@@ -104,6 +132,7 @@ WORKSPACE_EXPLORE_PROMPT = """
 <instruction>
 You are verifying a coding draft against the workspace.
 Use the `read_workspace_file` tool to inspect files referenced in the draft or user request.
+Use the `grep_workspace` tool to verify functions, classes, and identifiers exist in the codebase.
 Read only paths that exist and are relevant to correctness checks.
 When done exploring, reply with a short bullet list of verified facts and mismatches.
 Do not rewrite the draft.
@@ -261,6 +290,37 @@ def extract_workspace_paths(*texts: str) -> list[str]:
   return paths[:limit] if limit else []
 
 
+def extract_audit_symbols(*texts: str, limit: int = 8) -> list[str]:
+  """Collect function, class, and backtick identifiers worth verifying."""
+  symbols: list[str] = []
+  seen: set[str] = set()
+
+  for text in texts:
+    if not text:
+      continue
+
+    for regex in (SYMBOL_DEF_RE, SYMBOL_CLASS_RE):
+      for match in regex.finditer(text):
+        symbol = match.group(1)
+        if symbol in seen or symbol in SYMBOL_STOPWORDS:
+          continue
+        seen.add(symbol)
+        symbols.append(symbol)
+
+    for match in BACKTICK_SYMBOL_RE.finditer(text):
+      symbol = match.group(1)
+      if symbol in seen or symbol in SYMBOL_STOPWORDS:
+        continue
+      seen.add(symbol)
+      symbols.append(symbol)
+
+  return symbols[: max(0, limit)]
+
+
+def _workspace_tool_path(args: dict) -> str:
+  return (args.get("path") or args.get("file_path") or "").strip()
+
+
 def _cheap_llm(llm: "llm.LLM") -> "llm.LLM":
   """Bare downstream client for inexpensive internal completions."""
   import llm as llm_mod
@@ -298,12 +358,13 @@ def successful_workspace_reads(workspace_context: str) -> list[str]:
 
 
 def extract_workspace_tool_calls(messages: list[dict]) -> list[dict]:
-  """Collect read_workspace_file tool calls from a chat history slice."""
+  """Collect workspace tool calls from a chat history slice."""
   calls: list[dict] = []
   for message in messages:
     for tool_call in message.get("tool_calls") or []:
       function = tool_call.get("function") or {}
-      if function.get("name") != "read_workspace_file":
+      name = function.get("name")
+      if name not in WORKSPACE_TOOL_NAMES:
         continue
 
       args_raw = function.get("arguments") or "{}"
@@ -313,7 +374,7 @@ def extract_workspace_tool_calls(messages: list[dict]) -> list[dict]:
         args = {"raw_arguments": args_raw}
 
       calls.append({
-        "name": "read_workspace_file",
+        "name": name,
         "arguments": args,
       })
   return calls
@@ -329,12 +390,31 @@ def workspace_evidence_paths(
 
   for call in tool_calls:
     args = call.get("arguments") or {}
-    path = (args.get("path") or "").strip()
+    path = _workspace_tool_path(args)
     if path and path not in seen:
       seen.add(path)
       paths.append(path)
 
   return paths
+
+
+def workspace_evidence_satisfied(
+  workspace_context: str,
+  tool_calls: list[dict],
+) -> bool:
+  """Return True when workspace reads or grep checks were performed."""
+  if successful_workspace_reads(workspace_context):
+    return True
+
+  for call in tool_calls:
+    name = call.get("name")
+    args = call.get("arguments") or {}
+    if name == "grep_workspace" and (args.get("pattern") or "").strip():
+      return True
+    if name == "read_workspace_file" and _workspace_tool_path(args):
+      return True
+
+  return False
 
 
 def requires_workspace_evidence(paths: list[str]) -> bool:
@@ -344,14 +424,15 @@ def requires_workspace_evidence(paths: list[str]) -> bool:
 def enforce_workspace_evidence(
   audit: AuditResult,
   paths: list[str],
-  evidence_paths: list[str],
+  workspace_context: str,
+  tool_calls: list[dict],
 ) -> AuditResult:
   """
   Downgrade pass verdicts that lack workspace grounding when paths were cited.
   """
   if audit.verdict != "pass" or not requires_workspace_evidence(paths):
     return audit
-  if evidence_paths:
+  if workspace_evidence_satisfied(workspace_context, tool_calls):
     return audit
 
   findings = list(audit.findings)
@@ -433,16 +514,20 @@ async def generate_draft(chat: "ch.Chat", llm: "llm.LLM") -> str:
   return (draft or "").strip()
 
 
-def _register_workspace_tool() -> bool:
+def _register_workspace_tools() -> bool:
   if not config.WORKSPACE_ROOT.value:
     return False
 
-  from modules.tools import read_workspace_file
+  from modules.tools import grep_workspace, read_workspace_file
 
-  try:
-    tools.registry.set_local_tool("read_workspace_file", read_workspace_file)
-  except ValueError:
-    pass
+  for name, tool in (
+    ("read_workspace_file", read_workspace_file),
+    ("grep_workspace", grep_workspace),
+  ):
+    try:
+      tools.registry.set_local_tool(name, tool)
+    except ValueError:
+      pass
   return True
 
 
@@ -472,13 +557,49 @@ async def gather_workspace_context(paths: list[str]) -> str:
   return "\n\n".join(chunks)
 
 
+async def verify_symbols_with_grep(
+  symbols: list[str],
+  paths: list[str],
+) -> str:
+  """Mechanically verify draft symbols via grep_workspace."""
+  if not config.WORKSPACE_ROOT.value or not symbols:
+    return ""
+
+  from modules.tools import grep_workspace
+
+  search_path = "."
+  if paths:
+    parent = Path(paths[0]).parent
+    if str(parent) not in {"", "."}:
+      search_path = str(parent)
+
+  chunks: list[str] = []
+  max_symbols = max(0, config.AUTOCHECK_MAX_WORKSPACE_FILES.value)
+  for symbol in symbols[:max_symbols]:
+    try:
+      result = await grep_workspace(
+        re.escape(symbol),
+        path=search_path,
+        glob="*.py",
+        max_matches=5,
+      )
+      chunks.append(
+        f'<grep pattern="{symbol}" path="{search_path}">\n{result}\n</grep>',
+      )
+    except Exception as exc:
+      logger.warning(f"{ID_PREFIX}: symbol grep failed for '{symbol}': {exc}")
+      chunks.append(f'<grep pattern="{symbol}" error="{exc}" />')
+
+  return "\n\n".join(chunks)
+
+
 async def explore_workspace_with_tools(
   llm: "llm.LLM",
   draft: str,
   paths: list[str],
 ) -> tuple[str, list[dict]]:
   """Let the model verify paths via read_workspace_file when workspace is configured."""
-  if not paths or not _register_workspace_tool():
+  if not paths or not _register_workspace_tools():
     return "", []
 
   excerpt = draft[:4000]
@@ -530,8 +651,12 @@ async def run_audit(
 
   paths = workspace_paths or []
   tool_calls = workspace_tool_calls or []
-  evidence_paths = workspace_evidence_paths(workspace_context, tool_calls)
-  audit = enforce_workspace_evidence(audit, paths, evidence_paths)
+  audit = enforce_workspace_evidence(
+    audit,
+    paths,
+    workspace_context,
+    tool_calls,
+  )
 
   debug = AuditDebug(
     triggered=True,
@@ -598,13 +723,25 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM"):
   await llm.emit_status("Autocheck: auditing...")
   workspace_exploration = ""
   workspace_tool_calls: list[dict] = []
-  if config.WORKSPACE_ROOT.value and paths:
-    await llm.emit_status("Autocheck: verifying workspace paths...")
-    workspace_exploration, workspace_tool_calls = await explore_workspace_with_tools(
-      llm,
-      draft,
-      paths,
-    )
+  if config.WORKSPACE_ROOT.value:
+    symbols = extract_audit_symbols(message, draft)
+    symbol_context = await verify_symbols_with_grep(symbols, paths)
+    if symbol_context:
+      workspace_exploration = symbol_context
+
+    if paths:
+      await llm.emit_status("Autocheck: verifying workspace paths...")
+      exploration_notes, workspace_tool_calls = await explore_workspace_with_tools(
+        llm,
+        draft,
+        paths,
+      )
+      if exploration_notes:
+        workspace_exploration = (
+          f"{workspace_exploration}\n\n{exploration_notes}".strip()
+          if workspace_exploration
+          else exploration_notes
+        )
 
   try:
     audit, debug = await run_audit(

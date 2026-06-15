@@ -418,3 +418,69 @@ class TestWorkspaceFileTool:
       assert "read_workspace_file" not in selected
     finally:
       config.WORKSPACE_ROOT.__value__ = original
+
+  def test_grep_workspace_finds_pattern(self):
+    with tempfile.TemporaryDirectory() as workspace:
+      target = Path(workspace) / "src" / "main.py"
+      target.parent.mkdir(parents=True)
+      target.write_text("def hello_world():\n    return 1\n", encoding="utf-8")
+
+      original_root = self._with_workspace_root(workspace)
+      original_max = config.WORKSPACE_GREP_MAX_MATCHES.__value__
+      try:
+        config.WORKSPACE_GREP_MAX_MATCHES.__value__ = 10
+        import asyncio
+        result = asyncio.run(tools.grep_workspace("hello_world", glob="*.py"))
+      finally:
+        config.WORKSPACE_ROOT.__value__ = original_root
+        config.WORKSPACE_GREP_MAX_MATCHES.__value__ = original_max
+
+    assert "src/main.py:1:def hello_world():" in result
+
+  def test_grep_workspace_respects_max_matches(self):
+    with tempfile.TemporaryDirectory() as workspace:
+      target = Path(workspace) / "notes.txt"
+      target.write_text("match\nmatch\nmatch\n", encoding="utf-8")
+
+      original_root = self._with_workspace_root(workspace)
+      try:
+        import asyncio
+        result = asyncio.run(tools.grep_workspace("match", max_matches=2))
+      finally:
+        config.WORKSPACE_ROOT.__value__ = original_root
+
+    assert result.count("notes.txt:") == 2
+    assert "truncated to 2 matches" in result
+
+  def test_grep_workspace_path_jail(self):
+    with tempfile.TemporaryDirectory() as workspace:
+      original = self._with_workspace_root(workspace)
+      try:
+        with pytest.raises(ValueError, match="stay inside the workspace root"):
+          tools._workspace_search_path("../outside")
+      finally:
+        config.WORKSPACE_ROOT.__value__ = original
+
+  def test_grep_workspace_requires_workspace_root(self):
+    original = self._with_workspace_root("")
+    try:
+      with pytest.raises(ValueError, match="Workspace root is not configured"):
+        tools._workspace_search_path(".")
+    finally:
+      config.WORKSPACE_ROOT.__value__ = original
+
+  def test_selected_tools_includes_grep_when_configured(self):
+    original = self._with_workspace_root("/workspace")
+    try:
+      selected = tools._selected_tools(["grep_workspace"])
+      assert "grep_workspace" in selected
+    finally:
+      config.WORKSPACE_ROOT.__value__ = original
+
+  def test_selected_tools_omits_grep_when_unconfigured(self):
+    original = self._with_workspace_root("")
+    try:
+      selected = tools._selected_tools(["grep_workspace"])
+      assert "grep_workspace" not in selected
+    finally:
+      config.WORKSPACE_ROOT.__value__ = original

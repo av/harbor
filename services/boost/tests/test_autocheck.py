@@ -273,6 +273,7 @@ class TestWorkspaceEvidence:
       enforced = autocheck.enforce_workspace_evidence(
         audit,
         ["src/main.py"],
+        "",
         [],
       )
     finally:
@@ -289,12 +290,41 @@ class TestWorkspaceEvidence:
       enforced = autocheck.enforce_workspace_evidence(
         audit,
         ["src/main.py"],
-        ["src/main.py"],
+        '<file path="src/main.py">\nprint(1)\n</file>',
+        [],
       )
     finally:
       config.WORKSPACE_ROOT.__value__ = original
 
     assert enforced.verdict == "pass"
+
+  def test_enforce_workspace_evidence_allows_pass_with_grep_tool_call(self):
+    audit = autocheck.AuditResult(verdict="pass", summary="Looks good")
+    original = config.WORKSPACE_ROOT.__value__
+    try:
+      config.WORKSPACE_ROOT.__value__ = "/workspace"
+      enforced = autocheck.enforce_workspace_evidence(
+        audit,
+        ["src/main.py"],
+        "",
+        [{
+          "name": "grep_workspace",
+          "arguments": {"pattern": "retry_helper"},
+        }],
+      )
+    finally:
+      config.WORKSPACE_ROOT.__value__ = original
+
+    assert enforced.verdict == "pass"
+
+  def test_workspace_evidence_satisfied_with_grep_context(self):
+    context = '<grep pattern="retry_helper" path="src">\nsrc/main.py:10:def retry_helper()\n</grep>'
+    assert autocheck.workspace_evidence_satisfied(context, []) is False
+    tool_calls = [{
+      "name": "grep_workspace",
+      "arguments": {"pattern": "retry_helper"},
+    }]
+    assert autocheck.workspace_evidence_satisfied("", tool_calls) is True
 
   def test_extract_workspace_tool_calls_from_history(self):
     history = [
@@ -314,6 +344,59 @@ class TestWorkspaceEvidence:
     calls = autocheck.extract_workspace_tool_calls(history)
     assert len(calls) == 1
     assert calls[0]["arguments"]["path"] == "src/main.py"
+
+  def test_extract_workspace_tool_calls_includes_grep(self):
+    history = [
+      {
+        "role": "assistant",
+        "content": "",
+        "tool_calls": [{
+          "id": "call_2",
+          "type": "function",
+          "function": {
+            "name": "grep_workspace",
+            "arguments": '{"pattern": "retry_helper", "glob": "*.py"}',
+          },
+        }],
+      }
+    ]
+    calls = autocheck.extract_workspace_tool_calls(history)
+    assert len(calls) == 1
+    assert calls[0]["name"] == "grep_workspace"
+    assert calls[0]["arguments"]["pattern"] == "retry_helper"
+
+
+class TestSymbolVerification:
+  def test_extract_audit_symbols_from_code_blocks(self):
+    draft = (
+      "Update `retry_helper` in src/utils.py:\n"
+      "```python\n"
+      "def retry_helper():\n"
+      "    pass\n"
+      "```"
+    )
+    symbols = autocheck.extract_audit_symbols(draft)
+    assert "retry_helper" in symbols
+
+  @pytest.mark.asyncio
+  async def test_verify_symbols_with_grep_finds_matches(self):
+    with tempfile.TemporaryDirectory() as workspace:
+      target = Path(workspace) / "src" / "utils.py"
+      target.parent.mkdir(parents=True)
+      target.write_text("def retry_helper():\n    return 3\n", encoding="utf-8")
+
+      original_root = config.WORKSPACE_ROOT.__value__
+      try:
+        config.WORKSPACE_ROOT.__value__ = workspace
+        context = await autocheck.verify_symbols_with_grep(
+          ["retry_helper"],
+          ["src/utils.py"],
+        )
+      finally:
+        config.WORKSPACE_ROOT.__value__ = original_root
+
+    assert 'pattern="retry_helper"' in context
+    assert "retry_helper" in context
 
 
 class TestAuditAndRevise:

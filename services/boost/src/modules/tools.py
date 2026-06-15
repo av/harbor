@@ -1,3 +1,8 @@
+import fnmatch
+import os
+import re
+import shutil
+import subprocess
 from datetime import datetime
 from pathlib import Path
 from typing import Callable
@@ -19,9 +24,11 @@ them during the final completion and Boost will execute them inline.
 
 The module exposes web research tools (`web_search`, `read_url`) plus small
 scratchpad utilities (`add_note`, `read_notes`, scratch files, `current_time`,
-and `finish`). Web search uses Tavily when `HARBOR_BOOST_TAVILY_API_KEY` is
-set, otherwise SearXNG via `HARBOR_BOOST_SEARXNG_URL`. URL reading uses Jina
-Reader first and falls back to direct HTTP text extraction.
+and `finish`). When `HARBOR_BOOST_WORKSPACE_ROOT` is set, workspace tools
+(`read_workspace_file`, `grep_workspace`) are also available. Web search uses
+Tavily when `HARBOR_BOOST_TAVILY_API_KEY` is set, otherwise SearXNG via
+`HARBOR_BOOST_SEARXNG_URL`. URL reading uses Jina Reader first and falls back
+to direct HTTP text extraction.
 
 The module is workflow-aware: when it is placed before another workflow module,
 the workflow runner configures it as a setup step so tools are registered before
@@ -189,19 +196,148 @@ async def read_file(file_path: str) -> str:
   return fetch.trim(target.read_text(encoding="utf-8"), config.TOOLS_FILE_MAX_CHARS.value)
 
 
-def _workspace_path(file_path: str) -> Path:
+WORKSPACE_SKIP_DIRS = {
+  ".git",
+  ".hg",
+  ".svn",
+  "__pycache__",
+  "node_modules",
+  ".venv",
+  "venv",
+  "dist",
+  "build",
+  ".tox",
+  ".mypy_cache",
+  ".pytest_cache",
+}
+
+
+def _workspace_base() -> Path:
   if not config.WORKSPACE_ROOT.value:
     raise ValueError("Workspace root is not configured (HARBOR_BOOST_WORKSPACE_ROOT)")
+  return Path(config.WORKSPACE_ROOT.value).resolve()
 
+
+def _workspace_path(file_path: str) -> Path:
   if not file_path or not file_path.strip():
     raise ValueError("file_path is required")
 
-  base = Path(config.WORKSPACE_ROOT.value).resolve()
+  base = _workspace_base()
   target = (base / file_path.lstrip("/")).resolve()
   if base != target and base not in target.parents:
     raise ValueError("file_path must stay inside the workspace root")
 
   return target
+
+
+def _workspace_search_path(path: str = ".") -> Path:
+  if not path or not str(path).strip():
+    raise ValueError("path is required")
+
+  base = _workspace_base()
+  target = (base / str(path).lstrip("/")).resolve()
+  if base != target and base not in target.parents:
+    raise ValueError("path must stay inside the workspace root")
+  if not target.exists():
+    raise FileNotFoundError(path)
+  return target
+
+
+def _workspace_glob_matches(rel_path: str, glob_pattern: str | None) -> bool:
+  if not glob_pattern:
+    return True
+  return fnmatch.fnmatch(rel_path, glob_pattern) or fnmatch.fnmatch(
+    Path(rel_path).name,
+    glob_pattern,
+  )
+
+
+def _iter_workspace_files(search_root: Path, workspace_base: Path, glob_pattern: str | None):
+  for root, dirs, files in os.walk(search_root, topdown=True, followlinks=False):
+    dirs[:] = [
+      directory
+      for directory in dirs
+      if directory not in WORKSPACE_SKIP_DIRS and not directory.startswith(".")
+    ]
+    for filename in files:
+      if filename.startswith("."):
+        continue
+      file_path = Path(root) / filename
+      rel_path = str(file_path.relative_to(workspace_base))
+      if _workspace_glob_matches(rel_path, glob_pattern):
+        yield file_path, rel_path
+
+
+def _grep_workspace_python(
+  pattern: str,
+  search_root: Path,
+  workspace_base: Path,
+  glob_pattern: str | None,
+  max_matches: int,
+) -> list[str]:
+  try:
+    compiled = re.compile(pattern)
+  except re.error as exc:
+    raise ValueError(f"Invalid regex pattern: {exc}") from exc
+
+  matches: list[str] = []
+  for file_path, rel_path in _iter_workspace_files(search_root, workspace_base, glob_pattern):
+    try:
+      lines = file_path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+      continue
+
+    for line_number, line in enumerate(lines, start=1):
+      if not compiled.search(line):
+        continue
+      matches.append(f"{rel_path}:{line_number}:{line.rstrip()}")
+      if len(matches) >= max_matches:
+        return matches
+
+  return matches
+
+
+def _grep_workspace_ripgrep(
+  pattern: str,
+  search_root: Path,
+  glob_pattern: str | None,
+  max_matches: int,
+) -> list[str] | None:
+  rg_path = shutil.which("rg")
+  if not rg_path:
+    return None
+
+  command = [
+    rg_path,
+    "--no-heading",
+    "--line-number",
+    "--color",
+    "never",
+    "--max-count",
+    str(max_matches),
+    pattern,
+    ".",
+  ]
+  if glob_pattern:
+    command.extend(["--glob", glob_pattern])
+
+  try:
+    completed = subprocess.run(
+      command,
+      cwd=search_root,
+      capture_output=True,
+      text=True,
+      timeout=30,
+      check=False,
+    )
+  except (OSError, subprocess.TimeoutExpired):
+    return None
+
+  if completed.returncode not in {0, 1}:
+    return None
+
+  lines = [line.rstrip() for line in completed.stdout.splitlines() if line.strip()]
+  return lines[:max_matches]
 
 
 async def read_workspace_file(file_path: str) -> str:
@@ -219,6 +355,45 @@ async def read_workspace_file(file_path: str) -> str:
     target.read_text(encoding="utf-8"),
     config.WORKSPACE_FILE_MAX_CHARS.value,
   )
+
+
+async def grep_workspace(
+  pattern: str,
+  path: str = ".",
+  glob: str | None = None,
+  max_matches: int | None = None,
+) -> str:
+  """
+  Search the configured workspace with a ripgrep-style regex pattern.
+  Requires `HARBOR_BOOST_WORKSPACE_ROOT`. Paths are jailed to that directory.
+
+  Args:
+    pattern (str): Regex pattern to search for.
+    path (str): Relative workspace directory or file to search. Default: workspace root.
+    glob (str | None): Optional glob filter such as `*.py`.
+    max_matches (int | None): Maximum matches to return. Defaults to config cap.
+  """
+  if not pattern or not pattern.strip():
+    raise ValueError("pattern is required")
+
+  search_target = _workspace_search_path(path)
+  workspace_base = _workspace_base()
+  search_root = search_target if search_target.is_dir() else search_target.parent
+  cap = max(1, max_matches or config.WORKSPACE_GREP_MAX_MATCHES.value)
+
+  matches = _grep_workspace_ripgrep(pattern, search_root, glob, cap)
+  if matches is None:
+    matches = _grep_workspace_python(pattern, search_root, workspace_base, glob, cap)
+
+  if not matches:
+    scope = path or "."
+    glob_note = f" (glob={glob})" if glob else ""
+    return f"No matches for pattern `{pattern}` under `{scope}`{glob_note}."
+
+  output = "\n".join(matches)
+  if len(matches) >= cap:
+    output += f"\n\n(truncated to {cap} matches)"
+  return output
 
 
 async def list_files() -> str:
@@ -288,6 +463,7 @@ def _selected_tools(configured_tools: list[str] | None = None) -> dict[str, Call
 
   if config.WORKSPACE_ROOT.value:
     available['read_workspace_file'] = read_workspace_file
+    available['grep_workspace'] = grep_workspace
 
   configured = set(configured_tools) if configured_tools else set(config.TOOLS.value) if config.TOOLS.value else DEFAULT_TOOLS
   selected = {}
