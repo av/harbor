@@ -38,7 +38,9 @@ services:
       - ./.env
       - ./services/bionicgpt/override.env
     networks:
-      - harbor-network
+      harbor-network:
+        aliases:
+          - llm-api
 
   bionicgpt-embeddingsapi:
     container_name: ${HARBOR_CONTAINER_PREFIX}.bionicgpt-embeddingsapi
@@ -47,7 +49,9 @@ services:
       - ./.env
       - ./services/bionicgpt/override.env
     networks:
-      - harbor-network
+      harbor-network:
+        aliases:
+          - embeddings-api
 
   bionicgpt-chunkingengine:
     container_name: ${HARBOR_CONTAINER_PREFIX}.bionicgpt-chunkingengine

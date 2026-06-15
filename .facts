@@ -213,6 +213,12 @@
 - label: README introduces harbor launch with backend model --web --config and --service examples
   command: rg -q 'harbor launch --backend ollama' README.md && rg -q 'harbor launch --service opencode' README.md
   tags: [implemented]
+- label: BionicGPT docs explain how to configure Ollama from inside Harbor by using the internal Ollama URL with /v1, a non-empty API key, and an available Ollama model name
+  command: grep -q 'http://ollama:11434/v1' 'docs/2.1.8-Frontend&colon-BionicGPT.md' && grep -q 'sk-ollama' 'docs/2.1.8-Frontend&colon-BionicGPT.md' && grep -q 'harbor url -i ollama' 'docs/2.1.8-Frontend&colon-BionicGPT.md' && grep -Eq 'harbor ollama (list|ls)' 'docs/2.1.8-Frontend&colon-BionicGPT.md'
+  tags: [implemented]
+- label: BionicGPT compose exposes upstream default DNS names for its bundled LLM and embeddings APIs
+  command: grep -A10 '^  bionicgpt-llmapi:' services/compose.bionicgpt.yml | grep -q 'llm-api' && grep -A10 '^  bionicgpt-embeddingsapi:' services/compose.bionicgpt.yml | grep -q 'embeddings-api'
+  tags: [implemented]
 
 # ci
 - label: CI includes GitHub Actions workflows for app-release bench-docker boost-docker lint and test
