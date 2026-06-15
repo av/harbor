@@ -332,6 +332,30 @@ class TestWorkspaceAndNotes:
     assert "<git_diff_stat>" in note
     assert "config.py | 2 +" in note
 
+  def test_build_revise_scope_sections_lists_allowed_forbidden_and_git_evidence(self):
+    scope = diffscope.UserScope(
+      allowed=["services/boost/src/utils.py"],
+      forbidden=["services/boost/src/config.py"],
+    )
+    snapshot = diffscope.ChangedPathsSnapshot(
+      paths=["services/boost/src/config.py", "docs/CHANGELOG.md"],
+      stat=" config.py | 2 +",
+      mode="git",
+    )
+    violations = [
+      diffscope.ScopeViolation("services/boost/src/config.py", "out_of_scope"),
+      diffscope.ScopeViolation("docs/CHANGELOG.md", "out_of_scope"),
+    ]
+
+    sections = diffscope.build_revise_scope_sections(scope, violations, snapshot)
+
+    assert "services/boost/src/utils.py" in sections["allowed_paths"]
+    assert "services/boost/src/config.py" in sections["forbidden_paths"]
+    assert "confirmed changed in workspace git diff" in sections["out_of_scope_paths"]
+    assert "docs/CHANGELOG.md" in sections["out_of_scope_paths"]
+    assert "Workspace git diff" in sections["git_evidence"]
+    assert "config.py | 2 +" in sections["git_evidence"]
+
 
 class TestDiffscopeApply:
   @pytest.mark.asyncio
@@ -454,3 +478,50 @@ class TestDiffscopeApply:
       )
 
     assert revised == "Scoped answer."
+
+  @pytest.mark.asyncio
+  async def test_revise_with_correction_prompt_includes_explicit_scope_sections(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Only change services/boost/src/utils.py"},
+    ])
+    llm = MagicMock()
+    llm.url = "http://example.com"
+    llm.headers = {}
+    llm.query_params = {}
+    llm.model = "test-model"
+    scope = diffscope.UserScope(
+      allowed=["services/boost/src/utils.py"],
+      forbidden=["services/boost/src/config.py"],
+    )
+    snapshot = diffscope.ChangedPathsSnapshot(
+      paths=["services/boost/src/config.py"],
+      stat=" config.py | 1 +",
+      mode="git",
+    )
+    violations = [
+      diffscope.ScopeViolation("services/boost/src/config.py", "out_of_scope"),
+    ]
+
+    with patch.object(diffscope, "_cheap_llm") as cheap_llm:
+      cheap = MagicMock()
+      cheap.chat_completion = AsyncMock(return_value="Scoped answer.")
+      cheap_llm.return_value = cheap
+
+      await diffscope.revise_with_correction(
+        chat,
+        llm,
+        "Also edited services/boost/src/config.py.",
+        "<file_scope_violations></file_scope_violations>",
+        scope=scope,
+        violations=violations,
+        snapshot=snapshot,
+      )
+
+    kwargs = cheap.chat_completion.await_args.kwargs
+    assert kwargs["prompt"] == diffscope.REVISE_PROMPT
+    assert "only revision" in kwargs["prompt"].lower()
+    assert "minimal diff" in kwargs["prompt"].lower()
+    assert "services/boost/src/utils.py" in kwargs["allowed_paths"]
+    assert "services/boost/src/config.py" in kwargs["forbidden_paths"]
+    assert "confirmed changed in workspace git diff" in kwargs["out_of_scope_paths"]
+    assert "config.py | 1 +" in kwargs["git_evidence"]

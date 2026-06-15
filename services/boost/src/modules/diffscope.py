@@ -110,9 +110,31 @@ GIT_DIFF_TIMEOUT = 5.0
 REVISE_PROMPT = """
 <instruction>
 Revise the answer to stay within the user's stated file scope.
-Remove or relocate changes to out-of-scope paths. Do not mention diffscope.
-Return only the revised answer for the user.
+This is your only revision — produce the final scoped answer in one pass.
+
+Rules:
+- Make a minimal diff: touch ONLY files listed under allowed_paths.
+- Do NOT modify, cite, or add hunks for any forbidden_paths or out_of_scope_paths.
+- Remove every change for out-of-scope paths; do not relocate those edits elsewhere.
+- When git_evidence is present, treat listed paths as actually changed in the workspace.
+- Do not mention diffscope. Return only the revised answer for the user.
 </instruction>
+
+<allowed_paths>
+{allowed_paths}
+</allowed_paths>
+
+<forbidden_paths>
+{forbidden_paths}
+</forbidden_paths>
+
+<out_of_scope_paths>
+{out_of_scope_paths}
+</out_of_scope_paths>
+
+<git_evidence>
+{git_evidence}
+</git_evidence>
 
 <conversation>
 {conversation}
@@ -126,6 +148,8 @@ Return only the revised answer for the user.
 {correction}
 </scope_correction>
 """.strip()
+
+_NO_PATHS_LINE = "- (none)"
 
 
 @dataclass
@@ -423,8 +447,62 @@ def build_correction_note(
     lines.extend(f"- {path}" for path in scope.hinted)
     lines.append("</hinted_paths>")
 
+  if scope.forbidden:
+    lines.append("<forbidden_paths>")
+    lines.extend(f"- {path}" for path in scope.forbidden)
+    lines.append("</forbidden_paths>")
+
   lines.append("</file_scope_violations>")
   return "\n".join(lines)
+
+
+def build_revise_scope_sections(
+  scope: UserScope,
+  violations: list[ScopeViolation],
+  snapshot: ChangedPathsSnapshot | None = None,
+) -> dict[str, str]:
+  """Format explicit allowed/forbidden/out-of-scope lists for the revise prompt."""
+  if scope.allowed:
+    allowed_lines = [f"- {path}" for path in scope.allowed]
+  elif scope.hinted:
+    allowed_lines = [f"- {path}" for path in scope.hinted]
+  else:
+    allowed_lines = [
+      "- (none explicitly stated — keep only in-scope edits from the draft)",
+    ]
+
+  forbidden_lines = [f"- {path}" for path in scope.forbidden] or [_NO_PATHS_LINE]
+
+  git_paths = {path.lower() for path in (snapshot.paths if snapshot else [])}
+  out_of_scope_lines: list[str] = []
+  for violation in violations:
+    if violation.reason != "out_of_scope":
+      continue
+    line = f"- {violation.path}"
+    if snapshot is not None and snapshot.mode == "git":
+      if violation.path.lower() in git_paths:
+        line += " (confirmed changed in workspace git diff)"
+      else:
+        line += " (cited in draft; not in workspace git diff)"
+    out_of_scope_lines.append(line)
+  if not out_of_scope_lines:
+    out_of_scope_lines = [_NO_PATHS_LINE]
+
+  if snapshot is not None and snapshot.mode == "git":
+    git_lines = ["Workspace git diff — files changed in the working tree:"]
+    git_lines.extend(f"- {path}" for path in snapshot.paths)
+    if snapshot.stat:
+      git_lines.extend(["", "<git_diff_stat>", snapshot.stat, "</git_diff_stat>"])
+    git_evidence = "\n".join(git_lines)
+  else:
+    git_evidence = "(git diff unavailable — rely on scope_correction and draft paths)"
+
+  return {
+    "allowed_paths": "\n".join(allowed_lines),
+    "forbidden_paths": "\n".join(forbidden_lines),
+    "out_of_scope_paths": "\n".join(out_of_scope_lines),
+    "git_evidence": git_evidence,
+  }
 
 
 def _cheap_llm(llm: "llm.LLM") -> "llm.LLM":
@@ -446,7 +524,21 @@ async def revise_with_correction(
   llm: "llm.LLM",
   draft: str,
   correction: str,
+  *,
+  scope: UserScope | None = None,
+  violations: list[ScopeViolation] | None = None,
+  snapshot: ChangedPathsSnapshot | None = None,
 ) -> str:
+  scope_sections = (
+    build_revise_scope_sections(scope, violations or [], snapshot)
+    if scope is not None
+    else {
+      "allowed_paths": _NO_PATHS_LINE,
+      "forbidden_paths": _NO_PATHS_LINE,
+      "out_of_scope_paths": _NO_PATHS_LINE,
+      "git_evidence": "(scope details unavailable — rely on scope_correction)",
+    }
+  )
   intermediate = _cheap_llm(llm)
   revised = await intermediate.chat_completion(
     prompt=REVISE_PROMPT,
@@ -455,6 +547,7 @@ async def revise_with_correction(
     correction=correction,
     resolve=True,
     params={"temperature": 0.2},
+    **scope_sections,
   )
   return (revised or draft).strip()
 
@@ -510,7 +603,15 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
 
   await llm.emit_status("Diffscope: revising for scope...")
   try:
-    final_text = await revise_with_correction(chat, llm, draft, correction)
+    final_text = await revise_with_correction(
+      chat,
+      llm,
+      draft,
+      correction,
+      scope=scope,
+      violations=violations,
+      snapshot=snapshot,
+    )
   except Exception as exc:
     logger.error(f"{ID_PREFIX}: revision failed: {exc}")
     final_text = draft
