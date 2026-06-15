@@ -1,6 +1,7 @@
 """Performance and concurrency tests for research orchestration."""
 
 import asyncio
+import logging
 import os
 import sys
 import time
@@ -129,6 +130,42 @@ class TestOrchestrateParallelFetch:
     assert any(
       "hop 1: search budget exhausted" in note.lower()
       for note in brief.notes
+    )
+
+  @pytest.mark.asyncio
+  async def test_run_searches_deduplicates_identical_queries(self, caplog):
+    from unittest.mock import patch
+
+    budget = ResearchBudget(max_searches=4, max_url_reads=0, max_chars=20_000)
+    brief = ResearchBrief()
+    llm = MagicMock()
+    llm.emit_status = AsyncMock()
+
+    with patch(
+      "research.fetch.web_search",
+      new=AsyncMock(return_value="1. [Docs](https://a.example) (Date: N/A)\nSnippet"),
+    ) as web_search:
+      orchestrate.logger.propagate = True
+      try:
+        with caplog.at_level(logging.DEBUG, logger="research.orchestrate"):
+          await orchestrate.run_searches(
+            ["api docs", "API docs", "other query", "api docs"],
+            budget,
+            brief,
+            module_id="ponytail",
+            status_prefix="Ponytail research",
+            phase="Ponytail hop 1",
+            llm=llm,
+          )
+      finally:
+        orchestrate.logger.propagate = False
+
+    assert web_search.await_count == 2
+    assert budget.searches_used == 2
+    assert len(brief.searches) == 2
+    assert any(
+      "deduplicated 2 identical search queries (4 -> 2)" in record.message.lower()
+      for record in caplog.records
     )
 
 

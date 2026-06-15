@@ -172,6 +172,18 @@ async def run_searches(
   if not queries:
     return
 
+  original_count = len(queries)
+  queries = dedupe_queries(queries, limit=original_count)
+  if len(queries) < original_count:
+    logger.debug(
+      "Deduplicated %d identical search queries (%d -> %d)",
+      original_count - len(queries),
+      original_count,
+      len(queries),
+    )
+  if not queries:
+    return
+
   max_results = max(1, config.TOOLS_SEARCH_MAX_RESULTS.value)
   phase_label = f"{phase}: " if phase else ""
   use_parallel = parallel and len(queries) > 1
