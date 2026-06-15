@@ -10,8 +10,7 @@ import research.debug_metrics as debug_metrics
 import research.workflow as workflow_mod
 import tools.registry
 from modules import tools as tools_module
-from state import request as request_state
-from state import request_store
+from state import request_set, request_store
 
 if TYPE_CHECKING:
   import chat as ch
@@ -90,14 +89,10 @@ def _path_state() -> PathState:
 
 
 def _next_sequence() -> int:
-  request = request_state.get()
-  if request is None:
-    return 0
-
-  current = getattr(request.state, "sightline_seq", 0)
-  current += 1
-  setattr(request.state, "sightline_seq", current)
-  return current
+  current = request_store("sightline_seq", 0)
+  next_value = current + 1
+  request_set("sightline_seq", next_value)
+  return next_value
 
 
 def canonical_path(file_path: str) -> str:

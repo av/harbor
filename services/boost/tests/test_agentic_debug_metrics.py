@@ -254,6 +254,60 @@ class TestCavemanDebugMetrics:
     finally:
       config.CAVEMAN_TRIGGER.__value__ = original_trigger
 
+  @pytest.mark.asyncio
+  async def test_apply_llm_trigger_does_not_count_classifier_on_early_skip(self):
+    original_trigger = config.CAVEMAN_TRIGGER.__value__
+    config.CAVEMAN_TRIGGER.__value__ = "llm"
+    chat = self._chat("thanks")
+    llm = MagicMock()
+    llm.emit_status = AsyncMock()
+
+    try:
+      with request_context():
+        with (
+          patch.object(
+            caveman,
+            "classify_needs_research",
+            new=AsyncMock(return_value=True),
+          ) as classify,
+          patch(
+            "modules.caveman.workflow_mod.complete_or_defer",
+            new=AsyncMock(return_value="ok"),
+          ),
+        ):
+          await caveman.apply(chat, llm)
+
+        classify.assert_not_called()
+        stored = debug_metrics.get(caveman.ID_PREFIX)
+        assert stored is not None
+        assert stored.reason == "acknowledgment"
+        assert stored.extra_calls == 0
+    finally:
+      config.CAVEMAN_TRIGGER.__value__ = original_trigger
+
+  @pytest.mark.asyncio
+  async def test_apply_records_skipped_metrics_when_no_queries_extracted(self):
+    chat = self._chat("What is the Stripe checkout session API response format in 2024?")
+    llm = MagicMock(module=caveman.ID_PREFIX)
+    llm.emit_status = AsyncMock()
+
+    with request_context():
+      with (
+        patch.object(caveman, "extract_search_queries", new=AsyncMock(return_value=[])),
+        patch(
+          "modules.caveman.workflow_mod.complete_or_defer",
+          new=AsyncMock(return_value="ok"),
+        ),
+      ):
+        await caveman.apply(chat, llm)
+
+      stored = debug_metrics.get(caveman.ID_PREFIX)
+      assert stored is not None
+      assert stored.triggered is False
+      assert stored.skipped is True
+      assert stored.reason == "no_queries_extracted"
+      assert stored.extra_calls == 1
+
 
 class TestPonytailDebugMetrics:
   def _chat(self, content: str) -> ch.Chat:
@@ -278,6 +332,31 @@ class TestPonytailDebugMetrics:
       assert stored.skipped is True
       assert stored.reason == "acknowledgment"
       assert stored.extra_calls == 0
+
+  @pytest.mark.asyncio
+  async def test_apply_records_skipped_metrics_when_no_queries_planned(self):
+    chat = self._chat(
+      "What are the breaking changes when migrating from FastAPI 0.100 to 0.115?"
+    )
+    llm = MagicMock(module=ponytail.ID_PREFIX)
+    llm.emit_status = AsyncMock()
+
+    with request_context():
+      with (
+        patch.object(ponytail, "plan_search_queries", new=AsyncMock(return_value=[])),
+        patch(
+          "modules.ponytail.workflow_mod.complete_or_defer",
+          new=AsyncMock(return_value="ok"),
+        ),
+      ):
+        await ponytail.apply(chat, llm)
+
+      stored = debug_metrics.get(ponytail.ID_PREFIX)
+      assert stored is not None
+      assert stored.triggered is False
+      assert stored.skipped is True
+      assert stored.reason == "no_queries_planned"
+      assert stored.extra_calls == 1
 
   @pytest.mark.asyncio
   async def test_apply_records_trigger_metrics_with_research_calls(self):

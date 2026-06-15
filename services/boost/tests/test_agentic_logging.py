@@ -66,13 +66,13 @@ class TestCavemanGateReason:
   async def test_gate_reason_heuristic_no_match(self):
     chat = self._chat("Summarize how Harbor Boost modules are loaded.")
     llm = MagicMock(module=None)
-    assert await caveman.research_gate_reason(chat, llm) == "heuristic_no_match"
+    assert await caveman.research_gate_reason(chat, llm) == ("heuristic_no_match", 0)
 
   @pytest.mark.asyncio
   async def test_gate_reason_triggered_with_module_prefix(self):
     chat = self._chat("Summarize how Harbor Boost modules are loaded.")
     llm = MagicMock(module=caveman.ID_PREFIX)
-    assert await caveman.research_gate_reason(chat, llm) == "triggered"
+    assert await caveman.research_gate_reason(chat, llm) == ("triggered", 0)
 
   @pytest.mark.asyncio
   async def test_apply_logs_pass_through_reason(self, caplog):
@@ -103,7 +103,7 @@ class TestPonytailGateReason:
   async def test_gate_reason_not_research_heavy(self):
     chat = self._chat("What is asyncio.gather used for in Python?")
     llm = MagicMock(module=None)
-    assert await ponytail.research_gate_reason(chat, llm) == "not_research_heavy"
+    assert await ponytail.research_gate_reason(chat, llm) == ("not_research_heavy", 0)
 
 
 class TestKeelGateReason:

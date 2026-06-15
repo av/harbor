@@ -351,31 +351,32 @@ async def classify_needs_deep_research(
   return is_research_heavy(message)
 
 
-async def research_gate_reason(chat: "ch.Chat", llm: "llm.LLM") -> str:
-  """Return ``triggered`` when research should run, else a pass-through reason."""
+async def research_gate_reason(chat: "ch.Chat", llm: "llm.LLM") -> tuple[str, int]:
+  """Return pass-through reason or ``triggered``, plus cheap-LLM classifier calls."""
   skip = research_skip_reason(chat)
   if skip:
-    return skip
+    return skip, 0
 
   text = orchestrate.last_user_text(chat)
   if getattr(llm, "module", None) == ID_PREFIX:
     if _needs_research_with_module_prefix(chat, text):
-      return "triggered"
-    return "module_prefix_no_research_signals"
+      return "triggered", 0
+    return "module_prefix_no_research_signals", 0
 
   if _uses_llm_trigger():
     if await classify_needs_deep_research(chat, llm, text):
-      return "triggered"
-    return "llm_classifier_no"
+      return "triggered", 1
+    return "llm_classifier_no", 1
 
   if is_research_heavy(text):
-    return "triggered"
-  return "not_research_heavy"
+    return "triggered", 0
+  return "not_research_heavy", 0
 
 
 async def needs_research(chat: "ch.Chat", llm: "llm.LLM") -> bool:
   """Return True when this turn should run deep two-hop web research."""
-  return await research_gate_reason(chat, llm) == "triggered"
+  gate_reason, _ = await research_gate_reason(chat, llm)
+  return gate_reason == "triggered"
 
 
 async def plan_search_queries(
@@ -576,9 +577,8 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
     )
     return await workflow_mod.complete_or_defer(llm, config)
 
-  gate_reason = await research_gate_reason(chat, llm)
-  if _uses_llm_trigger():
-    extra_calls += 1
+  gate_reason, classifier_calls = await research_gate_reason(chat, llm)
+  extra_calls += classifier_calls
   if gate_reason != "triggered":
     await llm.emit_status(format_skipped_status(gate_reason))
     debug_metrics.record_module(
@@ -640,12 +640,13 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
     await llm.emit_status(format_skipped_status("no_queries_planned"))
     debug_metrics.record_module(
       ID_PREFIX,
-      debug_metrics.triggered_payload(
+      debug_metrics.skipped_payload(
         "no_queries_planned",
         duration_ms=timer.elapsed_ms(),
         extra_calls=extra_calls,
       ),
       logger=logger,
+      gate_reason="no_queries_planned",
     )
     return await workflow_mod.complete_or_defer(llm, config)
 
