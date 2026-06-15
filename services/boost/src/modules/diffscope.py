@@ -180,10 +180,20 @@ class ChangedPathsSnapshot:
   mode: Literal["git", "heuristic"] = "heuristic"
 
 
-def needs_diffscope(chat: "ch.Chat") -> bool:
+def diffscope_gate_reason(chat: "ch.Chat") -> str:
+  """Return ``triggered`` when scope checks should run, else a pass-through reason."""
   if not config.DIFFSCOPE_ENABLED.value:
-    return False
-  return deliverable.is_coding_deliverable(chat)
+    return "disabled"
+  if not deliverable.is_coding_deliverable(chat):
+    return "not_deliverable"
+  scope = extract_user_scope(chat)
+  if not scope.has_constraints:
+    return "no_scope_constraints"
+  return "triggered"
+
+
+def needs_diffscope(chat: "ch.Chat") -> bool:
+  return diffscope_gate_reason(chat) == "triggered"
 
 
 def _collect_unique(paths: list[str]) -> list[str]:
@@ -601,14 +611,12 @@ async def emit_final(llm: "llm.LLM", final_text: str) -> None:
 
 async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
   module_cfg = config or {}
-  if not needs_diffscope(chat):
-    logger.debug(f"{ID_PREFIX}: pass-through — not a coding deliverable")
+  gate_reason = diffscope_gate_reason(chat)
+  if gate_reason != "triggered":
+    logger.debug(f"{ID_PREFIX}: Pass-through — {gate_reason}")
     return await workflow_mod.complete_or_defer(llm, module_cfg)
 
   scope = extract_user_scope(chat)
-  if not scope.has_constraints:
-    logger.debug(f"{ID_PREFIX}: pass-through — no user scope constraints")
-    return await workflow_mod.complete_or_defer(llm, module_cfg)
 
   await llm.emit_status("Diffscope: drafting...")
   try:

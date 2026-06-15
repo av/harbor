@@ -494,11 +494,24 @@ def render_landing_checklist(brief: TaskBrief, *, drift_detected: bool = False) 
 
 
 def needs_keel(chat: "ch.Chat") -> bool:
+  return keel_gate_reason(chat) == "triggered"
+
+
+def keel_gate_reason(
+  chat: "ch.Chat",
+  *,
+  brief: TaskBrief | None = None,
+) -> str:
+  """Return ``triggered`` when keel should anchor this turn, else a pass-through reason."""
   if not boost_config.KEEL_ENABLED.value:
-    return False
+    return "disabled"
+  if brief is not None:
+    return "triggered"
   if getattr(chat, "llm", None) and getattr(chat.llm, "module", None) == ID_PREFIX:
-    return True
-  return deliverable.is_coding_deliverable(chat)
+    return "triggered"
+  if deliverable.is_coding_deliverable(chat):
+    return "triggered"
+  return "not_coding_deliverable"
 
 
 async def extract_task_brief(
@@ -611,8 +624,9 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
   else:
     brief = get_stored_brief() or hydrate_brief_from_chat(chat)
 
-  if not needs_keel(chat) and brief is None:
-    logger.debug(f"{ID_PREFIX}: Pass-through — not a coding deliverable turn")
+  gate_reason = keel_gate_reason(chat, brief=brief)
+  if gate_reason != "triggered":
+    logger.debug(f"{ID_PREFIX}: Pass-through — {gate_reason}")
     return await workflow_mod.complete_or_defer(llm, config)
 
   user_turns = count_user_turns(chat)
@@ -626,6 +640,7 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
     brief = await ensure_task_brief(chat, llm, message, force_refresh=force_refresh)
 
   if brief is None:
+    logger.debug(f"{ID_PREFIX}: Pass-through — non_substantive_message")
     return await workflow_mod.complete_or_defer(llm, config)
 
   if user_turns >= 2:

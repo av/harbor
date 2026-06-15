@@ -144,6 +144,15 @@ def workspace_guard_enabled(workspace: bool | None = None) -> bool:
   return config.SIGHTLINE_WORKSPACE.value
 
 
+def workspace_guard_skip_reason(workspace: bool | None = None) -> str | None:
+  """Return a skip reason when workspace tools are not guarded, else None."""
+  if not config.WORKSPACE_ROOT.value:
+    return "no_workspace_root"
+  if workspace_guard_enabled(workspace):
+    return None
+  return "workspace_guard_disabled"
+
+
 def scratch_file_exists(file_path: str) -> bool:
   try:
     target = tools_module._scratch_path(file_path)
@@ -452,6 +461,10 @@ async def apply(chat: "ch.Chat", llm: "llm_mod.LLM", config: dict | None = None)
     allow_create=allow_create,
     workspace=workspace,
   )
+  workspace_skip = workspace_guard_skip_reason(workspace)
+  if workspace_skip == "workspace_guard_disabled":
+    logger.debug(f"{ID_PREFIX}: Pass-through — {workspace_skip}")
+
   if wrapped:
     logger.info(f"{ID_PREFIX}: guarding {', '.join(wrapped)}")
     messages = [
@@ -465,7 +478,7 @@ async def apply(chat: "ch.Chat", llm: "llm_mod.LLM", config: dict | None = None)
       )
     chat.system(" ".join(messages))
   else:
-    logger.debug(f"{ID_PREFIX}: no file tools registered to guard")
+    logger.debug(f"{ID_PREFIX}: Pass-through — no_file_tools_registered")
 
   defer_final = cfg.get("defer_final", not cfg_final)
   return await workflow_mod.complete_or_defer(llm, {**cfg, "defer_final": defer_final})

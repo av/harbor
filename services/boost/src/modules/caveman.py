@@ -180,22 +180,30 @@ def _store_cached_brief(message: str, brief: brief_mod.ResearchBrief) -> None:
   )
 
 
-def should_skip_research(chat: "ch.Chat") -> bool:
-  """Pass through without web research on low-value follow-up turns."""
-  if orchestrate.should_skip_low_value_turn(chat):
-    return True
+def research_skip_reason(chat: "ch.Chat") -> str | None:
+  """Return a pass-through reason when research should be skipped, else None."""
+  low_value = orchestrate.low_value_skip_reason(chat)
+  if low_value:
+    return low_value
 
   text = orchestrate.last_user_text(chat)
   if deliverable.is_coding_deliverable(chat) and not deliverable.has_research_signals(text):
-    return True
+    return "coding_no_research_signals"
+
   brief = keel.get_stored_brief() or keel.hydrate_brief_from_chat(chat)
   if (
     brief
     and keel.is_implementation_brief(brief)
     and deliverable.is_coding_deliverable(chat)
   ):
-    return True
-  return False
+    return "keel_implementation_brief"
+
+  return None
+
+
+def should_skip_research(chat: "ch.Chat") -> bool:
+  """Pass through without web research on low-value follow-up turns."""
+  return research_skip_reason(chat) is not None
 
 
 async def classify_needs_research(
@@ -227,17 +235,29 @@ async def classify_needs_research(
   return research_heuristic(message)
 
 
-async def needs_research(chat: "ch.Chat", llm: "llm.LLM") -> bool:
-  """Return True when this turn should run smash-and-grab web research."""
-  if should_skip_research(chat):
-    return False
-  if getattr(llm, "module", None) == ID_PREFIX:
-    return True
+async def research_gate_reason(chat: "ch.Chat", llm: "llm.LLM") -> str:
+  """Return ``triggered`` when research should run, else a pass-through reason."""
+  skip = research_skip_reason(chat)
+  if skip:
+    return skip
 
   text = orchestrate.last_user_text(chat)
+  if getattr(llm, "module", None) == ID_PREFIX:
+    return "triggered"
+
   if _uses_llm_trigger():
-    return await classify_needs_research(chat, llm, text)
-  return research_heuristic(text)
+    if await classify_needs_research(chat, llm, text):
+      return "triggered"
+    return "llm_classifier_no"
+
+  if research_heuristic(text):
+    return "triggered"
+  return "heuristic_no_match"
+
+
+async def needs_research(chat: "ch.Chat", llm: "llm.LLM") -> bool:
+  """Return True when this turn should run smash-and-grab web research."""
+  return await research_gate_reason(chat, llm) == "triggered"
 
 
 def research_heuristic(text: str) -> bool:
@@ -283,8 +303,9 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
     logger.warning(f"{ID_PREFIX}: No user message found, passing through")
     return await workflow_mod.complete_or_defer(llm, config)
 
-  if not await needs_research(chat, llm):
-    logger.debug(f"{ID_PREFIX}: Skipping research for: {message[:80]}...")
+  gate_reason = await research_gate_reason(chat, llm)
+  if gate_reason != "triggered":
+    logger.debug(f"{ID_PREFIX}: Pass-through — {gate_reason}")
     return await workflow_mod.complete_or_defer(llm, config)
 
   cached_brief = _get_cached_brief(message)

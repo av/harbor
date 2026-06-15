@@ -35,14 +35,21 @@ def last_user_text(chat: "ch.Chat") -> str:
   return (node.content or "").strip() if node else ""
 
 
-def should_skip_low_value_turn(chat: "ch.Chat") -> bool:
-  """Skip research and similar modules on acks and short continuations."""
+def low_value_skip_reason(chat: "ch.Chat") -> str | None:
+  """Return a skip reason for acks and short continuations, or None to proceed."""
   text = last_user_text(chat)
   if not text or len(text) < 4:
-    return True
+    return "empty_or_short_message"
   if deliverable.is_acknowledgment(text):
-    return True
-  return bool(CONTINUATION_RE.search(text) and len(text) < 120)
+    return "acknowledgment"
+  if CONTINUATION_RE.search(text) and len(text) < 120:
+    return "continuation"
+  return None
+
+
+def should_skip_low_value_turn(chat: "ch.Chat") -> bool:
+  """Skip research and similar modules on acks and short continuations."""
+  return low_value_skip_reason(chat) is not None
 
 
 def cheap_llm(llm: "llm.LLM") -> "llm.LLM":

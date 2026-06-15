@@ -284,9 +284,14 @@ def _store_cached_brief(message: str, brief: brief_mod.ResearchBrief) -> None:
   )
 
 
+def research_skip_reason(chat: "ch.Chat") -> str | None:
+  """Return a pass-through reason when research should be skipped, else None."""
+  return orchestrate.low_value_skip_reason(chat)
+
+
 def should_skip_research(chat: "ch.Chat") -> bool:
   """Pass through without web research on low-value follow-up turns."""
-  return orchestrate.should_skip_low_value_turn(chat)
+  return research_skip_reason(chat) is not None
 
 
 def _needs_research_with_module_prefix(chat: "ch.Chat", text: str) -> bool:
@@ -324,18 +329,31 @@ async def classify_needs_deep_research(
   return is_research_heavy(message)
 
 
-async def needs_research(chat: "ch.Chat", llm: "llm.LLM") -> bool:
-  """Return True when this turn should run deep two-hop web research."""
-  if should_skip_research(chat):
-    return False
+async def research_gate_reason(chat: "ch.Chat", llm: "llm.LLM") -> str:
+  """Return ``triggered`` when research should run, else a pass-through reason."""
+  skip = research_skip_reason(chat)
+  if skip:
+    return skip
 
   text = orchestrate.last_user_text(chat)
   if getattr(llm, "module", None) == ID_PREFIX:
-    return _needs_research_with_module_prefix(chat, text)
+    if _needs_research_with_module_prefix(chat, text):
+      return "triggered"
+    return "module_prefix_no_research_signals"
 
   if _uses_llm_trigger():
-    return await classify_needs_deep_research(chat, llm, text)
-  return is_research_heavy(text)
+    if await classify_needs_deep_research(chat, llm, text):
+      return "triggered"
+    return "llm_classifier_no"
+
+  if is_research_heavy(text):
+    return "triggered"
+  return "not_research_heavy"
+
+
+async def needs_research(chat: "ch.Chat", llm: "llm.LLM") -> bool:
+  """Return True when this turn should run deep two-hop web research."""
+  return await research_gate_reason(chat, llm) == "triggered"
 
 
 async def plan_search_queries(
@@ -499,8 +517,9 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
     logger.warning(f"{ID_PREFIX}: No user message found, passing through")
     return await workflow_mod.complete_or_defer(llm, config)
 
-  if not await needs_research(chat, llm):
-    logger.debug(f"{ID_PREFIX}: Skipping research for: {message[:80]}...")
+  gate_reason = await research_gate_reason(chat, llm)
+  if gate_reason != "triggered":
+    logger.debug(f"{ID_PREFIX}: Pass-through — {gate_reason}")
     return await workflow_mod.complete_or_defer(llm, config)
 
   cached_brief = _get_cached_brief(message)
