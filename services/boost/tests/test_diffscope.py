@@ -2,6 +2,7 @@
 
 import json
 import os
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -137,6 +138,112 @@ class TestViolations:
     )
 
 
+class TestGitDiffGrounding:
+  def test_is_git_workspace_detects_dot_git_directory(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      root = Path(tmp)
+      (root / ".git").mkdir()
+      assert diffscope.is_git_workspace(root)
+
+  def test_is_git_workspace_false_without_git(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      assert not diffscope.is_git_workspace(tmp)
+
+  def test_run_git_diff_parses_name_only_and_stat(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      root = Path(tmp)
+      (root / ".git").mkdir()
+
+      def fake_run(cmd, **kwargs):
+        if cmd == ["git", "diff", "--name-only"]:
+          return subprocess.CompletedProcess(cmd, 0, "src/a.py\nsrc/b.py\n", "")
+        if cmd == ["git", "diff", "--stat"]:
+          return subprocess.CompletedProcess(
+            cmd,
+            0,
+            " src/a.py | 2 +-\n src/b.py | 4 ++++\n 2 files changed, 5 insertions(+), 1 deletion(-)\n",
+            "",
+          )
+        raise AssertionError(f"unexpected git command: {cmd}")
+
+      with patch.object(diffscope.subprocess, "run", side_effect=fake_run):
+        result = diffscope.run_git_diff(root)
+
+    assert result is not None
+    paths, stat = result
+    assert paths == ["src/a.py", "src/b.py"]
+    assert "2 files changed" in stat
+
+  def test_run_git_diff_returns_none_on_nonzero_exit(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      root = Path(tmp)
+      (root / ".git").mkdir()
+
+      with patch.object(
+        diffscope.subprocess,
+        "run",
+        return_value=subprocess.CompletedProcess(["git", "diff", "--name-only"], 128, "", "fatal"),
+      ):
+        assert diffscope.run_git_diff(root) is None
+
+  def test_run_git_diff_returns_none_on_timeout(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      root = Path(tmp)
+      (root / ".git").mkdir()
+
+      with patch.object(
+        diffscope.subprocess,
+        "run",
+        side_effect=subprocess.TimeoutExpired(cmd=["git", "diff", "--name-only"], timeout=5),
+      ):
+        assert diffscope.run_git_diff(root) is None
+
+  def test_collect_changed_paths_uses_git_when_available(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      root = Path(tmp)
+      (root / ".git").mkdir()
+      original = config.WORKSPACE_ROOT.__value__
+      try:
+        config.WORKSPACE_ROOT.__value__ = str(root)
+        with patch.object(
+          diffscope,
+          "run_git_diff",
+          return_value=(["services/boost/src/utils.py"], " utils.py | 1 +"),
+        ):
+          snapshot = diffscope.collect_changed_paths(
+            "Mentioned `services/boost/src/config.py` only.",
+          )
+      finally:
+        config.WORKSPACE_ROOT.__value__ = original
+
+    assert snapshot.mode == "git"
+    assert snapshot.paths == ["services/boost/src/utils.py"]
+    assert "utils.py" in snapshot.stat
+
+  def test_collect_changed_paths_falls_back_to_heuristic(self):
+    text = "Changed `services/boost/src/utils.py`."
+    snapshot = diffscope.collect_changed_paths(text)
+    assert snapshot.mode == "heuristic"
+    assert "services/boost/src/utils.py" in snapshot.paths
+
+  def test_collect_changed_paths_falls_back_when_git_diff_fails(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      root = Path(tmp)
+      (root / ".git").mkdir()
+      original = config.WORKSPACE_ROOT.__value__
+      try:
+        config.WORKSPACE_ROOT.__value__ = str(root)
+        with patch.object(diffscope, "run_git_diff", return_value=None):
+          snapshot = diffscope.collect_changed_paths(
+            "Also touched `services/boost/src/config.py`.",
+          )
+      finally:
+        config.WORKSPACE_ROOT.__value__ = original
+
+    assert snapshot.mode == "heuristic"
+    assert "services/boost/src/config.py" in snapshot.paths
+
+
 class TestWorkspaceAndNotes:
   @pytest.mark.asyncio
   async def test_verify_workspace_paths_detects_missing(self):
@@ -168,6 +275,23 @@ class TestWorkspaceAndNotes:
     assert "OUT_OF_SCOPE: docs/CHANGELOG.md" in note
     assert "MISSING: src/missing.py" in note
     assert "services/boost/src/utils.py" in note
+
+  def test_build_correction_note_includes_git_mode_and_stat(self):
+    scope = diffscope.UserScope(allowed=["services/boost/src/utils.py"])
+    snapshot = diffscope.ChangedPathsSnapshot(
+      paths=["services/boost/src/config.py"],
+      stat=" config.py | 2 +",
+      mode="git",
+    )
+    note = diffscope.build_correction_note(
+      [diffscope.ScopeViolation("services/boost/src/config.py", "out_of_scope")],
+      [],
+      scope,
+      snapshot,
+    )
+    assert "Grounding: workspace git diff" in note
+    assert "<git_diff_stat>" in note
+    assert "config.py | 2 +" in note
 
 
 class TestDiffscopeApply:
@@ -210,6 +334,37 @@ class TestDiffscopeApply:
 
     llm.emit_message.assert_awaited_once_with("Changed `services/boost/src/utils.py`.")
     llm.stream_final_completion.assert_awaited_once_with(emit=False)
+
+  @pytest.mark.asyncio
+  async def test_apply_uses_git_diff_paths_for_scope_check(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Only change services/boost/src/utils.py"},
+    ])
+    llm = MagicMock()
+    llm.emit_status = AsyncMock()
+    llm.emit_message = AsyncMock()
+    llm.stream_final_completion = AsyncMock(
+      return_value="Only updated services/boost/src/utils.py in the answer.",
+    )
+    snapshot = diffscope.ChangedPathsSnapshot(
+      paths=["services/boost/src/utils.py", "services/boost/src/config.py"],
+      stat=" config.py | 1 +",
+      mode="git",
+    )
+
+    with (
+      patch.object(diffscope, "collect_changed_paths", return_value=snapshot),
+      patch.object(diffscope, "verify_workspace_paths", new=AsyncMock(return_value=[])),
+      patch.object(
+        diffscope,
+        "revise_with_correction",
+        new=AsyncMock(return_value="Scoped to utils.py only."),
+      ) as revise,
+    ):
+      await diffscope.apply(chat, llm)
+
+    revise.assert_awaited_once()
+    llm.emit_message.assert_awaited_once_with("Scoped to utils.py only.")
 
   @pytest.mark.asyncio
   async def test_apply_revises_once_on_scope_violation(self):

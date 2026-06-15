@@ -2,8 +2,10 @@
 
 import json
 import re
+import subprocess
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from pathlib import Path
+from typing import TYPE_CHECKING, Literal
 
 import chat as ch
 import config
@@ -17,24 +19,31 @@ ID_PREFIX = "diffscope"
 
 DOCS = """
 `diffscope` is a post-deliverable scope guard for coding turns. On deliverable
-requests it drafts the model answer, extracts file paths from the response
-(code fences, diff headers, backticks, and file-tool arguments in chat history),
-and compares them to scope the user stated in recent messages (`only X`,
-`don't touch Y`, quoted paths).
+requests it drafts the model answer and compares changed file paths to scope the
+user stated in recent messages (`only X`, `don't touch Y`, quoted paths).
 
-When `HARBOR_BOOST_WORKSPACE_ROOT` is set, cited workspace paths are verified
-with `read_workspace_file`. Out-of-scope or missing paths trigger a correction
-note and **one** revision hop before the answer is emitted.
+**Path grounding modes**
+
+- **Git mode** (preferred): when `HARBOR_BOOST_WORKSPACE_ROOT` points at a git
+  repo, `diffscope` runs `git diff --name-only` and `git diff --stat` (5s
+  timeout) to list files actually changed in the working tree.
+- **Heuristic mode** (fallback): when git is unavailable, paths are extracted
+  from the draft (code fences, diff headers, backticks) and file-tool arguments
+  in chat history.
+
+When `HARBOR_BOOST_WORKSPACE_ROOT` is set, cited workspace paths are also
+verified with `read_workspace_file`. Out-of-scope or missing paths trigger a
+correction note and **one** revision hop before the answer is emitted.
 
 **When to use**
 
 - Coding deliverables where the user states file scope (`only X`, `don't touch Y`)
-- Post-deliverable guard: compares cited paths in the draft against recent constraints
+- Post-deliverable guard: compares changed paths against recent constraints
 - Optional hardening atop `keel` anchoring or `sightline` scratch guards
 
-**Limitation:** Scope is inferred from user text heuristics only. Scratch file
-tools (`read_file`, `write_file`) are not tracked — only workspace reads verify
-repo paths.
+**Limitation:** User scope is inferred from recent message heuristics. Scratch
+file tools (`read_file`, `write_file`) are not tracked — only workspace reads
+verify repo paths. Git mode reflects unstaged `git diff` output only.
 
 **Parameters**
 
@@ -93,6 +102,8 @@ FILE_TOOL_NAMES = frozenset({
   "read_workspace_file",
 })
 
+GIT_DIFF_TIMEOUT = 5.0
+
 REVISE_PROMPT = """
 <instruction>
 Revise the answer to stay within the user's stated file scope.
@@ -129,6 +140,13 @@ class UserScope:
 class ScopeViolation:
   path: str
   reason: str
+
+
+@dataclass
+class ChangedPathsSnapshot:
+  paths: list[str] = field(default_factory=list)
+  stat: str = ""
+  mode: Literal["git", "heuristic"] = "heuristic"
 
 
 def needs_diffscope(chat: "ch.Chat") -> bool:
@@ -229,6 +247,86 @@ def extract_response_paths(text: str, chat: "ch.Chat | None" = None) -> list[str
   return paths
 
 
+def is_git_workspace(root: str | Path | None = None) -> bool:
+  """Return True when the workspace root is inside a git repository."""
+  resolved = Path(root or config.WORKSPACE_ROOT.value or "")
+  if not resolved.is_dir():
+    return False
+  git_path = resolved / ".git"
+  return git_path.is_dir() or git_path.is_file()
+
+
+def run_git_diff(
+  root: str | Path,
+  *,
+  timeout: float = GIT_DIFF_TIMEOUT,
+) -> tuple[list[str], str] | None:
+  """Run git diff and return changed paths plus stat summary, or None on failure."""
+  cwd = str(root)
+  try:
+    name_proc = subprocess.run(
+      ["git", "diff", "--name-only"],
+      cwd=cwd,
+      capture_output=True,
+      text=True,
+      timeout=timeout,
+      check=False,
+    )
+    if name_proc.returncode != 0:
+      logger.debug(
+        f"{ID_PREFIX}: git diff --name-only failed (rc={name_proc.returncode}): "
+        f"{(name_proc.stderr or '').strip()}"
+      )
+      return None
+
+    stat_proc = subprocess.run(
+      ["git", "diff", "--stat"],
+      cwd=cwd,
+      capture_output=True,
+      text=True,
+      timeout=timeout,
+      check=False,
+    )
+    stat = (stat_proc.stdout or "").strip()
+    if stat_proc.returncode != 0:
+      logger.debug(
+        f"{ID_PREFIX}: git diff --stat failed (rc={stat_proc.returncode}): "
+        f"{(stat_proc.stderr or '').strip()}"
+      )
+      stat = ""
+
+    paths: list[str] = []
+    seen: set[str] = set()
+    for line in (name_proc.stdout or "").splitlines():
+      raw = line.strip()
+      if raw:
+        _add_path(paths, seen, raw)
+
+    return paths, stat
+  except (FileNotFoundError, subprocess.TimeoutExpired, OSError) as exc:
+    logger.debug(f"{ID_PREFIX}: git diff unavailable: {exc}")
+    return None
+
+
+def collect_changed_paths(text: str, chat: "ch.Chat | None" = None) -> ChangedPathsSnapshot:
+  """Prefer workspace git diff; fall back to response path heuristics."""
+  root = config.WORKSPACE_ROOT.value
+  if root and is_git_workspace(root):
+    result = run_git_diff(root)
+    if result is not None:
+      paths, stat = result
+      logger.debug(
+        f"{ID_PREFIX}: git mode — {len(paths)} changed path(s)"
+      )
+      return ChangedPathsSnapshot(paths=paths, stat=stat, mode="git")
+
+  heuristic_paths = extract_response_paths(text, chat)
+  logger.debug(
+    f"{ID_PREFIX}: heuristic mode — {len(heuristic_paths)} path(s) from response"
+  )
+  return ChangedPathsSnapshot(paths=heuristic_paths, stat="", mode="heuristic")
+
+
 def path_matches_scope(path: str, candidates: list[str]) -> bool:
   norm = path.lower().strip()
   for candidate in candidates:
@@ -288,8 +386,19 @@ def build_correction_note(
   violations: list[ScopeViolation],
   missing_paths: list[str],
   scope: UserScope,
+  snapshot: ChangedPathsSnapshot | None = None,
 ) -> str:
   lines = ["<file_scope_violations>"]
+
+  if snapshot is not None:
+    if snapshot.mode == "git":
+      lines.append("Grounding: workspace git diff (actual changed files)")
+    else:
+      lines.append("Grounding: response path heuristics (git unavailable)")
+    if snapshot.stat:
+      lines.append("<git_diff_stat>")
+      lines.append(snapshot.stat)
+      lines.append("</git_diff_stat>")
 
   for violation in violations:
     if violation.reason == "forbidden":
@@ -372,16 +481,18 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM"):
     logger.warning(f"{ID_PREFIX}: empty draft, passing through")
     return await llm.stream_final_completion()
 
-  response_paths = extract_response_paths(draft, chat)
-  violations = find_violations(response_paths, scope)
-  missing_paths = await verify_workspace_paths(response_paths)
+  snapshot = collect_changed_paths(draft, chat)
+  changed_paths = snapshot.paths
+  violations = find_violations(changed_paths, scope)
+  missing_paths = await verify_workspace_paths(changed_paths)
 
   if not violations and not missing_paths:
-    await llm.emit_status("Diffscope: scope OK")
+    mode_label = "git" if snapshot.mode == "git" else "heuristic"
+    await llm.emit_status(f"Diffscope: scope OK ({mode_label})")
     await emit_final(llm, draft)
     return draft
 
-  correction = build_correction_note(violations, missing_paths, scope)
+  correction = build_correction_note(violations, missing_paths, scope, snapshot)
   logger.warning(
     f"{ID_PREFIX}: scope issues — {len(violations)} violation(s), "
     f"{len(missing_paths)} missing path(s)"
