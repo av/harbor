@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 import chat as ch
 import config
 from modules import autocheck, caveman, diffscope, keel, ponytail, sightline
-from research import debug_metrics
+from research import debug_metrics, workflow as workflow_mod
 from research.brief import ResearchBrief
 from state import request as request_state
 
@@ -443,3 +443,130 @@ class TestDiffscopeDebugMetrics:
       assert stored.extra_calls == 1
       assert stored.extra["outcome"] == "scope_ok"
       assert stored.extra["grounding_mode"] == "heuristic"
+
+
+class TestDebugSummaryHelpers:
+  def test_debug_enabled_respects_boost_param(self):
+    llm = MagicMock()
+    original = config.BOOST_DEBUG.__value__
+    try:
+      config.BOOST_DEBUG.__value__ = False
+      llm.boost_params = {"debug": "true"}
+      assert debug_metrics.debug_enabled(llm)
+
+      llm.boost_params = {"debug": "false"}
+      assert not debug_metrics.debug_enabled(llm)
+    finally:
+      config.BOOST_DEBUG.__value__ = original
+
+  def test_debug_enabled_falls_back_to_config(self):
+    llm = MagicMock()
+    llm.boost_params = {}
+    original = config.BOOST_DEBUG.__value__
+    try:
+      config.BOOST_DEBUG.__value__ = True
+      assert debug_metrics.debug_enabled(llm)
+
+      config.BOOST_DEBUG.__value__ = False
+      assert not debug_metrics.debug_enabled(llm)
+    finally:
+      config.BOOST_DEBUG.__value__ = original
+
+  def test_collect_all_reads_debug_suffix_keys(self):
+    with request_context() as req:
+      debug_metrics.record(
+        "caveman",
+        debug_metrics.skipped_payload("acknowledgment", duration_ms=3),
+      )
+      debug_metrics.record(
+        "keel",
+        debug_metrics.triggered_payload(
+          "triggered",
+          duration_ms=12,
+          extra_calls=1,
+          extracted_brief=True,
+        ),
+      )
+      setattr(req.state, "keel_task_brief", {"objective": "ignored"})
+
+      collected = debug_metrics.collect_all()
+      assert set(collected) == {"caveman", "keel"}
+      assert collected["caveman"]["reason"] == "acknowledgment"
+      assert collected["keel"]["extra_calls"] == 1
+
+  def test_format_compact_summary_renders_modules(self):
+    summary = debug_metrics.format_compact_summary({
+      "caveman": debug_metrics.skipped_payload("acknowledgment", duration_ms=3).model_dump(),
+      "keel": debug_metrics.triggered_payload(
+        "triggered",
+        duration_ms=12,
+        extra_calls=1,
+        extracted_brief=True,
+      ).model_dump(),
+    })
+    assert summary.startswith("Debug:")
+    assert "caveman skipped (acknowledgment) 3ms" in summary
+    assert "keel triggered 12ms +1calls [extracted_brief=True]" in summary
+
+
+class TestCompleteOrDeferDebugStatus:
+  @pytest.mark.asyncio
+  async def test_emits_compact_summary_when_debug_enabled(self):
+    llm = MagicMock()
+    llm.boost_params = {"debug": "true"}
+    llm.emit_status = AsyncMock()
+    llm.stream_final_completion = AsyncMock(return_value="final")
+
+    with request_context():
+      debug_metrics.record(
+        "caveman",
+        debug_metrics.skipped_payload("acknowledgment", duration_ms=4),
+      )
+      result = await workflow_mod.complete_or_defer(llm)
+
+    assert result == "final"
+    llm.emit_status.assert_awaited_once()
+    status = llm.emit_status.await_args.args[0]
+    assert status.startswith("Debug:")
+    assert "caveman skipped (acknowledgment) 4ms" in status
+    llm.stream_final_completion.assert_awaited_once()
+
+  @pytest.mark.asyncio
+  async def test_skips_summary_when_debug_disabled(self):
+    llm = MagicMock()
+    llm.boost_params = {}
+    llm.emit_status = AsyncMock()
+    llm.stream_final_completion = AsyncMock(return_value="final")
+
+    original = config.BOOST_DEBUG.__value__
+    try:
+      config.BOOST_DEBUG.__value__ = False
+      with request_context():
+        debug_metrics.record(
+          "caveman",
+          debug_metrics.skipped_payload("acknowledgment", duration_ms=4),
+        )
+        await workflow_mod.complete_or_defer(llm)
+    finally:
+      config.BOOST_DEBUG.__value__ = original
+
+    llm.emit_status.assert_not_called()
+    llm.stream_final_completion.assert_awaited_once()
+
+  @pytest.mark.asyncio
+  async def test_defer_final_skips_summary_and_stream(self):
+    llm = MagicMock()
+    llm.boost_params = {"debug": "true"}
+    llm.emit_status = AsyncMock()
+    llm.stream_final_completion = AsyncMock()
+
+    with request_context():
+      debug_metrics.record(
+        "caveman",
+        debug_metrics.skipped_payload("acknowledgment", duration_ms=4),
+      )
+      result = await workflow_mod.complete_or_defer(llm, {"defer_final": True})
+
+    assert result is None
+    llm.emit_status.assert_not_called()
+    llm.stream_final_completion.assert_not_called()

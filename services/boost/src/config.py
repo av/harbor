@@ -681,6 +681,18 @@ WORKSPACE_LIST_MAX_ENTRIES = Config[int](
     description="Maximum number of file paths returned by `list_workspace_files`.",
 )
 
+# --------------- AGENTIC DEBUG ---------------
+
+BOOST_DEBUG = Config[bool](
+    name="HARBOR_BOOST_DEBUG",
+    type=bool,
+    default="false",
+    description=(
+        "When true, agentic workflows emit a compact debug metrics summary "
+        "before the final completion. Overridable per request via `@boost_debug`."
+    ),
+)
+
 # ----------------- CAVEMAN -----------------
 
 CAVEMAN_MAX_SEARCHES = Config[int](
