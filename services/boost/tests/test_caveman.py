@@ -420,6 +420,34 @@ class TestCavemanBriefCache:
     assert any("using cached brief" in status for status in statuses)
 
   @pytest.mark.asyncio
+  async def test_cache_enabled_with_workflow_config_dict(self, caveman_cache_mode):
+    """Regression: workflow module config dict must not shadow CAVEMAN_CACHE_BRIEF."""
+    config.CAVEMAN_CACHE_BRIEF.__value__ = True
+    question = "What are the latest Harbor Boost module patterns?"
+    brief = ResearchBrief(query="harbor boost modules")
+    brief.facts = ["caveman performs fast one-hop research"]
+    workflow_cfg = {"defer_final": True}
+
+    with request_context():
+      chat = ch.Chat.from_conversation([{"role": "user", "content": question}])
+      llm = MagicMock(module=caveman.ID_PREFIX)
+      llm.emit_status = AsyncMock()
+      llm.stream_final_completion = AsyncMock()
+
+      with (
+        patch.object(caveman, "extract_search_queries", new=AsyncMock(return_value=["harbor boost modules"])) as extract,
+        patch.object(caveman, "gather_research", new=AsyncMock(return_value=brief)) as gather,
+      ):
+        await caveman.apply(chat, llm, workflow_cfg)
+        await caveman.apply(chat, llm, workflow_cfg)
+
+    extract.assert_awaited_once()
+    gather.assert_awaited_once()
+    statuses = [call.args[0] for call in llm.emit_status.await_args_list]
+    assert any("using cached brief" in status for status in statuses)
+    llm.stream_final_completion.assert_not_called()
+
+  @pytest.mark.asyncio
   async def test_cache_enabled_runs_research_for_different_question(self, caveman_cache_mode):
     config.CAVEMAN_CACHE_BRIEF.__value__ = True
     first_question = "What are the latest Harbor Boost module patterns?"
