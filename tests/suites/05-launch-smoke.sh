@@ -525,6 +525,31 @@ assert_output '^model=shipyard-qwen-chat-model$'
 assert_output '^OPENAI_API_KEY=sk-boost$'
 assert_output 'base_url="http://localhost:8004/v1"'
 
+run_launch "workflow launch starts SearXNG and routes through research-deep workflow model" \
+  "ollama boost" "openai-mixed" \
+  --workflow research-deep --backend ollama codex --sandbox workspace-write
+assert_log '^tool=codex$'
+assert_log '^arg=model_providers\.harbor_launch\.base_url="http://localhost:8004/v1"$'
+assert_log '^arg=-m$'
+assert_log '^arg=research-deep-qwen-chat-model$'
+assert_docker_log 'up -d --wait boost searxng$'
+assert_output "Starting Boost workflow 'research-deep' for backend 'ollama'"
+
+run_launch "already-prefixed research-deep workflow model is not prefixed again" \
+  "ollama boost" "openai-mixed" \
+  --workflow research-deep --backend ollama --model research-deep-qwen-chat-model codex
+assert_log '^tool=codex$'
+assert_log '^arg=-m$'
+assert_log '^arg=research-deep-qwen-chat-model$'
+
+run_launch "launch --workflow research-deep config prints boosted model and Boost API settings" \
+  "ollama boost" "openai-mixed" \
+  --workflow research-deep --backend ollama --config codex
+assert_output '^backend=boost$'
+assert_output '^model=research-deep-qwen-chat-model$'
+assert_output '^OPENAI_API_KEY=sk-boost$'
+assert_output 'base_url="http://localhost:8004/v1"'
+
 run_launch "workflow launch routes through scope-guard workflow model without SearXNG" \
   "ollama boost" "openai-mixed" \
   --workflow scope-guard --backend ollama codex --sandbox workspace-write
@@ -572,6 +597,31 @@ run_launch "launch --workflow agent-code config prints boosted model and Boost A
   --workflow agent-code --backend ollama --config codex
 assert_output '^backend=boost$'
 assert_output '^model=agent-code-qwen-chat-model$'
+assert_output '^OPENAI_API_KEY=sk-boost$'
+assert_output 'base_url="http://localhost:8004/v1"'
+
+run_launch "workflow launch routes through code-check workflow model without SearXNG" \
+  "ollama boost" "openai-mixed" \
+  --workflow code-check --backend ollama codex --sandbox workspace-write
+assert_log '^tool=codex$'
+assert_log '^arg=model_providers\.harbor_launch\.base_url="http://localhost:8004/v1"$'
+assert_log '^arg=-m$'
+assert_log '^arg=code-check-qwen-chat-model$'
+assert_docker_log 'up -d --wait boost$'
+assert_output "Starting Boost workflow 'code-check' for backend 'ollama'"
+
+run_launch "already-prefixed code-check workflow model is not prefixed again" \
+  "ollama boost" "openai-mixed" \
+  --workflow code-check --backend ollama --model code-check-qwen-chat-model codex
+assert_log '^tool=codex$'
+assert_log '^arg=-m$'
+assert_log '^arg=code-check-qwen-chat-model$'
+
+run_launch "launch --workflow code-check config prints boosted model and Boost API settings" \
+  "ollama boost" "openai-mixed" \
+  --workflow code-check --backend ollama --config codex
+assert_output '^backend=boost$'
+assert_output '^model=code-check-qwen-chat-model$'
 assert_output '^OPENAI_API_KEY=sk-boost$'
 assert_output 'base_url="http://localhost:8004/v1"'
 
