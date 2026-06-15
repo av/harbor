@@ -41,6 +41,7 @@ messages) skip research to keep latency low.
 
 **Parameters**
 
+- `max_queries` — maximum search queries extracted per request. Default: `3`
 - `max_searches` — maximum web searches per request. Default: `2`
 - `max_url_reads` — maximum full-page URL reads per request. Default: `1`
 - `max_chars` — maximum research content characters retained. Default: `30000`
@@ -50,6 +51,7 @@ messages) skip research to keep latency low.
 
 ```bash
 harbor boost modules add caveman
+harbor config set HARBOR_BOOST_CAVEMAN_MAX_QUERIES 3
 harbor config set HARBOR_BOOST_CAVEMAN_MAX_SEARCHES 2
 harbor config set HARBOR_BOOST_CAVEMAN_MAX_URL_READS 1
 harbor config set HARBOR_BOOST_CAVEMAN_MAX_CHARS 30000
@@ -301,7 +303,7 @@ async def extract_search_queries(
     llm,
     message,
     prompt=QUERY_EXTRACTION_PROMPT,
-    max_queries=3,
+    max_queries=config.CAVEMAN_MAX_QUERIES.value,
   )
 
 

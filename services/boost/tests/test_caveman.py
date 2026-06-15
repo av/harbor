@@ -263,6 +263,41 @@ class TestCavemanQueryExtraction:
       "FastAPI migration guide",
     ]
 
+  @pytest.mark.asyncio
+  async def test_extract_search_queries_uses_config_max_queries(self):
+    chat = ch.Chat.from_conversation([{"role": "user", "content": "What is new in FastAPI?"}])
+    llm = MagicMock()
+    llm.url = "http://example.com"
+    llm.headers = {}
+    llm.query_params = {}
+    llm.model = "test-model"
+
+    original = config.CAVEMAN_MAX_QUERIES.__value__
+    try:
+      config.CAVEMAN_MAX_QUERIES.__value__ = 2
+
+      with patch("research.orchestrate.cheap_llm") as cheap_llm:
+        cheap = MagicMock()
+        cheap.chat_completion = AsyncMock(
+          return_value={
+            "queries": [
+              "FastAPI 2026 release notes",
+              "FastAPI breaking changes",
+              "FastAPI migration guide",
+            ]
+          }
+        )
+        cheap_llm.return_value = cheap
+
+        queries = await caveman.extract_search_queries(chat, llm, "What is new in FastAPI?")
+
+      assert queries == [
+        "FastAPI 2026 release notes",
+        "FastAPI breaking changes",
+      ]
+    finally:
+      config.CAVEMAN_MAX_QUERIES.__value__ = original
+
 
 class TestCavemanGatherResearch:
   @pytest.mark.asyncio

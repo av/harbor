@@ -716,6 +716,13 @@ CAVEMAN_MAX_CHARS = Config[int](
     description="Maximum research content characters retained by the `caveman` module.",
 )
 
+CAVEMAN_MAX_QUERIES = Config[int](
+    name="HARBOR_BOOST_CAVEMAN_MAX_QUERIES",
+    type=int,
+    default="3",
+    description="Maximum search queries extracted by the `caveman` research module.",
+)
+
 CAVEMAN_TRIGGER = Config[str](
     name="HARBOR_BOOST_CAVEMAN_TRIGGER",
     type=str,
