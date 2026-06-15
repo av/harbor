@@ -40,6 +40,26 @@ def _normalize_description(description: str) -> str:
   return " ".join((description or "").split())
 
 
+def _module_names(modules: list) -> list[str]:
+  names = []
+  for module_config in modules:
+    if isinstance(module_config, str):
+      names.append(module_config)
+    elif isinstance(module_config, dict):
+      names.append(module_config["module"])
+    else:
+      raise AssertionError(f"Unexpected module config: {module_config!r}")
+  return names
+
+
+def _shipyard_prep_module(modules: list, module_name: str) -> dict:
+  return next(
+    item
+    for item in modules
+    if (item.get("module") if isinstance(item, dict) else item) == module_name
+  )
+
+
 SIMPLE_PRESETS = {
   "research-quick": ("caveman", "Quick Research"),
   "research-deep": ("ponytail", "Deep Research"),
@@ -101,6 +121,31 @@ class TestWorkflowPresets:
         python_preset["description"]
       )
       assert yaml_preset["modules"] == python_preset["modules"]
+      assert workflow_presets.shorthand_for(yaml_preset["modules"]) == workflow_presets.SHORTHAND[
+        workflow_id
+      ]
+
+    shipyard_yaml = yaml_presets["shipyard"]
+    shipyard_python = workflow_presets.PRESETS["shipyard"]
+    assert shipyard_yaml["modules"] == SHIPYARD_MODULES == shipyard_python["modules"]
+    assert _module_names(shipyard_yaml["modules"]) == [
+      "keel",
+      "caveman",
+      "tools",
+      "ponytail",
+      "autocheck",
+      "final",
+    ]
+    assert workflow_presets.SHORTHAND["shipyard"] == "keel,caveman,tools,ponytail,autocheck,final"
+
+    for module_name in ("keel", "caveman", "ponytail", "autocheck"):
+      module = _shipyard_prep_module(shipyard_yaml["modules"], module_name)
+      assert module.get("continue") is True
+      assert module["config"]["defer_final"] is True
+
+    tools = _shipyard_prep_module(shipyard_yaml["modules"], "tools")
+    assert tools["config"]["final"] is False
+    assert "defer_final" not in tools["config"]
 
   @pytest.mark.parametrize(
     "workflow_id,module_name",
