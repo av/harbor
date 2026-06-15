@@ -759,6 +759,17 @@ PONYTAIL_TRIGGER = Config[str](
     ),
 )
 
+PONYTAIL_CACHE_BRIEF = Config[bool](
+    name="HARBOR_BOOST_PONYTAIL_CACHE_BRIEF",
+    type=bool,
+    default="false",
+    description=(
+        "When true, `ponytail` caches the last research brief in request state and "
+        "reuses it when the same user question is seen again within the session. "
+        "Experimental."
+    ),
+)
+
 # ----------------- AUTOCHECK -----------------
 
 AUTOCHECK_ENABLED = Config[bool](

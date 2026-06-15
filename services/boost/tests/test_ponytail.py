@@ -2,6 +2,7 @@
 
 import os
 import sys
+from contextlib import contextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -13,6 +14,20 @@ import config
 from modules import ponytail
 from research.brief import RESEARCH_UNAVAILABLE_NOTE, ResearchBrief, render_to_system
 from research.budget import ResearchBudget
+from state import request as request_state
+
+
+@contextmanager
+def request_context():
+  req = MagicMock()
+  req.state = type("State", (), {})()
+  token_req = request_state.set(req)
+  try:
+    yield req
+  finally:
+    request_state.reset(token_req)
+    if hasattr(req.state, ponytail.BRIEF_CACHE_KEY):
+      delattr(req.state, ponytail.BRIEF_CACHE_KEY)
 
 
 def web_search_hop2_queries(searched: list[str], follow_up: list[str]) -> bool:
@@ -44,6 +59,13 @@ def ponytail_trigger_mode():
   original = config.PONYTAIL_TRIGGER.__value__
   yield
   config.PONYTAIL_TRIGGER.__value__ = original
+
+
+@pytest.fixture
+def ponytail_cache_mode():
+  original = config.PONYTAIL_CACHE_BRIEF.__value__
+  yield
+  config.PONYTAIL_CACHE_BRIEF.__value__ = original
 
 
 class TestPonytailHeuristics:
@@ -536,6 +558,100 @@ class TestPonytailResearchLoop:
 
     assert budget.searches_used == 1
     assert any("second research hop skipped" in note.lower() for note in brief.notes)
+
+
+class TestPonytailBriefCache:
+  def test_docs_note_cache_brief_is_experimental(self):
+    assert "cache_brief" in ponytail.DOCS
+    assert "experimental" in ponytail.DOCS.lower()
+
+  def test_question_hash_ignores_surrounding_whitespace(self):
+    message = "Compare Python 3.12 vs 3.13 asyncio API behavior"
+    assert ponytail._question_hash(message) == ponytail._question_hash(f"  {message}  ")
+
+  @pytest.mark.asyncio
+  async def test_cache_disabled_runs_research_each_time(self, ponytail_cache_mode):
+    config.PONYTAIL_CACHE_BRIEF.__value__ = False
+    question = "How do I migrate from Stripe API 2023-10-16 to 2024-06-20?"
+    brief = ResearchBrief(query="stripe api migration")
+    brief.facts = ["Checkout session fields changed in 2024-06-20"]
+
+    with request_context():
+      chat = ch.Chat.from_conversation([{"role": "user", "content": question}])
+      llm = MagicMock(module=ponytail.ID_PREFIX)
+      llm.emit_status = AsyncMock()
+      llm.stream_final_completion = AsyncMock()
+
+      with (
+        patch.object(ponytail, "plan_search_queries", new=AsyncMock(return_value=["stripe api migration"])) as plan,
+        patch.object(ponytail, "run_research_loop", new=AsyncMock(return_value=brief)) as run_loop,
+      ):
+        await ponytail.apply(chat, llm)
+        await ponytail.apply(chat, llm)
+
+    assert plan.await_count == 2
+    assert run_loop.await_count == 2
+
+  @pytest.mark.asyncio
+  async def test_cache_enabled_reuses_brief_for_same_question(self, ponytail_cache_mode):
+    config.PONYTAIL_CACHE_BRIEF.__value__ = True
+    question = "How do I migrate from Stripe API 2023-10-16 to 2024-06-20?"
+    brief = ResearchBrief(query="stripe api migration")
+    brief.facts = ["Checkout session fields changed in 2024-06-20"]
+
+    with request_context():
+      chat = ch.Chat.from_conversation([{"role": "user", "content": question}])
+      llm = MagicMock(module=ponytail.ID_PREFIX)
+      llm.emit_status = AsyncMock()
+      llm.stream_final_completion = AsyncMock()
+
+      with (
+        patch.object(ponytail, "plan_search_queries", new=AsyncMock(return_value=["stripe api migration"])) as plan,
+        patch.object(ponytail, "run_research_loop", new=AsyncMock(return_value=brief)) as run_loop,
+      ):
+        await ponytail.apply(chat, llm)
+        await ponytail.apply(chat, llm)
+
+    plan.assert_awaited_once()
+    run_loop.assert_awaited_once()
+    statuses = [call.args[0] for call in llm.emit_status.await_args_list]
+    assert any("using cached brief" in status for status in statuses)
+
+  @pytest.mark.asyncio
+  async def test_cache_enabled_runs_research_for_different_question(self, ponytail_cache_mode):
+    config.PONYTAIL_CACHE_BRIEF.__value__ = True
+    first_question = "How do I migrate from Stripe API 2023-10-16 to 2024-06-20?"
+    second_question = "Compare Kubernetes 1.29 vs 1.30 API deprecations"
+    first_brief = ResearchBrief(query="stripe api migration")
+    first_brief.facts = ["Checkout session fields changed in 2024-06-20"]
+    second_brief = ResearchBrief(query="k8s deprecations")
+    second_brief.facts = ["Batch v1beta1 removed in 1.30"]
+
+    with request_context():
+      first_chat = ch.Chat.from_conversation([{"role": "user", "content": first_question}])
+      second_chat = ch.Chat.from_conversation([{"role": "user", "content": second_question}])
+      llm = MagicMock(module=ponytail.ID_PREFIX)
+      llm.emit_status = AsyncMock()
+      llm.stream_final_completion = AsyncMock()
+
+      with (
+        patch.object(
+          ponytail,
+          "plan_search_queries",
+          new=AsyncMock(side_effect=[["stripe api migration"], ["k8s 1.30 deprecations"]]),
+        ) as plan,
+        patch.object(
+          ponytail,
+          "run_research_loop",
+          new=AsyncMock(side_effect=[first_brief, second_brief]),
+        ) as run_loop,
+      ):
+        await ponytail.apply(first_chat, llm)
+        await ponytail.apply(second_chat, llm)
+
+    assert plan.await_count == 2
+    assert run_loop.await_count == 2
+    assert render_to_system(second_brief) in second_chat.history()[0]["content"]
 
 
 class TestPonytailApply:

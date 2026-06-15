@@ -1,5 +1,6 @@
 """Deep two-hop pre-answer web research for Harbor Boost."""
 
+import hashlib
 import re
 from typing import TYPE_CHECKING
 
@@ -12,6 +13,7 @@ import research.brief as brief_mod
 import research.budget as budget_mod
 import research.orchestrate as orchestrate
 import research.workflow as workflow_mod
+from state import request as request_state
 
 if TYPE_CHECKING:
   import chat as ch
@@ -44,6 +46,8 @@ Unlike `caveman`, ponytail triggers selectively on research-heavy questions
 - `max_chars` — maximum research content characters retained. Default: `60000`
 - `early_exit_chars` — skip hop 2 when hop 1 gathers this many characters. Default: `15000` (`0` disables)
 - `trigger` — deep-research gate: `heuristic` (default) or `llm` (cheap yes/no classifier)
+- `cache_brief` — *(experimental)* reuse the last research brief when the same user
+  question appears again within a request session. Default: `false`
 
 ```bash
 harbor boost modules add ponytail
@@ -52,6 +56,7 @@ harbor config set HARBOR_BOOST_PONYTAIL_MAX_URL_READS 3
 harbor config set HARBOR_BOOST_PONYTAIL_MAX_CHARS 60000
 harbor config set HARBOR_BOOST_PONYTAIL_EARLY_EXIT_CHARS 15000
 harbor config set HARBOR_BOOST_PONYTAIL_TRIGGER heuristic
+harbor config set HARBOR_BOOST_PONYTAIL_CACHE_BRIEF false
 harbor config set HARBOR_BOOST_TAVILY_API_KEY <key>
 # or
 harbor config set HARBOR_BOOST_SEARXNG_URL http://searxng:8080
@@ -148,6 +153,7 @@ Only include claims supported by the research. Leave lists empty when nothing ap
 """.strip()
 
 STATUS_PREFIX = "Ponytail research"
+BRIEF_CACHE_KEY = "ponytail_brief_cache"
 
 TRIGGER_CLASSIFIER_PROMPT = """
 <instruction>
@@ -229,6 +235,53 @@ def is_research_heavy(text: str) -> bool:
 
 def _uses_llm_trigger() -> bool:
   return (config.PONYTAIL_TRIGGER.value or "heuristic").strip().lower() == "llm"
+
+
+def _question_hash(text: str) -> str:
+  return hashlib.sha256((text or "").strip().encode()).hexdigest()
+
+
+def _request_store(name: str, default):
+  request = request_state.get()
+  if request is None:
+    return default
+
+  if not hasattr(request.state, name):
+    setattr(request.state, name, default)
+
+  return getattr(request.state, name)
+
+
+def _get_cached_brief(message: str) -> brief_mod.ResearchBrief | None:
+  if not config.PONYTAIL_CACHE_BRIEF.value:
+    return None
+
+  cached = _request_store(BRIEF_CACHE_KEY, None)
+  if not isinstance(cached, tuple) or len(cached) != 2:
+    return None
+
+  cached_hash, cached_brief = cached
+  if cached_hash != _question_hash(message):
+    return None
+  if not isinstance(cached_brief, brief_mod.ResearchBrief):
+    return None
+
+  return cached_brief.model_copy(deep=True)
+
+
+def _store_cached_brief(message: str, brief: brief_mod.ResearchBrief) -> None:
+  if not config.PONYTAIL_CACHE_BRIEF.value:
+    return
+
+  request = request_state.get()
+  if request is None:
+    return
+
+  setattr(
+    request.state,
+    BRIEF_CACHE_KEY,
+    (_question_hash(message), brief.model_copy(deep=True)),
+  )
 
 
 def should_skip_research(chat: "ch.Chat") -> bool:
@@ -450,6 +503,15 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
     logger.debug(f"{ID_PREFIX}: Skipping research for: {message[:80]}...")
     return await workflow_mod.complete_or_defer(llm, config)
 
+  cached_brief = _get_cached_brief(message)
+  if cached_brief is not None:
+    logger.debug(f"{ID_PREFIX}: Reusing cached brief for same question")
+    await llm.emit_status(f"{STATUS_PREFIX}: using cached brief...")
+    if not cached_brief.query:
+      cached_brief.query = message
+    chat.system(brief_mod.render_to_system(cached_brief))
+    return await workflow_mod.complete_or_defer(llm, config)
+
   await llm.emit_status(f"{STATUS_PREFIX}: planning queries...")
   budget = budget_mod.budget_from_config(ID_PREFIX)
 
@@ -479,5 +541,6 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
   if not brief_mod.has_usable_research(brief):
     await llm.emit_status(f"{STATUS_PREFIX}: research unavailable, continuing without live data...")
 
+  _store_cached_brief(message, brief)
   chat.system(brief_mod.render_to_system(brief))
   await workflow_mod.complete_or_defer(llm, config)
