@@ -57,17 +57,33 @@ NON_CODING_RE = re.compile(
   r"translate|define|describe)\b",
   re.IGNORECASE,
 )
-RESEARCH_SIGNAL_RE = re.compile(
+RESEARCH_KEYWORD_RE = re.compile(
   r"\b(?:"
   r"latest|current|today|recent(?:ly)?|20\d{2}|version|release|changelog|release\s+notes?|"
   r"documentat(?:ion|e)|api\s+(?:reference|docs?|endpoint|behavior|spec|version)|"
   r"endpoint\s+(?:response|format|behavior)|breaking\s+changes?|migrate|migration|migrating|"
   r"upgrade(?:\s+path|\s+guide)?|compatib(?:le|ility)|deprecat(?:e|ed|ion)|"
   r"compare|versus|vs\.?|benchmark|pricing|availability|error\s+code|stack\s*overflow|"
-  r"lookup|search\s+for|from\s+v?\d|to\s+v?\d|v\d+(?:\.\d+)+|semver"
+  r"lookup|search\s+for|from\s+v?\d|to\s+v?\d|semver"
   r")\b",
   re.IGNORECASE,
 )
+RESEARCH_VERSION_RE = re.compile(
+  r"(?<![`.\w])"
+  r"(?:v?\d+(?:\.\d+)+[a-z0-9]*|20\d{2}(?:-\d{2}-\d{2})?)"
+  r"(?![`.\w])",
+  re.IGNORECASE,
+)
+RESEARCH_PACKAGE_RE = re.compile(
+  r"(?:"
+  r"@[\w.-]+/[\w.-]+|"
+  r"\b[a-z][a-z0-9]*(?:[-_][a-z0-9]+)+\b|"
+  r"\b[A-Z][a-z]+(?:[A-Z][a-z0-9]*)+\b|"
+  r"(?<=\s)[A-Z][a-z]{3,}(?=\s+(?:API|SDK|CLI|docs?|documentation|library|package)\b)"
+  r")",
+)
+# Backward-compatible alias for modules that import the keyword pattern directly.
+RESEARCH_SIGNAL_RE = RESEARCH_KEYWORD_RE
 SKIP_MESSAGE_RE = re.compile(
   r"^\s*(?:"
   r"thanks?(?:\s+you)?|thank\s+you|thx|ok(?:ay)?|cool|great|perfect|sounds?\s+good|"
@@ -156,7 +172,7 @@ def is_research_only_turn(chat: "ch.Chat") -> bool:
     return False
   if is_coding_deliverable(chat):
     return False
-  return bool(has_research_signals(text) or ("?" in text and len(text) >= 20))
+  return has_research_signals(text)
 
 
 def has_research_signals(text: str) -> bool:
@@ -165,15 +181,22 @@ def has_research_signals(text: str) -> bool:
 
   Shared by research modules (caveman, ponytail) to avoid firing on pure
   implementation edits that do not need external facts.
+
+  A bare question mark is not enough; require a research keyword plus ``?``,
+  a version pattern, or a package/product name mention.
   """
   text = (text or "").strip()
   if not text:
     return False
-  if "?" in text:
-    return True
   if re.search(r"https?://", text, re.IGNORECASE):
     return True
-  return bool(RESEARCH_SIGNAL_RE.search(text))
+  if RESEARCH_VERSION_RE.search(text):
+    return True
+  if RESEARCH_PACKAGE_RE.search(text):
+    return True
+  if "?" in text and RESEARCH_KEYWORD_RE.search(text):
+    return True
+  return False
 
 
 def has_explicit_done_signal(text: str) -> bool:

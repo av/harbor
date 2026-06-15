@@ -457,6 +457,40 @@ class TestDeliverableBorderlineCases:
   def test_research_signal_keywords_detected(self, message: str):
     assert deliverable.has_research_signals(message)
 
+  @pytest.mark.parametrize(
+    "message",
+    [
+      "What does this code do?",
+      "Can you fix this bug?",
+      "Why is this test failing?",
+      "How should I structure this function?",
+      "Is this implementation correct?",
+      "Could you explain what went wrong here?",
+    ],
+  )
+  def test_bare_questions_without_research_context_are_not_research_signals(
+    self,
+    message: str,
+  ):
+    assert not deliverable.has_research_signals(message)
+
+  @pytest.mark.parametrize(
+    "message,reason",
+    [
+      ("What changed in Python 3.13 asyncio semantics?", "version"),
+      ("What is the Stripe checkout session API endpoint response format?", "keyword_question"),
+      ("latest Stripe API docs", "package"),
+      ("v1.2.3 to v2.0.0 upgrade path", "version"),
+      ("read https://docs.stripe.com/api/checkout/sessions", "url"),
+    ],
+  )
+  def test_research_signals_require_keyword_question_version_or_package(
+    self,
+    message: str,
+    reason: str,
+  ):
+    assert deliverable.has_research_signals(message), reason
+
 
 class TestWorkspaceFileTool:
   def _with_workspace_root(self, value: str):
