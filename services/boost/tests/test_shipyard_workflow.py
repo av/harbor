@@ -19,6 +19,7 @@ from modules import autocheck, caveman, keel, ponytail
 from modules import workflows as workflow_presets
 from modules.keel import TaskBrief, inject_brief_marker, store_brief
 from state import request as request_state
+from helpers import mock_cheap_llm
 
 
 SHIPYARD_MODULE_ORDER = [
@@ -305,14 +306,15 @@ class TestShipyardWorkflowE2E:
         ]
       )
     )
-    autocheck_cheap = _cheap_llm_mock(
-      AsyncMock(
+    autocheck_cheap = mock_cheap_llm(
+      stream_chat_completion=AsyncMock(return_value="Draft implementation plan."),
+      chat_completion=AsyncMock(
         return_value={
           "verdict": "pass",
           "summary": "Migration plan looks sound.",
           "findings": [],
-        }
-      )
+        },
+      ),
     )
 
     with (
@@ -324,6 +326,7 @@ class TestShipyardWorkflowE2E:
           ponytail_cheap,
           ponytail_cheap,
           ponytail_cheap,
+          autocheck_cheap,
           autocheck_cheap,
         ],
       ),
@@ -339,7 +342,7 @@ class TestShipyardWorkflowE2E:
 
     assert execution_order == SHIPYARD_MODULE_ORDER
     assert llm.stream_final_completion.await_count == 1
-    llm.stream_chat_completion.assert_awaited_once()
+    autocheck_cheap.stream_chat_completion.assert_awaited_once()
     keel_cheap.chat_completion.assert_awaited_once()
     caveman_cheap.chat_completion.assert_not_called()
     assert ponytail_cheap.chat_completion.await_count == 3

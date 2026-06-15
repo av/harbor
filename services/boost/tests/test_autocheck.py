@@ -18,6 +18,19 @@ import deliverable
 import tools.registry as tool_registry
 from modules import autocheck, tools
 from state import request as request_state
+from helpers import mock_autocheck_cheap_llm
+
+
+def _patch_autocheck_draft_llm(
+    draft_response: str = "Draft implementation",
+    *,
+    draft_side_effect=None,
+):
+    cheap = mock_autocheck_cheap_llm(
+        draft_response=draft_response,
+        draft_side_effect=draft_side_effect,
+    )
+    return patch("research.orchestrate.cheap_llm", return_value=cheap)
 
 
 @contextmanager
@@ -1875,7 +1888,6 @@ class TestAutocheckApply:
     llm.boost_params = {}
     llm.emit_status = AsyncMock()
     llm.emit_message = AsyncMock()
-    llm.stream_chat_completion = AsyncMock(return_value="Draft implementation")
 
     first_audit = autocheck.AuditResult(
       verdict="revise",
@@ -1888,6 +1900,7 @@ class TestAutocheckApply:
     revised = "Revised implementation"
 
     with (
+      _patch_autocheck_draft_llm(),
       patch.object(autocheck, "gather_workspace_context", new=AsyncMock(return_value="")),
       patch.object(
         autocheck,
@@ -2007,7 +2020,6 @@ class TestAutocheckApply:
     llm.boost_params = {}
     llm.emit_status = AsyncMock()
     llm.emit_message = AsyncMock()
-    llm.stream_chat_completion = AsyncMock(return_value="Draft implementation")
 
     audit = autocheck.AuditResult(verdict="pass", summary="Ship it")
     debug = autocheck.AuditDebug(triggered=True, gate_reason="triggered", verdict="pass")
@@ -2016,6 +2028,7 @@ class TestAutocheckApply:
     ]
 
     with (
+      _patch_autocheck_draft_llm(),
       patch.object(autocheck, "gather_workspace_context", new=AsyncMock(return_value="")),
       patch.object(
         autocheck,
@@ -2041,12 +2054,12 @@ class TestAutocheckApply:
     llm.boost_params = {}
     llm.emit_status = AsyncMock()
     llm.emit_message = AsyncMock()
-    llm.stream_chat_completion = AsyncMock(return_value="Draft implementation")
 
     audit = autocheck.AuditResult(verdict="pass", summary="Ship it")
     debug = autocheck.AuditDebug(triggered=True, gate_reason="triggered", verdict="pass")
 
     with (
+      _patch_autocheck_draft_llm(),
       patch.object(autocheck, "gather_workspace_context", new=AsyncMock(return_value="")),
       patch.object(autocheck, "run_audit", new=AsyncMock(return_value=(audit, debug))),
       patch.object(autocheck, "revise_draft", new=AsyncMock()) as revise,
@@ -2067,7 +2080,6 @@ class TestAutocheckApply:
     llm.boost_params = {}
     llm.emit_status = AsyncMock()
     llm.emit_message = AsyncMock()
-    llm.stream_chat_completion = AsyncMock(return_value="Draft implementation")
 
     first_audit = autocheck.AuditResult(
       verdict="revise",
@@ -2079,6 +2091,7 @@ class TestAutocheckApply:
     second_debug = autocheck.AuditDebug(triggered=True, gate_reason="triggered", verdict="pass")
 
     with (
+      _patch_autocheck_draft_llm(),
       patch.object(autocheck, "gather_workspace_context", new=AsyncMock(return_value="")),
       patch.object(
         autocheck,
@@ -2104,7 +2117,6 @@ class TestAutocheckApply:
     llm.boost_params = {}
     llm.emit_status = AsyncMock()
     llm.emit_message = AsyncMock()
-    llm.stream_chat_completion = AsyncMock(return_value="Draft implementation")
 
     first_audit = autocheck.AuditResult(
       verdict="revise",
@@ -2123,6 +2135,7 @@ class TestAutocheckApply:
     refreshed = ([], [])
 
     with (
+      _patch_autocheck_draft_llm(),
       patch.object(autocheck, "gather_workspace_context", new=AsyncMock(return_value="")),
       patch.object(
         autocheck,
@@ -2155,12 +2168,12 @@ class TestAutocheckApply:
     llm.emit_status = AsyncMock()
     llm.emit_artifact = AsyncMock()
     llm.emit_message = AsyncMock()
-    llm.stream_chat_completion = AsyncMock(return_value="Draft implementation")
 
     audit = autocheck.AuditResult(verdict="pass", summary="Ship it")
     debug = autocheck.AuditDebug(triggered=True, gate_reason="triggered", verdict="pass")
 
     with (
+      _patch_autocheck_draft_llm(),
       patch.object(autocheck, "gather_workspace_context", new=AsyncMock(return_value="")),
       patch.object(autocheck, "run_audit", new=AsyncMock(return_value=(audit, debug))),
     ):
@@ -2187,12 +2200,12 @@ class TestAutocheckApply:
     llm.emit_status = AsyncMock()
     llm.emit_artifact = AsyncMock()
     llm.emit_message = AsyncMock()
-    llm.stream_chat_completion = AsyncMock(return_value="Draft implementation")
 
     audit = autocheck.AuditResult(verdict="pass", summary="Ship it")
     debug = autocheck.AuditDebug(triggered=True, gate_reason="triggered", verdict="pass")
 
     with (
+      _patch_autocheck_draft_llm(),
       patch.object(autocheck, "gather_workspace_context", new=AsyncMock(return_value="")),
       patch.object(autocheck, "run_audit", new=AsyncMock(return_value=(audit, debug))),
     ):
@@ -2208,7 +2221,6 @@ class TestAutocheckApply:
     llm = MagicMock()
     llm.emit_status = AsyncMock()
     llm.emit_message = AsyncMock()
-    llm.stream_chat_completion = AsyncMock(return_value="Draft with services/boost/src/main.py")
 
     audit = autocheck.AuditResult(verdict="pass", summary="OK")
     original_root = config.WORKSPACE_ROOT.__value__
@@ -2217,6 +2229,7 @@ class TestAutocheckApply:
       config.WORKSPACE_ROOT.__value__ = "/workspace"
 
       with (
+        _patch_autocheck_draft_llm("Draft with services/boost/src/main.py"),
         patch.object(autocheck, "gather_workspace_context", new=AsyncMock(return_value="<file />")),
         patch.object(
           autocheck,
@@ -2242,7 +2255,6 @@ class TestAutocheckApply:
     llm.boost_params = {}
     llm.emit_status = AsyncMock()
     llm.emit_message = AsyncMock()
-    llm.stream_chat_completion = AsyncMock(return_value="Draft implementation")
 
     revise_audit = autocheck.AuditResult(
       verdict="revise",
@@ -2269,6 +2281,7 @@ class TestAutocheckApply:
       config.AUTOCHECK_STRICT.__value__ = True
       config.WORKSPACE_ROOT.__value__ = "/workspace"
       with (
+        _patch_autocheck_draft_llm(),
         patch.object(autocheck, "gather_workspace_context", new=AsyncMock(return_value="")),
         patch.object(
           autocheck,
@@ -2313,7 +2326,6 @@ class TestAutocheckApply:
     llm.boost_params = {}
     llm.emit_status = AsyncMock()
     llm.emit_message = AsyncMock()
-    llm.stream_chat_completion = AsyncMock(return_value="Draft implementation")
 
     revise_audit = autocheck.AuditResult(
       verdict="revise",
@@ -2332,6 +2344,7 @@ class TestAutocheckApply:
       config.AUTOCHECK_MAX_REVISE_PASSES.__value__ = 1
       config.AUTOCHECK_STRICT.__value__ = False
       with (
+        _patch_autocheck_draft_llm(),
         patch.object(autocheck, "gather_workspace_context", new=AsyncMock(return_value="")),
         patch.object(
           autocheck,
@@ -2369,7 +2382,6 @@ class TestAutocheckApply:
     llm.boost_params = {}
     llm.emit_status = AsyncMock()
     llm.emit_message = AsyncMock()
-    llm.stream_chat_completion = AsyncMock(return_value="Draft implementation")
 
     first_audit = autocheck.AuditResult(
       verdict="revise",
@@ -2393,6 +2405,7 @@ class TestAutocheckApply:
       config.AUTOCHECK_STRICT.__value__ = True
       config.WORKSPACE_ROOT.__value__ = "/workspace"
       with (
+        _patch_autocheck_draft_llm(),
         patch.object(autocheck, "gather_workspace_context", new=AsyncMock(return_value="")),
         patch.object(
           autocheck,
@@ -2441,7 +2454,6 @@ class TestAutocheckApply:
     llm.boost_params = {}
     llm.emit_status = AsyncMock()
     llm.emit_message = AsyncMock()
-    llm.stream_chat_completion = AsyncMock(return_value="Draft implementation")
 
     first_audit = autocheck.AuditResult(
       verdict="revise",
@@ -2460,6 +2472,7 @@ class TestAutocheckApply:
     try:
       config.AUTOCHECK_STRICT.__value__ = False
       with (
+        _patch_autocheck_draft_llm(),
         patch.object(autocheck, "gather_workspace_context", new=AsyncMock(return_value="")),
         patch.object(
           autocheck,
@@ -2490,9 +2503,9 @@ class TestAutocheckApply:
     llm.emit_status = AsyncMock()
     llm.emit_message = AsyncMock()
     llm.stream_final_completion = AsyncMock()
-    llm.stream_chat_completion = AsyncMock(return_value="Draft implementation")
 
     with (
+      _patch_autocheck_draft_llm(),
       patch.object(autocheck, "gather_workspace_context", new=AsyncMock(return_value="")),
       patch.object(autocheck, "run_audit", new=AsyncMock(side_effect=RuntimeError("audit down"))),
     ):

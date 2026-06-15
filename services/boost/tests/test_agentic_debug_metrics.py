@@ -15,6 +15,7 @@ from modules import autocheck, caveman, diffscope, keel, ponytail, sightline
 from research import debug_metrics, workflow as workflow_mod
 from research.brief import ResearchBrief
 from state import request as request_state
+from helpers import mock_autocheck_cheap_llm
 
 
 @contextmanager
@@ -133,13 +134,16 @@ class TestAutocheckDebugMetrics:
     llm.boost_params = {}
     llm.emit_status = AsyncMock()
     llm.emit_message = AsyncMock()
-    llm.stream_chat_completion = AsyncMock(return_value="Draft implementation")
 
     audit = autocheck.AuditResult(verdict="pass", summary="Ship it")
     debug = autocheck.AuditDebug(triggered=True, gate_reason="triggered", verdict="pass")
 
     with request_context():
       with (
+        patch(
+          "research.orchestrate.cheap_llm",
+          return_value=mock_autocheck_cheap_llm(),
+        ),
         patch.object(autocheck, "gather_workspace_context", new=AsyncMock(return_value="")),
         patch.object(autocheck, "run_audit", new=AsyncMock(return_value=(audit, debug))),
         patch.object(autocheck, "revise_draft", new=AsyncMock()) as revise,

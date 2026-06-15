@@ -252,6 +252,48 @@ def make_client(app=None, auth_key=None):
 
 
 # ---------------------------------------------------------------------------
+# Agentic / autocheck cheap-LLM mocks
+# ---------------------------------------------------------------------------
+
+def mock_cheap_llm(
+    *,
+    chat_completion=None,
+    stream_chat_completion=None,
+) -> MagicMock:
+    """Build a MagicMock returned by ``research.orchestrate.cheap_llm``."""
+    cheap = MagicMock()
+    if chat_completion is not None:
+        cheap.chat_completion = chat_completion
+    if stream_chat_completion is not None:
+        cheap.stream_chat_completion = stream_chat_completion
+    return cheap
+
+
+def mock_autocheck_cheap_llm(
+    *,
+    draft_response: str = "Draft implementation",
+    draft_side_effect=None,
+    audit_response=None,
+) -> MagicMock:
+    """Mock cheap client for autocheck draft (stream) and audit (chat) sub-calls."""
+    if draft_side_effect is not None:
+        stream_chat_completion = AsyncMock(side_effect=draft_side_effect)
+    else:
+        stream_chat_completion = AsyncMock(return_value=draft_response)
+    chat_completion = AsyncMock(
+        return_value=audit_response or {
+            "verdict": "pass",
+            "summary": "Ship it",
+            "findings": [],
+        },
+    )
+    return mock_cheap_llm(
+        chat_completion=chat_completion,
+        stream_chat_completion=stream_chat_completion,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Mock setup
 # ---------------------------------------------------------------------------
 

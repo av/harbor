@@ -22,6 +22,7 @@ from modules import autocheck, caveman, diffscope, ponytail, sightline
 from modules import tools as tools_module
 from modules import workflows as workflow_presets
 from state import request as request_state
+from helpers import mock_autocheck_cheap_llm
 
 
 CODE_CHECK_MODULE_ORDER = ["tools", "autocheck", "final"]
@@ -191,6 +192,12 @@ class TestCodeCheckWorkflowChain:
 
     with (
       request_context(),
+      patch(
+        "research.orchestrate.cheap_llm",
+        return_value=mock_autocheck_cheap_llm(
+          draft_response="Draft implementation plan.",
+        ),
+      ),
       patch.object(autocheck, "gather_workspace_context", new=AsyncMock(return_value="")),
       patch.object(
         autocheck,
@@ -292,6 +299,10 @@ class TestScopeGuardWorkflowChain:
 
     with (
       request_context(),
+      patch(
+        "research.orchestrate.cheap_llm",
+        return_value=mock_autocheck_cheap_llm(draft_response=draft_response),
+      ),
       patch.object(diffscope, "verify_workspace_paths", new=AsyncMock(return_value=[])),
       patch.object(autocheck, "gather_workspace_context", new=AsyncMock(return_value="")),
       patch.object(
@@ -345,9 +356,7 @@ class TestScopeGuardWorkflowChain:
       llm.is_final_stream = True
       return "Final scoped fix after revision."
 
-    llm.stream_chat_completion = AsyncMock(
-      side_effect=[draft_with_violation, autocheck_draft],
-    )
+    llm.stream_chat_completion = AsyncMock(return_value=draft_with_violation)
     llm.stream_final_completion = AsyncMock(side_effect=stream_final_side_effect)
 
     audit = autocheck.AuditResult(verdict="pass", summary="Scoped fix looks correct.")
@@ -355,6 +364,10 @@ class TestScopeGuardWorkflowChain:
 
     with (
       request_context(),
+      patch(
+        "research.orchestrate.cheap_llm",
+        return_value=mock_autocheck_cheap_llm(draft_response=autocheck_draft),
+      ),
       patch.object(diffscope, "verify_workspace_paths", new=AsyncMock(return_value=[])),
       patch.object(
         diffscope,
@@ -684,9 +697,7 @@ class TestAgentCodeWorkflowChain:
       llm.is_final_stream = True
       return "Final agent-code answer."
 
-    llm.stream_chat_completion = AsyncMock(
-      side_effect=["Scoped draft.", "Autocheck draft."],
-    )
+    llm.stream_chat_completion = AsyncMock(return_value="Scoped draft.")
     llm.stream_final_completion = AsyncMock(side_effect=stream_final_side_effect)
 
     audit = autocheck.AuditResult(verdict="pass", summary="Looks good.")
@@ -694,6 +705,10 @@ class TestAgentCodeWorkflowChain:
 
     with (
       request_context(),
+      patch(
+        "research.orchestrate.cheap_llm",
+        return_value=mock_autocheck_cheap_llm(draft_response="Autocheck draft."),
+      ),
       patch.object(diffscope, "verify_workspace_paths", new=AsyncMock(return_value=[])),
       patch.object(autocheck, "gather_workspace_context", new=AsyncMock(return_value="")),
       patch.object(
@@ -738,9 +753,7 @@ class TestAgentCodeWorkflowChain:
       llm.is_final_stream = True
       return "Final agent-code answer."
 
-    llm.stream_chat_completion = AsyncMock(
-      side_effect=[draft_with_violation, autocheck_draft],
-    )
+    llm.stream_chat_completion = AsyncMock(return_value=draft_with_violation)
     llm.stream_final_completion = AsyncMock(side_effect=stream_final_side_effect)
 
     audit = autocheck.AuditResult(
@@ -751,6 +764,10 @@ class TestAgentCodeWorkflowChain:
 
     with (
       request_context(),
+      patch(
+        "research.orchestrate.cheap_llm",
+        return_value=mock_autocheck_cheap_llm(draft_response=autocheck_draft),
+      ),
       patch.object(diffscope, "verify_workspace_paths", new=AsyncMock(return_value=[])),
       patch.object(
         diffscope,
