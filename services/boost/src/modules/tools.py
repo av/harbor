@@ -13,6 +13,7 @@ import log
 import research.fetch as fetch
 import research.workflow as workflow_mod
 import tools.registry
+from modules.diffscope import GIT_DIFF_TIMEOUT, is_git_workspace, run_git_diff
 from middleware.request_id import request_id_var
 from state import request as request_state
 
@@ -26,8 +27,9 @@ them during the final completion and Boost will execute them inline.
 The module exposes web research tools (`web_search`, `read_url`) plus small
 scratchpad utilities (`add_note`, `read_notes`, scratch files, `current_time`,
 and `finish`). When `HARBOR_BOOST_WORKSPACE_ROOT` is set, workspace tools
-(`read_workspace_file`, `grep_workspace`, `list_workspace_files`, and opt-in
-`write_workspace_file`) are also available. Web search uses
+(`read_workspace_file`, `grep_workspace`, `list_workspace_files`, `git_diff_workspace`
+when the root is a git repo, and opt-in `write_workspace_file`) are also available.
+Web search uses
 Tavily when `HARBOR_BOOST_TAVILY_API_KEY` is set, otherwise SearXNG via
 `HARBOR_BOOST_SEARXNG_URL`. URL reading uses Jina Reader first and falls back
 to direct HTTP text extraction.
@@ -455,6 +457,51 @@ async def list_workspace_files(
   return output
 
 
+async def git_diff_workspace(path: str = ".") -> str:
+  """
+  Return git diff --name-only and --stat for the configured workspace.
+  Requires `HARBOR_BOOST_WORKSPACE_ROOT` on a git repository. Paths are jailed
+  to that directory. Uses a 5 second timeout.
+
+  Args:
+    path (str): Relative workspace directory or file to scope the diff.
+      Default: entire workspace.
+  """
+  workspace_base = _workspace_base()
+  if not is_git_workspace(workspace_base):
+    raise ValueError("Workspace is not a git repository")
+
+  search_target = _workspace_search_path(path)
+  scope_paths: list[str] | None = None
+  if search_target != workspace_base:
+    scope_paths = [str(search_target.relative_to(workspace_base))]
+
+  result = run_git_diff(
+    workspace_base,
+    timeout=GIT_DIFF_TIMEOUT,
+    paths=scope_paths,
+  )
+  if result is None:
+    return "Git diff unavailable (git command failed or timed out)."
+
+  changed_paths, stat = result
+  if not changed_paths and not stat:
+    scope_note = f" under `{path}`" if path and path != "." else ""
+    return f"No changes in working tree{scope_note}."
+
+  lines = ["<git_diff_name_only>"]
+  if changed_paths:
+    lines.extend(changed_paths)
+  else:
+    lines.append("(none)")
+  lines.append("</git_diff_name_only>")
+  lines.append("")
+  lines.append("<git_diff_stat>")
+  lines.append(stat or "(none)")
+  lines.append("</git_diff_stat>")
+  return "\n".join(lines)
+
+
 async def list_files() -> str:
   """
   List request-scoped scratch files.
@@ -525,6 +572,8 @@ def _selected_tools(configured_tools: list[str] | None = None) -> dict[str, Call
     available['write_workspace_file'] = write_workspace_file
     available['grep_workspace'] = grep_workspace
     available['list_workspace_files'] = list_workspace_files
+    if is_git_workspace():
+      available['git_diff_workspace'] = git_diff_workspace
 
   configured = set(configured_tools) if configured_tools else set(config.TOOLS.value) if config.TOOLS.value else DEFAULT_TOOLS
   selected = {}

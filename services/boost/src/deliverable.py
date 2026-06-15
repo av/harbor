@@ -110,6 +110,7 @@ CODING_SESSION_TOOL_NAMES = frozenset({
   "write_workspace_file",
   "grep_workspace",
   "list_workspace_files",
+  "git_diff_workspace",
   "write_file",
   "read_file",
   "list_files",

@@ -48,13 +48,15 @@ short messages are always skipped. In `shipyard`, pass-through turns honor
 
 When `HARBOR_BOOST_WORKSPACE_ROOT` is set and paths are cited, the audit cannot
 return `pass` without workspace evidence — either direct `read_workspace_file`
-reads, `grep_workspace` symbol checks, `list_workspace_files` directory scans, or
-tool calls during workspace exploration.
+reads, `grep_workspace` symbol checks, `list_workspace_files` directory scans,
+`git_diff_workspace` change summaries (git repos), or tool calls during workspace
+exploration.
 
 Before the LLM audit, mechanical pre-checks (no model call) run when a workspace
 is configured:
 
 - **Git diff context** — in a git repo, `git diff --stat` is included in audit context
+  (models can also call `git_diff_workspace` for the same summary)
 - **Path existence** — cited draft paths are verified with `read_workspace_file`
 - **Code block grounding** — drafts with fenced code but zero file paths are flagged
 - **Test hint** — when test files exist near changed paths, a non-blocking warning
@@ -112,6 +114,7 @@ WORKSPACE_TOOL_NAMES = frozenset({
   "read_workspace_file",
   "grep_workspace",
   "list_workspace_files",
+  "git_diff_workspace",
 })
 
 SYMBOL_DEF_RE = re.compile(r"^\s*(?:async\s+)?def\s+([A-Za-z_]\w+)", re.MULTILINE)
@@ -155,6 +158,7 @@ You are verifying a coding draft against the workspace.
 Use the `read_workspace_file` tool to inspect files referenced in the draft or user request.
 Use the `grep_workspace` tool to verify functions, classes, and identifiers exist in the codebase.
 Use the `list_workspace_files` tool to discover files under cited directories when paths are ambiguous.
+Use the `git_diff_workspace` tool in git repos to list files changed in the working tree.
 Read only paths that exist and are relevant to correctness checks.
 When done exploring, reply with a short bullet list of verified facts and mismatches.
 Do not rewrite the draft.
@@ -418,6 +422,8 @@ def workspace_evidence_satisfied(
     if name == "read_workspace_file" and _workspace_tool_path(args):
       return True
     if name == "list_workspace_files":
+      return True
+    if name == "git_diff_workspace":
       return True
 
   return False
@@ -962,13 +968,25 @@ def _register_workspace_tools() -> bool:
   if not boost_config.WORKSPACE_ROOT.value:
     return False
 
-  from modules.tools import grep_workspace, list_workspace_files, read_workspace_file
+  from modules.tools import (
+    git_diff_workspace,
+    grep_workspace,
+    list_workspace_files,
+    read_workspace_file,
+  )
 
-  for name, tool in (
+  workspace_tools = (
     ("read_workspace_file", read_workspace_file),
     ("grep_workspace", grep_workspace),
     ("list_workspace_files", list_workspace_files),
-  ):
+  )
+  if is_git_workspace(boost_config.WORKSPACE_ROOT.value):
+    workspace_tools = (
+      *workspace_tools,
+      ("git_diff_workspace", git_diff_workspace),
+    )
+
+  for name, tool in workspace_tools:
     try:
       tools.registry.set_local_tool(name, tool)
     except ValueError:

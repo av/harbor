@@ -635,3 +635,146 @@ class TestWorkspaceFileTool:
       assert "list_workspace_files" not in selected
     finally:
       config.WORKSPACE_ROOT.__value__ = original
+
+  def _init_git_repo(self, root: Path) -> None:
+    import subprocess
+
+    subprocess.run(["git", "init"], cwd=root, check=True, capture_output=True)
+    subprocess.run(
+      ["git", "config", "user.email", "test@example.com"],
+      cwd=root,
+      check=True,
+      capture_output=True,
+    )
+    subprocess.run(
+      ["git", "config", "user.name", "Test User"],
+      cwd=root,
+      check=True,
+      capture_output=True,
+    )
+
+  def test_git_diff_workspace_returns_stat_and_name_only(self):
+    import asyncio
+    import subprocess
+
+    with tempfile.TemporaryDirectory() as workspace:
+      root = Path(workspace)
+      self._init_git_repo(root)
+      src = root / "src"
+      src.mkdir()
+      (src / "a.py").write_text("x = 1\n", encoding="utf-8")
+      subprocess.run(["git", "add", "."], cwd=root, check=True, capture_output=True)
+      subprocess.run(
+        ["git", "commit", "-m", "init"],
+        cwd=root,
+        check=True,
+        capture_output=True,
+      )
+      (src / "a.py").write_text("x = 2\n", encoding="utf-8")
+
+      original_root = self._with_workspace_root(workspace)
+      try:
+        result = asyncio.run(tools.git_diff_workspace())
+      finally:
+        config.WORKSPACE_ROOT.__value__ = original_root
+
+    assert "<git_diff_name_only>" in result
+    assert "src/a.py" in result
+    assert "</git_diff_name_only>" in result
+    assert "<git_diff_stat>" in result
+    assert "</git_diff_stat>" in result
+
+  def test_git_diff_workspace_scopes_path(self):
+    import asyncio
+    import subprocess
+    from unittest.mock import patch
+
+    with tempfile.TemporaryDirectory() as workspace:
+      root = Path(workspace)
+      self._init_git_repo(root)
+      src = root / "src"
+      other = root / "other"
+      src.mkdir()
+      other.mkdir()
+      (src / "a.py").write_text("x = 1\n", encoding="utf-8")
+      (other / "b.py").write_text("y = 1\n", encoding="utf-8")
+      subprocess.run(["git", "add", "."], cwd=root, check=True, capture_output=True)
+      subprocess.run(
+        ["git", "commit", "-m", "init"],
+        cwd=root,
+        check=True,
+        capture_output=True,
+      )
+      (src / "a.py").write_text("x = 2\n", encoding="utf-8")
+      (other / "b.py").write_text("y = 2\n", encoding="utf-8")
+
+      original_root = self._with_workspace_root(workspace)
+      try:
+        with patch.object(tools, "run_git_diff", wraps=tools.run_git_diff) as mocked:
+          result = asyncio.run(tools.git_diff_workspace(path="src"))
+          assert mocked.call_args.kwargs["paths"] == ["src"]
+      finally:
+        config.WORKSPACE_ROOT.__value__ = original_root
+
+    assert "src/a.py" in result
+    assert "other/b.py" not in result
+
+  def test_git_diff_workspace_path_jail(self):
+    with tempfile.TemporaryDirectory() as workspace:
+      root = Path(workspace)
+      self._init_git_repo(root)
+      original = self._with_workspace_root(workspace)
+      try:
+        with pytest.raises(ValueError, match="stay inside the workspace root"):
+          tools._workspace_search_path("../outside")
+      finally:
+        config.WORKSPACE_ROOT.__value__ = original
+
+  def test_git_diff_workspace_requires_git_repo(self):
+    import asyncio
+
+    with tempfile.TemporaryDirectory() as workspace:
+      original = self._with_workspace_root(workspace)
+      try:
+        with pytest.raises(ValueError, match="not a git repository"):
+          asyncio.run(tools.git_diff_workspace())
+      finally:
+        config.WORKSPACE_ROOT.__value__ = original
+
+  def test_git_diff_workspace_requires_workspace_root(self):
+    import asyncio
+
+    original = self._with_workspace_root("")
+    try:
+      with pytest.raises(ValueError, match="Workspace root is not configured"):
+        asyncio.run(tools.git_diff_workspace())
+    finally:
+      config.WORKSPACE_ROOT.__value__ = original
+
+  def test_selected_tools_includes_git_diff_when_git_workspace(self):
+    with tempfile.TemporaryDirectory() as workspace:
+      root = Path(workspace)
+      self._init_git_repo(root)
+      original = self._with_workspace_root(workspace)
+      try:
+        selected = tools._selected_tools(["git_diff_workspace"])
+        assert "git_diff_workspace" in selected
+      finally:
+        config.WORKSPACE_ROOT.__value__ = original
+
+  def test_selected_tools_omits_git_diff_when_not_git_repo(self):
+    with tempfile.TemporaryDirectory() as workspace:
+      original = self._with_workspace_root(workspace)
+      try:
+        selected = tools._selected_tools(["git_diff_workspace"])
+        assert "git_diff_workspace" not in selected
+      finally:
+        config.WORKSPACE_ROOT.__value__ = original
+
+  def test_selected_tools_omits_git_diff_when_unconfigured(self):
+    original = self._with_workspace_root("")
+    try:
+      selected = tools._selected_tools(["git_diff_workspace"])
+      assert "git_diff_workspace" not in selected
+    finally:
+      config.WORKSPACE_ROOT.__value__ = original

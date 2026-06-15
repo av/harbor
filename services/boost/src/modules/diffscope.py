@@ -27,7 +27,8 @@ user stated in recent messages (`only X`, `don't touch Y`, quoted paths).
 
 - **Git mode** (preferred): when `HARBOR_BOOST_WORKSPACE_ROOT` points at a git
   repo, `diffscope` runs `git diff --name-only` and `git diff --stat` (5s
-  timeout) to list files actually changed in the working tree.
+  timeout) to list files actually changed in the working tree. Models can also
+  call the `git_diff_workspace` tool for the same summary during exploration.
 - **Heuristic mode** (fallback): when git is unavailable, paths are extracted
   from the draft (code fences, diff headers, backticks) and file-tool arguments
   in chat history.
@@ -287,12 +288,18 @@ def run_git_diff(
   root: str | Path,
   *,
   timeout: float = GIT_DIFF_TIMEOUT,
+  paths: list[str] | None = None,
 ) -> tuple[list[str], str] | None:
   """Run git diff and return changed paths plus stat summary, or None on failure."""
   cwd = str(root)
+  name_cmd = ["git", "diff", "--name-only"]
+  stat_cmd = ["git", "diff", "--stat"]
+  if paths:
+    name_cmd.extend(["--", *paths])
+    stat_cmd.extend(["--", *paths])
   try:
     name_proc = subprocess.run(
-      ["git", "diff", "--name-only"],
+      name_cmd,
       cwd=cwd,
       capture_output=True,
       text=True,
@@ -307,7 +314,7 @@ def run_git_diff(
       return None
 
     stat_proc = subprocess.run(
-      ["git", "diff", "--stat"],
+      stat_cmd,
       cwd=cwd,
       capture_output=True,
       text=True,

@@ -476,6 +476,13 @@ class TestWorkspaceEvidence:
     }]
     assert autocheck.workspace_evidence_satisfied("", tool_calls) is True
 
+  def test_workspace_evidence_satisfied_with_git_diff_tool_call(self):
+    tool_calls = [{
+      "name": "git_diff_workspace",
+      "arguments": {"path": "."},
+    }]
+    assert autocheck.workspace_evidence_satisfied("", tool_calls) is True
+
   def test_extract_workspace_tool_calls_includes_list(self):
     history = [
       {

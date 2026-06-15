@@ -186,6 +186,28 @@ class TestGitDiffGrounding:
       ):
         assert diffscope.run_git_diff(root) is None
 
+  def test_run_git_diff_scopes_paths(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      root = Path(tmp)
+      (root / ".git").mkdir()
+
+      captured: list[list[str]] = []
+
+      def fake_run(cmd, **kwargs):
+        captured.append(cmd)
+        if cmd[:3] == ["git", "diff", "--name-only"]:
+          return subprocess.CompletedProcess(cmd, 0, "src/a.py\n", "")
+        if cmd[:3] == ["git", "diff", "--stat"]:
+          return subprocess.CompletedProcess(cmd, 0, " src/a.py | 1 +\n", "")
+        raise AssertionError(f"unexpected git command: {cmd}")
+
+      with patch.object(diffscope.subprocess, "run", side_effect=fake_run):
+        result = diffscope.run_git_diff(root, paths=["src"])
+
+    assert result is not None
+    assert captured[0] == ["git", "diff", "--name-only", "--", "src"]
+    assert captured[1] == ["git", "diff", "--stat", "--", "src"]
+
   def test_run_git_diff_returns_none_on_timeout(self):
     with tempfile.TemporaryDirectory() as tmp:
       root = Path(tmp)
