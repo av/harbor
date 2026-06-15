@@ -367,6 +367,15 @@
 - label: shared research fetch respects HARBOR_BOOST_RESEARCH_FETCH_TIMEOUT_SECONDS for web_search and read_url httpx clients: configurable HTTP timeout in seconds (default 30) applied to Tavily, Jina, and direct read paths
   command: cd services/boost && uv run pytest tests/test_agentic_infra.py::TestResearchFetch::test_research_fetch_timeout_defaults_to_30_seconds tests/test_agentic_infra.py::TestResearchFetch::test_search_tavily_uses_configured_fetch_timeout tests/test_agentic_infra.py::TestResearchFetch::test_read_with_jina_uses_configured_fetch_timeout tests/test_agentic_infra.py::TestResearchFetch::test_read_direct_uses_configured_fetch_timeout -q --tb=no
   tags: [implemented]
+- label: autocheck treats HARBOR_BOOST_AUTOCHECK_MAX_PASSES as a backward-compatible alias for HARBOR_BOOST_AUTOCHECK_MAX_REVISE_PASSES: both clamp to 0-2 and effective_max_revise_passes uses the higher value when both are set
+  command: cd services/boost && uv run pytest tests/test_autocheck.py::TestAutocheckGate::test_effective_max_revise_passes_honors_legacy_max_passes_alias -q --tb=no
+  tags: [spec, implemented]
+- label: HARBOR_BOOST_DEBUG and per-request boost debug param gate a compact Debug: status summary at final completion: when enabled complete_or_defer emits per-module triggered or skipped lines with duration_ms and extras; debug param overrides config
+  command: cd services/boost && uv run pytest tests/test_agentic_debug_metrics.py::TestDebugSummaryHelpers::test_debug_enabled_respects_boost_param tests/test_agentic_debug_metrics.py::TestDebugSummaryHelpers::test_debug_enabled_falls_back_to_config tests/test_agentic_debug_metrics.py::TestCompleteOrDeferDebugStatus::test_emits_compact_summary_when_debug_enabled tests/test_agentic_debug_metrics.py::TestCompleteOrDeferDebugStatus::test_skips_summary_when_debug_disabled -q --tb=no
+  tags: [spec, implemented]
+- label: agent-research workflow registers portable tools then runs caveman then final completion for agent sessions that need quick web research before answering
+  command: cd services/boost && uv run pytest 'tests/test_workflows.py::TestWorkflowPresets::test_preset_module_chain[agent-research-caveman]' tests/test_workflows.py::TestWorkflowPresets::test_presets_include_all_agentic_workflows tests/test_agentic_workflow_chains.py::TestAgentResearchWorkflowChain::test_agent_research_skips_caveman_on_implementation_turn -q --tb=no
+  tags: [spec, implemented]
 
 # testing
 - label: tests use a Deno orchestrator running sequential bash suites across containerized distros
