@@ -394,6 +394,9 @@
 - label: diffscope supports HARBOR_BOOST_DIFFSCOPE_ENABLED: when false needs_diffscope is false and diffscope_gate_reason returns disabled so scoped deliverables pass through without scope revision
   command: cd services/boost && uv run pytest tests/test_diffscope.py::TestDiffscopeGate::test_skips_when_disabled -q --tb=no
   tags: [spec, implemented]
+- label: research.workflow anchor_and_emit_final anchors a deferred draft via anchor_deferred_draft then emits the text with llm.emit_message unless defer_final is set; autocheck uses it on audit_failed so chained workflows anchor the draft without double-emitting before the explicit final step
+  command: cd services/boost && uv run pytest tests/test_agentic_debug_metrics.py::TestAnchorAndEmitFinal tests/test_autocheck.py::TestAutocheckApply::test_apply_audit_failed_defers_emit_when_configured -q --tb=no
+  tags: [implemented]
 
 # testing
 - label: tests use a Deno orchestrator running sequential bash suites across containerized distros
@@ -472,3 +475,10 @@
 
 ## daytona
 - tests/app-daytona-install.md exists and covers in-app Harbor install verification on Ubuntu 24.04 and Fedora 42 Daytona sandboxes @implemented @app-daytona-install-spec
+
+# development
+
+## lint
+- label: harbor dev lint --boost flags zero-byte .py module files under services/boost/src/modules and custom_modules with HARBOR011 so truncated writes fail at lint time instead of runtime import
+  command: test -f .scripts/lint/passes/boost.ts && rg -q 'HARBOR011' .scripts/lint/passes/boost.ts .github/workflows/lint.yml && test ! -s .scripts/lint/fixtures/boost/zero-byte/fail.py
+  tags: [implemented]
