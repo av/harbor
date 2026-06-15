@@ -75,4 +75,7 @@ workflows:
         config:
           defer_final: true
       - module: autocheck
+        continue: true
+        config:
+          defer_final: true
       - module: final

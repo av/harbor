@@ -143,6 +143,21 @@ def has_problem_indicator(text: str) -> bool:
   return bool(PROBLEM_INDICATOR_RE.search(text or ""))
 
 
+def is_research_only_turn(chat: "ch.Chat") -> bool:
+  """
+  Return True when the latest user turn needs facts but not code changes.
+
+  Used by shipyard modules (especially autocheck) to skip deliverable audit on
+  research-only turns while still allowing caveman/ponytail to gather context.
+  """
+  text = _last_user_text(chat).strip()
+  if not text or is_acknowledgment(text):
+    return False
+  if is_coding_deliverable(chat):
+    return False
+  return bool(has_research_signals(text) or ("?" in text and len(text) >= 20))
+
+
 def has_research_signals(text: str) -> bool:
   """
   Return True when the message likely needs live docs, version facts, or lookups.

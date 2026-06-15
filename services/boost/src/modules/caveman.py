@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 import config
 import deliverable
 import log
+from modules import keel
 import research.brief as brief_mod
 import research.budget as budget_mod
 import research.orchestrate as orchestrate
@@ -57,7 +58,8 @@ harbor config set HARBOR_BOOST_SEARXNG_URL http://searxng:8080
 
 - `research-quick` (`tools`, `caveman`, `final`) — fast smash-and-grab research
 - `agent-research` (`tools`, `caveman`, `final`) — tool-enabled research during agentic sessions
-- `shipyard` — selective ideation research before deeper `ponytail` and `autocheck`
+- `shipyard` — selective ideation research before deeper `ponytail` and `autocheck`;
+  skips when a keel implementation brief is already anchored
 
 **Standalone**
 
@@ -129,6 +131,13 @@ def should_skip_research(chat: "ch.Chat") -> bool:
   if orchestrate.CONTINUATION_RE.search(text) and len(text) < 120:
     return True
   if deliverable.is_coding_deliverable(chat) and not deliverable.has_research_signals(text):
+    return True
+  brief = keel.get_stored_brief() or keel.hydrate_brief_from_chat(chat)
+  if (
+    brief
+    and keel.is_implementation_brief(brief)
+    and deliverable.is_coding_deliverable(chat)
+  ):
     return True
   return False
 

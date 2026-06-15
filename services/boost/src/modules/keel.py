@@ -119,6 +119,15 @@ and repo-relative paths that are in scope. Keep each field concise.
 """.strip()
 
 
+IMPLEMENTATION_BRIEF_RE = re.compile(
+  r"\b(?:"
+  r"implement|fix|debug|patch|refactor|rewrite|migrate|migrat|add|update|create|"
+  r"write|build|ship|correct|repair"
+  r")\b",
+  re.IGNORECASE,
+)
+
+
 class TaskBrief(BaseModel):
   objective: str = Field(description="One-sentence goal for the coding task.")
   constraints: list[str] = Field(
@@ -133,6 +142,22 @@ class TaskBrief(BaseModel):
     description="Repo-relative paths the work should touch.",
     default_factory=list,
   )
+
+
+def is_implementation_brief(brief: TaskBrief | None) -> bool:
+  """Return True when the keel brief anchors an implementation (not research) task."""
+  if brief is None:
+    return False
+
+  objective = (brief.objective or "").strip()
+  if objective and IMPLEMENTATION_BRIEF_RE.search(objective):
+    return True
+
+  for criterion in brief.acceptance_criteria or []:
+    if IMPLEMENTATION_BRIEF_RE.search(criterion or ""):
+      return True
+
+  return False
 
 
 def _request_store(name: str, default):

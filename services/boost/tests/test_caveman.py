@@ -39,6 +39,21 @@ class TestCavemanHeuristics:
     chat = self._chat("Please implement a retry helper in services/boost/src/utils.py")
     assert caveman.should_skip_research(chat)
 
+  def test_skips_when_keel_implementation_brief_is_anchored(self):
+    from modules.keel import TaskBrief, inject_brief_marker, store_brief
+
+    chat = self._chat(
+      "Implement OAuth against the latest Stripe API documentation for checkout sessions."
+    )
+    brief = TaskBrief(
+      objective="Implement Stripe OAuth checkout integration",
+      acceptance_criteria=["Checkout sessions authenticate correctly"],
+      in_scope_paths=["services/boost/src/auth.py"],
+    )
+    inject_brief_marker(chat, brief)
+    store_brief(brief)
+    assert caveman.should_skip_research(chat)
+
   def test_does_not_skip_coding_deliverable_with_research_signals(self):
     chat = self._chat(
       "Implement OAuth against the latest Stripe API documentation for checkout sessions."

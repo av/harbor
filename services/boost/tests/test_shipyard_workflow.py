@@ -12,10 +12,12 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 import chat as ch
+import deliverable
 import workflows
 from middleware.request_id import request_id_var
 from modules import autocheck, caveman, keel, ponytail
 from modules import workflows as workflow_presets
+from modules.keel import TaskBrief, inject_brief_marker, store_brief
 from state import request as request_state
 
 
@@ -31,6 +33,10 @@ SHIPYARD_MODULE_ORDER = [
 SHIPYARD_USER_MESSAGE = (
   "Implement Stripe checkout session auth migration in services/boost/src/auth.py "
   "using the latest API documentation."
+)
+
+RESEARCH_ONLY_MESSAGE = (
+  "What is the Stripe checkout session API endpoint response format in 2024?"
 )
 
 MOCK_SEARCH_RESULT = (
@@ -84,6 +90,118 @@ def _cheap_llm_mock(chat_completion: AsyncMock) -> MagicMock:
   return cheap
 
 
+def _implementation_brief() -> TaskBrief:
+  return TaskBrief(
+    objective="Migrate Stripe checkout auth",
+    constraints=["Use latest Stripe API docs"],
+    acceptance_criteria=["Auth uses checkout sessions", "Tests pass"],
+    in_scope_paths=["services/boost/src/auth.py"],
+  )
+
+
+class TestShipyardTurnTypes:
+  @pytest.mark.asyncio
+  async def test_caveman_skips_when_keel_brief_is_implementation(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": SHIPYARD_USER_MESSAGE},
+    ])
+    brief = _implementation_brief()
+    with request_context():
+      inject_brief_marker(chat, brief)
+      store_brief(brief)
+
+      assert keel.is_implementation_brief(brief)
+      assert caveman.should_skip_research(chat)
+      assert not await caveman.needs_research(chat, MagicMock(module=caveman.ID_PREFIX))
+
+  @pytest.mark.asyncio
+  async def test_caveman_runs_for_research_only_turn_without_implementation_brief(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": RESEARCH_ONLY_MESSAGE},
+    ])
+    assert deliverable.is_research_only_turn(chat)
+    assert not caveman.should_skip_research(chat)
+    llm = MagicMock(module=caveman.ID_PREFIX)
+    assert await caveman.needs_research(chat, llm)
+
+  def test_autocheck_skips_research_only_turn(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": RESEARCH_ONLY_MESSAGE},
+    ])
+    assert not autocheck.needs_autocheck(chat)
+    assert autocheck.autocheck_gate_reason(chat) == "research_only"
+
+  def test_autocheck_triggers_on_implementation_deliverable(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": SHIPYARD_USER_MESSAGE},
+    ])
+    assert autocheck.needs_autocheck(chat)
+
+
+class TestShipyardDeferFinal:
+  @pytest.mark.asyncio
+  async def test_prep_modules_defer_final_until_explicit_final_step(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": RESEARCH_ONLY_MESSAGE},
+    ])
+    llm = _make_llm()
+    stream_calls: list[str] = []
+
+    async def tracked_final(**_kwargs):
+      stream_calls.append("final")
+      llm.is_final_stream = True
+      return "Final streamed answer."
+
+    llm.stream_final_completion = AsyncMock(side_effect=tracked_final)
+
+    ponytail_cheap = _cheap_llm_mock(
+      AsyncMock(
+        side_effect=[
+          {"queries": ["Stripe checkout session API response format 2024"]},
+          {"gaps": [], "follow_up_queries": []},
+          {
+            "facts": ["Response includes id, url, and status fields"],
+            "uncertainties": [],
+            "recommendation": "Use official Stripe docs.",
+            "do_not_assume": [],
+          },
+        ]
+      )
+    )
+
+    with (
+      request_context(),
+      patch(
+        "research.orchestrate.cheap_llm",
+        return_value=ponytail_cheap,
+      ),
+      patch("research.fetch.web_search", new=AsyncMock(return_value=MOCK_SEARCH_RESULT)),
+      patch("research.fetch.read_url", new=AsyncMock(return_value=MOCK_PAGE_CONTENT)),
+    ):
+      await workflows.apply_workflow(
+        deepcopy(workflow_presets.PRESETS["shipyard"]),
+        chat,
+        llm,
+      )
+
+    assert stream_calls == ["final"]
+    assert llm.stream_final_completion.await_count == 1
+
+  @pytest.mark.asyncio
+  async def test_autocheck_pass_through_defers_on_research_only_shipyard_turn(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": RESEARCH_ONLY_MESSAGE},
+    ])
+    llm = _make_llm()
+    llm.stream_final_completion = AsyncMock()
+
+    with patch.object(autocheck, "generate_draft", new=AsyncMock()) as draft:
+      await autocheck.apply(chat, llm, config={"defer_final": True})
+
+    draft.assert_not_called()
+    llm.stream_final_completion.assert_not_called()
+
+
 class TestShipyardWorkflowE2E:
   @pytest.mark.asyncio
   async def test_shipyard_executes_module_chain_in_order_with_mocked_llm(self):
@@ -107,14 +225,7 @@ class TestShipyardWorkflowE2E:
     llm.stream_final_completion = AsyncMock(side_effect=tracked_final)
 
     keel_cheap = _cheap_llm_mock(
-      AsyncMock(
-        return_value={
-          "objective": "Migrate Stripe checkout auth",
-          "constraints": ["Use latest Stripe API docs"],
-          "acceptance_criteria": ["Auth uses checkout sessions", "Tests pass"],
-          "in_scope_paths": ["services/boost/src/auth.py"],
-        }
-      )
+      AsyncMock(return_value=_implementation_brief().model_dump())
     )
     caveman_cheap = _cheap_llm_mock(
       AsyncMock(return_value={"queries": ["Stripe checkout session API migration"]})
@@ -148,7 +259,7 @@ class TestShipyardWorkflowE2E:
       patch.object(keel, "_cheap_llm", return_value=keel_cheap),
       patch(
         "research.orchestrate.cheap_llm",
-        side_effect=[caveman_cheap, ponytail_cheap, ponytail_cheap, ponytail_cheap],
+        side_effect=[ponytail_cheap, ponytail_cheap, ponytail_cheap],
       ),
       patch.object(autocheck, "_cheap_llm", return_value=autocheck_cheap),
       patch("research.fetch.web_search", new=AsyncMock(return_value=MOCK_SEARCH_RESULT)),
@@ -165,7 +276,7 @@ class TestShipyardWorkflowE2E:
     assert llm.stream_final_completion.await_count == 1
     llm.stream_chat_completion.assert_awaited_once()
     keel_cheap.chat_completion.assert_awaited_once()
-    caveman_cheap.chat_completion.assert_awaited_once()
+    caveman_cheap.chat_completion.assert_not_called()
     assert ponytail_cheap.chat_completion.await_count == 3
     autocheck_cheap.chat_completion.assert_awaited_once()
     llm.emit_message.assert_awaited_once_with("Draft implementation plan.")
@@ -173,4 +284,51 @@ class TestShipyardWorkflowE2E:
     history = chat.history()
     contents = [msg.get("content") or "" for msg in history]
     assert any("provided tools" in content for content in contents)
-    assert sum("<research_brief>" in content for content in contents) >= 2
+    assert sum("<research_brief>" in content for content in contents) == 1
+
+  @pytest.mark.asyncio
+  async def test_shipyard_research_only_turn_skips_autocheck_audit(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": RESEARCH_ONLY_MESSAGE},
+    ])
+    llm = _make_llm()
+
+    async def tracked_final(**_kwargs):
+      llm.is_final_stream = True
+      return "Research answer."
+
+    llm.stream_final_completion = AsyncMock(side_effect=tracked_final)
+
+    ponytail_cheap = _cheap_llm_mock(
+      AsyncMock(
+        side_effect=[
+          {"queries": ["Stripe checkout session API response format 2024"]},
+          {"gaps": [], "follow_up_queries": []},
+          {
+            "facts": ["Response includes id, url, and status fields"],
+            "uncertainties": [],
+            "recommendation": "Use official Stripe docs.",
+            "do_not_assume": [],
+          },
+        ]
+      )
+    )
+
+    with (
+      request_context(),
+      patch(
+        "research.orchestrate.cheap_llm",
+        return_value=ponytail_cheap,
+      ),
+      patch("research.fetch.web_search", new=AsyncMock(return_value=MOCK_SEARCH_RESULT)),
+      patch("research.fetch.read_url", new=AsyncMock(return_value=MOCK_PAGE_CONTENT)),
+      patch.object(autocheck, "run_audit", new=AsyncMock()) as run_audit,
+    ):
+      await workflows.apply_workflow(
+        deepcopy(workflow_presets.PRESETS["shipyard"]),
+        chat,
+        llm,
+      )
+
+    run_audit.assert_not_called()
+    assert llm.stream_final_completion.await_count == 1

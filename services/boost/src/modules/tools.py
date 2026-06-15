@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import config
 import log
 import research.fetch as fetch
+import research.workflow as workflow_mod
 import tools.registry
 from middleware.request_id import request_id_var
 from state import request as request_state
@@ -555,4 +556,4 @@ async def apply(chat, llm, config: dict | None = None):
   )
 
   if cfg_final:
-    await llm.stream_final_completion()
+    await workflow_mod.complete_or_defer(llm, cfg)

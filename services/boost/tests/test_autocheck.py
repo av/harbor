@@ -31,6 +31,13 @@ class TestAutocheckGate:
     assert not autocheck.needs_autocheck(chat)
     assert autocheck.autocheck_gate_reason(chat) == "not_deliverable"
 
+  def test_skips_research_only_turn(self):
+    chat = self._chat(
+      "What is the Stripe checkout session API endpoint response format in 2024?"
+    )
+    assert not autocheck.needs_autocheck(chat)
+    assert autocheck.autocheck_gate_reason(chat) == "research_only"
+
   def test_skips_when_disabled(self):
     chat = self._chat("Implement foo in bar.py")
     original = config.AUTOCHECK_ENABLED.__value__
@@ -796,6 +803,20 @@ class TestAutocheckApply:
 
     draft.assert_not_called()
     llm.stream_final_completion.assert_awaited_once()
+
+  @pytest.mark.asyncio
+  async def test_apply_defers_final_when_configured(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Explain Python dataclasses briefly."},
+    ])
+    llm = MagicMock()
+    llm.stream_final_completion = AsyncMock()
+
+    with patch.object(autocheck, "generate_draft", new=AsyncMock()) as draft:
+      await autocheck.apply(chat, llm, config={"defer_final": True})
+
+    draft.assert_not_called()
+    llm.stream_final_completion.assert_not_called()
 
   @pytest.mark.asyncio
   async def test_apply_runs_mechanical_preaudit_before_llm_audit(self):

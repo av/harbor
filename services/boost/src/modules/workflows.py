@@ -45,7 +45,7 @@ PRESETS: dict[str, dict] = {
       {"module": "caveman", "continue": True, "config": {"defer_final": True}},
       TOOLS_SETUP,
       {"module": "ponytail", "continue": True, "config": {"defer_final": True}},
-      "autocheck",
+      {"module": "autocheck", "continue": True, "config": {"defer_final": True}},
       FINAL_STEP,
     ],
   },

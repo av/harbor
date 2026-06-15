@@ -349,6 +349,7 @@ class TestDeliverableBorderlineCases:
   def test_research_questions_are_not_deliverable(self, message: str):
     assert deliverable.has_research_signals(message)
     assert not deliverable.is_coding_deliverable(self._chat(message))
+    assert deliverable.is_research_only_turn(self._chat(message))
 
   def test_implementation_with_research_signals_stays_deliverable(self):
     message = (

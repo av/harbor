@@ -8,9 +8,10 @@ from typing import TYPE_CHECKING, Literal
 from pydantic import BaseModel, Field
 
 import chat as ch
-import config
+import config as boost_config
 import deliverable
 import log
+import research.workflow as workflow_mod
 import tools.registry
 from modules.diffscope import is_git_workspace, run_git_diff
 
@@ -39,8 +40,9 @@ Autocheck triggers when the latest user message carries **at least two**
 deliverable signals (for example a coding keyword plus a repo-relative file path),
 when the ``finish`` tool was called in recent chat history, or when the user sends
 an explicit completion signal (`we're done`, `ship it`, `looks good`) after prior
-coding work. Simple acknowledgments (`thanks`, `ok`, `continue`) and very short
-messages are always skipped.
+coding work. Simple acknowledgments (`thanks`, `ok`, `continue`), research-only turns, and very
+short messages are always skipped. In `shipyard`, pass-through turns honor
+`defer_final` so the explicit `final` workflow step streams the answer.
 
 When `HARBOR_BOOST_WORKSPACE_ROOT` is set and paths are cited, the audit cannot
 return `pass` without workspace evidence — either direct `read_workspace_file`
@@ -252,7 +254,7 @@ def _last_user_text(chat: "ch.Chat") -> str:
 
 def autocheck_gate_reason(chat: "ch.Chat") -> str:
   """Explain why autocheck would or would not run on this turn."""
-  if not config.AUTOCHECK_ENABLED.value:
+  if not boost_config.AUTOCHECK_ENABLED.value:
     return "disabled"
 
   text = _last_user_text(chat)
@@ -260,6 +262,8 @@ def autocheck_gate_reason(chat: "ch.Chat") -> str:
     return "empty_message"
   if deliverable.is_completion_trigger(chat):
     return "triggered"
+  if deliverable.is_research_only_turn(chat):
+    return "research_only"
   if deliverable.is_acknowledgment(text):
     return "acknowledgment"
   if len(text) < MIN_AUTOCHECK_MESSAGE_CHARS:
@@ -302,7 +306,7 @@ def extract_workspace_paths(*texts: str) -> list[str]:
         seen.add(path)
         paths.append(path)
 
-  limit = max(0, config.AUTOCHECK_MAX_WORKSPACE_FILES.value)
+  limit = max(0, boost_config.AUTOCHECK_MAX_WORKSPACE_FILES.value)
   return paths[:limit] if limit else []
 
 
@@ -436,7 +440,7 @@ def workspace_evidence_satisfied(
 
 
 def requires_workspace_evidence(paths: list[str]) -> bool:
-  return bool(config.WORKSPACE_ROOT.value and paths)
+  return bool(boost_config.WORKSPACE_ROOT.value and paths)
 
 
 def draft_has_code_blocks(text: str) -> bool:
@@ -446,7 +450,7 @@ def draft_has_code_blocks(text: str) -> bool:
 
 def collect_git_diff_context() -> str:
   """Return git diff --stat summary for audit context when workspace is a git repo."""
-  root = config.WORKSPACE_ROOT.value
+  root = boost_config.WORKSPACE_ROOT.value
   if not root or not is_git_workspace(root):
     return ""
 
@@ -489,13 +493,13 @@ def check_code_blocks_without_paths(
 
 async def verify_draft_paths_exist(paths: list[str]) -> list[AuditFinding]:
   """Mechanically verify cited draft paths exist via read_workspace_file."""
-  if not config.WORKSPACE_ROOT.value or not paths:
+  if not boost_config.WORKSPACE_ROOT.value or not paths:
     return []
 
   from modules.tools import read_workspace_file
 
   findings: list[AuditFinding] = []
-  max_files = max(0, config.AUTOCHECK_MAX_WORKSPACE_FILES.value)
+  max_files = max(0, boost_config.AUTOCHECK_MAX_WORKSPACE_FILES.value)
 
   for path in paths[:max_files]:
     try:
@@ -663,7 +667,7 @@ async def generate_draft(chat: "ch.Chat", llm: "llm.LLM") -> str:
 
 
 def _register_workspace_tools() -> bool:
-  if not config.WORKSPACE_ROOT.value:
+  if not boost_config.WORKSPACE_ROOT.value:
     return False
 
   from modules.tools import grep_workspace, list_workspace_files, read_workspace_file
@@ -682,15 +686,15 @@ def _register_workspace_tools() -> bool:
 
 async def gather_workspace_context(paths: list[str]) -> str:
   """Read workspace files referenced in the draft."""
-  if not config.WORKSPACE_ROOT.value or not paths:
+  if not boost_config.WORKSPACE_ROOT.value or not paths:
     return ""
 
   import research.fetch as fetch
   from modules.tools import _workspace_path
 
   chunks: list[str] = []
-  max_files = max(0, config.AUTOCHECK_MAX_WORKSPACE_FILES.value)
-  max_chars = max(0, config.AUTOCHECK_WORKSPACE_FILE_MAX_CHARS.value)
+  max_files = max(0, boost_config.AUTOCHECK_MAX_WORKSPACE_FILES.value)
+  max_chars = max(0, boost_config.AUTOCHECK_WORKSPACE_FILE_MAX_CHARS.value)
 
   for path in paths[:max_files]:
     try:
@@ -711,7 +715,7 @@ async def verify_symbols_with_grep(
   paths: list[str],
 ) -> str:
   """Mechanically verify draft symbols via grep_workspace."""
-  if not config.WORKSPACE_ROOT.value or not symbols:
+  if not boost_config.WORKSPACE_ROOT.value or not symbols:
     return ""
 
   from modules.tools import grep_workspace
@@ -723,7 +727,7 @@ async def verify_symbols_with_grep(
       search_path = str(parent)
 
   chunks: list[str] = []
-  max_symbols = max(0, config.AUTOCHECK_MAX_WORKSPACE_FILES.value)
+  max_symbols = max(0, boost_config.AUTOCHECK_MAX_WORKSPACE_FILES.value)
   for symbol in symbols[:max_symbols]:
     try:
       result = await grep_workspace(
@@ -849,30 +853,31 @@ async def emit_final(llm: "llm.LLM", final_text: str) -> None:
     await llm.emit_message(final_text)
 
 
-async def apply(chat: "ch.Chat", llm: "llm.LLM"):
+async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
+  module_cfg = config or {}  # workflow module config; shadows name only in this block
   gate_reason = autocheck_gate_reason(chat)
   if gate_reason != "triggered":
     debug = AuditDebug(triggered=False, gate_reason=gate_reason, verdict="skipped")
     logger.debug(f"{ID_PREFIX}: Pass-through — {gate_reason} ({debug.model_dump()})")
-    return await llm.stream_final_completion()
+    return await workflow_mod.complete_or_defer(llm, module_cfg)
 
   message = _last_user_text(chat)
   if not message:
     logger.warning(f"{ID_PREFIX}: No user message found, passing through")
-    return await llm.stream_final_completion()
+    return await workflow_mod.complete_or_defer(llm, module_cfg)
 
-  max_passes = max(0, config.AUTOCHECK_MAX_PASSES.value)
+  max_passes = max(0, boost_config.AUTOCHECK_MAX_PASSES.value)
 
   await llm.emit_status("Autocheck: drafting...")
   try:
     draft = await generate_draft(chat, llm)
   except Exception as exc:
     logger.error(f"{ID_PREFIX}: draft generation failed: {exc}")
-    return await llm.stream_final_completion()
+    return await workflow_mod.complete_or_defer(llm, module_cfg)
 
   if not draft:
     logger.warning(f"{ID_PREFIX}: Empty draft, passing through")
-    return await llm.stream_final_completion()
+    return await workflow_mod.complete_or_defer(llm, module_cfg)
 
   paths = extract_workspace_paths(message, draft)
   workspace_context = await gather_workspace_context(paths)
@@ -883,7 +888,7 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM"):
   await llm.emit_status("Autocheck: auditing...")
   workspace_exploration = ""
   workspace_tool_calls: list[dict] = []
-  if config.WORKSPACE_ROOT.value:
+  if boost_config.WORKSPACE_ROOT.value:
     symbols = extract_audit_symbols(message, draft)
     symbol_context = await verify_symbols_with_grep(symbols, paths)
     if symbol_context:

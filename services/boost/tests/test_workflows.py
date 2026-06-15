@@ -35,7 +35,7 @@ SHIPYARD_MODULES = [
   {"module": "caveman", "continue": True, "config": {"defer_final": True}},
   {"module": "tools", "config": {"final": False}},
   {"module": "ponytail", "continue": True, "config": {"defer_final": True}},
-  "autocheck",
+  {"module": "autocheck", "continue": True, "config": {"defer_final": True}},
   "final",
 ]
 
@@ -191,6 +191,7 @@ class TestApplyWorkflow:
     assert applied == ["keel", "caveman", "tools", "ponytail", "autocheck"]
     assert mock_apply.await_args_list[0].args[1]["defer_final"] is True
     assert mock_apply.await_args_list[2].args[1]["final"] is False
+    assert mock_apply.await_args_list[4].args[1]["defer_final"] is True
     llm.stream_final_completion.assert_awaited_once()
 
   @pytest.mark.asyncio
