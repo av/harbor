@@ -178,6 +178,34 @@ class TestKeelBriefRendering:
     assert long_constraint not in rendered
     assert len(rendered.splitlines()) <= keel.ANCHOR_MAX_LINES
 
+  def test_render_anchor_block_truncates_constraints_list(self):
+    brief = keel.TaskBrief(
+      objective="Add retry helper",
+      constraints=[f"Constraint {index}" for index in range(10)],
+    )
+    rendered = keel.render_anchor_block(brief, "Helper retries 3 times")
+    assert "Constraint 0" in rendered
+    assert "Constraint 5" in rendered
+    assert "Constraint 6" not in rendered
+    assert "+4 more" in rendered
+    assert len(rendered.splitlines()) <= keel.ANCHOR_MAX_LINES
+
+  def test_render_anchor_block_respects_max_constraints_config(self):
+    original = config.KEEL_MAX_CONSTRAINTS.__value__
+    try:
+      config.KEEL_MAX_CONSTRAINTS.__value__ = 2
+      brief = keel.TaskBrief(
+        objective="Add retry helper",
+        constraints=[f"Constraint {index}" for index in range(5)],
+      )
+      rendered = keel.render_anchor_block(brief)
+      assert "Constraint 0" in rendered
+      assert "Constraint 1" in rendered
+      assert "Constraint 2" not in rendered
+      assert "+3 more" in rendered
+    finally:
+      config.KEEL_MAX_CONSTRAINTS.__value__ = original
+
   def test_next_unmet_criterion_skips_met_items(self):
     brief = keel.TaskBrief(
       objective="Ship feature",

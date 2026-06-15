@@ -911,6 +911,16 @@ KEEL_ANCHOR_EVERY = Config[int](
     ),
 )
 
+KEEL_MAX_CONSTRAINTS = Config[int](
+    name="HARBOR_BOOST_KEEL_MAX_CONSTRAINTS",
+    type=int,
+    default="6",
+    description=(
+        "Maximum number of constraints shown in the `keel` `<task_anchor>` block. "
+        "Additional constraints are summarized as `+N more`."
+    ),
+)
+
 # ---------------- SIGHTLINE -----------------
 
 SIGHTLINE_MODE = Config[str](

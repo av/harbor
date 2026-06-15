@@ -57,6 +57,7 @@ deliverable verification or `diffscope` for file-scope enforcement.
 
 - `enabled` — when false, pass through without anchoring. Default: `true`
 - `anchor_every` — inject `<task_anchor>` every N user turns (turn 1 never). Default: `2`
+- `max_constraints` — maximum constraints listed in `<task_anchor>`. Default: `6`
 - `keel_refresh` — when true, re-extract the `TaskBrief` from the current
   conversation and replace the hidden `<keel_brief>` marker. Resets met
   acceptance-criteria tracking. Default: `false`. Overridable per request via
@@ -515,7 +516,13 @@ def _truncate_anchor_text(text: str, max_len: int = ANCHOR_MAX_TEXT_LEN) -> str:
 
 def _format_anchor_constraints(constraints: list[str] | None) -> str:
   items = constraints or ["Stay within the stated scope."]
-  truncated = [_truncate_anchor_text(item, ANCHOR_MAX_CONSTRAINT_LEN) for item in items]
+  max_count = boost_config.KEEL_MAX_CONSTRAINTS.value
+  if max_count < 1:
+    max_count = 1
+  shown = items[:max_count]
+  truncated = [_truncate_anchor_text(item, ANCHOR_MAX_CONSTRAINT_LEN) for item in shown]
+  if len(items) > max_count:
+    truncated.append(f"+{len(items) - max_count} more")
   return "; ".join(truncated)
 
 
