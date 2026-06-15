@@ -358,6 +358,15 @@
 - label: research.workflow anchor_deferred_draft records deferred drafts in chat when defer_final is set, replacing an existing assistant tail instead of appending so downstream diffscope and autocheck in scope-guard and agent-code chains audit scoped or revised answers not pre-revision drafts (DIF-003)
   command: cd services/boost && uv run pytest tests/test_agentic_debug_metrics.py::TestAnchorDeferredDraft tests/test_diffscope.py::TestDiffscopeApply::test_apply_anchors_scoped_draft_when_defer_final tests/test_diffscope.py::TestDiffscopeApply::test_apply_replaces_prior_draft_when_defer_final tests/test_autocheck.py::TestAutocheckApply::test_apply_anchors_revised_draft_when_defer_final tests/test_agentic_workflow_chains.py::TestScopeGuardWorkflowChain::test_scope_guard_revises_out_of_scope_draft_then_autocheck_audits -q --tb=no
   tags: [implemented, bughunt]
+- label: autocheck supports HARBOR_BOOST_AUTOCHECK_DRAFT_MODEL: configurable model for the draft sub-call; when empty autocheck uses the incoming request model, when set draft_llm and generate_draft override the cheap LLM client model after stripping whitespace
+  command: cd services/boost && uv run pytest tests/test_autocheck.py::TestAuditAndRevise::test_draft_llm_keeps_request_model_when_unset tests/test_autocheck.py::TestAuditAndRevise::test_draft_llm_overrides_model_when_configured tests/test_autocheck.py::TestAuditAndRevise::test_generate_draft_uses_draft_model_override -q --tb=no
+  tags: [implemented]
+- label: autocheck supports HARBOR_BOOST_AUTOCHECK_REVISE_MODEL: configurable model for the revise sub-call; when empty autocheck uses the incoming request model, when set revise_llm and revise_draft override the cheap LLM client model after stripping whitespace
+  command: cd services/boost && uv run pytest tests/test_autocheck.py::TestAuditAndRevise::test_revise_llm_keeps_request_model_when_unset tests/test_autocheck.py::TestAuditAndRevise::test_revise_llm_overrides_model_when_configured tests/test_autocheck.py::TestAuditAndRevise::test_revise_draft_uses_revise_model_override -q --tb=no
+  tags: [implemented]
+- label: shared research fetch respects HARBOR_BOOST_RESEARCH_FETCH_TIMEOUT_SECONDS for web_search and read_url httpx clients: configurable HTTP timeout in seconds (default 30) applied to Tavily, Jina, and direct read paths
+  command: cd services/boost && uv run pytest tests/test_agentic_infra.py::TestResearchFetch::test_research_fetch_timeout_defaults_to_30_seconds tests/test_agentic_infra.py::TestResearchFetch::test_search_tavily_uses_configured_fetch_timeout tests/test_agentic_infra.py::TestResearchFetch::test_read_with_jina_uses_configured_fetch_timeout tests/test_agentic_infra.py::TestResearchFetch::test_read_direct_uses_configured_fetch_timeout -q --tb=no
+  tags: [implemented]
 
 # testing
 - label: tests use a Deno orchestrator running sequential bash suites across containerized distros
