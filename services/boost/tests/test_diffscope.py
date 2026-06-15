@@ -138,6 +138,152 @@ class TestViolations:
     )
 
 
+class TestCollateralViolations:
+  def test_partition_treats_hinted_out_of_scope_as_collateral_by_default(self):
+    scope = diffscope.UserScope(hinted=["services/boost/src/utils.py"])
+    violations = diffscope.find_violations(
+      ["services/boost/src/utils.py", "services/boost/src/config.py"],
+      scope,
+    )
+
+    blocking, collateral = diffscope.partition_violations(violations, scope)
+
+    assert len(blocking) == 0
+    assert len(collateral) == 1
+    assert collateral[0].path == "services/boost/src/config.py"
+
+  def test_partition_blocks_only_scope_even_when_collateral_allowed(self):
+    scope = diffscope.UserScope(allowed=["services/boost/src/utils.py"])
+    violations = diffscope.find_violations(
+      ["services/boost/src/utils.py", "services/boost/src/config.py"],
+      scope,
+    )
+
+    blocking, collateral = diffscope.partition_violations(violations, scope)
+
+    assert len(blocking) == 1
+    assert blocking[0].path == "services/boost/src/config.py"
+    assert collateral == []
+
+  def test_partition_blocks_hinted_out_of_scope_when_collateral_disabled(self):
+    scope = diffscope.UserScope(hinted=["services/boost/src/utils.py"])
+    violations = diffscope.find_violations(
+      ["services/boost/src/utils.py", "services/boost/src/config.py"],
+      scope,
+    )
+
+    blocking, collateral = diffscope.partition_violations(
+      violations,
+      scope,
+      allow_collateral=False,
+    )
+
+    assert len(blocking) == 1
+    assert blocking[0].path == "services/boost/src/config.py"
+    assert collateral == []
+
+  def test_partition_always_blocks_forbidden_paths(self):
+    scope = diffscope.UserScope(
+      hinted=["services/boost/src/utils.py"],
+      forbidden=["services/boost/src/config.py"],
+    )
+    violations = diffscope.find_violations(
+      ["services/boost/src/utils.py", "services/boost/src/config.py"],
+      scope,
+    )
+
+    blocking, collateral = diffscope.partition_violations(violations, scope)
+
+    assert len(blocking) == 1
+    assert blocking[0].reason == "forbidden"
+    assert collateral == []
+
+  @pytest.mark.asyncio
+  async def test_apply_warns_on_collateral_without_revision(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Update services/boost/src/utils.py to log errors."},
+    ])
+    llm = MagicMock()
+    llm.emit_status = AsyncMock()
+    llm.emit_message = AsyncMock()
+    llm.stream_chat_completion = AsyncMock(
+      return_value="Updated `services/boost/src/utils.py` and `services/boost/src/config.py`.",
+    )
+
+    with (
+      patch.object(diffscope, "verify_workspace_paths", new=AsyncMock(return_value=[])),
+      patch.object(
+        diffscope,
+        "revise_with_correction",
+        new=AsyncMock(return_value="Should not revise."),
+      ) as revise,
+    ):
+      await diffscope.apply(chat, llm)
+
+    revise.assert_not_awaited()
+    llm.emit_message.assert_awaited_once_with(
+      "Updated `services/boost/src/utils.py` and `services/boost/src/config.py`.",
+    )
+    status = llm.emit_status.await_args_list[-1].args[0]
+    assert "collateral" in status
+    assert "services/boost/src/config.py" in status
+
+  @pytest.mark.asyncio
+  async def test_apply_revises_only_scope_even_when_collateral_allowed(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Only change services/boost/src/utils.py"},
+    ])
+    llm = MagicMock()
+    llm.emit_status = AsyncMock()
+    llm.emit_message = AsyncMock()
+    llm.stream_chat_completion = AsyncMock(
+      return_value="Also edited services/boost/src/config.py for flags.",
+    )
+
+    with (
+      patch.object(diffscope, "verify_workspace_paths", new=AsyncMock(return_value=[])),
+      patch.object(
+        diffscope,
+        "revise_with_correction",
+        new=AsyncMock(return_value="Only updated services/boost/src/utils.py."),
+      ) as revise,
+    ):
+      await diffscope.apply(chat, llm)
+
+    revise.assert_awaited_once()
+    llm.emit_message.assert_awaited_once_with("Only updated services/boost/src/utils.py.")
+
+  @pytest.mark.asyncio
+  async def test_apply_revises_hinted_out_of_scope_when_collateral_disabled(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Update services/boost/src/utils.py to log errors."},
+    ])
+    llm = MagicMock()
+    llm.emit_status = AsyncMock()
+    llm.emit_message = AsyncMock()
+    llm.stream_chat_completion = AsyncMock(
+      return_value="Updated `services/boost/src/utils.py` and `services/boost/src/config.py`.",
+    )
+    original = config.DIFFSCOPE_ALLOW_COLLATERAL.__value__
+
+    try:
+      config.DIFFSCOPE_ALLOW_COLLATERAL.__value__ = False
+      with (
+        patch.object(diffscope, "verify_workspace_paths", new=AsyncMock(return_value=[])),
+        patch.object(
+          diffscope,
+          "revise_with_correction",
+          new=AsyncMock(return_value="Only updated services/boost/src/utils.py."),
+        ) as revise,
+      ):
+        await diffscope.apply(chat, llm)
+    finally:
+      config.DIFFSCOPE_ALLOW_COLLATERAL.__value__ = original
+
+    revise.assert_awaited_once()
+    llm.emit_message.assert_awaited_once_with("Only updated services/boost/src/utils.py.")
+
+
 class TestGitDiffGrounding:
   def test_is_git_workspace_detects_dot_git_directory(self):
     with tempfile.TemporaryDirectory() as tmp:

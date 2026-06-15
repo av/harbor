@@ -52,6 +52,9 @@ verify repo paths. Git mode reflects unstaged `git diff` output only.
 - `enabled` — when false, pass through without scope checks. Default: `true`
 - `max_user_turns` — recent user messages scanned for scope hints. Default: `5`
 - `max_workspace_files` — workspace existence checks per request. Default: `5`
+- `allow_collateral` — when true, extra files outside hinted scope warn only unless
+  the user said `only X`. When false, any out-of-scope file triggers revision.
+  Default: `true`
 
 ```bash
 harbor boost modules add diffscope
@@ -398,6 +401,38 @@ def find_violations(paths: list[str], scope: UserScope) -> list[ScopeViolation]:
   return violations
 
 
+def partition_violations(
+  violations: list[ScopeViolation],
+  scope: UserScope,
+  *,
+  allow_collateral: bool | None = None,
+) -> tuple[list[ScopeViolation], list[ScopeViolation]]:
+  """Split violations into blockers and collateral warnings.
+
+  Forbidden paths and explicit `only X` scope always block. Out-of-scope paths
+  against hinted scope become collateral warnings when collateral is allowed.
+  """
+  if allow_collateral is None:
+    allow_collateral = config.DIFFSCOPE_ALLOW_COLLATERAL.value
+
+  strict_only = bool(scope.allowed)
+  blocking: list[ScopeViolation] = []
+  collateral: list[ScopeViolation] = []
+
+  for violation in violations:
+    if violation.reason == "forbidden":
+      blocking.append(violation)
+      continue
+
+    if violation.reason == "out_of_scope" and not strict_only and allow_collateral:
+      collateral.append(violation)
+      continue
+
+    blocking.append(violation)
+
+  return blocking, collateral
+
+
 async def verify_workspace_paths(paths: list[str]) -> list[str]:
   if not config.WORKSPACE_ROOT.value:
     return []
@@ -590,17 +625,34 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
   snapshot = collect_changed_paths(draft, chat)
   changed_paths = snapshot.paths
   violations = find_violations(changed_paths, scope)
+  blocking_violations, collateral_violations = partition_violations(violations, scope)
   missing_paths = await verify_workspace_paths(changed_paths)
 
-  if not violations and not missing_paths:
+  if collateral_violations:
+    collateral_paths = ", ".join(violation.path for violation in collateral_violations)
+    logger.warning(
+      f"{ID_PREFIX}: collateral files outside hinted scope — {collateral_paths}"
+    )
+
+  if not blocking_violations and not missing_paths:
     mode_label = "git" if snapshot.mode == "git" else "heuristic"
-    await llm.emit_status(f"Diffscope: scope OK ({mode_label})")
+    status = f"Diffscope: scope OK ({mode_label})"
+    if collateral_violations:
+      collateral_paths = ", ".join(violation.path for violation in collateral_violations)
+      status = f"{status} — collateral: {collateral_paths}"
+    await llm.emit_status(status)
     await emit_final(llm, draft)
     return draft
 
-  correction = build_correction_note(violations, missing_paths, scope, snapshot)
+  correction = build_correction_note(
+    blocking_violations,
+    missing_paths,
+    scope,
+    snapshot,
+  )
   logger.warning(
-    f"{ID_PREFIX}: scope issues — {len(violations)} violation(s), "
+    f"{ID_PREFIX}: scope issues — {len(blocking_violations)} blocking violation(s), "
+    f"{len(collateral_violations)} collateral warning(s), "
     f"{len(missing_paths)} missing path(s)"
   )
   chat.system(
@@ -616,7 +668,7 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
       draft,
       correction,
       scope=scope,
-      violations=violations,
+      violations=blocking_violations,
       snapshot=snapshot,
     )
   except Exception as exc:

@@ -897,6 +897,16 @@ DIFFSCOPE_MAX_WORKSPACE_FILES = Config[int](
     description="Maximum workspace files `diffscope` verifies per request.",
 )
 
+DIFFSCOPE_ALLOW_COLLATERAL = Config[bool](
+    name="HARBOR_BOOST_DIFFSCOPE_ALLOW_COLLATERAL",
+    type=bool,
+    default="true",
+    description=(
+        "When true, files outside hinted scope only warn unless the user said "
+        "`only X`. When false, any out-of-scope file triggers a scope revision."
+    ),
+)
+
 # ------------------ KLMBR ------------------
 
 KLMBR_PERCENTAGE = Config[int](
