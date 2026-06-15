@@ -52,6 +52,31 @@ class TestUserScope:
     assert "services/boost/src/utils.py" in scope.allowed
     assert scope.has_constraints
 
+  def test_extract_allowed_paths_from_only_edit_phrase(self):
+    chat = self._chat("Implement the retry helper but only edit foo.py")
+    scope = diffscope.extract_user_scope(chat)
+    assert scope.allowed == ["foo.py"]
+    assert scope.allowed_only
+    assert scope.hinted == []
+
+  def test_extract_allowed_paths_from_edit_only_phrase(self):
+    chat = self._chat("Fix the bug but edit only services/boost/src/utils.py")
+    scope = diffscope.extract_user_scope(chat)
+    assert scope.allowed == ["services/boost/src/utils.py"]
+    assert scope.allowed_only
+
+  def test_extract_multiple_allowed_paths_from_only_edit_phrase(self):
+    chat = self._chat("Only edit foo.py and bar.py for the retry helper.")
+    scope = diffscope.extract_user_scope(chat)
+    assert scope.allowed == ["foo.py", "bar.py"]
+    assert scope.allowed_only
+
+  def test_allowed_paths_are_excluded_from_hinted_scope(self):
+    chat = self._chat("Only change services/boost/src/utils.py for the retry helper.")
+    scope = diffscope.extract_user_scope(chat)
+    assert scope.allowed == ["services/boost/src/utils.py"]
+    assert scope.hinted == []
+
   def test_extract_forbidden_paths_from_dont_touch(self):
     chat = self._chat("Fix the bug but don't touch services/boost/src/config.py.")
     scope = diffscope.extract_user_scope(chat)
@@ -206,6 +231,21 @@ class TestCollateralViolations:
     assert blocking[0].path == "services/boost/src/config.py"
     assert collateral == []
 
+  def test_partition_only_edit_ignores_allow_collateral(self):
+    scope = diffscope.UserScope(allowed=["foo.py"])
+    violations = diffscope.find_violations(["foo.py", "bar.py"], scope)
+
+    blocking, collateral = diffscope.partition_violations(
+      violations,
+      scope,
+      allow_collateral=True,
+    )
+
+    assert scope.allowed_only
+    assert len(blocking) == 1
+    assert blocking[0].path == "bar.py"
+    assert collateral == []
+
   def test_partition_blocks_hinted_out_of_scope_when_collateral_disabled(self):
     scope = diffscope.UserScope(hinted=["services/boost/src/utils.py"])
     violations = diffscope.find_violations(
@@ -293,6 +333,36 @@ class TestCollateralViolations:
 
     revise.assert_awaited_once()
     llm.emit_message.assert_awaited_once_with("Only updated services/boost/src/utils.py.")
+
+  @pytest.mark.asyncio
+  async def test_apply_revises_only_edit_even_when_allow_collateral_true(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Implement the retry helper but only edit foo.py"},
+    ])
+    llm = MagicMock()
+    llm.emit_status = AsyncMock()
+    llm.emit_message = AsyncMock()
+    llm.stream_chat_completion = AsyncMock(
+      return_value="Updated `src/foo.py` and `src/bar.py` for consistency.",
+    )
+    original = config.DIFFSCOPE_ALLOW_COLLATERAL.__value__
+
+    try:
+      config.DIFFSCOPE_ALLOW_COLLATERAL.__value__ = True
+      with (
+        patch.object(diffscope, "verify_workspace_paths", new=AsyncMock(return_value=[])),
+        patch.object(
+          diffscope,
+          "revise_with_correction",
+          new=AsyncMock(return_value="Only updated `src/foo.py`."),
+        ) as revise,
+      ):
+        await diffscope.apply(chat, llm)
+    finally:
+      config.DIFFSCOPE_ALLOW_COLLATERAL.__value__ = original
+
+    revise.assert_awaited_once()
+    llm.emit_message.assert_awaited_once_with("Only updated `src/foo.py`.")
 
   @pytest.mark.asyncio
   async def test_apply_revises_hinted_out_of_scope_when_collateral_disabled(self):

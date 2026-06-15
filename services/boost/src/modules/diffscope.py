@@ -94,11 +94,27 @@ FENCE_PATH_RE = re.compile(
 _REPO_PATH = r"(?:[\w.-]+/)*[\w.-]+\.[\w]+"
 _REPO_PATH_TOKEN_RE = re.compile(_REPO_PATH, re.IGNORECASE)
 
-ONLY_RE = re.compile(
+_ONLY_SCOPE_VERB = r"(?:change|edit|modify|update|fix|touch)"
+_ONLY_PATH_TAIL = (
+  rf"(?:\s*(?:,|and|or)\s+"
+  rf"(?:(?:{_ONLY_SCOPE_VERB})\s+)?(?:the\s+)?[`'\"]?(?:{_REPO_PATH}))*"
+)
+ONLY_PHRASE_RE = re.compile(
   r"\b(?:only|just|limit(?:ed)?\s+to|stick\s+to|focus\s+on|change\s+only)\s+"
-  r"(?:(?:change|edit|modify|update|fix|touch)\s+)?(?:the\s+)?[`'\"]?"
-  rf"({_REPO_PATH})",
+  rf"(?:(?:{_ONLY_SCOPE_VERB})\s+)?(?:the\s+)?[`'\"]?"
+  rf"(?:{_REPO_PATH})"
+  rf"{_ONLY_PATH_TAIL}",
   re.IGNORECASE,
+)
+EDIT_ONLY_PHRASE_RE = re.compile(
+  rf"\b(?:{_ONLY_SCOPE_VERB})\s+only\s+"
+  rf"(?:the\s+)?[`'\"]?(?:{_REPO_PATH})"
+  rf"{_ONLY_PATH_TAIL}",
+  re.IGNORECASE,
+)
+_ALLOWED_ONLY_PHRASE_RES = (
+  ONLY_PHRASE_RE,
+  EDIT_ONLY_PHRASE_RE,
 )
 DONT_TOUCH_PHRASE_RE = re.compile(
   r"\b(?:don't\s+touch|dont\s+touch|do\s+not\s+(?:touch|modify|change|edit)|"
@@ -187,6 +203,11 @@ class UserScope:
   def has_constraints(self) -> bool:
     return bool(self.allowed or self.hinted or self.forbidden)
 
+  @property
+  def allowed_only(self) -> bool:
+    """True when the user stated an explicit only-X scope (e.g. only edit foo.py)."""
+    return bool(self.allowed)
+
 
 @dataclass
 class ScopeViolation:
@@ -249,6 +270,14 @@ def _extract_forbidden_paths(text: str) -> list[str]:
   return forbidden
 
 
+def _extract_allowed_paths(text: str) -> list[str]:
+  allowed: list[str] = []
+  for pattern in _ALLOWED_ONLY_PHRASE_RES:
+    for match in pattern.finditer(text):
+      allowed.extend(_paths_in_phrase_match(match))
+  return allowed
+
+
 def extract_user_scope(chat: "ch.Chat") -> UserScope:
   allowed: list[str] = []
   hinted: list[str] = []
@@ -258,9 +287,7 @@ def extract_user_scope(chat: "ch.Chat") -> UserScope:
     if not text:
       continue
 
-    for match in ONLY_RE.finditer(text):
-      allowed.append(deliverable.normalize_repo_path(match.group(1)))
-
+    allowed.extend(_extract_allowed_paths(text))
     forbidden.extend(_extract_forbidden_paths(text))
 
     for match in deliverable.FILE_PATH_RE.finditer(text):
@@ -269,9 +296,16 @@ def extract_user_scope(chat: "ch.Chat") -> UserScope:
     for match in deliverable.BACKTICK_PATH_RE.finditer(text):
       hinted.append(deliverable.normalize_repo_path(match.group(1)))
 
+  allowed = _collect_unique(allowed)
+  allowed_keys = {path.lower() for path in allowed}
+  hinted = [
+    path for path in _collect_unique(hinted)
+    if path.lower() not in allowed_keys
+  ]
+
   return UserScope(
-    allowed=_collect_unique(allowed),
-    hinted=_collect_unique(hinted),
+    allowed=allowed,
+    hinted=hinted,
     forbidden=_collect_unique(forbidden),
   )
 
@@ -454,13 +488,13 @@ def partition_violations(
 ) -> tuple[list[ScopeViolation], list[ScopeViolation]]:
   """Split violations into blockers and collateral warnings.
 
-  Forbidden paths and explicit `only X` scope always block. Out-of-scope paths
-  against hinted scope become collateral warnings when collateral is allowed.
+  Forbidden paths and explicit allowed-only scope (`only edit X`, `only change X`)
+  always block. Out-of-scope paths against hinted scope become collateral
+  warnings when collateral is allowed and the user did not state only-X scope.
   """
   if allow_collateral is None:
     allow_collateral = config.DIFFSCOPE_ALLOW_COLLATERAL.value
 
-  strict_only = bool(scope.allowed)
   blocking: list[ScopeViolation] = []
   collateral: list[ScopeViolation] = []
 
@@ -469,7 +503,11 @@ def partition_violations(
       blocking.append(violation)
       continue
 
-    if violation.reason == "out_of_scope" and not strict_only and allow_collateral:
+    if (
+      violation.reason == "out_of_scope"
+      and not scope.allowed_only
+      and allow_collateral
+    ):
       collateral.append(violation)
       continue
 
