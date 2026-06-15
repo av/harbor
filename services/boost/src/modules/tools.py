@@ -25,7 +25,8 @@ them during the final completion and Boost will execute them inline.
 The module exposes web research tools (`web_search`, `read_url`) plus small
 scratchpad utilities (`add_note`, `read_notes`, scratch files, `current_time`,
 and `finish`). When `HARBOR_BOOST_WORKSPACE_ROOT` is set, workspace tools
-(`read_workspace_file`, `grep_workspace`) are also available. Web search uses
+(`read_workspace_file`, `grep_workspace`, and opt-in `write_workspace_file`) are
+also available. Web search uses
 Tavily when `HARBOR_BOOST_TAVILY_API_KEY` is set, otherwise SearXNG via
 `HARBOR_BOOST_SEARXNG_URL`. URL reading uses Jina Reader first and falls back
 to direct HTTP text extraction.
@@ -357,6 +358,27 @@ async def read_workspace_file(file_path: str) -> str:
   )
 
 
+async def write_workspace_file(file_path: str, content: str) -> str:
+  """
+  Write a file under the configured workspace root.
+  Requires `HARBOR_BOOST_WORKSPACE_ROOT`. Paths are jailed to that directory.
+  Opt in by listing `write_workspace_file` in `HARBOR_BOOST_TOOLS`; pair with
+  `sightline` for read-before-edit guarding.
+
+  Args:
+    file_path (str): Relative workspace file path.
+    content (str): Text content to write.
+  """
+  max_chars = config.WORKSPACE_FILE_MAX_CHARS.value
+  if len(content) > max_chars:
+    raise ValueError(f"content exceeds {max_chars} characters")
+
+  target = _workspace_path(file_path)
+  target.parent.mkdir(parents=True, exist_ok=True)
+  target.write_text(content, encoding="utf-8")
+  return f"Wrote {len(content)} characters to {file_path}."
+
+
 async def grep_workspace(
   pattern: str,
   path: str = ".",
@@ -463,6 +485,7 @@ def _selected_tools(configured_tools: list[str] | None = None) -> dict[str, Call
 
   if config.WORKSPACE_ROOT.value:
     available['read_workspace_file'] = read_workspace_file
+    available['write_workspace_file'] = write_workspace_file
     available['grep_workspace'] = grep_workspace
 
   configured = set(configured_tools) if configured_tools else set(config.TOOLS.value) if config.TOOLS.value else DEFAULT_TOOLS

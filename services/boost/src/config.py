@@ -640,8 +640,9 @@ WORKSPACE_ROOT = Config[str](
     type=str,
     default="",
     description="""
-Root directory for workspace file reads by agentic Boost modules and the
-`read_workspace_file` / `grep_workspace` tools. When unset, workspace reads are disabled.
+Root directory for workspace file reads and writes by agentic Boost modules and
+the `read_workspace_file`, `grep_workspace`, and opt-in `write_workspace_file`
+tools. When unset, workspace file tools are disabled.
 
 Example:
 ```bash
@@ -654,7 +655,10 @@ WORKSPACE_FILE_MAX_CHARS = Config[int](
     name="HARBOR_BOOST_WORKSPACE_FILE_MAX_CHARS",
     type=int,
     default="100000",
-    description="Maximum number of characters returned by `read_workspace_file`.",
+    description=(
+        "Maximum number of characters returned by `read_workspace_file` and "
+        "accepted by `write_workspace_file`."
+    ),
 )
 
 WORKSPACE_GREP_MAX_MATCHES = Config[int](

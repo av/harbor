@@ -34,13 +34,13 @@ exempt when `allow_create` is enabled.
 **When to use**
 
 - Scratch-pad agent workflows using Boost `read_file`, `write_file`, and `delete_file`
-- Workspace-aware coding workflows with `read_workspace_file` (and future write tools)
+- Workspace-aware coding sandboxes with `read_workspace_file` and opt-in
+  `write_workspace_file` (list both in `HARBOR_BOOST_TOOLS`)
 - Place **after** `tools` in the module chain so wrappers are registered first
 
-**Limitation:** Boost currently exposes `read_workspace_file` but not
-`write_workspace_file`. Sightline tracks workspace reads and will guard workspace
-writes automatically when that tool is added. IDE tools and other external editors
-are out of scope.
+**Limitation:** Workspace writes are opt-in — add `write_workspace_file` to
+`HARBOR_BOOST_TOOLS` when the sandbox should allow edits. IDE tools and other
+external editors are out of scope.
 
 **Parameters**
 

@@ -107,6 +107,7 @@ FINISH_TOOL_NAME = "finish"
 CODING_SESSION_TOOL_NAMES = frozenset({
   "finish",
   "read_workspace_file",
+  "write_workspace_file",
   "grep_workspace",
   "write_file",
   "read_file",

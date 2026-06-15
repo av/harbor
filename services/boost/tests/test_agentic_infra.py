@@ -484,3 +484,77 @@ class TestWorkspaceFileTool:
       assert "grep_workspace" not in selected
     finally:
       config.WORKSPACE_ROOT.__value__ = original
+
+  def test_write_workspace_file_writes_file(self):
+    with tempfile.TemporaryDirectory() as workspace:
+      original_root = self._with_workspace_root(workspace)
+      original_max = config.WORKSPACE_FILE_MAX_CHARS.__value__
+      try:
+        config.WORKSPACE_FILE_MAX_CHARS.__value__ = 1000
+        import asyncio
+        result = asyncio.run(
+          tools.write_workspace_file("src/main.py", "print('ok')"),
+        )
+        content = Path(workspace, "src", "main.py").read_text(encoding="utf-8")
+      finally:
+        config.WORKSPACE_ROOT.__value__ = original_root
+        config.WORKSPACE_FILE_MAX_CHARS.__value__ = original_max
+
+    assert content == "print('ok')"
+    assert "Wrote" in result
+
+  def test_write_workspace_file_enforces_size_cap(self):
+    with tempfile.TemporaryDirectory() as workspace:
+      original_root = self._with_workspace_root(workspace)
+      original_max = config.WORKSPACE_FILE_MAX_CHARS.__value__
+      try:
+        config.WORKSPACE_FILE_MAX_CHARS.__value__ = 5
+        import asyncio
+        with pytest.raises(ValueError, match="content exceeds 5 characters"):
+          asyncio.run(tools.write_workspace_file("big.txt", "123456"))
+      finally:
+        config.WORKSPACE_ROOT.__value__ = original_root
+        config.WORKSPACE_FILE_MAX_CHARS.__value__ = original_max
+
+  def test_write_workspace_file_path_jail(self):
+    with tempfile.TemporaryDirectory() as workspace:
+      original = self._with_workspace_root(workspace)
+      try:
+        import asyncio
+        with pytest.raises(ValueError, match="stay inside the workspace root"):
+          asyncio.run(tools.write_workspace_file("../outside.txt", "nope"))
+      finally:
+        config.WORKSPACE_ROOT.__value__ = original
+
+  def test_write_workspace_file_requires_workspace_root(self):
+    original = self._with_workspace_root("")
+    try:
+      import asyncio
+      with pytest.raises(ValueError, match="Workspace root is not configured"):
+        asyncio.run(tools.write_workspace_file("README.md", "hello"))
+    finally:
+      config.WORKSPACE_ROOT.__value__ = original
+
+  def test_selected_tools_includes_workspace_writer_when_configured(self):
+    original = self._with_workspace_root("/workspace")
+    try:
+      selected = tools._selected_tools(["write_workspace_file"])
+      assert "write_workspace_file" in selected
+    finally:
+      config.WORKSPACE_ROOT.__value__ = original
+
+  def test_selected_tools_omits_workspace_writer_when_unconfigured(self):
+    original = self._with_workspace_root("")
+    try:
+      selected = tools._selected_tools(["write_workspace_file"])
+      assert "write_workspace_file" not in selected
+    finally:
+      config.WORKSPACE_ROOT.__value__ = original
+
+  def test_default_tools_omits_workspace_writer(self):
+    original = self._with_workspace_root("/workspace")
+    try:
+      selected = tools._selected_tools()
+      assert "write_workspace_file" not in selected
+    finally:
+      config.WORKSPACE_ROOT.__value__ = original
