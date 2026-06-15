@@ -220,6 +220,9 @@
 - label: sightline enforces read-before-edit on scratch tools read_file write_file and delete_file: in block mode mutations without a prior read on the same path are rejected and a fresh read is required after each write or delete
   command: cd services/boost && uv run pytest tests/test_sightline.py::TestSightlineGuards -q --tb=no
   tags: [implemented]
+- label: sightline block errors include a suggested_command field with a copy-pasteable read_file or read_workspace_file tool call for the blocked path, JSON-escaped for special characters, repeated in the human-readable message, and propagated through guard ValueError payloads
+  command: cd services/boost && uv run pytest tests/test_sightline.py::TestSightlineGenerations::test_block_message_is_structured_json tests/test_sightline.py::TestSightlineGenerations::test_suggested_read_command_escapes_special_characters tests/test_sightline.py::TestSightlineGenerations::test_block_message_includes_suggested_command_in_guard_error tests/test_sightline.py::TestSightlineWorkspace::test_workspace_block_message_uses_workspace_tools -q --tb=no
+  tags: [implemented]
 - label: diffscope compares cited file paths in coding deliverable drafts against user-stated scope from recent messages, verifies workspace paths when HARBOR_BOOST_WORKSPACE_ROOT is set, and revises once on out-of-scope or missing paths
   command: cd services/boost && uv run pytest tests/test_diffscope.py::TestDiffscopeApply -q --tb=no
   tags: [implemented]
