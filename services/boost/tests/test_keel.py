@@ -161,10 +161,22 @@ class TestKeelBriefRendering:
     rendered = keel.render_anchor_block(brief, "Helper retries 3 times")
     assert "<task_anchor>" in rendered
     assert "<objective>Add retry helper</objective>" in rendered
+    assert "<constraints>Keep changes minimal</constraints>" in rendered
+    assert "<next_criterion>Helper retries 3 times</next_criterion>" in rendered
+    assert "<in_scope_paths>services/boost/src/utils.py</in_scope_paths>" in rendered
+    assert len(rendered.splitlines()) <= keel.ANCHOR_MAX_LINES
+
+  def test_render_anchor_block_truncates_long_constraints(self):
+    long_constraint = "Do not modify any files outside the approved module boundaries " * 3
+    brief = keel.TaskBrief(
+      objective="Add retry helper",
+      constraints=[long_constraint, "Keep changes minimal"],
+    )
+    rendered = keel.render_anchor_block(brief, "Helper retries 3 times")
+    assert "…" in rendered
     assert "Keep changes minimal" in rendered
-    assert "<next_criterion>" in rendered
-    assert "Helper retries 3 times" in rendered
-    assert "services/boost/src/utils.py" in rendered
+    assert long_constraint not in rendered
+    assert len(rendered.splitlines()) <= keel.ANCHOR_MAX_LINES
 
   def test_next_unmet_criterion_skips_met_items(self):
     brief = keel.TaskBrief(

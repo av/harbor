@@ -528,27 +528,47 @@ def next_unmet_criterion(brief: TaskBrief, met: set[int]) -> str | None:
   return None
 
 
+ANCHOR_MAX_LINES = 8
+ANCHOR_MAX_TEXT_LEN = 120
+ANCHOR_MAX_CONSTRAINT_LEN = 80
+ANCHOR_MAX_PATHS = 5
+
+
+def _truncate_anchor_text(text: str, max_len: int = ANCHOR_MAX_TEXT_LEN) -> str:
+  text = (text or "").strip()
+  if len(text) <= max_len:
+    return text
+  return text[: max_len - 1].rstrip() + "…"
+
+
+def _format_anchor_constraints(constraints: list[str] | None) -> str:
+  items = constraints or ["Stay within the stated scope."]
+  truncated = [_truncate_anchor_text(item, ANCHOR_MAX_CONSTRAINT_LEN) for item in items]
+  return "; ".join(truncated)
+
+
+def _format_anchor_paths(paths: list[str]) -> str:
+  shown = paths[:ANCHOR_MAX_PATHS]
+  formatted = [_truncate_anchor_text(path, 60) for path in shown]
+  if len(paths) > ANCHOR_MAX_PATHS:
+    formatted.append(f"+{len(paths) - ANCHOR_MAX_PATHS} more")
+  return ", ".join(formatted)
+
+
 def render_anchor_block(brief: TaskBrief, next_criterion: str | None = None) -> str:
-  constraints = brief.constraints or ["Stay within the stated scope."]
   lines = [
     "<task_anchor>",
-    f"<objective>{brief.objective}</objective>",
-    "<constraints>",
-    *(f"- {item}" for item in constraints),
-    "</constraints>",
+    f"<objective>{_truncate_anchor_text(brief.objective)}</objective>",
+    f"<constraints>{_format_anchor_constraints(brief.constraints)}</constraints>",
   ]
 
   if next_criterion:
-    lines.extend([
-      "<next_criterion>",
-      next_criterion,
-      "</next_criterion>",
-    ])
+    lines.append(
+      f"<next_criterion>{_truncate_anchor_text(next_criterion)}</next_criterion>"
+    )
 
   if brief.in_scope_paths:
-    lines.append("<in_scope_paths>")
-    lines.extend(f"- {path}" for path in brief.in_scope_paths)
-    lines.append("</in_scope_paths>")
+    lines.append(f"<in_scope_paths>{_format_anchor_paths(brief.in_scope_paths)}</in_scope_paths>")
 
   lines.append("</task_anchor>")
   return "\n".join(lines)
