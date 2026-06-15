@@ -46,6 +46,7 @@ Unlike `caveman`, ponytail triggers selectively on research-heavy questions
 - `max_url_reads` — maximum full-page URL reads per request. Default: `3`
 - `max_chars` — maximum research content characters retained. Default: `60000`
 - `early_exit_chars` — skip hop 2 when hop 1 gathers this many characters. Default: `15000` (`0` disables)
+- `synthesis_max_chars` — cap gathered research passed to brief synthesis. Default: `8000` (`0` disables)
 - `trigger` — deep-research gate: `heuristic` (default) or `llm` (cheap yes/no classifier)
 - `cache_brief` — *(experimental)* reuse the last research brief when the same user
   question appears again within a request session. Default: `false`
@@ -57,6 +58,7 @@ harbor config set HARBOR_BOOST_PONYTAIL_MAX_SEARCHES 4
 harbor config set HARBOR_BOOST_PONYTAIL_MAX_URL_READS 3
 harbor config set HARBOR_BOOST_PONYTAIL_MAX_CHARS 60000
 harbor config set HARBOR_BOOST_PONYTAIL_EARLY_EXIT_CHARS 15000
+harbor config set HARBOR_BOOST_PONYTAIL_SYNTHESIS_MAX_CHARS 8000
 harbor config set HARBOR_BOOST_PONYTAIL_TRIGGER heuristic
 harbor config set HARBOR_BOOST_PONYTAIL_CACHE_BRIEF false
 harbor config set HARBOR_BOOST_TAVILY_API_KEY <key>
@@ -427,7 +429,10 @@ async def synthesize_brief(
   result = await intermediate.chat_completion(
     prompt=SYNTHESIS_PROMPT,
     message=message,
-    research_summary=brief_mod.render_to_system(brief),
+    research_summary=brief_mod.render_for_synthesis(
+      brief,
+      max_chars=config.PONYTAIL_SYNTHESIS_MAX_CHARS.value,
+    ),
     schema=StructuredBrief,
     params={"temperature": 0.2},
     resolve=True,

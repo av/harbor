@@ -53,6 +53,41 @@ class TestPonytailBriefSynthesis:
     assert "Do not assume" in schema["do_not_assume"]["description"]
     assert "imperative" in schema["recommendation"]["description"].lower()
 
+  @pytest.mark.asyncio
+  async def test_synthesize_brief_truncates_oversized_research_summary(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Migrate from Django 4.2 to 5.0"},
+    ])
+    llm = MagicMock()
+    brief = ResearchBrief(query="Migrate from Django 4.2 to 5.0")
+    brief.add_page("https://example.com", "x" * 20_000)
+    structured = {
+      "facts": ["Django 5.0 removes django.utils.six"],
+      "uncertainties": [],
+      "recommendation": "Read the official migration guide first.",
+      "do_not_assume": ["Do not assume Django 4.2 settings still work unchanged."],
+    }
+
+    original = config.PONYTAIL_SYNTHESIS_MAX_CHARS.__value__
+    try:
+      config.PONYTAIL_SYNTHESIS_MAX_CHARS.__value__ = 8000
+
+      with patch("research.orchestrate.cheap_llm") as cheap_llm:
+        cheap = MagicMock()
+        cheap.chat_completion = AsyncMock(return_value=structured)
+        cheap_llm.return_value = cheap
+
+        result = await ponytail.synthesize_brief(
+          chat, llm, "Migrate from Django 4.2 to 5.0", brief
+        )
+
+      kwargs = cheap.chat_completion.await_args.kwargs
+      assert "[truncated to 8000 characters]" in kwargs["research_summary"]
+      assert result.facts == structured["facts"]
+      assert result.recommendation == structured["recommendation"]
+    finally:
+      config.PONYTAIL_SYNTHESIS_MAX_CHARS.__value__ = original
+
 
 @pytest.fixture
 def ponytail_trigger_mode():

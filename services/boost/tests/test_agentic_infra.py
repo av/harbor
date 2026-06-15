@@ -20,6 +20,7 @@ from research.brief import (
   finalize_brief,
   has_usable_research,
   highlight_versions,
+  render_for_synthesis,
   render_to_system,
 )
 from research.budget import BudgetExceeded, ResearchBudget, budget_from_config
@@ -191,6 +192,31 @@ class TestResearchBrief:
     assert "<page_content>" in rendered
     assert "spec text" in rendered
     assert "Prefer stdlib patterns" in rendered
+
+  def test_render_for_synthesis_truncates_oversized_summary(self):
+    brief = ResearchBrief(query="python asyncio")
+    brief.add_page("https://example.com", "z" * 10_000)
+
+    rendered = render_for_synthesis(brief, max_chars=500)
+
+    assert "[truncated to 500 characters]" in rendered
+    assert len(rendered) > 500
+
+  def test_render_for_synthesis_skips_truncation_when_under_limit(self):
+    brief = ResearchBrief(query="short query")
+
+    rendered = render_for_synthesis(brief, max_chars=8000)
+
+    assert "[truncated" not in rendered
+
+  def test_render_for_synthesis_zero_disables_truncation(self):
+    brief = ResearchBrief(query="python asyncio")
+    brief.add_page("https://example.com", "a" * 20_000)
+
+    rendered = render_for_synthesis(brief, max_chars=0)
+
+    assert "[truncated" not in rendered
+    assert len(rendered) > 8000
 
   def test_add_search_results_parses_formatted_lines(self):
     brief = ResearchBrief()

@@ -785,6 +785,16 @@ PONYTAIL_EARLY_EXIT_CHARS = Config[int](
     ),
 )
 
+PONYTAIL_SYNTHESIS_MAX_CHARS = Config[int](
+    name="HARBOR_BOOST_PONYTAIL_SYNTHESIS_MAX_CHARS",
+    type=int,
+    default="8000",
+    description=(
+        "Maximum characters of gathered research passed to the ponytail synthesis step. "
+        "Set to 0 to disable truncation."
+    ),
+)
+
 PONYTAIL_TRIGGER = Config[str](
     name="HARBOR_BOOST_PONYTAIL_TRIGGER",
     type=str,

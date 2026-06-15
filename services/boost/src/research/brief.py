@@ -176,3 +176,11 @@ def render_to_system(brief: ResearchBrief) -> str:
 
   sections.append("</research_brief>")
   return "\n".join(sections)
+
+
+def render_for_synthesis(brief: ResearchBrief, *, max_chars: int) -> str:
+  """Render gathered research for synthesis, truncating when over ``max_chars``."""
+  summary = render_to_system(brief)
+  if max_chars <= 0 or len(summary) <= max_chars:
+    return summary
+  return fetch_mod.trim(summary, max_chars)
