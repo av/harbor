@@ -2,6 +2,7 @@
 
 import os
 import sys
+from contextlib import contextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -13,6 +14,20 @@ import config
 from modules import caveman
 from research.brief import RESEARCH_UNAVAILABLE_NOTE, ResearchBrief, render_to_system
 from research.budget import BudgetExceeded, ResearchBudget
+from state import request as request_state
+
+
+@contextmanager
+def request_context():
+  req = MagicMock()
+  req.state = type("State", (), {})()
+  token_req = request_state.set(req)
+  try:
+    yield req
+  finally:
+    request_state.reset(token_req)
+    if hasattr(req.state, caveman.BRIEF_CACHE_KEY):
+      delattr(req.state, caveman.BRIEF_CACHE_KEY)
 
 
 @pytest.fixture
@@ -20,6 +35,13 @@ def caveman_trigger_mode():
   original = config.CAVEMAN_TRIGGER.__value__
   yield
   config.CAVEMAN_TRIGGER.__value__ = original
+
+
+@pytest.fixture
+def caveman_cache_mode():
+  original = config.CAVEMAN_CACHE_BRIEF.__value__
+  yield
+  config.CAVEMAN_CACHE_BRIEF.__value__ = original
 
 
 class TestCavemanHeuristics:
@@ -296,6 +318,100 @@ class TestCavemanGatherResearch:
 
     assert brief.pages == []
     assert any("Could not read" in note for note in brief.notes)
+
+
+class TestCavemanBriefCache:
+  def test_docs_note_cache_brief_is_experimental(self):
+    assert "cache_brief" in caveman.DOCS
+    assert "experimental" in caveman.DOCS.lower()
+
+  def test_question_hash_ignores_surrounding_whitespace(self):
+    message = "What changed in Python 3.13 asyncio semantics?"
+    assert caveman._question_hash(message) == caveman._question_hash(f"  {message}  ")
+
+  @pytest.mark.asyncio
+  async def test_cache_disabled_runs_research_each_time(self, caveman_cache_mode):
+    config.CAVEMAN_CACHE_BRIEF.__value__ = False
+    question = "What are the latest Harbor Boost module patterns?"
+    brief = ResearchBrief(query="harbor boost modules")
+    brief.facts = ["caveman performs fast one-hop research"]
+
+    with request_context():
+      chat = ch.Chat.from_conversation([{"role": "user", "content": question}])
+      llm = MagicMock(module=caveman.ID_PREFIX)
+      llm.emit_status = AsyncMock()
+      llm.stream_final_completion = AsyncMock()
+
+      with (
+        patch.object(caveman, "extract_search_queries", new=AsyncMock(return_value=["harbor boost modules"])) as extract,
+        patch.object(caveman, "gather_research", new=AsyncMock(return_value=brief)) as gather,
+      ):
+        await caveman.apply(chat, llm)
+        await caveman.apply(chat, llm)
+
+    assert extract.await_count == 2
+    assert gather.await_count == 2
+
+  @pytest.mark.asyncio
+  async def test_cache_enabled_reuses_brief_for_same_question(self, caveman_cache_mode):
+    config.CAVEMAN_CACHE_BRIEF.__value__ = True
+    question = "What are the latest Harbor Boost module patterns?"
+    brief = ResearchBrief(query="harbor boost modules")
+    brief.facts = ["caveman performs fast one-hop research"]
+
+    with request_context():
+      chat = ch.Chat.from_conversation([{"role": "user", "content": question}])
+      llm = MagicMock(module=caveman.ID_PREFIX)
+      llm.emit_status = AsyncMock()
+      llm.stream_final_completion = AsyncMock()
+
+      with (
+        patch.object(caveman, "extract_search_queries", new=AsyncMock(return_value=["harbor boost modules"])) as extract,
+        patch.object(caveman, "gather_research", new=AsyncMock(return_value=brief)) as gather,
+      ):
+        await caveman.apply(chat, llm)
+        await caveman.apply(chat, llm)
+
+    extract.assert_awaited_once()
+    gather.assert_awaited_once()
+    statuses = [call.args[0] for call in llm.emit_status.await_args_list]
+    assert any("using cached brief" in status for status in statuses)
+
+  @pytest.mark.asyncio
+  async def test_cache_enabled_runs_research_for_different_question(self, caveman_cache_mode):
+    config.CAVEMAN_CACHE_BRIEF.__value__ = True
+    first_question = "What are the latest Harbor Boost module patterns?"
+    second_question = "What changed in Python 3.13 asyncio semantics?"
+    first_brief = ResearchBrief(query="harbor boost modules")
+    first_brief.facts = ["caveman performs fast one-hop research"]
+    second_brief = ResearchBrief(query="python 3.13 asyncio")
+    second_brief.facts = ["asyncio task groups stabilized in 3.13"]
+
+    with request_context():
+      first_chat = ch.Chat.from_conversation([{"role": "user", "content": first_question}])
+      second_chat = ch.Chat.from_conversation([{"role": "user", "content": second_question}])
+      llm = MagicMock(module=caveman.ID_PREFIX)
+      llm.emit_status = AsyncMock()
+      llm.stream_final_completion = AsyncMock()
+
+      with (
+        patch.object(
+          caveman,
+          "extract_search_queries",
+          new=AsyncMock(side_effect=[["harbor boost modules"], ["python 3.13 asyncio"]]),
+        ) as extract,
+        patch.object(
+          caveman,
+          "gather_research",
+          new=AsyncMock(side_effect=[first_brief, second_brief]),
+        ) as gather,
+      ):
+        await caveman.apply(first_chat, llm)
+        await caveman.apply(second_chat, llm)
+
+    assert extract.await_count == 2
+    assert gather.await_count == 2
+    assert render_to_system(second_brief) in second_chat.history()[0]["content"]
 
 
 class TestCavemanApply:

@@ -1,5 +1,6 @@
 """Smash-and-grab pre-answer web research for Harbor Boost."""
 
+import hashlib
 from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field
@@ -12,6 +13,7 @@ import research.brief as brief_mod
 import research.budget as budget_mod
 import research.orchestrate as orchestrate
 import research.workflow as workflow_mod
+from state import request as request_state
 
 if TYPE_CHECKING:
   import chat as ch
@@ -42,6 +44,8 @@ messages) skip research to keep latency low.
 - `max_url_reads` — maximum full-page URL reads per request. Default: `1`
 - `max_chars` — maximum research content characters retained. Default: `30000`
 - `trigger` — research gate: `heuristic` (default) or `llm` (cheap yes/no classifier)
+- `cache_brief` — *(experimental)* reuse the last research brief when the same user
+  question appears again within a request session. Default: `false`
 
 ```bash
 harbor boost modules add caveman
@@ -49,6 +53,7 @@ harbor config set HARBOR_BOOST_CAVEMAN_MAX_SEARCHES 2
 harbor config set HARBOR_BOOST_CAVEMAN_MAX_URL_READS 1
 harbor config set HARBOR_BOOST_CAVEMAN_MAX_CHARS 30000
 harbor config set HARBOR_BOOST_CAVEMAN_TRIGGER heuristic
+harbor config set HARBOR_BOOST_CAVEMAN_CACHE_BRIEF false
 harbor config set HARBOR_BOOST_TAVILY_API_KEY <key>
 # or
 harbor config set HARBOR_BOOST_SEARXNG_URL http://searxng:8080
@@ -99,6 +104,7 @@ Do not repeat near-duplicate queries. Return at most 3 queries.
 """.strip()
 
 STATUS_PREFIX = "Caveman research"
+BRIEF_CACHE_KEY = "caveman_brief_cache"
 
 TRIGGER_CLASSIFIER_PROMPT = """
 <instruction>
@@ -125,6 +131,53 @@ class ResearchTriggerDecision(BaseModel):
 
 def _uses_llm_trigger() -> bool:
   return (config.CAVEMAN_TRIGGER.value or "heuristic").strip().lower() == "llm"
+
+
+def _question_hash(text: str) -> str:
+  return hashlib.sha256((text or "").strip().encode()).hexdigest()
+
+
+def _request_store(name: str, default):
+  request = request_state.get()
+  if request is None:
+    return default
+
+  if not hasattr(request.state, name):
+    setattr(request.state, name, default)
+
+  return getattr(request.state, name)
+
+
+def _get_cached_brief(message: str) -> brief_mod.ResearchBrief | None:
+  if not config.CAVEMAN_CACHE_BRIEF.value:
+    return None
+
+  cached = _request_store(BRIEF_CACHE_KEY, None)
+  if not isinstance(cached, tuple) or len(cached) != 2:
+    return None
+
+  cached_hash, cached_brief = cached
+  if cached_hash != _question_hash(message):
+    return None
+  if not isinstance(cached_brief, brief_mod.ResearchBrief):
+    return None
+
+  return cached_brief.model_copy(deep=True)
+
+
+def _store_cached_brief(message: str, brief: brief_mod.ResearchBrief) -> None:
+  if not config.CAVEMAN_CACHE_BRIEF.value:
+    return
+
+  request = request_state.get()
+  if request is None:
+    return
+
+  setattr(
+    request.state,
+    BRIEF_CACHE_KEY,
+    (_question_hash(message), brief.model_copy(deep=True)),
+  )
 
 
 def should_skip_research(chat: "ch.Chat") -> bool:
@@ -234,6 +287,15 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
     logger.debug(f"{ID_PREFIX}: Skipping research for: {message[:80]}...")
     return await workflow_mod.complete_or_defer(llm, config)
 
+  cached_brief = _get_cached_brief(message)
+  if cached_brief is not None:
+    logger.debug(f"{ID_PREFIX}: Reusing cached brief for same question")
+    await llm.emit_status(f"{STATUS_PREFIX}: using cached brief...")
+    if not cached_brief.query:
+      cached_brief.query = message
+    chat.system(brief_mod.render_to_system(cached_brief))
+    return await workflow_mod.complete_or_defer(llm, config)
+
   await llm.emit_status(f"{STATUS_PREFIX}: planning queries...")
   budget = budget_mod.budget_from_config(ID_PREFIX)
 
@@ -260,5 +322,6 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
   if not brief_mod.has_usable_research(brief):
     await llm.emit_status(f"{STATUS_PREFIX}: research unavailable, continuing without live data...")
 
+  _store_cached_brief(message, brief)
   chat.system(brief_mod.render_to_system(brief))
   await workflow_mod.complete_or_defer(llm, config)

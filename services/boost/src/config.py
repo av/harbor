@@ -715,6 +715,17 @@ CAVEMAN_TRIGGER = Config[str](
     ),
 )
 
+CAVEMAN_CACHE_BRIEF = Config[bool](
+    name="HARBOR_BOOST_CAVEMAN_CACHE_BRIEF",
+    type=bool,
+    default="false",
+    description=(
+        "When true, `caveman` caches the last research brief in request state and "
+        "reuses it when the same user question is seen again within the session. "
+        "Experimental."
+    ),
+)
+
 # ----------------- PONYTAIL -----------------
 
 PONYTAIL_MAX_SEARCHES = Config[int](
