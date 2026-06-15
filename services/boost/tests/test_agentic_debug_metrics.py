@@ -162,16 +162,16 @@ class TestCavemanDebugMetrics:
     return ch.Chat.from_conversation([{"role": "user", "content": content}])
 
   @pytest.mark.asyncio
-  async def test_apply_records_skip_metrics_on_request_state(self):
+  async def test_apply_records_acknowledgment_pass_through_debug_metrics(self):
     chat = self._chat("thanks")
     llm = MagicMock()
     llm.emit_status = AsyncMock()
 
-    with request_context():
+    with request_context() as req:
       with patch(
         "modules.caveman.workflow_mod.complete_or_defer",
         new=AsyncMock(return_value="ok"),
-      ):
+      ) as complete_or_defer:
         await caveman.apply(chat, llm)
 
       stored = debug_metrics.get(caveman.ID_PREFIX)
@@ -180,6 +180,13 @@ class TestCavemanDebugMetrics:
       assert stored.skipped is True
       assert stored.reason == "acknowledgment"
       assert stored.extra_calls == 0
+      assert stored.duration_ms >= 0
+      assert getattr(req.state, debug_metrics.state_key(caveman.ID_PREFIX)) == stored.model_dump()
+
+      llm.emit_status.assert_awaited_once_with(
+        caveman.format_skipped_status("acknowledgment"),
+      )
+      complete_or_defer.assert_awaited_once_with(llm, None)
 
   @pytest.mark.asyncio
   async def test_apply_records_trigger_metrics_with_query_extraction_call(self):
