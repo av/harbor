@@ -62,6 +62,9 @@ is configured:
 - **Test hint** — when test files exist near changed paths, a non-blocking warning
   suggests running tests with a command inferred from `pyproject.toml` or
   `package.json` scripts when detectable
+- **Linter hint** — when `.eslintrc`, `ruff.toml`, or `pyproject.toml` `[tool.ruff]`
+  exist near changed paths, a non-blocking warning suggests a lint command for
+  matching file types
 
 Mechanical findings are structured blockers merged into the audit before delivery.
 Audit debug logs include `triggered`, `gate_reason`, `tool_calls`, and `verdict`
@@ -651,6 +654,141 @@ def suggest_test_command(
   return f"pytest {' '.join(test_files[:3])}"
 
 
+ESLINT_EXTENSIONS = frozenset({".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"})
+
+
+def _pyproject_has_ruff(content: str) -> bool:
+  return "[tool.ruff]" in content.lower()
+
+
+def _has_eslint_config(directory: Path) -> bool:
+  """Return True when a directory contains a heuristic ESLint config file."""
+  if (directory / ".eslintrc").is_file():
+    return True
+  for suffix in (".json", ".js", ".yaml", ".yml", ".cjs"):
+    if (directory / f".eslintrc{suffix}").is_file():
+      return True
+  return False
+
+
+def _detect_linter_at_directory(directory: Path) -> str | None:
+  """Return ``eslint`` or ``ruff`` when a linter config is present in ``directory``."""
+  if _has_eslint_config(directory):
+    return "eslint"
+  if (directory / "ruff.toml").is_file():
+    return "ruff"
+
+  pyproject = directory / "pyproject.toml"
+  if pyproject.is_file():
+    try:
+      content = pyproject.read_text(encoding="utf-8")
+    except OSError:
+      content = ""
+    if _pyproject_has_ruff(content):
+      return "ruff"
+  return None
+
+
+def discover_nearby_linters(
+  anchor_paths: list[str],
+  workspace_root: Path,
+) -> list[tuple[str, Path]]:
+  """Heuristically locate linter configs near changed or cited paths."""
+  search_roots = _search_roots_for_paths(anchor_paths, [], workspace_root)
+  found: list[tuple[str, Path]] = []
+  seen: set[tuple[str, str]] = set()
+
+  for start in search_roots:
+    for parent in [start, *start.parents]:
+      try:
+        parent.relative_to(workspace_root)
+      except ValueError:
+        break
+
+      linter = _detect_linter_at_directory(parent)
+      if not linter:
+        continue
+
+      key = (linter, str(parent))
+      if key in seen:
+        continue
+      seen.add(key)
+      found.append((linter, parent))
+
+  return found
+
+
+def _eslint_eligible_paths(anchor_paths: list[str]) -> list[str]:
+  return [
+    path
+    for path in anchor_paths
+    if Path(path).suffix.lower() in ESLINT_EXTENSIONS
+  ][:5]
+
+
+def _ruff_eligible_paths(anchor_paths: list[str]) -> list[str]:
+  return [path for path in anchor_paths if path.endswith(".py")][:5]
+
+
+def suggest_lint_command(
+  linters: list[tuple[str, Path]],
+  anchor_paths: list[str],
+  workspace_root: Path,
+) -> str:
+  """Infer a runnable lint command from nearby linter configs."""
+  commands: list[str] = []
+
+  for linter, config_dir in linters:
+    rel_parent = config_dir.relative_to(workspace_root)
+    prefix = ""
+    if rel_parent != Path("."):
+      prefix = f"cd {rel_parent.as_posix()} && "
+
+    if linter == "eslint":
+      targets = _eslint_eligible_paths(anchor_paths)
+      if not targets:
+        continue
+      target_str = " ".join(targets[:3])
+      commands.append(f"{prefix}npx eslint {target_str}")
+    elif linter == "ruff":
+      targets = _ruff_eligible_paths(anchor_paths)
+      if not targets:
+        continue
+      target_str = " ".join(targets[:3])
+      commands.append(f"{prefix}ruff check {target_str}")
+
+  return " && ".join(commands)
+
+
+def suggest_running_linter(cited_paths: list[str]) -> list[AuditFinding]:
+  """Return a non-blocking warning when linters appear near changed paths."""
+  root = boost_config.WORKSPACE_ROOT.value
+  if not root:
+    return []
+
+  workspace_root = Path(root)
+  anchor_paths = merge_anchor_paths(cited_paths)
+  if not anchor_paths:
+    return []
+
+  linters = discover_nearby_linters(anchor_paths, workspace_root)
+  if not linters:
+    return []
+
+  command = suggest_lint_command(linters, anchor_paths, workspace_root)
+  if not command:
+    return []
+
+  linter_names = ", ".join(dict.fromkeys(name for name, _ in linters))
+  return [
+    AuditFinding(
+      severity="warn",
+      message=f"Consider running the linter near changed paths ({linter_names})",
+      fix_hint=f"Run: {command}",
+    ),
+  ]
+
+
 def suggest_running_tests(cited_paths: list[str]) -> list[AuditFinding]:
   """Return a non-blocking warning when tests appear near changed paths."""
   root = boost_config.WORKSPACE_ROOT.value
@@ -735,6 +873,7 @@ async def run_mechanical_preaudit(
   findings.extend(check_code_blocks_without_paths(draft, paths))
   findings.extend(await verify_draft_paths_exist(paths))
   findings.extend(suggest_running_tests(paths))
+  findings.extend(suggest_running_linter(paths))
 
   return git_context, findings
 

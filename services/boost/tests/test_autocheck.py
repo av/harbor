@@ -835,6 +835,138 @@ class TestTestHint:
     assert any("consider running tests" in finding.message.lower() for finding in findings)
 
 
+class TestLinterHint:
+  def test_has_eslint_config_detects_common_files(self):
+    with tempfile.TemporaryDirectory() as workspace:
+      root = Path(workspace)
+      (root / ".eslintrc").write_text("{}", encoding="utf-8")
+      assert autocheck._has_eslint_config(root)
+
+      (root / ".eslintrc").unlink()
+      (root / ".eslintrc.json").write_text("{}", encoding="utf-8")
+      assert autocheck._has_eslint_config(root)
+
+  def test_detect_linter_at_directory_finds_ruff_toml(self):
+    with tempfile.TemporaryDirectory() as workspace:
+      root = Path(workspace)
+      (root / "ruff.toml").write_text("[lint]\n", encoding="utf-8")
+      assert autocheck._detect_linter_at_directory(root) == "ruff"
+
+  def test_detect_linter_at_directory_finds_pyproject_ruff(self):
+    with tempfile.TemporaryDirectory() as workspace:
+      root = Path(workspace)
+      (root / "pyproject.toml").write_text(
+        "[tool.ruff]\nline-length = 88\n",
+        encoding="utf-8",
+      )
+      assert autocheck._detect_linter_at_directory(root) == "ruff"
+
+  def test_discover_nearby_linters_walks_up_from_changed_paths(self):
+    with tempfile.TemporaryDirectory() as workspace:
+      root = Path(workspace)
+      app_dir = root / "app" / "src"
+      app_dir.mkdir(parents=True)
+      (root / "app" / ".eslintrc").write_text("{}", encoding="utf-8")
+
+      found = autocheck.discover_nearby_linters(["app/src/widget.ts"], root)
+
+    assert found == [("eslint", root / "app")]
+
+  def test_suggest_lint_command_for_eslint_and_ruff(self):
+    with tempfile.TemporaryDirectory() as workspace:
+      root = Path(workspace)
+      (root / ".eslintrc").write_text("{}", encoding="utf-8")
+      (root / "pyproject.toml").write_text("[tool.ruff]\n", encoding="utf-8")
+      command = autocheck.suggest_lint_command(
+        [("eslint", root), ("ruff", root)],
+        ["src/widget.ts", "src/widget.py"],
+        root,
+      )
+
+    assert "npx eslint src/widget.ts" in command
+    assert "ruff check src/widget.py" in command
+
+  def test_suggest_lint_command_uses_subdirectory_prefix(self):
+    with tempfile.TemporaryDirectory() as workspace:
+      root = Path(workspace)
+      app_dir = root / "app"
+      app_dir.mkdir()
+      (app_dir / "ruff.toml").write_text("[lint]\n", encoding="utf-8")
+      command = autocheck.suggest_lint_command(
+        [("ruff", app_dir)],
+        ["app/src/widget.py"],
+        root,
+      )
+
+    assert command == "cd app && ruff check app/src/widget.py"
+
+  def test_suggest_running_linter_emits_warn_finding(self):
+    with tempfile.TemporaryDirectory() as workspace:
+      root = Path(workspace)
+      target = root / "src" / "widget.py"
+      target.parent.mkdir(parents=True)
+      target.write_text("def widget():\n  return 1\n", encoding="utf-8")
+      (root / "pyproject.toml").write_text("[tool.ruff]\n", encoding="utf-8")
+
+      original = config.WORKSPACE_ROOT.__value__
+      try:
+        config.WORKSPACE_ROOT.__value__ = str(root)
+        findings = autocheck.suggest_running_linter(["src/widget.py"])
+      finally:
+        config.WORKSPACE_ROOT.__value__ = original
+
+    assert len(findings) == 1
+    assert findings[0].severity == "warn"
+    assert "consider running the linter" in findings[0].message.lower()
+    assert "ruff check src/widget.py" in findings[0].fix_hint
+
+  def test_suggest_running_linter_skips_without_eligible_extensions(self):
+    with tempfile.TemporaryDirectory() as workspace:
+      root = Path(workspace)
+      (root / ".eslintrc").write_text("{}", encoding="utf-8")
+
+      original = config.WORKSPACE_ROOT.__value__
+      try:
+        config.WORKSPACE_ROOT.__value__ = str(root)
+        findings = autocheck.suggest_running_linter(["src/widget.py"])
+      finally:
+        config.WORKSPACE_ROOT.__value__ = original
+
+    assert findings == []
+
+  def test_suggest_running_linter_empty_without_workspace(self):
+    original = config.WORKSPACE_ROOT.__value__
+    try:
+      config.WORKSPACE_ROOT.__value__ = ""
+      findings = autocheck.suggest_running_linter(["src/widget.py"])
+    finally:
+      config.WORKSPACE_ROOT.__value__ = original
+
+    assert findings == []
+
+  @pytest.mark.asyncio
+  async def test_run_mechanical_preaudit_includes_linter_hint(self):
+    with tempfile.TemporaryDirectory() as workspace:
+      root = Path(workspace)
+      target = root / "src" / "widget.py"
+      target.parent.mkdir(parents=True)
+      target.write_text("def widget():\n  return 1\n", encoding="utf-8")
+      (root / "ruff.toml").write_text("[lint]\n", encoding="utf-8")
+
+      original = config.WORKSPACE_ROOT.__value__
+      try:
+        config.WORKSPACE_ROOT.__value__ = str(root)
+        _git_context, findings = await autocheck.run_mechanical_preaudit(
+          "Update src/widget.py with a helper.",
+          ["src/widget.py"],
+        )
+      finally:
+        config.WORKSPACE_ROOT.__value__ = original
+
+    assert any(finding.severity == "warn" for finding in findings)
+    assert any("consider running the linter" in finding.message.lower() for finding in findings)
+
+
 class TestAuditAndRevise:
   @pytest.mark.asyncio
   async def test_run_audit_parses_structured_result(self):
