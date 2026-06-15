@@ -7,6 +7,7 @@ supported distro row. Works on any host with docker (or podman as fallback).
 harbor dev test                                 # everything, parallel
 harbor dev test --suite smoke                   # one suite, every row
 harbor dev test --suite launch-smoke            # launch adapter smoke tests
+harbor dev test --suite boost-agentic-smoke     # Boost agentic module pytest battery
 harbor dev test --distros ubuntu-2404           # every suite, one row
 harbor dev test --distros ubuntu-2404 --suite install,smoke
 harbor dev test --keep                          # leave containers running
@@ -40,7 +41,7 @@ tests/
   on pass. Prints one `[<suite>] <step>` line per logical step. Cleans
   up its own state on exit via `trap`. Suites run in filename order, so
   `01-install.sh` reliably precedes `02-cli.sh`, `03-smoke.sh`,
-  `04-integration.sh`, and `05-launch-smoke.sh`.
+  `04-integration.sh`, `05-launch-smoke.sh`, and `06-boost-agentic-smoke.sh`.
 - **Row** — a Containerfile under `containers/`. Each row image boots
   systemd as PID 1, runs dockerd nested inside, and has curl + git + jq +
   httpYac pre-installed.
@@ -89,6 +90,21 @@ The suite contract:
   `tests/artifacts/<run-id>/<row>/<name>/` automatically via the bind
   mount — no copy step.
 - Every wait has a bounded timeout.
+
+### Boost agentic smoke (`06-boost-agentic-smoke.sh`)
+
+Runs the Boost agentic pytest battery against the Harbor Boost image built
+inside the row's nested docker daemon. Tests are bind-mounted from the staged
+repo; pytest is invoked with `uv run --with pytest --with pytest-asyncio` inside
+the Boost image so the battery matches production dependencies without baking
+test tools into the service image.
+
+```bash
+harbor dev test --suite boost-agentic-smoke
+HARBOR_TEST_AGENTIC_MODE=host bash tests/suites/06-boost-agentic-smoke.sh
+```
+
+Shared helpers live in `tests/lib/boost-agentic.sh`.
 
 ## Artifacts
 

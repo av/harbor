@@ -227,12 +227,14 @@ class TestAutocheckEdgeCases:
   async def test_apply_passes_through_on_thanks(self):
     chat = self._chat("thanks")
     llm = MagicMock()
+    llm.emit_status = AsyncMock()
     llm.stream_final_completion = AsyncMock()
 
     with patch.object(autocheck, "generate_draft", new=AsyncMock()) as draft:
       await autocheck.apply(chat, llm)
 
     draft.assert_not_called()
+    llm.emit_status.assert_awaited_once_with("Autocheck: skipped (acknowledgment)")
     llm.stream_final_completion.assert_awaited_once()
 
 

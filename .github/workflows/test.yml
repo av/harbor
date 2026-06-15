@@ -12,6 +12,7 @@ on:
       - 'requirements.sh'
       - 'services/compose.mock-openai.yml'
       - 'services/mock-openai/override.env'
+      - 'services/boost/**'
   pull_request:
     branches: [main]
     paths:
@@ -23,6 +24,7 @@ on:
       - 'requirements.sh'
       - 'services/compose.mock-openai.yml'
       - 'services/mock-openai/override.env'
+      - 'services/boost/**'
   schedule:
     # Nightly: broad distro coverage without blocking merges.
     - cron: '17 3 * * *'
