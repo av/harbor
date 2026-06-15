@@ -290,7 +290,7 @@ class TestScopeGuardWorkflowChain:
 class TestResearchQuickWorkflowChain:
   @pytest.mark.asyncio
   async def test_research_quick_runs_tools_caveman_final_with_fetch(self):
-    """research-quick: tools → caveman → final; research question triggers fetch."""
+    """research-quick: tools → caveman → final; fetch runs, autocheck skipped."""
     chat = ch.Chat.from_conversation([
       {"role": "user", "content": RESEARCH_QUICK_USER_MESSAGE},
     ])
@@ -323,6 +323,7 @@ class TestResearchQuickWorkflowChain:
       ),
       patch("research.fetch.web_search", new=AsyncMock(return_value=MOCK_SEARCH_RESULT)) as web_search,
       patch("research.fetch.read_url", new=AsyncMock(return_value=MOCK_PAGE_CONTENT)) as read_url,
+      patch.object(autocheck, "run_audit", new=AsyncMock()) as run_audit,
       patch.object(workflows, "_apply_module", new=tracking_apply_module),
     ):
       await workflows.apply_workflow(
@@ -333,6 +334,8 @@ class TestResearchQuickWorkflowChain:
 
     assert execution_order == RESEARCH_QUICK_MODULE_ORDER
     assert await caveman.needs_research(chat, llm)
+    assert not autocheck.needs_autocheck(chat)
+    run_audit.assert_not_called()
     caveman_cheap.chat_completion.assert_awaited_once()
     web_search.assert_awaited_once()
     read_url.assert_awaited_once()
