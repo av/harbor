@@ -351,7 +351,7 @@ class TestPonytailDebugMetrics:
         patch(
           "modules.ponytail.workflow_mod.complete_or_defer",
           new=AsyncMock(return_value="ok"),
-        ),
+        ) as complete_or_defer,
       ):
         await ponytail.apply(chat, llm)
 
@@ -361,6 +361,10 @@ class TestPonytailDebugMetrics:
       assert stored.skipped is True
       assert stored.reason == "no_queries_planned"
       assert stored.extra_calls == 1
+
+      statuses = [call.args[0] for call in llm.emit_status.await_args_list]
+      assert statuses[-1] == ponytail.format_skipped_status("no_queries_planned")
+      complete_or_defer.assert_awaited_once_with(llm, None)
 
   @pytest.mark.asyncio
   async def test_apply_records_trigger_metrics_with_research_calls(self):

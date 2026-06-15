@@ -789,6 +789,32 @@ class TestPonytailApply:
     llm.stream_final_completion.assert_awaited_once()
 
   @pytest.mark.asyncio
+  async def test_apply_passes_through_when_no_queries_planned(self):
+    chat = ch.Chat.from_conversation([
+      {
+        "role": "user",
+        "content": "What are the breaking changes when migrating from FastAPI 0.100 to 0.115?",
+      },
+    ])
+    llm = MagicMock(module=ponytail.ID_PREFIX)
+    llm.emit_status = AsyncMock()
+    llm.stream_final_completion = AsyncMock()
+
+    with (
+      patch.object(ponytail, "plan_search_queries", new=AsyncMock(return_value=[])),
+      patch.object(ponytail, "run_research_loop", new=AsyncMock()) as run_loop,
+    ):
+      await ponytail.apply(chat, llm)
+
+    run_loop.assert_not_called()
+    statuses = [call.args[0] for call in llm.emit_status.await_args_list]
+    assert statuses == [
+      "Ponytail research: planning queries...",
+      "Ponytail research: skipped (no_queries_planned)",
+    ]
+    llm.stream_final_completion.assert_awaited_once()
+
+  @pytest.mark.asyncio
   async def test_apply_injects_structured_brief_and_completes(self):
     chat = ch.Chat.from_conversation([
       {"role": "user", "content": "How do I migrate from Stripe API 2023-10-16 to 2024-06-20?"},
