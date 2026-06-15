@@ -237,6 +237,81 @@ class TestWorkspacePaths:
     assert "Autocheck: pass (0 findings)" in rendered
     assert "Ship it" in rendered
 
+  def test_blocking_findings_returns_critical_and_major_only(self):
+    audit = autocheck.AuditResult(
+      verdict="revise",
+      findings=[
+        autocheck.AuditFinding(severity="critical", message="Broken import"),
+        autocheck.AuditFinding(severity="major", message="Wrong path"),
+        autocheck.AuditFinding(severity="minor", message="Style nit"),
+        autocheck.AuditFinding(severity="warn", message="Run tests"),
+      ],
+    )
+    blockers = autocheck.blocking_findings(audit)
+    assert len(blockers) == 2
+    assert {finding.severity for finding in blockers} == {"critical", "major"}
+
+  def test_should_prepend_strict_warning_when_enabled_with_blockers(self):
+    audit = autocheck.AuditResult(
+      verdict="revise",
+      findings=[autocheck.AuditFinding(severity="major", message="Wrong path")],
+    )
+    original = config.AUTOCHECK_STRICT.__value__
+    try:
+      config.AUTOCHECK_STRICT.__value__ = True
+      assert autocheck.should_prepend_strict_warning(audit)
+      config.AUTOCHECK_STRICT.__value__ = False
+      assert not autocheck.should_prepend_strict_warning(audit)
+    finally:
+      config.AUTOCHECK_STRICT.__value__ = original
+
+  def test_should_not_prepend_strict_warning_for_warn_only_findings(self):
+    audit = autocheck.AuditResult(
+      verdict="pass",
+      findings=[
+        autocheck.AuditFinding(
+          severity="warn",
+          message="Consider running tests",
+          fix_hint="pytest tests/test_widget.py",
+        ),
+      ],
+    )
+    original = config.AUTOCHECK_STRICT.__value__
+    try:
+      config.AUTOCHECK_STRICT.__value__ = True
+      assert not autocheck.should_prepend_strict_warning(audit)
+    finally:
+      config.AUTOCHECK_STRICT.__value__ = original
+
+  def test_format_strict_warning_banner_lists_blockers(self):
+    audit = autocheck.AuditResult(
+      verdict="revise",
+      summary="Fix imports before shipping.",
+      findings=[
+        autocheck.AuditFinding(
+          severity="major",
+          message="Missing import",
+          fix_hint="Add `import os`",
+        ),
+        autocheck.AuditFinding(severity="warn", message="Run tests"),
+      ],
+    )
+    banner = autocheck.format_strict_warning_banner(audit)
+    assert "Autocheck warning" in banner
+    assert "Fix imports before shipping." in banner
+    assert "[major] Missing import" in banner
+    assert "Add `import os`" in banner
+    assert "[warn]" not in banner
+
+  def test_prepend_strict_warning_banner_adds_blockquote_before_answer(self):
+    audit = autocheck.AuditResult(
+      verdict="revise",
+      findings=[autocheck.AuditFinding(severity="major", message="Wrong path")],
+    )
+    rendered = autocheck.prepend_strict_warning_banner("Final answer", audit)
+    assert rendered.startswith("> **Autocheck warning:**")
+    assert rendered.endswith("Final answer")
+
   def test_format_audit_artifact_html_renders_findings_table(self):
     audit = autocheck.AuditResult(
       verdict="revise",
@@ -1502,6 +1577,103 @@ class TestAutocheckApply:
       assert run_audit.await_args.kwargs["workspace_tool_calls"] == []
     finally:
       config.WORKSPACE_ROOT.__value__ = original_root
+
+  @pytest.mark.asyncio
+  async def test_apply_prepends_strict_warning_when_blockers_remain(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Implement retry helper in services/boost/src/utils.py"},
+    ])
+    llm = MagicMock()
+    llm.boost_params = {}
+    llm.emit_status = AsyncMock()
+    llm.emit_message = AsyncMock()
+    llm.stream_chat_completion = AsyncMock(return_value="Draft implementation")
+
+    first_audit = autocheck.AuditResult(
+      verdict="revise",
+      summary="Fix imports",
+      findings=[autocheck.AuditFinding(severity="major", message="Missing import")],
+    )
+    second_audit = autocheck.AuditResult(
+      verdict="revise",
+      summary="Still missing import",
+      findings=[autocheck.AuditFinding(severity="major", message="Missing import")],
+    )
+    first_debug = autocheck.AuditDebug(triggered=True, gate_reason="triggered", verdict="revise")
+    second_debug = autocheck.AuditDebug(triggered=True, gate_reason="triggered", verdict="revise")
+    original_strict = config.AUTOCHECK_STRICT.__value__
+
+    try:
+      config.AUTOCHECK_STRICT.__value__ = True
+      with (
+        patch.object(autocheck, "gather_workspace_context", new=AsyncMock(return_value="")),
+        patch.object(
+          autocheck,
+          "run_audit",
+          new=AsyncMock(side_effect=[(first_audit, first_debug), (second_audit, second_debug)]),
+        ),
+        patch.object(
+          autocheck,
+          "revise_draft",
+          new=AsyncMock(return_value="Revised implementation"),
+        ),
+      ):
+        await autocheck.apply(chat, llm)
+    finally:
+      config.AUTOCHECK_STRICT.__value__ = original_strict
+
+    emitted = llm.emit_message.await_args.args[0]
+    assert emitted.startswith("> **Autocheck warning:**")
+    assert "Revised implementation" in emitted
+    assert "[major] Missing import" in emitted
+
+  @pytest.mark.asyncio
+  async def test_apply_skips_strict_warning_when_disabled(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Implement retry helper in services/boost/src/utils.py"},
+    ])
+    llm = MagicMock()
+    llm.boost_params = {}
+    llm.emit_status = AsyncMock()
+    llm.emit_message = AsyncMock()
+    llm.stream_chat_completion = AsyncMock(return_value="Draft implementation")
+
+    first_audit = autocheck.AuditResult(
+      verdict="revise",
+      summary="Fix imports",
+      findings=[autocheck.AuditFinding(severity="major", message="Missing import")],
+    )
+    second_audit = autocheck.AuditResult(
+      verdict="revise",
+      summary="Still missing import",
+      findings=[autocheck.AuditFinding(severity="major", message="Missing import")],
+    )
+    first_debug = autocheck.AuditDebug(triggered=True, gate_reason="triggered", verdict="revise")
+    second_debug = autocheck.AuditDebug(triggered=True, gate_reason="triggered", verdict="revise")
+    original_strict = config.AUTOCHECK_STRICT.__value__
+
+    try:
+      config.AUTOCHECK_STRICT.__value__ = False
+      with (
+        patch.object(autocheck, "gather_workspace_context", new=AsyncMock(return_value="")),
+        patch.object(
+          autocheck,
+          "run_audit",
+          new=AsyncMock(side_effect=[(first_audit, first_debug), (second_audit, second_debug)]),
+        ),
+        patch.object(
+          autocheck,
+          "revise_draft",
+          new=AsyncMock(return_value="Revised implementation"),
+        ),
+      ):
+        await autocheck.apply(chat, llm)
+    finally:
+      config.AUTOCHECK_STRICT.__value__ = original_strict
+
+    emitted = llm.emit_message.await_args.args[0]
+    assert emitted == "Revised implementation"
+    assert "Autocheck warning" not in emitted
 
   @pytest.mark.asyncio
   async def test_apply_falls_back_on_audit_failure(self):

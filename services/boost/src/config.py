@@ -822,6 +822,16 @@ AUTOCHECK_SHOW_AUDIT = Config[bool](
     ),
 )
 
+AUTOCHECK_STRICT = Config[bool](
+    name="HARBOR_BOOST_AUTOCHECK_STRICT",
+    type=bool,
+    default="false",
+    description=(
+        "When true, the `autocheck` module prepends a warning banner to the final answer "
+        "when critical or major audit findings remain after all revise passes."
+    ),
+)
+
 # ------------------- KEEL -------------------
 
 KEEL_ENABLED = Config[bool](

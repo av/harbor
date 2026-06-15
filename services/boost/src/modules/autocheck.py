@@ -79,12 +79,15 @@ for troubleshooting.
 - `show_audit` — when true, append a brief audit footer to the final answer and emit
   an HTML findings summary artifact for the UI. Default: `false`. Overridable per
   request via `@boost_show_audit`.
+- `strict` — when true, prepend a warning banner when critical or major findings
+  remain after all revise passes. Default: `false`.
 
 ```bash
 harbor boost modules add autocheck
 harbor config set HARBOR_BOOST_AUTOCHECK_ENABLED true
 harbor config set HARBOR_BOOST_AUTOCHECK_MAX_PASSES 1
 harbor config set HARBOR_BOOST_AUTOCHECK_SHOW_AUDIT true
+harbor config set HARBOR_BOOST_AUTOCHECK_STRICT true
 harbor config set HARBOR_BOOST_WORKSPACE_ROOT /workspace/myproject
 ```
 
@@ -359,6 +362,25 @@ def _workspace_tool_path(args: dict) -> str:
 
 def should_revise(audit: AuditResult) -> bool:
   return audit.verdict == "revise"
+
+
+def blocking_findings(audit: AuditResult) -> list[AuditFinding]:
+  """Return critical and major findings that block shipping."""
+  return [
+    finding
+    for finding in audit.findings
+    if finding.severity in BLOCKING_SEVERITIES
+  ]
+
+
+def has_blocking_findings(audit: AuditResult) -> bool:
+  """Return True when the audit still has unresolved critical or major findings."""
+  return bool(blocking_findings(audit))
+
+
+def should_prepend_strict_warning(audit: AuditResult) -> bool:
+  """Return True when strict mode should surface unresolved blocking findings."""
+  return boost_config.AUTOCHECK_STRICT.value and has_blocking_findings(audit)
 
 
 def successful_workspace_reads(workspace_context: str) -> list[str]:
@@ -1044,6 +1066,39 @@ def append_audit_footer(final_text: str, audit: AuditResult) -> str:
   return f"{final_text.rstrip()}\n\n---\n*{footer}*"
 
 
+def format_strict_warning_banner(audit: AuditResult) -> str:
+  """Render a user-visible warning when blocking findings remain after revision."""
+  blockers = blocking_findings(audit)
+  if not blockers:
+    return ""
+
+  finding_lines = []
+  for finding in blockers:
+    hint = f" Fix: {finding.fix_hint}" if finding.fix_hint else ""
+    finding_lines.append(f"> - [{finding.severity}] {finding.message}.{hint}")
+
+  summary = (audit.summary or "").strip()
+  if summary and len(summary) > 120:
+    summary = summary[:117].rstrip() + "..."
+
+  lines = [
+    "> **Autocheck warning:** Unresolved critical or major findings remain after "
+    "revision. Review before shipping.",
+  ]
+  if summary:
+    lines.append(f"> {summary}")
+  lines.extend(finding_lines)
+  return "\n".join(lines)
+
+
+def prepend_strict_warning_banner(final_text: str, audit: AuditResult) -> str:
+  """Prepend a strict-mode warning banner when blocking findings remain."""
+  banner = format_strict_warning_banner(audit)
+  if not banner:
+    return final_text
+  return f"{banner}\n\n{final_text.lstrip()}"
+
+
 def format_audit_artifact_html(audit: AuditResult) -> str:
   """Render a minimal HTML summary table for emit_artifact."""
   finding_count = len(audit.findings)
@@ -1457,6 +1512,8 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
       break
 
   await emit_audit_artifact(llm, audit)
+  if should_prepend_strict_warning(audit):
+    final_text = prepend_strict_warning_banner(final_text, audit)
   if show_audit_footer(llm):
     final_text = append_audit_footer(final_text, audit)
 

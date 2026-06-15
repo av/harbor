@@ -295,6 +295,9 @@
 - label: autocheck supports HARBOR_BOOST_AUTOCHECK_SHOW_AUDIT and per-request boost show_audit param: when enabled appends an audit footer to deliverable answers and emits an HTML findings summary artifact; show_audit overrides config
   command: cd services/boost && uv run pytest tests/test_autocheck.py::TestWorkspacePaths::test_show_audit_footer_reads_boost_params tests/test_autocheck.py::TestWorkspacePaths::test_show_audit_footer_boost_param_overrides_config tests/test_autocheck.py::TestAutocheckApply::test_apply_appends_audit_footer_when_show_audit_enabled tests/test_autocheck.py::TestAutocheckApply::test_apply_skips_audit_artifact_when_show_audit_disabled -q --tb=no
   tags: [implemented]
+- label: autocheck supports HARBOR_BOOST_AUTOCHECK_STRICT: when true prepends a warning banner to deliverable answers when critical or major findings remain after all revise passes instead of silently shipping
+  command: cd services/boost && uv run pytest tests/test_autocheck.py::TestWorkspacePaths::test_should_prepend_strict_warning_when_enabled_with_blockers tests/test_autocheck.py::TestAutocheckApply::test_apply_prepends_strict_warning_when_blockers_remain tests/test_autocheck.py::TestAutocheckApply::test_apply_skips_strict_warning_when_disabled -q --tb=no
+  tags: [implemented]
 - label: diffscope revise_with_correction prompt includes explicit allowed_paths forbidden_paths out_of_scope_paths and git_evidence sections built from user scope violations and workspace git diff
   command: cd services/boost && uv run pytest tests/test_diffscope.py::TestWorkspaceAndNotes::test_build_revise_scope_sections_lists_allowed_forbidden_and_git_evidence -q --tb=no
   tags: [implemented]
