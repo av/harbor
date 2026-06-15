@@ -204,6 +204,51 @@ class TestCodeCheckWorkflowChain:
     assert any("provided tools" in content for content in contents)
     llm.emit_message.assert_awaited_once_with("Draft implementation plan.")
 
+  @pytest.mark.asyncio
+  async def test_code_check_skips_autocheck_on_research_question(self):
+    """code-check: tools → autocheck → final; research question skips audit."""
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": RESEARCH_QUICK_USER_MESSAGE},
+    ])
+    llm = _make_llm()
+    execution_order: list[str] = []
+    real_apply_module = workflows._apply_module
+
+    async def tracking_apply_module(module_name, module_cfg, chat_obj, llm_obj):
+      execution_order.append(module_name)
+      return await real_apply_module(module_name, module_cfg, chat_obj, llm_obj)
+
+    async def tracked_final(**_kwargs):
+      execution_order.append("final")
+      llm.is_final_stream = True
+      return "Final research answer."
+
+    llm.stream_final_completion = AsyncMock(side_effect=tracked_final)
+
+    with (
+      request_context(),
+      patch.object(autocheck, "generate_draft", new=AsyncMock()) as generate_draft,
+      patch.object(autocheck, "run_audit", new=AsyncMock()) as run_audit,
+      patch.object(workflows, "_apply_module", new=tracking_apply_module),
+    ):
+      await workflows.apply_workflow(
+        deepcopy(workflow_presets.PRESETS["code-check"]),
+        chat,
+        llm,
+      )
+
+    assert execution_order == CODE_CHECK_MODULE_ORDER
+    assert autocheck.autocheck_gate_reason(chat) == "research_only"
+    assert not autocheck.needs_autocheck(chat)
+    generate_draft.assert_not_called()
+    run_audit.assert_not_called()
+    assert llm.stream_final_completion.await_count == 1
+    llm.emit_status.assert_any_await("Autocheck: skipped (research_only)")
+
+    history = chat.history()
+    contents = [msg.get("content") or "" for msg in history]
+    assert any("provided tools" in content for content in contents)
+
 
 class TestScopeGuardWorkflowChain:
   @pytest.mark.asyncio
