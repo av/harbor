@@ -601,3 +601,66 @@ class TestCompleteOrDeferDebugStatus:
     assert result is None
     llm.emit_status.assert_not_called()
     llm.stream_final_completion.assert_not_called()
+
+
+class TestAnchorDeferredDraft:
+  def test_replaces_assistant_tail_when_defer_final(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Only change src/foo.py"},
+      {"role": "assistant", "content": "Pre-revision draft touching src/bar.py"},
+    ])
+    scoped = "Only updated src/foo.py."
+
+    workflow_mod.anchor_deferred_draft(chat, scoped, {"defer_final": True})
+
+    assistants = [
+      msg.get("content") or ""
+      for msg in chat.history()
+      if msg.get("role") == "assistant"
+    ]
+    assert assistants == [scoped]
+
+  def test_appends_when_no_assistant_tail(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Only change src/foo.py"},
+    ])
+    scoped = "Only updated src/foo.py."
+
+    workflow_mod.anchor_deferred_draft(chat, scoped, {"defer_final": True})
+
+    assistants = [
+      msg.get("content") or ""
+      for msg in chat.history()
+      if msg.get("role") == "assistant"
+    ]
+    assert assistants == [scoped]
+
+  def test_noop_without_defer_final(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Only change src/foo.py"},
+      {"role": "assistant", "content": "Pre-revision draft"},
+    ])
+
+    workflow_mod.anchor_deferred_draft(chat, "Revised answer", {"defer_final": False})
+
+    assistants = [
+      msg.get("content") or ""
+      for msg in chat.history()
+      if msg.get("role") == "assistant"
+    ]
+    assert assistants == ["Pre-revision draft"]
+
+  def test_noop_on_empty_text(self):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Only change src/foo.py"},
+      {"role": "assistant", "content": "Pre-revision draft"},
+    ])
+
+    workflow_mod.anchor_deferred_draft(chat, "   ", {"defer_final": True})
+
+    assistants = [
+      msg.get("content") or ""
+      for msg in chat.history()
+      if msg.get("role") == "assistant"
+    ]
+    assert assistants == ["Pre-revision draft"]
