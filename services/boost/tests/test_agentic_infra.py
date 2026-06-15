@@ -6,6 +6,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
+import httpx
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
@@ -85,6 +86,92 @@ class TestResearchFetch:
 
     assert is_search_failure_result(result)
     assert "provider down" in result
+
+  @pytest.mark.asyncio
+  async def test_web_search_retries_once_on_transient_failure(self):
+    search_mock = AsyncMock(
+      side_effect=[
+        httpx.ConnectError("connection reset"),
+        "1. [Docs](https://example.com) (Date: N/A)\nSnippet",
+      ],
+    )
+    with (
+      patch("research.fetch._search_tavily", new=search_mock),
+      patch("research.fetch.asyncio.sleep", new=AsyncMock()) as sleep_mock,
+    ):
+      original = config.TAVILY_API_KEY.__value__
+      try:
+        config.TAVILY_API_KEY.__value__ = "test-key"
+        result = await web_search("python asyncio")
+      finally:
+        config.TAVILY_API_KEY.__value__ = original
+
+    assert search_mock.await_count == 2
+    sleep_mock.assert_awaited_once_with(1.0)
+    assert result == "1. [Docs](https://example.com) (Date: N/A)\nSnippet"
+
+  @pytest.mark.asyncio
+  async def test_web_search_does_not_retry_non_transient_failures(self):
+    search_mock = AsyncMock(side_effect=RuntimeError("provider down"))
+    with (
+      patch("research.fetch._search_tavily", new=search_mock),
+      patch("research.fetch.asyncio.sleep", new=AsyncMock()) as sleep_mock,
+    ):
+      original = config.TAVILY_API_KEY.__value__
+      try:
+        config.TAVILY_API_KEY.__value__ = "test-key"
+        result = await web_search("python asyncio")
+      finally:
+        config.TAVILY_API_KEY.__value__ = original
+
+    assert search_mock.await_count == 1
+    sleep_mock.assert_not_awaited()
+    assert is_search_failure_result(result)
+    assert "provider down" in result
+
+  @pytest.mark.asyncio
+  async def test_read_url_retries_jina_once_on_transient_failure(self):
+    jina_mock = AsyncMock(
+      side_effect=[
+        httpx.ReadTimeout("read timed out"),
+        "page content from jina",
+      ],
+    )
+    direct_mock = AsyncMock(return_value="should not be used")
+
+    with (
+      patch("research.fetch._read_with_jina", new=jina_mock),
+      patch("research.fetch._read_direct", new=direct_mock),
+      patch("research.fetch.asyncio.sleep", new=AsyncMock()) as sleep_mock,
+    ):
+      result = await read_url("https://example.com/docs")
+
+    assert jina_mock.await_count == 2
+    direct_mock.assert_not_awaited()
+    sleep_mock.assert_awaited_once_with(1.0)
+    assert result == "page content from jina"
+
+  @pytest.mark.asyncio
+  async def test_read_url_retries_direct_once_on_transient_failure(self):
+    jina_mock = AsyncMock(side_effect=ValueError("jina unavailable"))
+    direct_mock = AsyncMock(
+      side_effect=[
+        httpx.ConnectError("connection reset"),
+        "page content from direct http",
+      ],
+    )
+
+    with (
+      patch("research.fetch._read_with_jina", new=jina_mock),
+      patch("research.fetch._read_direct", new=direct_mock),
+      patch("research.fetch.asyncio.sleep", new=AsyncMock()) as sleep_mock,
+    ):
+      result = await read_url("https://example.com/docs")
+
+    assert jina_mock.await_count == 1
+    assert direct_mock.await_count == 2
+    sleep_mock.assert_awaited_once_with(1.0)
+    assert result == "page content from direct http"
 
 
 class TestResearchBrief:

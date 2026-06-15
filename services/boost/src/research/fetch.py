@@ -1,10 +1,12 @@
 """Shared web search and URL reading helpers for agentic modules."""
 
+import asyncio
 import html
 import ipaddress
 import re
 import socket
-from typing import Any
+from collections.abc import Awaitable, Callable
+from typing import Any, TypeVar
 from urllib.parse import parse_qs, urlparse
 
 import httpx
@@ -19,6 +21,33 @@ USER_AGENT = "Harbor Boost tools (+https://github.com/av/harbor)"
 SEARCH_FAILED_PREFIX = "Web search failed:"
 SEARCH_UNAVAILABLE_PREFIX = "Web search unavailable:"
 READ_FAILED_PREFIX = "Could not read URL:"
+
+_TRANSIENT_HTTP_ERRORS = (httpx.TimeoutException, httpx.ConnectError)
+_RETRY_BACKOFF_SECONDS = 1.0
+
+T = TypeVar("T")
+
+
+def _is_transient_failure(exc: BaseException) -> bool:
+  return isinstance(exc, _TRANSIENT_HTTP_ERRORS)
+
+
+async def _with_transient_retry(
+  operation: str,
+  coro_fn: Callable[[], Awaitable[T]],
+) -> T:
+  """Run ``coro_fn`` once; on transient HTTP failure, wait and retry once."""
+  try:
+    return await coro_fn()
+  except Exception as exc:
+    if not _is_transient_failure(exc):
+      raise
+    logger.warning(
+      f"{operation} failed with transient error ({exc}); "
+      f"retrying in {_RETRY_BACKOFF_SECONDS:g}s",
+    )
+    await asyncio.sleep(_RETRY_BACKOFF_SECONDS)
+    return await coro_fn()
 
 
 def trim(text: str, max_chars: int) -> str:
@@ -159,10 +188,13 @@ async def web_search(query: str, *, max_results: int | None = None) -> str:
   """
   limit = max(1, max_results or config.TOOLS_SEARCH_MAX_RESULTS.value)
 
-  try:
+  async def _run_search() -> str:
     if config.TAVILY_API_KEY.value:
       return await _search_tavily(query, limit)
     return await _search_searxng(query, limit)
+
+  try:
+    return await _with_transient_retry("web_search", _run_search)
   except Exception as e:
     logger.error(f"web_search failed: {e}")
     return f"Web search failed: {e}"
@@ -184,12 +216,18 @@ async def read_url(url: str, *, max_chars: int | None = None) -> str:
 
   limit = max_chars or config.TOOLS_READ_MAX_CHARS.value
 
+  async def _run_jina_read() -> str:
+    return await _read_with_jina(url)
+
+  async def _run_direct_read() -> str:
+    return await _read_direct(url)
+
   try:
-    content = await _read_with_jina(url)
+    content = await _with_transient_retry("read_url", _run_jina_read)
   except Exception as e:
     logger.warning(f"Jina read failed for {url}: {e}; falling back to direct HTTP")
     try:
-      content = await _read_direct(url)
+      content = await _with_transient_retry("read_url", _run_direct_read)
     except Exception as direct_error:
       logger.error(f"read_url failed for {url}: {direct_error}")
       return f"{READ_FAILED_PREFIX} {url}: {direct_error}"
