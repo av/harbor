@@ -75,6 +75,12 @@ run_boost_agentic_pytest() {
       fi
       (
         cd "$boost_dir"
+        default_venv="${boost_dir}/.venv"
+        # Container builds can leave a root-owned .venv on the bind mount; fall
+        # back to a disposable env under /tmp when the project venv is not usable.
+        if [[ -e "$default_venv" ]] && [[ ! -w "$default_venv" ]]; then
+          export UV_PROJECT_ENVIRONMENT="${TMPDIR:-/tmp}/harbor-boost-agentic-venv"
+        fi
         UV_LINK_MODE="${UV_LINK_MODE:-copy}" \
           uv run --with pytest --with pytest-asyncio \
           pytest -q "${targets[@]}"

@@ -11,7 +11,7 @@ set -euo pipefail
 
 suite_log() { echo "[boost-agentic-smoke] $*"; }
 
-HARBOR_TEST_REPO="${HARBOR_TEST_REPO:-/opt/harbor-test/repo}"
+HARBOR_TEST_REPO="${HARBOR_TEST_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 BOOST_DIR="${HARBOR_TEST_REPO}/services/boost"
 AGENTIC_MODE="${HARBOR_TEST_AGENTIC_MODE:-container}"
 PYTEST_TIMEOUT_SECONDS="${HARBOR_TEST_AGENTIC_TIMEOUT:-600}"
