@@ -325,6 +325,18 @@
 - label: diffscope anchor_scoped_draft records the scoped or revised draft in chat history when defer_final is set so downstream autocheck in scope-guard and agent-code workflow chains audits the in-scope answer not the pre-revision draft (DIF-003)
   command: cd services/boost && uv run pytest tests/test_diffscope.py::TestDiffscopeApply::test_apply_anchors_scoped_draft_when_defer_final -q --tb=no
   tags: [implemented, bughunt]
+- label: caveman respects HARBOR_BOOST_CAVEMAN_MAX_QUERIES when extracting search queries: clamps planned queries to the configured limit (default 3) instead of a hardcoded cap
+  command: cd services/boost && uv run pytest tests/test_caveman.py::TestCavemanQueryExtraction::test_extract_search_queries_uses_config_max_queries -q --tb=no
+  tags: [implemented]
+- label: ponytail respects HARBOR_BOOST_PONYTAIL_MAX_QUERIES when planning search queries: clamps planned queries to the configured limit (default 5)
+  command: cd services/boost && uv run pytest tests/test_ponytail.py::TestPonytailQueryPlanning::test_plan_search_queries_uses_config_max_queries -q --tb=no
+  tags: [implemented]
+- label: diffscope extracts forbidden paths from user scope hints including dont touch, leave X alone, except and except for Z, multi-path lists, and apostrophe-less dont-touch variants
+  command: cd services/boost && uv run pytest tests/test_diffscope.py::TestUserScope::test_extract_forbidden_paths_from_dont_touch tests/test_diffscope.py::TestUserScope::test_extract_forbidden_paths_from_leave_alone tests/test_diffscope.py::TestUserScope::test_extract_forbidden_paths_from_except tests/test_diffscope.py::TestUserScope::test_extract_forbidden_paths_from_except_for tests/test_diffscope.py::TestUserScope::test_extract_multiple_forbidden_paths_from_dont_touch tests/test_diffscope.py::TestUserScope::test_extract_multiple_forbidden_paths_from_leave_alone tests/test_diffscope.py::TestUserScope::test_extract_forbidden_without_apostrophe -q --tb=no
+  tags: [implemented]
+- label: deliverable.is_implementation_turn gates shipyard research: true for concrete implementation requests with file paths and no research signals, false for research-only or doc-heavy migration turns
+  command: cd services/boost && uv run pytest tests/test_shipyard_workflow.py::TestShipyardTurnTypes -q --tb=no
+  tags: [implemented]
 
 # testing
 - label: tests use a Deno orchestrator running sequential bash suites across containerized distros
