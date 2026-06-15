@@ -8929,14 +8929,16 @@ docker_model_available() {
 }
 
 run_privileged_install_command() {
+    # Package managers print progress to stdout; keep that off launch/up
+    # command substitutions that capture only the final echoed value.
     if [ "$(id -u)" -eq 0 ]; then
-        "$@"
+        "$@" >&2
     else
         if ! command -v sudo >/dev/null 2>&1; then
             log_error "sudo is required to install host packages automatically."
             return 1
         fi
-        sudo "$@"
+        sudo "$@" >&2
     fi
 }
 

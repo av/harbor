@@ -30,6 +30,9 @@ parallel_out="$tmp_dir/parallel.out"
 launch_workspace="$tmp_dir/launch-tests"
 mkdir -p "$fake_bin" "$harbor_home/profiles" "$harbor_home/services" "$launch_workspace"
 cp "$HARBOR_TEST_REPO/profiles/default.env" "$harbor_home/profiles/default.env"
+# Launch smoke fakes Docker and must not apt-install Docker Model Runner on the host.
+sed -i 's/^HARBOR_DMR_MANAGE_HOST=true$/HARBOR_DMR_MANAGE_HOST=false/' \
+  "$harbor_home/profiles/default.env"
 cp "$HARBOR_TEST_REPO/compose.yml" "$harbor_home/compose.yml"
 # Symlink individual service compose files (not the directory itself) so that
 # find without -L can traverse the services/ directory. A directory symlink
