@@ -154,6 +154,12 @@ const BASH_EXCLUDES = [
   ".scripts/lint/fixtures/**/*.sh",
   // Vendored third-party caches are not Harbor code.
   "lemonade/cache/**/*.sh",
+  "node_modules/**/*.sh",
+  ".deno-cache/**/*.sh",
+  "services/**/.venv/**/*.sh",
+  // Test artifacts contain staged copies of the repo; linting them double-counts
+  // findings and flags intentional-failure fixtures.
+  "tests/artifacts/**/*.sh",
 ];
 
 const RULES_PATH = `${REPO_ROOT}/.scripts/lint/rules.yaml`;
