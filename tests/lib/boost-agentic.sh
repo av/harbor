@@ -15,9 +15,9 @@ tests/test_agentic_debug_metrics.py
 tests/test_agentic_workflow_chains.py
 tests/test_shipyard_workflow.py
 tests/test_workflows.py
-tests/test_caveman.py
+tests/test_quickhop.py
 tests/test_keel.py
-tests/test_ponytail.py
+tests/test_deephop.py
 tests/test_autocheck.py
 tests/test_sightline.py
 tests/test_diffscope.py
@@ -76,7 +76,7 @@ run_boost_agentic_pytest() {
         return 1
       fi
       (
-        cd "$boost_dir"
+        cd "$boost_dir" || return 1
         default_venv="${boost_dir}/.venv"
         # Container builds can leave a root-owned .venv on the bind mount; fall
         # back to a disposable env under /tmp when the project venv is not usable.

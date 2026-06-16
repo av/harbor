@@ -1566,6 +1566,94 @@ if echo "$tunnels_after" | grep -q 'webui'; then
 fi
 
 # ---------------------------------------------------------------------------
+# 32b. Default UI resolution for open/url/tunnel/qr (regression: 1ef53cb9)
+#      Uses fake docker where possible; does not require services to be running.
+# ---------------------------------------------------------------------------
+suite_log "=== default UI resolution (open/url/tunnel/qr) ==="
+
+saved_ui_main=$(harbor config get ui.main 2>/dev/null || true)
+[ -n "$saved_ui_main" ] || fail "ui.main is unset at suite start"
+
+for cmd in open url qr tunnel; do
+  assert_match "$cmd --help documents ui.main default" \
+    'ui\.main' \
+    harbor "$cmd" --help
+done
+
+assert_no_empty_service_rejection() {
+  local name="$1"; shift
+  suite_log "$name"
+  "$@" >/tmp/cli-step.out 2>&1 || true
+  if grep -Eq 'No service specified' /tmp/cli-step.out; then
+    cat /tmp/cli-step.out >&2
+    fail "$name"
+  fi
+}
+
+assert_no_empty_service_rejection "open: bare command resolves ui.main" harbor open
+assert_no_empty_service_rejection "tunnel: bare command resolves ui.main" harbor tunnel
+
+assert_ok "tunnel down succeeds with no active tunnels" harbor tunnel down
+
+ui_fake_bin="$(mktemp -d -t harbor-ui.XXXXXX)"
+cat >"$ui_fake_bin/docker" <<'UI_FAKE_DOCKER'
+#!/usr/bin/env bash
+case "$*" in
+  "compose ps --format {{.Service}}")
+    echo "ollama"
+    exit 0
+    ;;
+  "compose ps --services --filter status=running")
+    echo "ollama"
+    exit 0
+    ;;
+  "compose ps -a --services --filter status=running")
+    echo "ollama"
+    exit 0
+    ;;
+  "port harbor.ollama")
+    echo "11434/tcp -> 0.0.0.0:11434"
+    exit 0
+    ;;
+esac
+[ "$1" = "compose" ] && exit 0
+exit 0
+UI_FAKE_DOCKER
+chmod +x "$ui_fake_bin/docker"
+
+suite_log "url: bare and flag-only forms resolve ui.main via fake docker"
+harbor config set ui.main ollama
+bare_local=$(PATH="$ui_fake_bin:$PATH" harbor url 2>/dev/null || true)
+bare_lan=$(PATH="$ui_fake_bin:$PATH" harbor url -a 2>/dev/null || true)
+bare_intra=$(PATH="$ui_fake_bin:$PATH" harbor url -i 2>/dev/null || true)
+[ "$bare_local" = "http://localhost:11434" ] || fail "bare harbor url got '$bare_local'"
+echo "$bare_lan" | grep -Eq '^http://[0-9.]+:11434$' || fail "bare harbor url -a got '$bare_lan'"
+[ "$bare_intra" = "http://ollama:11434" ] || fail "bare harbor url -i got '$bare_intra'"
+
+suite_log "ui.main: unset reports configuration error"
+assert_ok "config unset ui.main" harbor config unset ui.main
+harbor url >/tmp/cli-step.out 2>&1 || true
+if ! grep -Eq 'No default UI service configured' /tmp/cli-step.out; then
+  cat /tmp/cli-step.out >&2
+  fail "unset ui.main did not report missing default UI"
+fi
+
+suite_log "ui.main: invalid handle reports service not found"
+harbor config set ui.main nonexistent-service-xyz
+harbor open >/tmp/cli-step.out 2>&1 || true
+if ! grep -Eq "Service 'nonexistent-service-xyz' not found" /tmp/cli-step.out; then
+  cat /tmp/cli-step.out >&2
+  fail "invalid ui.main did not report missing service"
+fi
+if grep -Eq 'No service specified' /tmp/cli-step.out; then
+  cat /tmp/cli-step.out >&2
+  fail "invalid ui.main regressed to empty-args rejection"
+fi
+
+assert_ok "restore ui.main" harbor config set ui.main "$saved_ui_main"
+rm -rf "$ui_fake_bin"
+
+# ---------------------------------------------------------------------------
 # 33. Config set with special characters (v0.5.0 supplement)
 #     Commit d59fb2de fixed sed injection: values containing |, &, or \
 #     corrupted the .env file. This tests the head/printf/tail replacement
@@ -1856,6 +1944,7 @@ suite_log "update: prerequisite check — .git directory"
   _with_timeout() { shift; "$@"; }
   harbor_home="/tmp/harbor-fake-no-git-$$"
   mkdir -p "$harbor_home"
+  # shellcheck disable=SC2034
   version="0.0.0"
 
   # Source just the update_harbor function
@@ -1887,6 +1976,7 @@ suite_log "update: prerequisite check — git command"
   _with_timeout() { shift; "$@"; }
   harbor_home="/tmp/harbor-fake-git-$$"
   mkdir -p "$harbor_home/.git"
+  # shellcheck disable=SC2034
   version="0.0.0"
 
   eval "$(sed -n '/^update_harbor()/,/^}/p' "$harbor_script")"

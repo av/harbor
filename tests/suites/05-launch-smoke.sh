@@ -31,7 +31,7 @@ launch_workspace="$tmp_dir/launch-tests"
 mkdir -p "$fake_bin" "$harbor_home/profiles" "$harbor_home/services" "$launch_workspace"
 cp "$HARBOR_TEST_REPO/profiles/default.env" "$harbor_home/profiles/default.env"
 # Launch smoke fakes Docker and must not apt-install Docker Model Runner on the host.
-sed -i 's/^HARBOR_DMR_MANAGE_HOST=true$/HARBOR_DMR_MANAGE_HOST=false/' \
+perl -i -pe 's/^HARBOR_DMR_MANAGE_HOST=true$/HARBOR_DMR_MANAGE_HOST=false/' \
   "$harbor_home/profiles/default.env"
 cp "$HARBOR_TEST_REPO/compose.yml" "$harbor_home/compose.yml"
 # Symlink individual service compose files (not the directory itself) so that
@@ -214,6 +214,19 @@ cat >"$fake_bin/droid" <<'EOF'
 } >>"$HARBOR_LAUNCH_TOOL_LOG"
 EOF
 
+cat >"$fake_bin/grok" <<'EOF'
+#!/usr/bin/env bash
+{
+  echo "tool=grok"
+  echo "cwd=$PWD"
+  echo "GROK_MODELS_BASE_URL=${GROK_MODELS_BASE_URL:-}"
+  echo "XAI_API_KEY=${XAI_API_KEY:-}"
+  for arg in "$@"; do
+    echo "arg=$arg"
+  done
+} >>"$HARBOR_LAUNCH_TOOL_LOG"
+EOF
+
 cat >"$fake_bin/hermes" <<'EOF'
 #!/usr/bin/env bash
 {
@@ -301,7 +314,7 @@ cat >"$fake_bin/code" <<'EOF'
 } >>"$HARBOR_LAUNCH_TOOL_LOG"
 EOF
 
-chmod +x "$fake_bin/docker" "$fake_bin/curl" "$fake_bin/codex" "$fake_bin/copilot" "$fake_bin/claude" "$fake_bin/droid" "$fake_bin/hermes" "$fake_bin/mi" "$fake_bin/openclaw" "$fake_bin/opencode" "$fake_bin/pi" "$fake_bin/pool" "$fake_bin/code"
+chmod +x "$fake_bin/docker" "$fake_bin/curl" "$fake_bin/codex" "$fake_bin/copilot" "$fake_bin/claude" "$fake_bin/droid" "$fake_bin/grok" "$fake_bin/hermes" "$fake_bin/mi" "$fake_bin/openclaw" "$fake_bin/opencode" "$fake_bin/pi" "$fake_bin/pool" "$fake_bin/code"
 
 run_launch() {
   local name="$1"
@@ -678,6 +691,48 @@ assert_output '^model=research-quick-qwen-chat-model$'
 assert_output '^OPENAI_API_KEY=sk-boost$'
 assert_output 'base_url="http://localhost:8004/v1"'
 
+run_launch "module launch starts SearXNG and routes through quickhop module model" \
+  "ollama boost" "openai-mixed" \
+  --workflow quickhop --backend ollama codex --sandbox workspace-write
+assert_log '^tool=codex$'
+assert_log '^arg=model_providers\.harbor_launch\.base_url="http://localhost:8004/v1"$'
+assert_log '^arg=-m$'
+assert_log '^arg=quickhop-qwen-chat-model$'
+assert_docker_log 'up -d --wait --force-recreate boost searxng$'
+assert_output "Starting Boost workflow 'quickhop' for backend 'ollama'"
+assert_output "Advertising Boost module 'quickhop' for this launch."
+
+run_launch "launch --workflow quickhop config prints boosted module model and Boost API settings" \
+  "ollama boost" "openai-mixed" \
+  --workflow quickhop --backend ollama --config codex
+assert_output '^backend=boost$'
+assert_output '^model=quickhop-qwen-chat-model$'
+assert_output '^OPENAI_API_KEY=sk-boost$'
+assert_output 'base_url="http://localhost:8004/v1"'
+
+run_launch "module launch routes grok through quickhop with Boost model list env" \
+  "ollama boost" "openai-mixed" \
+  --workflow quickhop --backend ollama grok -p hello
+assert_log '^tool=grok$'
+assert_log '^GROK_MODELS_BASE_URL=http://localhost:8004/v1$'
+assert_log '^XAI_API_KEY=sk-boost$'
+assert_log '^arg=-m$'
+assert_log '^arg=quickhop-qwen-chat-model$'
+assert_log '^arg=-p$'
+assert_log '^arg=hello$'
+assert_output "Advertising Boost module 'quickhop' for this launch."
+
+run_launch "module launch routes through keel module model without SearXNG" \
+  "ollama boost" "openai-mixed" \
+  --workflow keel --backend ollama codex --sandbox workspace-write
+assert_log '^tool=codex$'
+assert_log '^arg=model_providers\.harbor_launch\.base_url="http://localhost:8004/v1"$'
+assert_log '^arg=-m$'
+assert_log '^arg=keel-qwen-chat-model$'
+assert_docker_log 'up -d --wait --force-recreate boost$'
+assert_output "Starting Boost workflow 'keel' for backend 'ollama'"
+assert_output "Advertising Boost module 'keel' for this launch."
+
 run_launch "workflow launch routes through shipyard when boost and SearXNG are already running" \
   "ollama boost searxng" "openai-mixed" \
   --workflow shipyard --backend ollama codex --sandbox workspace-write
@@ -858,6 +913,39 @@ assert_log '^OPENAI_BASE_URL=http://localhost:11434/v1$'
 assert_log '^OPENAI_API_KEY=sk-harbor$'
 assert_log '^HERMES_MODEL=qwen-chat-model$'
 assert_log '^arg=chat$'
+
+run_launch "grok uses GROK_MODELS_BASE_URL and XAI_API_KEY with model argument" \
+  "ollama" "openai-mixed" \
+  --backend ollama grok -p hello
+assert_log '^tool=grok$'
+assert_log '^cwd='"$HARBOR_TEST_REPO"'$'
+assert_log '^GROK_MODELS_BASE_URL=http://localhost:11434/v1$'
+assert_log '^XAI_API_KEY=sk-harbor$'
+assert_log '^arg=-m$'
+assert_log '^arg=qwen-chat-model$'
+assert_log '^arg=-p$'
+assert_log '^arg=hello$'
+
+run_launch "grok --web routes through Boost with workflow-prefixed model" \
+  "ollama boost" "openai-mixed" \
+  --web --backend ollama grok -p hello
+assert_log '^tool=grok$'
+assert_log '^GROK_MODELS_BASE_URL=http://localhost:8004/v1$'
+assert_log '^XAI_API_KEY=sk-boost$'
+assert_log '^arg=-m$'
+assert_log '^arg=boost-web-qwen-chat-model$'
+assert_docker_log 'up -d --wait boost searxng$'
+
+run_launch "grok preserves user-supplied model argument" \
+  "ollama" "openai-mixed" \
+  --backend ollama grok -m tool-model -p hello
+assert_log '^tool=grok$'
+assert_log '^GROK_MODELS_BASE_URL=http://localhost:11434/v1$'
+assert_log '^XAI_API_KEY=sk-harbor$'
+assert_log '^arg=-m$'
+assert_log '^arg=tool-model$'
+assert_log '^arg=-p$'
+assert_log '^arg=hello$'
 
 run_launch "vscode opens the current workspace through code" \
   "ollama" "openai-mixed" \
