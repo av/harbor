@@ -270,5 +270,36 @@ export async function removeLlamacppModel(modelSpec: string): Promise<boolean> {
     } catch { /* ignore */ }
   }
 
+  // Resolved-ID fallback: walk the cache the same way listing does and match
+  // by the full "canonicalId:quant" model ID. Catches models whose canonical
+  // ID has no slash (e.g. flat files without a manifest or sidecar).
+  if (!removed) {
+    const prefixMap = await buildPrefixMap(legacyCache);
+
+    async function* walkGguf(dir: string): AsyncGenerator<{ fullPath: string; name: string; relDir: string }> {
+      try {
+        for await (const entry of Deno.readDir(dir)) {
+          const fullPath = dir + '/' + entry.name;
+          if (entry.isDirectory) {
+            yield* walkGguf(fullPath);
+          } else if (entry.isFile && entry.name.endsWith('.gguf')) {
+            const relDir = dir === legacyCache ? '' : dir.slice(legacyCache.length + 1);
+            yield { fullPath, name: entry.name, relDir };
+          }
+        }
+      } catch { /* ignore */ }
+    }
+
+    for await (const item of walkGguf(legacyCache)) {
+      if (item.name.toLowerCase().includes('mmproj')) continue;
+      const canonicalId = await resolveFileCanonicalId(item.name, item.relDir, legacyCache, prefixMap);
+      if (canonicalId !== repoSpec) continue;
+      if (!quantMatches(item.name)) continue;
+      await Deno.remove(item.fullPath);
+      try { await Deno.remove(item.fullPath + '.json'); } catch { /* no sidecar */ }
+      removed = true;
+    }
+  }
+
   return removed;
 }
