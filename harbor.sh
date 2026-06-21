@@ -7701,7 +7701,9 @@ unsafe_update() {
         log_warn "Your '$current_branch' branch is preserved — switch back with: git checkout $current_branch"
         if ! git checkout -B main FETCH_HEAD; then
             log_error "Failed to switch to main branch."
-            log_error "Run 'git status' in $harbor_home to inspect."
+            log_error "Local or untracked file changes likely conflict with the update."
+            log_error "Run 'git status' in $harbor_home to see which files are affected."
+            log_error "To safely update: cd $harbor_home && git stash --include-untracked && harbor update --latest"
             return 1
         fi
     else
@@ -7714,7 +7716,9 @@ unsafe_update() {
         if [ "$current_branch" = "HEAD" ]; then
             if ! git checkout -B main FETCH_HEAD; then
                 log_error "Failed to switch to main branch."
-                log_error "Run 'git status' in $harbor_home to inspect."
+                log_error "Local or untracked file changes likely conflict with the update."
+                log_error "Run 'git status' in $harbor_home to see which files are affected."
+                log_error "To safely update: cd $harbor_home && git stash --include-untracked && harbor update --latest"
                 return 1
             fi
         fi
@@ -7901,14 +7905,19 @@ update_harbor() {
         local checkout_output
         if ! checkout_output=$(git checkout "tags/$harbor_version" 2>&1); then
             log_error "Failed to check out version $harbor_version."
-            if printf '%s\n' "$checkout_output" | grep -qi "local changes.*would be overwritten"; then
-                log_error "You have local modifications to tracked files that conflict with the update."
-                log_error "Run 'git status' in $harbor_home to see which files are modified."
-                log_error "To discard local changes and force update: cd $harbor_home && git checkout -- . && harbor update"
-            elif printf '%s\n' "$checkout_output" | grep -qi "did not match"; then
-                log_error "This version tag may not exist. Check available versions at https://github.com/av/harbor/releases"
+            # Detect cause with locale-independent git commands instead of grepping
+            # localized error messages (the old English-only patterns failed for
+            # Italian, German, etc.)
+            if ! git rev-parse "tags/$harbor_version" >/dev/null 2>&1; then
+                log_error "Version tag does not exist locally."
+                log_error "Check available versions at https://github.com/av/harbor/releases"
             else
-                log_error "$checkout_output"
+                log_error "Local or untracked file changes conflict with the update."
+                log_error "Run 'git status' in $harbor_home to see which files are affected."
+                log_error "To safely update (your changes are saved in git stash):"
+                log_error "  cd $harbor_home && git stash --include-untracked && harbor update"
+                log_error "To forcefully discard ALL local changes and update:"
+                log_error "  cd $harbor_home && git checkout -- . && git clean -fd && harbor update"
             fi
             _restore_stash_on_error
             return 1
