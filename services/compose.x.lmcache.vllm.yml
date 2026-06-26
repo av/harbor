@@ -1,0 +1,23 @@
+services:
+  lmcache-server:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.lmcache
+    image: lmcache/standalone:nightly
+    platform: linux/amd64
+    ipc: host
+    shm_size: 16g
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    command:
+      - /opt/venv/bin/lmcache
+      - server
+      - --l1-size-gb=${HARBOR_LMCACHE_L1_SIZE_GB:-60}
+      - --eviction-policy=LRU
+      - --max-workers=${HARBOR_LMCACHE_MAX_WORKERS:-4}
+      - --port=${HARBOR_LMCACHE_PORT:-6555}
+    networks:
+      - harbor-network
