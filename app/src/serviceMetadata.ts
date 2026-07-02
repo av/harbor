@@ -1113,4 +1113,12 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         wikiUrl: `${wikiUrl}/2.3.92-Satellite-Daytona`,
         tooltip: 'Self-hosted sandbox platform for AI agents with Docker-in-Docker, computer use, and GPU support.',
     },
+    'qq-ai-bot': {
+        name: 'qq-ai-bot',
+        tags: [HST.satellite, HST.api, HST.tools],
+        projectUrl: 'https://github.com/happysnaker/qq-ai-bot',
+        logo: 'https://github.com/happysnaker.png?size=200',
+        wikiUrl: `${wikiUrl}/2.3.93-Satellite-qq-ai-bot`,
+        tooltip: 'Self-hosted QQ ↔ AI bot scaffold for OneBot 11 / NapCat / LLOneBot with ACP-compatible agents, persistent sessions, progress streaming, and a Docker demo.',
+    },
 };
