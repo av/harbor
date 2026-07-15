@@ -147,8 +147,8 @@ class ConsiderationSchema(BaseModel):
 class ConceptOutputSchema(BaseModel):
   concepts: list[ConceptSchema] = Field(
     description='List of concepts that are relevant to the message.',
-    min_items=1,
-    max_items=10,
+    min_length=1,
+    max_length=10,
   )
 
 

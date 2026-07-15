@@ -225,8 +225,6 @@ async def apply(chat: 'ch.Chat', llm: 'llm.LLM'):
     class PickNextSchema(BaseModel):
       concept: str = Field(
         description='List of two concepts that are picked from the list.',
-        min_items=2,
-        max_items=2,
       )
 
       model_config = {

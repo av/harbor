@@ -38,8 +38,8 @@ class ProgramSchema(BaseModel):
   operations: List[InsertWordSchema | ReplaceWordSchema |
                    RemoveWordSchema] = Field(
                      description="List of operations to perform",
-                     min_items=1,
-                     max_items=2
+                     min_length=1,
+                     max_length=2
                    )
 
 
@@ -124,7 +124,7 @@ async def apply(chat: 'ch.Chat', llm: 'llm.LLM'):
       resolve=True
     )
     await llm.emit_status(word_ops.to_prompt())
-    program = ProgramSchema.parse_obj(program_json)
+    program = ProgramSchema.model_validate(program_json)
     await llm.emit_status(program)
     word_ops.execute_program(program)
 
