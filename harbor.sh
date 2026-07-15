@@ -1111,7 +1111,7 @@ run_routine() {
 
     if command -v deno &>/dev/null; then
         log_debug "Using local deno for routine"
-        HARBOR_LOG_LEVEL="$default_log_level" deno run -A --unstable-sloppy-imports "$routine_path" "$@"
+        HARBOR_LOG_LEVEL="$default_log_level" DENO_NO_UPDATE_CHECK=1 deno run -A --unstable-sloppy-imports "$routine_path" "$@"
     else
         _check_docker || return 1
         log_debug "Using Docker container for routine"
@@ -7991,7 +7991,7 @@ run_migrate_command() {
         fi
 
         if command -v deno &>/dev/null; then
-            deno run -A --unstable-sloppy-imports "$harbor_home/.scripts/migrate.ts" --target "$target_config_version" "$@"
+            DENO_NO_UPDATE_CHECK=1 deno run -A --unstable-sloppy-imports "$harbor_home/.scripts/migrate.ts" --target "$target_config_version" "$@"
         elif command -v docker &>/dev/null; then
             log_debug "deno not found, running migration in container"
             docker run --rm \
@@ -8485,7 +8485,7 @@ run_harbor_dev() {
             "./.scripts/$script.ts" "${script_args[@]}"
     else
         log_debug "running on host: $script"
-        deno run -A --unstable-sloppy-imports "$script_path" "${script_args[@]}"
+        DENO_NO_UPDATE_CHECK=1 deno run -A --unstable-sloppy-imports "$script_path" "${script_args[@]}"
     fi
 }
 

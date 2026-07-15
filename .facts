@@ -64,6 +64,9 @@
 - label: harbor doctor SELinux AVC probe reads audit logs instead of blocking on noninteractive stdin
   command: timeout 5 bash -lc 'cd /home/everlier/code/harbor && tail -f /dev/null | harbor doctor >/tmp/harbor-doctor-stdin.out 2>/tmp/harbor-doctor-stdin.err'
   tags: [spec, app-doctor-stdin, implemented]
+- label: host deno invocations set DENO_NO_UPDATE_CHECK=1 to suppress the update-check nag and its dl.deno.land telemetry
+  command: test $(grep -c 'DENO_NO_UPDATE_CHECK=1 deno run' harbor.sh) -eq 3
+  tags: [spec, deno-no-update-check, implemented]
 
 ## launch
 - label: harbor launch routes host tools codex, claude, opencode, pi, and others to OpenAI-compatible Harbor backends with optional --backend, --model, --config, --web, and --workflow
