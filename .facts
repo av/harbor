@@ -329,6 +329,9 @@
 - label: caveman injects one level-tagged caveman_style block into the leading system message before completion unless the user or workflow disables the style, preserving single-system-message backend compatibility
   command: cd services/boost && uv run --with pytest --with pytest-asyncio pytest -q tests/test_caveman.py
   tags: [spec, release-validation, implemented]
+- label: Boost declares a dev dependency group with pytest pytest-asyncio and anthropic so bare uv run pytest collects the Anthropic and OpenAI SDK integration tests by default
+  command: cd services/boost && python3 -c "import tomllib;g=tomllib.load(open('pyproject.toml','rb'))['dependency-groups']['dev'];assert {'pytest','pytest-asyncio','anthropic'} <= set(g), g"
+  tags: [implemented]
 
 # testing
 - label: tests use a Deno orchestrator running sequential bash suites across containerized distros
