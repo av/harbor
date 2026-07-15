@@ -416,7 +416,7 @@ show_help() {
     echo "    hf dl           - HuggingFaceModelDownloader CLI"
     echo "    hf parse-url    - Parse file URL from Hugging Face"
     echo "    hf token        - Get/set the Hugging Face Hub token"
-    echo "    hf cache        - Get/set the path to Hugging Face cache"
+    echo "    hf cachedir     - Get/set the path to Hugging Face cache"
     echo "    hf find <query> - Open HF Hub with a query (trending by default)"
     echo "    hf path <spec>  - Print a folder in HF cache for a given model spec"
     echo "    hf *            - Anything else is passed to the official Hugging Face CLI"
@@ -4280,7 +4280,7 @@ _harbor_completions() {
     local completion_shells="bash zsh fish"
 
     # HF subcommands
-    local hf_subcommands="dl download parse-url find search cache ls token login"
+    local hf_subcommands="dl download parse-url find search cachedir ls token login"
 
     # Ollama subcommands
     local ollama_subcommands="model models show tags list ls pull run rm stop ps"
@@ -4790,7 +4790,7 @@ _harbor() {
             ;;
         hf)
             if ((CURRENT == 3)); then
-                local -a hf_cmds=('dl' 'download' 'parse-url' 'find' 'search' 'cache' 'ls' 'token' 'login')
+                local -a hf_cmds=('dl' 'download' 'parse-url' 'find' 'search' 'cachedir' 'ls' 'token' 'login')
                 _describe -t hf-commands 'hf command' hf_cmds
             fi
             ;;
@@ -5146,7 +5146,7 @@ complete -c harbor -n '__harbor_using_subcommand hf' -a download -d 'Download mo
 complete -c harbor -n '__harbor_using_subcommand hf' -a parse-url -d 'Parse HF file URL'
 complete -c harbor -n '__harbor_using_subcommand hf' -a find -d 'Find models'
 complete -c harbor -n '__harbor_using_subcommand hf' -a search -d 'Search models'
-complete -c harbor -n '__harbor_using_subcommand hf' -a cache -d 'Manage HF cache'
+complete -c harbor -n '__harbor_using_subcommand hf' -a cachedir -d 'Get/set HF cache path'
 complete -c harbor -n '__harbor_using_subcommand hf' -a ls -d 'List cached models'
 complete -c harbor -n '__harbor_using_subcommand hf' -a token -d 'Manage HF token'
 complete -c harbor -n '__harbor_using_subcommand hf' -a login -d 'Login to HF'
@@ -8965,7 +8965,7 @@ run_hf_command() {
         env_manager_alias hf.token "$@"
         return
         ;;
-    cache)
+    cachedir)
         shift
         env_manager_alias hf.cache "$@"
         return
@@ -9008,7 +9008,7 @@ run_hf_command() {
         echo
         echo "Commands:"
         echo "  harbor hf token [token]    - Get or set the Hugging Face API token"
-        echo "  harbor hf cache            - Get or set the location of Hugging Face cache"
+        echo "  harbor hf cachedir         - Get or set the location of Hugging Face cache"
         echo "  harbor hf dl [args]        - Download a model from Hugging Face"
         echo "  harbor hf path [user/repo] - Resolve the path to a model dir in HF cache"
         echo "  harbor hf find [query]     - Search for a model on Hugging Face"
