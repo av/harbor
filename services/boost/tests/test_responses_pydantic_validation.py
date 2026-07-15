@@ -1182,7 +1182,9 @@ class TestNonStreamingIncomplete:
         assert validated.status == "incomplete"
         assert validated.incomplete_details is not None
         assert validated.incomplete_details.reason == "max_output_tokens"
-        assert validated.completed_at is None
+        # SDK >= 1.98 dropped completed_at from the Response model; check the
+        # raw payload instead of the validated attribute.
+        assert resp.get("completed_at") is None
 
     def test_content_filter_incomplete_validates(self):
         """Response with finish_reason=content_filter produces valid incomplete."""
@@ -1283,7 +1285,7 @@ class TestNonStreamingCompletedAt:
         validated = sdk.Response.model_validate(resp)
 
         assert validated.status == "incomplete"
-        assert validated.completed_at is None
+        assert resp.get("completed_at") is None
 
     def test_created_at_present(self):
         """All responses have a created_at timestamp."""
