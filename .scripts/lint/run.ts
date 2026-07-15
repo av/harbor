@@ -157,6 +157,7 @@ const BASH_EXCLUDES = [
   "node_modules/**/*.sh",
   ".deno-cache/**/*.sh",
   "services/**/.venv/**/*.sh",
+  ".claude/worktrees/**/*.sh",
   // Test artifacts contain staged copies of the repo; linting them double-counts
   // findings and flags intentional-failure fixtures.
   "tests/artifacts/**/*.sh",

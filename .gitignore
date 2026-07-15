@@ -50,6 +50,7 @@ node_modules/
 langfuse/db/
 
 scripts/*
+!scripts/demos/
 
 # LiteLLM
 litellm/db
