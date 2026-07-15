@@ -157,7 +157,7 @@ assert_match "launch help lists host tools" 'Host tools: .*codex.*pi.*vscode' ha
 assert_match "launch help lists dmr mlx and omlx backends" 'Backends: .*dmr.*mlx.*omlx' harbor launch --help
 assert_match "launch help lists service CLI shortcuts" 'Service CLI shortcuts: .*plandex.*promptfoo.*tokscale' harbor launch --help
 assert_match "launch help lists container service fallback" "Container services: any service from 'harbor ls'.*mi.*opencode" harbor launch --help
-assert_match "launch help documents web as the only tool modifier" '^--model, --config, and --web\.$' harbor launch --help
+assert_match "launch help documents web and workflow modifiers" '^--model, --config, --web, and --workflow\.$' harbor launch --help
 assert_not_match "launch help does not list removed tool groups" '--time|--notes|--files|--scratch' harbor launch --help
 
 suite_log "launch help avoids broken generic service --help example"
@@ -628,17 +628,6 @@ assert_ok "integration: aider + llamacpp + dmr" harbor cmd aider llamacpp dmr
 #     intercept the actual compose pull and verify routing without network I/O.
 # ---------------------------------------------------------------------------
 
-# No-args case: should fail with usage showing both modes.
-suite_log "pull: no-args shows usage"
-if harbor pull >/tmp/cli-step.out 2>&1; then
-  cat /tmp/cli-step.out >&2
-  fail "harbor pull with no args unexpectedly succeeded"
-fi
-if ! grep -Fq 'harbor pull <service>' /tmp/cli-step.out || ! grep -Fq 'harbor pull <model>' /tmp/cli-step.out; then
-  cat /tmp/cli-step.out >&2
-  fail "harbor pull usage does not mention both service and model modes"
-fi
-
 # Set up a fake docker to intercept pull routing decisions.
 pull_fake_bin="$(mktemp -d -t harbor-pull.XXXXXX)"
 pull_fake_log="$(mktemp -t harbor-pull-log.XXXXXX)"
@@ -663,6 +652,11 @@ if [ "$1" = "compose" ]; then
   exit 0
 fi
 
+if [ "$1" = "run" ]; then
+  printf 'docker %s\n' "$*" >>"$HARBOR_PULL_FAKE_LOG"
+  exit 0
+fi
+
 exit 0
 FAKE_DOCKER
 cat >"$pull_fake_bin/curl" <<'FAKE_CURL'
@@ -671,6 +665,18 @@ cat >"$pull_fake_bin/curl" <<'FAKE_CURL'
 printf '%s\n' '{"data":[]}'
 FAKE_CURL
 chmod +x "$pull_fake_bin/docker" "$pull_fake_bin/curl"
+
+# No-args case: pull selected Docker images.
+: >"$pull_fake_log"
+suite_log "pull: no-args routes to docker image pull"
+if ! HARBOR_PULL_FAKE_LOG="$pull_fake_log" PATH="$pull_fake_bin:$PATH" harbor pull >/tmp/cli-step.out 2>&1; then
+  cat /tmp/cli-step.out >&2
+  fail "harbor pull with no args failed"
+fi
+if ! grep -q ' pull$' "$pull_fake_log"; then
+  cat "$pull_fake_log" >&2
+  fail "harbor pull with no args did not route to docker compose pull"
+fi
 
 # Test: known service name routes to docker compose pull.
 : >"$pull_fake_log"
@@ -715,6 +721,36 @@ HARBOR_PULL_FAKE_LOG="$pull_fake_log" PATH="$pull_fake_bin:$PATH" harbor pull ll
 if grep -q ' pull$' "$pull_fake_log"; then
   cat "$pull_fake_log" >&2
   fail "harbor pull llama3.2 incorrectly routed to docker compose pull"
+fi
+
+# Test: mixed service + model args route only the model to the model pull path.
+: >"$pull_fake_log"
+suite_log "pull: mixed service and model routes only model to model download"
+HARBOR_PULL_FAKE_LOG="$pull_fake_log" PATH="$pull_fake_bin:$PATH" harbor pull ollama qwen3:8b >/tmp/cli-step.out 2>&1 || true
+if grep -q ' pull$' "$pull_fake_log"; then
+  cat "$pull_fake_log" >&2
+  fail "harbor pull ollama qwen3:8b incorrectly routed to docker compose pull"
+fi
+if ! grep -Eq 'run .* ollama pull qwen3:8b$' "$pull_fake_log"; then
+  cat "$pull_fake_log" >&2
+  fail "harbor pull ollama qwen3:8b did not pass qwen3:8b as the model"
+fi
+if grep -Eq 'run .* ollama pull ollama($| )' "$pull_fake_log"; then
+  cat "$pull_fake_log" >&2
+  fail "harbor pull ollama qwen3:8b passed the service name as the model"
+fi
+
+# Test: models ls auto-starts Ollama when no source is given.
+: >"$pull_fake_log"
+suite_log "models: ls auto-starts Ollama when source is omitted"
+HARBOR_PULL_FAKE_LOG="$pull_fake_log" PATH="$pull_fake_bin:$PATH" harbor models ls >/tmp/cli-step.out 2>&1 || true
+if ! grep -Eq 'up -d --wait$' "$pull_fake_log"; then
+  cat "$pull_fake_log" >&2
+  fail "harbor models ls did not auto-start Ollama"
+fi
+if ! grep -Eq 'docker run .* ./routines/models.ts ls$' "$pull_fake_log"; then
+  cat "$pull_fake_log" >&2
+  fail "harbor models ls did not run the models routine"
 fi
 
 rm -rf "$pull_fake_bin" "$pull_fake_log"
@@ -1594,6 +1630,37 @@ assert_no_empty_service_rejection "open: bare command resolves ui.main" harbor o
 assert_no_empty_service_rejection "tunnel: bare command resolves ui.main" harbor tunnel
 
 assert_ok "tunnel down succeeds with no active tunnels" harbor tunnel down
+
+open_fake_bin="$(mktemp -d -t harbor-open.XXXXXX)"
+open_fake_log="$(mktemp -t harbor-open-log.XXXXXX)"
+cat >"$open_fake_bin/xdg-open" <<'OPEN_FAKE_XDG'
+#!/usr/bin/env bash
+printf '%s\n' "$1" >>"$HARBOR_OPEN_FAKE_LOG"
+OPEN_FAKE_XDG
+cat >"$open_fake_bin/docker" <<'OPEN_FAKE_DOCKER'
+#!/usr/bin/env bash
+echo "docker should not be required for configured open_url" >&2
+exit 99
+OPEN_FAKE_DOCKER
+chmod +x "$open_fake_bin/xdg-open" "$open_fake_bin/docker"
+
+saved_ollama_open_url=$(harbor config get ollama.open_url 2>/dev/null || true)
+harbor config set ollama.open_url https://example.test/ollama >/tmp/cli-step.out 2>&1
+suite_log "open: configured open_url works without Docker"
+if ! HARBOR_OPEN_FAKE_LOG="$open_fake_log" PATH="$open_fake_bin:$PATH" harbor open ollama >/tmp/cli-step.out 2>&1; then
+  cat /tmp/cli-step.out >&2
+  fail "harbor open ollama with open_url failed"
+fi
+if ! grep -Fxq 'https://example.test/ollama' "$open_fake_log"; then
+  cat "$open_fake_log" >&2
+  fail "harbor open ollama did not open configured open_url"
+fi
+if [ -n "$saved_ollama_open_url" ]; then
+  harbor config set ollama.open_url "$saved_ollama_open_url" >/tmp/cli-step.out 2>&1
+else
+  harbor config unset ollama.open_url >/tmp/cli-step.out 2>&1
+fi
+rm -rf "$open_fake_bin" "$open_fake_log"
 
 ui_fake_bin="$(mktemp -d -t harbor-ui.XXXXXX)"
 cat >"$ui_fake_bin/docker" <<'UI_FAKE_DOCKER'

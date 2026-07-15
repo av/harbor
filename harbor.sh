@@ -591,16 +591,6 @@ run_harbor_doctor() {
             log_info "${ok} Docker Compose (v2) version is newer than $desired_compose_major.$desired_compose_minor.$desired_compose_patch"
         fi
 
-        if $check_mode; then
-            if $has_critical; then
-                log_error "Harbor Doctor: essential checks failed."
-                return 1
-            else
-                log_info "Harbor Doctor: essential checks passed."
-                return 0
-            fi
-        fi
-
         # Check Docker disk space (LLM models are large, disk exhaustion is common)
         local docker_root_dir data_space_gb
         docker_root_dir=$(echo "$docker_access_output" | grep "Docker Root Dir:" | sed 's/.*Docker Root Dir: *//')
@@ -653,6 +643,16 @@ run_harbor_doctor() {
         log_warn "${nok} Harbor home is not a git repository ($harbor_home/.git not found)."
         log_warn "  'harbor update' will not work. If you installed via --source-path,"
         log_warn "  reinstall with: curl -fsSL https://raw.githubusercontent.com/av/harbor/main/install.sh | bash"
+    fi
+
+    if $check_mode; then
+        if $has_critical; then
+            log_error "Harbor Doctor: essential checks failed."
+            return 1
+        else
+            log_info "Harbor Doctor: essential checks passed."
+            return 0
+        fi
     fi
 
     # WSL-specific diagnostics
@@ -1540,7 +1540,7 @@ run_up() {
         fi
     done
 
-    if [ "$default_autoopen" = "true" ]; then
+    if [ "$default_autoopen" = "true" ] && ! $should_open; then
         run_open "$default_open"
     fi
 
@@ -1558,7 +1558,8 @@ run_up() {
     fi
 
     if $should_open; then
-        run_open "$filtered_args"
+        local open_target="${display_services[0]:-}"
+        run_open "$open_target"
     fi
 }
 
@@ -2091,43 +2092,39 @@ run_pull() {
     _check_docker || return 1
 
     if [ $# -eq 0 ]; then
-        log_error "No service or model specified."
-        echo "Usage:" >&2
-        echo "  harbor pull <service> [service...]   Pull Docker images for services" >&2
-        echo "  harbor pull <model>                  Pull a model (alias for 'harbor models pull')" >&2
-        echo "" >&2
-        echo "Examples:" >&2
-        echo "  harbor pull ollama webui             Pull Docker images" >&2
-        echo "  harbor pull qwen3:8b                 Pull an Ollama model" >&2
-        return 1
+        $(compose_with_options) pull
+        return
     fi
 
     local available_services
     available_services=$(get_services --silent)
 
     # Separate services (Docker image pull) from models (model download).
-    # If any arg is not a known service, treat ALL args as a single model pull
-    # invocation rather than silently mixing the two operations.
+    # If any arg is not a known service, only the non-service args are passed to
+    # the model pull, avoiding using a service name as the model ID.
     local service_args=()
     local has_non_service=false
+    local first_model_index=-1
+    local i=0
     for arg in "$@"; do
         if echo "$available_services" | grep -q "^${arg}$"; then
-            service_args+=("$arg")
+            if ! $has_non_service; then
+                service_args+=("$arg")
+            fi
         else
+            if ! $has_non_service; then
+                first_model_index=$i
+            fi
             has_non_service=true
-            break
         fi
+        i=$((i + 1))
     done
 
     if $has_non_service; then
         if [ ${#service_args[@]} -gt 0 ]; then
-            # Mixed: some args are services, some aren't. This is confusing.
-            # Treat the non-service arg as a model and warn about the ambiguity.
-            log_warn "Ignoring service arguments (${service_args[*]}) -- treating '$arg' as a model to download."
-            log_warn "To pull Docker images, use: harbor pull ${service_args[*]}"
-            log_warn "To pull a model, use: harbor models pull $arg"
+            log_warn "Mixed service and model arguments; only the model will be pulled."
         fi
-        run_models_pull "$arg"
+        run_models_pull "${@:$((first_model_index + 1))}"
         return
     fi
 
@@ -2135,7 +2132,7 @@ run_pull() {
     for service in "${service_args[@]}"; do
         log_info "Pulling service $service"
     done
-    $(compose_with_options "$@") pull
+    $(compose_with_options "${service_args[@]}") pull
 }
 
 shell_single_quote() {
@@ -5463,12 +5460,43 @@ get_intra_url() {
     fi
 }
 
+_resolve_ui_service() {
+    local service="${1:-}"
+
+    if [ -z "$service" ]; then
+        service=$(env_manager get ui.main)
+    fi
+    if [ -z "$service" ]; then
+        log_error "No default UI service configured."
+        log_error "Set one with: harbor config set ui.main <service>"
+        return 1
+    fi
+
+    echo "$service"
+}
+
+_validate_resolved_service() {
+    local service_handle="$1"
+
+    if ! service_compose_exists "$service_handle"; then
+        log_error "Service '$service_handle' not found."
+        local suggestion
+        if suggestion=$(_suggest_service "$service_handle") && [ -n "$suggestion" ]; then
+            log_info "Did you mean: $suggestion?"
+        fi
+        log_info "Run 'harbor ls' to see available services."
+        return 1
+    fi
+}
+
 get_url() {
     case "${1:-}" in
     --help | -h | help)
-        echo "Usage: harbor url [options] <service>"
+        echo "Usage: harbor url [options] [service]"
         echo ""
         echo "Get the URL for a running service."
+        echo ""
+        echo "When service is omitted, uses ui.main (harbor config get ui.main)."
         echo ""
         echo "Options:"
         echo "  (default)                  URL on localhost (http://localhost:<port>)"
@@ -5476,6 +5504,7 @@ get_url() {
         echo "  -i, --internal, --intra    URL within Harbor's Docker network"
         echo ""
         echo "Examples:"
+        echo "  harbor url                 URL for the default UI service"
         echo "  harbor url webui           http://localhost:33801"
         echo "  harbor url -a webui        http://192.168.1.100:33801"
         echo "  harbor url -i webui        http://webui:8080"
@@ -5510,10 +5539,10 @@ get_url() {
         esac
     done
 
-    # If nothing specified - use a handle
-    # of the default service to open
     if [ ${#filtered_args[@]} -eq 0 ] || [ -z "${filtered_args[0]}" ]; then
-        filtered_args[0]="$default_open"
+        if ! filtered_args[0]=$(_resolve_ui_service); then
+            return 1
+        fi
     fi
 
     if $is_local; then
@@ -5532,7 +5561,27 @@ print_qr() {
 }
 
 print_service_qr() {
-    local url=$(get_url -a "$1")
+    case "${1:-}" in
+    --help | -h | help)
+        echo "Usage: harbor qr [service]"
+        echo ""
+        echo "Generate a QR code for a service URL and print it in the terminal."
+        echo ""
+        echo "When service is omitted, uses ui.main (harbor config get ui.main)."
+        echo ""
+        echo "Examples:"
+        echo "  harbor qr              QR code for the default UI service"
+        echo "  harbor qr webui        QR code for Open WebUI"
+        echo ""
+        echo "See also: harbor url, harbor open"
+        return 0
+        ;;
+    esac
+
+    local url
+    if ! url=$(get_url -a "$1"); then
+        return 1
+    fi
     log_info "URL: $url"
     print_qr "$url"
 }
@@ -5583,31 +5632,36 @@ sys_open() {
 run_open() {
     case "${1:-}" in
     --help | -h | help)
-        echo "Usage: harbor open <service>"
+        echo "Usage: harbor open [service]"
         echo ""
         echo "Open a running service's UI in the default browser."
+        echo ""
+        echo "When service is omitted, uses ui.main (harbor config get ui.main)."
         echo ""
         echo "The URL is resolved in order:"
         echo "  1. Custom URL from config (<service>.open_url)"
         echo "  2. Auto-detected URL from Docker port mapping"
         echo ""
         echo "Examples:"
-        echo "  harbor open webui     Open the WebUI interface"
-        echo "  harbor open ollama    Open Ollama's endpoint"
+        echo "  harbor open              Open the default UI service"
+        echo "  harbor open webui        Open the WebUI interface"
+        echo "  harbor open ollama       Open Ollama's endpoint"
         echo ""
         echo "See also: harbor url, harbor up"
         return 0
         ;;
-    "")
-        log_error "No service specified."
-        log_error "Usage: harbor open <service>"
-        log_error "Run 'harbor ps' to see running services."
-        return 1
-        ;;
     esac
 
-    local service_handle=$1
+    local service_handle
     local service_url
+
+    if ! service_handle=$(_resolve_ui_service "$1"); then
+        return 1
+    fi
+
+    if ! _validate_resolved_service "$service_handle"; then
+        return 1
+    fi
 
     # Check if the service has a custom URL
     local config_url=$(env_manager get "$service_handle.open_url")
@@ -5619,14 +5673,16 @@ run_open() {
         fi
     fi
 
+    _check_docker || return 1
+
     # Use docker port for the final fallback
-    if service_url=$(get_url "$1"); then
+    if service_url=$(get_url "$service_handle"); then
         if sys_open "$service_url"; then
             log_info "Opened $service_url in your default browser."
             return 0
         fi
     else
-        log_error "Failed to get service URL for '$1'. Is the service running? Try 'harbor up $1' first."
+        log_error "Failed to get service URL for '$service_handle'. Is the service running? Try 'harbor up $service_handle' first."
         return 1
     fi
 }
@@ -6645,6 +6701,20 @@ env_manager_arr() {
         if [ -z "$array" ]; then
             new_array="$value"
         else
+            # Avoid duplicate entries.
+            local existing
+            local found=false
+            IFS="$delimiter" read -ra existing <<< "$array"
+            for item in "${existing[@]}"; do
+                if [ "$item" = "$value" ]; then
+                    found=true
+                    break
+                fi
+            done
+            if [ "$found" = true ]; then
+                log_info "Value '$value' is already in $field"
+                return 0
+            fi
             new_array="${array}${delimiter}${value}"
         fi
         set_array "$new_array"
@@ -7863,7 +7933,9 @@ unsafe_update() {
         log_warn "Your '$current_branch' branch is preserved — switch back with: git checkout $current_branch"
         if ! git checkout -B main FETCH_HEAD; then
             log_error "Failed to switch to main branch."
-            log_error "Run 'git status' in $harbor_home to inspect."
+            log_error "Local or untracked file changes likely conflict with the update."
+            log_error "Run 'git status' in $harbor_home to see which files are affected."
+            log_error "To safely update: cd $harbor_home && git stash --include-untracked && harbor update --latest"
             return 1
         fi
     else
@@ -7876,7 +7948,9 @@ unsafe_update() {
         if [ "$current_branch" = "HEAD" ]; then
             if ! git checkout -B main FETCH_HEAD; then
                 log_error "Failed to switch to main branch."
-                log_error "Run 'git status' in $harbor_home to inspect."
+                log_error "Local or untracked file changes likely conflict with the update."
+                log_error "Run 'git status' in $harbor_home to see which files are affected."
+                log_error "To safely update: cd $harbor_home && git stash --include-untracked && harbor update --latest"
                 return 1
             fi
         fi
@@ -8063,14 +8137,19 @@ update_harbor() {
         local checkout_output
         if ! checkout_output=$(git checkout "tags/$harbor_version" 2>&1); then
             log_error "Failed to check out version $harbor_version."
-            if printf '%s\n' "$checkout_output" | grep -qi "local changes.*would be overwritten"; then
-                log_error "You have local modifications to tracked files that conflict with the update."
-                log_error "Run 'git status' in $harbor_home to see which files are modified."
-                log_error "To discard local changes and force update: cd $harbor_home && git checkout -- . && harbor update"
-            elif printf '%s\n' "$checkout_output" | grep -qi "did not match"; then
-                log_error "This version tag may not exist. Check available versions at https://github.com/av/harbor/releases"
+            # Detect cause with locale-independent git commands instead of grepping
+            # localized error messages (the old English-only patterns failed for
+            # Italian, German, etc.)
+            if ! git rev-parse "tags/$harbor_version" >/dev/null 2>&1; then
+                log_error "Version tag does not exist locally."
+                log_error "Check available versions at https://github.com/av/harbor/releases"
             else
-                log_error "$checkout_output"
+                log_error "Local or untracked file changes conflict with the update."
+                log_error "Run 'git status' in $harbor_home to see which files are affected."
+                log_error "To safely update (your changes are saved in git stash):"
+                log_error "  cd $harbor_home && git stash --include-untracked && harbor update"
+                log_error "To forcefully discard ALL local changes and update:"
+                log_error "  cd $harbor_home && git checkout -- . && git clean -fd && harbor update"
             fi
             _restore_stash_on_error
             return 1
@@ -8272,16 +8351,19 @@ extract_tunnel_url() {
 establish_tunnel() {
     case "${1:-}" in
     --help | -h | help)
-        echo "Usage: harbor tunnel <service>"
+        echo "Usage: harbor tunnel [service]"
         echo "       harbor tunnel down|stop"
         echo ""
         echo "Expose a running service to the internet via Cloudflare Tunnel."
         echo "Creates a temporary tunnel using cloudflared (no account required)."
         echo ""
+        echo "When service is omitted, uses ui.main (harbor config get ui.main)."
+        echo ""
         echo "Subcommands:"
         echo "  down, stop, d, s    Stop all running tunnels"
         echo ""
         echo "Examples:"
+        echo "  harbor tunnel              Tunnel the default UI service"
         echo "  harbor tunnel webui        Tunnel the WebUI to the internet"
         echo "  harbor tunnel ollama       Tunnel Ollama's API"
         echo "  harbor tunnel down         Stop all tunnels"
@@ -8306,31 +8388,23 @@ establish_tunnel() {
         fi
         return 0
         ;;
-    "")
-        log_error "No service specified."
-        log_error "Usage: harbor tunnel <service>"
-        log_error "Run 'harbor ps' to see running services."
-        return 1
-        ;;
     esac
 
     _check_docker || return 1
 
-    # Validate service name
-    if ! service_compose_exists "$1"; then
-        log_error "Service '$1' not found."
-        local suggestion
-        if suggestion=$(_suggest_service "$1") && [ -n "$suggestion" ]; then
-            log_info "Did you mean: $suggestion?"
-        fi
-        log_info "Run 'harbor ls' to see available services."
+    local service_handle
+    if ! service_handle=$(_resolve_ui_service "$1"); then
+        return 1
+    fi
+
+    if ! _validate_resolved_service "$service_handle"; then
         return 1
     fi
 
     local intra_url
-    if ! intra_url=$(get_url -i "$@") || [ -z "$intra_url" ]; then
-        log_error "Failed to get internal URL for '$1'. Is the service running?"
-        log_error "Start it first with: harbor up $1"
+    if ! intra_url=$(get_url -i "$service_handle") || [ -z "$intra_url" ]; then
+        log_error "Failed to get internal URL for '$service_handle'. Is the service running?"
+        log_error "Start it first with: harbor up $service_handle"
         return 1
     fi
 

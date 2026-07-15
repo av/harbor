@@ -64,6 +64,18 @@
 - label: harbor doctor SELinux AVC probe reads audit logs instead of blocking on noninteractive stdin
   command: timeout 5 bash -lc 'cd /home/everlier/code/harbor && tail -f /dev/null | harbor doctor >/tmp/harbor-doctor-stdin.out 2>/tmp/harbor-doctor-stdin.err'
   tags: [spec, app-doctor-stdin, implemented]
+- bare harbor open resolves ui.main instead of reporting no service specified @spec @implemented
+- bare harbor tunnel resolves ui.main instead of reporting no service specified @spec @implemented
+- _resolve_ui_service centralizes default UI target resolution for open, url, and tunnel @spec @implemented
+- harbor up --open opens the first started service instead of ui.main when no separate open target is given @spec @implemented
+- _resolve_ui_service reads ui.main at call time and validates the resolved service exists @spec @implemented
+- harbor qr documents and resolves ui.main like harbor url @spec @implemented
+- label: harbor up --open targets the first started service after defaults and --no-defaults are resolved
+  command: rg -q 'open_target="$\{display_services\[0\]:-\}"' harbor.sh
+  tags: [spec, implemented]
+- label: harbor doctor --check reports Docker, Compose, Harbor home, git, curl, and git-repository status before returning, while only critical environment failures make it exit nonzero
+  command: bash tests/suites/02-cli.sh
+  tags: [spec, release-validation, implemented]
 - label: host deno invocations set DENO_NO_UPDATE_CHECK=1 to suppress the update-check nag and its dl.deno.land telemetry
   command: test $(grep -c 'DENO_NO_UPDATE_CHECK=1 deno run' harbor.sh) -eq 3
   tags: [spec, deno-no-update-check, implemented]
@@ -87,10 +99,9 @@
 - label: harbor launch exposes --web and --workflow as Boost routing modifiers and rejects removed groups such as --time and --notes
   command: ./harbor.sh launch --help | rg -q -- '--web' && ./harbor.sh launch --help | rg -q -- '--workflow' && ! ./harbor.sh launch --help | rg -q -- '--time|--notes|--files|--scratch'
   tags: [implemented]
-- label: harbor launch --workflow starts Boost with a builtin preset such as scope-guard, agent-code, or shipyard, starts SearXNG when required, and routes the tool to a workflow-prefixed model
-  command: rg -q 'launch_prepare_builtin_workflow' harbor.sh && rg -q 'launch_builtin_workflow_is_valid' harbor.sh && rg -q 'scope-guard' harbor.sh && rg -q 'agent-code' harbor.sh && rg -q 'shipyard' harbor.sh
-  tags: [implemented]
-
+- label: harbor launch --workflow accepts Boost module names but does not advertise built-in workflow presets when none ship
+  command: ./harbor.sh launch --help | rg -q 'Boost module' && ./harbor.sh launch --help | rg -q 'No built-in workflow presets ship by default' && ! ./harbor.sh launch --help | rg -q 'workflow presets:'
+  tags: [spec, reported-regression, implemented]
 ## models
 - label: harbor models supports source-aware list, pull, and rm for ollama, llamacpp, dmr, mlx, and omlx
   command: rg -q 'run_models_routine' harbor.sh && rg -q 'dmr' routines/models.ts && rg -q 'mlx' routines/models.ts && rg -q 'omlx' routines/models.ts
@@ -103,6 +114,11 @@
 - label: compose deepMerge normalizes list-form depends_on to map form when merging, so cross-file depends_on never drops init-sidecar completion conditions
   command: deno eval --unstable-sloppy-imports 'import {deepMerge} from "./routines/utils.ts"; const r: any = deepMerge({depends_on:{i:{condition:"service_completed_successfully"}}} as any, {depends_on:["o"]} as any); if (!r.depends_on?.i) Deno.exit(1);'
   tags: [implemented, bughunt]
+
+## pull
+- label: harbor pull with mixed service and model arguments passes only model arguments to the model pull path
+  command: rg -q 'first_model_index' harbor.sh && rg -q 'Mixed service and model arguments' harbor.sh
+  tags: [spec, reported-regression, implemented]
 
 # services
 - label: compose.yml defines only the shared harbor-network without service definitions
@@ -199,57 +215,12 @@
 - label: Boost BackendError forwards rate-limit headers to clients on 429 in both streaming and non-streaming paths
   command: rg -q 'RATE_LIMIT_FORWARD_HEADERS' services/boost/src/compat_utils.py && rg -q 'BackendError' services/boost/tests/test_streaming_backend_error.py
   tags: [implemented]
-- label: caveman performs budget-capped web research on research turns: extracts search queries, runs web_search, optionally reads top pages, injects a research_brief system block, then streams the final completion; acknowledgments and short continuation messages pass through without research
-  command: cd services/boost && uv run pytest tests/test_caveman.py -q --tb=no
-  tags: [implemented]
-- label: caveman supports HARBOR_BOOST_CAVEMAN_TRIGGER llm mode: a cheap LLM classifier decides whether external research is needed, skips the classifier when already inside a caveman-prefixed module turn, and falls back to heuristic mode on classifier failure
-  command: cd services/boost && uv run pytest tests/test_caveman.py::TestCavemanLlmTrigger -q --tb=no
-  tags: [spec, implemented]
-- label: caveman supports HARBOR_BOOST_CAVEMAN_CACHE_BRIEF (experimental): when enabled reuses the last research brief for the same normalized user question within a request session, skipping extract and gather on cache hits and emitting a using cached brief status
-  command: cd services/boost && uv run pytest tests/test_caveman.py::TestCavemanBriefCache -q --tb=no
-  tags: [implemented]
-- label: ponytail performs two-hop web research on research-heavy turns (migrations, version comparisons, API behavior): initial search, page reads, gap detection, targeted second search, then injects a structured research_brief before the final answer
-  command: cd services/boost && uv run pytest tests/test_ponytail.py::TestPonytailResearchLoop -q --tb=no
-  tags: [implemented]
-- label: ponytail supports HARBOR_BOOST_PONYTAIL_CACHE_BRIEF (experimental): when enabled reuses the last two-hop research brief for the same normalized user question within a request session, skipping plan and run_research_loop on cache hits
-  command: cd services/boost && uv run pytest tests/test_ponytail.py::TestPonytailBriefCache -q --tb=no
-  tags: [implemented]
 - label: autocheck audits coding deliverable drafts with a structured checklist (correctness, completeness, file-path grounding) and revises at most once when the audit verdict is revise; non-deliverable turns pass through unchanged
   command: cd services/boost && uv run pytest tests/test_autocheck.py::TestAutocheckApply -q --tb=no
-  tags: [implemented]
-- label: keel extracts a TaskBrief on the first substantive coding turn, injects a task_anchor system block on later turns with the next unmet acceptance criterion, and prepends a landing checklist when the user signals completion
-  command: cd services/boost && uv run pytest tests/test_keel.py::TestKeelApply -q --tb=no
-  tags: [implemented]
-- label: sightline enforces read-before-edit on scratch tools read_file write_file and delete_file: in block mode mutations without a prior read on the same path are rejected and a fresh read is required after each write or delete
-  command: cd services/boost && uv run pytest tests/test_sightline.py::TestSightlineGuards -q --tb=no
-  tags: [implemented]
-- label: sightline block errors include a suggested_command field with a copy-pasteable read_file or read_workspace_file tool call for the blocked path, JSON-escaped for special characters, repeated in the human-readable message, and propagated through guard ValueError payloads
-  command: cd services/boost && uv run pytest tests/test_sightline.py::TestSightlineGenerations::test_block_message_is_structured_json tests/test_sightline.py::TestSightlineGenerations::test_suggested_read_command_escapes_special_characters tests/test_sightline.py::TestSightlineGenerations::test_block_message_includes_suggested_command_in_guard_error tests/test_sightline.py::TestSightlineWorkspace::test_workspace_block_message_uses_workspace_tools -q --tb=no
   tags: [implemented]
 - label: diffscope compares cited file paths in coding deliverable drafts against user-stated scope from recent messages, verifies workspace paths when HARBOR_BOOST_WORKSPACE_ROOT is set, and revises once on out-of-scope or missing paths
   command: cd services/boost && uv run pytest tests/test_diffscope.py::TestDiffscopeApply -q --tb=no
   tags: [implemented]
-- label: research-quick workflow registers portable tools then runs caveman then final completion
-  command: cd services/boost && uv run pytest 'tests/test_workflows.py::TestWorkflowPresets::test_preset_module_chain[research-quick-caveman]' -q --tb=no
-  tags: [implemented]
-- label: research-deep workflow registers portable tools then runs ponytail then final completion
-  command: cd services/boost && uv run pytest 'tests/test_workflows.py::TestWorkflowPresets::test_preset_module_chain[research-deep-ponytail]' -q --tb=no
-  tags: [implemented]
-- label: code-check workflow registers portable tools then runs autocheck then final completion
-  command: cd services/boost && uv run pytest 'tests/test_workflows.py::TestWorkflowPresets::test_preset_module_chain[code-check-autocheck]' -q --tb=no
-  tags: [implemented]
-- label: shipyard workflow chains keel caveman tools ponytail and autocheck before final, with defer_final on intermediate grounding and research steps
-  command: cd services/boost && uv run pytest tests/test_workflows.py::TestWorkflowPresets::test_shipyard_preset_module_chain -q --tb=no
-  tags: [implemented]
-- label: shipyard turn-type hardening classifies user turns via deliverable.is_implementation_turn (implement/fix/add/patch plus file path, no research signals): caveman and ponytail skip research with reason implementation_turn on those turns; caveman also skips keel_implementation_brief turns after keel anchors an implementation TaskBrief; autocheck skips research-only turns; defer_final defers streaming until the explicit final step
-  command: cd services/boost && uv run pytest tests/test_shipyard_workflow.py::TestShipyardTurnTypes tests/test_shipyard_workflow.py::TestShipyardDeferFinal -q --tb=no
-  tags: [spec, implemented]
-- label: scope-guard workflow chains tools diffscope and autocheck before final for focused bugfix deliverables with user-stated file scope
-  command: cd services/boost && uv run pytest tests/test_workflows.py::TestWorkflowPresets::test_scope_guard_preset_module_chain tests/test_workflows.py::TestApplyWorkflow::test_scope_guard_runs_full_module_chain_before_final tests/test_agentic_workflow_chains.py::TestScopeGuardWorkflowChain -q --tb=no
-  tags: [spec, implemented]
-- label: agent-code workflow chains tools sightline diffscope and autocheck before final for sandbox coding sessions
-  command: cd services/boost && uv run pytest tests/test_workflows.py::TestWorkflowPresets::test_agent_code_preset_module_chain -q --tb=no
-  tags: [spec, implemented]
 - label: deliverable heuristics gate agentic modules: coding implementation requests with file paths or code blocks trigger post-processing while purely explanatory questions pass through
   command: cd services/boost && uv run pytest tests/test_agentic_infra.py::TestDeliverableGate -q --tb=no
   tags: [implemented]
@@ -277,30 +248,9 @@
 - label: diffscope grounds scope checks in git repos by collecting changed paths from git diff --name-only and git diff --stat with timeout and nonzero-exit fallback to cited draft paths
   command: cd services/boost && uv run pytest tests/test_diffscope.py::TestGitDiffGrounding -q --tb=no
   tags: [spec, implemented]
-- label: sightline applies read-before-edit guards to read_workspace_file and write_workspace_file when HARBOR_BOOST_WORKSPACE_ROOT is set and workspace guarding is enabled
-  command: cd services/boost && uv run pytest tests/test_sightline.py::TestSightlineWorkspace -q --tb=no
-  tags: [spec, implemented]
-- label: keel persists TaskBrief state across stateless turns via a hidden keel_brief system marker that round-trips through chat history and hydrates stored brief state on subsequent requests
-  command: cd services/boost && uv run pytest tests/test_keel.py::TestKeelBriefPersistence -q --tb=no
-  tags: [spec, implemented]
-- label: keel supports per-request @boost_keel_refresh (keel_refresh boost param): when true re-extracts TaskBrief from the current conversation, replaces the hidden keel_brief marker, clears met acceptance-criteria tracking, and emits Keel: refreshing task brief status
-  command: cd services/boost && uv run pytest tests/test_keel.py::TestKeelRefreshParam tests/test_keel.py::TestKeelApply::test_apply_refresh_reextracts_and_replaces_marker -q --tb=no
-  tags: [implemented]
-- label: keel tracks met acceptance criteria by keyword-matching assistant messages against each criterion and renders landing checklist checkboxes as [x]/[ ] with a met count; progress syncs into the hidden keel_brief marker
-  command: cd services/boost && uv run pytest tests/test_keel.py::TestKeelMetCriteria tests/test_keel.py::TestKeelApply::test_apply_landing_checklist_marks_met_criteria_from_assistant_history tests/test_keel.py::TestKeelApply::test_finish_wrapper_prepends_checklist -q --tb=no
-  tags: [implemented]
-- label: keel respects HARBOR_BOOST_KEEL_MAX_CONSTRAINTS when rendering task_anchor constraints: limits how many constraints appear in the anchor block (default 6) and summarizes overflow as +N more
-  command: cd services/boost && uv run pytest tests/test_keel.py::TestKeelBriefRendering::test_render_anchor_block_truncates_constraints_list tests/test_keel.py::TestKeelBriefRendering::test_render_anchor_block_respects_max_constraints_config -q --tb=no
-  tags: [implemented]
 - label: research orchestration parallelizes multi-query web_search calls and multi-URL page reads with concurrency caps while respecting per-request search and read budgets
   command: cd services/boost && uv run pytest tests/test_orchestrate.py::TestOrchestrateParallelFetch -q --tb=no
   tags: [spec, implemented]
-- label: ponytail skips the second research hop when the first hop gathers enough characters per HARBOR_BOOST_PONYTAIL_EARLY_EXIT_CHARS
-  command: cd services/boost && uv run pytest tests/test_orchestrate.py::TestPonytailEarlyExit -q --tb=no
-  tags: [spec, implemented]
-- label: ponytail respects HARBOR_BOOST_PONYTAIL_SYNTHESIS_MAX_CHARS when synthesizing the research brief: truncates gathered research passed to the synthesis step to the configured limit (default 8000); set to 0 to disable truncation
-  command: cd services/boost && uv run pytest tests/test_ponytail.py::TestPonytailBriefSynthesis::test_synthesize_brief_truncates_oversized_research_summary -q --tb=no
-  tags: [implemented]
 - label: autocheck runs mechanical pre-audit before the LLM audit on deliverable turns: flags code without cited paths or missing workspace paths, includes git diff stat context, and forces revise when blockers are found
   command: cd services/boost && uv run pytest tests/test_autocheck.py::TestMechanicalPreaudit -q --tb=no
   tags: [spec, implemented]
@@ -322,7 +272,7 @@
 - label: diffscope revise_with_correction prompt includes explicit allowed_paths forbidden_paths out_of_scope_paths and git_evidence sections built from user scope violations and workspace git diff
   command: cd services/boost && uv run pytest tests/test_diffscope.py::TestWorkspaceAndNotes::test_build_revise_scope_sections_lists_allowed_forbidden_and_git_evidence -q --tb=no
   tags: [implemented]
-- label: agentic modules record optional per-module debug payloads on request.state via research.debug_metrics: triggered or skipped status, reason, duration_ms, and module-specific extras under keys like caveman_debug
+- label: agentic modules record optional per-module debug payloads on request.state via research.debug_metrics: triggered or skipped status, reason, duration_ms, and module-specific extras under keys like quickhop_debug
   command: cd services/boost && uv run pytest tests/test_agentic_debug_metrics.py -q --tb=no
   tags: [implemented]
 - label: autocheck supports HARBOR_BOOST_AUTOCHECK_MAX_REVISE_PASSES: configurable revise passes after audit verdict revise clamped to 0-2; HARBOR_BOOST_AUTOCHECK_STRICT true adds one extra pass still capped at 2
@@ -343,23 +293,11 @@
 - label: shared research fetch retries web_search and read_url once after transient HTTP failures (timeout or connect error) with a one second backoff and does not retry non-transient errors
   command: cd services/boost && uv run pytest tests/test_agentic_infra.py::TestResearchFetch::test_web_search_retries_once_on_transient_failure tests/test_agentic_infra.py::TestResearchFetch::test_web_search_does_not_retry_non_transient_failures tests/test_agentic_infra.py::TestResearchFetch::test_read_url_retries_jina_once_on_transient_failure tests/test_agentic_infra.py::TestResearchFetch::test_read_url_retries_direct_once_on_transient_failure -q --tb=no
   tags: [implemented]
-- label: caveman research_heuristic delegates to deliverable.has_research_signals: heuristic mode no longer triggers on bare questions with only a question mark and no research keyword version package or URL (CAV-002/DEL-001)
-  command: cd services/boost && uv run pytest tests/test_caveman.py::TestCavemanHeuristics::test_research_heuristic_rejects_bare_questions_without_research_signals tests/test_agentic_infra.py::TestDeliverableBorderlineCases::test_bare_questions_without_research_context_are_not_research_signals -q --tb=no
-  tags: [implemented, bughunt]
-- label: caveman respects HARBOR_BOOST_CAVEMAN_MAX_QUERIES when extracting search queries: clamps planned queries to the configured limit (default 3) instead of a hardcoded cap
-  command: cd services/boost && uv run pytest tests/test_caveman.py::TestCavemanQueryExtraction::test_extract_search_queries_uses_config_max_queries -q --tb=no
-  tags: [implemented]
-- label: ponytail respects HARBOR_BOOST_PONYTAIL_MAX_QUERIES when planning search queries: clamps planned queries to the configured limit (default 5)
-  command: cd services/boost && uv run pytest tests/test_ponytail.py::TestPonytailQueryPlanning::test_plan_search_queries_uses_config_max_queries -q --tb=no
-  tags: [implemented]
 - label: diffscope extracts forbidden paths from user scope hints including dont touch, leave X alone, except and except for Z, multi-path lists, and apostrophe-less dont-touch variants
   command: cd services/boost && uv run pytest tests/test_diffscope.py::TestUserScope::test_extract_forbidden_paths_from_dont_touch tests/test_diffscope.py::TestUserScope::test_extract_forbidden_paths_from_leave_alone tests/test_diffscope.py::TestUserScope::test_extract_forbidden_paths_from_except tests/test_diffscope.py::TestUserScope::test_extract_forbidden_paths_from_except_for tests/test_diffscope.py::TestUserScope::test_extract_multiple_forbidden_paths_from_dont_touch tests/test_diffscope.py::TestUserScope::test_extract_multiple_forbidden_paths_from_leave_alone tests/test_diffscope.py::TestUserScope::test_extract_forbidden_without_apostrophe -q --tb=no
   tags: [implemented]
-- label: caveman skips web research on deliverable.is_implementation_turn with debug reason implementation_turn (even before keel extracts a brief) and also skips when keel anchors an implementation-focused TaskBrief; agent-research workflow uses the same gate
-  command: cd services/boost && uv run pytest tests/test_shipyard_workflow.py::TestShipyardTurnTypes::test_caveman_skips_implementation_turn_without_keel_brief tests/test_shipyard_workflow.py::TestShipyardTurnTypes::test_caveman_skips_when_keel_brief_is_implementation tests/test_agentic_workflow_chains.py::TestAgentResearchWorkflowChain::test_agent_research_skips_caveman_on_implementation_turn -q --tb=no
-  tags: [implemented]
-- label: research.workflow anchor_deferred_draft records deferred drafts in chat when defer_final is set, replacing an existing assistant tail instead of appending so downstream diffscope and autocheck in scope-guard and agent-code chains audit scoped or revised answers not pre-revision drafts (DIF-003)
-  command: cd services/boost && uv run pytest tests/test_agentic_debug_metrics.py::TestAnchorDeferredDraft tests/test_diffscope.py::TestDiffscopeApply::test_apply_anchors_scoped_draft_when_defer_final tests/test_diffscope.py::TestDiffscopeApply::test_apply_replaces_prior_draft_when_defer_final tests/test_autocheck.py::TestAutocheckApply::test_apply_anchors_revised_draft_when_defer_final tests/test_agentic_workflow_chains.py::TestScopeGuardWorkflowChain::test_scope_guard_revises_out_of_scope_draft_then_autocheck_audits -q --tb=no
+- label: research.workflow anchor_deferred_draft records deferred drafts in chat when defer_final is set, replacing an existing assistant tail instead of appending so downstream diffscope and autocheck in chained workflows audit scoped or revised answers not pre-revision drafts (DIF-003)
+  command: cd services/boost && uv run pytest tests/test_agentic_debug_metrics.py::TestAnchorDeferredDraft tests/test_diffscope.py::TestDiffscopeApply::test_apply_anchors_scoped_draft_when_defer_final tests/test_diffscope.py::TestDiffscopeApply::test_apply_replaces_prior_draft_when_defer_final tests/test_autocheck.py::TestAutocheckApply::test_apply_anchors_revised_draft_when_defer_final tests/test_agentic_workflow_chains.py::TestDiffscopeDeliverableChain::test_diffscope_scope_violation_triggers_revise -q --tb=no
   tags: [implemented, bughunt]
 - label: autocheck supports HARBOR_BOOST_AUTOCHECK_DRAFT_MODEL: configurable model for the draft sub-call; when empty autocheck uses the incoming request model, when set draft_llm and generate_draft override the cheap LLM client model after stripping whitespace
   command: cd services/boost && uv run pytest tests/test_autocheck.py::TestAuditAndRevise::test_draft_llm_keeps_request_model_when_unset tests/test_autocheck.py::TestAuditAndRevise::test_draft_llm_overrides_model_when_configured tests/test_autocheck.py::TestAuditAndRevise::test_generate_draft_uses_draft_model_override -q --tb=no
@@ -376,23 +314,8 @@
 - label: HARBOR_BOOST_DEBUG and per-request boost debug param gate a compact Debug: status summary at final completion: when enabled complete_or_defer emits per-module triggered or skipped lines with duration_ms and extras; debug param overrides config
   command: cd services/boost && uv run pytest tests/test_agentic_debug_metrics.py::TestDebugSummaryHelpers::test_debug_enabled_respects_boost_param tests/test_agentic_debug_metrics.py::TestDebugSummaryHelpers::test_debug_enabled_falls_back_to_config tests/test_agentic_debug_metrics.py::TestCompleteOrDeferDebugStatus::test_emits_compact_summary_when_debug_enabled tests/test_agentic_debug_metrics.py::TestCompleteOrDeferDebugStatus::test_skips_summary_when_debug_disabled -q --tb=no
   tags: [spec, implemented]
-- label: agent-research workflow registers portable tools then runs caveman then final completion for agent sessions that need quick web research before answering
-  command: cd services/boost && uv run pytest 'tests/test_workflows.py::TestWorkflowPresets::test_preset_module_chain[agent-research-caveman]' tests/test_workflows.py::TestWorkflowPresets::test_presets_include_all_agentic_workflows tests/test_agentic_workflow_chains.py::TestAgentResearchWorkflowChain::test_agent_research_skips_caveman_on_implementation_turn -q --tb=no
-  tags: [spec, implemented]
-- label: sightline supports HARBOR_BOOST_SIGHTLINE_MODE: block rejects scratch write/delete without prior read_file with structured errors; warn streams Sightline status and allows the mutation
-  command: cd services/boost && uv run pytest tests/test_sightline.py::TestSightlineGuards::test_write_blocked_without_prior_read tests/test_sightline.py::TestSightlineGuards::test_warn_mode_allows_mutation tests/test_sightline.py::TestSightlineModeIntegration::test_sightline_mode_warn_allows_write_without_read_and_emits_status -q --tb=no
-  tags: [spec, implemented]
-- label: sightline supports HARBOR_BOOST_SIGHTLINE_ALLOW_CREATE: when true the first write to a non-existent scratch path is exempt from read-before-edit; when false new-file creates require read_file first
-  command: cd services/boost && uv run pytest tests/test_sightline.py::TestSightlineExemptions::test_create_exempt_for_missing_scratch_file tests/test_sightline.py::TestSightlineExemptions::test_create_not_exempt_when_file_exists tests/test_sightline.py::TestSightlineExemptions::test_create_not_exempt_when_disabled -q --tb=no
-  tags: [spec, implemented]
-- label: sightline supports HARBOR_BOOST_SIGHTLINE_WORKSPACE: when true with HARBOR_BOOST_WORKSPACE_ROOT set install_guards wraps read_workspace_file and write_workspace_file; when false workspace tools stay unwrapped and workspace_guard_skip_reason is workspace_guard_disabled
-  command: cd services/boost && uv run pytest tests/test_sightline.py::TestSightlineWorkspace tests/test_agentic_logging.py::TestSightlineGateLogging::test_workspace_guard_skip_reason_when_disabled -q --tb=no
-  tags: [spec, implemented]
 - label: autocheck supports HARBOR_BOOST_AUTOCHECK_ENABLED: when false needs_autocheck is false and autocheck_gate_reason returns disabled so deliverable turns pass through without audit
   command: cd services/boost && uv run pytest tests/test_autocheck.py::TestAutocheckGate::test_skips_when_disabled -q --tb=no
-  tags: [spec, implemented]
-- label: keel supports HARBOR_BOOST_KEEL_ENABLED: when false needs_keel is false and keel_gate_reason returns disabled so coding deliverables pass through without task anchoring
-  command: cd services/boost && uv run pytest tests/test_keel.py::TestKeelHeuristics::test_needs_keel_skips_when_disabled tests/test_agentic_logging.py::TestKeelGateReason::test_disabled -q --tb=no
   tags: [spec, implemented]
 - label: diffscope supports HARBOR_BOOST_DIFFSCOPE_ENABLED: when false needs_diffscope is false and diffscope_gate_reason returns disabled so scoped deliverables pass through without scope revision
   command: cd services/boost && uv run pytest tests/test_diffscope.py::TestDiffscopeGate::test_skips_when_disabled -q --tb=no
@@ -400,6 +323,12 @@
 - label: research.workflow anchor_and_emit_final anchors a deferred draft via anchor_deferred_draft then emits the text with llm.emit_message unless defer_final is set; autocheck uses it on audit_failed so chained workflows anchor the draft without double-emitting before the explicit final step
   command: cd services/boost && uv run pytest tests/test_agentic_debug_metrics.py::TestAnchorAndEmitFinal tests/test_autocheck.py::TestAutocheckApply::test_apply_audit_failed_defers_emit_when_configured -q --tb=no
   tags: [implemented]
+- label: Boost ChatNode preserves non-text multimodal content parts instead of flattening them to text
+  command: cd services/boost && uv run pytest tests/test_chat_node.py::TestChatNodeContent -q --tb=short
+  tags: [spec, reported-regression, implemented]
+- label: caveman injects one level-tagged caveman_style block into the leading system message before completion unless the user or workflow disables the style, preserving single-system-message backend compatibility
+  command: cd services/boost && uv run --with pytest --with pytest-asyncio pytest -q tests/test_caveman.py
+  tags: [spec, release-validation, implemented]
 
 # testing
 - label: tests use a Deno orchestrator running sequential bash suites across containerized distros
@@ -409,6 +338,8 @@
 - label: harbor dev test --suite boost-agentic-smoke runs the Boost agentic pytest battery via tests/suites/06-boost-agentic-smoke.sh with container or host mode through tests/lib/boost-agentic.sh
   command: test -f tests/suites/06-boost-agentic-smoke.sh && test -f tests/lib/boost-agentic.sh && rg -q 'boost-agentic-smoke' tests/README.md
   tags: [implemented]
+- pending launch CLI, Hugging Face model discovery, and Boost module changes have an agent-executable integration release checklist covering behavior, lint, facts, and user documentation @spec @release-validation @implemented
+- the test-boost-module skill live-tests current Boost modules through harbor launch with pi and does not recommend removed modules or obsolete module roles @spec @release-validation @implemented
 
 # lint
 - label: harbor dev lint runs a three-pass Deno orchestrator with HARBOR-prefixed bash rules under .scripts/lint
@@ -491,3 +422,121 @@
 - label: harbor dev lint --boost flags zero-byte .py module files under services/boost/src/modules and custom_modules with HARBOR011 so truncated writes fail at lint time instead of runtime import
   command: test -f .scripts/lint/passes/boost.ts && rg -q 'HARBOR011' .scripts/lint/passes/boost.ts .github/workflows/lint.yml && test ! -s .scripts/lint/fixtures/boost/zero-byte/fail.py
   tags: [implemented]
+- harbor dev lint ignores nested .claude worktrees so their copied source and intentional failure fixtures do not create duplicate findings @spec @release-validation @implemented
+
+# launch
+- label: harbor launch grok writes or updates a harbor-<backend> model entry in ~/.grok/config.toml with the selected base_url, model, and env_key, then invokes grok -m harbor-<backend>
+  command: rg -q 'launch_grok_config_path' harbor.sh && rg -q 'launch_write_grok_config' harbor.sh && ./harbor.sh launch --help | rg -q grok
+  tags: [implemented]
+- label: harbor launch grok removes the harbor-<backend> model entry from ~/.grok/config.toml after the grok process exits
+  command: rg -q 'launch_remove_grok_config' harbor.sh && rg -q 'trap .*launch_remove_grok_config' harbor.sh && ./harbor.sh launch --help | rg -q grok
+  tags: [spec, implemented]
+
+# models
+- label: harbor models ls and rm start Ollama automatically when no explicit source is provided
+  command: rg -q 'requested_source.*ollama' harbor.sh && rg -q 'run_up --no-defaults ollama' harbor.sh
+  tags: [spec, reported-regression, implemented]
+
+# demos
+- label: launch-grid demo supports --duration and exits early when all agent panes finish
+  command: ./scripts/demos/launch-grid.sh --help | grep -q -- '--duration' && grep -q 'start_completion_watcher' scripts/demos/launch-grid.sh
+  tags: [spec, autonomous-demo, implemented]
+- label: launch-grid demo defaults to llamacpp backend, unsloth/Qwen3.6-35B-A3B-GGUF:Q4_K_XL model, caveman workflow, and codex/opencode/hermes/title toolset
+  command: grep -q 'HARBOR_DEMO_BACKEND:-llamacpp' scripts/demos/launch-grid.sh && grep -q 'HARBOR_DEMO_MODEL:-unsloth/Qwen3.6-35B-A3B-GGUF:Q4_K_XL' scripts/demos/launch-grid.sh && grep -q 'WORKFLOW="${HARBOR_DEMO_WORKFLOW:-caveman}"' scripts/demos/launch-grid.sh && grep -q 'TOOLS="codex,opencode,hermes,title"' scripts/demos/launch-grid.sh
+  tags: [spec, implemented]
+- label: launch-grid demo uses viewer-readable per-tool CLI syntax for codex exec, hermes chat -Q -q, and pi --session-dir -p
+  command: grep -q 'TOOL_PROMPT_DISPLAY\[codex\]="exec' scripts/demos/launch-grid.sh && grep -q 'TOOL_PROMPT\[hermes\]="chat -Q -q' scripts/demos/launch-grid.sh && grep -q 'TOOL_PROMPT\[pi\]="--session-dir' scripts/demos/launch-grid.sh
+  tags: [spec, implemented]
+- label: launch-grid demo applies the same Boost workflow to every assistant pane and uses a title pane rendered with glow
+  command: grep -q title scripts/demos/launch-grid.sh && grep -q find_glow scripts/demos/launch-grid.sh && grep -q workflow scripts/demos/launch-grid.sh
+  tags: [spec, implemented]
+- label: launch-grid demo dry-run prints a compact Pane/Command table with human-readable quoted prompts and --workflow on every assistant launch command
+  command: out=$(./scripts/demos/launch-grid.sh --dry-run --yes); grep -q "==> Dry run" <<<"$out" && grep -q "Pane         Command" <<<"$out" && grep -q -- "--workflow caveman codex exec" <<<"$out" && grep -q -- "--workflow caveman opencode run" <<<"$out" && grep -q -- "--workflow caveman hermes chat -Q -q" <<<"$out" && grep -q "Tool route. Boost shape. Local model answer." <<<"$out" && ! grep -q "bash -lc" <<<"$out"
+  tags: [spec, implemented]
+- label: launch-grid help examples use valid grids with at least two assistant tools and keep Boost workflow examples visible
+  command: ./scripts/demos/launch-grid.sh --help | grep -q -- "--workflow deephop --tools codex,opencode,hermes,title" && ./scripts/demos/launch-grid.sh --help | grep -q -- "--workflow quickhop --tools codex,opencode,hermes,title" && ./scripts/demos/launch-grid.sh --help | grep -q -- "--panes 3 --tools grok,pi,title" && ! ./scripts/demos/launch-grid.sh --help | grep -q -- "codex,title"
+  tags: [spec, implemented]
+- label: launch-grid duration mode tracks assistant completion marker files so the intro pane does not prevent early completion
+  command: grep -q 'DEMO_DONE_DIR' scripts/demos/launch-grid.sh && grep -q \\*.done scripts/demos/launch-grid.sh && grep -q 'DEMO_ASSISTANT_COUNT' scripts/demos/launch-grid.sh && ! grep -q 'pane_dead' scripts/demos/launch-grid.sh
+  tags: [spec, implemented]
+- label: launch-grid assistant panes hide adapter stderr unless the command fails, while grok uses --no-wait-for-background for scale demos
+  command: grep -q 'TOOL_QUIET_STDERR' scripts/demos/launch-grid.sh && grep -q 'cat .*stderr_log.*>&2' scripts/demos/launch-grid.sh && grep -q -- '--no-wait-for-background' scripts/demos/launch-grid.sh
+  tags: [spec, implemented]
+- label: launch-grid demo chooses a concise default prompt from the selected Boost workflow when HARBOR_DEMO_TASK is unset
+  command: grep -q 'default_task_for_workflow' scripts/demos/launch-grid.sh && grep -q 'HARBOR_DEMO_TASK+x' scripts/demos/launch-grid.sh && grep -q 'Quickhop search brief first' scripts/demos/launch-grid.sh && grep -q 'Deephop checks first pass' scripts/demos/launch-grid.sh
+  tags: [spec, implemented]
+- label: launch-grid title pane explains harbor launch routing, the selected Boost workflow behavior, and what viewers should compare across tools
+  command: grep -q 'What is happening' scripts/demos/launch-grid.sh && grep -q 'harbor launch starts or reuses' scripts/demos/launch-grid.sh && grep -q 'Workflow behavior' scripts/demos/launch-grid.sh && grep -q 'Compare panes' scripts/demos/launch-grid.sh
+  tags: [spec, implemented]
+- label: launch-walkthrough demo presents harbor launch in tmux as a paced story: status, configuration preview, direct host-tool launch, and web-enabled Boost routing without pre-starting Boost or SearXNG outside the visible web step
+  command: out=$(bash scripts/demos/launch-walkthrough.sh --dry-run); grep -q -- '--web' <<<"$out" && grep -q -- '--config' <<<"$out" && bash -n scripts/demos/launch-walkthrough.sh && ! rg -q '^[[:space:]]*ensure_service[[:space:]]+boost$' scripts/demos/launch-walkthrough.sh && ! rg -q '^[[:space:]]*ensure_service[[:space:]]+searxng$' scripts/demos/launch-walkthrough.sh
+  tags: [spec, implemented]
+- label: launch-walkthrough demo rejects unsupported tools and Claude before building the web step
+  command: ! ./scripts/demos/launch-walkthrough.sh --dry-run --tool claude >/tmp/harbor-launch-walkthrough-claude.out 2>&1 && grep -q "does not support --web" /tmp/harbor-launch-walkthrough-claude.out && ! ./scripts/demos/launch-walkthrough.sh --dry-run --tool unknown >/tmp/harbor-launch-walkthrough-unknown.out 2>&1 && grep -q "Unsupported demo tool" /tmp/harbor-launch-walkthrough-unknown.out
+  tags: [spec, implemented]
+- label: launch-walkthrough demo writes narrative text through a temp file and shell-quotes --allow-missing-tool fallback messages
+  command: grep -q "NARRATIVE_FILE=" scripts/demos/launch-walkthrough.sh && grep -q "narrative_render_cmd" scripts/demos/launch-walkthrough.sh && grep -q "missing_tool_cmd" scripts/demos/launch-walkthrough.sh && grep -q -- "--allow-missing-tool" scripts/demos/launch-walkthrough.sh && ! grep -q "cat <<'NARRATIVE'" scripts/demos/launch-walkthrough.sh
+  tags: [spec, implemented]
+- label: launch-walkthrough demo uses a tmux client-attached hook so the step driver starts only after viewers can see panes update live
+  command: grep -q "client-attached" scripts/demos/launch-walkthrough.sh && grep -q "run-shell -b" scripts/demos/launch-walkthrough.sh && grep -q "tmux attach-session" scripts/demos/launch-walkthrough.sh && ! grep -q "run_demo &" scripts/demos/launch-walkthrough.sh
+  tags: [spec, implemented]
+- label: launch-walkthrough dry-run validates the selected web-compatible tool and prints the four planned steps without requiring harbor or tmux on PATH
+  command: PATH=/usr/bin:/bin bash scripts/demos/launch-walkthrough.sh --dry-run --tool mi --backend test-backend --model test-model --task test | grep -q "Step 4: Web tools" && ! PATH=/usr/bin:/bin bash scripts/demos/launch-walkthrough.sh --dry-run --tool claude >/tmp/launch-walkthrough-claude.out 2>&1 && grep -q "does not support --web" /tmp/launch-walkthrough-claude.out
+  tags: [spec, implemented]
+- label: launch-walkthrough live mode creates narrative and action panes, installs a tmux client-attached hook, and starts the step driver only after attach
+  command: grep -q "client-attached" scripts/demos/launch-walkthrough.sh && grep -q "run-shell -b" scripts/demos/launch-walkthrough.sh && grep -q "tmux attach-session" scripts/demos/launch-walkthrough.sh && grep -q "NARRATIVE_PANE" scripts/demos/launch-walkthrough.sh && grep -q "ACTION_PANE" scripts/demos/launch-walkthrough.sh
+  tags: [spec, implemented]
+- label: launch-walkthrough workflow uses a product-focused launch-route opening, explicit action headings, and a web proof step that shows harbor ps before and after harbor launch --web
+  command: bash scripts/demos/launch-walkthrough.sh --dry-run | grep -q "Opening: Launch route" && ! bash scripts/demos/launch-walkthrough.sh --dry-run | grep -qi "what to watch\|good TUI\|readable, paced\|Charm glow narrative" && grep -q "run_action_command" scripts/demos/launch-walkthrough.sh && grep -q "Before --web" scripts/demos/launch-walkthrough.sh && grep -q "After --web" scripts/demos/launch-walkthrough.sh
+  tags: [spec, implemented]
+- label: launch-walkthrough live mode hides completion markers with PROMPT_COMMAND, records command status, and requires host tools unless --allow-missing-tool is passed
+  command: grep -q "PROMPT_COMMAND" scripts/demos/launch-walkthrough.sh && grep -q "STATUS_FILE" scripts/demos/launch-walkthrough.sh && grep -q -- "--allow-missing-tool" scripts/demos/launch-walkthrough.sh && grep -q "Host tool.*is not installed.*--allow-missing-tool" scripts/demos/launch-walkthrough.sh
+  tags: [spec, implemented]
+- label: launch-walkthrough renders narrative cards with Charm glow when available and falls back to plain cat when glow is missing
+  command: grep -q "find_glow" scripts/demos/launch-walkthrough.sh && grep -q -- "--style dark" scripts/demos/launch-walkthrough.sh && grep -q "printf.*cat %s" scripts/demos/launch-walkthrough.sh
+  tags: [spec, implemented]
+- label: launch-walkthrough defaults to slower capture-friendly pacing with a hold delay after visible commands
+  command: bash scripts/demos/launch-walkthrough.sh --dry-run | grep -q "Hold delay" && grep -q "HOLD_DELAY" scripts/demos/launch-walkthrough.sh && grep -q "hold_capture" scripts/demos/launch-walkthrough.sh
+  tags: [spec, implemented]
+- label: launch-walkthrough reduces action-pane noise by using a minimal prompt, pane titles for action labels, and no printed marker strings
+  command: grep -q "PS1=\\$ " scripts/demos/launch-walkthrough.sh && grep -q "select-pane.*-T" scripts/demos/launch-walkthrough.sh && ! grep -q "printf .*HARBOR_WALKTHROUGH_DONE" scripts/demos/launch-walkthrough.sh
+  tags: [spec, implemented]
+- label: launch-walkthrough visible titles and explainers describe Harbor behavior, not demo-production advice or meta-commentary
+  command: ! bash scripts/demos/launch-walkthrough.sh --dry-run | grep -qi "what to watch\|good TUI\|readable, paced\|honest\|Charm glow narrative\|stable panes\|live output\|capture" && grep -q "Opening: Launch route" scripts/demos/launch-walkthrough.sh && grep -q "harbor launch connects host coding tools" scripts/demos/launch-walkthrough.sh
+  tags: [spec, implemented]
+- label: launch-walkthrough narrative pane renders cards by respawning the pane instead of typing shell commands into it
+  command: grep -q "respawn-pane" scripts/demos/launch-walkthrough.sh && grep -q "narrative_pane_cmd" scripts/demos/launch-walkthrough.sh && ! grep -q "send-keys -t \"\$NARRATIVE_PANE\" \"clear" scripts/demos/launch-walkthrough.sh
+  tags: [spec, implemented]
+- label: launch-walkthrough opening and completion cards do not render as numbered steps
+  command: bash scripts/demos/launch-walkthrough.sh --dry-run | grep -q "Opening: Launch route" && grep -q "show_card" scripts/demos/launch-walkthrough.sh && ! grep -q "show_narrative 0" scripts/demos/launch-walkthrough.sh && ! grep -q "show_narrative \"\$TOTAL_STEPS\" \"\$TOTAL_STEPS\" \"Demo complete\"" scripts/demos/launch-walkthrough.sh
+  tags: [spec, implemented]
+- label: launch-tui demo dry-run prints a sequential harbor launch story with status, config, direct, web-before, web, web-after, and recap steps without requiring Textual or harbor on PATH
+  command: PATH=/usr/bin:/bin python3 scripts/demos/launch-tui.py --dry-run --tool mi --backend test-backend --model test-model | grep -q 'Step 6: Recap' && PATH=/usr/bin:/bin python3 scripts/demos/launch-tui.py --dry-run --tool mi --backend test-backend --model test-model | grep -q -- 'harbor launch --web --backend test-backend --model test-model mi -p'
+  tags: [spec, implemented]
+- label: launch-tui demo rejects Claude and unsupported tools before building the web-enabled step
+  command: ! python3 scripts/demos/launch-tui.py --dry-run --tool claude >/tmp/harbor-launch-tui-claude.out 2>&1 && grep -q 'does not support --web' /tmp/harbor-launch-tui-claude.out && ! python3 scripts/demos/launch-tui.py --dry-run --tool unknown >/tmp/harbor-launch-tui-unknown.out 2>&1 && grep -q 'Unsupported demo tool' /tmp/harbor-launch-tui-unknown.out
+  tags: [spec, implemented]
+- label: launch-tui --tui mode is a Textual dashboard with a step sidebar, top route bar, command output panel, and explanation panel, while dry-run avoids importing Textual
+  command: python3 -m py_compile scripts/demos/launch-tui.py && grep -q 'class HarborLaunchDemoApp' scripts/demos/launch-tui.py && grep -q 'import_textual' scripts/demos/launch-tui.py && grep -q 'StepList' scripts/demos/launch-tui.py && grep -q 'output-log' scripts/demos/launch-tui.py && grep -q 'explain-panel' scripts/demos/launch-tui.py
+  tags: [spec, implemented]
+- label: launch-tui demo supports capture-friendly run controls: --allow-missing-tool, --duration, --record, and --capture-mode asciinema
+  command: python3 scripts/demos/launch-tui.py --help | grep -q -- '--allow-missing-tool' && python3 scripts/demos/launch-tui.py --help | grep -q -- '--duration' && python3 scripts/demos/launch-tui.py --help | grep -q -- '--record' && python3 scripts/demos/launch-tui.py --help | grep -q -- '--capture-mode' && grep -q 'asciinema rec' scripts/demos/launch-tui.py
+  tags: [spec, implemented]
+- label: launch-tui demo can be run directly with uv because the script declares its Textual dependency in a PEP 723 metadata block and help shows the uv run command
+  command: head -n 20 scripts/demos/launch-tui.py | grep -q 'dependencies = \["textual' && python3 scripts/demos/launch-tui.py --help | grep -q 'uv run scripts/demos/launch-tui.py'
+  tags: [spec, implemented]
+- label: launch-tui demo opens with a visible product explanation that says it will run real harbor launch commands and shows the config direct and web route before execution
+  command: grep -q 'What this demo does' scripts/demos/launch-tui.py && grep -q 'This demo runs real Harbor commands' scripts/demos/launch-tui.py && grep -q 'Config -> Direct -> Web route' scripts/demos/launch-tui.py
+  tags: [spec, implemented]
+- label: launch-tui demo names the Textual app Harbor Launch Demo and the prelaunch confirmation tells users to run --dry-run first if they only want the command plan
+  command: grep -q 'TITLE = "Harbor Launch Demo"' scripts/demos/launch-tui.py && grep -q -- '--dry-run first' scripts/demos/launch-tui.py
+  tags: [spec, implemented]
+- label: launch-tui demo defaults to a narrated plain-terminal story and reserves the full-screen Textual dashboard for --tui
+  command: python3 scripts/demos/launch-tui.py --help | grep -q -- '--tui' && grep -q 'run_story' scripts/demos/launch-tui.py && grep -q 'run_live' scripts/demos/launch-tui.py && python3 scripts/demos/launch-tui.py --dry-run | grep -q 'What this proves'
+  tags: [spec, implemented]
+- label: launch-tui story mode explains harbor launch as a route builder before commands run and labels every step with what it proves, why it matters, and what to look for
+  command: grep -q 'route builder' scripts/demos/launch-tui.py && grep -q 'What this proves' scripts/demos/launch-tui.py && grep -q 'Why it matters' scripts/demos/launch-tui.py && grep -q 'What to look for' scripts/demos/launch-tui.py
+  tags: [spec, implemented]
+- label: launch-tui story mode displays canonical harbor commands while executing ./harbor.sh as a repo-local fallback when harbor is not on PATH
+  command: grep -q 'resolve_harbor_bin' scripts/demos/launch-tui.py && grep -q './harbor.sh' scripts/demos/launch-tui.py && grep -q 'display_command' scripts/demos/launch-tui.py
+  tags: [spec, implemented]
