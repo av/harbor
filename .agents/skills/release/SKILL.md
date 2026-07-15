@@ -41,17 +41,20 @@ when the user explicitly asks.
 
 This constant is the single source of truth — the seed script propagates it to
 `pyproject.toml`, `package.json`, `harbor.sh`, `app/package.json`,
-`app/src-tauri/tauri.conf.json`, and `app/src-tauri/Cargo.toml`.
+`app/src-tauri/tauri.conf.json`, `app/src-tauri/Cargo.toml`, and
+`services/boost/pyproject.toml`.
 
 ## Step 2 — Run Codegen
 
 ```bash
-harbor dev release
+bash .scripts/release.sh
 ```
 
-This runs the release script (`.scripts/release.sh`), which:
+Note: `harbor dev` only runs `.scripts/*.ts` Deno scripts, so `release.sh` must
+be invoked directly with bash. The script:
 - Seeds the version into all targets (`harbor dev seed`, `seed-cdi`, `seed-traefik`)
-- Syncs docs to the wiki repo and pushes them
+- Runs the human lint pass (`harbor dev lint`)
+- Regenerates docs and pushes them to the wiki repo (`../harbor.wiki`)
 
 Wait for it to complete. Check the output for errors — especially the wiki push,
 which can fail if there are merge conflicts in `../harbor.wiki`.
@@ -99,7 +102,7 @@ The bullet format is:
 
 ## Step 5 — Run Local CI Lint Gate
 
-Run the lint checks before committing or pushing the release. `harbor dev release`
+Run the lint checks before committing or pushing the release. `release.sh`
 runs the human lint pass, but CI also has a strict Harbor rules gate where any
 `HARBORxxx` finding fails the build. Do not publish a release with red CI.
 
@@ -123,11 +126,19 @@ Shellcheck warnings from `bash harbor.sh dev lint` may be pre-existing, but the
 
 ## Step 6 — Commit and Push
 
+Stage only the files touched by the release pipeline (never `git add -A` —
+the working tree may hold unrelated in-flight work):
+
 ```bash
-git add -A
+git add .scripts/seed.ts README.md pyproject.toml package.json harbor.sh \
+  app/package.json app/src-tauri/tauri.conf.json app/src-tauri/Cargo.toml \
+  services/boost/pyproject.toml
 git commit -m "chore: vX.Y.Z"
 git push origin main
 ```
+
+Check `git status` afterwards for any other files the seed scripts touched
+(e.g. regenerated compose/CDI/Traefik outputs) and add them to the same commit.
 
 The commit message is always `chore: vX.Y.Z` — no variation.
 
