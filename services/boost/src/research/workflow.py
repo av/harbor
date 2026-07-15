@@ -128,7 +128,7 @@ async def apply_research_module(
   query_failure_status: str,
   query_failure_metric_key: str,
 ) -> None:
-  """Shared apply() scaffold for caveman/ponytail-style pre-answer web research."""
+  """Shared apply() scaffold for quickhop/deephop-style pre-answer web research."""
   timer = debug_metrics.DebugTimer()
   extra_calls = 0
   message = orchestrate.last_user_text(chat)

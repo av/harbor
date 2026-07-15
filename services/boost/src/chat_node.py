@@ -33,10 +33,24 @@ class ChatNode:
     return node
 
   @staticmethod
-  def from_message(message):
-    content = message.get('content', '')
+  def _normalize_content(content):
     if content is None:
-      content = ''
+      return ''
+    if isinstance(content, list):
+      text_parts = []
+      for part in content:
+        if isinstance(part, dict) and part.get('type') == 'text':
+          text_parts.append(part.get('text', ''))
+        elif isinstance(part, str):
+          text_parts.append(part)
+        else:
+          return content
+      return '\n'.join(text_parts)
+    return content
+
+  @staticmethod
+  def from_message(message):
+    content = ChatNode._normalize_content(message.get('content', ''))
 
     return ChatNode(
       role=message.get('role', ''),
@@ -118,7 +132,10 @@ class ChatNode:
     return max(self.children, key=lambda c: c.value).best_child()
 
   def contains(self, substring):
-    return substring.lower() in self.content.lower()
+    content = self.content
+    if isinstance(content, list):
+      return substring.lower() in str(content).lower()
+    return substring.lower() in content.lower()
 
   def parents(self):
     parents = [self]

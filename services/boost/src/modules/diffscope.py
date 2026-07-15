@@ -43,7 +43,6 @@ correction note and **one** revision hop before the answer is emitted.
 
 - Coding deliverables where the user states file scope (`only X`, `don't touch Y`)
 - Post-deliverable guard: compares changed paths against recent constraints
-- Optional hardening atop `keel` anchoring or `sightline` scratch guards
 
 **Limitation:** User scope is inferred from recent message heuristics. Scratch
 file tools (`read_file`, `write_file`) are not tracked — only workspace reads
@@ -63,12 +62,6 @@ harbor boost modules add diffscope
 harbor config set HARBOR_BOOST_DIFFSCOPE_ENABLED true
 harbor config set HARBOR_BOOST_WORKSPACE_ROOT /workspace/myproject
 ```
-
-**Workflow presets**
-
-- `scope-guard` (`tools`, `diffscope`, `autocheck`, `final`) — lightweight scope enforcement for focused bugfixes
-- `agent-code` (`tools`, `sightline`, `diffscope`, `autocheck`, `final`) — sandbox scope enforcement
-- Custom example: `scope-check=tools,keel,autocheck,diffscope,final` via `HARBOR_BOOST_WORKFLOWS`
 
 **Standalone**
 
@@ -762,9 +755,7 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
       ),
       logger=logger,
     )
-    workflow_mod.anchor_deferred_draft(chat, draft, module_cfg)
-    await workflow_mod.emit_final(llm, draft)
-    return draft
+    return await workflow_mod.anchor_and_emit_final(llm, chat, draft, module_cfg)
 
   correction = build_correction_note(
     blocking_violations,
@@ -814,6 +805,4 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
     ),
     logger=logger,
   )
-  workflow_mod.anchor_deferred_draft(chat, final_text, module_cfg)
-  await workflow_mod.emit_final(llm, final_text)
-  return final_text
+  return await workflow_mod.anchor_and_emit_final(llm, chat, final_text, module_cfg)

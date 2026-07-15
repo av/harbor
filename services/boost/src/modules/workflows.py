@@ -1,64 +1,11 @@
-"""Built-in workflow presets for agentic coding modules."""
+"""Workflow preset helpers for agentic coding modules."""
 
 from copy import deepcopy
 
 TOOLS_SETUP = {"module": "tools", "config": {"final": False}}
-SIGHTLINE_SETUP = {"module": "sightline", "config": {"final": False}}
 FINAL_STEP = "final"
 
-PRESETS: dict[str, dict] = {
-  "research-quick": {
-    "name": "Quick Research",
-    "description": "Register portable tools, run fast caveman web research, then answer.",
-    "modules": [TOOLS_SETUP, "caveman", FINAL_STEP],
-  },
-  "research-deep": {
-    "name": "Deep Research",
-    "description": "Register portable tools, run two-hop ponytail research, then answer.",
-    "modules": [TOOLS_SETUP, "ponytail", FINAL_STEP],
-  },
-  "code-check": {
-    "name": "Code Check",
-    "description": "Register portable tools, audit coding deliverables with autocheck, then answer.",
-    "modules": [TOOLS_SETUP, "autocheck", FINAL_STEP],
-  },
-  "scope-guard": {
-    "name": "Scope Guard",
-    "description": (
-      "Lightweight bugfix workflow: register portable tools, enforce user-stated "
-      "file scope with diffscope, audit deliverables with autocheck, then answer."
-    ),
-    "modules": [TOOLS_SETUP, "diffscope", "autocheck", FINAL_STEP],
-  },
-  "agent-research": {
-    "name": "Agent Research",
-    "description": "Tool-enabled smash-and-grab research for agentic coding sessions.",
-    "modules": [TOOLS_SETUP, "caveman", FINAL_STEP],
-  },
-  "agent-code": {
-    "name": "Agent Code",
-    "description": (
-      "Sandbox coding session: register portable and workspace tools, enforce "
-      "read-before-edit, scope constraints, and deliverable audit."
-    ),
-    "modules": [TOOLS_SETUP, SIGHTLINE_SETUP, "diffscope", "autocheck", FINAL_STEP],
-  },
-  "shipyard": {
-    "name": "Shipyard",
-    "description": (
-      "Full agentic coding pipeline: keel grounding, selective caveman ideation, "
-      "portable tools, ponytail implementation research, and autocheck audit."
-    ),
-    "modules": [
-      {"module": "keel", "continue": True, "config": {"defer_final": True}},
-      {"module": "caveman", "continue": True, "config": {"defer_final": True}},
-      TOOLS_SETUP,
-      {"module": "ponytail", "continue": True, "config": {"defer_final": True}},
-      {"module": "autocheck", "continue": True, "config": {"defer_final": True}},
-      FINAL_STEP,
-    ],
-  },
-}
+PRESETS: dict[str, dict] = {}
 
 
 def _module_name(module_config) -> str | None:

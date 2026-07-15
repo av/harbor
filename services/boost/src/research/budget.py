@@ -66,16 +66,16 @@ class BudgetExceeded(Exception):
 def budget_from_config(module: str) -> ResearchBudget:
   """Build a module-specific research budget from Harbor Boost config."""
   module = module.lower()
-  if module == "caveman":
+  if module == "quickhop":
     return ResearchBudget(
-      max_searches=config.CAVEMAN_MAX_SEARCHES.value,
-      max_url_reads=config.CAVEMAN_MAX_URL_READS.value,
-      max_chars=config.CAVEMAN_MAX_CHARS.value,
+      max_searches=config.QUICKHOP_MAX_SEARCHES.value,
+      max_url_reads=config.QUICKHOP_MAX_URL_READS.value,
+      max_chars=config.QUICKHOP_MAX_CHARS.value,
     )
-  if module == "ponytail":
+  if module == "deephop":
     return ResearchBudget(
-      max_searches=config.PONYTAIL_MAX_SEARCHES.value,
-      max_url_reads=config.PONYTAIL_MAX_URL_READS.value,
-      max_chars=config.PONYTAIL_MAX_CHARS.value,
+      max_searches=config.DEEPHOP_MAX_SEARCHES.value,
+      max_url_reads=config.DEEPHOP_MAX_URL_READS.value,
+      max_chars=config.DEEPHOP_MAX_CHARS.value,
     )
   return ResearchBudget()

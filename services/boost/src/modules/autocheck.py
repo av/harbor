@@ -44,7 +44,7 @@ deliverable signals (for example a coding keyword plus a repo-relative file path
 when the ``finish`` tool was called in recent chat history, or when the user sends
 an explicit completion signal (`we're done`, `ship it`, `looks good`) after prior
 coding work. Simple acknowledgments (`thanks`, `ok`, `continue`), research-only turns, and very
-short messages are always skipped. In `shipyard`, pass-through turns honor
+short messages are always skipped. In chained workflows, pass-through turns honor
 `defer_final` so the explicit `final` workflow step streams the answer.
 
 When `HARBOR_BOOST_WORKSPACE_ROOT` is set and paths are cited, the audit cannot
@@ -103,13 +103,6 @@ harbor config set HARBOR_BOOST_AUTOCHECK_DRAFT_MODEL gpt-4o
 harbor config set HARBOR_BOOST_AUTOCHECK_REVISE_MODEL gpt-4o
 harbor config set HARBOR_BOOST_WORKSPACE_ROOT /workspace/myproject
 ```
-
-**Workflow presets**
-
-- `code-check` (`tools`, `autocheck`, `final`) — self-audit coding deliverables
-- `scope-guard` (`tools`, `diffscope`, `autocheck`, `final`) — scoped bugfix deliverable audit
-- `agent-code` (`tools`, `sightline`, `diffscope`, `autocheck`, `final`) — sandbox deliverable audit
-- `shipyard` — final audit step before the downstream completion
 
 **Standalone**
 
@@ -1617,6 +1610,4 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
     final_text = append_audit_footer(final_text, audit)
 
   await llm.emit_status("Autocheck: final answer...")
-  workflow_mod.anchor_deferred_draft(chat, final_text, module_cfg)
-  await workflow_mod.emit_final(llm, final_text)
-  return final_text
+  return await workflow_mod.anchor_and_emit_final(llm, chat, final_text, module_cfg)

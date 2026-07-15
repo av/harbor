@@ -2,7 +2,6 @@
 
 import os
 import sys
-from copy import deepcopy
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -13,21 +12,10 @@ import chat as ch
 import config
 import deliverable
 import workflows
-from modules import autocheck, caveman, diffscope, keel, ponytail
-from modules import workflows as workflow_presets
+from modules import autocheck, caveman, deephop, diffscope, quickhop
 from research.brief import RESEARCH_UNAVAILABLE_NOTE, ResearchBrief
 from research.budget import ResearchBudget
 import research.orchestrate as orchestrate
-
-
-SHIPYARD_MODULE_ORDER = [
-  "keel",
-  "caveman",
-  "tools",
-  "ponytail",
-  "autocheck",
-  "final",
-]
 
 
 @pytest.fixture(autouse=True)
@@ -37,7 +25,7 @@ def reset_workflow_registry():
   workflows.invalidate_registry()
 
 
-class TestCavemanEdgeCases:
+class TestQuickhopEdgeCases:
   def _chat(self, content: str) -> ch.Chat:
     return ch.Chat.from_conversation([{"role": "user", "content": content}])
 
@@ -45,49 +33,72 @@ class TestCavemanEdgeCases:
   async def test_continue_skips_research_without_module_prefix(self):
     chat = self._chat("continue")
     llm = MagicMock(module=None)
-    assert caveman.should_skip_research(chat)
-    assert not await caveman.needs_research(chat, llm)
+    assert quickhop.research_skip_reason(chat) is not None
+    gate_reason, _ = await quickhop.research_gate_reason(chat, llm)
+    assert gate_reason != "triggered"
 
   @pytest.mark.asyncio
   async def test_thanks_for_help_skips_research(self):
     chat = self._chat("thanks for the help!")
     llm = MagicMock(module=None)
-    assert caveman.should_skip_research(chat)
-    assert not await caveman.needs_research(chat, llm)
+    assert quickhop.research_skip_reason(chat) is not None
+    gate_reason, _ = await quickhop.research_gate_reason(chat, llm)
+    assert gate_reason != "triggered"
 
   @pytest.mark.asyncio
   async def test_version_question_triggers_research_without_module_prefix(self):
     chat = self._chat("What changed in Python 3.13 asyncio semantics?")
     llm = MagicMock(module=None)
-    assert not caveman.should_skip_research(chat)
-    assert await caveman.needs_research(chat, llm)
+    assert quickhop.research_skip_reason(chat) is None
+    gate_reason, _ = await quickhop.research_gate_reason(chat, llm)
+    assert gate_reason == "triggered"
 
   @pytest.mark.asyncio
   async def test_api_endpoint_question_triggers_research(self):
     chat = self._chat(
       "What is the Stripe checkout session API endpoint response format?"
     )
-    llm = MagicMock(module=caveman.ID_PREFIX)
-    assert await caveman.needs_research(chat, llm)
+    llm = MagicMock(module=quickhop.ID_PREFIX)
+    gate_reason, _ = await quickhop.research_gate_reason(chat, llm)
+    assert gate_reason == "triggered"
 
   @pytest.mark.asyncio
   async def test_apply_passes_through_on_continue(self):
     chat = self._chat("carry on as planned")
-    llm = MagicMock(module=caveman.ID_PREFIX)
+    llm = MagicMock(module=quickhop.ID_PREFIX)
     llm.emit_status = AsyncMock()
     llm.stream_final_completion = AsyncMock()
 
-    with patch.object(caveman, "extract_search_queries", new=AsyncMock()) as extract:
-      await caveman.apply(chat, llm)
+    with patch.object(quickhop, "extract_search_queries", new=AsyncMock()) as extract:
+      await quickhop.apply(chat, llm)
 
     extract.assert_not_called()
     llm.emit_status.assert_awaited_once_with(
-      "Caveman research: skipped (continuation)"
+      "Quickhop research: skipped (continuation)"
     )
     llm.stream_final_completion.assert_awaited_once()
 
 
-class TestPonytailEdgeCases:
+class TestCavemanStyleEdgeCases:
+  def _chat(self, content: str) -> ch.Chat:
+    return ch.Chat.from_conversation([{"role": "user", "content": content}])
+
+  @pytest.mark.asyncio
+  async def test_apply_passes_through_when_user_stops_style(self):
+    chat = self._chat("stop caveman and answer normally.")
+    llm = MagicMock()
+
+    with patch(
+      "modules.style.workflow_mod.complete_or_defer",
+      new=AsyncMock(return_value="ok"),
+    ) as complete_or_defer:
+      await caveman.apply(chat, llm)
+
+    assert not any("<caveman_style" in (msg.get("content") or "") for msg in chat.history())
+    complete_or_defer.assert_awaited_once_with(llm, None)
+
+
+class TestDeephopEdgeCases:
   @pytest.mark.asyncio
   async def test_mid_hop_budget_exhaustion_stops_remaining_first_hop_queries(self):
     chat = ch.Chat.from_conversation([
@@ -110,9 +121,9 @@ class TestPonytailEdgeCases:
         ["api v1 docs", "api v2 docs", "api migration guide"],
         budget,
         brief,
-        module_id=ponytail.ID_PREFIX,
-        status_prefix="Ponytail research",
-        phase="Ponytail hop 1",
+        module_id=deephop.ID_PREFIX,
+        status_prefix="Deephop research",
+        phase="Deephop hop 1",
       )
 
     assert web_search.await_count == 1
@@ -140,14 +151,14 @@ class TestPonytailEdgeCases:
         "research.fetch.web_search",
         new=AsyncMock(side_effect=RuntimeError("search provider down")),
       ),
-      patch.object(ponytail, "detect_gaps", new=AsyncMock(return_value=ponytail.GapAnalysis())),
+      patch.object(deephop, "detect_gaps", new=AsyncMock(return_value=deephop.GapAnalysis())),
       patch.object(
-        ponytail,
+        deephop,
         "synthesize_brief",
         new=AsyncMock(side_effect=lambda _c, _l, _m, brief: brief),
       ),
     ):
-      brief, _ = await ponytail.run_research_loop(
+      brief, _ = await deephop.run_research_loop(
         chat,
         llm,
         "Migrate from FastAPI 0.100 to 0.115",
@@ -181,14 +192,14 @@ class TestPonytailEdgeCases:
         "research.fetch.read_url",
         new=AsyncMock(side_effect=ValueError("blocked by robots.txt")),
       ),
-      patch.object(ponytail, "detect_gaps", new=AsyncMock(return_value=ponytail.GapAnalysis())),
+      patch.object(deephop, "detect_gaps", new=AsyncMock(return_value=deephop.GapAnalysis())),
       patch.object(
-        ponytail,
+        deephop,
         "synthesize_brief",
         new=AsyncMock(side_effect=lambda _c, _l, _m, brief: brief),
       ),
     ):
-      brief, _ = await ponytail.run_research_loop(
+      brief, _ = await deephop.run_research_loop(
         chat,
         llm,
         "Compare Kubernetes 1.29 vs 1.30 API deprecations",
@@ -243,122 +254,6 @@ class TestAutocheckEdgeCases:
     llm.stream_final_completion.assert_awaited_once()
 
 
-class TestKeelEdgeCases:
-  def _chat(self, *messages: str) -> ch.Chat:
-    conversation = [{"role": "user", "content": msg} for msg in messages]
-    return ch.Chat.from_conversation(conversation)
-
-  def test_drift_detected_on_also_refactor_phrase(self):
-    assert keel.detect_drift("Can you also refactor the auth module while you're here?")
-
-  def test_anchor_not_injected_on_first_turn(self):
-    chat = self._chat("Implement retry helper in services/boost/src/utils.py")
-    assert keel.count_user_turns(chat) == 1
-
-  @pytest.mark.asyncio
-  async def test_apply_skips_anchor_on_third_user_turn_with_default_throttle(self):
-    chat = ch.Chat.from_conversation([
-      {"role": "user", "content": "Implement retry helper in services/boost/src/utils.py"},
-      {"role": "assistant", "content": "Added retry helper with three attempts."},
-      {"role": "user", "content": "Add logging around retries."},
-      {"role": "assistant", "content": "Added structured logging."},
-      {"role": "user", "content": "Tighten the timeout handling."},
-    ])
-    llm = MagicMock()
-    llm.emit_status = AsyncMock()
-    llm.stream_final_completion = AsyncMock()
-
-    brief = keel.TaskBrief(
-      objective="Add retry helper",
-      acceptance_criteria=["Helper retries 3 times", "Tests pass"],
-      in_scope_paths=["services/boost/src/utils.py"],
-    )
-
-    with (
-      patch.object(keel, "get_stored_brief", return_value=brief),
-      patch.object(keel, "hydrate_brief_from_chat", return_value=None),
-      patch.object(keel, "update_met_criteria_from_history", return_value=set()),
-      patch.object(keel, "_register_finish_wrapper"),
-    ):
-      await keel.apply(chat, llm)
-
-    assert keel.count_user_turns(chat) == 3
-    history = chat.history()
-    assert not any("<task_anchor>" in (msg.get("content") or "") for msg in history)
-    llm.stream_final_completion.assert_awaited_once()
-
-  @pytest.mark.asyncio
-  async def test_apply_injects_drift_warning_on_also_refactor(self):
-    chat = ch.Chat.from_conversation([
-      {"role": "user", "content": "Implement retry helper in services/boost/src/utils.py"},
-      {"role": "assistant", "content": "Added retry helper."},
-      {"role": "user", "content": "Can you also refactor the auth module?"},
-    ])
-    llm = MagicMock()
-    llm.emit_status = AsyncMock()
-    llm.stream_final_completion = AsyncMock()
-
-    brief = keel.TaskBrief(
-      objective="Add retry helper",
-      acceptance_criteria=["Helper retries 3 times"],
-      in_scope_paths=["services/boost/src/utils.py"],
-    )
-
-    with (
-      patch.object(keel, "get_stored_brief", return_value=brief),
-      patch.object(keel, "update_met_criteria_from_history", return_value=set()),
-      patch.object(keel, "_register_finish_wrapper"),
-    ):
-      await keel.apply(chat, llm)
-
-    history = chat.history()
-    assert any(keel.DRIFT_WARNING in (msg.get("content") or "") for msg in history)
-    llm.emit_status.assert_awaited_with(keel.DRIFT_STATUS)
-
-  @pytest.mark.asyncio
-  async def test_apply_anchor_respects_keel_max_constraints_config(self):
-    chat = ch.Chat.from_conversation([
-      {"role": "user", "content": "Implement retry helper in services/boost/src/utils.py"},
-      {"role": "assistant", "content": "Added retry helper with three attempts."},
-      {"role": "user", "content": "Add logging around retries."},
-    ])
-    llm = MagicMock()
-    llm.boost_params = {}
-    llm.emit_status = AsyncMock()
-    llm.stream_final_completion = AsyncMock()
-
-    brief = keel.TaskBrief(
-      objective="Add retry helper",
-      acceptance_criteria=["Helper retries 3 times"],
-      in_scope_paths=["services/boost/src/utils.py"],
-      constraints=[f"Constraint {index}" for index in range(5)],
-    )
-
-    original = config.KEEL_MAX_CONSTRAINTS.__value__
-    try:
-      config.KEEL_MAX_CONSTRAINTS.__value__ = 2
-      with (
-        patch.object(keel, "get_stored_brief", return_value=brief),
-        patch.object(keel, "update_met_criteria_from_history", return_value=set()),
-        patch.object(keel, "_register_finish_wrapper"),
-      ):
-        await keel.apply(chat, llm)
-    finally:
-      config.KEEL_MAX_CONSTRAINTS.__value__ = original
-
-    history = chat.history()
-    anchor_blocks = [
-      msg.get("content") or ""
-      for msg in history
-      if "<task_anchor>" in (msg.get("content") or "")
-    ]
-    assert len(anchor_blocks) == 1
-    assert "Constraint 0" in anchor_blocks[0]
-    assert "Constraint 1" in anchor_blocks[0]
-    assert "Constraint 2" not in anchor_blocks[0]
-    assert "+3 more" in anchor_blocks[0]
-
-
 class TestDiffscopeEdgeCases:
   def _chat(self, content: str) -> ch.Chat:
     return ch.Chat.from_conversation([{"role": "user", "content": content}])
@@ -399,35 +294,3 @@ class TestDiffscopeEdgeCases:
 
     revise.assert_awaited_once()
     llm.emit_message.assert_awaited_once_with("Only updated `src/foo.py`.")
-
-
-class TestWorkflowEdgeCases:
-  def test_shipyard_preset_module_order_exact(self):
-    preset = workflow_presets.PRESETS["shipyard"]
-    module_names = []
-    for module_config in preset["modules"]:
-      if isinstance(module_config, str):
-        module_names.append(module_config)
-      else:
-        module_names.append(module_config["module"])
-    assert module_names == SHIPYARD_MODULE_ORDER
-
-  def test_shipyard_shorthand_matches_exact_module_order(self):
-    assert workflow_presets.SHORTHAND["shipyard"] == ",".join(SHIPYARD_MODULE_ORDER)
-
-  @pytest.mark.asyncio
-  async def test_shipyard_apply_workflow_runs_modules_in_order(self):
-    chat = MagicMock()
-    llm = MagicMock()
-    llm.is_final_stream = False
-    llm.stream_final_completion = AsyncMock()
-
-    with patch.object(workflows, "_apply_module", new_callable=AsyncMock) as mock_apply:
-      await workflows.apply_workflow(
-        deepcopy(workflow_presets.PRESETS["shipyard"]),
-        chat,
-        llm,
-      )
-
-    applied = [call.args[0] for call in mock_apply.await_args_list]
-    assert applied == SHIPYARD_MODULE_ORDER[:-1]

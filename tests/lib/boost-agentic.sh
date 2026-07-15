@@ -13,13 +13,13 @@ tests/test_agentic_edge_cases.py
 tests/test_agentic_logging.py
 tests/test_agentic_debug_metrics.py
 tests/test_agentic_workflow_chains.py
-tests/test_shipyard_workflow.py
+tests/test_no_builtin_workflows.py
 tests/test_workflows.py
 tests/test_quickhop.py
-tests/test_keel.py
 tests/test_deephop.py
+tests/test_caveman.py
+tests/test_ponytail.py
 tests/test_autocheck.py
-tests/test_sightline.py
 tests/test_diffscope.py
 tests/test_diffscope_git_merge.py
 tests/test_orchestrate.py

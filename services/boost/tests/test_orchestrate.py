@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 import config
 import research.orchestrate as orchestrate
-from modules import ponytail
+from modules import deephop
 from research.brief import ResearchBrief
 from research.budget import ResearchBudget
 
@@ -48,9 +48,9 @@ class TestOrchestrateParallelFetch:
         ["q1", "q2", "q3", "q4"],
         budget,
         brief,
-        module_id="ponytail",
-        status_prefix="Ponytail research",
-        phase="Ponytail hop 1",
+        module_id="deephop",
+        status_prefix="Deephop research",
+        phase="Deephop hop 1",
         llm=llm,
       )
       elapsed = time.monotonic() - started
@@ -91,9 +91,9 @@ class TestOrchestrateParallelFetch:
         [f"https://example.com/{idx}" for idx in range(4)],
         budget,
         brief,
-        module_id="ponytail",
-        status_prefix="Ponytail research",
-        phase="Ponytail hop 1",
+        module_id="deephop",
+        status_prefix="Deephop research",
+        phase="Deephop hop 1",
         llm=llm,
       )
       elapsed = time.monotonic() - started
@@ -124,8 +124,8 @@ class TestOrchestrateParallelFetch:
           ["api docs"],
           budget,
           brief,
-          module_id="caveman",
-          status_prefix="Caveman research",
+          module_id="quickhop",
+          status_prefix="Quickhop research",
         )
     finally:
       config.RESEARCH_NOTES_MAX_CHARS.__value__ = original
@@ -150,9 +150,9 @@ class TestOrchestrateParallelFetch:
         ["api v1 docs", "api v2 docs", "api migration guide"],
         budget,
         brief,
-        module_id=ponytail.ID_PREFIX,
-        status_prefix="Ponytail research",
-        phase="Ponytail hop 1",
+        module_id=deephop.ID_PREFIX,
+        status_prefix="Deephop research",
+        phase="Deephop hop 1",
       )
 
     assert web_search.await_count == 1
@@ -182,9 +182,9 @@ class TestOrchestrateParallelFetch:
             ["api docs", "API docs", "other query", "api docs"],
             budget,
             brief,
-            module_id="ponytail",
-            status_prefix="Ponytail research",
-            phase="Ponytail hop 1",
+            module_id="deephop",
+            status_prefix="Deephop research",
+            phase="Deephop hop 1",
             llm=llm,
           )
       finally:
@@ -208,7 +208,7 @@ class TestOrchestrateBriefHelpers:
     assert orchestrate.content_chars_in_brief(brief) == len("12345") + len("abcdef")
 
 
-class TestPonytailEarlyExit:
+class TestDeephopEarlyExit:
   @pytest.mark.asyncio
   async def test_run_research_loop_skips_second_hop_on_early_exit(self):
     import chat as ch
@@ -222,26 +222,26 @@ class TestPonytailEarlyExit:
     budget = ResearchBudget(max_searches=4, max_url_reads=2, max_chars=50_000)
 
     search_text = "1. [Docs](https://docs.example.com) (Date: N/A)\n" + ("x" * 8000)
-    gap = ponytail.GapAnalysis(
+    gap = deephop.GapAnalysis(
       gaps=["Need explicit deprecation list"],
       follow_up_queries=["FastAPI 0.115 deprecations"],
     )
 
-    original = config.PONYTAIL_EARLY_EXIT_CHARS.__value__
+    original = config.DEEPHOP_EARLY_EXIT_CHARS.__value__
     try:
-      config.PONYTAIL_EARLY_EXIT_CHARS.__value__ = 10_000
+      config.DEEPHOP_EARLY_EXIT_CHARS.__value__ = 10_000
 
       with (
         patch("research.fetch.web_search", new=AsyncMock(return_value=search_text)) as web_search,
         patch("research.fetch.read_url", new=AsyncMock(return_value="y" * 5000)) as read_url,
-        patch.object(ponytail, "detect_gaps", new=AsyncMock(return_value=gap)) as detect_gaps,
+        patch.object(deephop, "detect_gaps", new=AsyncMock(return_value=gap)) as detect_gaps,
         patch.object(
-          ponytail,
+          deephop,
           "synthesize_brief",
           new=AsyncMock(side_effect=lambda _c, _l, _m, brief: brief),
         ),
       ):
-        brief, _ = await ponytail.run_research_loop(
+        brief, _ = await deephop.run_research_loop(
           chat,
           llm,
           "Migrate from FastAPI 0.100 to 0.115",
@@ -250,7 +250,7 @@ class TestPonytailEarlyExit:
         )
 
     finally:
-      config.PONYTAIL_EARLY_EXIT_CHARS.__value__ = original
+      config.DEEPHOP_EARLY_EXIT_CHARS.__value__ = original
 
     assert web_search.await_count == 2
     read_url.assert_awaited()

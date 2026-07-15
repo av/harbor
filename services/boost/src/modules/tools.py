@@ -40,24 +40,8 @@ the final completion. Ad hoc requests can also pass a workflow through
 `@boost_workflow` on the chat completion body.
 
 `finish` signals that the model is done using tools and returns its final answer.
-Downstream agentic modules replace tools in the local registry; if a name is
-already registered, `tools` skips re-registration so the wrapper is kept:
-
-- **`sightline`** (place **after** `tools`) — wraps scratch and workspace file
-  tools (`read_file`, `write_file`, `delete_file`, `read_workspace_file`, and
-  opt-in `write_workspace_file`) with read-before-edit guards.
-- **`keel`** (place **before** `tools`, when a `TaskBrief` is anchored) — wraps
-  `finish` to prepend an acceptance-criteria landing checklist; includes git diff
-  paths when the workspace is a git repo.
 
 `autocheck` treats a recent `finish` call as a deliverable completion signal.
-
-**Workflow presets**
-
-- `research-quick`, `research-deep`, `agent-research` — portable research tools
-- `code-check`, `scope-guard` — workspace tools with deliverable audit
-- `agent-code` (`tools`, `sightline`, …) — `sightline` guards file tools after registration
-- `shipyard` (`keel`, …, `tools`, …) — `keel` wraps `finish` before `tools` runs
 
 ```bash
 harbor boost modules add tools
@@ -374,8 +358,7 @@ async def write_workspace_file(file_path: str, content: str) -> str:
   """
   Write a file under the configured workspace root.
   Requires `HARBOR_BOOST_WORKSPACE_ROOT`. Paths are jailed to that directory.
-  Opt in by listing `write_workspace_file` in `HARBOR_BOOST_TOOLS`; pair with
-  `sightline` for read-before-edit guarding.
+  Opt in by listing `write_workspace_file` in `HARBOR_BOOST_TOOLS`.
 
   Args:
     file_path (str): Relative workspace file path.

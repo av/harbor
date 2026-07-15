@@ -275,7 +275,7 @@ BOOST_KEYS = [
 EXTRA_LLM_PARAMS = Config[ConfigDict](
     name="HARBOR_BOOST_EXTRA_LLM_PARAMS",
     type=ConfigDict,
-    default="temperature=0.35",
+    default="",
     description="""
 Allows to specify extra payload for /chat/completions endpoints for all downstream services at once.
 Format is `key=value,key2=value2,...`.
@@ -712,127 +712,151 @@ BOOST_DEBUG = Config[bool](
     ),
 )
 
-# ----------------- CAVEMAN -----------------
+# ----------------- QUICKHOP -----------------
 
-CAVEMAN_MAX_SEARCHES = Config[int](
-    name="HARBOR_BOOST_CAVEMAN_MAX_SEARCHES",
+QUICKHOP_MAX_SEARCHES = Config[int](
+    name="HARBOR_BOOST_QUICKHOP_MAX_SEARCHES",
     type=int,
     default="2",
-    description="Maximum web searches performed by the `caveman` research module.",
+    description="Maximum web searches performed by the `quickhop` research module.",
 )
 
-CAVEMAN_MAX_URL_READS = Config[int](
-    name="HARBOR_BOOST_CAVEMAN_MAX_URL_READS",
+QUICKHOP_MAX_URL_READS = Config[int](
+    name="HARBOR_BOOST_QUICKHOP_MAX_URL_READS",
     type=int,
     default="1",
-    description="Maximum full-page URL reads performed by the `caveman` research module.",
+    description="Maximum full-page URL reads performed by the `quickhop` research module.",
 )
 
-CAVEMAN_MAX_CHARS = Config[int](
-    name="HARBOR_BOOST_CAVEMAN_MAX_CHARS",
+QUICKHOP_MAX_CHARS = Config[int](
+    name="HARBOR_BOOST_QUICKHOP_MAX_CHARS",
     type=int,
     default="30000",
-    description="Maximum research content characters retained by the `caveman` module.",
+    description="Maximum research content characters retained by the `quickhop` module.",
 )
 
-CAVEMAN_MAX_QUERIES = Config[int](
-    name="HARBOR_BOOST_CAVEMAN_MAX_QUERIES",
+QUICKHOP_MAX_QUERIES = Config[int](
+    name="HARBOR_BOOST_QUICKHOP_MAX_QUERIES",
     type=int,
     default="3",
-    description="Maximum search queries extracted by the `caveman` research module.",
+    description="Maximum search queries extracted by the `quickhop` research module.",
 )
 
-CAVEMAN_TRIGGER = Config[str](
-    name="HARBOR_BOOST_CAVEMAN_TRIGGER",
+QUICKHOP_TRIGGER = Config[str](
+    name="HARBOR_BOOST_QUICKHOP_TRIGGER",
     type=str,
     default="heuristic",
     description=(
-        "How `caveman` decides whether to run web research: "
+        "How `quickhop` decides whether to run web research: "
         "`heuristic` (keyword/question rules) or `llm` (cheap yes/no classifier). "
         "Module-prefixed requests always research regardless of mode."
     ),
 )
 
-CAVEMAN_CACHE_BRIEF = Config[bool](
-    name="HARBOR_BOOST_CAVEMAN_CACHE_BRIEF",
+QUICKHOP_CACHE_BRIEF = Config[bool](
+    name="HARBOR_BOOST_QUICKHOP_CACHE_BRIEF",
     type=bool,
     default="false",
     description=(
-        "When true, `caveman` caches the last research brief in request state and "
+        "When true, `quickhop` caches the last research brief in request state and "
         "reuses it when the same user question is seen again within the session. "
         "Experimental."
     ),
 )
 
-# ----------------- PONYTAIL -----------------
+# ----------------- DEEPHOP -----------------
 
-PONYTAIL_MAX_QUERIES = Config[int](
-    name="HARBOR_BOOST_PONYTAIL_MAX_QUERIES",
+DEEPHOP_MAX_QUERIES = Config[int](
+    name="HARBOR_BOOST_DEEPHOP_MAX_QUERIES",
     type=int,
     default="5",
-    description="Maximum search queries planned by the `ponytail` research module.",
+    description="Maximum search queries planned by the `deephop` research module.",
 )
 
-PONYTAIL_MAX_SEARCHES = Config[int](
-    name="HARBOR_BOOST_PONYTAIL_MAX_SEARCHES",
+DEEPHOP_MAX_SEARCHES = Config[int](
+    name="HARBOR_BOOST_DEEPHOP_MAX_SEARCHES",
     type=int,
     default="4",
-    description="Maximum web searches performed by the `ponytail` research module.",
+    description="Maximum web searches performed by the `deephop` research module.",
 )
 
-PONYTAIL_MAX_URL_READS = Config[int](
-    name="HARBOR_BOOST_PONYTAIL_MAX_URL_READS",
+DEEPHOP_MAX_URL_READS = Config[int](
+    name="HARBOR_BOOST_DEEPHOP_MAX_URL_READS",
     type=int,
     default="3",
-    description="Maximum full-page URL reads performed by the `ponytail` research module.",
+    description="Maximum full-page URL reads performed by the `deephop` research module.",
 )
 
-PONYTAIL_MAX_CHARS = Config[int](
-    name="HARBOR_BOOST_PONYTAIL_MAX_CHARS",
+DEEPHOP_MAX_CHARS = Config[int](
+    name="HARBOR_BOOST_DEEPHOP_MAX_CHARS",
     type=int,
     default="60000",
-    description="Maximum research content characters retained by the `ponytail` module.",
+    description="Maximum research content characters retained by the `deephop` module.",
 )
 
-PONYTAIL_EARLY_EXIT_CHARS = Config[int](
-    name="HARBOR_BOOST_PONYTAIL_EARLY_EXIT_CHARS",
+DEEPHOP_EARLY_EXIT_CHARS = Config[int](
+    name="HARBOR_BOOST_DEEPHOP_EARLY_EXIT_CHARS",
     type=int,
     default="15000",
     description=(
-        "When the first ponytail research hop gathers at least this many characters, "
+        "When the first deephop research hop gathers at least this many characters, "
         "skip the second hop. Set to 0 to disable early exit."
     ),
 )
 
-PONYTAIL_SYNTHESIS_MAX_CHARS = Config[int](
-    name="HARBOR_BOOST_PONYTAIL_SYNTHESIS_MAX_CHARS",
+DEEPHOP_SYNTHESIS_MAX_CHARS = Config[int](
+    name="HARBOR_BOOST_DEEPHOP_SYNTHESIS_MAX_CHARS",
     type=int,
     default="8000",
     description=(
-        "Maximum characters of gathered research passed to the ponytail synthesis step. "
+        "Maximum characters of gathered research passed to the deephop synthesis step. "
         "Set to 0 to disable truncation."
     ),
 )
 
-PONYTAIL_TRIGGER = Config[str](
-    name="HARBOR_BOOST_PONYTAIL_TRIGGER",
+DEEPHOP_TRIGGER = Config[str](
+    name="HARBOR_BOOST_DEEPHOP_TRIGGER",
     type=str,
     default="heuristic",
     description=(
-        "How `ponytail` decides whether to run deep two-hop research: "
+        "How `deephop` decides whether to run deep two-hop research: "
         "`heuristic` (migration/version/API keyword rules) or `llm` (cheap yes/no classifier). "
         "Module-prefixed requests always research when they carry research signals."
     ),
 )
 
-PONYTAIL_CACHE_BRIEF = Config[bool](
-    name="HARBOR_BOOST_PONYTAIL_CACHE_BRIEF",
+DEEPHOP_CACHE_BRIEF = Config[bool](
+    name="HARBOR_BOOST_DEEPHOP_CACHE_BRIEF",
     type=bool,
     default="false",
     description=(
-        "When true, `ponytail` caches the last research brief in request state and "
+        "When true, `deephop` caches the last research brief in request state and "
         "reuses it when the same user question is seen again within the session. "
         "Experimental."
+    ),
+)
+
+# ----------------- CAVEMAN (style) -----------------
+
+CAVEMAN_LEVEL = Config[str](
+    name="HARBOR_BOOST_CAVEMAN_LEVEL",
+    type=str,
+    default="full",
+    description=(
+        "Default terse-output level for the `caveman` style module: "
+        "`lite`, `full`, `ultra`, `wenyan-lite`, `wenyan-full`, `wenyan-ultra`, or `off`."
+    ),
+)
+
+# ----------------- PONYTAIL (style) -----------------
+
+PONYTAIL_LEVEL = Config[str](
+    name="HARBOR_BOOST_PONYTAIL_LEVEL",
+    type=str,
+    default="full",
+    description=(
+        "Default YAGNI build-discipline level for the `ponytail` style module: "
+        "`lite`, `full`, `ultra`, or `off`."
     ),
 )
 
@@ -928,68 +952,6 @@ AUTOCHECK_REVISE_MODEL = Config[str](
     description=(
         "Model used for the `autocheck` revise sub-call. When empty, autocheck "
         "uses the same model as the incoming request."
-    ),
-)
-
-# ------------------- KEEL -------------------
-
-KEEL_ENABLED = Config[bool](
-    name="HARBOR_BOOST_KEEL_ENABLED",
-    type=bool,
-    default="true",
-    description="When false, the `keel` module passes through without task anchoring.",
-)
-
-KEEL_ANCHOR_EVERY = Config[int](
-    name="HARBOR_BOOST_KEEL_ANCHOR_EVERY",
-    type=int,
-    default="2",
-    description=(
-        "Inject `<task_anchor>` every N user turns in `keel` (turn 1 never). "
-        "Set to 1 to anchor on every turn after the first."
-    ),
-)
-
-KEEL_MAX_CONSTRAINTS = Config[int](
-    name="HARBOR_BOOST_KEEL_MAX_CONSTRAINTS",
-    type=int,
-    default="6",
-    description=(
-        "Maximum number of constraints shown in the `keel` `<task_anchor>` block. "
-        "Additional constraints are summarized as `+N more`."
-    ),
-)
-
-# ---------------- SIGHTLINE -----------------
-
-SIGHTLINE_MODE = Config[str](
-    name="HARBOR_BOOST_SIGHTLINE_MODE",
-    type=str,
-    default="block",
-    description=(
-        "How `sightline` handles scratch writes/deletes without a prior `read_file`: "
-        "`block` rejects the tool call; `warn` streams a status and allows it."
-    ),
-)
-
-SIGHTLINE_ALLOW_CREATE = Config[bool](
-    name="HARBOR_BOOST_SIGHTLINE_ALLOW_CREATE",
-    type=bool,
-    default="true",
-    description=(
-        "When true, `sightline` allows the first write to a non-existent scratch path "
-        "without a prior read_file."
-    ),
-)
-
-SIGHTLINE_WORKSPACE = Config[bool](
-    name="HARBOR_BOOST_SIGHTLINE_WORKSPACE",
-    type=bool,
-    default="true",
-    description=(
-        "When true and `HARBOR_BOOST_WORKSPACE_ROOT` is set, `sightline` tracks "
-        "`read_workspace_file` and guards `write_workspace_file` when that tool is "
-        "registered. Defaults to enabled whenever a workspace root is configured."
     ),
 )
 

@@ -212,7 +212,7 @@ def is_research_only_turn(chat: "ch.Chat") -> bool:
   """
   Return True when the latest user turn needs facts but not code changes.
 
-  Used by shipyard modules (especially autocheck) to skip deliverable audit on
+  Used by agentic modules (especially autocheck) to skip deliverable audit on
   research-only turns while still allowing caveman/ponytail to gather context.
   """
   text = last_user_text(chat).strip()

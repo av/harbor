@@ -30,9 +30,9 @@ Harbor is a CLI and companion app that lets you spin up a complete local LLM sta
 
 ## News
 
-- **v0.5.3** - Harbor Boost agentic modules `caveman`, `ponytail`, `keel`, `autocheck`, `sightline`, and `diffscope` for web research, task anchoring, deliverable audits, read-before-edit, and scoped file edits
-- **v0.5.3** - Built-in Boost workflow presets and `harbor launch --workflow` route coding agents through chains like `shipyard`, `agent-code`, and `research-quick`
-- **v0.5.3** - `boost.workspace` mounts your project repo into Boost so agentic presets can read and verify real file paths during coding sessions
+- **v0.5.3** - Harbor Boost agentic modules `quickhop`, `deephop`, `caveman`, `ponytail`, `autocheck`, and `diffscope` for web research, deliverable audits, scoped file checks, and response style control
+- **v0.5.3** - `harbor launch --workflow` routes coding agents through Boost modules such as `quickhop`, `deephop`, and `autocheck`
+- **v0.5.3** - `boost.workspace` mounts your project repo into Boost so agentic modules can read and verify real file paths during coding sessions
 - **v0.5.2** - Fixes `.env` corruption when several Harbor commands run at once and stops `harbor doctor` from hanging on non-interactive stdin
 - **v0.5.1** - Faster `harbor doctor` with timeout-guarded compose checks and early exit for `--check` mode
 - **v0.5.0** - DMR, MLX, oMLX, and Daytona services, llamacpp replaces Ollama as default backend, in-app guided install, agent skills CLI, tab completion, and port conflict detection
@@ -101,24 +101,24 @@ harbor launch --config opencode
 harbor launch --service opencode --help
 ```
 
-Supported host tools include `claude`, `codex`, `copilot`, `droid`, `hermes`, `mi`, `openclaw`, `opencode`, `pi`, `pool`, and `vscode`.
+Supported host tools include `claude`, `codex`, `copilot`, `droid`, `grok`, `hermes`, `mi`, `openclaw`, `opencode`, `pi`, `pool`, and `vscode`.
 
 #### Agentic coding with Boost
 
-[Harbor Boost](./docs/5.2.-Harbor-Boost.md) chains agentic modules—web research, task anchoring, read-before-edit, scoped edits, and deliverable audits—into built-in [workflow presets](./docs/5.2.3-Harbor-Boost-Modules.md#harbor-launch-automation). [`harbor launch --workflow`](./docs/5.2.3-Harbor-Boost-Modules.md#harbor-launch-automation) routes coding agents through a preset instead of the raw backend model.
+[Harbor Boost](./docs/5.2.-Harbor-Boost.md) chains agentic modules—web research, deliverable audits, scope checks, and style passes—into custom [workflows](./docs/5.2.3-Harbor-Boost-Modules.md#custom-workflows). [`harbor launch --workflow`](./docs/5.2.3-Harbor-Boost-Modules.md#harbor-launch-automation) routes coding agents through a single Boost module instead of the raw backend model.
 
 ```bash
-# Full pipeline: grounding, ideation, tools, research, and audit
-harbor launch --workflow shipyard --backend ollama --model qwen3.5:4b codex
-
-# Scoped coding with read-before-edit and deliverable audit
-harbor launch --workflow agent-code --backend ollama --model qwen3.5:4b claude
+# Two-hop research before answering
+harbor launch --workflow deephop --backend ollama --model qwen3.5:4b codex
 
 # Fast web research before answering
-harbor launch --workflow research-quick --backend ollama --model qwen3.5:4b codex
+harbor launch --workflow quickhop --backend ollama --model qwen3.5:4b codex
+
+# Deliverable audit before the final answer
+harbor launch --workflow autocheck --backend ollama --model qwen3.5:4b codex
 ```
 
-Presets include `shipyard`, `agent-code`, `agent-research`, `research-quick`, `research-deep`, `code-check`, and `scope-guard`. Research presets auto-start SearXNG. Mount your project with `boost.workspace` so agents can verify real file paths—see [Boost configuration](./docs/5.2.2-Harbor-Boost-Configuration.md) and the [modules reference](./docs/5.2.3-Harbor-Boost-Modules.md).
+Modules `quickhop` and `deephop` auto-start SearXNG. Define multi-step workflows with `HARBOR_BOOST_WORKFLOWS` or `workflows.yaml`, and mount your project with `boost.workspace` so agents can verify real file paths—see [Boost configuration](./docs/5.2.2-Harbor-Boost-Configuration.md) and the [modules reference](./docs/5.2.3-Harbor-Boost-Modules.md).
 
 ####  Cutting Edge Inference
 

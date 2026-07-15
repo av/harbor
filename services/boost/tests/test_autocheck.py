@@ -1997,7 +1997,7 @@ class TestAutocheckApply:
       if msg.get("role") == "assistant"
     ]
     assert assistants == [revised]
-    llm.emit_message.assert_awaited_once_with(revised)
+    llm.emit_message.assert_not_called()
     llm.stream_final_completion.assert_not_called()
 
   @pytest.mark.parametrize(

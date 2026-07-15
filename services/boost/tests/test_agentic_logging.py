@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 import chat as ch
 import config
-from modules import autocheck, caveman, diffscope, keel, ponytail, sightline
+from modules import autocheck, caveman, diffscope, ponytail, quickhop
 from research import orchestrate
 
 
@@ -19,11 +19,11 @@ from research import orchestrate
 def _enable_module_log_propagation():
   """Enable propagation on agentic module loggers so caplog can capture them."""
   logger_names = [
+    "quickhop",
+    "deephop",
     "caveman",
     "ponytail",
     "autocheck",
-    "keel",
-    "sightline",
     "diffscope",
     "research.orchestrate",
   ]
@@ -51,95 +51,77 @@ class TestLowValueSkipReason:
     assert orchestrate.low_value_skip_reason(self._chat("ok")) == "empty_or_short_message"
 
 
-class TestCavemanGateReason:
+class TestQuickhopGateReason:
   def _chat(self, content: str) -> ch.Chat:
     return ch.Chat.from_conversation([{"role": "user", "content": content}])
 
   def test_skip_reason_for_acknowledgment(self):
-    assert caveman.research_skip_reason(self._chat("thanks")) == "acknowledgment"
+    assert quickhop.research_skip_reason(self._chat("thanks")) == "acknowledgment"
 
   def test_skip_reason_for_coding_without_research_signals(self):
     chat = self._chat("Implement retry helper in services/boost/src/utils.py")
-    assert caveman.research_skip_reason(chat) == "implementation_turn"
+    assert quickhop.research_skip_reason(chat) == "implementation_turn"
 
   @pytest.mark.asyncio
   async def test_gate_reason_heuristic_no_match(self):
     chat = self._chat("Summarize how Harbor Boost modules are loaded.")
     llm = MagicMock(module=None)
-    assert await caveman.research_gate_reason(chat, llm) == ("heuristic_no_match", 0)
+    assert await quickhop.research_gate_reason(chat, llm) == ("heuristic_no_match", 0)
 
   @pytest.mark.asyncio
   async def test_gate_reason_triggered_with_module_prefix(self):
     chat = self._chat("Summarize how Harbor Boost modules are loaded.")
-    llm = MagicMock(module=caveman.ID_PREFIX)
-    assert await caveman.research_gate_reason(chat, llm) == ("triggered", 0)
+    llm = MagicMock(module=quickhop.ID_PREFIX)
+    assert await quickhop.research_gate_reason(chat, llm) == ("triggered", 0)
 
   @pytest.mark.asyncio
   async def test_apply_logs_pass_through_reason(self, caplog):
     chat = self._chat("thanks")
     llm = MagicMock()
     llm.emit_status = AsyncMock()
-    with caplog.at_level(logging.DEBUG, logger="caveman"):
+    with caplog.at_level(logging.DEBUG, logger="quickhop"):
       with patch(
-        "modules.caveman.workflow_mod.complete_or_defer",
+        "modules.quickhop.workflow_mod.complete_or_defer",
         new=AsyncMock(return_value="ok"),
       ):
-        await caveman.apply(chat, llm)
+        await quickhop.apply(chat, llm)
 
     assert any(
       "Pass-through — acknowledgment" in record.message
       for record in caplog.records
     )
-
-
-class TestPonytailGateReason:
-  def _chat(self, content: str) -> ch.Chat:
-    return ch.Chat.from_conversation([{"role": "user", "content": content}])
-
-  def test_skip_reason_for_acknowledgment(self):
-    assert ponytail.research_skip_reason(self._chat("thanks!")) == "acknowledgment"
-
+class TestCavemanStyleLogging:
   @pytest.mark.asyncio
-  async def test_gate_reason_not_research_heavy(self):
-    chat = self._chat("What is asyncio.gather used for in Python?")
-    llm = MagicMock(module=None)
-    assert await ponytail.research_gate_reason(chat, llm) == ("not_research_heavy", 0)
-
-
-class TestKeelGateReason:
-  def _chat(self, content: str) -> ch.Chat:
-    return ch.Chat.from_conversation([{"role": "user", "content": content}])
-
-  def test_disabled(self):
-    chat = self._chat("Implement helper in utils.py")
-    original = config.KEEL_ENABLED.__value__
-    try:
-      config.KEEL_ENABLED.__value__ = False
-      assert keel.keel_gate_reason(chat) == "disabled"
-    finally:
-      config.KEEL_ENABLED.__value__ = original
-
-  def test_not_coding_deliverable(self):
-    chat = self._chat("Explain what asyncio.gather does.")
-    assert keel.keel_gate_reason(chat) == "not_coding_deliverable"
-
-  @pytest.mark.asyncio
-  async def test_apply_logs_pass_through_reason(self, caplog):
-    chat = self._chat("Explain what asyncio.gather does.")
+  async def test_apply_logs_style_level(self, caplog):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Implement retry helper in services/boost/src/utils.py"},
+    ])
     llm = MagicMock()
-    llm.boost_params = {}
-    llm.emit_status = AsyncMock()
-    with caplog.at_level(logging.DEBUG, logger="keel"):
+    with caplog.at_level(logging.DEBUG, logger="caveman"):
       with patch(
-        "modules.keel.workflow_mod.complete_or_defer",
+        "modules.style.workflow_mod.complete_or_defer",
         new=AsyncMock(return_value="ok"),
       ):
-        await keel.apply(chat, llm)
+        await caveman.apply(chat, llm)
 
-    assert any(
-      "Pass-through — not_coding_deliverable" in record.message
-      for record in caplog.records
-    )
+    assert any("level=full" in record.message for record in caplog.records)
+
+
+class TestPonytailStyleLogging:
+  @pytest.mark.asyncio
+  async def test_apply_logs_style_level(self, caplog):
+    chat = ch.Chat.from_conversation([
+      {"role": "user", "content": "Implement retry helper in services/boost/src/utils.py"},
+    ])
+    llm = MagicMock()
+    with caplog.at_level(logging.DEBUG, logger="ponytail"):
+      with patch(
+        "modules.style.workflow_mod.complete_or_defer",
+        new=AsyncMock(return_value="ok"),
+      ):
+        await ponytail.apply(chat, llm)
+
+    assert any("level=full" in record.message for record in caplog.records)
 
 
 class TestDiffscopeGateReason:
@@ -180,28 +162,3 @@ class TestAutocheckGateLogging:
       "Pass-through — acknowledgment" in record.message
       for record in caplog.records
     )
-
-
-class TestSightlineGateLogging:
-  @pytest.mark.asyncio
-  async def test_apply_logs_when_no_tools_registered(self, caplog):
-    chat = ch.Chat.from_conversation([{"role": "user", "content": "hello"}])
-    llm = MagicMock()
-    llm.emit_status = AsyncMock()
-    with caplog.at_level(logging.DEBUG, logger="sightline"):
-      with patch("modules.sightline.install_guards", return_value=[]):
-        with patch(
-          "modules.sightline.workflow_mod.complete_or_defer",
-          new=AsyncMock(return_value="ok"),
-        ):
-          await sightline.apply(chat, llm)
-
-    assert any(
-      "Pass-through — no_file_tools_registered" in record.message
-      for record in caplog.records
-    )
-
-  def test_workspace_guard_skip_reason_when_disabled(self, monkeypatch):
-    monkeypatch.setattr(config, "WORKSPACE_ROOT", MagicMock(value="/workspace"))
-    monkeypatch.setattr(config, "SIGHTLINE_WORKSPACE", MagicMock(value=False))
-    assert sightline.workspace_guard_skip_reason() == "workspace_guard_disabled"

@@ -1,4 +1,4 @@
-"""Unit tests for built-in agentic coding workflow presets."""
+"""Unit tests for workflow presets and the workflow engine."""
 
 import os
 import sys
@@ -17,15 +17,6 @@ import workflows
 from modules import workflows as workflow_presets
 
 WORKFLOWS_YAML = Path(__file__).resolve().parent.parent / "src" / "workflows.yaml"
-EXPECTED_PRESET_IDS = {
-  "research-quick",
-  "research-deep",
-  "code-check",
-  "scope-guard",
-  "agent-research",
-  "agent-code",
-  "shipyard",
-}
 
 
 def _load_yaml_presets() -> dict[str, dict]:
@@ -34,10 +25,6 @@ def _load_yaml_presets() -> dict[str, dict]:
   if not isinstance(workflows_block, dict):
     raise ValueError("workflows.yaml must define a workflows mapping")
   return workflows_block
-
-
-def _normalize_description(description: str) -> str:
-  return " ".join((description or "").split())
 
 
 def _module_names(modules: list) -> list[str]:
@@ -52,46 +39,6 @@ def _module_names(modules: list) -> list[str]:
   return names
 
 
-def _shipyard_prep_module(modules: list, module_name: str) -> dict:
-  return next(
-    item
-    for item in modules
-    if (item.get("module") if isinstance(item, dict) else item) == module_name
-  )
-
-
-SIMPLE_PRESETS = {
-  "research-quick": ("caveman", "Quick Research"),
-  "research-deep": ("ponytail", "Deep Research"),
-  "code-check": ("autocheck", "Code Check"),
-  "agent-research": ("caveman", "Agent Research"),
-}
-
-SCOPE_GUARD_MODULES = [
-  {"module": "tools", "config": {"final": False}},
-  "diffscope",
-  "autocheck",
-  "final",
-]
-
-AGENT_CODE_MODULES = [
-  {"module": "tools", "config": {"final": False}},
-  {"module": "sightline", "config": {"final": False}},
-  "diffscope",
-  "autocheck",
-  "final",
-]
-
-SHIPYARD_MODULES = [
-  {"module": "keel", "continue": True, "config": {"defer_final": True}},
-  {"module": "caveman", "continue": True, "config": {"defer_final": True}},
-  {"module": "tools", "config": {"final": False}},
-  {"module": "ponytail", "continue": True, "config": {"defer_final": True}},
-  {"module": "autocheck", "continue": True, "config": {"defer_final": True}},
-  "final",
-]
-
-
 @pytest.fixture(autouse=True)
 def reset_workflow_registry():
   workflows.invalidate_registry()
@@ -100,255 +47,32 @@ def reset_workflow_registry():
 
 
 class TestWorkflowPresets:
-  def test_presets_include_all_agentic_workflows(self):
-    assert set(workflow_presets.PRESETS) == EXPECTED_PRESET_IDS
-    assert set(workflow_presets.PRESETS) == set(SIMPLE_PRESETS) | {
-      "scope-guard",
-      "agent-code",
-      "shipyard",
-    }
+  def test_no_builtin_presets(self):
+    assert workflow_presets.PRESETS == {}
 
   def test_workflows_yaml_matches_python_presets(self):
     yaml_presets = _load_yaml_presets()
-    assert set(yaml_presets) == set(workflow_presets.PRESETS) == EXPECTED_PRESET_IDS
-
-    for workflow_id in sorted(EXPECTED_PRESET_IDS):
-      python_preset = workflow_presets.PRESETS[workflow_id]
-      yaml_preset = yaml_presets[workflow_id]
-
-      assert yaml_preset["name"] == python_preset["name"]
-      assert _normalize_description(yaml_preset["description"]) == _normalize_description(
-        python_preset["description"]
-      )
-      assert yaml_preset["modules"] == python_preset["modules"]
-      assert workflow_presets.shorthand_for(yaml_preset["modules"]) == workflow_presets.SHORTHAND[
-        workflow_id
-      ]
-
-    shipyard_yaml = yaml_presets["shipyard"]
-    shipyard_python = workflow_presets.PRESETS["shipyard"]
-    assert shipyard_yaml["modules"] == SHIPYARD_MODULES == shipyard_python["modules"]
-    assert _module_names(shipyard_yaml["modules"]) == [
-      "keel",
-      "caveman",
-      "tools",
-      "ponytail",
-      "autocheck",
-      "final",
-    ]
-    assert workflow_presets.SHORTHAND["shipyard"] == "keel,caveman,tools,ponytail,autocheck,final"
-
-    for module_name in ("keel", "caveman", "ponytail", "autocheck"):
-      module = _shipyard_prep_module(shipyard_yaml["modules"], module_name)
-      assert module.get("continue") is True
-      assert module["config"]["defer_final"] is True
-
-    tools = _shipyard_prep_module(shipyard_yaml["modules"], "tools")
-    assert tools["config"]["final"] is False
-    assert "defer_final" not in tools["config"]
-
-  @pytest.mark.parametrize(
-    "workflow_id,module_name",
-    [(workflow_id, module_name) for workflow_id, (module_name, _name) in SIMPLE_PRESETS.items()],
-  )
-  def test_preset_module_chain(self, workflow_id, module_name):
-    preset = workflow_presets.PRESETS[workflow_id]
-    modules = preset["modules"]
-
-    assert modules[0] == {"module": "tools", "config": {"final": False}}
-    assert modules[1] == module_name
-    assert modules[2] == "final"
-
-  def test_scope_guard_preset_module_chain(self):
-    preset = workflow_presets.PRESETS["scope-guard"]
-    assert preset["name"] == "Scope Guard"
-    assert preset["modules"] == SCOPE_GUARD_MODULES
-
-  def test_scope_guard_shorthand_matches_module_chain(self):
-    shorthand = workflow_presets.SHORTHAND["scope-guard"]
-    assert shorthand == "tools,diffscope,autocheck,final"
-
-  def test_agent_code_preset_module_chain(self):
-    preset = workflow_presets.PRESETS["agent-code"]
-    assert preset["name"] == "Agent Code"
-    assert preset["modules"] == AGENT_CODE_MODULES
-
-  def test_agent_code_shorthand_matches_module_chain(self):
-    shorthand = workflow_presets.SHORTHAND["agent-code"]
-    assert shorthand == "tools,sightline,diffscope,autocheck,final"
-
-  def test_shipyard_preset_module_chain(self):
-    preset = workflow_presets.PRESETS["shipyard"]
-    assert preset["name"] == "Shipyard"
-    assert preset["modules"] == SHIPYARD_MODULES
-
-  def test_shipyard_shorthand_matches_module_chain(self):
-    shorthand = workflow_presets.SHORTHAND["shipyard"]
-    assert shorthand == "keel,caveman,tools,ponytail,autocheck,final"
-
-  @pytest.mark.parametrize(
-    "workflow_id,module_name",
-    [(workflow_id, module_name) for workflow_id, (module_name, _name) in SIMPLE_PRESETS.items()],
-  )
-  def test_shorthand_matches_module_chain(self, workflow_id, module_name):
-    shorthand = workflow_presets.SHORTHAND[workflow_id]
-    assert shorthand == f"tools,{module_name},final"
+    assert set(yaml_presets) == set(workflow_presets.PRESETS)
 
   def test_definitions_returns_copy_of_presets(self):
     loaded = workflow_presets.definitions()
     assert loaded == workflow_presets.PRESETS
-    loaded["research-quick"]["name"] = "changed"
-    assert workflow_presets.PRESETS["research-quick"]["name"] == "Quick Research"
 
   def test_preset_ids_do_not_collide_with_module_prefixes(self):
     for workflow_id in workflow_presets.PRESETS:
       assert workflow_id not in mods.registry
 
-  @pytest.mark.parametrize(
-    "workflow_id",
-    list(SIMPLE_PRESETS) + ["scope-guard", "agent-code", "shipyard"],
-  )
-  def test_normalize_workflow_accepts_preset(self, workflow_id):
-    normalized = workflows.normalize_workflow(workflow_presets.PRESETS[workflow_id], workflow_id)
-    assert normalized is not None
-    assert normalized["id"] == workflow_id
+  def test_shorthand_is_empty(self):
+    assert workflow_presets.SHORTHAND == {}
 
-  def test_load_workflows_includes_builtin_presets(self, monkeypatch):
-    monkeypatch.setattr(config.WORKFLOWS, "__value__", "")
+
+class TestWorkflowEngine:
+  def test_env_workflow_creates_custom_preset(self, monkeypatch):
+    monkeypatch.setattr(config.WORKFLOWS, "__value__", "my-flow=caveman,final")
     monkeypatch.setattr(workflows, "_load_file_definitions", lambda: [])
     loaded = workflows.load_workflows()
-    for workflow_id in SIMPLE_PRESETS:
-      assert workflow_id in loaded
-    assert "scope-guard" in loaded
-    assert "agent-code" in loaded
-    assert "shipyard" in loaded
-
-  def test_env_workflow_overrides_builtin_preset(self, monkeypatch):
-    monkeypatch.setattr(config.WORKFLOWS, "__value__", "research-quick=tools,g1,final")
-    monkeypatch.setattr(workflows, "_load_file_definitions", lambda: [])
-    loaded = workflows.load_workflows()
-    assert loaded["research-quick"]["modules"] == ["tools", "g1", "final"]
-
-  def test_split_workflow_model_recognizes_preset_prefix(self, monkeypatch):
-    monkeypatch.setattr(config.WORKFLOWS, "__value__", "")
-    monkeypatch.setattr(workflows, "_load_file_definitions", lambda: [])
-    workflows.invalidate_registry()
-
-    workflow, base_model = workflows.split_workflow_model("research-deep-llama3.2")
-    assert workflow is not None
-    assert workflow["id"] == "research-deep"
-    assert base_model == "llama3.2"
-
-  def test_model_for_prefixes_base_model_id(self):
-    workflow = workflows.normalize_workflow(workflow_presets.PRESETS["code-check"], "code-check")
-    model = workflows.model_for(workflow, {"id": "gpt-4o", "name": "GPT-4o"})
-    assert model["id"] == "code-check-gpt-4o"
-    assert model["owned_by"] == "harbor-boost-workflow"
-    assert model["boost_workflow"]["id"] == "code-check"
-
-  def test_shorthand_parser_round_trip(self):
-    for workflow_id, shorthand in workflow_presets.SHORTHAND.items():
-      parsed = workflows.normalize_workflow(f"{workflow_id}={shorthand}")
-      assert parsed is not None
-      assert parsed["id"] == workflow_id
-      assert parsed["modules"] == [name for name in shorthand.split(",")]
-
-  def test_workflows_yaml_agent_code_sightline_defers_final(self, monkeypatch):
-    monkeypatch.setattr(config.WORKFLOWS, "__value__", "")
-    monkeypatch.setattr(config.WORKFLOWS_FILE, "__value__", str(WORKFLOWS_YAML))
-
-    loaded = workflows.load_workflows()
-    modules = loaded["agent-code"]["modules"]
-    sightline = next(
-      module
-      for module in modules
-      if (module.get("module") if isinstance(module, dict) else module) == "sightline"
-    )
-    assert sightline["config"]["final"] is False
-
-  def test_workflows_yaml_shipyard_keeps_defer_final_on_prep_modules(self, monkeypatch):
-    monkeypatch.setattr(config.WORKFLOWS, "__value__", "")
-    monkeypatch.setattr(config.WORKFLOWS_FILE, "__value__", str(WORKFLOWS_YAML))
-
-    loaded = workflows.load_workflows()
-    for module_name in ("keel", "caveman", "ponytail", "autocheck"):
-      module = next(
-        item
-        for item in loaded["shipyard"]["modules"]
-        if (item.get("module") if isinstance(item, dict) else item) == module_name
-      )
-      assert module.get("continue") is True
-      assert module["config"]["defer_final"] is True
-
-
-class TestApplyWorkflow:
-  @pytest.mark.asyncio
-  async def test_tools_setup_does_not_stream_before_research_module(self):
-    chat = MagicMock()
-    llm = MagicMock()
-    llm.is_final_stream = False
-    llm.stream_final_completion = AsyncMock()
-
-    with patch.object(workflows, "_apply_module", new_callable=AsyncMock) as mock_apply:
-      await workflows.apply_workflow(deepcopy(workflow_presets.PRESETS["research-quick"]), chat, llm)
-
-    tools_call = mock_apply.await_args_list[0]
-    assert tools_call.args[0] == "tools"
-    assert tools_call.args[1]["final"] is False
-    assert mock_apply.await_args_list[1].args[0] == "caveman"
-    llm.stream_final_completion.assert_awaited_once()
-
-  @pytest.mark.asyncio
-  async def test_scope_guard_runs_full_module_chain_before_final(self):
-    chat = MagicMock()
-    llm = MagicMock()
-    llm.is_final_stream = False
-    llm.stream_final_completion = AsyncMock()
-
-    with patch.object(workflows, "_apply_module", new_callable=AsyncMock) as mock_apply:
-      await workflows.apply_workflow(
-        deepcopy(workflow_presets.PRESETS["scope-guard"]),
-        chat,
-        llm,
-      )
-
-    applied = [call.args[0] for call in mock_apply.await_args_list]
-    assert applied == ["tools", "diffscope", "autocheck"]
-    assert mock_apply.await_args_list[0].args[1]["final"] is False
-    llm.stream_final_completion.assert_awaited_once()
-
-  @pytest.mark.asyncio
-  async def test_agent_code_runs_full_module_chain_before_final(self):
-    chat = MagicMock()
-    llm = MagicMock()
-    llm.is_final_stream = False
-    llm.stream_final_completion = AsyncMock()
-
-    with patch.object(workflows, "_apply_module", new_callable=AsyncMock) as mock_apply:
-      await workflows.apply_workflow(deepcopy(workflow_presets.PRESETS["agent-code"]), chat, llm)
-
-    applied = [call.args[0] for call in mock_apply.await_args_list]
-    assert applied == ["tools", "sightline", "diffscope", "autocheck"]
-    assert mock_apply.await_args_list[0].args[1]["final"] is False
-    assert mock_apply.await_args_list[1].args[1]["final"] is False
-    llm.stream_final_completion.assert_awaited_once()
-
-  @pytest.mark.asyncio
-  async def test_shipyard_runs_full_module_chain_before_final(self):
-    chat = MagicMock()
-    llm = MagicMock()
-    llm.is_final_stream = False
-    llm.stream_final_completion = AsyncMock()
-
-    with patch.object(workflows, "_apply_module", new_callable=AsyncMock) as mock_apply:
-      await workflows.apply_workflow(deepcopy(workflow_presets.PRESETS["shipyard"]), chat, llm)
-
-    applied = [call.args[0] for call in mock_apply.await_args_list]
-    assert applied == ["keel", "caveman", "tools", "ponytail", "autocheck"]
-    assert mock_apply.await_args_list[0].args[1]["defer_final"] is True
-    assert mock_apply.await_args_list[2].args[1]["final"] is False
-    assert mock_apply.await_args_list[4].args[1]["defer_final"] is True
-    llm.stream_final_completion.assert_awaited_once()
+    assert "my-flow" in loaded
+    assert loaded["my-flow"]["modules"] == ["caveman", "final"]
 
   @pytest.mark.asyncio
   async def test_apply_workflow_streams_final_when_last_step_missing(self):
@@ -358,11 +82,34 @@ class TestApplyWorkflow:
     llm.stream_final_completion = AsyncMock()
 
     definition = {
-      "id": "research-quick",
+      "id": "test-flow",
       "modules": [{"module": "tools", "config": {"final": False}}, "caveman"],
     }
 
     with patch.object(workflows, "_apply_module", new_callable=AsyncMock):
       await workflows.apply_workflow(definition, chat, llm)
 
+    llm.stream_final_completion.assert_awaited_once()
+
+  @pytest.mark.asyncio
+  async def test_apply_workflow_runs_modules_in_order(self):
+    chat = MagicMock()
+    llm = MagicMock()
+    llm.is_final_stream = False
+    llm.stream_final_completion = AsyncMock()
+
+    definition = {
+      "id": "test-chain",
+      "modules": [
+        {"module": "caveman", "continue": True, "config": {"defer_final": True}},
+        {"module": "ponytail", "continue": True, "config": {"defer_final": True}},
+        "final",
+      ],
+    }
+
+    with patch.object(workflows, "_apply_module", new_callable=AsyncMock) as mock_apply:
+      await workflows.apply_workflow(definition, chat, llm)
+
+    applied = [call.args[0] for call in mock_apply.await_args_list]
+    assert applied == ["caveman", "ponytail"]
     llm.stream_final_completion.assert_awaited_once()

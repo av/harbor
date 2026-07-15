@@ -35,7 +35,7 @@ def last_user_text(chat: "ch.Chat") -> str:
 
 
 def research_skip_reason(chat: "ch.Chat") -> str | None:
-  """Return a pass-through reason shared by caveman and ponytail, else None."""
+  """Return a pass-through reason shared by quickhop and deephop, else None."""
   low_value = low_value_skip_reason(chat)
   if low_value:
     return low_value

@@ -456,23 +456,23 @@ class TestResearchBudget:
 
   def test_budget_from_config_uses_module_defaults(self):
     original = (
-      config.CAVEMAN_MAX_SEARCHES.__value__,
-      config.CAVEMAN_MAX_URL_READS.__value__,
-      config.CAVEMAN_MAX_CHARS.__value__,
+      config.QUICKHOP_MAX_SEARCHES.__value__,
+      config.QUICKHOP_MAX_URL_READS.__value__,
+      config.QUICKHOP_MAX_CHARS.__value__,
     )
     try:
-      config.CAVEMAN_MAX_SEARCHES.__value__ = 7
-      config.CAVEMAN_MAX_URL_READS.__value__ = 3
-      config.CAVEMAN_MAX_CHARS.__value__ = 12000
-      budget = budget_from_config("caveman")
+      config.QUICKHOP_MAX_SEARCHES.__value__ = 7
+      config.QUICKHOP_MAX_URL_READS.__value__ = 3
+      config.QUICKHOP_MAX_CHARS.__value__ = 12000
+      budget = budget_from_config("quickhop")
       assert budget.max_searches == 7
       assert budget.max_url_reads == 3
       assert budget.max_chars == 12000
     finally:
       (
-        config.CAVEMAN_MAX_SEARCHES.__value__,
-        config.CAVEMAN_MAX_URL_READS.__value__,
-        config.CAVEMAN_MAX_CHARS.__value__,
+        config.QUICKHOP_MAX_SEARCHES.__value__,
+        config.QUICKHOP_MAX_URL_READS.__value__,
+        config.QUICKHOP_MAX_CHARS.__value__,
       ) = original
 
 
