@@ -2425,7 +2425,7 @@ launch_supported_backends() {
 }
 
 launch_supported_host_tools() {
-    echo "claude codex copilot droid hermes mi openclaw opencode pi pool vscode"
+    echo "claude codex copilot droid grok hermes mi openclaw opencode pi pool vscode"
 }
 
 launch_supported_service_cli_handles() {
@@ -2740,26 +2740,66 @@ launch_tool_group_services() {
 }
 
 launch_builtin_workflows() {
-    echo "research-quick research-deep code-check scope-guard agent-research agent-code shipyard"
+    :
 }
 
 launch_builtin_workflow_is_valid() {
-    case "$1" in
-    research-quick | research-deep | code-check | scope-guard | agent-research | agent-code | shipyard)
+    return 1
+}
+
+launch_builtin_workflow_services() {
+    :
+}
+
+launch_boost_module_exists() {
+    local name="$1"
+
+    [ -f "$harbor_home/services/boost/src/modules/${name}.py" ] || \
+        [ -f "$harbor_home/services/boost/src/custom_modules/${name}.py" ]
+}
+
+launch_workflow_is_valid() {
+    launch_builtin_workflow_is_valid "$1" || launch_boost_module_exists "$1"
+}
+
+launch_workflow_services() {
+    if launch_builtin_workflow_is_valid "$1"; then
+        launch_builtin_workflow_services "$1"
         return 0
-        ;;
-    *)
-        return 1
+    fi
+
+    case "$1" in
+    quickhop | deephop)
+        echo "searxng"
         ;;
     esac
 }
 
-launch_builtin_workflow_services() {
-    case "$1" in
-    research-quick | research-deep | agent-research | shipyard)
-        echo "searxng"
-        ;;
-    esac
+launch_boost_modules_with_workflow() {
+    local workflow_id="$1"
+    local configured=""
+    local item=""
+
+    if ! launch_boost_module_exists "$workflow_id"; then
+        return 1
+    fi
+
+    configured=$(env_manager --silent get boost.modules 2>/dev/null || true)
+    configured="${configured#\"}"
+    configured="${configured%\"}"
+
+    if [ -z "$configured" ] || [ "$configured" = "all" ]; then
+        return 1
+    fi
+
+    IFS=';' read -ra _launch_boost_modules <<<"$configured"
+    for item in "${_launch_boost_modules[@]}"; do
+        if [ "$item" = "$workflow_id" ]; then
+            return 1
+        fi
+    done
+
+    echo "${configured};${workflow_id}"
 }
 
 launch_prepare_builtin_workflow() {
@@ -2769,6 +2809,8 @@ launch_prepare_builtin_workflow() {
     local compose_services=("$target_backend" boost)
     local start_services=(boost)
     local service
+    local boost_modules=""
+    local compose_up_args=(up -d --wait)
 
     log_info "Starting Boost workflow '$workflow_id' for backend '$target_backend'..."
     for service in "$@"; do
@@ -2776,7 +2818,17 @@ launch_prepare_builtin_workflow() {
         launch_append_unique start_services "$service"
     done
 
-    $(compose_with_options --no-defaults "${compose_services[@]}") up -d --wait "${start_services[@]}"
+    if boost_modules=$(launch_boost_modules_with_workflow "$workflow_id"); then
+        log_info "Advertising Boost module '$workflow_id' for this launch."
+        compose_up_args+=(--force-recreate)
+    fi
+
+    if [ -n "$boost_modules" ]; then
+        HARBOR_BOOST_MODULES="$boost_modules" \
+            $(compose_with_options --no-defaults "${compose_services[@]}") "${compose_up_args[@]}" "${start_services[@]}"
+    else
+        $(compose_with_options --no-defaults "${compose_services[@]}") "${compose_up_args[@]}" "${start_services[@]}"
+    fi
 }
 
 launch_workflow_model_name() {
@@ -3121,6 +3173,92 @@ launch_write_openclaw_config() {
         --arg models "$models"
 }
 
+launch_grok_config_path() {
+    echo "${HARBOR_LAUNCH_GROK_CONFIG:-$HOME/.grok/config.toml}"
+}
+
+launch_write_grok_config() {
+    local backend="$1"
+    local api_url="$2"
+    local api_key="$3"
+    local model="$4"
+    local alias="harbor-$backend"
+    local path
+    local dir
+    local tmp
+    local block
+
+    path=$(launch_grok_config_path)
+    dir=$(dirname "$path")
+    mkdir -p "$dir" || return 1
+
+    # Escape backslashes and double quotes in interpolated TOML values.
+    local escaped_model escaped_api_url escaped_backend
+    escaped_model=$(printf '%s' "$model" | sed 's/\\/\\\\/g; s/"/\\"/g')
+    escaped_api_url=$(printf '%s' "$api_url" | sed 's/\\/\\\\/g; s/"/\\"/g')
+    escaped_backend=$(printf '%s' "$backend" | sed 's/\\/\\\\/g; s/"/\\"/g')
+
+    block=$(printf '[model.%s]\nmodel = "%s"\nbase_url = "%s"\nname = "Harbor %s"\nenv_key = "XAI_API_KEY"\n' "$alias" "$escaped_model" "$escaped_api_url" "$escaped_backend")
+
+    if [ -f "$path" ]; then
+        tmp=$(mktemp "${dir}/harbor-launch-grok.XXXXXX") || return 1
+        awk -v alias="$alias" '
+            BEGIN { skip=0 }
+            /^[[:space:]]*\[model\./ {
+                if ($0 ~ ("^[[:space:]]*\\[model\\." alias "\\]$")) {
+                    skip=1
+                    next
+                }
+                skip=0
+            }
+            skip && /^[[:space:]]*\[/ { skip=0 }
+            !skip { print }
+        ' "$path" > "$tmp"
+        printf '\n%s\n' "$block" >> "$tmp"
+        mv "$tmp" "$path"
+    else
+        printf '%s\n' "$block" > "$path"
+    fi
+}
+
+launch_remove_grok_config() {
+    local alias="${1:-}"
+    local path
+    local dir
+    local tmp
+
+    if [ -z "$alias" ]; then
+        return 0
+    fi
+
+    path=$(launch_grok_config_path)
+    if [ ! -f "$path" ]; then
+        return 0
+    fi
+
+    dir=$(dirname "$path")
+    tmp=$(mktemp "${dir}/harbor-launch-grok.XXXXXX") || return 1
+
+    awk -v alias="$alias" '
+        BEGIN { skip=0 }
+        /^[[:space:]]*\[model\./ {
+            if ($0 ~ ("^[[:space:]]*\\[model\\." alias "\\]$")) {
+                skip=1
+                next
+            }
+            skip=0
+        }
+        skip && /^[[:space:]]*\[/ { skip=0 }
+        !skip { print }
+    ' "$path" > "$tmp"
+
+    if [ ! -s "$tmp" ] || ! grep -q '[^[:space:]]' "$tmp"; then
+        rm -f "$path" "$tmp"
+    else
+        mv "$tmp" "$path"
+    fi
+}
+
 launch_print_host_config() {
     local tool="$1"
     local backend="$2"
@@ -3166,6 +3304,13 @@ launch_print_host_config() {
     droid)
         echo "DROID_CONFIG=$(launch_droid_config_path)"
         launch_write_droid_config "$backend" "$api_url" "$api_key" "$model" "$models" >/dev/null || return 1
+        ;;
+    grok)
+        echo "GROK_CONFIG=$(launch_grok_config_path)"
+        launch_write_grok_config "$backend" "$api_url" "$api_key" "$model" >/dev/null || return 1
+        echo "GROK_MODELS_BASE_URL=$api_url"
+        echo "XAI_API_KEY=$api_key"
+        echo "grok -m \"harbor-$backend\""
         ;;
     hermes)
         echo "OPENAI_BASE_URL=$api_url"
@@ -3308,7 +3453,7 @@ launch_host_tool_command() {
 
     if { [ ${#boost_tool_groups[@]} -gt 0 ] || [ -n "$launch_workflow" ]; } && [ "$tool" = "claude" ]; then
         log_error "harbor launch $tool does not support Boost workflow routing because Claude Code uses the Anthropic Messages API, not OpenAI Chat Completions."
-        log_info "Use an OpenAI-compatible host tool such as codex, opencode, copilot, droid, openclaw, pi, pool, or hermes."
+        log_info "Use an OpenAI-compatible host tool such as codex, grok, opencode, copilot, droid, openclaw, pi, pool, or hermes."
         return 1
     fi
 
@@ -3380,14 +3525,15 @@ launch_host_tool_command() {
                 launch_prepare_boost_workflow "$target_backend" "$workflow_id" "$workflow_json" "${boost_services[@]}" || return 1
             fi
         else
-            if ! launch_builtin_workflow_is_valid "$launch_workflow"; then
+            if ! launch_workflow_is_valid "$launch_workflow"; then
                 log_error "Unsupported launch workflow '$launch_workflow'."
-                log_info "Supported builtin workflows: $(launch_builtin_workflows)"
+                log_info "No built-in workflow presets ship by default."
+                log_info "Pass a Boost module name (e.g. quickhop, deephop, autocheck)."
                 return 1
             fi
 
             workflow_id="$launch_workflow"
-            workflow_services=$(launch_builtin_workflow_services "$launch_workflow")
+            workflow_services=$(launch_workflow_services "$launch_workflow")
 
             if ! $config_only; then
                 launch_prepare_builtin_workflow "$target_backend" "$workflow_id" $workflow_services || return 1
@@ -3463,6 +3609,21 @@ launch_host_tool_command() {
         launch_write_droid_config "$backend" "$api_url" "$api_key" "$model" "$models" || return 1
         launch_in_original_dir droid "${tool_args[@]}"
         ;;
+    grok)
+        local grok_args=()
+        local grok_alias="harbor-$backend"
+
+        launch_write_grok_config "$backend" "$api_url" "$api_key" "$model" || return 1
+
+        # Remove the temporary harbor-* model entry when the tool exits or is interrupted.
+        trap 'launch_remove_grok_config "$grok_alias"' RETURN
+
+        if ! launch_args_include_model "${tool_args[@]}"; then
+            grok_args+=(-m "$grok_alias")
+        fi
+
+        GROK_MODELS_BASE_URL="$api_url" XAI_API_KEY="$api_key" launch_in_original_dir grok "${grok_args[@]}" "${tool_args[@]}"
+        ;;
     hermes)
         if [ "${#tool_args[@]}" -eq 0 ]; then
             tool_args=(chat)
@@ -3534,10 +3695,10 @@ run_launch_command() {
         echo "Every argument after the tool name is passed to the launched tool unchanged."
         echo "--web starts Boost with web_search and read_url tools, starts SearXNG,"
         echo "and routes the tool to a generated boost-web-... workflow model."
-        echo "--workflow <preset> starts Boost with a builtin workflow preset such as shipyard,"
-        echo "starts SearXNG when web research modules are required, and routes the tool to"
-        echo "a workflow-prefixed model such as shipyard-qwen3.5:4b."
-        echo "Builtin workflow presets: $(launch_builtin_workflows)"
+        echo "--workflow <module> starts Boost with a single Boost module,"
+        echo "starts SearXNG when web research is required, and routes the tool to"
+        echo "a prefixed model such as quickhop-qwen3.5:4b or autocheck-qwen3.5:4b."
+        echo "No built-in workflow presets ship by default."
         echo "If no backend is running, host tool adapters start llamacpp by default."
         echo "Use --service before the handle to bypass host tool adapters for name-colliding services."
         echo
@@ -3549,7 +3710,8 @@ run_launch_command() {
         echo
         echo "Examples:"
         echo "  harbor launch --web --backend ollama --model qwen3.5:4b codex"
-        echo "  harbor launch --workflow shipyard --backend ollama --model qwen3.5:4b codex"
+        echo "  harbor launch --workflow quickhop --backend ollama --model qwen3.5:4b codex"
+        echo "  harbor launch --workflow autocheck --backend ollama --model qwen3.5:4b codex"
         echo "  harbor launch --backend ollama --model qwen3.5:4b codex"
         echo "  harbor launch --backend ollama --model qwen3.5:4b mi"
         echo "  harbor launch --model qwen3.5:4b claude -p \"explain this repo\""
@@ -3638,7 +3800,7 @@ run_launch_command() {
     fi
 
     case "$service" in
-    claude | codex | copilot | droid | hermes | mi | openclaw | opencode | pi | pool | vscode)
+    claude | codex | copilot | droid | grok | hermes | mi | openclaw | opencode | pi | pool | vscode)
         ;;
     *)
         if [ ${#launch_options[@]} -gt 0 ]; then
@@ -3649,7 +3811,7 @@ run_launch_command() {
     esac
 
     case "$service" in
-    claude | codex | copilot | droid | hermes | mi | openclaw | opencode | pi | pool | vscode)
+    claude | codex | copilot | droid | grok | hermes | mi | openclaw | opencode | pi | pool | vscode)
         launch_host_tool_command "$service" "${launch_options[@]}" -- "${tool_args[@]}"
         ;;
     aider)
