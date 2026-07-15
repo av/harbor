@@ -31,6 +31,76 @@ async function readJsonFile(p: string): Promise<Record<string, unknown> | null> 
   }
 }
 
+// Recursively walk a directory, collecting files with resolved blob paths.
+// Used to supplement/replace @huggingface/hub's scanSnapshotDir which skips
+// subdirectories, and to rescue repos the library drops entirely.
+// Dedup by blob path makes this a no-op for files the library already found.
+// deno-lint-ignore no-explicit-any
+async function walkDir(dir: string, files: any[], knownBlobs: Set<string>): Promise<void> {
+  let entries;
+  try {
+    entries = [];
+    for await (const e of Deno.readDir(dir)) entries.push(e);
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    const fullPath = dir + '/' + entry.name;
+    if (entry.isDirectory) {
+      await walkDir(fullPath, files, knownBlobs);
+    } else if (entry.isSymlink || entry.isFile) {
+      try {
+        const blobPath = await Deno.realPath(fullPath);
+        if (knownBlobs.has(blobPath)) continue;
+        knownBlobs.add(blobPath);
+        const stat = await Deno.stat(blobPath);
+        files.push({ path: fullPath, blob: { path: blobPath, size: stat.size } });
+      } catch {
+        // broken symlink or inaccessible
+      }
+    }
+  }
+}
+
+// Scan a HF cache repo directory directly, bypassing the library.
+// Picks the most recently modified snapshot and collects all files from it.
+// Used as a fallback when scanCacheDir throws (e.g. stale ref pointing to
+// a commit hash with no local snapshot).
+async function scanRepoFallback(repoPath: string): Promise<{
+  repoId: string; repoType: string; files: { path: string; blob: { path: string; size: number } }[];
+  modified: Date;
+} | null> {
+  const name = repoPath.split('/').pop() ?? '';
+  const sep = '--';
+  const idx = name.indexOf(sep);
+  if (idx < 0) return null;
+  const typeStr = name.slice(0, idx);
+  if (typeStr !== 'models') return null;
+  const repoId = name.slice(idx + sep.length).replace(/--/g, '/');
+
+  const snapshotsPath = repoPath + '/snapshots';
+  if (!(await dirExists(snapshotsPath))) return null;
+
+  let bestSnap = '';
+  let bestMtime = 0;
+  try {
+    for await (const e of Deno.readDir(snapshotsPath)) {
+      if (!e.isDirectory) continue;
+      const s = await Deno.stat(snapshotsPath + '/' + e.name);
+      const mt = s.mtime?.getTime() ?? 0;
+      if (mt >= bestMtime) { bestMtime = mt; bestSnap = e.name; }
+    }
+  } catch { return null; }
+  if (!bestSnap) return null;
+
+  // deno-lint-ignore no-explicit-any
+  const files: any[] = [];
+  await walkDir(snapshotsPath + '/' + bestSnap, files, new Set());
+  if (files.length === 0) return null;
+
+  return { repoId, repoType: 'model', files, modified: new Date(bestMtime) };
+}
+
 const GGUF_WORKER_URL = new URL('./gguf-worker.ts', import.meta.url);
 let workerIdCounter = 0;
 
@@ -129,6 +199,13 @@ export async function listHfModels(): Promise<HfRepoInfo[]> {
     // deno-lint-ignore no-explicit-any
     const allFiles: any[] = Array.from(latest.files ?? []);
 
+    const snapshotPath: string | undefined = latest.path;
+    if (snapshotPath) {
+      // deno-lint-ignore no-explicit-any
+      const knownBlobs = new Set<string>(allFiles.map((f: any) => f.blob?.path).filter(Boolean));
+      await walkDir(snapshotPath, allFiles, knownBlobs);
+    }
+
     // Normalise file objects: new API has { path (full), blob: { path, size } }
     // Old API had { fileName, size, blob: { path } }
     // deno-lint-ignore no-explicit-any
@@ -190,14 +267,40 @@ export async function listHfModels(): Promise<HfRepoInfo[]> {
     };
   }
 
-  const [repoResults, looseGgufs, ggufSubdir] = await Promise.all([
+  // Collect repo paths the library returned so we can find ones it dropped.
+  // deno-lint-ignore no-explicit-any
+  const knownRepoPaths = new Set(Array.from(cacheInfo.repos).map((r: any) => r.path ?? r.repoPath));
+
+  // Scan the hub dir for model repos the library missed (e.g. stale refs
+  // pointing to a commit hash with no local snapshot cause it to throw).
+  const hubDir = hfCache + '/hub';
+  const rescuedRepos: Promise<HfRepoInfo | null>[] = [];
+  try {
+    for await (const entry of Deno.readDir(hubDir)) {
+      if (!entry.isDirectory || !entry.name.startsWith('models--')) continue;
+      const fullPath = hubDir + '/' + entry.name;
+      if (knownRepoPaths.has(fullPath)) continue;
+      rescuedRepos.push(
+        scanRepoFallback(fullPath).then(r => r ? processRepo({
+          id: { name: r.repoId, type: r.repoType },
+          path: fullPath,
+          size: r.files.reduce((s, f) => s + (f.blob?.size ?? 0), 0),
+          revisions: [{ files: r.files, lastModifiedAt: r.modified, path: '' }],
+        }) : null)
+      );
+    }
+  } catch { /* hub dir unreadable — already handled above */ }
+
+  const [repoResults, rescued, looseGgufs, ggufSubdir] = await Promise.all([
     Promise.all(Array.from(cacheInfo.repos).map(processRepo)),
+    Promise.all(rescuedRepos),
     scanLooseGgufs(hfCache),
     scanLooseGgufs(hfCache + '/gguf'),
   ]);
 
   const results: HfRepoInfo[] = [
     ...(repoResults.filter((r): r is HfRepoInfo => r !== null)),
+    ...(rescued.filter((r): r is HfRepoInfo => r !== null)),
     ...looseGgufs,
     ...ggufSubdir,
   ];
