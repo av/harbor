@@ -52,7 +52,7 @@
   command: grep -q 'up -d --wait' harbor.sh && grep -q 'desired_compose_minor="23"' harbor.sh
   tags: [implemented]
 - label: harbor logs tails container output by default and can hang unattended agents
-  command: grep -q 'logs -n 20 -f' harbor.sh
+  command: grep -q -- "logs -n \"\$tail_lines\" -f" harbor.sh
   tags: [implemented]
 - label: harbor.sh avoids Bash 4 case-conversion parameter expansion for macOS Bash 3 compatibility
   command: bash -n harbor.sh && ! rg -q '\$\{[^}]+(\^\^|,,)' harbor.sh
@@ -71,7 +71,7 @@
 - _resolve_ui_service reads ui.main at call time and validates the resolved service exists @spec @implemented
 - harbor qr documents and resolves ui.main like harbor url @spec @implemented
 - label: harbor up --open targets the first started service after defaults and --no-defaults are resolved
-  command: rg -q 'open_target="$\{display_services\[0\]:-\}"' harbor.sh
+  command: rg -q 'open_target="\$\{display_services\[0\]:-\}"' harbor.sh
   tags: [spec, implemented]
 - label: harbor doctor --check reports Docker, Compose, Harbor home, git, curl, and git-repository status before returning, while only critical environment failures make it exit nonzero
   command: bash tests/suites/02-cli.sh
