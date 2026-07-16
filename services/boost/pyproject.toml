@@ -8,4 +8,4 @@ dependencies = ["fastapi==0.111.0","uvicorn[standard]==0.30.6","requests==2.32.3
 version = "0.5.3"
 
 [dependency-groups]
-dev = ["pytest", "pytest-asyncio", "anthropic"]
+dev = ["pytest", "pytest-asyncio", "pytest-xdist", "anthropic"]

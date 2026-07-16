@@ -194,6 +194,9 @@
 - label: install.ps1 suppresses the PowerShell progress bar during the Docker Desktop installer download to avoid the PS 5.1 Invoke-WebRequest slowdown
   command: rg -q "ProgressPreference = 'SilentlyContinue'" install.ps1
   tags: [implemented]
+- label: Harbor App build splits vendor code into react terminal markdown and syntax chunks via Vite manualChunks so no JS chunk exceeds 600 kB
+  command: grep -q 'manualChunks' app/vite.config.ts
+  tags: [implemented]
 
 # boost
 - label: Boost is a FastAPI LLM proxy that exposes OpenAI chat completions and optional Anthropic and Responses compat layers
@@ -338,8 +341,8 @@
 - label: caveman injects one level-tagged caveman_style block into the leading system message before completion unless the user or workflow disables the style, preserving single-system-message backend compatibility
   command: cd services/boost && uv run --with pytest --with pytest-asyncio pytest -q tests/test_caveman.py
   tags: [spec, release-validation, implemented]
-- label: Boost declares a dev dependency group with pytest pytest-asyncio and anthropic so bare uv run pytest collects the Anthropic and OpenAI SDK integration tests by default
-  command: cd services/boost && python3 -c "import tomllib;g=tomllib.load(open('pyproject.toml','rb'))['dependency-groups']['dev'];assert {'pytest','pytest-asyncio','anthropic'} <= set(g), g"
+- label: Boost declares a dev dependency group with pytest pytest-asyncio pytest-xdist and anthropic so bare uv run pytest collects the SDK integration tests and can parallelize with -n auto
+  command: cd services/boost && python3 -c "import tomllib;g=tomllib.load(open('pyproject.toml','rb'))['dependency-groups']['dev'];assert {'pytest','pytest-asyncio','pytest-xdist','anthropic'} <= set(g), g"
   tags: [implemented]
 - label: style level commands are module scoped: /caveman <level> and stop caveman only affect the caveman module and /ponytail forms only affect ponytail, while normal mode disables both; resolve_style_level receives the calling module id
   command: cd services/boost && uv run pytest tests/test_caveman.py tests/test_ponytail.py -q
@@ -356,6 +359,12 @@
 - label: deephop passes phase labels 'hop 1'/'hop 2' (without the module name) to run_searches and read_urls so emitted status lines read 'Deephop research: hop 2: ...' instead of duplicating 'Deephop'
   command: ! grep -q 'phase="Deephop hop' services/boost/src/modules/deephop.py && grep -q 'phase="hop 2"' services/boost/src/modules/deephop.py
   tags: [spec, release-validation, implemented]
+- label: Boost module discovery resolves relative BOOST_FOLDERS entries against the mods.py directory instead of the process cwd so tests and tools can import mods from any working directory
+  command: cd /tmp && python3 -c "import sys;sys.path.insert(0,'/home/everlier/code/harbor/services/boost/src');import types;m=types.ModuleType('mapper');m.__stub__=True;sys.modules['mapper']=m;import mods;assert len(mods.registry)>0"
+  tags: [implemented]
+- label: Boost CI runs the pytest suite in parallel with pytest-xdist -n auto
+  command: grep -q 'pytest -q -n auto' .github/workflows/boost-tests.yml
+  tags: [implemented]
 
 # testing
 - label: tests use a Deno orchestrator running sequential bash suites across containerized distros

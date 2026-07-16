@@ -30,8 +30,8 @@ jobs:
           cache-dependency-glob: services/boost/uv.lock
 
       - name: Run boost test suite
-        # The dev dependency group covers pytest, pytest-asyncio and the
-        # anthropic SDK, so a bare `uv run pytest` collects everything
+        # The dev dependency group covers pytest, pytest-asyncio, pytest-xdist
+        # and the anthropic SDK, so a bare `uv run pytest` collects everything
         # (including SDK integration tests). No extra --with flags needed.
         working-directory: services/boost
-        run: uv run pytest -q
+        run: uv run pytest -q -n auto

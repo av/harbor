@@ -16,7 +16,9 @@ import pytest
 SRC_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src'))
 if SRC_DIR not in sys.path:
     sys.path.insert(0, SRC_DIR)
-os.chdir(SRC_DIR)
+# NOTE: no os.chdir(SRC_DIR) here — an import-time chdir makes pytest-xdist
+# workers collect zero tests. Code that loads files relative to the app dir
+# (e.g. mods.load_folder) must anchor on __file__ instead of the cwd.
 
 # Stub only mapper — it cannot be imported in the test environment due to
 # missing asyncache.  The compat test files monkeypatch these attributes

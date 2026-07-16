@@ -20,7 +20,10 @@ registry = {}
 
 def load_folder(folder):
   logger.debug(f"Loading modules from '{folder}'")
-  for filename in os.listdir(folder):
+  # Relative folders resolve against the app directory, not the process cwd,
+  # so imports work regardless of where the interpreter was launched.
+  folder_path = folder if os.path.isabs(folder) else os.path.join(os.path.dirname(__file__), folder)
+  for filename in os.listdir(folder_path):
     is_target_mod = filename.endswith(".py") and filename != "__init__.py"
 
     if is_target_mod:
