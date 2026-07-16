@@ -669,7 +669,7 @@ chmod +x "$pull_fake_bin/docker" "$pull_fake_bin/curl"
 # No-args case: pull selected Docker images.
 : >"$pull_fake_log"
 suite_log "pull: no-args routes to docker image pull"
-if ! HARBOR_PULL_FAKE_LOG="$pull_fake_log" PATH="$pull_fake_bin:$PATH" harbor pull >/tmp/cli-step.out 2>&1; then
+if ! HARBOR_PULL_FAKE_LOG="$pull_fake_log" HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false PATH="$pull_fake_bin:$PATH" harbor pull >/tmp/cli-step.out 2>&1; then
   cat /tmp/cli-step.out >&2
   fail "harbor pull with no args failed"
 fi
@@ -681,7 +681,7 @@ fi
 # Test: known service name routes to docker compose pull.
 : >"$pull_fake_log"
 suite_log "pull: known service routes to docker image pull"
-if ! HARBOR_PULL_FAKE_LOG="$pull_fake_log" PATH="$pull_fake_bin:$PATH" harbor pull ollama >/tmp/cli-step.out 2>&1; then
+if ! HARBOR_PULL_FAKE_LOG="$pull_fake_log" HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false PATH="$pull_fake_bin:$PATH" harbor pull ollama >/tmp/cli-step.out 2>&1; then
   cat /tmp/cli-step.out >&2
   fail "harbor pull ollama (known service) failed"
 fi
@@ -693,7 +693,7 @@ fi
 # Test: multiple known services route to docker compose pull.
 : >"$pull_fake_log"
 suite_log "pull: multiple services route to docker image pull"
-if ! HARBOR_PULL_FAKE_LOG="$pull_fake_log" PATH="$pull_fake_bin:$PATH" harbor pull ollama webui >/tmp/cli-step.out 2>&1; then
+if ! HARBOR_PULL_FAKE_LOG="$pull_fake_log" HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false PATH="$pull_fake_bin:$PATH" harbor pull ollama webui >/tmp/cli-step.out 2>&1; then
   cat /tmp/cli-step.out >&2
   fail "harbor pull ollama webui (known services) failed"
 fi
@@ -707,7 +707,7 @@ fi
 # itself is what we test -- it should NOT trigger docker compose pull.
 : >"$pull_fake_log"
 suite_log "pull: model name routes to model download (not docker pull)"
-HARBOR_PULL_FAKE_LOG="$pull_fake_log" PATH="$pull_fake_bin:$PATH" harbor pull qwen3:8b >/tmp/cli-step.out 2>&1 || true
+HARBOR_PULL_FAKE_LOG="$pull_fake_log" HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false PATH="$pull_fake_bin:$PATH" harbor pull qwen3:8b >/tmp/cli-step.out 2>&1 || true
 # The compose pull line should NOT appear in the log (model != service).
 if grep -q ' pull$' "$pull_fake_log"; then
   cat "$pull_fake_log" >&2
@@ -717,7 +717,7 @@ fi
 # Test: unknown name without colon also routes to model pull, not docker pull.
 : >"$pull_fake_log"
 suite_log "pull: unknown name routes to model download"
-HARBOR_PULL_FAKE_LOG="$pull_fake_log" PATH="$pull_fake_bin:$PATH" harbor pull llama3.2 >/tmp/cli-step.out 2>&1 || true
+HARBOR_PULL_FAKE_LOG="$pull_fake_log" HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false PATH="$pull_fake_bin:$PATH" harbor pull llama3.2 >/tmp/cli-step.out 2>&1 || true
 if grep -q ' pull$' "$pull_fake_log"; then
   cat "$pull_fake_log" >&2
   fail "harbor pull llama3.2 incorrectly routed to docker compose pull"
@@ -726,7 +726,7 @@ fi
 # Test: mixed service + model args route only the model to the model pull path.
 : >"$pull_fake_log"
 suite_log "pull: mixed service and model routes only model to model download"
-HARBOR_PULL_FAKE_LOG="$pull_fake_log" PATH="$pull_fake_bin:$PATH" harbor pull ollama qwen3:8b >/tmp/cli-step.out 2>&1 || true
+HARBOR_PULL_FAKE_LOG="$pull_fake_log" HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false PATH="$pull_fake_bin:$PATH" harbor pull ollama qwen3:8b >/tmp/cli-step.out 2>&1 || true
 if grep -q ' pull$' "$pull_fake_log"; then
   cat "$pull_fake_log" >&2
   fail "harbor pull ollama qwen3:8b incorrectly routed to docker compose pull"
@@ -743,7 +743,7 @@ fi
 # Test: models ls auto-starts Ollama when no source is given.
 : >"$pull_fake_log"
 suite_log "models: ls auto-starts Ollama when source is omitted"
-HARBOR_PULL_FAKE_LOG="$pull_fake_log" PATH="$pull_fake_bin:$PATH" harbor models ls >/tmp/cli-step.out 2>&1 || true
+HARBOR_PULL_FAKE_LOG="$pull_fake_log" HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false PATH="$pull_fake_bin:$PATH" harbor models ls >/tmp/cli-step.out 2>&1 || true
 if ! grep -Eq 'up -d --wait$' "$pull_fake_log"; then
   cat "$pull_fake_log" >&2
   fail "harbor models ls did not auto-start Ollama"
@@ -2258,11 +2258,16 @@ if [ ! -f "$harbor_home_path/.env" ]; then
 fi
 suite_log "harbor home: contains .env"
 
-# harbor home should be a git repository
-if [ ! -d "$harbor_home_path/.git" ]; then
+# harbor home should be a git repository — but only when installed via git
+# clone (install-source github). The local install source copies a bounded
+# staged tree (git ls-files) that intentionally carries no .git directory.
+if [ "${HARBOR_TEST_INSTALL_SOURCE:-github}" = "local" ]; then
+  suite_log "harbor home: git repo check skipped (local staged install)"
+elif [ ! -d "$harbor_home_path/.git" ]; then
   fail "harbor home: .git directory not found (not a git repo)"
+else
+  suite_log "harbor home: is a git repository"
 fi
-suite_log "harbor home: is a git repository"
 
 # harbor home should contain compose.yml (base compose file)
 if [ ! -f "$harbor_home_path/compose.yml" ]; then

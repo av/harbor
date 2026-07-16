@@ -2091,8 +2091,11 @@ run_logs() {
 run_pull() {
     _check_docker || return 1
 
+    local compose_cmd
+
     if [ $# -eq 0 ]; then
-        $(compose_with_options) pull
+        compose_cmd=$(compose_with_options) || return 1
+        $compose_cmd pull
         return
     fi
 
@@ -2132,7 +2135,8 @@ run_pull() {
     for service in "${service_args[@]}"; do
         log_info "Pulling service $service"
     done
-    $(compose_with_options "${service_args[@]}") pull
+    compose_cmd=$(compose_with_options "${service_args[@]}") || return 1
+    $compose_cmd pull
 }
 
 shell_single_quote() {

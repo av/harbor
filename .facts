@@ -79,6 +79,9 @@
 - label: host deno invocations set DENO_NO_UPDATE_CHECK=1 to suppress the update-check nag and its dl.deno.land telemetry
   command: test $(grep -c 'DENO_NO_UPDATE_CHECK=1 deno run' harbor.sh) -eq 3
   tags: [spec, deno-no-update-check, implemented]
+- label: when compose_with_options fails, run_pull returns 1 instead of executing a bare 'pull' word
+  command: grep -q 'compose_cmd=$(compose_with_options) || return 1' harbor.sh && grep -q 'compose_cmd=$(compose_with_options "${service_args\[@\]}") || return 1' harbor.sh
+  tags: [spec, implemented, pull-resolver-guard]
 
 ## launch
 - label: harbor launch routes host tools codex, claude, opencode, pi, and others to OpenAI-compatible Harbor backends with optional --backend, --model, --config, --web, and --workflow
