@@ -54,6 +54,9 @@ Note: `harbor dev` only runs `.scripts/*.ts` Deno scripts, so `release.sh` must
 be invoked directly with bash. The script:
 - Seeds the version into all targets (`harbor dev seed`, `seed-cdi`, `seed-traefik`)
 - Runs the human lint pass (`harbor dev lint`)
+- Refreshes `app/src-tauri/Cargo.lock` to match the bumped `Cargo.toml`
+  (`cargo update --workspace`); if `cargo` is missing it warns — sync the lock
+  manually before committing
 - Regenerates docs and pushes them to the wiki repo (`../harbor.wiki`)
 
 Wait for it to complete. Check the output for errors — especially the wiki push,
@@ -132,6 +135,7 @@ the working tree may hold unrelated in-flight work):
 ```bash
 git add .scripts/seed.ts README.md pyproject.toml package.json harbor.sh \
   app/package.json app/src-tauri/tauri.conf.json app/src-tauri/Cargo.toml \
+  app/src-tauri/Cargo.lock \
   services/boost/pyproject.toml
 git commit -m "chore: vX.Y.Z"
 git push origin main
