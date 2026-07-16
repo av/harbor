@@ -13,7 +13,7 @@ mkdir -p /root/.config/aichat
 python /app/yaml_config_merger.py --pattern ".yml" --output "/root/.config/aichat/config.yaml" --directory "/app/configs"
 
 log "Merged Configs:"
-log $(cat /root/.config/aichat/config.yaml)
+log "$(cat /root/.config/aichat/config.yaml)"
 
 log echo "Starting aichat with args: '$*'"
 /app/aichat "$@"

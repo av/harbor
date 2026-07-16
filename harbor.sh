@@ -1212,7 +1212,8 @@ compose_with_options() {
 
     for file in $(resolve_compose_files); do
         if [ -f "$file" ]; then
-            local filename=$(basename "$file")
+            local filename
+            filename=$(basename "$file")
             local match=false
 
             # This is a "cross" file, only to be included
@@ -1593,7 +1594,8 @@ run_down() {
 
     _check_docker || return 1
 
-    local services=$(get_active_services)
+    local services
+    services=$(get_active_services)
     local matched_services=()
     local compose_targets=()
     local requested_services=()
@@ -1763,7 +1765,8 @@ run_restart() {
 
     _check_docker || return 1
 
-    local active_services=$(get_active_services)
+    local active_services
+    active_services=$(get_active_services)
 
     if [ -z "$active_services" ] && [ $# -eq 0 ]; then
         log_warn "No active services to restart. Start services first with 'harbor up <service>'."
@@ -2201,7 +2204,8 @@ run_llamacpp_pull() {
     local model_args
     model_args=$(llamacpp_pull_model_args "$model") || return 1
 
-    local safe_model_name=$(echo "$model" | sed 's/[^a-zA-Z0-9._-]/-/g')
+    local safe_model_name
+    safe_model_name=$(echo "$model" | sed 's/[^a-zA-Z0-9._-]/-/g')
     local c_log="/tmp/pull-${safe_model_name}.log"
 
     # Embed simple logger to match Harbor's CLI style inside the container
@@ -2276,7 +2280,8 @@ run_run() {
     shift
 
     # Check if it is an alias first
-    local maybe_cmd=$(env_manager_dict aliases --silent get "$service")
+    local maybe_cmd
+    maybe_cmd=$(env_manager_dict aliases --silent get "$service")
 
     if [ -n "$maybe_cmd" ]; then
         log_info "Running alias $service -> \"$maybe_cmd\""
@@ -2285,7 +2290,8 @@ run_run() {
     fi
 
     log_debug "'harbor run': no alias found for $service, running as service"
-    local services=$(get_active_services)
+    local services
+    services=$(get_active_services)
     
     local tty_opt=""
     if [ ! -t 0 ] || [ ! -t 1 ]; then
@@ -3988,8 +3994,10 @@ link_cli() {
     local target_dir
     target_dir=$(env_manager get cli.path)
     target_dir="${target_dir/#\~/$HOME}"
-    local script_name=$(env_manager get cli.name)
-    local short_name=$(env_manager get cli.short)
+    local script_name
+    script_name=$(env_manager get cli.name)
+    local short_name
+    short_name=$(env_manager get cli.short)
     local script_path="$harbor_home/harbor.sh"
     local create_short_link=false
 
@@ -4177,8 +4185,10 @@ unlink_cli() {
     local target_dir
     target_dir=$(env_manager get cli.path)
     target_dir="${target_dir/#\~/$HOME}"
-    local script_name=$(env_manager get cli.name)
-    local short_name=$(env_manager get cli.short)
+    local script_name
+    script_name=$(env_manager get cli.name)
+    local short_name
+    short_name=$(env_manager get cli.short)
 
     log_info "Removing symlinks..."
 
@@ -5673,7 +5683,8 @@ run_open() {
     fi
 
     # Check if the service has a custom URL
-    local config_url=$(env_manager get "$service_handle.open_url")
+    local config_url
+    config_url=$(env_manager get "$service_handle.open_url")
     log_debug "Custom URL for $service_handle: $config_url"
     if [ -n "$config_url" ]; then
         if sys_open "$config_url"; then
@@ -6206,9 +6217,12 @@ log() {
     local level="$1"
     shift
 
-    local current_level=$(get_default_log_level "$level")
-    local set_level=$(get_default_log_level "$default_log_level")
-    local label=$(get_default_log_label "$level")
+    local current_level
+    current_level=$(get_default_log_level "$level")
+    local set_level
+    set_level=$(get_default_log_level "$default_log_level")
+    local label
+    label=$(get_default_log_label "$level")
 
     # Check if the numeric value of the current log level is greater than or equal to the set default_log_level
     if [[ $current_level -ge $set_level ]]; then
@@ -6625,7 +6639,8 @@ env_manager_arr() {
 
     # Helper function to get the current array
     get_array() {
-        local array_string=$(env_manager get "$field")
+        local array_string
+        array_string=$(env_manager get "$field")
         echo "$array_string"
     }
 
@@ -6641,7 +6656,8 @@ env_manager_arr() {
     case "$action" in
     ls | list | "")
         # Show all values
-        local array=$(get_array)
+        local array
+        array=$(get_array)
         if [ -z "$array" ]; then
             log_info "Config $field is empty"
         else
@@ -6666,10 +6682,12 @@ env_manager_arr() {
             log_info "All values removed from $field"
         else
             # Remove one value
-            local array=$(get_array)
+            local array
+            array=$(get_array)
             if [ "$value" -eq "$value" ] 2>/dev/null; then
                 # If value is a number, treat it as an index
-                local new_array=$(echo "$array" | awk -F"$delimiter" -v idx="$value" '{
+                local new_array
+                new_array=$(echo "$array" | awk -F"$delimiter" -v idx="$value" '{
                         OFS=FS;
                         for(i=1;i<=NF;i++) {
                             if(i-1 != idx) {
@@ -6682,7 +6700,8 @@ env_manager_arr() {
                     }')
             else
                 # Otherwise, treat it as a value to be removed
-                local new_array=$(echo "$array" | awk -F"$delimiter" -v val="$value" '{
+                local new_array
+                new_array=$(echo "$array" | awk -F"$delimiter" -v val="$value" '{
                         OFS=FS;
                         for(i=1;i<=NF;i++) {
                             if($i != val) {
@@ -6706,7 +6725,8 @@ env_manager_arr() {
             echo "Usage: env_manager_arr $field add <value>"
             return 1
         fi
-        local array=$(get_array)
+        local array
+        array=$(get_array)
         if [ -z "$array" ]; then
             new_array="$value"
         else
@@ -6790,7 +6810,8 @@ env_manager_dict() {
 
     # Helper function to get the current dictionary
     get_dict() {
-        local dict_string=$(env_manager get "$field")
+        local dict_string
+        dict_string=$(env_manager get "$field")
         echo "$dict_string"
     }
 
@@ -6808,7 +6829,8 @@ env_manager_dict() {
     case "$action" in
     ls | list | "")
         # Show all key/value pairs
-        local dict=$(get_dict)
+        local dict
+        dict=$(get_dict)
         if [ -z "$dict" ]; then
             $silent || log_info "Config $field is empty"
         else
@@ -6823,8 +6845,10 @@ env_manager_dict() {
             $silent || echo "Usage: env_dict_manager $field get <key>"
             return 1
         fi
-        local dict=$(get_dict)
-        local value=$(echo "$dict" | awk -F"$delimiter" -v key="$key" '{
+        local dict
+        dict=$(get_dict)
+        local value
+        value=$(echo "$dict" | awk -F"$delimiter" -v key="$key" '{
                 for(i=1;i<=NF;i++) {
                     split($i,kv,"=")
                     if(kv[1] == key) {
@@ -6847,8 +6871,10 @@ env_manager_dict() {
             echo "Usage: env_dict_manager $field set <key> <value>"
             return 1
         fi
-        local dict=$(get_dict)
-        local new_dict=$(echo "$dict" | awk -F"$delimiter" -v key="$key" -v val="$value" '{
+        local dict
+        dict=$(get_dict)
+        local new_dict
+        new_dict=$(echo "$dict" | awk -F"$delimiter" -v key="$key" -v val="$value" '{
                 OFS=FS
                 found=0
                 for(i=1;i<=NF;i++) {
@@ -6871,8 +6897,10 @@ env_manager_dict() {
             echo "Usage: env_dict_manager $field rm <key>"
             return 1
         fi
-        local dict=$(get_dict)
-        local new_dict=$(echo "$dict" | awk -F"$delimiter" -v key="$key" '{
+        local dict
+        dict=$(get_dict)
+        local new_dict
+        new_dict=$(echo "$dict" | awk -F"$delimiter" -v key="$key" '{
                 OFS=FS
                 for(i=1;i<=NF;i++) {
                     split($i,kv,"=")
@@ -7646,9 +7674,12 @@ parse_hf_url() {
 }
 
 hf_url_2_llama_spec() {
-    local decomposed=$(parse_hf_url "$1")
-    local repo_name=$(echo "$decomposed" | cut -d"$delimiter" -f1)
-    local file_specifier=$(echo "$decomposed" | cut -d"$delimiter" -f2)
+    local decomposed
+    decomposed=$(parse_hf_url "$1")
+    local repo_name
+    repo_name=$(echo "$decomposed" | cut -d"$delimiter" -f1)
+    local file_specifier
+    file_specifier=$(echo "$decomposed" | cut -d"$delimiter" -f2)
 
     echo "--hf-repo $repo_name --hf-file $file_specifier"
 }
@@ -7678,11 +7709,14 @@ docker_fsacl() {
         return 0
     fi
 
-    local uid=$(id -u)
-    local gid=$(id -g)
+    local uid
+    uid=$(id -u)
+    local gid
+    gid=$(id -g)
     log_debug "fsacl: $folder (chown to $uid:$gid)"
 
-    local abs_folder=$(_portable_realpath "$folder")
+    local abs_folder
+    abs_folder=$(_portable_realpath "$folder")
 
     docker run --rm \
         --entrypoint sh \
@@ -7764,8 +7798,10 @@ run_fixfs() {
         fi
     fi
 
-    local uid=$(id -u)
-    local gid=$(id -g)
+    local uid
+    uid=$(id -u)
+    local gid
+    gid=$(id -g)
 
     local paths=("$harbor_home")
 
@@ -8311,7 +8347,8 @@ get_services() {
     done
 
     if $is_active; then
-        local active_services=$(docker compose ps --format "{{.Service}}")
+        local active_services
+        active_services=$(docker compose ps --format "{{.Service}}")
 
         if [ -z "$active_services" ]; then
             log_warn "Harbor has no active services."
@@ -8510,8 +8547,10 @@ run_history() {
         _check_docker || return 1
         local max_entries=10
         local history_file="$default_history_file"
-        local tmp_dir=$(mktemp -d -t harbor.XXXXXX)
-        local services=$(get_active_services)
+        local tmp_dir
+        tmp_dir=$(mktemp -d -t harbor.XXXXXX)
+        local services
+        services=$(get_active_services)
 
         local output_file="$tmp_dir/selected_command.txt"
         local entrypoint="/bin/sh -c \"/usr/local/bin/gum filter < ${history_file} > /tmp/gum_test/selected_command.txt\""
@@ -8767,8 +8806,10 @@ run_av_tools() {
 run_llamacpp_command() {
     update_model_spec() {
         local spec=""
-        local current_model=$(env_manager get llamacpp.model)
-        local current_gguf=$(env_manager get llamacpp.gguf)
+        local current_model
+        current_model=$(env_manager get llamacpp.model)
+        local current_gguf
+        current_gguf=$(env_manager get llamacpp.gguf)
 
         if [ -n "$current_model" ]; then
             spec=$(hf_url_2_llama_spec $current_model)
@@ -8782,7 +8823,7 @@ run_llamacpp_command() {
     case "$1" in
     models|ls)
         shift
-        curl -s $(harbor url llamacpp)/models | jq -r '.data[].id'
+        curl -s "$(harbor url llamacpp)/models" | jq -r '.data[].id'
         ;;
     model)
         shift
@@ -8800,7 +8841,8 @@ run_llamacpp_command() {
         shift
         case "$1" in
         on)
-            local current_caps=$(env_manager get capabilities.default)
+            local current_caps
+            current_caps=$(env_manager get capabilities.default)
             if [[ ! ";${current_caps};" =~ ";build;" ]]; then
                 if [ -z "$current_caps" ]; then
                     env_manager set capabilities.default "build"
@@ -8812,8 +8854,10 @@ run_llamacpp_command() {
             log_info "Run 'harbor build llamacpp' to build, then 'harbor up llamacpp'"
             ;;
         off)
-            local current_caps=$(env_manager get capabilities.default)
-            local new_caps=$(echo "$current_caps" | sed 's/;*build//g; s/^;//; s/;$//')
+            local current_caps
+            current_caps=$(env_manager get capabilities.default)
+            local new_caps
+            new_caps=$(echo "$current_caps" | sed 's/;*build//g; s/^;//; s/;$//')
             env_manager set capabilities.default "$new_caps"
             log_info "Build from source disabled for llamacpp"
             ;;
@@ -8945,9 +8989,12 @@ run_ikllamacpp_command() {
 run_tgi_command() {
     update_model_spec() {
         local spec=""
-        local current_model=$(env_manager get tgi.model)
-        local current_quant=$(env_manager get tgi.quant)
-        local current_revision=$(env_manager get tgi.revision)
+        local current_model
+        current_model=$(env_manager get tgi.model)
+        local current_quant
+        current_quant=$(env_manager get tgi.quant)
+        local current_revision
+        current_revision=$(env_manager get tgi.revision)
 
         if [ -n "$current_model" ]; then
             spec="--model-id $current_model"
@@ -9886,7 +9933,8 @@ run_omlx_command() {
 run_vllm_command() {
     update_model_spec() {
         local spec=""
-        local current_model=$(env_manager get vllm.model)
+        local current_model
+        current_model=$(env_manager get vllm.model)
 
         if [ -n "$current_model" ]; then
             spec="--model $current_model"
@@ -10057,12 +10105,14 @@ run_npcsh_command() {
 
 run_open_ai_command() {
     update_main_key() {
-        local key=$(env_manager get openai.keys | cut -d";" -f1)
+        local key
+        key=$(env_manager get openai.keys | cut -d";" -f1)
         env_manager set openai.key "$key"
     }
 
     update_main_url() {
-        local url=$(env_manager get openai.urls | cut -d";" -f1)
+        local url
+        url=$(env_manager get openai.urls | cut -d";" -f1)
         env_manager set openai.url "$url"
     }
 
@@ -10129,7 +10179,8 @@ run_webui_command() {
 run_tabbyapi_command() {
     update_model_spec() {
         local spec=""
-        local current_model=$(env_manager get tabbyapi.model)
+        local current_model
+        current_model=$(env_manager get tabbyapi.model)
 
         if [ -n "$current_model" ]; then
             spec=$(hf_spec_2_folder_spec $current_model)
@@ -10217,10 +10268,14 @@ run_mistralrs_command() {
 
     update_model_spec() {
         local spec=""
-        local current_model=$(env_manager get mistralrs.model)
-        local current_type=$(env_manager get mistralrs.model_type)
-        local current_arch=$(env_manager get mistralrs.model_arch)
-        local current_isq=$(env_manager get mistralrs.isq)
+        local current_model
+        current_model=$(env_manager get mistralrs.model)
+        local current_type
+        current_type=$(env_manager get mistralrs.model_type)
+        local current_arch
+        current_arch=$(env_manager get mistralrs.model_arch)
+        local current_isq
+        current_isq=$(env_manager get mistralrs.isq)
 
         if [ -n "$current_isq" ]; then
             spec="--isq $current_isq"
@@ -10308,8 +10363,10 @@ run_opint_command() {
 
     update_cmd() {
         local cmd=""
-        local current_model=$(env_manager get opint.model)
-        local current_args=$(env_manager get opint.extra.args)
+        local current_model
+        current_model=$(env_manager get opint.model)
+        local current_args
+        current_args=$(env_manager get opint.extra.args)
 
         if [ -n "$current_model" ]; then
             cmd="--model $current_model"
@@ -10362,7 +10419,8 @@ run_opint_command() {
         ;;
     *)
         # Allow permanent override of the target backend
-        local services=$(env_manager get opint.backend)
+        local services
+        services=$(env_manager get opint.backend)
 
         if [ -z "$services" ]; then
             services=$(get_active_services)
@@ -10412,7 +10470,8 @@ run_cmdh_command() {
 
     _check_docker || return 1
 
-    local services=$(get_active_services)
+    local services
+    services=$(get_active_services)
 
     # Mount the current directory and set it as the working directory
     $(compose_with_options $services "cmdh") run \
@@ -10427,7 +10486,8 @@ run_cmdh_command() {
 run_harbor_how_command() {
     _check_docker || return 1
 
-    local services=$(get_active_services)
+    local services
+    services=$(get_active_services)
 
     local tty_opt=""
     if [ ! -t 0 ] || [ ! -t 1 ]; then
@@ -10512,7 +10572,8 @@ run_fabric_command() {
 
     _check_docker || return 1
 
-    local services=$(get_active_services)
+    local services
+    services=$(get_active_services)
 
     # Fabric has some funky TTY handling
     # Container hangs for specific flags
@@ -10833,7 +10894,8 @@ run_aichat_command() {
 
     _check_docker || return 1
 
-    local services=$(get_active_services)
+    local services
+    services=$(get_active_services)
 
     $(compose_with_options $services "aichat") run \
         --rm \
@@ -10847,7 +10909,7 @@ run_aichat_command() {
 
 run_ollama_command() {
     update_ollama_env() {
-        harbor env ollama OLLAMA_CONTEXT_LENGTH $(harbor config get ollama.context_length)
+        harbor env ollama OLLAMA_CONTEXT_LENGTH "$(harbor config get ollama.context_length)"
     }
 
     case "$1" in
@@ -10869,8 +10931,10 @@ run_ollama_command() {
         _check_disk_space "$ollama_cache" 10 "Ollama model storage ($ollama_cache)"
     fi
 
-    local services=$(get_active_services)
-    local ollama_host=$(env_manager get ollama.internal.url)
+    local services
+    services=$(get_active_services)
+    local ollama_host
+    ollama_host=$(env_manager get ollama.internal.url)
 
     if ! is_service_running "ollama"; then
         log_debug "Ollama is not running, launching..."
@@ -10992,7 +11056,8 @@ run_bench_command() {
     run)
         shift
         _check_docker || return 1
-        local services=$(get_active_services)
+        local services
+        services=$(get_active_services)
         $(compose_with_options $services "bench") run --rm "bench" "$@"
         ;;
     *)
@@ -11003,7 +11068,8 @@ run_bench_command() {
 
 run_lm_eval_command() {
     update_model_spec() {
-        local current_model=$(env_manager_dict lmeval.model.args get model)
+        local current_model
+        current_model=$(env_manager_dict lmeval.model.args get model)
 
         # If model is present, propagate to env var
         if [ -n "$current_model" ]; then
@@ -11067,7 +11133,8 @@ run_lm_eval_command() {
 
     _check_docker || return 1
 
-    local services=$(get_active_services)
+    local services
+    services=$(get_active_services)
 
     $(compose_with_options $services "lmeval") run \
         --rm \
@@ -11445,7 +11512,8 @@ run_photoprism_command() {
 
     _check_docker || return 1
 
-    local services=$(get_active_services)
+    local services
+    services=$(get_active_services)
 
     if ! is_service_running "photoprism"; then
         log_error "PhotoPrism is not running. Start it with 'harbor up photoprism'"
@@ -11460,7 +11528,8 @@ run_photoprism_command() {
 run_openhands_command() {
     _check_docker || return 1
 
-    local services=$(get_active_services)
+    local services
+    services=$(get_active_services)
 
     $(compose_with_options $services "openhands") run \
         --rm \
@@ -11548,7 +11617,8 @@ run_nexa_command() {
 
     _check_docker || return 1
 
-    local services=$(get_active_services)
+    local services
+    services=$(get_active_services)
 
     $(compose_with_options $services "nexa") run \
         --rm \
@@ -11563,7 +11633,8 @@ run_nexa_command() {
 run_repopack_command() {
     _check_docker || return 1
 
-    local services=$(get_active_services)
+    local services
+    services=$(get_active_services)
 
     $(compose_with_options $services "repopack") run \
         --rm \
@@ -11577,7 +11648,8 @@ run_repopack_command() {
 run_k6_command() {
     _check_docker || return 1
 
-    local services=$(get_active_services)
+    local services
+    services=$(get_active_services)
     echo "Active services: $services"
 
     # Check if the specified service is running
@@ -11606,7 +11678,8 @@ run_k6_command() {
 run_promptfoo_eval() {
     local eval_name="$1"
     local other_args="${@:2}"
-    local eval_path="$(harbor home)/promptfoo/evals/$eval_name"
+    local eval_path
+    eval_path="$(harbor home)/promptfoo/evals/$eval_name"
 
     log_debug "Running promptfoo eval: $eval_name"
     pushd "$eval_path" || {
@@ -11623,7 +11696,8 @@ run_promptfoo_eval() {
 run_promptfoo_command() {
     _check_docker || return 1
 
-    local services=$(get_active_services)
+    local services
+    services=$(get_active_services)
     log_debug "Active services: $services"
 
     local tty_opt="-it"
@@ -11668,7 +11742,8 @@ run_promptfoo_command() {
 run_webtop_command() {
     _check_docker || return 1
 
-    local services=$(get_active_services)
+    local services
+    services=$(get_active_services)
     local is_running=false
 
     if echo "$services" | grep -q "webtop"; then
@@ -11681,7 +11756,8 @@ run_webtop_command() {
         # Just in case
         run_down webtop
         # Cleanup data directory
-        local data_dir=$(env_manager get webtop.workspace)
+        local data_dir
+        data_dir=$(env_manager get webtop.workspace)
         log_info "Deleting Webtop workspace at '$data_dir'"
         rm -rf $data_dir
         return 0
@@ -11772,8 +11848,10 @@ run_gptme_command() {
 
     _check_docker || return 1
 
-    local services=$(get_active_services)
-    local model_id=$(env_manager get gptme.model)
+    local services
+    services=$(get_active_services)
+    local model_id
+    model_id=$(env_manager get gptme.model)
     local model_spec="local/$model_id"
 
     $(compose_with_options $services "gptme") run \
@@ -11812,7 +11890,8 @@ run_hermes_command() {
 
     _check_docker || return 1
 
-    local services=$(get_active_services)
+    local services
+    services=$(get_active_services)
 
     $(compose_with_options $services "hermes") exec \
         hermes \
@@ -12765,7 +12844,8 @@ check_migration_needed() {
     local exclude_pattern="^(app|docs|routines|scripts|profiles|shared|harbor|tools|skills|services|node_modules|dist|\..*)$"
 
     while IFS= read -r dir; do
-        local basename=$(basename "$dir")
+        local basename
+        basename=$(basename "$dir")
         if [[ ! "$basename" =~ $exclude_pattern ]]; then
             # Check if this looks like a service directory (has corresponding compose file)
             if [ -f "$harbor_home/compose.$basename.yml" ] || [ -f "$harbor_home/compose.$basename.ts" ]; then

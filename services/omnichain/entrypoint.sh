@@ -6,6 +6,7 @@ API_PORT=5002
 # Function to stop socat processes
 stop_socat() {
     echo "Stopping socat processes..."
+    # shellcheck disable=SC2046 # jobs -p emits one PID per word; splitting is intended
     kill $(jobs -p)
     wait
 }
