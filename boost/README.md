@@ -80,6 +80,8 @@ Boost comes with [a lot of built-in modules](../docs/5.2.3-Harbor-Boost-Modules.
 |-|-|-|
 | ![](../docs/boost-dot.png) | ![](../docs/boost-klmbr.png) | ![](../docs/boost-r0.png) |
 
+Recent additions include web research flows — [`quickhop`](../docs/5.2.3-Harbor-Boost-Modules.md#quickhop) (single-hop search + read) and [`deephop`](../docs/5.2.3-Harbor-Boost-Modules.md#deephop) (two-hop deep research) — and style modules [`caveman`](../docs/5.2.3-Harbor-Boost-Modules.md#caveman) (terse output, `HARBOR_BOOST_CAVEMAN_LEVEL`) and [`ponytail`](../docs/5.2.3-Harbor-Boost-Modules.md#ponytail) (YAGNI build discipline, `HARBOR_BOOST_PONYTAIL_LEVEL`). Research budgets and triggers are configurable via `HARBOR_BOOST_QUICKHOP_*` / `HARBOR_BOOST_DEEPHOP_*` — see the [modules reference](../docs/5.2.3-Harbor-Boost-Modules.md) for details.
+
 #### Scripting
 
 Creating custom modules is a first-class feature and one of the main use-cases for Harbor Boost.
