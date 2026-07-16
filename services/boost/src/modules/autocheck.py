@@ -1295,10 +1295,16 @@ async def gather_workspace_context(paths: list[str]) -> str:
       if not target.exists() or not target.is_file():
         raise FileNotFoundError(path)
       content = fetch.trim(target.read_text(encoding="utf-8"), max_chars)
+      # Neutralize file-tag markers inside content so successful_workspace_reads
+      # cannot mistake embedded text for a real read marker.
+      content = re.sub(r'<(file\s+path=)"', r'<\1&quot;', content)
       chunks.append(f'<file path="{path}">\n{content}\n</file>')
     except Exception as exc:
       logger.warning(f"{ID_PREFIX}: could not read workspace file '{path}': {exc}")
-      chunks.append(f'<file path="{path}" error="{exc}" />')
+      # Quotes/newlines in the error would break the error="..." attribute and
+      # make the failed read count as workspace evidence.
+      error_text = str(exc).replace('"', "'").replace("\n", " ")
+      chunks.append(f'<file path="{path}" error="{error_text}" />')
 
   return "\n\n".join(chunks)
 
