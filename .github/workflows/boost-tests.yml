@@ -1,0 +1,37 @@
+name: Boost Tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/boost-tests.yml'
+      - 'services/boost/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/boost-tests.yml'
+      - 'services/boost/**'
+  workflow_dispatch:
+
+jobs:
+  pytest:
+    name: uv run pytest
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: services/boost/uv.lock
+
+      - name: Run boost test suite
+        # The dev dependency group covers pytest, pytest-asyncio and the
+        # anthropic SDK, so a bare `uv run pytest` collects everything
+        # (including SDK integration tests). No extra --with flags needed.
+        working-directory: services/boost
+        run: uv run pytest -q

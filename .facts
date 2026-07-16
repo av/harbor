@@ -85,6 +85,9 @@
 - label: when the compose resolver routine fails or returns empty, compose_with_options emits a 'false' sentinel command so bare $(compose_with_options ...) call sites fail cleanly instead of executing a bare docker subcommand
   command: grep -A6 'The compose file merge routine produced no output' harbor.sh | grep -q 'echo "false"'
   tags: [spec, implemented, pull-resolver-guard]
+- label: harbor up with multiple services and -t tails logs for all requested services, not just the first
+  command: rg -q "run_logs \"\\\$\\{filtered_args\\[@\\]\\}\"" harbor.sh
+  tags: [spec, implemented]
 
 ## launch
 - label: harbor launch routes host tools codex, claude, opencode, pi, and others to OpenAI-compatible Harbor backends with optional --backend, --model, --config, --web, and --workflow
@@ -363,6 +366,9 @@
 - label: harbor dev lint runs a three-pass Deno orchestrator with HARBOR-prefixed bash rules under .scripts/lint
   command: test -f .scripts/lint/run.ts && test -f .scripts/lint/rules.yaml && grep -q 'HARBOR0' .scripts/lint/rules.yaml
   tags: [implemented]
+- label: harbor dev lint --strict exits non-zero when any finding is reported, warnings included, so CI can gate on a fully clean lint
+  command: rg -q 'case "strict"' .scripts/lint/run.ts && rg -q 'args.strict && reported.length > 0' .scripts/lint/run.ts
+  tags: [spec, implemented]
 
 # docs
 - label: documentation lives in docs/ with hierarchical numbering and covers 100+ services

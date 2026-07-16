@@ -35,6 +35,7 @@ type Args = {
   boost: boolean | null;
   files: string[] | null;
   severity: Set<"error" | "warning">;
+  strict: boolean;
 };
 
 function parseArgs(raw: string[]): Args {
@@ -47,6 +48,7 @@ function parseArgs(raw: string[]): Args {
     boost: null,
     files: null,
     severity: new Set(["error", "warning"]),
+    strict: false,
   };
 
   const takeValue = (i: number, inline: string | undefined, key: string): [string, number] => {
@@ -83,6 +85,9 @@ function parseArgs(raw: string[]): Args {
         break;
       case "boost":
         args.boost = true;
+        break;
+      case "strict":
+        args.strict = true;
         break;
       case "files": {
         const [v, ni] = takeValue(i, inline, rawKey);
@@ -124,6 +129,8 @@ Options:
                             (repo-relative paths).
   --severity error[,warning]  Findings to report; default error+warning.
                             Exit non-zero iff any reported finding is an error.
+  --strict                  Exit non-zero if ANY finding is reported,
+                            warnings included. Intended for CI gates.
   --json                    Machine-readable JSON output.
   --help                    Show this help.
 
@@ -295,7 +302,8 @@ async function main() {
   }
 
   const anyError = reported.some((f) => f.severity === "error");
-  Deno.exit(anyError ? 1 : 0);
+  const fail = anyError || (args.strict && reported.length > 0);
+  Deno.exit(fail ? 1 : 0);
 }
 
 await main();

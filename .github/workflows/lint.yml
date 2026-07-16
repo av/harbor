@@ -62,34 +62,10 @@ jobs:
       - name: Run lint self-test (regex-vs-fixture regressions)
         run: bash harbor.sh dev lint-self-test
 
-      - name: Run lint (human output for logs)
-        run: bash harbor.sh dev lint
-
-      - name: Assert boost pass is clean (no zero-byte modules)
-        run: |
-          bash harbor.sh dev lint --boost --json > boost.json
-          count=$(jq '.findings | length' boost.json)
-          if [ "$count" -ne 0 ]; then
-            echo "::error::harbor dev lint --boost reported $count finding(s); baseline is 0."
-            jq -r '.findings[] | "  \(.file) \(.severity) \(.rule) \(.message)"' boost.json
-            exit 1
-          fi
-          echo "boost pass clean: 0 findings."
-
-      - name: Assert rules pass is clean (no warnings or errors)
-        # Phase 6 baseline: services/** and shared/** are clean of HARBORxxx
-        # findings. Any new warning is a regression we want to block at PR
-        # time. Shellcheck severity is intentionally not gated here — there
-        # are pre-existing SC errors tracked separately.
-        run: |
-          bash harbor.sh dev lint --rules --json > rules.json
-          count=$(jq '.findings | length' rules.json)
-          if [ "$count" -ne 0 ]; then
-            echo "::error::harbor dev lint --rules reported $count finding(s); baseline is 0."
-            jq -r '.findings[] | "  \(.file):\(.line) \(.severity) \(.rule) \(.message)"' rules.json
-            exit 1
-          fi
-          echo "rules pass clean: 0 findings."
+      - name: Run lint (strict — zero errors AND zero warnings)
+        # The repo is fully clean as of v0.5.3 (0 errors / 0 warnings across
+        # all four passes). --strict fails on any finding so it stays there.
+        run: bash harbor.sh dev lint --strict
 
       - name: Run lint (JSON for annotations)
         if: always()
