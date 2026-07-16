@@ -332,6 +332,15 @@
 - label: Boost declares a dev dependency group with pytest pytest-asyncio and anthropic so bare uv run pytest collects the Anthropic and OpenAI SDK integration tests by default
   command: cd services/boost && python3 -c "import tomllib;g=tomllib.load(open('pyproject.toml','rb'))['dependency-groups']['dev'];assert {'pytest','pytest-asyncio','anthropic'} <= set(g), g"
   tags: [implemented]
+- label: style level commands are module scoped: /caveman <level> and stop caveman only affect the caveman module and /ponytail forms only affect ponytail, while normal mode disables both; resolve_style_level receives the calling module id
+  command: cd services/boost && uv run pytest tests/test_caveman.py tests/test_ponytail.py -q
+  tags: [implemented]
+- label: read_url direct fetch follows redirects manually (max 5 hops) and re-validates every hop with require_http_url so a public URL cannot 3xx into private, loopback, link-local, or reserved addresses
+  command: cd services/boost && uv run pytest tests/test_agentic_infra.py -q -k redirect
+  tags: [implemented]
+- label: autocheck gather_workspace_context sanitizes error attributes (quotes and newlines) and neutralizes file-tag markers inside file content so failed or spoofed reads never count as successful workspace evidence
+  command: cd services/boost && uv run pytest tests/test_autocheck.py -q
+  tags: [implemented]
 
 # testing
 - label: tests use a Deno orchestrator running sequential bash suites across containerized distros
@@ -439,6 +448,9 @@
 - label: harbor models ls and rm start Ollama automatically when no explicit source is provided
   command: rg -q 'requested_source.*ollama' harbor.sh && rg -q 'run_up --no-defaults ollama' harbor.sh
   tags: [spec, reported-regression, implemented]
+- label: listHfModels does not wipe the model list when the hub library scan throws: it proceeds with zero known repos so the rescue directory walk still lists readable repos
+  command: rg -q "cacheInfo = \{ repos: \[\] \}" routines/models/hf.ts
+  tags: [implemented]
 
 # demos
 - label: launch-grid demo supports --duration and exits early when all agent panes finish
