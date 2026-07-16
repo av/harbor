@@ -173,8 +173,10 @@ export async function listHfModels(): Promise<HfRepoInfo[]> {
   try {
     cacheInfo = await scanCacheDir(hfCache + '/hub');
   } catch (err) {
+    // A single corrupt/stale repo can make the whole scan throw — fall
+    // through with no known repos so the rescue walk below lists the rest.
     log.warn(`Failed to scan HF cache at ${hfCache}: ${(err as Error).message}`);
-    return [];
+    cacheInfo = { repos: [] };
   }
 
   // deno-lint-ignore no-explicit-any
