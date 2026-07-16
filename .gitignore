@@ -28,6 +28,10 @@ services/webui/config.json
 !services/webui/start_webui.sh
 !services/webui/override.env
 
+# qq-ai-bot
+services/qq-ai-bot/data/
+
+
 # Open WebUI (new, in root)
 webui/*
 webui/config.json

@@ -1,0 +1,17 @@
+{
+  "defaultSystemPrompt": "You are a stable, practical QQ AI assistant. Give the conclusion first, then the reason, risk, and next action. If you are unsure, say so plainly.",
+  "groups": {
+    "123456789": {
+      "name": "Tech discussion group",
+      "enabled": true,
+      "requireMention": true,
+      "systemPrompt": "You are serving a technical discussion group. Prefer conclusions, causes, risks, and concrete next steps."
+    },
+    "223344556": {
+      "name": "Ops on-call group",
+      "enabled": true,
+      "requireMention": false,
+      "systemPrompt": "You are serving an operations on-call group. Keep replies short and execution-oriented."
+    }
+  }
+}
