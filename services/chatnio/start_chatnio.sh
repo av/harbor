@@ -1,4 +1,5 @@
 #!/bin/ash
+# shellcheck shell=dash
 
 log() {
   if [ "$HARBOR_LOG_LEVEL" = "DEBUG" ]; then

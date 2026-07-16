@@ -96,13 +96,13 @@ function pip_install() {
 }
 
 function provisioning_get_apt_packages() {
-    if [[ -n $APT_PACKAGES ]]; then
+    if [[ ${#APT_PACKAGES[@]} -gt 0 ]]; then
             sudo $APT_INSTALL "${APT_PACKAGES[@]}"
     fi
 }
 
 function provisioning_get_pip_packages() {
-    if [[ -n $PIP_PACKAGES ]]; then
+    if [[ ${#PIP_PACKAGES[@]} -gt 0 ]]; then
             pip_install "${PIP_PACKAGES[@]}"
     fi
 }

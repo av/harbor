@@ -1223,18 +1223,21 @@ compose_with_options() {
                 cross="${cross%.yml}"
 
                 # Convert dot notation to array
-                local filename_parts=(${cross//./ })
+                local filename_parts=()
+                IFS='.' read -r -a filename_parts <<< "$cross"
                 local all_matched=true
 
                 for part in "${filename_parts[@]}"; do
                     # Skip capability files for wildcard match
                     if is_capability "$part"; then
                         # Capabilities must match exactly, no wildcards
+                        # shellcheck disable=SC2076 # literal substring match intended, not regex
                         if [[ ! " ${options[*]} " =~ " ${part} " ]]; then
                             all_matched=false
                             break
                         fi
                     else
+                        # shellcheck disable=SC2076 # literal substring match intended, not regex
                         if [[ ! " ${options[*]} " =~ " ${part} " ]] && [[ ! " ${options[*]} " =~ " * " ]]; then
                             all_matched=false
                             break
@@ -1555,12 +1558,12 @@ run_up() {
     done
 
     if $should_attach; then
-        run_attach "$filtered_args"
+        run_attach "${filtered_args[0]:-}"
         return
     fi
 
     if $should_tail; then
-        run_logs "$filtered_args"
+        run_logs "${filtered_args[@]}"
     fi
 
     if $should_open; then
@@ -1685,7 +1688,9 @@ run_down() {
         log_debug "Checking if service '$svc' has companions running..."
         matched_service=$(echo "$raw_services" | grep "^${svc}-" || true)
         if [ -n "$matched_service" ]; then
-            matched_services+=($matched_service)
+            while IFS= read -r _line; do
+                matched_services+=("$_line")
+            done <<< "$matched_service"
         fi
     done
 
@@ -1801,7 +1806,11 @@ run_restart() {
     done
 
     local unique_services=()
-    local all_services=($active_services "${services[@]}")
+    local active_services_arr=()
+    if [ -n "$active_services" ]; then
+        mapfile -t active_services_arr <<< "$active_services"
+    fi
+    local all_services=("${active_services_arr[@]}" "${services[@]}")
 
     local s
     for s in "${all_services[@]}"; do
@@ -1945,7 +1954,9 @@ run_build() {
     matched_service=$(echo "$all_services" | grep "^$service-" || true)
     if [ -n "$matched_service" ]; then
         log_debug "Matched service: $matched_service"
-        matched_services+=($matched_service)
+        while IFS= read -r _line; do
+            matched_services+=("$_line")
+        done <<< "$matched_service"
     fi
 
     local matched_services_str=""
@@ -2643,7 +2654,7 @@ launch_model_is_embedding() {
     model=$(harbor_lower "$1")
 
     case "$model" in
-    *embed* | *embedding* | *bge-* | *e5-* | *gte-* | *rerank*)
+    *embed* | *bge-* | *e5-* | *gte-* | *rerank*)
         return 0
         ;;
     esac
@@ -2686,6 +2697,7 @@ launch_append_unique() {
     local existing
 
     eval "local values=(\"\${${var_name}[@]}\")"
+    # shellcheck disable=SC2154 # values is assigned via the eval above
     for existing in "${values[@]}"; do
         if [ "$existing" = "$value" ]; then
             return 0
@@ -5224,7 +5236,6 @@ FISH_COMPLETION
 # Output the completion script for the given shell, or install it.
 run_completion_command() {
     local shell="$1"
-    local install_flag="$2"
 
     case "$shell" in
         bash)
@@ -6189,6 +6200,7 @@ suggest_command() {
     fi
 }
 
+# shellcheck disable=SC2034 # read indirectly via eval in get_default_log_level/label
 set_default_log_levels() {
     default_log_levels_DEBUG=0
     default_log_levels_INFO=1
@@ -8179,8 +8191,7 @@ update_harbor() {
             _restore_stash_on_error
             return 1
         fi
-        local checkout_output
-        if ! checkout_output=$(git checkout "tags/$harbor_version" 2>&1); then
+        if ! git checkout "tags/$harbor_version" >/dev/null 2>&1; then
             log_error "Failed to check out version $harbor_version."
             # Detect cause with locale-independent git commands instead of grepping
             # localized error messages (the old English-only patterns failed for
@@ -9452,16 +9463,16 @@ omlx_host_start() {
         log_info "oMLX is already running on port $runner_port"
     else
         log_info "Starting oMLX from $workspace (models: $model_dir)"
-        local cmd=(uv run omlx serve --model-dir "$model_dir" --host 127.0.0.1 --port "$runner_port" --base-path "$base_path" --paged-ssd-cache-dir "$cache_dir")
+        local omlx_cmd=(uv run omlx serve --model-dir "$model_dir" --host 127.0.0.1 --port "$runner_port" --base-path "$base_path" --paged-ssd-cache-dir "$cache_dir")
         if [ -n "$api_key" ]; then
-            cmd+=(--api-key "$api_key")
+            omlx_cmd+=(--api-key "$api_key")
         fi
         if [ -n "$extra_args" ]; then
             local extra_args_array=()
             read -r -a extra_args_array <<< "$extra_args"
-            cmd+=("${extra_args_array[@]}")
+            omlx_cmd+=("${extra_args_array[@]}")
         fi
-        (cd "$workspace" && nohup "${cmd[@]}" >>"$logfile" 2>&1 & disown)
+        (cd "$workspace" && nohup "${omlx_cmd[@]}" >>"$logfile" 2>&1 & disown)
 
         local retries=0 max_retries=60
         while ! omlx_curl "$local_url/v1/models" -s -o /dev/null -w '' 2>/dev/null; do
@@ -11441,15 +11452,6 @@ run_langflow_command() {
         shift
         execute_and_process "env_manager get langflow.data" "sys_open {{output}}" "No langflow.data set"
         ;;
-    ui)
-        shift
-        if service_url=$(get_url langflow 2>&1); then
-            sys_open "$service_url"
-        else
-            log_error "Failed to get service URL for langflow: $service_url"
-            return 1
-        fi
-        ;;
     -h | --help | help)
         echo "Langflow - LangChain Flow UI"
         echo
@@ -11661,7 +11663,7 @@ run_k6_command() {
     fi
 
     log_info "--------------------------------------"
-    log_info "${c_y}🔗 Harbor K6: ${c_b}$(get_url k6-grafana)${c_nc}"
+    log_info "🔗 Harbor K6: $(get_url k6-grafana)${c_nc}"
     log_info "--------------------------------------"
 
     $(compose_with_options --no-defaults "k6") run \
@@ -11677,7 +11679,7 @@ run_k6_command() {
 
 run_promptfoo_eval() {
     local eval_name="$1"
-    local other_args="${@:2}"
+    local other_args=("${@:2}")
     local eval_path
     eval_path="$(harbor home)/promptfoo/evals/$eval_name"
 
@@ -11688,7 +11690,7 @@ run_promptfoo_eval() {
     }
 
     trap 'popd >/dev/null; return 130' INT
-    harbor pf eval $other_args
+    harbor pf eval "${other_args[@]}"
     trap - INT
     popd >/dev/null
 }
@@ -11972,7 +11974,6 @@ run_modularmax_command() {
 
 # Globals
 version="0.5.3"
-harbor_repo_url="https://github.com/av/harbor.git"
 harbor_release_url="https://api.github.com/repos/av/harbor/releases/latest"
 delimiter="|"
 scramble_exit_code=42
@@ -12094,9 +12095,9 @@ fi
 if [ -z "$(env_manager --silent get unsloth-studio.password)" ]; then
     env_manager --silent set unsloth-studio.password "$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | dd bs=1 count=16 2>/dev/null)"
 fi
-default_options=($(env_manager get services.default | tr ';' ' '))
-default_tunnels=($(env_manager get services.tunnels | tr ';' ' '))
-default_capabilities=($(env_manager get capabilities.default | tr ';' ' '))
+read -r -a default_options <<< "$(env_manager get services.default | tr ';' ' ')"
+read -r -a default_tunnels <<< "$(env_manager get services.tunnels | tr ';' ' ')"
+read -r -a default_capabilities <<< "$(env_manager get capabilities.default | tr ';' ' ')"
 default_auto_capabilities=$(env_manager get capabilities.autodetect)
 default_open=$(env_manager get ui.main)
 default_autoopen=$(env_manager get ui.autoopen)
@@ -12857,9 +12858,13 @@ check_migration_needed() {
 
     # Check for compose files at root (excluding base compose.yml)
     if [ "$has_old_structure" = false ]; then
-        if ls "$harbor_home"/compose.*.yml "$harbor_home"/compose.*.ts 2>/dev/null | grep -v "^$harbor_home/compose.yml$" >/dev/null; then
+        local _compose_file
+        for _compose_file in "$harbor_home"/compose.*.yml "$harbor_home"/compose.*.ts; do
+            [ -e "$_compose_file" ] || continue
+            [ "$_compose_file" = "$harbor_home/compose.yml" ] && continue
             has_old_structure=true
-        fi
+            break
+        done
     fi
 
     if [ "$has_old_structure" = true ]; then

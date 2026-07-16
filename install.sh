@@ -423,6 +423,7 @@ main() {
   acquire_install_lock
   # Override the lock-cleanup trap with one that also handles setup stage,
   # leaked backup directories, and orphaned git stashes.
+  # shellcheck disable=SC2154 # ec is assigned on the first line of the trap body
   trap '
     ec=$?
     rm -rf "$HARBOR_LOCK_FILE" 2>/dev/null
