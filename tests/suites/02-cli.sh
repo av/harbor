@@ -22,9 +22,11 @@ fail() { echo "[cli] FAIL: $*" >&2; exit 1; }
 assert_ok() {
   local name="$1"; shift
   suite_log "$name"
-  if ! "$@" >/tmp/cli-step.out 2>&1; then
+  local rc=0
+  "$@" >/tmp/cli-step.out 2>&1 || rc=$?
+  if [ "$rc" -ne 0 ]; then
     cat /tmp/cli-step.out >&2
-    fail "$name (exit $?)"
+    fail "$name (exit $rc)"
   fi
 }
 
@@ -32,9 +34,11 @@ assert_ok() {
 assert_match() {
   local name="$1" regex="$2"; shift 2
   suite_log "$name"
-  if ! "$@" >/tmp/cli-step.out 2>&1; then
+  local rc=0
+  "$@" >/tmp/cli-step.out 2>&1 || rc=$?
+  if [ "$rc" -ne 0 ]; then
     cat /tmp/cli-step.out >&2
-    fail "$name (exit $?)"
+    fail "$name (exit $rc)"
   fi
   if ! grep -Eq -- "$regex" /tmp/cli-step.out; then
     cat /tmp/cli-step.out >&2
@@ -45,9 +49,11 @@ assert_match() {
 assert_not_match() {
   local name="$1" regex="$2"; shift 2
   suite_log "$name"
-  if ! "$@" >/tmp/cli-step.out 2>&1; then
+  local rc=0
+  "$@" >/tmp/cli-step.out 2>&1 || rc=$?
+  if [ "$rc" -ne 0 ]; then
     cat /tmp/cli-step.out >&2
-    fail "$name (exit $?)"
+    fail "$name (exit $rc)"
   fi
   if grep -Eq -- "$regex" /tmp/cli-step.out; then
     cat /tmp/cli-step.out >&2
@@ -439,8 +445,12 @@ rm -rf "$launch_fake_bin" "$launch_fake_curl_log" "$launch_fake_docker_state"
 #    checks (docker, compose v2 >= 2.23, git, curl) all pass against the
 #    row image we built.
 assert_ok    "harbor doctor"         harbor doctor
+# stdin is an open pipe that never delivers data or EOF; doctor must complete
+# anyway. Process substitution (not a pipeline) so the shell doesn't wait for
+# the feeder — busybox tail -f never exits, which used to hang this test on
+# alpine regardless of doctor's behavior.
 assert_ok    "harbor doctor with noninteractive stdin" \
-  timeout 5 bash -lc 'tail -f /dev/null | harbor doctor >/tmp/cli-doctor-stdin.out 2>/tmp/cli-doctor-stdin.err'
+  timeout 15 bash -c 'harbor doctor < <(sleep 60) >/tmp/cli-doctor-stdin.out 2>/tmp/cli-doctor-stdin.err'
 
 # 9. ps — lists harbor-prefixed containers; OK to be empty.
 assert_ok    "harbor ps"             harbor ps
@@ -1448,18 +1458,15 @@ if [ -n "$conflict_test_port" ]; then
     fail "_is_port_in_use reported free port $conflict_test_port as in use"
   fi
 
-  # Bind the port with a background listener.
+  # Bind the port with a background listener. Not every distro ships the same
+  # tools (arch: no python3/socat, alpine: busybox nc), so probe in order and
+  # skip the occupied-port half when nothing can listen.
   suite_log "port conflict e2e: occupied port $conflict_test_port detected"
-  # Use bash's built-in /dev/tcp redirection trick or nc
+  listener_pid=""
   if command -v socat &>/dev/null; then
     socat TCP-LISTEN:"$conflict_test_port",reuseaddr,fork /dev/null &
     listener_pid=$!
-  elif command -v nc &>/dev/null; then
-    # GNU nc (ncat) on Fedora supports -l -k
-    nc -l -k "$conflict_test_port" >/dev/null 2>&1 &
-    listener_pid=$!
-  else
-    # Python fallback
+  elif command -v python3 &>/dev/null; then
     python3 -c "
 import socket, time
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -1469,7 +1476,20 @@ s.listen(1)
 time.sleep(30)
 " &
     listener_pid=$!
+  elif command -v nc &>/dev/null; then
+    if nc --help 2>&1 | grep -q -- '-k'; then
+      # GNU/ncat supports -l -k <port>
+      nc -l -k "$conflict_test_port" >/dev/null 2>&1 &
+    else
+      # busybox nc: single-shot listen with -l -p
+      nc -l -p "$conflict_test_port" >/dev/null 2>&1 &
+    fi
+    listener_pid=$!
   fi
+
+  if [ -z "$listener_pid" ]; then
+    suite_log "port conflict e2e: SKIP occupied-port check (no socat/python3/nc available)"
+  else
 
   # Wait briefly for the listener to bind.
   sleep 0.3
@@ -1487,6 +1507,8 @@ time.sleep(30)
   if [ "$port_in_use_result" -ne 0 ]; then
     fail "_is_port_in_use did not detect occupied port $conflict_test_port"
   fi
+
+  fi # listener available
 else
   suite_log "port conflict e2e: SKIP (no free port found in range)"
 fi

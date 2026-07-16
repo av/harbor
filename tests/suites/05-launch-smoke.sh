@@ -32,13 +32,15 @@ launch_workspace="$tmp_dir/launch-tests"
 mkdir -p "$fake_bin" "$harbor_home/profiles" "$harbor_home/services" "$launch_workspace"
 cp "$HARBOR_TEST_REPO/profiles/default.env" "$harbor_home/profiles/default.env"
 # Launch smoke fakes Docker and must not apt-install Docker Model Runner on the host.
-perl -i -pe 's/^HARBOR_DMR_MANAGE_HOST=true$/HARBOR_DMR_MANAGE_HOST=false/' \
-  "$harbor_home/profiles/default.env"
+sed 's/^HARBOR_DMR_MANAGE_HOST=true$/HARBOR_DMR_MANAGE_HOST=false/' \
+  "$harbor_home/profiles/default.env" >"$harbor_home/profiles/default.env.tmp" &&
+  mv "$harbor_home/profiles/default.env.tmp" "$harbor_home/profiles/default.env"
 cp "$HARBOR_TEST_REPO/compose.yml" "$harbor_home/compose.yml"
 # Symlink individual service compose files (not the directory itself) so that
 # find without -L can traverse the services/ directory. A directory symlink
 # would be opaque to find(1) without -L.
-ln -st "$harbor_home/services" "$HARBOR_TEST_REPO"/services/compose.*.yml
+# POSIX 'ln -s TARGET... DIR' form — busybox ln (alpine) has no -t
+ln -s "$HARBOR_TEST_REPO"/services/compose.*.yml "$harbor_home/services/"
 # Symlink service subdirectories (config templates, etc.)
 for _d in "$HARBOR_TEST_REPO"/services/*/; do
   [ -d "$_d" ] && ln -s "$_d" "$harbor_home/services/$(basename "$_d")" 2>/dev/null || true
@@ -457,20 +459,19 @@ assert_file_toml() {
   local path="$1"
   local key="$2"
   local expected="$3"
-  if ! python3 - "$path" "$key" "$expected" <<'PY' >/dev/null 2>&1; then
-import sys, tomllib
-path, key, expected = sys.argv[1:4]
-with open(path, 'rb') as f:
-    data = tomllib.load(f)
-for part in key.split('.'):
-    data = data[part]
-if data != expected:
-    print(f'Expected {expected!r}, got {data!r}', file=sys.stderr)
-    sys.exit(1)
-PY
+  # Portable check (python3/tomllib is unavailable on arch, rocky-9, and
+  # ubuntu-2204 rows): extract the [section] block, then the leaf key's
+  # quoted string value. Sufficient for the flat string tables Harbor writes.
+  local section="${key%.*}" leaf="${key##*.}"
+  local section_re actual
+  section_re=$(printf '%s' "$section" | sed 's/\./\\./g')
+  actual=$(sed -n "/^\[${section_re}\][[:space:]]*$/,/^\[/p" "$path" |
+    sed -n "s/^${leaf}[[:space:]]*=[[:space:]]*\"\(.*\)\"[[:space:]]*$/\1/p" |
+    head -n 1)
+  if [ "$actual" != "$expected" ]; then
     echo "--- $path ---" >&2
     cat "$path" >&2
-    fail "$path did not satisfy TOML key $key == $expected"
+    fail "$path did not satisfy TOML key $key == $expected (got '${actual:-<missing>}')"
   fi
 }
 
