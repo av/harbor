@@ -82,6 +82,9 @@
 - label: when compose_with_options fails, run_pull returns 1 instead of executing a bare 'pull' word
   command: grep -q 'compose_cmd=$(compose_with_options) || return 1' harbor.sh && grep -q 'compose_cmd=$(compose_with_options "${service_args\[@\]}") || return 1' harbor.sh
   tags: [spec, implemented, pull-resolver-guard]
+- label: when the compose resolver routine fails or returns empty, compose_with_options emits a 'false' sentinel command so bare $(compose_with_options ...) call sites fail cleanly instead of executing a bare docker subcommand
+  command: grep -A6 'The compose file merge routine produced no output' harbor.sh | grep -q 'echo "false"'
+  tags: [spec, implemented, pull-resolver-guard]
 
 ## launch
 - label: harbor launch routes host tools codex, claude, opencode, pi, and others to OpenAI-compatible Harbor backends with optional --backend, --model, --config, --web, and --workflow

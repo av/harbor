@@ -1146,12 +1146,17 @@ routine_compose_with_options() {
         fi
     fi
 
-    local cmd
+    local cmd status
     cmd=$(run_routine mergeComposeFiles "$@" "${options[@]}")
-    if [ -z "$cmd" ]; then
+    status=$?
+    if [ "$status" -ne 0 ] || [ -z "$cmd" ]; then
         log_error "Failed to resolve compose configuration."
         log_error "The compose file merge routine produced no output."
         log_error "Try 'harbor doctor' to diagnose, or set 'harbor config set legacy.cli true' to use the legacy compose resolver."
+        # Sentinel: bare '$(compose_with_options ...) <subcommand>' call sites
+        # would otherwise execute the subcommand as a bare word. 'false'
+        # swallows the arguments and fails cleanly.
+        echo "false"
         return 1
     fi
     echo "$cmd"
