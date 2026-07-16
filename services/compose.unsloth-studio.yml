@@ -113,6 +113,8 @@ services:
   # the stored key first and re-runs the flow only when it 401s. See
   # bootstrap.sh.
   unsloth-studio-bootstrap:
+    # Mounts the project .env by design (bootstrap reads Harbor config directly)
+    x-harbor-lint-ignore: [volume-paths]
     container_name: ${HARBOR_CONTAINER_PREFIX}.unsloth-studio-bootstrap
     # Bake curl + jq into the image instead of `apk add`-ing on every up.
     # The runtime install paid ~24s per container creation, blocking every

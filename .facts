@@ -446,6 +446,9 @@
   command: test -f .scripts/lint/passes/boost.ts && rg -q 'HARBOR011' .scripts/lint/passes/boost.ts .github/workflows/lint.yml && test ! -s .scripts/lint/fixtures/boost/zero-byte/fail.py
   tags: [implemented]
 - harbor dev lint ignores nested .claude worktrees so their copied source and intentional failure fixtures do not create duplicate findings @spec @release-validation @implemented
+- label: A compose service may declare x-harbor-lint-ignore: [rule, ...] to waive specific compose lint rules for that service; the env-file-main pass fixture includes a waived service proving zero findings
+  command: grep -q 'x-harbor-lint-ignore' .scripts/lint/passes/compose.ts && grep -q 'x-harbor-lint-ignore' .scripts/lint/fixtures/compose/env-file-main/pass.yml
+  tags: [implemented]
 
 # launch
 - label: harbor launch grok writes or updates a harbor-<backend> model entry in ~/.grok/config.toml with the selected base_url, model, and env_key, then invokes grok -m harbor-<backend>

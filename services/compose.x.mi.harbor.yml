@@ -1,5 +1,7 @@
 services:
   mi:
+    # Mounts harbor.sh by design so mi can drive the Harbor CLI
+    x-harbor-lint-ignore: [volume-paths]
     environment:
       - MI_API_PARAMS={"temperature":0.25}
     volumes:

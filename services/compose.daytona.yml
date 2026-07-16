@@ -121,6 +121,8 @@ services:
         condition: service_started
 
   daytona-proxy:
+    # Upstream Daytona stack container — deliberately not wired to Harbor ./.env
+    x-harbor-lint-ignore: [env-file-main]
     container_name: ${HARBOR_CONTAINER_PREFIX}.daytona-proxy
     image: ${HARBOR_DAYTONA_PROXY_IMAGE}:${HARBOR_DAYTONA_PROXY_VERSION}
     environment:
@@ -143,6 +145,8 @@ services:
       - ${HARBOR_DAYTONA_PROXY_HOST_PORT}:4000
 
   daytona-runner:
+    # Upstream Daytona stack container — deliberately not wired to Harbor ./.env
+    x-harbor-lint-ignore: [env-file-main]
     container_name: ${HARBOR_CONTAINER_PREFIX}.daytona-runner
     image: ${HARBOR_DAYTONA_RUNNER_IMAGE}:${HARBOR_DAYTONA_RUNNER_VERSION}
     environment:
@@ -171,6 +175,8 @@ services:
     privileged: true
 
   daytona-ssh:
+    # Upstream Daytona stack container — deliberately not wired to Harbor ./.env
+    x-harbor-lint-ignore: [env-file-main]
     container_name: ${HARBOR_CONTAINER_PREFIX}.daytona-ssh
     image: ${HARBOR_DAYTONA_SSH_IMAGE}:${HARBOR_DAYTONA_SSH_VERSION}
     environment:
@@ -185,6 +191,8 @@ services:
       - ${HARBOR_DAYTONA_SSH_HOST_PORT}:2222
 
   daytona-dex:
+    # Upstream Daytona stack container — deliberately not wired to Harbor ./.env
+    x-harbor-lint-ignore: [env-file-main]
     container_name: ${HARBOR_CONTAINER_PREFIX}.daytona-dex
     image: ${HARBOR_DAYTONA_DEX_IMAGE}:${HARBOR_DAYTONA_DEX_VERSION}
     volumes:
@@ -202,6 +210,8 @@ services:
       retries: 10
 
   daytona-db:
+    # Upstream Daytona stack container — deliberately not wired to Harbor ./.env
+    x-harbor-lint-ignore: [env-file-main]
     container_name: ${HARBOR_CONTAINER_PREFIX}.daytona-db
     image: ${HARBOR_DAYTONA_DB_IMAGE}:${HARBOR_DAYTONA_DB_VERSION}
     environment:
@@ -221,6 +231,8 @@ services:
       retries: 10
 
   daytona-pgadmin:
+    # Upstream Daytona stack container — deliberately not wired to Harbor ./.env
+    x-harbor-lint-ignore: [env-file-main]
     container_name: ${HARBOR_CONTAINER_PREFIX}.daytona-pgadmin
     image: ${HARBOR_DAYTONA_PGADMIN_IMAGE}:${HARBOR_DAYTONA_PGADMIN_VERSION}
     entrypoint: ['sh', '-c', 'chmod 600 /pgpass && exec /entrypoint.sh']
@@ -242,6 +254,8 @@ services:
       - harbor-network
 
   daytona-redis:
+    # Upstream Daytona stack container — deliberately not wired to Harbor ./.env
+    x-harbor-lint-ignore: [env-file-main]
     container_name: ${HARBOR_CONTAINER_PREFIX}.daytona-redis
     image: ${HARBOR_DAYTONA_REDIS_IMAGE}:${HARBOR_DAYTONA_REDIS_VERSION}
     networks:
@@ -253,6 +267,8 @@ services:
       retries: 10
 
   daytona-registry:
+    # Upstream Daytona stack container — deliberately not wired to Harbor ./.env
+    x-harbor-lint-ignore: [env-file-main]
     container_name: ${HARBOR_CONTAINER_PREFIX}.daytona-registry
     image: ${HARBOR_DAYTONA_REGISTRY_IMAGE}:${HARBOR_DAYTONA_REGISTRY_VERSION}
     environment:
@@ -271,6 +287,8 @@ services:
       - ${HARBOR_DAYTONA_REGISTRY_HOST_PORT}:6000
 
   daytona-registry-ui:
+    # Upstream Daytona stack container — deliberately not wired to Harbor ./.env
+    x-harbor-lint-ignore: [env-file-main]
     container_name: ${HARBOR_CONTAINER_PREFIX}.daytona-registry-ui
     image: ${HARBOR_DAYTONA_REGISTRY_UI_IMAGE}:${HARBOR_DAYTONA_REGISTRY_UI_VERSION}
     environment:
@@ -291,6 +309,8 @@ services:
       - ${HARBOR_DAYTONA_REGISTRY_UI_HOST_PORT}:80
 
   daytona-minio:
+    # Upstream Daytona stack container — deliberately not wired to Harbor ./.env
+    x-harbor-lint-ignore: [env-file-main]
     container_name: ${HARBOR_CONTAINER_PREFIX}.daytona-minio
     image: ${HARBOR_DAYTONA_MINIO_IMAGE}:${HARBOR_DAYTONA_MINIO_VERSION}
     environment:
@@ -307,6 +327,8 @@ services:
       - ${HARBOR_DAYTONA_MINIO_CONSOLE_HOST_PORT}:9001
 
   daytona-jaeger:
+    # Upstream Daytona stack container — deliberately not wired to Harbor ./.env
+    x-harbor-lint-ignore: [env-file-main]
     container_name: ${HARBOR_CONTAINER_PREFIX}.daytona-jaeger
     image: ${HARBOR_DAYTONA_JAEGER_IMAGE}:${HARBOR_DAYTONA_JAEGER_VERSION}
     networks:
@@ -315,6 +337,8 @@ services:
       - ${HARBOR_DAYTONA_JAEGER_HOST_PORT}:16686
 
   daytona-otel:
+    # Upstream Daytona stack container — deliberately not wired to Harbor ./.env
+    x-harbor-lint-ignore: [env-file-main]
     container_name: ${HARBOR_CONTAINER_PREFIX}.daytona-otel
     image: ${HARBOR_DAYTONA_OTEL_IMAGE}:${HARBOR_DAYTONA_OTEL_VERSION}
     volumes:
@@ -325,6 +349,8 @@ services:
       - daytona-jaeger
 
   daytona-maildev:
+    # Upstream Daytona stack container — deliberately not wired to Harbor ./.env
+    x-harbor-lint-ignore: [env-file-main]
     container_name: ${HARBOR_CONTAINER_PREFIX}.daytona-maildev
     image: ${HARBOR_DAYTONA_MAILDEV_IMAGE}:${HARBOR_DAYTONA_MAILDEV_VERSION}
     networks:

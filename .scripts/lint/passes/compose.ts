@@ -381,7 +381,20 @@ async function lintFile(root: string, filePath: string): Promise<Finding[]> {
   for (const rule of rules) {
     findings.push(...(await rule.check(ctx)));
   }
-  return findings;
+  return findings.filter((f) => !isWaived(parsed, f));
+}
+
+// A service may declare `x-harbor-lint-ignore: [rule, ...]` (a compose
+// extension key, ignored by docker compose) to waive specific lint rules
+// for that service — e.g. vendored upstream stacks whose containers are
+// deliberately not wired to Harbor's ./.env.
+function isWaived(parsed: Record<string, unknown>, f: Finding): boolean {
+  const m = f.message.match(/^\[([^\]]+)\]/);
+  if (!m) return false;
+  const services = (parsed.services as Record<string, Record<string, unknown>>) ?? {};
+  const svc = services[m[1]];
+  const waived = svc?.["x-harbor-lint-ignore"];
+  return Array.isArray(waived) && waived.map(String).includes(f.rule);
 }
 
 export interface ComposeOptions {

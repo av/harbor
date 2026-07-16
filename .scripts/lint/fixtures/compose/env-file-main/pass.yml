@@ -6,3 +6,8 @@ services:
     env_file:
       - ./.env
       - ./services/alpha/override.env
+  # Missing env_file but explicitly waived via the compose lint extension key.
+  beta:
+    image: alpine:latest
+    container_name: ${HARBOR_CONTAINER_PREFIX}.beta
+    x-harbor-lint-ignore: [env-file-main]
