@@ -42,6 +42,10 @@ tests/
   up its own state on exit via `trap`. Suites run in filename order, so
   `01-install.sh` reliably precedes `02-cli.sh`, `03-smoke.sh`,
   `04-integration.sh`, `05-launch-smoke.sh`, and `06-boost-agentic-smoke.sh`.
+  When `--suite` selects a suite that assumes an installed harbor (every
+  suite except `install` and the self-bootstrapping `boost-agentic-smoke`)
+  without also selecting `install`, the orchestrator auto-prepends the
+  install suite — `--suite cli` runs `install,cli`.
 - **Row** — a Containerfile under `containers/`. Each row image boots
   systemd as PID 1, runs dockerd nested inside, and has curl + git + jq +
   httpYac pre-installed.

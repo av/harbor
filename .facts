@@ -425,6 +425,11 @@
   command: test -f scripts/specs/fix-tests.md && grep -q '## Root Cause' scripts/specs/fix-tests.md && grep -q 'No remediation is specified here' scripts/specs/fix-tests.md
   tags: [spec, implemented]
 
+## runner
+- label: the test orchestrator auto-prepends 01-install when a selected suite requires an installed harbor (all except install and boost-agentic-smoke) and install was not selected
+  command: grep -q 'SELF_SUFFICIENT_SUITES' tests/run.ts && grep -q 'auto-prepending' tests/run.ts
+  tags: [spec, implemented]
+
 # project > distribution
 - label: requirements.sh apt package availability checks verify real package metadata: every apt-cache show probe greps for ^Package: so empty-output false positives (e.g. docker-ce on Ubuntu 24.04 without the Docker repo) fall through to the docker.io / distro fallback
   command: test $(grep -cE "apt-cache show (docker-ce|docker-compose-v2|docker-compose-plugin)" requirements.sh) -gt 0 && ! grep -E "apt-cache show (docker-ce|docker-compose-v2|docker-compose-plugin)" requirements.sh | grep -v "Package:" | grep -q .

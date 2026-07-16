@@ -153,7 +153,8 @@ function printHelp() {
 
 Options:
   --suite, --suites <list>        Comma-separated suite names (e.g. install,smoke).
-                                  Default: all suites.
+                                  Default: all suites. 'install' is auto-prepended
+                                  when a selected suite depends on it.
   --distro, --distros <list>      Comma-separated row names (e.g. ubuntu-2404,fedora-43).
                                   Default: all rows.
   --keep                          Do not tear down containers after the run.
@@ -464,6 +465,12 @@ async function discoverRows(filter: string[] | null): Promise<string[]> {
 
 type Suite = { id: string; file: string; short: string };
 
+// Suites that do not assume `harbor` is already on PATH. Every other suite
+// depends on 01-install having run first in the same row — selecting one of
+// them without install would fail with "harbor: command not found" (exit 127),
+// so the orchestrator auto-prepends install for the user.
+const SELF_SUFFICIENT_SUITES = new Set(["install", "boost-agentic-smoke"]);
+
 async function discoverSuites(filter: string[] | null): Promise<Suite[]> {
   const all: Suite[] = [];
   for await (const entry of Deno.readDir(SUITES_DIR)) {
@@ -478,13 +485,28 @@ async function discoverSuites(filter: string[] | null): Promise<Suite[]> {
 
   if (!filter) return all;
   const wanted = new Set(filter);
-  const chosen = all.filter((s) => wanted.has(s.short) || wanted.has(s.id));
+  let chosen = all.filter((s) => wanted.has(s.short) || wanted.has(s.id));
   const found = new Set(chosen.flatMap((s) => [s.short, s.id]));
   const missing = filter.filter((f) => !found.has(f));
   if (missing.length > 0) {
     throw new Error(
       `Unknown suite(s): ${missing.join(", ")}. Available: ${all.map((s) => s.short).join(", ")}.`,
     );
+  }
+
+  // Every suite outside SELF_SUFFICIENT_SUITES assumes install already ran
+  // in the same row. Prepend it when it's needed but wasn't selected.
+  const needsInstall = chosen.some((s) => !SELF_SUFFICIENT_SUITES.has(s.short));
+  const hasInstall = chosen.some((s) => s.short === "install");
+  if (needsInstall && !hasInstall) {
+    const install = all.find((s) => s.short === "install");
+    if (!install) {
+      throw new Error(
+        `Selected suite(s) require 'install' to run first, but no install suite exists under ${SUITES_DIR}.`,
+      );
+    }
+    log("test", `auto-prepending 'install' — selected suite(s) assume harbor is installed`);
+    chosen = [install, ...chosen].sort((a, b) => a.id.localeCompare(b.id));
   }
   return chosen;
 }
