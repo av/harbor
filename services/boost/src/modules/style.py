@@ -18,15 +18,25 @@ LEVEL_ALIASES = {
   "wenyan-ultra": "wenyan-ultra",
 }
 
-STOP_RE = re.compile(
-  r"\b(?:stop\s+(?:caveman|ponytail)|normal\s+mode)\b",
-  re.IGNORECASE,
-)
+_LEVELS_PATTERN = r"(lite|full|ultra|off|wenyan-lite|wenyan-full|wenyan-ultra)"
 
-LEVEL_COMMAND_RE = re.compile(
-  r"/(?:caveman|ponytail)\s+(lite|full|ultra|off|wenyan-lite|wenyan-full|wenyan-ultra)\b",
-  re.IGNORECASE,
-)
+
+def _module_pattern(module: str | None) -> str:
+  return re.escape(module) if module else r"(?:caveman|ponytail)"
+
+
+def _stop_re(module: str | None) -> re.Pattern:
+  return re.compile(
+    rf"\b(?:stop\s+{_module_pattern(module)}|normal\s+mode)\b",
+    re.IGNORECASE,
+  )
+
+
+def _level_command_re(module: str | None) -> re.Pattern:
+  return re.compile(
+    rf"/{_module_pattern(module)}\s+{_LEVELS_PATTERN}\b",
+    re.IGNORECASE,
+  )
 
 
 def normalize_level(level: str | None, *, default: str = "full") -> str:
@@ -34,15 +44,15 @@ def normalize_level(level: str | None, *, default: str = "full") -> str:
   return LEVEL_ALIASES.get(value, default)
 
 
-def level_from_user_text(text: str) -> str | None:
-  match = LEVEL_COMMAND_RE.search(text or "")
+def level_from_user_text(text: str, module: str | None = None) -> str | None:
+  match = _level_command_re(module).search(text or "")
   if not match:
     return None
   return normalize_level(match.group(1))
 
 
-def style_disabled_by_user(text: str) -> bool:
-  return bool(STOP_RE.search(text or ""))
+def style_disabled_by_user(text: str, module: str | None = None) -> bool:
+  return bool(_stop_re(module).search(text or ""))
 
 
 def resolve_style_level(
@@ -50,14 +60,15 @@ def resolve_style_level(
   *,
   default: str,
   config_level: str | None = None,
+  module: str | None = None,
 ) -> str:
   from research.orchestrate import last_user_text
 
   text = last_user_text(chat)
-  if style_disabled_by_user(text):
+  if style_disabled_by_user(text, module):
     return "off"
 
-  command_level = level_from_user_text(text)
+  command_level = level_from_user_text(text, module)
   if command_level:
     return command_level
 

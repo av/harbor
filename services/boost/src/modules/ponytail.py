@@ -66,6 +66,7 @@ async def apply(chat: "ch.Chat", llm: "llm.LLM", config: dict | None = None):
     chat,
     default=boost_config.PONYTAIL_LEVEL.value,
     config_level=cfg.get("level"),
+    module=ID_PREFIX,
   )
   logger.debug(f"{ID_PREFIX}: level={level}")
   return await style_mod.apply_style_and_continue(

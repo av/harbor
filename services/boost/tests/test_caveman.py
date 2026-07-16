@@ -56,6 +56,22 @@ class TestCavemanResolveStyleLevel:
     )
     assert level == "off"
 
+  def test_ponytail_command_does_not_affect_caveman(self):
+    level = style_mod.resolve_style_level(
+      self._chat("/ponytail ultra please"),
+      default="full",
+      module="caveman",
+    )
+    assert level == "full"
+
+  def test_stop_ponytail_does_not_disable_caveman(self):
+    level = style_mod.resolve_style_level(
+      self._chat("stop ponytail now"),
+      default="full",
+      module="caveman",
+    )
+    assert level == "full"
+
   def test_workflow_config_level_overrides_default(self):
     level = style_mod.resolve_style_level(
       self._chat("Implement retry helper in utils.py"),
