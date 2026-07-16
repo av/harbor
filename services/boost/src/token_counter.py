@@ -29,9 +29,21 @@ except Exception:
     logger.warning("tiktoken unavailable; count_tokens will use chars/4 heuristic")
 
 
+# BPE merge time degrades super-linearly on pathological inputs (e.g. one
+# megabyte-long run of the same character), which would let a single request
+# stall the event loop for minutes. Encode long texts in fixed-size slices:
+# bounded time, off by at most a token or two per boundary.
+_ENCODE_CHUNK_CHARS = 16 * 1024
+
+
 def _tiktoken_len(text: str) -> int:
     """Count tokens using tiktoken."""
-    return len(_encoding.encode(text))
+    if len(text) <= _ENCODE_CHUNK_CHARS:
+        return len(_encoding.encode(text))
+    return sum(
+        len(_encoding.encode(text[i:i + _ENCODE_CHUNK_CHARS]))
+        for i in range(0, len(text), _ENCODE_CHUNK_CHARS)
+    )
 
 
 def _heuristic_len(text: str) -> int:

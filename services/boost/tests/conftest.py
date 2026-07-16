@@ -66,6 +66,10 @@ def _restore_mapper_stub():
             cfg = getattr(config_mod, key, None)
             if cfg is not None and hasattr(cfg, "__value__"):
                 saved_cfg[key] = cfg.__value__
+    # BOOST_AUTH is a plain module-level list (not a Config object); tests
+    # rebind it directly and a mid-test failure can leak the override,
+    # breaking unrelated tests with 401s.
+    saved_auth = getattr(config_mod, "BOOST_AUTH", None) if config_mod else None
     mods_mod = sys.modules.get("mods")
     saved_registry = getattr(mods_mod, "registry", None)
     yield
@@ -87,3 +91,5 @@ def _restore_mapper_stub():
             cfg = getattr(config_mod, key, None)
             if cfg is not None:
                 cfg.__value__ = value
+        if saved_auth is not None:
+            config_mod.BOOST_AUTH = saved_auth

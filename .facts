@@ -365,6 +365,12 @@
 - label: Boost CI runs the pytest suite in parallel with pytest-xdist -n auto
   command: grep -q 'pytest -q -n auto' .github/workflows/boost-tests.yml
   tags: [implemented]
+- label: token_counter encodes texts longer than 16k chars in fixed-size slices so pathological inputs like a 1MB single-character run cannot stall the server for minutes during token counting
+  command: cd services/boost && timeout 120 uv run pytest -q tests/test_anthropic_compat.py -k TestSecurityTokenCounting
+  tags: [implemented]
+- label: the boost test isolation fixture snapshots and restores the plain BOOST_AUTH list so a test that rebinds it cannot leak 401s into unrelated tests
+  command: grep -q 'saved_auth' services/boost/tests/conftest.py
+  tags: [implemented]
 
 # testing
 - label: tests use a Deno orchestrator running sequential bash suites across containerized distros
