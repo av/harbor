@@ -2121,32 +2121,28 @@ run_pull() {
     local available_services
     available_services=$(get_services --silent)
 
-    # Separate services (Docker image pull) from models (model download).
-    # If any arg is not a known service, only the non-service args are passed to
-    # the model pull, avoiding using a service name as the model ID.
+    # Separate flags (passed to the compose resolver), services (Docker image
+    # pull), and models (model download). If any arg is not a known service or
+    # flag, the non-service args are passed to the model pull, avoiding using
+    # a service name as the model ID.
+    local flag_args=()
     local service_args=()
-    local has_non_service=false
-    local first_model_index=-1
-    local i=0
+    local model_args=()
     for arg in "$@"; do
-        if echo "$available_services" | grep -q "^${arg}$"; then
-            if ! $has_non_service; then
-                service_args+=("$arg")
-            fi
+        if [[ "$arg" == -* ]]; then
+            flag_args+=("$arg")
+        elif echo "$available_services" | grep -q "^${arg}$"; then
+            service_args+=("$arg")
         else
-            if ! $has_non_service; then
-                first_model_index=$i
-            fi
-            has_non_service=true
+            model_args+=("$arg")
         fi
-        i=$((i + 1))
     done
 
-    if $has_non_service; then
+    if [ ${#model_args[@]} -gt 0 ]; then
         if [ ${#service_args[@]} -gt 0 ]; then
             log_warn "Mixed service and model arguments; only the model will be pulled."
         fi
-        run_models_pull "${@:$((first_model_index + 1))}"
+        run_models_pull "${model_args[@]}"
         return
     fi
 
@@ -2154,7 +2150,7 @@ run_pull() {
     for service in "${service_args[@]}"; do
         log_info "Pulling service $service"
     done
-    compose_cmd=$(compose_with_options "${service_args[@]}") || return 1
+    compose_cmd=$(compose_with_options "${flag_args[@]}" "${service_args[@]}") || return 1
     $compose_cmd pull
 }
 
