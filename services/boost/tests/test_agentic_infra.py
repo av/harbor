@@ -46,6 +46,7 @@ class TestResearchFetch:
     mock_response.json.return_value = {"results": []}
     mock_response.text = "<html><body>page</body></html>"
     mock_response.headers = {"content-type": "text/html"}
+    mock_response.is_redirect = False
 
     mock_client = AsyncMock()
     mock_client.get = AsyncMock(return_value=mock_response)
@@ -98,7 +99,54 @@ class TestResearchFetch:
     finally:
       config.RESEARCH_FETCH_TIMEOUT_SECONDS.__value__ = original_timeout
 
-    client_ctor.assert_called_once_with(timeout=12.0, follow_redirects=True)
+    client_ctor.assert_called_once_with(timeout=12.0, follow_redirects=False)
+
+  @pytest.mark.asyncio
+  async def test_read_direct_rejects_redirect_to_private_host(self):
+    redirect_response = MagicMock()
+    redirect_response.is_redirect = True
+    redirect_response.headers = {"location": "http://127.0.0.1/admin"}
+
+    mock_client = self._mock_httpx_client()
+    mock_client.get = AsyncMock(return_value=redirect_response)
+
+    with patch("research.fetch.httpx.AsyncClient", return_value=mock_client):
+      with pytest.raises(ValueError, match="internal or private"):
+        await _read_direct("https://example.com/docs")
+
+  @pytest.mark.asyncio
+  async def test_read_direct_follows_public_redirect(self):
+    redirect_response = MagicMock()
+    redirect_response.is_redirect = True
+    redirect_response.headers = {"location": "https://example.com/final"}
+
+    final_response = MagicMock()
+    final_response.is_redirect = False
+    final_response.raise_for_status = MagicMock()
+    final_response.headers = {"content-type": "text/plain"}
+    final_response.text = "final body"
+
+    mock_client = self._mock_httpx_client()
+    mock_client.get = AsyncMock(side_effect=[redirect_response, final_response])
+
+    with patch("research.fetch.httpx.AsyncClient", return_value=mock_client):
+      result = await _read_direct("https://example.com/docs")
+
+    assert result == "final body"
+    assert mock_client.get.await_args.args[0] == "https://example.com/final"
+
+  @pytest.mark.asyncio
+  async def test_read_direct_errors_after_too_many_redirects(self):
+    redirect_response = MagicMock()
+    redirect_response.is_redirect = True
+    redirect_response.headers = {"location": "https://example.com/loop"}
+
+    mock_client = self._mock_httpx_client()
+    mock_client.get = AsyncMock(return_value=redirect_response)
+
+    with patch("research.fetch.httpx.AsyncClient", return_value=mock_client):
+      with pytest.raises(ValueError, match="Too many redirects"):
+        await _read_direct("https://example.com/docs")
 
   def test_trim_truncates_long_text(self):
     text = "x" * 20

@@ -7,7 +7,7 @@ import re
 import socket
 from collections.abc import Awaitable, Callable
 from typing import Any, TypeVar
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urljoin, urlparse
 
 import httpx
 
@@ -114,14 +114,26 @@ async def _read_with_jina(url: str) -> str:
     return response.text
 
 
+_MAX_REDIRECTS = 5
+
+
 async def _read_direct(url: str) -> str:
-  async with httpx.AsyncClient(timeout=_research_fetch_timeout(), follow_redirects=True) as client:
-    response = await client.get(url, headers={"User-Agent": USER_AGENT})
-    response.raise_for_status()
-    content_type = response.headers.get("content-type", "")
-    if "html" in content_type:
-      return _strip_html(response.text)
-    return response.text
+  # Follow redirects manually so every hop is re-validated against the
+  # internal-address guard — follow_redirects=True would let a public URL
+  # 3xx into private/loopback/metadata addresses.
+  async with httpx.AsyncClient(timeout=_research_fetch_timeout(), follow_redirects=False) as client:
+    for _ in range(_MAX_REDIRECTS + 1):
+      response = await client.get(url, headers={"User-Agent": USER_AGENT})
+      if response.is_redirect:
+        location = response.headers.get("location", "")
+        url = require_http_url(urljoin(url, location))
+        continue
+      response.raise_for_status()
+      content_type = response.headers.get("content-type", "")
+      if "html" in content_type:
+        return _strip_html(response.text)
+      return response.text
+  raise ValueError(f"Too many redirects (>{_MAX_REDIRECTS})")
 
 
 def is_search_failure_result(text: str) -> bool:
