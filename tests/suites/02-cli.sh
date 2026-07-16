@@ -750,6 +750,28 @@ if grep -Eq 'run .* ollama pull ollama($| )' "$pull_fake_log"; then
   fail "harbor pull ollama qwen3:8b passed the service name as the model"
 fi
 
+# Test: flags are routed to the compose resolver, not treated as models.
+# Regression: `harbor pull --no-defaults <service>` used to classify the flag
+# as a model spec and try to model-pull "--no-defaults" via Ollama.
+: >"$pull_fake_log"
+suite_log "pull: --no-defaults routes to compose resolver, not model pull"
+if ! HARBOR_PULL_FAKE_LOG="$pull_fake_log" HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false PATH="$pull_fake_bin:$PATH" harbor pull --no-defaults ollama >/tmp/cli-step.out 2>&1; then
+  cat /tmp/cli-step.out >&2
+  fail "harbor pull --no-defaults ollama failed"
+fi
+if ! grep -q ' pull$' "$pull_fake_log"; then
+  cat "$pull_fake_log" >&2
+  fail "harbor pull --no-defaults ollama did not route to docker compose pull"
+fi
+if grep -q -- '--no-defaults' "$pull_fake_log"; then
+  cat "$pull_fake_log" >&2
+  fail "harbor pull --no-defaults leaked the flag into the docker invocation"
+fi
+if grep -Eq 'run .* pull ' "$pull_fake_log"; then
+  cat "$pull_fake_log" >&2
+  fail "harbor pull --no-defaults ollama incorrectly triggered a model pull"
+fi
+
 # Test: models ls auto-starts Ollama when no source is given.
 : >"$pull_fake_log"
 suite_log "models: ls auto-starts Ollama when source is omitted"
