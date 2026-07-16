@@ -30,4 +30,39 @@ export default defineConfig(async () => ({
     },
   },
   assetsInclude: ['**/*.md'],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id: string) {
+          if (!id.includes("node_modules")) return;
+          if (id.includes("refractor") || id.includes("highlight.js")) return "syntax";
+          if (
+            id.includes("react-markdown") ||
+            id.includes("@uiw") ||
+            id.includes("rehype") ||
+            id.includes("remark") ||
+            id.includes("micromark") ||
+            id.includes("mdast") ||
+            id.includes("hast") ||
+            id.includes("unified") ||
+            id.includes("unist") ||
+            id.includes("vfile") ||
+            id.includes("parse5") ||
+            id.includes("katex")
+          ) {
+            return "markdown";
+          }
+          if (id.includes("@xterm") || id.includes("tauri-pty")) return "terminal";
+          if (
+            id.includes("/react/") ||
+            id.includes("/react-dom/") ||
+            id.includes("react-router") ||
+            id.includes("/scheduler/")
+          ) {
+            return "react";
+          }
+        },
+      },
+    },
+  },
 }));
