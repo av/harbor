@@ -350,6 +350,12 @@
 - label: autocheck gather_workspace_context sanitizes error attributes (quotes and newlines) and neutralizes file-tag markers inside file content so failed or spoofed reads never count as successful workspace evidence
   command: cd services/boost && uv run pytest tests/test_autocheck.py -q
   tags: [implemented]
+- label: research orchestrate read_urls schedules at most the remaining URL-read budget, so the 'reading N sources' status line never reports more pages than the budget allows
+  command: grep -q 'scheduled_urls = urls\[:remaining_reads\]' services/boost/src/research/orchestrate.py
+  tags: [spec, release-validation, implemented]
+- label: deephop passes phase labels 'hop 1'/'hop 2' (without the module name) to run_searches and read_urls so emitted status lines read 'Deephop research: hop 2: ...' instead of duplicating 'Deephop'
+  command: ! grep -q 'phase="Deephop hop' services/boost/src/modules/deephop.py && grep -q 'phase="hop 2"' services/boost/src/modules/deephop.py
+  tags: [spec, release-validation, implemented]
 
 # testing
 - label: tests use a Deno orchestrator running sequential bash suites across containerized distros

@@ -289,11 +289,8 @@ async def read_urls(
     return
 
   phase_label = f"{phase}: " if phase else ""
-  scheduled_urls = []
-  for url in urls:
-    if not budget.can_read_url():
-      break
-    scheduled_urls.append(url)
+  remaining_reads = max(0, budget.max_url_reads - budget.url_reads_used)
+  scheduled_urls = urls[:remaining_reads]
 
   if not scheduled_urls:
     return

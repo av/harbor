@@ -419,7 +419,7 @@ async def run_research_loop(
     brief,
     module_id=ID_PREFIX,
     status_prefix=STATUS_PREFIX,
-    phase="Deephop hop 1",
+    phase="hop 1",
     llm=llm,
   )
 
@@ -430,7 +430,7 @@ async def run_research_loop(
     brief,
     module_id=ID_PREFIX,
     status_prefix=STATUS_PREFIX,
-    phase="Deephop hop 1",
+    phase="hop 1",
     llm=llm,
   )
   hop1_queries = len(brief.searches) - searches_before_hop1
@@ -478,7 +478,7 @@ async def run_research_loop(
       brief,
       module_id=ID_PREFIX,
       status_prefix=STATUS_PREFIX,
-      phase="Deephop hop 2",
+      phase="hop 2",
       llm=llm,
     )
 
@@ -492,7 +492,7 @@ async def run_research_loop(
       brief,
       module_id=ID_PREFIX,
       status_prefix=STATUS_PREFIX,
-      phase="Deephop hop 2",
+      phase="hop 2",
       llm=llm,
     )
     hop2_queries = len(brief.searches) - searches_before_hop2
