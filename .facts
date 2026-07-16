@@ -126,7 +126,7 @@
 
 ## pull
 - label: harbor pull with mixed service and model arguments passes only model arguments to the model pull path
-  command: rg -q 'first_model_index' harbor.sh && rg -q 'Mixed service and model arguments' harbor.sh
+  command: rg -q 'model_args\+\=' harbor.sh && rg -q 'Mixed service and model arguments' harbor.sh && rg -q 'run_models_pull "\$\{model_args\[@\]\}"' harbor.sh
   tags: [spec, reported-regression, implemented]
 
 # services
@@ -446,6 +446,9 @@
 - tests/app-daytona-install.md exists and covers in-app Harbor install verification on Ubuntu 24.04 and Fedora 42 Daytona sandboxes @implemented @app-daytona-install-spec
 
 # development
+- label: release.sh refreshes app/src-tauri/Cargo.lock after the version seed via cargo update --workspace, warning on stderr when cargo is unavailable
+  command: grep -q 'cargo update --workspace' .scripts/release.sh && grep -q 'command -v cargo' .scripts/release.sh && grep -qi 'WARNING' .scripts/release.sh
+  tags: [spec, release, implemented]
 
 ## lint
 - label: harbor dev lint --boost flags zero-byte .py module files under services/boost/src/modules and custom_modules with HARBOR011 so truncated writes fail at lint time instead of runtime import
@@ -574,4 +577,9 @@
   tags: [spec, implemented]
 - label: launch-tui story mode displays canonical harbor commands while executing ./harbor.sh as a repo-local fallback when harbor is not on PATH
   command: grep -q 'resolve_harbor_bin' scripts/demos/launch-tui.py && grep -q './harbor.sh' scripts/demos/launch-tui.py && grep -q 'display_command' scripts/demos/launch-tui.py
+  tags: [spec, implemented]
+
+# pull
+- label: harbor pull passes leading flags like --no-defaults to the compose resolver instead of misrouting them as model specs
+  command: bash -c 'source /dev/null; grep -A4 "flag_args=()" harbor.sh | grep -q "service_args=()"' && grep -q 'compose_with_options "${flag_args\[@\]}" "${service_args\[@\]}"' harbor.sh
   tags: [spec, implemented]
