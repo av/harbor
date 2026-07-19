@@ -374,6 +374,9 @@
 - label: When the backend rejects a chat completion, Boost propagates the backend's HTTP status and an OpenAI-style error JSON to the client instead of 200 with empty content; mid-stream failures emit a final SSE error chunk before DONE
   command: cd services/boost && uv run pytest -q tests/test_backend_error_propagation.py
   tags: [spec, boost-error-propagation, implemented]
+- label: Handled BackendErrors log one concise 'Backend error <status>: <message>' line without stack-trace frames (raise sites warn once; _on_task_done and the chat handler stay quiet for them), while unexpected exceptions still log full tracebacks via exc_info
+  command: cd services/boost && uv run pytest -q tests/test_backend_error_logging.py
+  tags: [spec, implemented, boost-error-logging]
 
 # testing
 - label: tests use a Deno orchestrator running sequential bash suites across containerized distros

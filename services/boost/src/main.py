@@ -487,7 +487,9 @@ async def post_boost_chat_completion(
       return JSONResponse(content=content, status_code=200)
 
   except BackendError as e:
-    logger.warning("Chat completions backend error %d: %s", e.status_code, e.body[:256])
+    # Raise sites in llm.py already log the concise "Backend error" line;
+    # keep this at debug to avoid duplicate lines per request.
+    logger.debug("Chat completions backend error %d forwarded to client", e.status_code)
     return backend_error_response(e)
 
 
