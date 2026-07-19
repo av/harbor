@@ -374,6 +374,44 @@ async def get_boost_models(request: Request, api_key: str = Depends(get_api_key)
   )
 
 
+def backend_error_payload(e: BackendError) -> dict:
+  """OpenAI-style error body carrying the backend's message.
+
+  If the backend already returned an OpenAI-style {"error": {...}} body,
+  forward it as-is; otherwise wrap the raw body text.
+  """
+  raw = e.body
+  if isinstance(raw, bytes):
+    raw = raw.decode("utf-8", errors="replace")
+
+  try:
+    parsed = json.loads(raw)
+    if isinstance(parsed, dict):
+      err = parsed.get("error")
+      if isinstance(err, dict):
+        return {"error": err}
+      if isinstance(err, str) and err.strip():
+        raw = err
+  except (json.JSONDecodeError, TypeError):
+    pass
+
+  message = raw.strip() if raw and raw.strip() else "Backend request failed"
+  return {
+    "error": {
+      "message": message,
+      "type": "upstream_error",
+      "code": e.status_code,
+    }
+  }
+
+
+def backend_error_response(e: BackendError) -> JSONResponse:
+  resp = JSONResponse(content=backend_error_payload(e), status_code=e.status_code)
+  for hdr, val in e.headers.items():
+    resp.headers[hdr] = val
+  return resp
+
+
 @app.post("/v1/chat/completions")
 async def post_boost_chat_completion(
   request: Request, api_key: str = Depends(get_api_key)
@@ -420,20 +458,37 @@ async def post_boost_chat_completion(
       )
 
     if stream:
-      return StreamingResponse(completion, media_type="text/event-stream", headers=SSE_HEADERS)
+      # Pull the first chunk before committing to the SSE response.
+      # A BackendError raised before any output (the common terminal
+      # failure, e.g. context-size rejection) propagates to the outer
+      # handler while headers are not yet sent, so the client gets the
+      # backend's real status code. Errors after streaming has started
+      # are emitted as a final SSE error chunk instead.
+      iterator = completion.__aiter__()
+      try:
+        first_chunk = await iterator.__anext__()
+      except StopAsyncIteration:
+        first_chunk = None
+
+      async def stream_with_errors():
+        if first_chunk is not None:
+          yield first_chunk
+        try:
+          async for chunk in iterator:
+            yield chunk
+        except BackendError as e:
+          payload = backend_error_payload(e)
+          yield f"data: {json.dumps(payload)}\n\n".encode("utf-8")
+          yield b"data: [DONE]\n\n"
+
+      return StreamingResponse(stream_with_errors(), media_type="text/event-stream", headers=SSE_HEADERS)
     else:
       content = await proxy.consume_stream(completion)
       return JSONResponse(content=content, status_code=200)
 
   except BackendError as e:
     logger.warning("Chat completions backend error %d: %s", e.status_code, e.body[:256])
-    resp = JSONResponse(
-      content={"error": {"message": "Backend request failed", "type": "server_error"}},
-      status_code=e.status_code,
-    )
-    for hdr, val in e.headers.items():
-      resp.headers[hdr] = val
-    return resp
+    return backend_error_response(e)
 
 
 # --- OpenAI Responses API Compatible ---------

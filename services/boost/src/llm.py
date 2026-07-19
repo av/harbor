@@ -275,6 +275,12 @@ class LLM(AsyncEventEmitter):
         try:
           self.chat.llm = self
           await workflows.apply_workflow(runtime_workflow, self.chat, self)
+        except BackendError:
+          # Terminal backend failure — the final completion cannot be
+          # produced. Re-raise so serve()'s done-callback records it as
+          # the stream error and the response layer propagates the
+          # backend's status instead of returning 200 with empty content.
+          raise
         except Exception as e:
           logger.error(f"Failed to apply workflow: {e}")
           for line in traceback.format_tb(e.__traceback__):
@@ -302,6 +308,11 @@ class LLM(AsyncEventEmitter):
       try:
         self.chat.llm = self
         await mod.apply(chat=self.chat, llm=self)
+      except BackendError:
+        # Terminal backend failure escaping the module (modules that
+        # intentionally recover catch it internally) — propagate to the
+        # response layer instead of completing with empty content.
+        raise
       except Exception as e:
         logger.error(f"Failed to apply module '{self.module}': {e}")
         for line in traceback.format_tb(e.__traceback__):

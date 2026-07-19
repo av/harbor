@@ -275,18 +275,18 @@ class TestBackendErrorHandling:
         resp = client.post("/v1/chat/completions", json=_chat_body())
         assert resp.status_code == 502
 
-    def test_backend_error_sanitizes_body(self, monkeypatch):
-        """Error response should not leak raw backend body."""
+    def test_backend_error_carries_backend_message(self, monkeypatch):
+        """Error response carries the backend's message to the client."""
         fake = _FakeLLM(
-            serve_error=BackendError(500, "Internal secret: password=xyz"),
+            serve_error=BackendError(500, "model failed to load"),
         )
         _setup_mocks(monkeypatch, fake)
 
         client = _make_client()
         resp = client.post("/v1/chat/completions", json=_chat_body())
         body = resp.json()
-        assert body["error"]["message"] == "Backend request failed"
-        assert "password" not in json.dumps(body)
+        assert body["error"]["message"] == "model failed to load"
+        assert body["error"]["type"] == "upstream_error"
 
     def test_backend_error_forwards_rate_limit_headers(self, monkeypatch):
         fake = _FakeLLM(
@@ -312,7 +312,7 @@ class TestBackendErrorHandling:
         client = _make_client()
         resp = client.post("/v1/chat/completions", json=_chat_body())
         assert resp.status_code == 503
-        assert resp.json()["error"]["type"] == "server_error"
+        assert resp.json()["error"]["type"] == "upstream_error"
 
     def test_backend_error_format_is_openai_style(self, monkeypatch):
         """Chat completions errors use OpenAI error format."""

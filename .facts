@@ -371,6 +371,9 @@
 - label: the boost test isolation fixture snapshots and restores the plain BOOST_AUTH list so a test that rebinds it cannot leak 401s into unrelated tests
   command: grep -q 'saved_auth' services/boost/tests/conftest.py
   tags: [implemented]
+- label: When the backend rejects a chat completion, Boost propagates the backend's HTTP status and an OpenAI-style error JSON to the client instead of 200 with empty content; mid-stream failures emit a final SSE error chunk before DONE
+  command: cd services/boost && uv run pytest -q tests/test_backend_error_propagation.py
+  tags: [spec, boost-error-propagation, implemented]
 
 # testing
 - label: tests use a Deno orchestrator running sequential bash suites across containerized distros

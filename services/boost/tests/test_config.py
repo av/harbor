@@ -1154,7 +1154,7 @@ class TestMainPyRemainingHttpHandlerPaths:
                     print("CHAT BE ERROR:", resp.status_code, resp.text)
                 assert resp.status_code == 429
                 data = resp.json()
-                assert "Backend request failed" in str(data)
+                assert "rate limited" in str(data)
                 # headers forwarded from the except block
                 assert resp.headers.get("retry-after") == "5"
                 assert resp.headers.get("x-ratelimit-remaining") == "0"
