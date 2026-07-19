@@ -2122,19 +2122,27 @@ run_pull() {
     available_services=$(get_services --silent)
 
     # Separate flags (passed to the compose resolver), services (Docker image
-    # pull), and models (model download). If any arg is not a known service or
-    # flag, the non-service args are passed to the model pull, avoiding using
-    # a service name as the model ID.
+    # pull), and models (model download). A token is only treated as a model
+    # spec when it looks like one (contains "/" or ":") or follows an explicit
+    # service arg (e.g. `harbor pull ollama gemma`). Any other bare token is an
+    # unknown service -- fail fast instead of silently starting a backend.
     local flag_args=()
     local service_args=()
     local model_args=()
+    local seen_service=false
     for arg in "$@"; do
         if [[ "$arg" == -* ]]; then
             flag_args+=("$arg")
         elif echo "$available_services" | grep -q "^${arg}$"; then
             service_args+=("$arg")
-        else
+            seen_service=true
+        elif [[ "$arg" == */* || "$arg" == *:* ]] || [ "$seen_service" = true ]; then
             model_args+=("$arg")
+        else
+            log_error "Unknown service: '$arg'"
+            log_error "Run 'harbor ls' to see available services."
+            log_error "To pull a model, use a model spec (org/repo or name:tag), or name the backend explicitly: harbor pull ollama $arg"
+            return 1
         fi
     done
 

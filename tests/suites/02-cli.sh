@@ -724,13 +724,35 @@ if grep -q ' pull$' "$pull_fake_log"; then
   fail "harbor pull qwen3:8b incorrectly routed to docker compose pull"
 fi
 
-# Test: unknown name without colon also routes to model pull, not docker pull.
+# Test: unknown bare name (no slash/colon, not a service) is rejected fast.
+# Regression: `harbor pull llama3.2` used to be classified as an ollama model
+# spec and silently started ollama.
 : >"$pull_fake_log"
-suite_log "pull: unknown name routes to model download"
-HARBOR_PULL_FAKE_LOG="$pull_fake_log" HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false PATH="$pull_fake_bin:$PATH" harbor pull llama3.2 >/tmp/cli-step.out 2>&1 || true
+suite_log "pull: unknown bare name is rejected without starting anything"
+if HARBOR_PULL_FAKE_LOG="$pull_fake_log" HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false PATH="$pull_fake_bin:$PATH" harbor pull llama3.2 >/tmp/cli-step.out 2>&1; then
+  cat /tmp/cli-step.out >&2
+  fail "harbor pull llama3.2 (unknown bare name) should have failed"
+fi
+if ! grep -qi 'unknown service' /tmp/cli-step.out; then
+  cat /tmp/cli-step.out >&2
+  fail "harbor pull llama3.2 did not print an unknown-service error"
+fi
+if [ -s "$pull_fake_log" ]; then
+  cat "$pull_fake_log" >&2
+  fail "harbor pull llama3.2 invoked docker despite unknown name"
+fi
+
+# Test: bare model name after an explicit service routes to that model pull.
+: >"$pull_fake_log"
+suite_log "pull: bare model after explicit service routes to model download"
+HARBOR_PULL_FAKE_LOG="$pull_fake_log" HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false PATH="$pull_fake_bin:$PATH" harbor pull ollama llama3.2 >/tmp/cli-step.out 2>&1 || true
 if grep -q ' pull$' "$pull_fake_log"; then
   cat "$pull_fake_log" >&2
-  fail "harbor pull llama3.2 incorrectly routed to docker compose pull"
+  fail "harbor pull ollama llama3.2 incorrectly routed to docker compose pull"
+fi
+if ! grep -Eq 'run .* ollama pull llama3.2$' "$pull_fake_log"; then
+  cat "$pull_fake_log" >&2
+  fail "harbor pull ollama llama3.2 did not pass llama3.2 as the model"
 fi
 
 # Test: mixed service + model args route only the model to the model pull path.

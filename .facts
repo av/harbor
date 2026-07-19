@@ -604,3 +604,6 @@
 - label: harbor pull passes leading flags like --no-defaults to the compose resolver instead of misrouting them as model specs
   command: bash -c 'source /dev/null; grep -A4 "flag_args=()" harbor.sh | grep -q "service_args=()"' && grep -q 'compose_with_options "${flag_args\[@\]}" "${service_args\[@\]}"' harbor.sh
   tags: [spec, implemented]
+- label: harbor pull rejects a bare unknown token (no slash or colon, not a service) with an unknown-service error and starts nothing
+  command: timeout 60 ./harbor.sh pull definitely-not-a-real-service-xyz 2>&1 | grep -qi 'unknown service' && ! timeout 60 ./harbor.sh pull definitely-not-a-real-service-xyz >/dev/null 2>&1
+  tags: [spec, pull-unknown-reject, implemented]
