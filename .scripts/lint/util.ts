@@ -7,6 +7,21 @@
 
 import { expandGlob } from "https://deno.land/std/fs/mod.ts";
 
+// Service runtime data (e.g. services/daytona/data) can contain root-owned
+// dirs that throw PermissionDenied when walked — never descend into them.
+// Shared by every expandGlob call site (collectFiles and the bash pass's
+// global-exclude expansion) so no walk ever enters these trees.
+// netdata's workspace defaults to ./services/netdata itself, so its runtime
+// dirs (cache/lib) are listed explicitly.
+export const RUNTIME_DIR_EXCLUDES = [
+  "services/*/data",
+  "services/*/workspace",
+  "services/*/vectordb",
+  "services/*/meili_data*",
+  "services/netdata/cache",
+  "services/netdata/lib",
+];
+
 // Expand `globs` from `root`, then drop any path matched by `exclude`.
 // Returns absolute paths, sorted, deduplicated. Directories are skipped.
 export async function collectFiles(
@@ -14,18 +29,11 @@ export async function collectFiles(
   globs: string[],
   exclude: string[] = [],
 ): Promise<string[]> {
-  // Service runtime data (e.g. services/daytona/data) can contain root-owned
-  // dirs that throw PermissionDenied when walked — never descend into them.
   const options = {
     root,
     includeDirs: false,
     globstar: true,
-    exclude: [
-      "services/*/data",
-      "services/*/workspace",
-      "services/*/vectordb",
-      "services/*/meili_data*",
-    ],
+    exclude: RUNTIME_DIR_EXCLUDES,
   };
   const seen = new Set<string>();
   for (const g of globs) {

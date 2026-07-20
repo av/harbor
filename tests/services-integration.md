@@ -640,6 +640,83 @@ Groups run serially, one service at a time (they contend for the iGPU).
 
 Teardown after each check: `./harbor.sh down`.
 
+## Group K — lightweight standalone CPU web services (Batch K of the Coverage Plan)
+
+Automated in `tests/services-integration.sh --groups K`; part of the default
+group list (CPU-safe, no LLM backend required). All eight services start
+concurrently (`harbor up landing hollama mikupad mock-openai qdrant
+libretranslate netdata dbhub`) — distinct ports, no GPU contention.
+
+Batch K remainder (deferred to a later iteration): drawio, sillytavern,
+lobechat, traefik (traefik needs a routed target service — an integration
+check, not standalone).
+
+### K1. landing
+
+- Ready: `GET /` returns 200 within 120 s.
+- Functional: index body contains `harbor` (case-insensitive); `GET /docs/`
+  serves the autoindexed docs mount (body contains `href`).
+
+### K2. hollama
+
+- Ready: `GET /` returns 200 within 120 s.
+- Functional: SPA index body contains `hollama` (it is a static frontend for
+  ollama; deeper interaction requires a browser session — content check is
+  the deepest headless assertion available).
+
+### K3. mikupad
+
+- Image builds from `github.com/lmg-anon/mikupad#main` at `harbor up` (first
+  run compiles the image); allow 300 s ready window.
+- Functional: served single-file app contains `mikupad`.
+
+### K4. mock-openai
+
+- Harbor's own OpenAI-shaped test fixture (`tests/fixtures/mock-openai`).
+- Ready: `GET /v1/models` 200; `.data[0].id == "mock-model"`.
+- Functional: `POST /v1/chat/completions` returns non-empty
+  `.choices[0].message.content` ("Hello from mock-openai!").
+
+### K5. qdrant
+
+- Auth: all requests need `api-key: $(harbor config get qdrant.api_key)`.
+- Ready: `GET /healthz` 200 within 120 s.
+- Functional (CRUD round trip): `PUT /collections/harbor_it_k5` (vectors
+  size 4, Dot) → `.result == true`; upsert 2 points (`?wait=true`); search
+  with vector `[0.9,0.1,0.1,0.1]` limit 1 → top hit `id == 2`; delete the
+  collection afterwards.
+
+### K6. libretranslate
+
+- Pre-step: `harbor env libretranslate LT_LOAD_ONLY en,es` — the default
+  (`LT_UPDATE_MODELS=true`, no load-only filter) downloads every language
+  pair (~10 GB). Unset after the run.
+- Ready: `GET /languages` 200 within 600 s (en/es models download on first
+  boot).
+- Functional: `POST /translate {"q":"hello world","source":"en","target":"es"}`
+  → `.translatedText` non-empty and different from the input ("Hola mundo").
+
+### K7. netdata
+
+- Ready: `GET /api/v1/info` 200 within 180 s.
+- Functional: `.version` non-empty from the same endpoint (real metrics API,
+  not a static page).
+
+### K8. dbhub
+
+- MCP server (streamable HTTP transport) — Harbor entrypoint falls back to
+  `--demo` (bundled sample SQLite) when `DSN` is empty, so it works out of
+  the box.
+- Endpoint is `POST /mcp` (stateless streamable HTTP — plain JSON responses,
+  no session header required); `Accept: application/json, text/event-stream`
+  must be sent.
+- Functional: JSON-RPC `initialize` returns `.result.serverInfo.name`
+  ("DBHub MCP Server"; polled up to 120 s), then `tools/call` of
+  `execute_sql` with `SELECT 6*7 AS answer` returns rows `[{"answer":42}]`
+  (nested as JSON text in `.result.content[0].text`).
+
+Teardown: `./harbor.sh down` + `harbor env libretranslate unset LT_LOAD_ONLY`.
+
 ## Results
 
 Execution results are appended per run as:
@@ -1155,3 +1232,76 @@ defects):
 - Q4_K_M Qwen3.5-0.8B deterministically spends the whole budget on
   reasoning_content; GPU inference checks accept content OR
   reasoning_content.
+
+### Run 2026-07-20 — Group K (lightweight standalone CPU web services)
+
+Runner: `./tests/services-integration.sh --groups K` — final run: 19 passed,
+0 failed, 0 skipped.
+
+```
+CHECK: K1 landing
+COMMAND: GET / + GET /docs/
+EXPECTED: 200; index contains 'harbor'; /docs autoindex lists entries
+ACTUAL: 200 after 0s; both content checks matched
+RESULT: PASS (x3)
+
+CHECK: K2 hollama
+COMMAND: GET /
+EXPECTED: 200 + SPA index contains 'hollama'
+ACTUAL: 200 after 0s; matched
+RESULT: PASS (x2)
+
+CHECK: K3 mikupad
+COMMAND: GET / (image built from github.com/lmg-anon/mikupad#main)
+EXPECTED: 200 + body contains 'mikupad'
+ACTUAL: 200 after 0s; matched
+RESULT: PASS (x2)
+
+CHECK: K4 mock-openai
+COMMAND: GET /v1/models; POST /v1/chat/completions
+EXPECTED: .data[0].id == "mock-model"; non-empty .choices[0].message.content
+ACTUAL: mock-model; "Hello from mock-openai!"
+RESULT: PASS (x3)
+
+CHECK: K5 qdrant
+COMMAND: PUT collection (size 4, Dot) + upsert 2 points + search [0.9,0.1,0.1,0.1] + delete (api-key auth)
+EXPECTED: .result == true; top search hit id == 2
+ACTUAL: created; top hit id=2; collection deleted
+RESULT: PASS (x3)
+
+CHECK: K6 libretranslate
+COMMAND: LT_LOAD_ONLY=en,es; GET /languages; POST /translate en->es "hello world"
+EXPECTED: 200; .translatedText non-empty and != input
+ACTUAL: "hola mundo"
+RESULT: PASS (x2) — after product fix (run-as-host-user + XDG pinning, fact plx)
+
+CHECK: K7 netdata
+COMMAND: GET /api/v1/info
+EXPECTED: 200 + non-empty .version
+ACTUAL: v2.10.4
+RESULT: PASS (x2)
+
+CHECK: K8 dbhub
+COMMAND: POST /mcp initialize; tools/call execute_sql "SELECT 6*7 AS answer"
+EXPECTED: serverInfo.name non-empty; rows [{"answer":42}]
+ACTUAL: "DBHub MCP Server"; 42
+RESULT: PASS (x2) — initial /message+SSE expectation was wrong (endpoint is /mcp, plain JSON, stateless); spec fixed
+
+Product defect (libretranslate, fact plx @implemented): first boot crash-looped —
+PermissionError on /home/libretranslate/.local/share then .config, plus
+"Error: '' is not a valid port number" fallout. Root cause: init sidecar chowns
+the workspace mounts to the host user, but the upstream image runs as uid 1032
+(libretranslate:nogroup), which then cannot write its own mounts. Fix in
+compose.libretranslate.yml: run as ${HARBOR_USER_ID}:${HARBOR_GROUP_ID} with
+HOME=/home/libretranslate and XDG_DATA/CACHE/CONFIG_HOME pinned inside the
+mounted .local (the image-owned home dir itself is not writable).
+
+Dev-tooling defect (fact x56 @implemented): `harbor dev lint --strict` crashed
+(WalkError) on root-owned services/netdata/cache after running netdata — the
+bash pass's global-exclude expandGlob had no runtime-dir excludes. Fix:
+RUNTIME_DIR_EXCLUDES shared from .scripts/lint/util.ts, netdata cache/lib added.
+
+Runner pitfall (recurring): `grep -q` on a curl pipe under pipefail SIGPIPEs
+curl on early match -> flaky FAIL (hit on K3). Same class as the docker-logs
+case from Group J; all Group K content checks use full-read `grep -i ... >/dev/null`.
+```

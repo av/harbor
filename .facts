@@ -525,6 +525,9 @@
 - label: tests/services-integration.sh --list includes Group J ROCm paths (llamacpp/ollama/lemonade/localai/voicebox/vllm), gated behind ROCm-host detection and excluded from the default group list
   command: ./tests/services-integration.sh --list | grep -q '^J .*ROCm' && grep -q 'has_rocm_host' tests/services-integration.sh && ! grep -q 'DEFAULT_GROUPS=.*J' tests/services-integration.sh
   tags: [services-runner, implemented]
+- label: the lint file collector excludes services/netdata/cache and services/netdata/lib — netdata's workspace is services/netdata itself and its runtime dirs are root-owned, crashing the walk
+  command: grep -q 'services/netdata/cache' .scripts/lint/util.ts && grep -q 'services/netdata/lib' .scripts/lint/util.ts
+  tags: [spec, implemented]
 ## app-install
 - label: the integration install suite exercises install.sh and first-run llamacpp webui wiring
   command: rg -q 'install.sh' tests/suites/01-install.sh && rg -q 'harbor up --no-defaults llamacpp webui' tests/suites/01-install.sh
@@ -699,4 +702,9 @@
 ## lint
 - label: the lint file collector never descends into service runtime dirs (services/*/data, workspace, vectordb, meili_data*) — gitignored container-generated trees that contain root-owned dirs and third-party scripts which crash or fail the scan
   command: grep -q 'services/\*/workspace' .scripts/lint/util.ts && grep -q 'services/\*/vectordb' .scripts/lint/util.ts
+  tags: [spec, implemented]
+
+# libretranslate
+- label: compose.libretranslate.yml runs the container as the host user (user: HARBOR_USER_ID:HARBOR_GROUP_ID with HOME=/home/libretranslate) — upstream image uid 1032 cannot write workspace mounts chowned to the host user by the init sidecar
+  command: grep -q 'user: "${HARBOR_USER_ID}:${HARBOR_GROUP_ID}"' services/compose.libretranslate.yml && grep -q 'HOME=/home/libretranslate' services/compose.libretranslate.yml && grep -q 'XDG_DATA_HOME=/home/libretranslate/.local/share' services/compose.libretranslate.yml
   tags: [spec, implemented]

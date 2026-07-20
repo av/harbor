@@ -2,7 +2,7 @@
 # Harbor services integration runner — automates tests/services-integration.md.
 #
 # Usage:
-#   ./tests/services-integration.sh                 # run all CPU-safe groups (A B C D F G H I)
+#   ./tests/services-integration.sh                 # run all CPU-safe groups (A B C D F G H I K)
 #   ./tests/services-integration.sh --groups B,G    # run selected groups
 #   ./tests/services-integration.sh --list          # list groups and their checks
 #
@@ -23,7 +23,7 @@ set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.." || exit 1
 HARBOR=./harbor.sh
 
-DEFAULT_GROUPS="A B C D F G H I"
+DEFAULT_GROUPS="A B C D F G H I K"
 PASS_COUNT=0
 FAIL_COUNT=0
 SKIP_COUNT=0
@@ -959,6 +959,158 @@ group_J() {
   teardown
 }
 
+group_K() {
+  log "Group K: landing hollama mikupad mock-openai qdrant libretranslate netdata dbhub (lightweight standalone CPU web services)"
+
+  # LibreTranslate downloads every language pair by default (~10 GB); pin to
+  # en<->es for the round trip. Restored (unset) in the teardown below.
+  "$HARBOR" env libretranslate LT_LOAD_ONLY "en,es" >/dev/null
+
+  "$HARBOR" up landing hollama mikupad mock-openai qdrant libretranslate netdata dbhub >/dev/null 2>&1
+
+  # K1 landing — nginx serving the landing page + /docs mount
+  if probe_200 "K1 landing ready" "$(svc_url landing)/" 120; then
+    if curl -s -m 10 "$(svc_url landing)/" | grep -i 'harbor' >/dev/null; then
+      record PASS "K1 landing index content"
+    else
+      record FAIL "K1 landing index content" "no 'harbor' in index.html"
+    fi
+    if curl -s -m 10 "$(svc_url landing)/docs/" | grep -i 'href' >/dev/null; then
+      record PASS "K1 landing /docs listing"
+    else
+      record FAIL "K1 landing /docs listing"
+    fi
+  fi
+
+  # K2 hollama — SPA index served
+  if probe_200 "K2 hollama ready" "$(svc_url hollama)/" 120; then
+    if curl -s -m 10 "$(svc_url hollama)/" | grep -i 'hollama' >/dev/null; then
+      record PASS "K2 hollama index content"
+    else
+      record FAIL "K2 hollama index content"
+    fi
+  fi
+
+  # K3 mikupad — single-file app served by http-server (image builds from git)
+  if probe_200 "K3 mikupad ready" "$(svc_url mikupad)/" 300; then
+    if curl -s -m 10 "$(svc_url mikupad)/" | grep -i 'mikupad' >/dev/null; then
+      record PASS "K3 mikupad index content"
+    else
+      record FAIL "K3 mikupad index content"
+    fi
+  fi
+
+  # K4 mock-openai — OpenAI-shaped fixture: models list + chat completion
+  local mock_url
+  mock_url=$(svc_url mock-openai)
+  if probe_200 "K4 mock-openai ready" "$mock_url/v1/models" 120; then
+    if curl -s -m 10 "$mock_url/v1/models" | jq -er '.data[0].id == "mock-model"' >/dev/null 2>&1; then
+      record PASS "K4 mock-openai models"
+    else
+      record FAIL "K4 mock-openai models"
+    fi
+    local mock_reply
+    mock_reply=$(curl -s -m 10 "$mock_url/v1/chat/completions" -H 'Content-Type: application/json' \
+      -d '{"model":"mock-model","messages":[{"role":"user","content":"ping"}]}' \
+      | jq -er '.choices[0].message.content' 2>/dev/null)
+    if [ -n "$mock_reply" ]; then
+      record PASS "K4 mock-openai chat completion" "$mock_reply"
+    else
+      record FAIL "K4 mock-openai chat completion"
+    fi
+  fi
+
+  # K5 qdrant — collection CRUD + vector search (api-key auth)
+  local qdrant_url qdrant_key
+  qdrant_url=$(svc_url qdrant)
+  qdrant_key=$("$HARBOR" config get qdrant.api_key 2>/dev/null)
+  if probe_200 "K5 qdrant ready" "$qdrant_url/healthz" 120; then
+    local coll="harbor_it_k5"
+    curl -s -m 10 -X DELETE "$qdrant_url/collections/$coll" -H "api-key: $qdrant_key" >/dev/null 2>&1
+    if curl -s -m 10 -X PUT "$qdrant_url/collections/$coll" -H "api-key: $qdrant_key" \
+      -H 'Content-Type: application/json' \
+      -d '{"vectors":{"size":4,"distance":"Dot"}}' | jq -er '.result == true' >/dev/null 2>&1; then
+      record PASS "K5 qdrant create collection"
+    else
+      record FAIL "K5 qdrant create collection"
+    fi
+    curl -s -m 10 -X PUT "$qdrant_url/collections/$coll/points?wait=true" -H "api-key: $qdrant_key" \
+      -H 'Content-Type: application/json' \
+      -d '{"points":[{"id":1,"vector":[0.1,0.2,0.3,0.4]},{"id":2,"vector":[0.9,0.1,0.1,0.1]}]}' >/dev/null 2>&1
+    local top_id
+    top_id=$(curl -s -m 10 -X POST "$qdrant_url/collections/$coll/points/search" -H "api-key: $qdrant_key" \
+      -H 'Content-Type: application/json' \
+      -d '{"vector":[0.9,0.1,0.1,0.1],"limit":1}' | jq -er '.result[0].id' 2>/dev/null)
+    if [ "$top_id" = "2" ]; then
+      record PASS "K5 qdrant upsert + search" "top hit id=2"
+    else
+      record FAIL "K5 qdrant upsert + search" "expected id 2, got '${top_id:-none}'"
+    fi
+    curl -s -m 10 -X DELETE "$qdrant_url/collections/$coll" -H "api-key: $qdrant_key" >/dev/null 2>&1
+  fi
+
+  # K6 libretranslate — en->es translation round trip (models download on
+  # first boot even with LT_LOAD_ONLY; allow a long ready window)
+  local lt_url
+  lt_url=$(svc_url libretranslate)
+  if probe_200 "K6 libretranslate ready" "$lt_url/languages" 600; then
+    local lt_text
+    lt_text=$(curl -s -m 60 "$lt_url/translate" -H 'Content-Type: application/json' \
+      -d '{"q":"hello world","source":"en","target":"es"}' \
+      | jq -er '.translatedText' 2>/dev/null)
+    if [ -n "$lt_text" ] && [ "$lt_text" != "hello world" ]; then
+      record PASS "K6 libretranslate en->es" "$lt_text"
+    else
+      record FAIL "K6 libretranslate en->es" "got '${lt_text:-none}'"
+    fi
+  fi
+
+  # K7 netdata — real metrics API
+  local nd_url nd_version
+  nd_url=$(svc_url netdata)
+  if probe_200 "K7 netdata ready" "$nd_url/api/v1/info" 180; then
+    nd_version=$(curl -s -m 10 "$nd_url/api/v1/info" | jq -er '.version' 2>/dev/null)
+    if [ -n "$nd_version" ]; then
+      record PASS "K7 netdata info" "$nd_version"
+    else
+      record FAIL "K7 netdata info"
+    fi
+  fi
+
+  # K8 dbhub — MCP server (streamable HTTP, stateless) at /mcp over the
+  # bundled demo SQLite: initialize returns serverInfo, and a tools/call
+  # of execute_sql actually runs SQL.
+  local dbhub_url dbhub_server
+  dbhub_url=$(svc_url dbhub)
+  local waited=0 rc=1
+  while [ "$waited" -le 120 ]; do
+    dbhub_server=$(curl -s -m 10 "$dbhub_url/mcp" -X POST \
+      -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+      -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"harbor-it","version":"1.0"}}}' \
+      | jq -er '.result.serverInfo.name' 2>/dev/null) && rc=0 && break
+    sleep 5
+    waited=$((waited + 5))
+  done
+  if [ "$rc" = "0" ] && [ -n "$dbhub_server" ]; then
+    record PASS "K8 dbhub MCP initialize" "$dbhub_server after ${waited}s"
+  else
+    record FAIL "K8 dbhub MCP initialize" "no serverInfo within 120s"
+  fi
+  local dbhub_answer
+  dbhub_answer=$(curl -s -m 10 "$dbhub_url/mcp" -X POST \
+    -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+    -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"execute_sql","arguments":{"sql":"SELECT 6*7 AS answer"}}}' \
+    | jq -er '.result.content[0].text | fromjson | .data.rows[0].answer' 2>/dev/null)
+  if [ "$dbhub_answer" = "42" ]; then
+    record PASS "K8 dbhub execute_sql" "6*7=42"
+  else
+    record FAIL "K8 dbhub execute_sql" "expected 42, got '${dbhub_answer:-none}'"
+  fi
+
+  "$HARBOR" env libretranslate unset LT_LOAD_ONLY >/dev/null 2>&1
+  teardown
+}
+
 list_groups() {
   cat <<'EOF'
 A  llamacpp webui boost litellm aichat   (llamacpp backend + OpenAI satellites)
@@ -971,6 +1123,7 @@ G  fabric cmdh                           (run-style CLIs via ollama)
 H  kobold speaches txtairag plandex webtop (batch 3, two sub-batches)
 I  webui searxng litellm boost jupyter promptfoo comfyui chatui librechat langflow (depth: chat/eval/kernel/workflow/flow)
 J  llamacpp ollama lemonade localai voicebox vllm (ROCm paths; skipped on non-ROCm hosts, excluded by default)
+K  landing hollama mikupad mock-openai qdrant libretranslate netdata dbhub (lightweight standalone web services)
 EOF
 }
 
@@ -995,8 +1148,8 @@ main() {
   local g
   for g in $groups; do
     case "$g" in
-      A|B|C|D|E|F|G|H|I|J) ;;
-      *) echo "Unknown group: $g (valid: A-J)" >&2; exit 2 ;;
+      A|B|C|D|E|F|G|H|I|J|K) ;;
+      *) echo "Unknown group: $g (valid: A-K)" >&2; exit 2 ;;
     esac
   done
 

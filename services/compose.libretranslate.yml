@@ -10,6 +10,20 @@ services:
     volumes:
       - ${HARBOR_LIBRETRANSLATE_WORKSPACE}/keys:/app/db
       - ${HARBOR_LIBRETRANSLATE_WORKSPACE}/local:/home/libretranslate/.local
+    # The upstream image runs as uid 1032 (libretranslate:nogroup), which
+    # cannot write the workspace mounts after the init sidecar chowns them
+    # to the host user. Run as the host user instead — both writable paths
+    # (/app/db and /home/libretranslate/.local) are the chowned mounts, so
+    # an arbitrary uid works as long as HOME resolves to the mounted home.
+    user: "${HARBOR_USER_ID}:${HARBOR_GROUP_ID}"
+    # XDG dirs are pinned inside the mounted .local because the home dir
+    # itself is image-owned (uid 1032) and not writable by the host user;
+    # argostranslate honors XDG_* when creating its data/cache/config dirs.
+    environment:
+      - HOME=/home/libretranslate
+      - XDG_DATA_HOME=/home/libretranslate/.local/share
+      - XDG_CACHE_HOME=/home/libretranslate/.local/cache
+      - XDG_CONFIG_HOME=/home/libretranslate/.local/config
     tty: true
     stdin_open: true
     # Wait for the init sidecar to chown the workspace bind mount so the

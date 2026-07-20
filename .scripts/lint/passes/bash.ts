@@ -16,7 +16,7 @@ import { parse as parseYaml } from "https://deno.land/std/yaml/mod.ts";
 import { expandGlob } from "https://deno.land/std/fs/mod.ts";
 
 import type { Finding } from "../types.ts";
-import { collectFiles, relative } from "../util.ts";
+import { collectFiles, relative, RUNTIME_DIR_EXCLUDES } from "../util.ts";
 
 interface RawRule {
   id: string;
@@ -92,7 +92,14 @@ export async function runBashRules(opts: BashOptions): Promise<Finding[]> {
   const rules = await loadRules(opts.rulesPath);
   const globalDrop = new Set<string>();
   for (const g of opts.globalExclude ?? []) {
-    for await (const entry of expandGlob(g, { root: opts.root, includeDirs: false, globstar: true })) {
+    for await (
+      const entry of expandGlob(g, {
+        root: opts.root,
+        includeDirs: false,
+        globstar: true,
+        exclude: RUNTIME_DIR_EXCLUDES,
+      })
+    ) {
       if (entry.isFile) globalDrop.add(entry.path);
     }
   }
