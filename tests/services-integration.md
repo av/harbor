@@ -949,13 +949,14 @@ Teardown: `./harbor.sh down`; restore configs; remove stray
 ## Group M — proxies / gateways / MCP services (Batch M of the Coverage Plan)
 
 Automated in `tests/services-integration.sh --groups M`; part of the default
-group list. Three sub-batches: M-a bifrost + optillm (OpenAI gateways proxied
-through to ollama/llamacpp), M-b metamcp + mcpo + mcp-server-time (MCP over
-HTTP), M-c supergateway (stdio→SSE bridge, run-style CLI).
+group list. Four sub-batches: M-a bifrost + optillm + litellm×optillm (OpenAI
+gateways proxied through to ollama/llamacpp), M-b metamcp + mcpo +
+mcp-server-time (MCP over HTTP), M-c supergateway (stdio→SSE bridge,
+run-style CLI), M-d pipelines + mcp-inspector.
 
 ### M-a. OpenAI gateway proxies
 
-Pre: `./harbor.sh up ollama optillm bifrost` (llamacpp comes up as a default
+Pre: `./harbor.sh up ollama optillm bifrost litellm` (llamacpp comes up as a default
 service; optillm builds from `codelion/optillm#main` on first up); pull
 `qwen3:0.6b` into ollama.
 
@@ -1039,6 +1040,45 @@ Pre: `./harbor.sh up metamcp mcpo mcp-server-time` (metamcp builds
   *inside* the container → first SSE frame is `event: endpoint` with a
   `/message?sessionId=…` payload — the stdio MCP server is bridged to SSE.
   Container removed afterwards.
+
+### M-d. litellm×optillm combo, pipelines, mcp-inspector (M12–M14)
+
+M12 runs inside M-a's session (litellm added to the same `harbor up`); M13/M14
+are a separate `./harbor.sh up pipelines mcp-inspector`.
+
+- M12 litellm×optillm: with both services selected,
+  `compose.x.litellm.optillm.yml` mounts
+  `services/litellm/litellm.optillm.yaml` into the merged proxy config.
+  - Product improvement (fact litellm-optillm-wildcard): the shipped fragment
+    pinned a stale static model (`openai/llama3.1:8b`); replaced with
+    provider wildcard routing (`optillm/*` → `openai/*`, same pattern as
+    `litellm.llamacpp.yaml`) since optillm passes any model through to its
+    backend and understands approach prefixes.
+  - Checks: litellm `/health/liveliness` 200; `/v1/models` lists `optillm/*`
+    (proves the fragment merged); completion with model
+    `optillm/none-<backend model>` → PONG (chain
+    litellm → optillm → ollama/llamacpp).
+- M13 pipelines: root probe 200 (healthcheck curls `/`); unauthenticated
+  `/v1/pipelines` → 403 (`PIPELINES_API_KEY`, config `pipelines.api_key`);
+  real plugin round trip — upload a minimal echo `Pipeline` class via
+  `POST /v1/pipelines/upload` (multipart `file=@…`), it appears in
+  `/v1/models` (id = filename sans `.py`), `POST /v1/chat/completions`
+  through it streams `ECHO: <message>`, then `DELETE /v1/pipelines/delete
+  {"id":…}` removes it. No backing LLM needed — pipelines executes the
+  plugin itself.
+- M14 mcp-inspector: UI probe 200 on the published port
+  (`mcp.inspector.host_port`) and proxy `GET /health` → `{"status":"ok"}` on
+  `mcp.inspector.client_host_port`.
+  - Product defect (fact mcp-inspector-bind): the old socat-forwarding
+    entrypoint self-connect fork-bombed — inspector binds `localhost` as
+    `::1`, socat forwarded IPv4 `127.0.0.1` into its own wildcard listener,
+    so both published ports were dead (curl `000`) and socat forked
+    unboundedly. Fixed: dropped the socat entrypoint/build entirely,
+    inspector now runs with `HOST=0.0.0.0` (+`ALLOWED_ORIGINS` for the
+    remapped host port) on the plain `ghcr.io/av/tools` image;
+    `services/mcp/inspector-entrypoint.sh` removed.
+  - Auth note: the proxy prints a per-boot session token in `docker logs
+    harbor.mcp-inspector`; `/health` is unauthenticated.
 
 Teardown: `./harbor.sh down` after each sub-batch; remove the supergateway
 run container; `services/metamcp/data` (postgres) and `services/mcp/cache`
@@ -1733,3 +1773,23 @@ Product defects fixed this run (facts lbl, b2e, wp7, et1, all
 optillm OPTILLM_HOST=0.0.0.0; metamcp start-sse headless seeding;
 harbor.sh cross-file-only selector validation (documented
 `harbor up mcpo mcp-server-time` flow).
+
+### Run 2026-07-20 — Group M (extension: M12–M14)
+
+`./tests/services-integration.sh --groups M`: 20 passed, 0 failed, 0
+skipped — M1–M11 regression-green plus the new checks:
+
+- M12 litellm×optillm: liveliness 200; `/v1/models` lists `optillm/*`
+  (wildcard fragment merged); `optillm/none-qwen3:0.6b` completion → PONG
+  on attempt 1 (chain litellm → optillm → ollama).
+- M13 pipelines: root 200; unauthenticated `/v1/pipelines` → 403; echo
+  pipeline uploaded, listed as a model, chat streamed `ECHO: PONG`,
+  deleted after.
+- M14 mcp-inspector: UI 200 on :34781; proxy `/health` → `{"status":"ok"}`
+  on :34782.
+
+Product changes this run (facts xyb, dgl, both @implemented):
+litellm.optillm.yaml switched from a stale pinned model (llama3.1:8b) to
+provider wildcard routing; mcp-inspector socat entrypoint (self-connect
+fork bomb, dead published ports) replaced with HOST=0.0.0.0 +
+ALLOWED_ORIGINS, `services/mcp/inspector-entrypoint.sh` removed.

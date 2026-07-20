@@ -1489,11 +1489,11 @@ sys.exit(rc)
 }
 
 group_M() {
-  log "=== Group M: proxies/gateways/MCP (bifrost, optillm, mcpo, metamcp, supergateway)"
+  log "=== Group M: proxies/gateways/MCP (bifrost, optillm, litellm x optillm, mcpo, metamcp, supergateway, pipelines, mcp-inspector)"
 
   # --- M-a: OpenAI gateway proxies via ollama + llamacpp ---
-  log "M-a: harbor up ollama optillm bifrost (optillm builds from git on first up)"
-  "$HARBOR" up ollama optillm bifrost >/dev/null 2>&1
+  log "M-a: harbor up ollama optillm bifrost litellm (optillm builds from git on first up)"
+  "$HARBOR" up ollama optillm bifrost litellm >/dev/null 2>&1
 
   local bifrost_url optillm_url
   bifrost_url=$(svc_url bifrost)
@@ -1577,6 +1577,33 @@ group_M() {
     fi
     if [ "$attempt" = "2" ]; then
       record FAIL "M6 optillm proxies completion" "backend=$obase reply=$(echo "$reply" | cut -c1-80 | head -1)"
+    fi
+  done
+
+  # --- M12: litellm x optillm combo (wildcard fragment litellm.optillm.yaml) ---
+  local litellm_url litellm_key
+  litellm_url=$(svc_url litellm)
+  litellm_key=$("$HARBOR" config get litellm.master.key 2>/dev/null)
+  probe_200 "M12a litellm liveliness" "$litellm_url/health/liveliness" 180
+  if curl -s -m 30 -H "Authorization: Bearer $litellm_key" "$litellm_url/v1/models" \
+    | jq -r '.data[].id' | grep -x 'optillm/\*' >/dev/null; then
+    record PASS "M12b litellm merged optillm fragment" "optillm/* in model list"
+  else
+    record FAIL "M12b litellm merged optillm fragment" "optillm/* missing from /v1/models"
+  fi
+  # ollama backs optillm only when its overlay won; route via the same model
+  # optillm itself was proven with. none-<model> disables any approach.
+  for attempt in 1 2; do
+    reply=$(curl -s -m 240 "$litellm_url/v1/chat/completions" \
+      -H 'Content-Type: application/json' -H "Authorization: Bearer $litellm_key" \
+      -d "{\"model\":\"optillm/none-$omodel\",\"messages\":[{\"role\":\"user\",\"content\":\"Reply with exactly: PONG\"}],\"max_tokens\":$MAX_TOKENS}" \
+      | jq -r '.choices[0].message.content // ""')
+    if echo "$reply" | grep -i 'PONG' >/dev/null; then
+      record PASS "M12 litellm->optillm completion" "attempt=$attempt"
+      break
+    fi
+    if [ "$attempt" = "2" ]; then
+      record FAIL "M12 litellm->optillm completion" "reply=$(echo "$reply" | cut -c1-80 | head -1)"
     fi
   done
 
@@ -1664,6 +1691,74 @@ group_M() {
   [ -n "$sg_cid" ] && docker rm -f "$sg_cid" >/dev/null 2>&1
 
   teardown
+
+  # --- M-d: pipelines + mcp-inspector ---
+  log "M-d: harbor up pipelines mcp-inspector"
+  "$HARBOR" up pipelines mcp-inspector >/dev/null 2>&1
+
+  local pipelines_url pipelines_key inspector_url inspector_client_port
+  pipelines_url=$(svc_url pipelines)
+  pipelines_key=$("$HARBOR" config get pipelines.api_key 2>/dev/null)
+  probe_200 "M13a pipelines ready" "$pipelines_url/" 180
+
+  # Real plugin round trip: upload a minimal echo pipeline, see it as a
+  # model, chat through it, then remove it. Unauthenticated access must 403.
+  local echo_py noauth_code chat_out
+  echo_py=$(mktemp "${TMPDIR:-/tmp}/it_echo_XXXX.py")
+  cat > "$echo_py" <<'PYEOF'
+from typing import Generator, Iterator, List, Union
+
+
+class Pipeline:
+    def __init__(self):
+        self.name = "IT Echo"
+
+    async def on_startup(self):
+        pass
+
+    async def on_shutdown(self):
+        pass
+
+    def pipe(
+        self, user_message: str, model_id: str, messages: List[dict], body: dict
+    ) -> Union[str, Generator, Iterator]:
+        return f"ECHO: {user_message}"
+PYEOF
+  noauth_code=$(curl -s -o /dev/null -w '%{http_code}' -m 10 "$pipelines_url/v1/pipelines")
+  if [ "$noauth_code" = "403" ] || [ "$noauth_code" = "401" ]; then
+    record PASS "M13b pipelines rejects missing key" "code=$noauth_code"
+  else
+    record FAIL "M13b pipelines rejects missing key" "code=$noauth_code"
+  fi
+  curl -s -m 60 -H "Authorization: Bearer $pipelines_key" \
+    -F "file=@$echo_py" "$pipelines_url/v1/pipelines/upload" >/dev/null 2>&1
+  sleep 3
+  chat_out=$(curl -s -m 60 -H "Authorization: Bearer $pipelines_key" \
+    -H 'Content-Type: application/json' "$pipelines_url/v1/chat/completions" \
+    -d '{"model":"'"$(basename "$echo_py" .py)"'","messages":[{"role":"user","content":"PONG"}]}')
+  if echo "$chat_out" | grep 'ECHO: PONG' >/dev/null; then
+    record PASS "M13 pipelines plugin round trip" "upload -> model -> ECHO: PONG"
+  else
+    record FAIL "M13 pipelines plugin round trip" "$(echo "$chat_out" | cut -c1-120 | head -1)"
+  fi
+  curl -s -m 30 -X DELETE -H "Authorization: Bearer $pipelines_key" \
+    -H 'Content-Type: application/json' "$pipelines_url/v1/pipelines/delete" \
+    -d '{"id":"'"$(basename "$echo_py" .py)"'"}' >/dev/null 2>&1
+  rm -f "$echo_py"
+
+  # mcp-inspector: UI through the published port + proxy /health — proves
+  # the HOST=0.0.0.0 bind fix (the old socat entrypoint self-connect-looped).
+  inspector_url=$(svc_url mcp-inspector)
+  inspector_client_port=$("$HARBOR" config get mcp.inspector.client_host_port 2>/dev/null)
+  probe_200 "M14a mcp-inspector UI" "$inspector_url/" 180
+  if curl -s -m 10 "http://localhost:${inspector_client_port}/health" \
+    | grep '"status":[[:space:]]*"ok"' >/dev/null; then
+    record PASS "M14 mcp-inspector proxy health" "port=$inspector_client_port"
+  else
+    record FAIL "M14 mcp-inspector proxy health" "port=$inspector_client_port"
+  fi
+
+  teardown
 }
 
 list_groups() {
@@ -1680,7 +1775,7 @@ I  webui searxng litellm boost jupyter promptfoo comfyui chatui librechat langfl
 J  llamacpp ollama lemonade localai voicebox vllm (ROCm paths; skipped on non-ROCm hosts, excluded by default)
 K  landing hollama mikupad mock-openai qdrant libretranslate netdata dbhub drawio sillytavern lobechat traefik (standalone web services + routed traefik)
 L  anythingllm sqlchat khoj perplexica ldr presenton aider opint oterm parllama (LLM frontends + CLIs)
-M  bifrost optillm metamcp mcpo supergateway (proxies/gateways/MCP; git builds on first up)
+M  bifrost optillm litellm metamcp mcpo supergateway pipelines mcp-inspector (proxies/gateways/MCP; git builds on first up)
 EOF
 }
 

@@ -233,6 +233,9 @@
 - label: a litellm.llamacpp config fragment plus compose.x.litellm.llamacpp.yml overlay route llamacpp/* requests through LiteLLM to the llama.cpp router via wildcard routing
   command: grep -q 'llamacpp/\*' services/litellm/litellm.llamacpp.yaml && grep -q litellm.llamacpp.yaml services/compose.x.litellm.llamacpp.yml
   tags: [services-runner, implemented]
+- label: litellm.optillm.yaml routes via provider wildcard (optillm/* -> openai/* at http://optillm:8000/v1) instead of a pinned static model, so any backend model reaches optillm through LiteLLM as optillm/<model>
+  command: grep -q 'model_name: "optillm/\*"' services/litellm/litellm.optillm.yaml && grep -q 'model: "openai/\*"' services/litellm/litellm.optillm.yaml
+  tags: [services-it, implemented]
 
 ## boost
 - label: ChatNode.history() merges consecutive same-role plain messages (no tool calls) so multi-assistant-turn modules like g1 pass llama.cpp's 'cannot have 2+ assistant messages at the end' validation
@@ -291,6 +294,11 @@
 ## metamcp
 - label: metamcp start-sse.mjs seeds a default project/profile/API key when the api_keys table is empty, so 'harbor up metamcp' succeeds headlessly on a fresh database instead of crash-looping until the UI is opened
   command: grep -q 'seeding default project/profile/key' services/metamcp/start-sse.mjs
+  tags: [services-it, implemented]
+
+## mcp-inspector
+- label: compose.mcp-inspector.yml runs the inspector with HOST=0.0.0.0 and ALLOWED_ORIGINS for the remapped host port, with no socat entrypoint — the old socat forwarder self-connect-looped (inspector binds ::1, socat forwarded 127.0.0.1 into its own wildcard listener), leaving both published ports dead
+  command: grep -q 'HOST=0.0.0.0' services/compose.mcp-inspector.yml && ! grep -q 'inspector-entrypoint' services/compose.mcp-inspector.yml && [ ! -f services/mcp/inspector-entrypoint.sh ]
   tags: [services-it, implemented]
 
 # app

@@ -1,6 +1,10 @@
 model_list:
-  - model_name: optillm
+  # optillm passes any model through to its backend (and understands
+  # approach prefixes like "none-<model>"), so a static model id can't be
+  # pinned here — use provider wildcard routing instead: request
+  # "optillm/<model>" and LiteLLM forwards "<model>" to optillm.
+  - model_name: "optillm/*"
     litellm_params:
-      model: openai/llama3.1:8b
+      model: "openai/*"
       api_base: http://optillm:8000/v1
       api_key: sk-optillm

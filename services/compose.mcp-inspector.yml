@@ -1,19 +1,22 @@
 services:
   mcp-inspector:
     container_name: ${HARBOR_CONTAINER_PREFIX}.mcp-inspector
-    build:
-      context: ./services/mcp
-      dockerfile_inline: |
-        FROM ghcr.io/av/tools:latest
-        RUN apt-get update && apt-get install -y socat
-    entrypoint: /app/inspector-entrypoint.sh
+    image: ghcr.io/av/tools:latest
     command: npx @modelcontextprotocol/inspector
     ports:
       - ${HARBOR_MCP_INSPECTOR_HOST_PORT}:6274
       - ${HARBOR_MCP_INSPECTOR_CLIENT_HOST_PORT}:6277
+    environment:
+      # Inspector binds localhost by default; HOST=0.0.0.0 makes both the UI
+      # and the proxy reachable through the published ports. The previous
+      # socat-forwarding entrypoint self-connected in a loop (inspector binds
+      # ::1, socat forwarded to 127.0.0.1 — its own listener).
+      - HOST=0.0.0.0
+      # The proxy validates Origin against the UI's own origin; allow the
+      # remapped Harbor host port.
+      - ALLOWED_ORIGINS=http://localhost:${HARBOR_MCP_INSPECTOR_HOST_PORT}
     volumes:
       - ./services/mcp/cache:/app/cache
-      - ./services/mcp/inspector-entrypoint.sh:/app/inspector-entrypoint.sh
     env_file:
       - ./.env
       - ./services/mcp/override.env
