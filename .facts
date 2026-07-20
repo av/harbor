@@ -257,6 +257,22 @@
   command: grep -q 'EMBEDDING_MODEL_PREF=nomic-embed-text' services/compose.x.anythingllm.ollama.yml
   tags: [services-it, implemented]
 
+## ldr
+- label: compose.x.ldr.searxng.yml sets LDR_SEARCH_ENGINE_WEB_SEARXNG_DEFAULT_PARAMS_INSTANCE_URL (LDR's env mapping for the searxng instance_url setting) instead of the stale SEARXNG_INSTANCE/LDR_SEARCH__TOOL names, so LDR web research actually queries SearXNG
+  command: grep -q 'LDR_SEARCH_ENGINE_WEB_SEARXNG_DEFAULT_PARAMS_INSTANCE_URL' services/compose.x.ldr.searxng.yml && ! grep -q 'SEARXNG_INSTANCE=' services/compose.x.ldr.searxng.yml
+  tags: [spec, services-it, implemented]
+- label: compose.ldr.yml mounts the ldr workspace data dir at /data (the image's LDR_DATA_DIR) so users and research history persist across container recreation
+  command: grep -q 'HARBOR_LDR_WORKSPACE}/data:/data' services/compose.ldr.yml
+  tags: [spec, services-it, implemented]
+
+## presenton
+- label: compose.x.presenton.ollama.yml points OLLAMA_URL at HARBOR_OLLAMA_INTERNAL_URL (compose-network ollama), not a hardcoded host port unreachable from inside the container
+  command: grep -q 'OLLAMA_URL=${HARBOR_OLLAMA_INTERNAL_URL}' services/compose.x.presenton.ollama.yml
+  tags: [spec, services-it, implemented]
+- label: presenton auth is disabled by default via HARBOR_PRESENTON_DISABLE_AUTH -> DISABLE_AUTH so the API works out of the box (upstream 428s 'Login setup is required' otherwise)
+  command: grep -q 'DISABLE_AUTH=${HARBOR_PRESENTON_DISABLE_AUTH}' services/compose.presenton.yml && grep -q 'HARBOR_PRESENTON_DISABLE_AUTH="true"' profiles/default.env
+  tags: [spec, services-it, implemented]
+
 # app
 - label: Harbor App blocks main UI behind a setup gate until setup detail status is ready
   command: rg -q 'detail\?\.status === "ready"' app/src/setup/HarborSetupContext.tsx

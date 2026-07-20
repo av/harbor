@@ -17,7 +17,10 @@ services:
       - LDR_ANTHROPIC_API_KEY=${HARBOR_ANTHROPIC_KEY}
     volumes:
       - ${HARBOR_LDR_WORKSPACE}/config:/root/.config/local_deep_research
-      - ${HARBOR_LDR_WORKSPACE}/data:/usr/local/lib/python3.13/site-packages/data
+      # The image sets LDR_DATA_DIR=/data — all persistent state (encrypted
+      # per-user DBs, research history) lives there. The old
+      # site-packages/data path is stale for current images.
+      - ${HARBOR_LDR_WORKSPACE}/data:/data
     # Wait for the init sidecar to chown the workspace bind mount so the
     # host directory stays owned by the host user — recoverable without
     # `sudo`. Docker creates missing bind-mount targets as root:root by

@@ -777,10 +777,9 @@ Teardown (K-b): `./harbor.sh down`; drawio.ai_model restored.
 ## Group L — LLM frontends via ollama/llamacpp (Batch L of the Coverage Plan)
 
 Automated in `tests/services-integration.sh --groups L`; part of the default
-group list. First slice of Batch L: anythingllm + sqlchat (both get a full
-chat round trip). Remaining Batch L candidates for later iterations: khoj +
-perplexica + ldr (each pairs with searxng), presenton, oterm, parllama,
-aider, opint.
+group list. Three sub-batches: L1–L2 anythingllm + sqlchat (chat round
+trips), L-b khoj + perplexica + ldr (each × ollama × searxng) + presenton,
+L-c aider + opint + oterm + parllama (run-style / TUI CLIs via ollama).
 
 Pre: `./harbor.sh up ollama anythingllm sqlchat` (llamacpp comes up as a
 default service); pull `qwen3:0.6b`.
@@ -828,6 +827,124 @@ default service); pull `qwen3:0.6b`.
 - Cleanup: `ollama rm gpt-3.5-turbo`.
 
 Teardown: `./harbor.sh down`.
+
+### Sub-batch L-b — khoj, perplexica, ldr (each × ollama × searxng), presenton
+
+Pre: set `khoj.default.model` and `presenton.ollama.model` to `qwen3:0.6b`
+(saved/restored); `./harbor.sh up ollama searxng khoj perplexica ldr
+presenton`; pull `qwen3:0.6b`.
+
+#### L3. khoj chat + online search
+
+- Ready: `GET /api/health` 200 within 600 s (first boot loads
+  sentence-transformer models from the mounted cache; a cold cache
+  downloads them).
+- Anonymous mode (`--anonymous-mode` in the shipped command) — no auth.
+- Chat: `POST /api/chat {"q":…,"stream":true}` streams frames separated by
+  `␃🔚␗`; assert `end_llm_response` + the reply text (frames can split
+  mid-word — match a substring). `/api/health` 200s before khoj's async
+  first-boot init (migrations + chat-model creation) completes, so the
+  first chat can 500 inside `get_default_chat_model` — retry up to 3x. The `.ollama`
+  overlay wires `OPENAI_BASE_URL` to ollama `/v1` and
+  `KHOJ_DEFAULT_CHAT_MODEL` (config `khoj.default.model`).
+- SearXNG: `/online <query>` chat command; `KHOJ_SEARXNG_URL` (from the
+  `.searxng` overlay) is read by `processor/tools/online_search.py`; the
+  streamed `references` frame carries `onlineContext` with `organic`
+  results.
+
+#### L4. perplexica webSearch round trip
+
+- The pinned images (andypenno fork) are the old WebSocket architecture:
+  the backend has no `POST /api/search`; searches run over a WS connection
+  with model params in the query string (`connectionManager.js`).
+- Ready: `GET :34042/api/models` 200; `chatModelProviders.ollama` lists the
+  ollama models (`OLLAMA_API_ENDPOINT` from the `.ollama` overlay).
+- Round trip: `tests/lib/perplexica-search.mjs` (node ≥ 22 native
+  WebSocket) sends `{type:"message", focusMode:"webSearch", …}` and asserts
+  a non-empty reply before `messageEnd`; `sources` count > 0 proves the
+  searxng path (`SEARXNG_API_ENDPOINT`). SKIPs without node.
+- Known gap (documented): `services/perplexica/source.config.toml` never
+  existed in the repo, so docker created the bind-mount target as an empty
+  root-owned directory. The backend falls back to env vars, so Harbor's
+  integration works regardless; UI settings saves land in that bogus
+  directory. Left as-is pending a decision on shipping a config template.
+
+#### L5. ldr quick research via searxng + ollama
+
+- Product defect (fact s13): the `.searxng` overlay exported stale env
+  names (`SEARXNG_INSTANCE`, `LDR_SEARCH__TOOL`). LDR maps settings keys to
+  env as `LDR_` + key.upper().replace(".", "_") (settings/manager.py), so
+  the engine came up "disabled (no instance URL)" and every research ended
+  "No sources were found". Fixed:
+  `LDR_SEARCH_ENGINE_WEB_SEARXNG_DEFAULT_PARAMS_INSTANCE_URL`.
+- Product defect (fact m7y): the image keeps all state under `/data`
+  (`LDR_DATA_DIR`), but Harbor mounted the workspace at a stale
+  `python3.13/site-packages/data` path — users and research history were
+  lost on every recreate. Fixed: mount at `/data`.
+- Ready: `GET /api/v1/health` 200.
+- Auth: register via the CSRF form (`acknowledge` must be the literal
+  string `true`; a 400 re-render means validation failed — the response
+  flash is unstyled, read `web/auth/routes.py`), then login (302 → `/`).
+  Sessions are in-memory: any container recreate invalidates cookies.
+- Research: `POST /api/start_research` (JSON + `X-CSRFToken` from the home
+  page's `csrf-token` meta) with `mode:"quick"`,
+  `model_provider:"OLLAMA"`, `model:"qwen3:0.6b"`,
+  `search_engine:"searxng"`, 1 iteration / 1 question,
+  `strategy:"source-based"`; poll `/api/research/<id>/status` to
+  `completed` (~2 min) and assert `/api/report/<id>` `.content` is a
+  sourced report (not the "No sources were found" placeholder).
+
+#### L6. presenton pptx generation
+
+- Product defect (fact ieb): the `.ollama` overlay pointed `OLLAMA_URL` at
+  `http://localhost:33821` — a host port that does not exist inside the
+  container. Fixed to `${HARBOR_OLLAMA_INTERNAL_URL}`.
+- Product defect (fact rc7s): upstream requires a login/password setup
+  (HTTP 428 `Login setup is required` on every API call) unless
+  `DISABLE_AUTH` is truthy; Harbor never set it. Fixed:
+  `HARBOR_PRESENTON_DISABLE_AUTH="true"` default → `DISABLE_AUTH`.
+- Ready: `GET /` 200.
+- Generate: `POST /api/v1/ppt/presentation/generate {"content":…,
+  "n_slides":2,"language":"English","export_as":"pptx"}` → `.path` to the
+  exported pptx (~30 s with qwen3:0.6b on this host).
+
+Teardown: `./harbor.sh down`; restore configs.
+
+### Sub-batch L-c — aider, opint, oterm, parllama (run-style / TUI CLIs)
+
+Pre: set `aider.model qwen3:0.6b` (saved/restored); `./harbor.sh up
+ollama`; pull `qwen3:0.6b`.
+
+#### L7. aider
+
+- `harbor aider` is `compose run -it` — it requires a TTY; drive it with
+  `python3 -c 'import pty; pty.spawn([...])'` (the host has no `script`
+  binary). The `.ollama` overlay merges `openai-api-base` (ollama `/v1`) +
+  `model: openai/$HARBOR_AIDER_MODEL` into `.aider.conf.yml`.
+- Run from a scratch directory — `harbor aider` mounts the invoking cwd as
+  the workspace and `--message` edits files in it (a stray edit landed in
+  the repo during exploration). `--message '/ask …'` avoids edits.
+- Assert: reply text or the `Tokens: … sent, … received.` summary line.
+
+#### L8. opint (Open Interpreter)
+
+- Both `.ollama` and `.llamacpp` overlays override the entrypoint; with
+  both backends up the winner is invocation-dependent — pin with
+  `harbor opint backend ollama` (saved/restored).
+- Model must be litellm-prefixed: `harbor opint model openai/qwen3:0.6b`
+  (this rewrites `opint.cmd`; restored to the shipped `qwen3.5:4b` after).
+- `echo 'Reply with exactly: PONG' | harbor opint -y` — piped stdin is read
+  as the chat message, EOF exits cleanly; assert `PONG` in output.
+
+#### L9/L10. oterm, parllama
+
+- Textual TUIs — no headless chat path; the check is: the harbor-built
+  image runs, reports a version (`oterm --version`, `uvx parllama
+  --version`), the `.ollama` overlay wires `OLLAMA_URL=http://ollama:11434`,
+  and (oterm) ollama is reachable from inside the container.
+
+Teardown: `./harbor.sh down`; restore configs; remove stray
+`harbor-*-run-*` containers.
 
 ## Results
 
@@ -1459,3 +1576,32 @@ COMMAND: `ollama cp qwen3:0.6b gpt-3.5-turbo`; `POST /api/chat` with `x-openai-e
 EXPECTED: streamed reply containing PONG
 ACTUAL: PONG (upstream hardcodes gpt-* model names — documented limitation, alias workaround)
 RESULT: PASS
+
+### Run 2026-07-20 — Group L full (L1–L10, all three sub-batches)
+
+`./tests/services-integration.sh --groups L` — 20 passed, 0 failed, 0
+skipped (RUNNER-EXIT=0).
+
+- L1 anythingllm: ready 0s; workspace create; chat round trip
+  (completion_tokens 101).
+- L2 sqlchat: ready; PONG via ollama alias.
+- L3 khoj: ready 10s; chat PONG via ollama (after retry fix for the
+  first-boot init race); /online via searxng → onlineContext organic
+  results.
+- L4 perplexica: backend /api/models lists qwen3:0.6b under ollama; WS
+  webSearch round trip returned a real reply (sources count varies run to
+  run — 15 in exploration, 0 in this run; assertion is on the reply).
+- L5 ldr: register+login 302; quick research (searxng + ollama
+  qwen3:0.6b, 1 iteration) completed with a sourced report in ~2 min.
+- L6 presenton: ready; 2-slide pptx generated (~30 s), export path
+  returned.
+- L7 aider: /ask PONG via ollama through a pty from a scratch dir.
+- L8 opint: piped PONG via ollama (backend pinned).
+- L9 oterm v0.20.0 + OLLAMA_URL wired + ollama reachable; L10 parllama
+  0.9.2 + OLLAMA_URL wired.
+
+Product defects fixed this run (facts s13, m7y, ieb, rc7s, all
+@implemented): ldr searxng env names; ldr /data mount; presenton
+OLLAMA_URL host-port; presenton DISABLE_AUTH default. Documented gap:
+perplexica source.config.toml missing from repo (docker creates a bogus
+directory; backend runs on env vars regardless).

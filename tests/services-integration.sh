@@ -1225,7 +1225,7 @@ group_K() {
 }
 
 group_L() {
-  log "Group L: anythingllm sqlchat (LLM frontends, chat round trips)"
+  log "Group L: anythingllm sqlchat (chat round trips)"
 
   "$HARBOR" up ollama anythingllm sqlchat >/dev/null 2>&1
   docker exec harbor.ollama ollama pull "$OLLAMA_TINY_MODEL" >/dev/null 2>&1
@@ -1293,6 +1293,199 @@ group_L() {
   fi
 
   teardown
+
+  # ---- Sub-batch L-b: khoj + perplexica + ldr (each x ollama x searxng) + presenton
+  log "Group L-b: khoj perplexica ldr presenton (searxng-paired frontends)"
+  save_and_set_config khoj.default.model "$OLLAMA_TINY_MODEL"
+  save_and_set_config presenton.ollama.model "$OLLAMA_TINY_MODEL"
+  "$HARBOR" up ollama searxng khoj perplexica ldr presenton >/dev/null 2>&1
+  docker exec harbor.ollama ollama pull "$OLLAMA_TINY_MODEL" >/dev/null 2>&1
+
+  # L3 khoj — anonymous mode; chat via ollama, then /online via searxng.
+  local khoj_url
+  khoj_url=$(svc_url khoj)
+  if probe_200 "L3 khoj ready" "$khoj_url/api/health" 600; then
+    # /api/health 200s before khoj's async first-boot init (migrations +
+    # chat-model creation) finishes — the first chat can die inside
+    # get_default_chat_model. Retry a few times.
+    local khoj_out khoj_try
+    for khoj_try in 1 2 3; do
+      khoj_out=$(curl -s -m 300 -N -X POST "$khoj_url/api/chat" \
+        -H 'Content-Type: application/json' \
+        -d '{"q":"Reply with exactly: PONG","stream":true}')
+      echo "$khoj_out" | grep -a 'end_llm_response' >/dev/null && break
+      log "L3 khoj chat retry ($khoj_try)"
+      sleep 15
+    done
+    if echo "$khoj_out" | grep -a 'end_llm_response' >/dev/null \
+      && echo "$khoj_out" | grep -a 'ONG' >/dev/null; then
+      record PASS "L3 khoj chat round trip" "PONG via ollama"
+    else
+      record FAIL "L3 khoj chat round trip" "$(echo "$khoj_out" | tail -c 200)"
+    fi
+    khoj_out=$(curl -s -m 300 -N -X POST "$khoj_url/api/chat" \
+      -H 'Content-Type: application/json' \
+      -d '{"q":"/online latest Docker Compose version","stream":true}')
+    if echo "$khoj_out" | grep -a '"organic"' >/dev/null; then
+      record PASS "L3 khoj online search via searxng" "onlineContext has organic results"
+    else
+      record FAIL "L3 khoj online search via searxng" "no organic results in onlineContext"
+    fi
+  fi
+
+  # L4 perplexica — backend lists ollama providers; WS webSearch round trip
+  # (old andypenno fork is WebSocket-only; node >= 22 has a native client).
+  local ppx_be ppx_port
+  ppx_port=$("$HARBOR" config get perplexica.backend.host.port 2>/dev/null)
+  ppx_be="http://localhost:${ppx_port:-34042}"
+  if probe_200 "L4 perplexica backend ready" "$ppx_be/api/models" 300; then
+    if curl -s -m 10 "$ppx_be/api/models" \
+      | jq -er ".chatModelProviders.ollama | has(\"$OLLAMA_TINY_MODEL\")" >/dev/null 2>&1; then
+      record PASS "L4 perplexica ollama models listed"
+    else
+      record FAIL "L4 perplexica ollama models listed" "tiny model missing from /api/models"
+    fi
+    if command -v node >/dev/null 2>&1; then
+      local ppx_out
+      if ppx_out=$(node tests/lib/perplexica-search.mjs "ws://localhost:${ppx_be##*:}" \
+        "$OLLAMA_TINY_MODEL" "nomic-embed-text:latest" \
+        "What is Docker Compose? Answer briefly." 2>&1); then
+        record PASS "L4 perplexica webSearch round trip" "$(echo "$ppx_out" | cut -c1-120)"
+      else
+        record FAIL "L4 perplexica webSearch round trip" "$(echo "$ppx_out" | tail -c 200)"
+      fi
+    else
+      record SKIP "L4 perplexica webSearch round trip" "node not installed"
+    fi
+  fi
+
+  # L5 ldr — register/login (CSRF form + session), then a quick research via
+  # searxng + ollama and assert the report has content.
+  local ldr_url ldr_jar csrf rid st=""
+
+  ldr_url=$(svc_url ldr)
+  ldr_jar=$(mktemp /tmp/harbor-it-ldr-XXXXXX.jar)
+  if probe_200 "L5 ldr ready" "$ldr_url/api/v1/health" 300; then
+    csrf=$(curl -s -c "$ldr_jar" "$ldr_url/auth/register" \
+      | grep -o 'csrf_token" value="[^"]*' | sed 's/.*value="//')
+    curl -s -b "$ldr_jar" -c "$ldr_jar" -X POST "$ldr_url/auth/register" \
+      --data-urlencode "csrf_token=$csrf" \
+      -d 'username=harborit&password=harbor-it-pass1&confirm_password=harbor-it-pass1&acknowledge=true' \
+      -o /dev/null 2>/dev/null # acknowledge must be the literal "true"; 400 if the user exists — ignored
+    csrf=$(curl -s -b "$ldr_jar" -c "$ldr_jar" "$ldr_url/auth/login" \
+      | grep -o 'csrf_token" value="[^"]*' | sed 's/.*value="//')
+    local login_code
+    login_code=$(curl -s -b "$ldr_jar" -c "$ldr_jar" -X POST "$ldr_url/auth/login" \
+      --data-urlencode "csrf_token=$csrf" \
+      -d 'username=harborit&password=harbor-it-pass1' -o /dev/null -w '%{http_code}')
+    if [ "$login_code" = "302" ]; then
+      record PASS "L5 ldr register+login" "302 to /"
+      csrf=$(curl -s -b "$ldr_jar" -c "$ldr_jar" "$ldr_url/" \
+        | grep -o 'csrf-token" content="[^"]*' | head -1 | sed 's/.*content="//')
+      rid=$(curl -s -b "$ldr_jar" -c "$ldr_jar" -X POST "$ldr_url/api/start_research" \
+        -H 'Content-Type: application/json' -H "X-CSRFToken: $csrf" \
+        -d "{\"query\":\"What is Docker Compose? One short paragraph.\",\"mode\":\"quick\",\"model_provider\":\"OLLAMA\",\"model\":\"$OLLAMA_TINY_MODEL\",\"search_engine\":\"searxng\",\"iterations\":1,\"questions_per_iteration\":1,\"strategy\":\"source-based\"}" \
+        | jq -er '.research_id' 2>/dev/null)
+      if [ -n "$rid" ]; then
+        for _ in $(seq 1 90); do
+          st=$(curl -s -m 10 -b "$ldr_jar" "$ldr_url/api/research/$rid/status" \
+            | jq -r '.status' 2>/dev/null)
+          case "$st" in completed|failed|error|suspended|cancelled) break ;; esac
+          sleep 10
+        done
+        if [ "$st" = "completed" ] && curl -s -b "$ldr_jar" "$ldr_url/api/report/$rid" \
+          | jq -er '.content | select(length > 100)' >/dev/null 2>&1 \
+          && ! curl -s -b "$ldr_jar" "$ldr_url/api/report/$rid" \
+          | jq -r '.content' | grep -q 'No sources were found'; then
+          record PASS "L5 ldr quick research via searxng+ollama" "completed with sourced report"
+        else
+          record FAIL "L5 ldr quick research via searxng+ollama" "status=$st"
+        fi
+      else
+        record FAIL "L5 ldr research start" "no research_id"
+      fi
+    else
+      record FAIL "L5 ldr register+login" "login code $login_code"
+    fi
+  fi
+  rm -f "$ldr_jar"
+
+  # L6 presenton — auth disabled by Harbor default; generate a tiny deck.
+  local pres_url pres_out
+  pres_url=$(svc_url presenton)
+  if probe_200 "L6 presenton ready" "$pres_url/" 300; then
+    pres_out=$(curl -s -m 580 -X POST "$pres_url/api/v1/ppt/presentation/generate" \
+      -H 'Content-Type: application/json' \
+      -d '{"content":"Docker Compose basics","n_slides":2,"language":"English","export_as":"pptx"}')
+    if echo "$pres_out" | jq -er '.path | select(length > 0)' >/dev/null 2>&1; then
+      record PASS "L6 presenton 2-slide pptx generate" "$(echo "$pres_out" | jq -r '.path' | tail -c 80)"
+    else
+      record FAIL "L6 presenton 2-slide pptx generate" "$(echo "$pres_out" | tail -c 200)"
+    fi
+  fi
+
+  teardown
+
+  # ---- Sub-batch L-c: run-style / TUI CLIs via ollama (aider, opint, oterm, parllama)
+  log "Group L-c: aider opint oterm parllama (run-style CLIs via ollama)"
+  save_and_set_config aider.model "$OLLAMA_TINY_MODEL"
+  "$HARBOR" up ollama >/dev/null 2>&1
+  docker exec harbor.ollama ollama pull "$OLLAMA_TINY_MODEL" >/dev/null 2>&1
+
+  # L7 aider — interactive-only entrypoint (compose run -it): needs a pty.
+  # /ask mode avoids file edits; run from a scratch dir so the mounted
+  # workdir is never the repo.
+  local aider_dir aider_out repo_root
+  repo_root="$PWD"
+  aider_dir=$(mktemp -d /tmp/harbor-it-aider-XXXXXX)
+  aider_out=$(cd "$aider_dir" && python3 -c "
+import pty, sys
+rc = pty.spawn(['timeout','300','$repo_root/harbor.sh','aider','--message','/ask Reply with exactly: PONG','--no-git','--yes-always','--no-stream','--no-show-model-warnings'])
+sys.exit(rc)
+" </dev/null 2>&1)
+  if echo "$aider_out" | grep -aE 'PONG|Tokens: .* sent' >/dev/null; then
+    record PASS "L7 aider /ask round trip via ollama"
+  else
+    record FAIL "L7 aider /ask round trip via ollama" "$(echo "$aider_out" | tr -d '\r' | tail -c 200)"
+  fi
+  rm -rf "$aider_dir"
+
+  # L8 opint — pin the backend (both .ollama and .llamacpp overlays override
+  # the entrypoint; the winner is invocation-dependent). Piped stdin is read
+  # as the chat message, EOF exits cleanly.
+  save_and_set_config opint.backend ollama
+  "$HARBOR" opint model "openai/$OLLAMA_TINY_MODEL" >/dev/null 2>&1
+  local opint_out
+  opint_out=$(echo 'Reply with exactly: PONG' | timeout 300 "$HARBOR" opint -y 2>&1)
+  if echo "$opint_out" | grep -a 'PONG' >/dev/null; then
+    record PASS "L8 opint chat round trip via ollama"
+  else
+    record FAIL "L8 opint chat round trip via ollama" "$(echo "$opint_out" | tail -c 200)"
+  fi
+  "$HARBOR" opint model qwen3.5:4b >/dev/null 2>&1 # shipped default
+
+  # L9/L10 oterm + parllama — textual TUIs: assert the harbor-built images
+  # run, report a version, and are wired to ollama (env + reachability).
+  local tui_out
+  tui_out=$($("$HARBOR" cmd ollama oterm 2>/dev/null) run --rm --entrypoint sh oterm -c \
+    'echo "OLLAMA_URL=$OLLAMA_URL"; oterm --version; python3 -c "import urllib.request,os; urllib.request.urlopen(os.environ[\"OLLAMA_URL\"]+\"/api/version\", timeout=10)" && echo OLLAMA_REACHABLE' 2>&1)
+  if echo "$tui_out" | grep -a 'oterm v' >/dev/null \
+    && echo "$tui_out" | grep -a 'OLLAMA_URL=http://ollama:11434' >/dev/null \
+    && echo "$tui_out" | grep -a 'OLLAMA_REACHABLE' >/dev/null; then
+    record PASS "L9 oterm version + ollama wiring" "$(echo "$tui_out" | grep -a 'oterm v' | head -1)"
+  else
+    record FAIL "L9 oterm version + ollama wiring" "$(echo "$tui_out" | tail -c 200)"
+  fi
+  tui_out=$($("$HARBOR" cmd ollama parllama 2>/dev/null) run --rm --entrypoint sh parllama -c \
+    'echo "OLLAMA_URL=$OLLAMA_URL"; uvx parllama --version' 2>&1)
+  if echo "$tui_out" | grep -a 'parllama [0-9]' >/dev/null \
+    && echo "$tui_out" | grep -a 'OLLAMA_URL=http://ollama:11434' >/dev/null; then
+    record PASS "L10 parllama version + ollama wiring" "$(echo "$tui_out" | grep -a 'parllama [0-9]' | head -1)"
+  else
+    record FAIL "L10 parllama version + ollama wiring" "$(echo "$tui_out" | tail -c 200)"
+  fi
+
+  teardown
 }
 
 list_groups() {
@@ -1308,7 +1501,7 @@ H  kobold speaches txtairag plandex webtop (batch 3, two sub-batches)
 I  webui searxng litellm boost jupyter promptfoo comfyui chatui librechat langflow (depth: chat/eval/kernel/workflow/flow)
 J  llamacpp ollama lemonade localai voicebox vllm (ROCm paths; skipped on non-ROCm hosts, excluded by default)
 K  landing hollama mikupad mock-openai qdrant libretranslate netdata dbhub drawio sillytavern lobechat traefik (standalone web services + routed traefik)
-L  anythingllm sqlchat                    (LLM frontends, chat round trips)
+L  anythingllm sqlchat khoj perplexica ldr presenton aider opint oterm parllama (LLM frontends + CLIs)
 EOF
 }
 
