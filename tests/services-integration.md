@@ -190,7 +190,12 @@ Teardown: `./harbor.sh down`
 
 ## Group D — ollama backend + gptme
 
-Start: `./harbor.sh up ollama gptme`
+Start: `./harbor.sh up ollama`
+
+(Do **not** include `gptme` in `up` — like aichat it is a run-style CLI
+container. It is exercised via the dedicated `harbor gptme` subcommand in D2,
+which injects `-m local/$(harbor config get gptme.model)` and runs the
+container with the ollama overlay.)
 
 ### D1. ollama
 
@@ -207,17 +212,28 @@ Start: `./harbor.sh up ollama gptme`
 
 ### D2. gptme (container CLI, ollama overlay)
 
-- Function: `timeout 300 ./harbor.sh run gptme --non-interactive 'Reply with exactly: PONG'`
-  Expected: exit 0, non-empty stdout. (If `--non-interactive` is not a valid
-  flag, use `-n` / check `./harbor.sh run gptme --help`; record the working
-  invocation in results.)
+- Pre: gptme's model must exist in ollama — save the current value, then
+  `./harbor.sh config set gptme.model qwen3:0.6b`; restore afterwards
+  (shipped default `qwen3.5:4b` is not pulled by D1).
+- Function:
+  `timeout 300 ./harbor.sh gptme -n --no-stream 'Reply with exactly: PONG' </dev/null`
+  Expected: exit 0, non-empty stdout containing model output. Notes: use the
+  `harbor gptme` subcommand, not `harbor run gptme` — only the subcommand
+  passes `-m local/<gptme.model>`; gptme's non-interactive flag is
+  `-n/--non-interactive` (implies `--no-confirm`). In autonomous mode gptme
+  auto-replies twice asking for tool calls, then exits 0 on its own — that is
+  normal for a plain-text prompt.
 
 Teardown: `./harbor.sh down`
 
 ## Group E — comfyui (optional; GPU)
 
-Only run on a host with a working GPU runtime. No model checkpoint is
-required for the startup check; image generation is out of scope here.
+No model checkpoint is required for the startup check; image generation is
+out of scope here. The shipped image is `ghcr.io/ai-dock/comfyui:latest-cuda`;
+on a host **without** an NVIDIA driver the ComfyUI process fatals at boot
+(`RuntimeError: Found no NVIDIA driver`) while the container itself stays Up
+(supervisor keeps running). For a GPU-less startup check, set
+`./harbor.sh config set comfyui.args "--cpu"` first and restore it afterwards.
 
 Start: `./harbor.sh up comfyui`
 
@@ -370,3 +386,43 @@ RESULT: PASS — after spec fix: with `$MODEL` (Qwen3.5) llama.cpp returned 400 
 Triage summary Group B+C: two real product defects fixed (searxng stale/typo'd settings.yml — fact 5b8; langflow first-boot bind-mount ownership — fact fqo, init-sidecar pattern). One bad spec expectation fixed (C2 model choice + exit-code assertion). No environment-only failures.
 
 Teardown: `./harbor.sh down` executed.
+
+### Run 2026-07-20 — Group D
+
+CHECK: D1 ollama ready
+COMMAND: `curl -s "$(./harbor.sh url ollama)/api/version" | jq -er '.version'`
+EXPECTED: exit 0 within 120 s
+ACTUAL: `0.22.1` immediately after `harbor up ollama` reported healthy
+RESULT: PASS
+
+CHECK: D1 ollama pull + generate
+COMMAND: `./harbor.sh exec ollama ollama pull qwen3:0.6b`; then `curl -s "$URL/api/generate" -d '{"model":"qwen3:0.6b","prompt":"Reply with exactly: PONG","stream":false}' | jq -er '.response | length > 0'`
+EXPECTED: pull exit 0; jq prints `true`
+ACTUAL: pull `success`, exit 0; jq `true`
+RESULT: PASS
+
+CHECK: D2 gptme one-shot
+COMMAND: `timeout 300 ./harbor.sh gptme -n --no-stream 'Reply with exactly: PONG' </dev/null` (after `harbor config set gptme.model qwen3:0.6b`)
+EXPECTED: exit 0, non-empty stdout with model output
+ACTUAL: exit 0; model produced thinking + reply; gptme auto-reply loop asked for tool calls twice, then exited cleanly ("Autonomous mode: No tools used after 2 confirmations")
+RESULT: PASS — after two spec fixes: (1) `harbor run gptme` is the wrong entrypoint — only the `harbor gptme` subcommand injects `-m local/<gptme.model>`, without it gptme has no model; (2) gptme must not be in the `harbor up` list (run-style container, same as aichat). Also gptme.model must be a model that actually exists in ollama (default `qwen3.5:4b` is not pulled by D1) — check now sets/restores it.
+
+Triage summary Group D: no product defects. Two bad spec expectations fixed (gptme invocation via subcommand, not `harbor run`; run-style container excluded from `up`). Config note: gptme.model must match a pulled ollama tag. Teardown: `./harbor.sh down`; gptme.model restored to `qwen3.5:4b`.
+
+### Run 2026-07-20 — Group E
+
+Host: AMD (Strix Halo), no NVIDIA driver.
+
+CHECK: E1 comfyui ready
+COMMAND: 200 probe on `$(./harbor.sh url comfyui)/`
+EXPECTED: 200 within 300 s
+ACTUAL: first attempt (default config): container `Up`, init sidecar exit 0, ports bound, but probe stayed 000 for 300 s — ComfyUI process FATAL in supervisor: `RuntimeError: Found no NVIDIA driver on your system` (image is `latest-cuda`; environment limitation, not a Harbor defect). Retry with `harbor config set comfyui.args "--cpu"` and container recreate: probe 200 in ~20 s
+RESULT: PASS (CPU mode) — environment note recorded in the Group E preamble; a `docker restart` is not enough after changing comfyui.args, the container must be recreated (`docker rm -f harbor.comfyui && harbor up comfyui`) since env is read at create time. `harbor up` also refuses to recreate while the old container holds its own ports — remove it first.
+
+CHECK: E1 comfyui system_stats
+COMMAND: `curl -s "$URL/system_stats" | jq -er '.system'`
+EXPECTED: exit 0
+ACTUAL: exit 0 — `comfyui_version v0.2.2`, device type `cpu`
+RESULT: PASS
+
+Triage summary Group E: no product defects. One environment limitation (CUDA-only default image on a non-NVIDIA host) with a documented config workaround (`comfyui.args "--cpu"`). Teardown: `./harbor.sh down`; comfyui.args restored to empty.
