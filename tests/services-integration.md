@@ -132,7 +132,10 @@ failure. It is exercised via `harbor run` in A5.)
   hangs unattended runs); pass `</dev/null` and `--no-stream` so the
   one-shot never blocks on a TTY. If the run times out, remove leftover
   `harbor-aichat-run-*` containers — abandoned runs keep llamacpp slots
-  generating and can exhaust the context for later requests.
+  generating and can exhaust the context for later requests. Removing the
+  client container alone does **not** stop the slot — llamacpp keeps
+  decoding the orphaned request; `docker restart harbor.llamacpp` before
+  retrying, then re-wait for `/health` 200.
 
 Teardown: `./harbor.sh down`
 
@@ -655,5 +658,20 @@ COMMAND: 200 probe on `$(harbor url webtop)/`
 EXPECTED: 200 within 300 s
 ACTUAL: image build FAILED twice first: `neofetch` no longer exists in the Ubuntu base (apt exit 100), and the legacy `npmjs.org/install.sh` npm bootstrap is defunct (exit 1; distro `nodejs`+`npm` also mutually conflict in this base). After fixes (drop neofetch — fact dfh; NodeSource node 22 which bundles npm — fact uv2): build OK, 200 on first poll
 RESULT: PASS
+
+### Run 2026-07-20 — Groups A + G (re-execution, fresh context)
+
+`MODEL=unsloth/Qwen3.5-0.8B-GGUF:Q4_K_M`.
+
+CHECK: A1 ready — health 200 on first poll — PASS.
+CHECK: A1 chat completion — first attempt `false` (reasoning consumed all 2000 tokens, empty content — intermittent for this thinking model), re-run `true` (content `PONG`, 160 completion tokens) — PASS (flaky-once).
+CHECK: A2 webui — `healthy`, `/health` 200, version `0.9.6` — PASS.
+CHECK: A3 boost — health 200; models `true`; boosted completion via `autotemp-...` `true`; no-auth 401 — PASS (all four).
+CHECK: A4 litellm — liveliness 200; models `[]` exit 0 (expected, no llamacpp overlay) — PASS.
+CHECK: A5 aichat — first two attempts timed out with runaway generation; removing `harbor-aichat-run-*` did NOT free the llamacpp slot (orphaned task kept decoding to 93k tokens) — required `docker restart harbor.llamacpp`; clean retry rc=0, output ends `PONG` — PASS. Spec updated (reproducibility fix): retry procedure now says to restart llamacpp, not just remove containers.
+CHECK: G1 fabric — rc=0, stdout `PONG` (fabric.model=qwen3:0.6b, restored after) — PASS.
+CHECK: G2 cmdh — rc=0, `desired command: pwd` + assistant message, option prompt exits cleanly on closed stdin (cmdh.model=qwen3:0.6b, restored after) — PASS.
+
+Triage: no product defects. One reproducibility gap fixed in A5 retry guidance. Teardown `./harbor.sh down`; aichat/fabric/cmdh models restored to `qwen3.5:4b`; no containers left.
 
 Triage summary Group H: six real product defects fixed across plandex (installer domain dead, broken third-party server image, port drift, fragile /etc/timezone mount, unpinned postgres hitting the PG18 layout change) and webtop (removed apt package, defunct npm bootstrap). No Harbor defects in kobold/speaches/txtairag. Teardown: `./harbor.sh down`; no config overrides were changed in this group; stale root-owned runtime dirs removed via alpine before linting.
