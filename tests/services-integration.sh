@@ -477,7 +477,11 @@ group_H() {
   "$HARBOR" up txtairag plandex webtop >/dev/null 2>&1
 
   probe_200 "H3 txtairag ready" "$(svc_url txtairag)/" 300
-  probe_200 "H4 plandex server health" "$(svc_url plandex)/health" 120
+  # The run-style `plandex` CLI container exits, so `harbor url plandex`
+  # fails; probe the long-running server container instead. First boot does
+  # fresh postgres init + LiteLLM proxy bootstrap + migrations before the
+  # listener opens — allow the same 300s budget as the other web probes.
+  probe_200 "H4 plandex server health" "$(svc_url plandex-server)/health" 300
   probe_200 "H5 webtop ready" "$(svc_url webtop)/" 300
 
   teardown

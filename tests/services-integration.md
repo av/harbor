@@ -386,8 +386,10 @@ image on first up).
 
 #### H4. plandex
 
-- Ready: `curl -s $(./harbor.sh url plandex)/health` (plandex-server) → 200
-  within 120 s. If `/health` is not the path, discover via
+- Ready: `curl -s $(./harbor.sh url plandex-server)/health` → 200
+  (`harbor url plandex` fails once the run-style CLI container exits)
+  within 300 s (first boot does fresh postgres init + LiteLLM proxy
+  bootstrap + migrations before the listener opens). If `/health` is not the path, discover via
   `docker logs harbor.plandex-server` and record the actual endpoint.
 
 #### H5. webtop

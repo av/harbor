@@ -209,6 +209,9 @@
 - label: plandex-server port mapping and the CLI's PLANDEX_API_HOST use port 8099 (official image in GOENV=development listens on 8099, not 8080)
   command: grep -q 'plandex-server:8099' services/compose.plandex.yml && grep -q ':8099$' services/compose.plandex.yml
   tags: [spec, implemented]
+- label: H4 plandex health probe allows 300s — first boot does fresh postgres init + LiteLLM bootstrap + migrations before the listener opens
+  command: grep -qE 'H4 plandex server health.+plandex-server./health.+ 300$' tests/services-integration.sh
+  tags: [implemented]
 
 ## webtop
 - label: services/webtop/Dockerfile does not install neofetch (package removed from current Ubuntu base of the webtop image; it broke the build)
