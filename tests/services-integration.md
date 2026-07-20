@@ -684,3 +684,47 @@ CHECK: G2 cmdh — rc=0, `desired command: pwd` + assistant message, option prom
 Triage: no product defects. One reproducibility gap fixed in A5 retry guidance. Teardown `./harbor.sh down`; aichat/fabric/cmdh models restored to `qwen3.5:4b`; no containers left.
 
 Triage summary Group H: six real product defects fixed across plandex (installer domain dead, broken third-party server image, port drift, fragile /etc/timezone mount, unpinned postgres hitting the PG18 layout change) and webtop (removed apt package, defunct npm bootstrap). No Harbor defects in kobold/speaches/txtairag. Teardown: `./harbor.sh down`; no config overrides were changed in this group; stale root-owned runtime dirs removed via alpine before linting.
+
+## Coverage Plan (extension)
+
+Gap analysis of 2026-07-20 (host: AMD Strix Halo — ROCm iGPU, no NVIDIA, no external API keys). 23 services covered by Groups A–H; ~108 top-level services remain uncovered (sidecars like `*-db`/`*-init` counted with their parent). Classification below is verified against `services/compose.<name>.yml` and `services/compose.x.*.yml` overlays, not guessed; borderline items are re-verified when their batch runs.
+
+### Uncovered-service classification (summary)
+
+- CPU-testable (~80): most frontends/utilities/proxies — e.g. anythingllm, hollama, lobechat, sillytavern, mikupad, aider, bifrost, optillm, pipelines, mcpo, metamcp, supergateway, mock-openai, dify, langfuse, n8n, flowise, cognee, kotaemon, opennotebook, khoj, perplexica, perplexideez, ldr, presenton, sqlchat, oterm, parllama, docling, tts, stt (`-cpu` tag), libretranslate, qdrant, drawio, dbhub, netdata, traefik, landing, k6, mistralrs (`:cpu` image), llamaswap (`:cpu`), localai (CPU version), ikllamacpp (`IMAGE_CPU`), litlytics, mindsdb, mcpforge, nanobot, needle, npcsh, mi, agent, gum, facts, hf, hfdownloader, harbor-cli, repopack, qrgen, tokscale, openhands, opint, openterminal, openfang, sim, karakeep, activepieces, windmill, onyx, bionicgpt, surfsense, airweave, postiz, daytona, photoprism, homeassistant, browseruse, chatnio, agentzero, astrbot, beszel, bolt, deerflow, latentscope, ml-intern, bench, lmeval, omnichain, ol1, open-design, raglite, resume-matcher, ros-mcp-server, textgrad, solo, pipelines, mikupad, sillytavern.
+- GPU-ROCm-testable on this host (6 paths): llamacpp.rocm (`HARBOR_LLAMACPP_IMAGE_ROCM`, kyuz0/amd-strix-halo-toolboxes), ollama.rocm (`:rocm` tag), localai.rocm, lemonade (AMD-native, rocm overlay), vllm (rocm overlay), voicebox (rocm overlay).
+- needs-external-API-key (4): openclaw (Claude session), autogpt (OpenAI), cfd (Cloudflare tunnel token), morphic (search API; `.ollama` overlay exists but search side needs keys — verify at batch time).
+- impractical here (~12): NVIDIA-only inference/training — aphrodite, tgi, tabbyapi, sglang, lmdeploy, ktransformers, airllm, unsloth, unsloth-studio; Apple-Silicon-only — mlx, omlx; heavy vision downloads — omniparser.
+
+### Depth gaps in covered services (startup/health only, no functional exercise)
+
+- webui: no chat round trip through its API (only /health + version).
+- chatui: front page only — no conversation.
+- librechat: config API only — no chat.
+- promptfoo: /health only — no actual eval run.
+- jupyter: /api only — no kernel execution.
+- langflow: version only — no flow execution.
+- litellm: liveliness only; never proxied a request. No `litellm.ollama`/`litellm.llamacpp` config fragment exists (product gap candidate — only dmr/mlx/omlx/npcsh/tgi/vllm/optillm/langfuse fragments ship).
+- searxng: one JSON query — no category/engine coverage.
+- boost: only `autotemp` exercised; 27 other modules untested (klmbr, rcn, markov, mcts, g1, tools, workflows, …).
+- comfyui: system_stats only — no workflow submission.
+- txtairag: Streamlit 200 only (RAG needs bigger model — candidate for ROCm batch).
+- webtop: desktop 200 only.
+- kobold/speaches: already functional (generate / TTS→STT) — no gap.
+
+### Integration (compose.x) gaps among covered services
+
+500 `compose.x.*` overlays exist; ~0 were explicitly exercised. Testable now with covered services: webui×{ollama, llamacpp, searxng, boost, litellm, speaches, kobold, pipelines}, chatui×{llamacpp, ollama, searxng}, boost×{llamacpp, ollama, litellm}, promptfoo×{ollama, llamacpp}, aichat×llamacpp, gptme×ollama (implicitly used), fabric×{ollama, litellm}, cmdh×{ollama, harbor}, plandex×{ollama, llamacpp, litellm}, langflow×litellm, txtairag×ollama, khoj×searxng, litellm×{optillm, langfuse}.
+
+### Prioritized batches (one iteration each, highest user value first)
+
+1. Batch I — depth + integrations of already-covered services (no new pulls): webui×ollama chat round trip via webui API; webui×searxng web-search-enabled answer; webui×boost model visibility; chatui×llamacpp conversation; promptfoo real eval vs ollama; langflow flow execution (API); jupyter kernel execute; litellm actually proxying (verify fragment gap, decide fix); searxng category queries; boost 4–6 more modules (klmbr, rcn, g1, tools).
+2. Batch J — ROCm on Strix Halo: llamacpp.rocm (kyuz0 image) inference + speed sanity, ollama.rocm generate, lemonade (AMD-native) health+completion, localai.rocm; document vllm/voicebox rocm results (may be heavy).
+3. Batch K — lightweight standalone CPU web services: hollama, mikupad, sillytavern, lobechat, dbhub, drawio, libretranslate (translate round trip), qdrant (collection CRUD), netdata, traefik (routing to one covered service), landing, mock-openai.
+4. Batch L — LLM frontends/agents via ollama (qwen3:0.6b): anythingllm, khoj(×searxng), perplexica(×searxng), ldr(×searxng), presenton, sqlchat, oterm, parllama, aider (one-shot), opint.
+5. Batch M — proxies/gateways/MCP: bifrost (+llamacpp/ollama bootstraps), optillm×ollama, litellm×optillm, pipelines (+webui.pipelines), mcpo (mcp-server-time overlay), metamcp, supergateway, mcp-inspector.
+6. Batch N — RAG/workflow stacks (heavier, CPU): dify (11 containers), langfuse (+litellm.langfuse tracing round trip), n8n, flowise, cognee×ollama, kotaemon×ollama, opennotebook×ollama.
+7. Batch O — speech/vision/docs CPU: tts, stt (`-cpu`), docling conversion round trip, photoprism×ollama, latentscope, libretranslate if not done in K.
+8. Batch P — heavy multi-container platforms (as time allows, startup+API smoke): onyx, bionicgpt, windmill, surfsense, airweave, sim, karakeep, activepieces, postiz, daytona, mindsdb, homeassistant.
+
+Deferred: needs-key set (openclaw, autogpt, cfd, morphic full path) and impractical set (NVIDIA-only, Apple-only, omniparser) — document, don't test.
