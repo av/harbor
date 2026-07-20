@@ -1081,8 +1081,9 @@ are a separate `./harbor.sh up pipelines mcp-inspector`.
     harbor.mcp-inspector`; `/health` is unauthenticated.
 
 Teardown: `./harbor.sh down` after each sub-batch; remove the supergateway
-run container; `services/metamcp/data` (postgres) and `services/mcp/cache`
-become root-owned — alpine-rm before linting.
+run container; `services/metamcp/data` (postgres), `services/mcp/cache` and
+`services/pipelines/persistent` (upload residue + `__pycache__`) become
+root-owned — alpine-rm before linting.
 
 ## Results
 
