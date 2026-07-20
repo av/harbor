@@ -239,6 +239,24 @@
   command: grep -q OPENAI_BASE_URL services/chatui/envify.js
   tags: [spec, services-it, implemented]
 
+## traefik
+- label: traefik.config default is ./services/traefik/traefik.yml so the compose bind mount resolves to the shipped config (repo-root-relative convention)
+  command: grep -q 'HARBOR_TRAEFIK_CONFIG="./services/traefik/traefik.yml"' profiles/default.env
+  tags: [services-it, implemented]
+
+## drawio
+- label: drawio ollama overlay sets OLLAMA_BASE_URL to the native Ollama API root (${HARBOR_OLLAMA_INTERNAL_URL}/api) because next-ai-draw-io uses ollama-ai-provider (createOllama), which 404s against the OpenAI-compatible /v1 root
+  command: grep -q 'OLLAMA_INTERNAL_URL}/api' services/compose.x.drawio.ollama.yml && ! grep -q 'OLLAMA_INTERNAL_URL}/v1' services/compose.x.drawio.ollama.yml
+  tags: [services-it, implemented]
+
+## anythingllm
+- label: anythingllm-init sidecar chowns the storage bind mount to the image's fixed uid 1000 before anythingllm starts, fixing the first-boot crash-loop (SQLite 'unable to open database file' on a root-owned storage dir)
+  command: grep -q 'anythingllm-init' services/compose.anythingllm.yml && test -f services/anythingllm/storage-init.sh
+  tags: [services-it, implemented]
+- label: anythingllm ollama overlay sets EMBEDDING_MODEL_PREF=nomic-embed-text:latest (part of the ollama default pull) — the ollama embedder aborts every chat with 'No embedding model was set' when the pref is missing
+  command: grep -q 'EMBEDDING_MODEL_PREF=nomic-embed-text' services/compose.x.anythingllm.ollama.yml
+  tags: [services-it, implemented]
+
 # app
 - label: Harbor App blocks main UI behind a setup gate until setup detail status is ready
   command: rg -q 'detail\?\.status === "ready"' app/src/setup/HarborSetupContext.tsx

@@ -2,7 +2,7 @@
 # Harbor services integration runner — automates tests/services-integration.md.
 #
 # Usage:
-#   ./tests/services-integration.sh                 # run all CPU-safe groups (A B C D F G H I K)
+#   ./tests/services-integration.sh                 # run all CPU-safe groups (A B C D F G H I K L)
 #   ./tests/services-integration.sh --groups B,G    # run selected groups
 #   ./tests/services-integration.sh --list          # list groups and their checks
 #
@@ -23,7 +23,7 @@ set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.." || exit 1
 HARBOR=./harbor.sh
 
-DEFAULT_GROUPS="A B C D F G H I K"
+DEFAULT_GROUPS="A B C D F G H I K L"
 PASS_COUNT=0
 FAIL_COUNT=0
 SKIP_COUNT=0
@@ -1109,6 +1109,190 @@ group_K() {
 
   "$HARBOR" env libretranslate unset LT_LOAD_ONLY >/dev/null 2>&1
   teardown
+
+  # --- K-b: drawio sillytavern lobechat traefik (need ollama + a routed target)
+  log "Group K-b: drawio sillytavern lobechat traefik (+ollama +landing)"
+
+  # Default drawio model (qwen3:30b) is not pulled; use the tiny one.
+  save_and_set_config drawio.ai_model "$OLLAMA_TINY_MODEL"
+  "$HARBOR" up ollama drawio sillytavern lobechat traefik landing >/dev/null 2>&1
+  docker exec harbor.ollama ollama pull "$OLLAMA_TINY_MODEL" >/dev/null 2>&1
+
+  # K9 drawio — GET / is a 307 to /en/; AI chat round trip via ollama
+  local drawio_url waited code
+  drawio_url=$(svc_url drawio)
+  waited=0 code=""
+  while [ "$waited" -le 180 ]; do
+    code=$(curl -sL -o /dev/null -m 10 -w '%{http_code}' "$drawio_url/" 2>/dev/null)
+    [ "$code" = "200" ] && break
+    sleep 5
+    waited=$((waited + 5))
+  done
+  if [ "$code" = "200" ]; then
+    record PASS "K9 drawio ready" "200 after ${waited}s"
+    local drawio_chat
+    drawio_chat=$(curl -s -m 300 "$drawio_url/api/chat" -H 'Content-Type: application/json' \
+      -d '{"messages":[{"id":"m1","role":"user","parts":[{"type":"text","text":"Reply with a short greeting"}]}],"xml":""}')
+    if echo "$drawio_chat" | grep '"type":"finish"' >/dev/null \
+      && echo "$drawio_chat" | grep '"text-delta"' >/dev/null; then
+      record PASS "K9 drawio AI chat" "streamed text-delta + finish"
+    else
+      record FAIL "K9 drawio AI chat" "$(echo "$drawio_chat" | tail -c 200)"
+    fi
+  else
+    record FAIL "K9 drawio ready" "no 200 within 180s (last: ${code:-none})"
+  fi
+
+  # K10 sillytavern — version API + index content + ollama wiring
+  local st_url st_version
+  st_url=$(svc_url sillytavern)
+  if probe_200 "K10 sillytavern ready" "$st_url/version" 180; then
+    st_version=$(curl -s -m 10 "$st_url/version" | jq -er '.pkgVersion' 2>/dev/null)
+    if [ -n "$st_version" ] && curl -s -m 10 "$st_url/" | grep -i 'sillytavern' >/dev/null; then
+      record PASS "K10 sillytavern version + content" "$st_version"
+    else
+      record FAIL "K10 sillytavern version + content"
+    fi
+    if docker exec harbor.sillytavern env 2>/dev/null | grep '^SILLYTAVERN_OLLAMA_URL=http://ollama:11434' >/dev/null; then
+      record PASS "K10 sillytavern ollama wiring"
+    else
+      record FAIL "K10 sillytavern ollama wiring" "SILLYTAVERN_OLLAMA_URL not set"
+    fi
+  fi
+
+  # K11 lobechat — GET / is a 307 to /chat; chat round trip needs the client
+  # XOR token (base64(XOR(json, 'LobeHub · LobeHub'))), built with node.
+  local lobe_url
+  lobe_url=$(svc_url lobechat)
+  waited=0 code=""
+  while [ "$waited" -le 300 ]; do
+    code=$(curl -sL -o /dev/null -m 10 -w '%{http_code}' "$lobe_url/" 2>/dev/null)
+    [ "$code" = "200" ] && break
+    sleep 5
+    waited=$((waited + 5))
+  done
+  if [ "$code" = "200" ]; then
+    record PASS "K11 lobechat ready" "200 after ${waited}s"
+    if command -v node >/dev/null 2>&1; then
+      local lobe_tok lobe_out
+      lobe_tok=$(node -e '
+        const key = Buffer.from("LobeHub · LobeHub", "utf8");
+        const p = Buffer.from(JSON.stringify({ accessCode: "", apiKey: "", baseURL: "", userId: "harbor-it" }), "utf8");
+        const out = Buffer.alloc(p.length);
+        for (let i = 0; i < p.length; i++) out[i] = p[i] ^ key[i % key.length];
+        console.log(out.toString("base64"));')
+      lobe_out=$(curl -s -m 300 "$lobe_url/webapi/chat/ollama" \
+        -H "X-lobe-chat-auth: $lobe_tok" -H 'Content-Type: application/json' \
+        -d '{"model":"'"$OLLAMA_TINY_MODEL"'","messages":[{"role":"user","content":"Reply with exactly: PONG"}],"stream":false}')
+      if echo "$lobe_out" | grep -E 'event: (text|reasoning)' >/dev/null; then
+        record PASS "K11 lobechat chat round trip" "streamed model output via ollama"
+      else
+        record FAIL "K11 lobechat chat round trip" "$(echo "$lobe_out" | tail -c 200)"
+      fi
+    else
+      record SKIP "K11 lobechat chat round trip" "node not available for the auth token"
+    fi
+  else
+    record FAIL "K11 lobechat ready" "no 200 within 300s (last: ${code:-none})"
+  fi
+
+  # K12 traefik — routed target check against landing via the docker provider.
+  # Traefik binds host 80/443; if the container is not up (ports taken), SKIP.
+  local traefik_dash="http://localhost:34373"
+  if ! docker ps --format '{{.Names}}' | grep -x 'harbor.traefik' >/dev/null; then
+    record SKIP "K12 traefik" "container not running (host ports 80/443 likely taken)"
+  elif probe_200 "K12 traefik dashboard ready" "$traefik_dash/api/http/routers" 120; then
+    if curl -s -m 10 "$traefik_dash/api/http/routers" | jq -er '[.[].name] | index("landing@docker") != null' >/dev/null 2>&1; then
+      record PASS "K12 traefik landing router registered"
+    else
+      record FAIL "K12 traefik landing router registered"
+    fi
+    if curl -sk -m 10 'https://localhost:443/' -H 'Host: landing.lan' | grep -i 'harbor' >/dev/null; then
+      record PASS "K12 traefik https routing to landing"
+    else
+      record FAIL "K12 traefik https routing to landing"
+    fi
+    local redir
+    redir=$(curl -s -o /dev/null -m 10 -w '%{http_code}' 'http://localhost:80/' -H 'Host: landing.lan')
+    if [ "$redir" = "301" ] || [ "$redir" = "308" ]; then
+      record PASS "K12 traefik http->https redirect" "$redir"
+    else
+      record FAIL "K12 traefik http->https redirect" "got $redir"
+    fi
+  fi
+
+  teardown
+}
+
+group_L() {
+  log "Group L: anythingllm sqlchat (LLM frontends, chat round trips)"
+
+  "$HARBOR" up ollama anythingllm sqlchat >/dev/null 2>&1
+  docker exec harbor.ollama ollama pull "$OLLAMA_TINY_MODEL" >/dev/null 2>&1
+  resolve_model
+
+  # L1 anythingllm — workspace chat round trip. Both the .llamacpp and
+  # .ollama overlays apply (both backends up); which LLM_PROVIDER wins the
+  # env merge is invocation-dependent, so pick the chat model to match the
+  # active provider. Default chatMode 'automatic' routes into the agent
+  # websocket flow, so it is forced to 'chat'.
+  local allm_url allm_slug allm_final allm_provider allm_model
+  allm_url=$(svc_url anythingllm)
+  allm_provider=$(docker exec harbor.anythingllm sh -c 'echo "$LLM_PROVIDER"' 2>/dev/null)
+  if [ "$allm_provider" = "ollama" ]; then
+    allm_model="$OLLAMA_TINY_MODEL"
+  else
+    allm_model="$MODEL"
+  fi
+  if probe_200 "L1 anythingllm ready" "$allm_url/api/ping" 300; then
+    allm_slug=$(curl -s -m 10 -X POST "$allm_url/api/workspace/new" \
+      -H 'Content-Type: application/json' -d '{"name":"harbor-it"}' \
+      | jq -er '.workspace.slug' 2>/dev/null)
+    if [ -n "$allm_slug" ]; then
+      record PASS "L1 anythingllm workspace create" "$allm_slug"
+      curl -s -m 10 -X POST "$allm_url/api/workspace/$allm_slug/update" \
+        -H 'Content-Type: application/json' \
+        -d '{"chatMode":"chat","chatModel":"'"$allm_model"'"}' >/dev/null 2>&1
+      allm_final=$(curl -s -m 300 -X POST "$allm_url/api/workspace/$allm_slug/stream-chat" \
+        -H 'Content-Type: application/json' \
+        -d '{"message":"Reply with exactly: PONG","attachments":[]}' \
+        | grep 'finalizeResponseStream' | tail -1)
+      if echo "$allm_final" | grep -o '"completion_tokens":[0-9]*' \
+        | grep -v '"completion_tokens":0$' >/dev/null; then
+        record PASS "L1 anythingllm chat round trip" "$(echo "$allm_final" | grep -o '"completion_tokens":[0-9]*' | head -1)"
+      else
+        record FAIL "L1 anythingllm chat round trip" "no finalizeResponseStream with tokens"
+      fi
+      curl -s -m 10 -X DELETE "$allm_url/api/workspace/$allm_slug" >/dev/null 2>&1
+    else
+      record FAIL "L1 anythingllm workspace create"
+    fi
+  fi
+
+  # L2 sqlchat — /api/chat only forwards built-in gpt-* model names
+  # (upstream limitation): alias the tiny model in ollama and point the
+  # request at ollama via the honored x-openai-endpoint header.
+  local sql_url sql_out
+  sql_url=$(svc_url sqlchat)
+  if probe_200 "L2 sqlchat ready" "$sql_url/" 300; then
+    docker exec harbor.ollama ollama cp "$OLLAMA_TINY_MODEL" gpt-3.5-turbo >/dev/null 2>&1
+    local attempt
+    for attempt in 1 2; do
+      sql_out=$(curl -s -m 300 "$sql_url/api/chat" -H 'Content-Type: application/json' \
+        -H 'x-openai-endpoint: http://ollama:11434/v1' \
+        -d '{"messages":[{"role":"user","content":"Reply with exactly: PONG"}]}')
+      echo "$sql_out" | grep 'PONG' >/dev/null && break
+      log "L2 retry ($attempt)"
+    done
+    if echo "$sql_out" | grep 'PONG' >/dev/null; then
+      record PASS "L2 sqlchat chat round trip" "PONG via ollama alias"
+    else
+      record FAIL "L2 sqlchat chat round trip" "$(echo "$sql_out" | tail -c 200)"
+    fi
+    docker exec harbor.ollama ollama rm gpt-3.5-turbo >/dev/null 2>&1
+  fi
+
+  teardown
 }
 
 list_groups() {
@@ -1123,7 +1307,8 @@ G  fabric cmdh                           (run-style CLIs via ollama)
 H  kobold speaches txtairag plandex webtop (batch 3, two sub-batches)
 I  webui searxng litellm boost jupyter promptfoo comfyui chatui librechat langflow (depth: chat/eval/kernel/workflow/flow)
 J  llamacpp ollama lemonade localai voicebox vllm (ROCm paths; skipped on non-ROCm hosts, excluded by default)
-K  landing hollama mikupad mock-openai qdrant libretranslate netdata dbhub (lightweight standalone web services)
+K  landing hollama mikupad mock-openai qdrant libretranslate netdata dbhub drawio sillytavern lobechat traefik (standalone web services + routed traefik)
+L  anythingllm sqlchat                    (LLM frontends, chat round trips)
 EOF
 }
 
@@ -1148,8 +1333,8 @@ main() {
   local g
   for g in $groups; do
     case "$g" in
-      A|B|C|D|E|F|G|H|I|J|K) ;;
-      *) echo "Unknown group: $g (valid: A-K)" >&2; exit 2 ;;
+      A|B|C|D|E|F|G|H|I|J|K|L) ;;
+      *) echo "Unknown group: $g (valid: A-L)" >&2; exit 2 ;;
     esac
   done
 

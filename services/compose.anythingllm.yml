@@ -15,5 +15,23 @@ services:
       - STORAGE_DIR=/app/server/storage
       - VECTOR_DB=lancedb
       - PASSWORDMINCHAT=8
+    depends_on:
+      anythingllm-init:
+        condition: service_completed_successfully
+    networks:
+      - harbor-network
+
+  # Init sidecar: chowns the storage bind mount to the image's fixed uid 1000
+  # before anythingllm starts — first boot otherwise crash-loops on a
+  # root-owned storage dir. Mirrors the langflow/kotaemon/beszel pattern.
+  anythingllm-init:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.anythingllm-init
+    image: alpine:3.20
+    env_file:
+      - ./.env
+    entrypoint: ["/bin/sh", "/init.sh"]
+    volumes:
+      - ./services/anythingllm/storage-init.sh:/init.sh:ro
+      - ./services/anythingllm/storage:/storage
     networks:
       - harbor-network

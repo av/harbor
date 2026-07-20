@@ -5,3 +5,7 @@ services:
       - OLLAMA_BASE_PATH=${HARBOR_OLLAMA_INTERNAL_URL}
       - EMBEDDING_ENGINE=ollama
       - EMBEDDING_BASE_PATH=${HARBOR_OLLAMA_INTERNAL_URL}
+      # Without a model pref the ollama embedder throws "No embedding model
+      # was set" and every chat aborts. Harbor's ollama default pull
+      # (HARBOR_OLLAMA_DEFAULT_MODELS) already includes this model.
+      - EMBEDDING_MODEL_PREF=nomic-embed-text:latest

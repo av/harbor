@@ -647,9 +647,11 @@ group list (CPU-safe, no LLM backend required). All eight services start
 concurrently (`harbor up landing hollama mikupad mock-openai qdrant
 libretranslate netdata dbhub`) — distinct ports, no GPU contention.
 
-Batch K remainder (deferred to a later iteration): drawio, sillytavern,
-lobechat, traefik (traefik needs a routed target service — an integration
-check, not standalone).
+Sub-batch K-b (K9–K12) covers the former Batch K remainder: drawio,
+sillytavern, lobechat, traefik. These need ollama (drawio/sillytavern/lobechat
+overlays) and a routed target for traefik (landing), so they run as a second
+`harbor up ollama drawio sillytavern lobechat traefik landing` after the K-a
+checks, with `qwen3:0.6b` pulled into ollama.
 
 ### K1. landing
 
@@ -716,6 +718,116 @@ check, not standalone).
   (nested as JSON text in `.result.content[0].text`).
 
 Teardown: `./harbor.sh down` + `harbor env libretranslate unset LT_LOAD_ONLY`.
+
+### K9. drawio (next-ai-draw-io, AI diagram round trip via ollama)
+
+- Pre: `harbor config set drawio.ai_model qwen3:0.6b` (default `qwen3:30b` is
+  not pulled); pull `qwen3:0.6b` into ollama.
+- Ready: `GET /` is a 307 to `/en/` — probe with `curl -L`, 200 within 180 s.
+- Functional: `POST /api/chat` with a UIMessage-parts body
+  (`{"messages":[{"id":"m1","role":"user","parts":[{"type":"text","text":…}]}],"xml":""}`)
+  streams SSE `text-delta` chunks and ends with
+  `{"type":"finish","finishReason":"stop"…}` — a full LLM round trip.
+- Product defect found here (fact 08h): the ollama overlay set
+  `OLLAMA_BASE_URL=${HARBOR_OLLAMA_INTERNAL_URL}/v1`, but next-ai-draw-io uses
+  `ollama-ai-provider` (`createOllama`, default `https://ollama.com/api`)
+  which expects the *native* Ollama API root — every chat errored `Not Found`.
+  Fixed to `…/api` in `services/compose.x.drawio.ollama.yml`.
+
+### K10. sillytavern
+
+- Ready: `GET /version` 200 within 180 s → `.pkgVersion` non-empty
+  (e.g. 1.16.0); index body contains `SillyTavern`.
+- Integration: container env has `SILLYTAVERN_OLLAMA_URL=http://ollama:11434`
+  (ollama overlay wired). Deeper chat requires a CSRF-bound browser session —
+  version + content is the deepest headless assertion.
+
+### K11. lobechat chat round trip via ollama
+
+- Ready: `GET /` is a 307 to `/chat` — probe with `curl -L`, 200 within 300 s.
+- Auth: LobeChat's `/webapi/*` provider routes 401 without the client token.
+  The token is NOT a signed JWT: `X-lobe-chat-auth` =
+  base64(XOR(JSON payload, `'LobeHub · LobeHub'`)) (`getXorPayload` in the
+  server bundle). Payload `{accessCode:'',apiKey:'',baseURL:'',userId:…}`.
+- Functional: `POST /webapi/chat/ollama` with that header +
+  `{"model":"qwen3:0.6b","messages":[…],"stream":false}` streams SSE
+  `event: reasoning` / `event: text` chunks from the model (the `ollama`
+  runtime honors `OLLAMA_PROXY_URL=http://ollama:11434` from the overlay).
+- Requires `node` on the host to build the token; SKIP otherwise.
+
+### K12. traefik (reverse proxy with a routed target: landing)
+
+- Traefik binds host ports 80/443 (+ dashboard 34373); SKIP if 80 or 443 is
+  already taken on the host.
+- Ready: dashboard `GET :34373/api/http/routers` 200 within 120 s.
+- Functional (routing): the routers list contains `landing@docker` (labels
+  from `compose.x.traefik.landing.yml` are picked up via the docker
+  provider); `curl -k https://localhost/ -H 'Host: landing.lan'` returns 200
+  with the landing page body (contains `harbor`); plain
+  `http://localhost/ -H 'Host: landing.lan'` is a 301 to https (the
+  web→websecure redirect from traefik.yml).
+- Product defect found here (fact zms): the shipped default
+  `traefik.config=./traefik/traefik.yml` resolved to a nonexistent repo-root
+  path (docker would bind-mount a fresh *directory* over
+  `/etc/traefik/traefik.yml`). Fixed to `./services/traefik/traefik.yml` in
+  `profiles/default.env`.
+
+Teardown (K-b): `./harbor.sh down`; drawio.ai_model restored.
+
+## Group L — LLM frontends via ollama/llamacpp (Batch L of the Coverage Plan)
+
+Automated in `tests/services-integration.sh --groups L`; part of the default
+group list. First slice of Batch L: anythingllm + sqlchat (both get a full
+chat round trip). Remaining Batch L candidates for later iterations: khoj +
+perplexica + ldr (each pairs with searxng), presenton, oterm, parllama,
+aider, opint.
+
+Pre: `./harbor.sh up ollama anythingllm sqlchat` (llamacpp comes up as a
+default service); pull `qwen3:0.6b`.
+
+### L1. anythingllm chat round trip
+
+- Backend: both the `.llamacpp` (generic-openai) and `.ollama` overlays
+  apply when both backends are up; which `LLM_PROVIDER` wins the env merge is
+  invocation-dependent — the runner reads the container's `LLM_PROVIDER` and
+  picks a matching chat model (`qwen3:0.6b` for ollama, `$MODEL` otherwise).
+- Product defect found here (fact 9i9): the ollama overlay set
+  `EMBEDDING_ENGINE=ollama` without `EMBEDDING_MODEL_PREF`, so the ollama
+  embedder aborted every chat with `No embedding model was set`. Fixed by
+  adding `EMBEDDING_MODEL_PREF=nomic-embed-text:latest` (already part of
+  Harbor's ollama default pull).
+- Ready: `GET /api/ping` → `.online == true` within 300 s.
+- Single-user no-password mode: the frontend API needs no auth token.
+  - `POST /api/workspace/new {"name":"harbor-it"}` → slug.
+  - `POST /api/workspace/<slug>/update {"chatMode":"chat","chatModel":$MODEL}`
+    — the default `chatMode` is `automatic`, which routes straight into the
+    *agent* websocket flow (`agentInitWebsocketConnection`) instead of plain
+    chat; it must be forced to `chat` for a headless round trip.
+  - `POST /api/workspace/<slug>/stream-chat {"message":…,"attachments":[]}` →
+    SSE ends with `finalizeResponseStream` whose `.metrics.completion_tokens`
+    is > 0 (thinking models may put the whole reply in reasoning, so the
+    assertion is on metrics, not text).
+  - Cleanup: `DELETE /api/workspace/<slug>`.
+- Product defect found here (fact cxu): first boot crash-looped — docker
+  created `services/anythingllm/storage` root-owned while the image runs as
+  fixed uid 1000, so Prisma died with `unable to open database file`. Fixed
+  with an `anythingllm-init` chown sidecar (langflow/kotaemon pattern).
+
+### L2. sqlchat chat round trip
+
+- Ready: `GET /` 200 within 300 s.
+- Upstream limitation (documented, not a Harbor defect): sqlchat's
+  `/api/chat` only ever forwards its built-in `gpt-*` model names — the
+  request-body model and unknown `x-openai-model` headers are ignored, so a
+  llamacpp/ollama backend 400s with `model 'gpt-3.5-turbo' not found`.
+- Workaround for a real round trip: alias the tiny model in ollama
+  (`ollama cp qwen3:0.6b gpt-3.5-turbo`) and send the per-request
+  `x-openai-endpoint: http://ollama:11434/v1` header (honored by chat.js).
+  `POST /api/chat {"messages":[{"role":"user","content":"Reply with exactly:
+  PONG"}]}` then streams a reply containing `PONG`.
+- Cleanup: `ollama rm gpt-3.5-turbo`.
+
+Teardown: `./harbor.sh down`.
 
 ## Results
 
@@ -1305,3 +1417,45 @@ Runner pitfall (recurring): `grep -q` on a curl pipe under pipefail SIGPIPEs
 curl on early match -> flaky FAIL (hit on K3). Same class as the docker-logs
 case from Group J; all Group K content checks use full-read `grep -i ... >/dev/null`.
 ```
+
+### Run 2026-07-20 — Group K-b (drawio, sillytavern, lobechat, traefik) + Group L
+
+Full `--groups K,L` runner invocation: Group K 30 passed / 0 failed (K1–K8
+regression-green, K9–K12 new); Group L re-run after the anythingllm embedder
+fix: 5 passed / 0 failed.
+
+CHECK: K9 drawio ready + AI chat
+COMMAND: `curl -L /` then `POST /api/chat` (UIMessage parts, model qwen3:0.6b via ollama)
+EXPECTED: 200; SSE stream with `text-delta` chunks ending in `{"type":"finish","finishReason":"stop"}`
+ACTUAL: 200 after 0 s; streamed mxCell diagram XML, finish stop (fix validated — before the `/api` base-path fix every chat returned `{"type":"error","errorText":"Not Found"}`)
+RESULT: PASS
+
+CHECK: K10 sillytavern
+COMMAND: `GET /version`; index grep; container env grep
+EXPECTED: pkgVersion, `SillyTavern` in body, `SILLYTAVERN_OLLAMA_URL=http://ollama:11434`
+ACTUAL: 1.16.0; content + wiring present
+RESULT: PASS
+
+CHECK: K11 lobechat ready + chat round trip
+COMMAND: `curl -L /` (307→/chat); `POST /webapi/chat/ollama` with the XOR client token
+EXPECTED: 200; SSE `event: text`/`event: reasoning` chunks from qwen3:0.6b
+ACTUAL: 200 after 0 s; streamed model output via ollama
+RESULT: PASS
+
+CHECK: K12 traefik routing to landing
+COMMAND: dashboard `/api/http/routers`; `curl -k https://localhost/ -H 'Host: landing.lan'`; plain http
+EXPECTED: `landing@docker` registered; 200 with landing body; 301 to https
+ACTUAL: router registered (drawio/lobechat/ollama/sillytavern routers also present); https body contains `harbor`; 301 (fix validated — with the old `traefik.config` default the container mounted an empty directory over traefik.yml)
+RESULT: PASS
+
+CHECK: L1 anythingllm chat round trip
+COMMAND: workspace new → update (chatMode=chat, provider-matched model) → stream-chat → delete
+EXPECTED: `finalizeResponseStream` with completion_tokens > 0
+ACTUAL: completion_tokens 160, provider OllamaAILLM (first run FAILed with `No embedding model was set` — product defect, fixed via EMBEDDING_MODEL_PREF in the ollama overlay, fact 9i9)
+RESULT: PASS
+
+CHECK: L2 sqlchat chat round trip
+COMMAND: `ollama cp qwen3:0.6b gpt-3.5-turbo`; `POST /api/chat` with `x-openai-endpoint: http://ollama:11434/v1`
+EXPECTED: streamed reply containing PONG
+ACTUAL: PONG (upstream hardcodes gpt-* model names — documented limitation, alias workaround)
+RESULT: PASS
