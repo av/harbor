@@ -1328,6 +1328,15 @@ service_compose_exists() {
         return 0
     fi
 
+    # Cross-file-only selectors (e.g. `mcp-server-time`) have no service of
+    # their own but activate overlay files such as
+    # compose.x.mcpo.mcp-server-time.yml — documented flow:
+    # `harbor up mcpo mcp-server-time`.
+    if compgen -G "$services_dir/compose.x.*.$service.yml" >/dev/null \
+        || compgen -G "$services_dir/compose.x.*.$service.*.yml" >/dev/null; then
+        return 0
+    fi
+
     # Companion sub-services (e.g. langfuse-worker, daytona-registry-ui) are
     # defined inside the parent's compose file and follow <parent>-<suffix> naming.
     local parent="$service"

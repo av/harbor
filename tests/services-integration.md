@@ -946,6 +946,104 @@ ollama`; pull `qwen3:0.6b`.
 Teardown: `./harbor.sh down`; restore configs; remove stray
 `harbor-*-run-*` containers.
 
+## Group M — proxies / gateways / MCP services (Batch M of the Coverage Plan)
+
+Automated in `tests/services-integration.sh --groups M`; part of the default
+group list. Three sub-batches: M-a bifrost + optillm (OpenAI gateways proxied
+through to ollama/llamacpp), M-b metamcp + mcpo + mcp-server-time (MCP over
+HTTP), M-c supergateway (stdio→SSE bridge, run-style CLI).
+
+### M-a. OpenAI gateway proxies
+
+Pre: `./harbor.sh up ollama optillm bifrost` (llamacpp comes up as a default
+service; optillm builds from `codelion/optillm#main` on first up); pull
+`qwen3:0.6b` into ollama.
+
+#### M1–M4. bifrost
+
+- Ready: `GET /health` 200 (also a compose healthcheck).
+- Bootstrap sidecars: `harbor.bifrost-ollama-bootstrap` and
+  `harbor.bifrost-llamacpp-bootstrap` must exit 0 and the `harbor-ollama`
+  provider key must exist at `GET /api/providers/ollama/keys`.
+  - Product defect found here (fact bifrost-bootstrap-idempotent): with a
+    persisted `services/bifrost/config.db`, every re-`up` failed —
+    `bootstrap-provider.sh` checked key presence via
+    `GET /api/providers/<p>` which *redacts keys* (they live at the
+    `/keys` sub-endpoint), then hit a 500 "record with this name already
+    exists" on the blind re-create. Fixed by querying `/keys` first.
+- Proxy-through (ollama): `POST /v1/chat/completions` with
+  `Authorization: Bearer sk-bifrost` and model `ollama/qwen3:0.6b` →
+  non-empty `content` (qwen3 also emits `reasoning`; accept either).
+- Proxy-through (llamacpp): resolve the model id from the llamacpp router
+  itself (bifrost's persisted `config.db` can hold stale ids from earlier
+  bootstraps; it forwards any `llamacpp/<id>` regardless) — a completion
+  against `llamacpp/…Qwen3.5-0.8B…Q4_K_M` returns content or reasoning
+  (this quant deterministically answers in `reasoning` only — same as
+  Group J). Retry up to 3×: the router closes the first connection while
+  cold-loading a model, which bifrost surfaces as "server closed connection
+  before returning the first response byte".
+
+#### M5–M6. optillm
+
+- Product defect found here (fact optillm-bind-host): upstream now defaults
+  `--host 127.0.0.1` "for security", so the container was unreachable
+  through the published port. Fixed with `OPTILLM_HOST=0.0.0.0` in
+  `compose.optillm.yml` (list-form `environment` — the backend overlays use
+  list form and map/list forms do not merge).
+- Ready: `GET /v1/models` 200 — the model list is passed through from the
+  backend (`OPTILLM_BASE_URL`; with both ollama and llamacpp up the overlay
+  winner is invocation-dependent, read it from the container env).
+- Completion: `POST /v1/chat/completions` with the `none-<model>` approach
+  prefix (overrides the shipped default `OPTILLM_APPROACH=z3` per request)
+  → reply contains `PONG`. Use a non-thinking model (LFM2.5 on llamacpp,
+  `qwen3:0.6b` on ollama): thinking models burn the budget in reasoning and
+  optillm returns empty content with `completion_tokens: 2000`.
+
+### M-b. MCP over HTTP (metamcp + mcpo)
+
+Pre: `./harbor.sh up metamcp mcpo mcp-server-time` (metamcp builds
+`metatool-ai/metatool-app` from git on first up — pnpm, several minutes).
+
+- `mcp-server-time` is a *cross-file-only selector*: it has no compose file
+  of its own, it only activates `compose.x.mcpo.mcp-server-time.yml`
+  (mounts the `time` server into mcpo's merged config), per the documented
+  flow in docs/2.3.43.
+  - Product defect found here (fact crossfile-selector): `harbor up`
+    validation (`service_compose_exists`) rejected such selectors with
+    "Service 'mcp-server-time' not found", breaking the documented
+    `harbor up mcpo mcp-server-time` flow. Fixed: the check now also
+    accepts tokens that appear as parts of `compose.x.*` filenames.
+- M7 metamcp UI: `GET /mcp-servers` 200 within 300 s (root 307-redirects).
+- M8 metamcp-sse healthy (serves the aggregated MCP endpoint on :12006).
+  - Product defect found here (fact metamcp-sse-seed): on a fresh database
+    `start-sse.mjs` crashed (`api_keys` is empty until a browser opens the
+    UI — the app seeds project/profile/key from frontend JS), so
+    `harbor up metamcp` always failed on first boot. Fixed: `start-sse.mjs`
+    now seeds a default project/profile/API key headlessly when missing.
+- M9 mcpo tool call: poll `GET /time/docs` 200 (uvx installs on first
+  start), then `POST /time/get_current_time {"timezone":"UTC"}` → JSON with
+  `datetime` — a real MCP tool exposed over OpenAPI HTTP.
+- M10 metamcp aggregation round trip: seed a `time` server row into
+  metamcp's `mcp_servers` table (psql via the `metamcp-postgres` container),
+  restart mcpo (its metamcp session snapshots the tool list at connect),
+  then `GET /metamcp/openapi.json` lists `/mcp-time__get_current_time` and
+  POSTing it returns `datetime`. Chain proven:
+  mcpo → supergateway (`--sse`) → metamcp-sse → metamcp API → uvx
+  mcp-server-time. The seeded row is deleted afterwards.
+
+### M-c. supergateway (M11)
+
+- Run-style CLI (`entrypoint: npx supergateway`, no ports). Check:
+  `$(harbor cmd supergateway) run -d supergateway --stdio "uvx
+  mcp-server-time" --port 8000`, then `curl http://localhost:8000/sse`
+  *inside* the container → first SSE frame is `event: endpoint` with a
+  `/message?sessionId=…` payload — the stdio MCP server is bridged to SSE.
+  Container removed afterwards.
+
+Teardown: `./harbor.sh down` after each sub-batch; remove the supergateway
+run container; `services/metamcp/data` (postgres) and `services/mcp/cache`
+become root-owned — alpine-rm before linting.
+
 ## Results
 
 Execution results are appended per run as:
@@ -1605,3 +1703,33 @@ Product defects fixed this run (facts s13, m7y, ieb, rc7s, all
 OLLAMA_URL host-port; presenton DISABLE_AUTH default. Documented gap:
 perplexica source.config.toml missing from repo (docker creates a bogus
 directory; backend runs on env vars regardless).
+
+### Run 2026-07-20 — Group M
+
+`./tests/services-integration.sh --groups M` → 12 passed, 0 failed, 0
+skipped (RUNNER-EXIT=0).
+
+- M1/M2 bifrost: healthy at once; both bootstrap sidecars exit 0 with the
+  `harbor-ollama` key present (validates the idempotency fix against a
+  persisted config.db).
+- M3 bifrost→ollama: `ollama/qwen3:0.6b` completion → PONG.
+- M4 bifrost→llamacpp: `llamacpp/unsloth/Qwen3.5-0.8B-GGUF:Q4_K_M`
+  completion (attempt 2 — first connection dropped during router
+  cold-load, per the documented retry).
+- M5/M6 optillm: models pass-through 200; `none-qwen3:0.6b` completion →
+  PONG on attempt 1 (ollama won the overlay merge this run).
+- M7/M8 metamcp: UI 200; metamcp-sse healthy immediately (validates the
+  headless API-key seeding fix).
+- M9 mcpo: `POST /time/get_current_time` → UTC datetime JSON (real MCP
+  tool over OpenAPI HTTP, `mcp-server-time` cross-file selector).
+- M10 metamcp aggregation: seeded `time` server; `/metamcp/
+  mcp-time__get_current_time` through mcpo → supergateway → metamcp-sse →
+  metamcp returned datetime; seed row deleted.
+- M11 supergateway: stdio→SSE bridge served `event: endpoint` +
+  sessionId.
+
+Product defects fixed this run (facts lbl, b2e, wp7, et1, all
+@implemented): bifrost bootstrap key-presence check (/keys endpoint);
+optillm OPTILLM_HOST=0.0.0.0; metamcp start-sse headless seeding;
+harbor.sh cross-file-only selector validation (documented
+`harbor up mcpo mcp-server-time` flow).

@@ -2,7 +2,7 @@
 # Harbor services integration runner — automates tests/services-integration.md.
 #
 # Usage:
-#   ./tests/services-integration.sh                 # run all CPU-safe groups (A B C D F G H I K L)
+#   ./tests/services-integration.sh                 # run all CPU-safe groups (A B C D F G H I K L M)
 #   ./tests/services-integration.sh --groups B,G    # run selected groups
 #   ./tests/services-integration.sh --list          # list groups and their checks
 #
@@ -23,7 +23,7 @@ set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.." || exit 1
 HARBOR=./harbor.sh
 
-DEFAULT_GROUPS="A B C D F G H I K L"
+DEFAULT_GROUPS="A B C D F G H I K L M"
 PASS_COUNT=0
 FAIL_COUNT=0
 SKIP_COUNT=0
@@ -1488,6 +1488,184 @@ sys.exit(rc)
   teardown
 }
 
+group_M() {
+  log "=== Group M: proxies/gateways/MCP (bifrost, optillm, mcpo, metamcp, supergateway)"
+
+  # --- M-a: OpenAI gateway proxies via ollama + llamacpp ---
+  log "M-a: harbor up ollama optillm bifrost (optillm builds from git on first up)"
+  "$HARBOR" up ollama optillm bifrost >/dev/null 2>&1
+
+  local bifrost_url optillm_url
+  bifrost_url=$(svc_url bifrost)
+  optillm_url=$(svc_url optillm)
+  docker exec harbor.ollama ollama pull "$OLLAMA_TINY_MODEL" >/dev/null 2>&1
+
+  probe_200 "M1 bifrost health" "$bifrost_url/health" 180
+
+  # Bootstrap sidecars must exit 0 and leave the provider key registered.
+  # With a persisted services/bifrost/config.db this is the idempotency
+  # regression check (keys live at /api/providers/<p>/keys, not on the
+  # provider object).
+  local rc_o rc_l keys_json
+  rc_o=$(docker inspect -f '{{.State.ExitCode}}' harbor.bifrost-ollama-bootstrap 2>/dev/null)
+  rc_l=$(docker inspect -f '{{.State.ExitCode}}' harbor.bifrost-llamacpp-bootstrap 2>/dev/null)
+  keys_json=$(curl -s -m 10 "$bifrost_url/api/providers/ollama/keys")
+  if [ "$rc_o" = "0" ] && [ "$rc_l" = "0" ] \
+    && echo "$keys_json" | grep 'harbor-ollama' >/dev/null; then
+    record PASS "M2 bifrost bootstraps idempotent" "both exit 0, harbor-ollama key present"
+  else
+    record FAIL "M2 bifrost bootstraps idempotent" "ollama rc=$rc_o llamacpp rc=$rc_l keys=$(echo "$keys_json" | cut -c1-120 | head -1)"
+  fi
+
+  # Proxy-through via ollama. qwen3 may spend part of the budget on
+  # reasoning; accept non-empty content or reasoning.
+  local reply
+  reply=$(curl -s -m 240 "$bifrost_url/v1/chat/completions" \
+    -H 'Content-Type: application/json' -H 'Authorization: Bearer sk-bifrost' \
+    -d "{\"model\":\"ollama/$OLLAMA_TINY_MODEL\",\"messages\":[{\"role\":\"user\",\"content\":\"Reply with exactly: PONG\"}],\"max_tokens\":$MAX_TOKENS}" \
+    | jq -r '(.choices[0].message.content // "") + (.choices[0].message.reasoning // "")')
+  if [ -n "$reply" ]; then
+    record PASS "M3 bifrost proxies to ollama" "$(echo "$reply" | cut -c1-60 | head -1)"
+  else
+    record FAIL "M3 bifrost proxies to ollama" "empty reply"
+  fi
+
+  # Proxy-through via the llamacpp provider. Resolve the model id from the
+  # llamacpp router itself — bifrost's persisted config.db can hold stale
+  # ids from earlier bootstraps, and it forwards any llamacpp/<id> anyway.
+  local bmodel
+  resolve_model
+  bmodel="llamacpp/$MODEL"
+  # Retry: the llamacpp router closes the first connection while cold-
+  # loading a model, which bifrost surfaces as "server closed connection".
+  local m4_attempt
+  reply=""
+  for m4_attempt in 1 2 3; do
+    reply=$(curl -s -m 240 "$bifrost_url/v1/chat/completions" \
+      -H 'Content-Type: application/json' -H 'Authorization: Bearer sk-bifrost' \
+      -d "{\"model\":\"$bmodel\",\"messages\":[{\"role\":\"user\",\"content\":\"Reply with exactly: PONG\"}],\"max_tokens\":$MAX_TOKENS}" \
+      | jq -r '(.choices[0].message.content // "") + (.choices[0].message.reasoning // "")' 2>/dev/null)
+    [ -n "$reply" ] && break
+    sleep 10
+  done
+  if [ -n "$bmodel" ] && [ -n "$reply" ]; then
+    record PASS "M4 bifrost proxies to llamacpp" "$bmodel attempt=$m4_attempt"
+  else
+    record FAIL "M4 bifrost proxies to llamacpp" "model=$bmodel reply-empty"
+  fi
+
+  probe_200 "M5 optillm models" "$optillm_url/v1/models" 120
+
+  # Which backend won the overlay merge is invocation-dependent — read it
+  # from the container and pick a non-thinking model accordingly. The
+  # none-<model> prefix overrides the shipped OPTILLM_APPROACH=z3.
+  local obase omodel attempt
+  obase=$(docker exec harbor.optillm printenv OPTILLM_BASE_URL 2>/dev/null)
+  if echo "$obase" | grep 'ollama' >/dev/null; then
+    omodel="$OLLAMA_TINY_MODEL"
+  else
+    omodel="$OPENCODE_MODEL"
+  fi
+  for attempt in 1 2; do
+    reply=$(curl -s -m 240 "$optillm_url/v1/chat/completions" \
+      -H 'Content-Type: application/json' -H 'Authorization: Bearer sk-optillm' \
+      -d "{\"model\":\"none-$omodel\",\"messages\":[{\"role\":\"user\",\"content\":\"Reply with exactly: PONG\"}],\"max_tokens\":$MAX_TOKENS}" \
+      | jq -r '.choices[0].message.content // ""')
+    if echo "$reply" | grep -i 'PONG' >/dev/null; then
+      record PASS "M6 optillm proxies completion" "backend=$obase attempt=$attempt"
+      break
+    fi
+    if [ "$attempt" = "2" ]; then
+      record FAIL "M6 optillm proxies completion" "backend=$obase reply=$(echo "$reply" | cut -c1-80 | head -1)"
+    fi
+  done
+
+  teardown
+
+  # --- M-b: MCP over HTTP (metamcp + mcpo + mcp-server-time selector) ---
+  log "M-b: harbor up metamcp mcpo mcp-server-time (metamcp builds from git on first up)"
+  "$HARBOR" up metamcp mcpo mcp-server-time >/dev/null 2>&1
+
+  local metamcp_url mcpo_url
+  metamcp_url=$(svc_url metamcp)
+  mcpo_url=$(svc_url mcpo)
+
+  probe_200 "M7 metamcp UI" "$metamcp_url/mcp-servers" 300
+
+  # Healthy SSE sidecar proves the headless project/profile/API-key seeding.
+  local sse_health waited
+  waited=0
+  while [ "$waited" -le 120 ]; do
+    sse_health=$(docker inspect -f '{{.State.Health.Status}}' harbor.metamcp-sse 2>/dev/null)
+    [ "$sse_health" = "healthy" ] && break
+    sleep 5
+    waited=$((waited + 5))
+  done
+  if [ "$sse_health" = "healthy" ]; then
+    record PASS "M8 metamcp-sse healthy" "after ${waited}s"
+  else
+    record FAIL "M8 metamcp-sse healthy" "status=$sse_health"
+  fi
+
+  # Real MCP tool exposed over OpenAPI HTTP (uvx installs on first start).
+  probe_200 "M9a mcpo time docs" "$mcpo_url/time/docs" 180
+  local tool_out
+  tool_out=$(curl -s -m 30 -X POST "$mcpo_url/time/get_current_time" \
+    -H 'Content-Type: application/json' -d '{"timezone":"UTC"}')
+  if echo "$tool_out" | grep '"datetime"' >/dev/null; then
+    record PASS "M9 mcpo MCP tool call" "$(echo "$tool_out" | cut -c1-60 | head -1)"
+  else
+    record FAIL "M9 mcpo MCP tool call" "$(echo "$tool_out" | cut -c1-120 | head -1)"
+  fi
+
+  # Aggregation round trip: seed a time server into metamcp, restart mcpo
+  # (its metamcp session snapshots the tool list at connect), call the tool
+  # through the mcpo -> supergateway -> metamcp-sse -> metamcp chain.
+  docker exec harbor.metamcp-postgres sh -c \
+    'psql -U $POSTGRES_USER -d $POSTGRES_DB -c "INSERT INTO mcp_servers (name, description, command, args, profile_uuid) SELECT '\''time'\'', '\''it-seed'\'', '\''uvx'\'', ARRAY['\''mcp-server-time'\''], uuid FROM profiles LIMIT 1"' >/dev/null 2>&1
+  docker restart harbor.mcpo >/dev/null 2>&1
+  waited=0
+  while [ "$waited" -le 240 ]; do
+    if curl -s -m 10 "$mcpo_url/metamcp/openapi.json" 2>/dev/null \
+      | grep 'mcp-time__get_current_time' >/dev/null; then
+      break
+    fi
+    sleep 5
+    waited=$((waited + 5))
+  done
+  tool_out=$(curl -s -m 60 -X POST "$mcpo_url/metamcp/mcp-time__get_current_time" \
+    -H 'Content-Type: application/json' -d '{"timezone":"UTC"}')
+  if echo "$tool_out" | grep '"datetime"' >/dev/null; then
+    record PASS "M10 metamcp aggregation round trip" "after ${waited}s"
+  else
+    record FAIL "M10 metamcp aggregation round trip" "$(echo "$tool_out" | cut -c1-120 | head -1)"
+  fi
+  docker exec harbor.metamcp-postgres sh -c \
+    'psql -U $POSTGRES_USER -d $POSTGRES_DB -c "DELETE FROM mcp_servers WHERE description = '\''it-seed'\''"' >/dev/null 2>&1
+
+  # --- M-c: supergateway stdio->SSE bridge (run-style, no ports) ---
+  local sg_cid sg_out
+  sg_cid=$($("$HARBOR" cmd supergateway) run -d supergateway \
+    --stdio "uvx mcp-server-time" --port 8000 2>/dev/null | tail -1)
+  sg_out=""
+  waited=0
+  while [ "$waited" -le 120 ]; do
+    sg_out=$(docker exec "$sg_cid" sh -c 'curl -s -m 3 http://localhost:8000/sse' 2>/dev/null | head -2)
+    [ -n "$sg_out" ] && break
+    sleep 5
+    waited=$((waited + 5))
+  done
+  if echo "$sg_out" | grep 'event: endpoint' >/dev/null \
+    && echo "$sg_out" | grep 'sessionId' >/dev/null; then
+    record PASS "M11 supergateway stdio->SSE bridge" "after ${waited}s"
+  else
+    record FAIL "M11 supergateway stdio->SSE bridge" "$(echo "$sg_out" | cut -c1-120 | head -1)"
+  fi
+  [ -n "$sg_cid" ] && docker rm -f "$sg_cid" >/dev/null 2>&1
+
+  teardown
+}
+
 list_groups() {
   cat <<'EOF'
 A  llamacpp webui boost litellm aichat   (llamacpp backend + OpenAI satellites)
@@ -1502,6 +1680,7 @@ I  webui searxng litellm boost jupyter promptfoo comfyui chatui librechat langfl
 J  llamacpp ollama lemonade localai voicebox vllm (ROCm paths; skipped on non-ROCm hosts, excluded by default)
 K  landing hollama mikupad mock-openai qdrant libretranslate netdata dbhub drawio sillytavern lobechat traefik (standalone web services + routed traefik)
 L  anythingllm sqlchat khoj perplexica ldr presenton aider opint oterm parllama (LLM frontends + CLIs)
+M  bifrost optillm metamcp mcpo supergateway (proxies/gateways/MCP; git builds on first up)
 EOF
 }
 
@@ -1526,8 +1705,8 @@ main() {
   local g
   for g in $groups; do
     case "$g" in
-      A|B|C|D|E|F|G|H|I|J|K|L) ;;
-      *) echo "Unknown group: $g (valid: A-L)" >&2; exit 2 ;;
+      A|B|C|D|E|F|G|H|I|J|K|L|M) ;;
+      *) echo "Unknown group: $g (valid: A-M)" >&2; exit 2 ;;
     esac
   done
 

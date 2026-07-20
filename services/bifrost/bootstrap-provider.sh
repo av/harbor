@@ -117,7 +117,11 @@ JSON
 }
 
 ensure_key_endpoint() {
-  provider_json="$(curl -fsS "$BIFROST_URL/api/providers/$BIFROST_PROVIDER" || true)"
+  # GET /api/providers/<name> redacts keys — the keys list has its own endpoint.
+  provider_json="$(curl -fsS "$BIFROST_URL/api/providers/$BIFROST_PROVIDER/keys" || true)"
+  if ! printf '%s' "$provider_json" | grep -q '"keys":\['; then
+    provider_json="$(curl -fsS "$BIFROST_URL/api/providers/$BIFROST_PROVIDER" || true)"
+  fi
   if printf '%s' "$provider_json" | grep -q '"keys":\[' && \
     { printf '%s' "$provider_json" | grep -q "\"$BIFROST_KEY_ID\"" || printf '%s' "$provider_json" | grep -q "\"$BIFROST_KEY_NAME\""; }; then
     echo "Provider key $BIFROST_KEY_ID present"

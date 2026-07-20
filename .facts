@@ -129,6 +129,11 @@
   command: rg -q 'model_args\+\=' harbor.sh && rg -q 'Mixed service and model arguments' harbor.sh && rg -q 'run_models_pull "\$\{model_args\[@\]\}"' harbor.sh
   tags: [spec, reported-regression, implemented]
 
+## up
+- label: service_compose_exists accepts cross-file-only selectors (tokens appearing as parts of compose.x.* filenames, e.g. mcp-server-time), keeping the documented 'harbor up mcpo mcp-server-time' flow working
+  command: bash -c 'source /dev/null; ./harbor.sh cmd mcpo mcp-server-time >/dev/null'
+  tags: [services-it, implemented]
+
 # services
 - label: compose.yml defines only the shared harbor-network without service definitions
   command: grep -q 'harbor-network' compose.yml && ! grep -q '^services:' compose.yml
@@ -272,6 +277,21 @@
 - label: presenton auth is disabled by default via HARBOR_PRESENTON_DISABLE_AUTH -> DISABLE_AUTH so the API works out of the box (upstream 428s 'Login setup is required' otherwise)
   command: grep -q 'DISABLE_AUTH=${HARBOR_PRESENTON_DISABLE_AUTH}' services/compose.presenton.yml && grep -q 'HARBOR_PRESENTON_DISABLE_AUTH="true"' profiles/default.env
   tags: [spec, services-it, implemented]
+
+## bifrost
+- label: bifrost bootstrap-provider.sh verifies provider-key presence via GET /api/providers/<p>/keys (the provider object redacts keys), so re-running the bootstrap against a persisted config.db exits 0 instead of failing with 'record with this name already exists'
+  command: grep -q 'providers/$BIFROST_PROVIDER/keys' services/bifrost/bootstrap-provider.sh
+  tags: [services-it, implemented]
+
+## optillm
+- label: compose.optillm.yml sets OPTILLM_HOST=0.0.0.0 (list-form environment) because upstream optillm now binds 127.0.0.1 by default, which makes the published port unreachable
+  command: grep -q 'OPTILLM_HOST=0.0.0.0' services/compose.optillm.yml
+  tags: [services-it, implemented]
+
+## metamcp
+- label: metamcp start-sse.mjs seeds a default project/profile/API key when the api_keys table is empty, so 'harbor up metamcp' succeeds headlessly on a fresh database instead of crash-looping until the UI is opened
+  command: grep -q 'seeding default project/profile/key' services/metamcp/start-sse.mjs
+  tags: [services-it, implemented]
 
 # app
 - label: Harbor App blocks main UI behind a setup gate until setup detail status is ready

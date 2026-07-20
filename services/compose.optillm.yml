@@ -8,6 +8,10 @@ services:
     env_file:
       - ./.env
       - ./services/optillm/override.env
+    # Upstream defaults to binding 127.0.0.1 "for security" — unreachable
+    # through the published port without this.
+    environment:
+      - OPTILLM_HOST=0.0.0.0
     volumes:
       - ${HARBOR_OPTILLM_WORKSPACE}:/root/.config/optillm
     ports:

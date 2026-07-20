@@ -10,16 +10,38 @@ async function resolveApiKey() {
     connectionString: process.env.DATABASE_URL,
   });
   await client.connect();
-  const result = await client.query(
+
+  // On a fresh install the api_keys table is empty until the MetaMCP UI is
+  // opened once (the app seeds project/profile/key from the frontend), which
+  // used to crash this bootstrap. Seed the same default rows headlessly.
+  const result = await client.query(`SELECT api_key FROM api_keys LIMIT 1`);
+
+  if (result.rows.length > 0) {
+    await client.end();
+    return result.rows[0].api_key;
+  }
+
+  console.log("No MetaMCP API key found — seeding default project/profile/key");
+  const seeded = await client.query(
     `
-    SELECT
-      *
-    FROM
-      api_keys
+    WITH project AS (
+      INSERT INTO projects (name) VALUES ('Default Project') RETURNING uuid
+    ), profile AS (
+      INSERT INTO profiles (name, project_uuid)
+      SELECT 'Default Workspace', uuid FROM project RETURNING uuid, project_uuid
+    ), activate AS (
+      UPDATE projects SET active_profile_uuid = profile.uuid
+      FROM profile WHERE projects.uuid = profile.project_uuid
+    )
+    INSERT INTO api_keys (project_uuid, api_key)
+    SELECT project_uuid, 'sk_mt_' || replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', '')
+    FROM profile
+    RETURNING api_key
   `
   );
 
-  return result.rows[0].api_key;
+  await client.end();
+  return seeded.rows[0].api_key;
 }
 
 async function startSSEServer(apiKey) {
