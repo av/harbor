@@ -1,0 +1,9 @@
+model_list:
+  # llama.cpp router auto-discovers models from the HF cache, so a static
+  # model id can't be pinned here — use provider wildcard routing instead:
+  # request "llamacpp/<router-model-id>" and LiteLLM forwards "<router-model-id>".
+  - model_name: "llamacpp/*"
+    litellm_params:
+      model: "openai/*"
+      api_base: http://llamacpp:8080/v1
+      api_key: sk-llamacpp

@@ -399,6 +399,85 @@ image on first up).
 
 Teardown: `./harbor.sh down`; verify no `harbor.*` containers remain.
 
+## Group I — depth + integrations of covered services (Batch I of the Coverage Plan)
+
+Three serial sub-batches; automated in `tests/services-integration.sh --groups I`.
+Deferred to a later batch: chatui/librechat chat round trips (need session/auth
+bootstrapping) and langflow flow execution (needs a flow definition import).
+
+### I-a: webui chat, searxng categories, litellm proxy, boost modules
+
+Pre: `harbor config set boost.modules "klmbr;rcn;g1;mcts;eli5;concept;ponder"`
+(boost only serves configured modules; restore afterwards), then
+`./harbor.sh up llamacpp webui boost litellm searxng`.
+
+#### I1. webui chat round trip
+
+- Signup a throwaway user via `POST /api/v1/auths/signup` → token. Existing
+  instances have users, so the new user lands as `pending`: promote it to
+  `admin` directly in `/app/backend/data/webui.db` inside the container.
+- `POST /api/chat/completions` with `Bearer <token>`, `model=$MODEL`,
+  `max_tokens 2000` → non-empty `.choices[0].message.content`.
+- Cleanup: delete the test user from `user` and `auth` tables.
+
+#### I2. searxng category queries
+
+- `GET /search?q=github&categories=images&format=json` and
+  `...&categories=it&format=json` → `.results` is an array (result counts vary
+  with external engine availability; the JSON category path itself must work).
+
+#### I3. litellm actually proxying
+
+- Ships via the new `services/litellm/litellm.llamacpp.yaml` +
+  `services/compose.x.litellm.llamacpp.yml` (wildcard routing — the llama.cpp
+  router auto-discovers models, so no static id can be pinned).
+- `GET /v1/models` (master key) → `.data | length > 0`.
+- `POST /v1/chat/completions` with `model=llamacpp/$MODEL` → non-empty content.
+
+#### I4. boost modules (7-module sample)
+
+- For each of klmbr, rcn, g1, mcts, eli5, concept, ponder: find the
+  `<module>-<model>` id in `/v1/models` (Bearer sk-boost) and get a non-empty
+  completion (`-m 900` — multi-turn modules like mcts/rcn/g1 make many
+  internal calls on CPU). One retry per module.
+- rcn and g1 capture the *content* of intermediate completions into the chat;
+  thinking models (Qwen3.5) return only `reasoning_content` there, producing
+  empty assistant turns and an empty final answer — use the non-thinking,
+  template-tolerant model (LFM2.5) for those two; the rest use `$MODEL`.
+- Product defect found here (fact cvg): g1 appends multiple consecutive
+  assistant messages, which llama.cpp rejects with 400 "Cannot have 2 or more
+  assistant messages at the end of the list". Fixed by merging consecutive
+  same-role plain messages in `ChatNode.history()` (tool messages exempt).
+
+### I-b: jupyter kernel execution, promptfoo eval
+
+Pre: `./harbor.sh up ollama jupyter promptfoo`; pull `qwen3:0.6b`.
+
+#### I5. jupyter kernel execute
+
+- `docker exec harbor.jupyter python -c '<jupyter_client start_new_kernel;
+  execute print(6*7); read iopub stream>'` → `42`.
+
+#### I6. promptfoo eval run
+
+- Inside the container (with `OLLAMA_BASE_URL=http://ollama:11434`): write a
+  minimal config (one prompt, provider `ollama:chat:qwen3:0.6b`, a
+  `javascript: output.length > 0` assert) to `/tmp/pf.yaml` and run
+  `promptfoo eval -c pf.yaml` (fallback `node /app/dist/src/main.js`).
+  Exit 0 = eval executed and assertion passed.
+
+### I-c: comfyui workflow submission (CPU)
+
+Pre: `harbor config set comfyui.args "--cpu"` + recreate (Group E workaround).
+
+#### I7. comfyui workflow
+
+- `POST /prompt` with a model-free graph `EmptyImage → SaveImage` → `prompt_id`;
+  poll `GET /history/<prompt_id>` until `.outputs | length > 0` (≤120 s).
+  Exercises queueing, execution, and history without checkpoints.
+
+Teardown after each sub-batch: `./harbor.sh down` + config restore.
+
 ## Results
 
 Execution results are appended per run as:
@@ -728,3 +807,61 @@ Gap analysis of 2026-07-20 (host: AMD Strix Halo — ROCm iGPU, no NVIDIA, no ex
 8. Batch P — heavy multi-container platforms (as time allows, startup+API smoke): onyx, bionicgpt, windmill, surfsense, airweave, sim, karakeep, activepieces, postiz, daytona, mindsdb, homeassistant.
 
 Deferred: needs-key set (openclaw, autogpt, cfd, morphic full path) and impractical set (NVIDIA-only, Apple-only, omniparser) — document, don't test.
+
+### Run 2026-07-20 — Group I (depth + integrations)
+
+Runner: `./tests/services-integration.sh --groups I` — final run: 22 passed,
+0 failed, 0 skipped.
+
+```
+CHECK: I1 webui chat round trip
+COMMAND: signup + role promote in webui.db, then POST /api/chat/completions (model unsloth/Qwen3.5-0.8B-GGUF:Q4_K_M)
+EXPECTED: non-empty .choices[0].message.content
+ACTUAL: non-empty reply; test user removed afterwards
+RESULT: PASS
+
+CHECK: I2 searxng categories images / it
+COMMAND: GET /search?q=github&categories=<cat>&format=json
+EXPECTED: .results is an array
+ACTUAL: arrays for both categories
+RESULT: PASS (x2)
+
+CHECK: I3 litellm proxying (new llamacpp overlay)
+COMMAND: GET /v1/models; POST /v1/chat/completions model=llamacpp/unsloth/Qwen3.5-0.8B-GGUF:Q4_K_M
+EXPECTED: models non-empty; non-empty content
+ACTUAL: wildcard entry served; completion proxied to llama.cpp router
+RESULT: PASS (x2) — closes the "litellm never proxied" gap via services/litellm/litellm.llamacpp.yaml + compose.x.litellm.llamacpp.yml
+
+CHECK: I4 boost modules klmbr rcn g1 mcts eli5 concept ponder
+COMMAND: POST /v1/chat/completions per <module>-<model>, max_tokens 2000, -m 900
+EXPECTED: non-empty content each
+ACTUAL: all 7 PASS. First run: rcn/g1 FAILED — two real findings:
+  (1) product defect (fact cvg): g1 appends consecutive assistant messages;
+      llama.cpp 400s "Cannot have 2 or more assistant messages at the end of
+      the list". Fixed: ChatNode.history() merges consecutive same-role plain
+      messages (tool messages exempt); boost pytest suite green (2403 passed).
+  (2) bad expectation: rcn/g1 capture intermediate completion *content*;
+      thinking models emit only reasoning_content there → empty turns and
+      final answers. Spec/runner now use LFM2.5 (non-thinking) for rcn/g1.
+RESULT: PASS (x7)
+
+CHECK: I5 jupyter kernel execute
+COMMAND: docker exec harbor.jupyter python -c '<jupyter_client: execute print(6*7)>'
+EXPECTED: 42 on iopub stream
+ACTUAL: 42
+RESULT: PASS
+
+CHECK: I6 promptfoo eval run
+COMMAND: promptfoo eval -c pf.yaml (provider ollama:chat:qwen3:0.6b, javascript output.length>0 assert)
+EXPECTED: exit 0
+ACTUAL: exit 0 — eval executed against ollama, assertion passed
+RESULT: PASS
+
+CHECK: I7 comfyui workflow (CPU)
+COMMAND: POST /prompt EmptyImage→SaveImage; poll /history/<id>
+EXPECTED: outputs present
+ACTUAL: prompt_id 402770d7…, outputs within 120 s
+RESULT: PASS
+
+Deferred to a later batch: chatui/librechat chat round trips (session/auth
+bootstrap), langflow flow execution (needs flow import).

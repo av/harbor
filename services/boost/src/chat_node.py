@@ -174,7 +174,40 @@ class ChatNode:
       node = node.parent
       messages.append(node.message())
 
-    return messages[::-1]
+    return self.__merge_consecutive(messages[::-1])
+
+  @staticmethod
+  def __merge_consecutive(messages):
+    """
+    Merge consecutive same-role plain-text messages. Strict backends
+    (e.g. llama.cpp server) reject conversations with repeated roles —
+    notably trailing assistant runs produced by multi-turn modules (g1).
+    Tool-related messages are never merged.
+    """
+
+    def mergeable(msg):
+      return (
+        msg.get("role") != "tool"
+        and "tool_call_id" not in msg
+        and "tool_calls" not in msg
+        and isinstance(msg.get("content"), str)
+      )
+
+    merged = []
+    for msg in messages:
+      prev = merged[-1] if merged else None
+      if (
+        prev is not None
+        and prev["role"] == msg["role"]
+        and mergeable(prev)
+        and mergeable(msg)
+      ):
+        parts = [p for p in (prev["content"], msg["content"]) if p]
+        prev["content"] = "\n\n".join(parts)
+      else:
+        merged.append(msg)
+
+    return merged
 
   def __str__(self):
     return f"{self.role}: {self.content}"

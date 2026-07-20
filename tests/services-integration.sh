@@ -2,7 +2,7 @@
 # Harbor services integration runner — automates tests/services-integration.md.
 #
 # Usage:
-#   ./tests/services-integration.sh                 # run all CPU-safe groups (A B C D F G H)
+#   ./tests/services-integration.sh                 # run all CPU-safe groups (A B C D F G H I)
 #   ./tests/services-integration.sh --groups B,G    # run selected groups
 #   ./tests/services-integration.sh --list          # list groups and their checks
 #
@@ -21,7 +21,7 @@ set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.." || exit 1
 HARBOR=./harbor.sh
 
-DEFAULT_GROUPS="A B C D F G H"
+DEFAULT_GROUPS="A B C D F G H I"
 PASS_COUNT=0
 FAIL_COUNT=0
 SKIP_COUNT=0
@@ -487,6 +487,193 @@ group_H() {
   teardown
 }
 
+BOOST_IT_MODULES="klmbr rcn g1 mcts eli5 concept ponder"
+
+group_I() {
+  log "Group I-a: depth checks — webui chat, searxng categories, litellm proxy, boost modules"
+  # Boost only serves configured modules; select the ones under test.
+  save_and_set_config boost.modules "klmbr;rcn;g1;mcts;eli5;concept;ponder"
+  "$HARBOR" up llamacpp webui boost litellm searxng >/dev/null 2>&1
+
+  wait_llamacpp_ready "I0 llamacpp ready" || { teardown; return; }
+  resolve_model || { record FAIL "I0 model discovery"; teardown; return; }
+
+  # I1 webui chat round trip via its OpenAI-compat API. The instance may have
+  # existing users, so a fresh signup lands as "pending" — promote it to admin
+  # directly in webui.db (test user is removed afterwards).
+  local waited=0 health=""
+  while [ "$waited" -le 300 ]; do
+    health=$(docker inspect -f '{{.State.Health.Status}}' harbor.webui 2>/dev/null)
+    [ "$health" = "healthy" ] && break
+    sleep 5; waited=$((waited + 5))
+  done
+  local wu it_email it_token
+  wu=$(svc_url webui)
+  it_email="services-it-$$@harbor.test"
+  it_token=$(curl -s -m 30 "$wu/api/v1/auths/signup" -H 'Content-Type: application/json' \
+    -d "{\"name\":\"services-it\",\"email\":\"$it_email\",\"password\":\"services-it-pass\"}" \
+    | jq -r '.token // empty')
+  docker exec harbor.webui python -c "import sqlite3; c = sqlite3.connect('/app/backend/data/webui.db'); c.execute(\"update user set role='admin' where email='$it_email'\"); c.commit()" >/dev/null 2>&1
+  local webui_reply
+  webui_reply=$(curl -s -m 600 "$wu/api/chat/completions" \
+    -H "Authorization: Bearer $it_token" -H 'Content-Type: application/json' \
+    -d "{\"model\":\"$MODEL\",\"messages\":[{\"role\":\"user\",\"content\":\"Reply with exactly: PONG\"}],\"max_tokens\":$MAX_TOKENS}" \
+    | jq -r '.choices[0].message.content // empty')
+  if [ -n "$it_token" ] && [ -n "$webui_reply" ]; then
+    record PASS "I1 webui chat round trip"
+  else
+    record FAIL "I1 webui chat round trip" "token: ${it_token:+set}${it_token:-missing}, reply empty"
+  fi
+  docker exec harbor.webui python -c "import sqlite3; c = sqlite3.connect('/app/backend/data/webui.db'); c.execute(\"delete from user where email='$it_email'\"); c.execute(\"delete from auth where email='$it_email'\"); c.commit()" >/dev/null 2>&1
+
+  # I2 searxng category queries (beyond the single general JSON query of B1).
+  local sx cat
+  sx=$(svc_url searxng)
+  for cat in images it; do
+    if curl -s -m 60 "$sx/search?q=github&categories=$cat&format=json" \
+      | jq -er '.results | type == "array"' >/dev/null 2>&1; then
+      record PASS "I2 searxng category: $cat"
+    else
+      record FAIL "I2 searxng category: $cat"
+    fi
+  done
+
+  # I3 litellm actually proxying to llamacpp via the llamacpp wildcard fragment.
+  probe_200 "I3 litellm ready" "$(svc_url litellm)/health/liveliness" 120
+  local litellm_key lu
+  litellm_key=$("$HARBOR" config get litellm.master.key 2>/dev/null)
+  lu=$(svc_url litellm)
+  if curl -s -m 10 -H "Authorization: Bearer ${litellm_key:-sk-litellm}" "$lu/v1/models" \
+    | jq -er '.data | length > 0' >/dev/null 2>&1; then
+    record PASS "I3 litellm models non-empty"
+  else
+    record FAIL "I3 litellm models non-empty"
+  fi
+  if curl -s -m 600 -H "Authorization: Bearer ${litellm_key:-sk-litellm}" \
+    -H 'Content-Type: application/json' "$lu/v1/chat/completions" \
+    -d "{\"model\":\"llamacpp/$MODEL\",\"messages\":[{\"role\":\"user\",\"content\":\"Reply with exactly: PONG\"}],\"max_tokens\":$MAX_TOKENS}" \
+    | jq -er '.choices[0].message.content | length > 0' >/dev/null 2>&1; then
+    record PASS "I3 litellm proxied completion" "llamacpp/$MODEL"
+  else
+    record FAIL "I3 litellm proxied completion" "llamacpp/$MODEL"
+  fi
+
+  # I4 boost modules — one boosted completion per module under test.
+  probe_200 "I4 boost ready" "$(svc_url boost)/health" 120
+  local boost_url models mod mid
+  boost_url=$(svc_url boost)
+  models=$(curl -s -m 10 -H 'Authorization: Bearer sk-boost' "$boost_url/v1/models" | jq -r '.data[].id')
+  local base attempt ok
+  for mod in $BOOST_IT_MODULES; do
+    # Multi-turn self-reflection modules (rcn, g1) capture the *content* of
+    # intermediate completions; thinking models (Qwen3.5) emit only
+    # reasoning_content there, breaking the chain — use the non-thinking,
+    # template-tolerant model for those.
+    case "$mod" in
+      rcn|g1) base="$OPENCODE_MODEL" ;;
+      *) base="$MODEL" ;;
+    esac
+    mid=$(echo "$models" | grep -i "^${mod}-" | grep -iF "$base" | head -1)
+    if [ -z "$mid" ]; then
+      record FAIL "I4 boost module $mod" "no ${mod}-* model served"
+      continue
+    fi
+    ok=""
+    for attempt in 1 2; do
+      if curl -s -m 900 "$boost_url/v1/chat/completions" \
+        -H 'Authorization: Bearer sk-boost' -H 'Content-Type: application/json' \
+        -d "{\"model\":\"$mid\",\"messages\":[{\"role\":\"user\",\"content\":\"What is 6 times 7? Reply briefly.\"}],\"max_tokens\":$MAX_TOKENS}" \
+        | jq -er '.choices[0].message.content | length > 0' >/dev/null 2>&1; then
+        ok=1
+        break
+      fi
+      log "I4 $mod attempt $attempt failed, retrying"
+    done
+    if [ -n "$ok" ]; then
+      record PASS "I4 boost module $mod" "$mid"
+    else
+      record FAIL "I4 boost module $mod" "$mid"
+    fi
+  done
+
+  teardown
+
+  log "Group I-b: jupyter kernel exec, promptfoo eval (via ollama)"
+  "$HARBOR" up ollama jupyter promptfoo >/dev/null 2>&1
+  wait_ollama_ready "I5 ollama ready" || { teardown; return; }
+  "$HARBOR" exec ollama ollama pull "$OLLAMA_TINY_MODEL" >/dev/null 2>&1
+
+  probe_200 "I5 jupyter ready" "$(svc_url jupyter)/api" 600
+  local kernel_out
+  kernel_out=$(docker exec harbor.jupyter python -c '
+from jupyter_client.manager import start_new_kernel
+km, kc = start_new_kernel(kernel_name="python3")
+kc.execute("print(6*7)")
+while True:
+    msg = kc.get_iopub_msg(timeout=120)
+    if msg["msg_type"] == "stream":
+        print(msg["content"]["text"].strip())
+        break
+km.shutdown_kernel()
+' 2>/dev/null)
+  if [ "$kernel_out" = "42" ]; then
+    record PASS "I5 jupyter kernel execute" "print(6*7) -> 42"
+  else
+    record FAIL "I5 jupyter kernel execute" "got: ${kernel_out:-nothing}"
+  fi
+
+  probe_200 "I6 promptfoo ready" "$(svc_url promptfoo)/health" 120
+  local pf_rc
+  docker exec -e OLLAMA_BASE_URL=http://ollama:11434 harbor.promptfoo sh -c '
+    cd /tmp || exit 1
+    printf "prompts:\n  - \"Reply with exactly: PONG\"\nproviders:\n  - id: ollama:chat:%s\ntests:\n  - assert:\n      - type: javascript\n        value: output.length > 0\n" "'"$OLLAMA_TINY_MODEL"'" > pf.yaml
+    if command -v promptfoo >/dev/null 2>&1; then
+      promptfoo eval -c pf.yaml --no-progress-bar
+    else
+      node /app/dist/src/main.js eval -c pf.yaml --no-progress-bar
+    fi
+  ' >/dev/null 2>&1
+  pf_rc=$?
+  if [ "$pf_rc" -eq 0 ]; then
+    record PASS "I6 promptfoo eval run"
+  else
+    record FAIL "I6 promptfoo eval run" "rc=$pf_rc"
+  fi
+
+  teardown
+
+  log "Group I-c: comfyui workflow submission (CPU mode)"
+  save_and_set_config comfyui.args "--cpu"
+  docker rm -f harbor.comfyui >/dev/null 2>&1
+  "$HARBOR" up comfyui >/dev/null 2>&1
+
+  probe_200 "I7 comfyui ready" "$(svc_url comfyui)/" 300
+  # Model-free graph: EmptyImage -> SaveImage exercises the full queue,
+  # execution, and history pipeline without needing checkpoints.
+  local cu prompt_id
+  cu=$(svc_url comfyui)
+  prompt_id=$(curl -s -m 30 "$cu/prompt" -H 'Content-Type: application/json' \
+    -d '{"prompt":{"1":{"class_type":"EmptyImage","inputs":{"width":64,"height":64,"batch_size":1,"color":0}},"2":{"class_type":"SaveImage","inputs":{"images":["1",0],"filename_prefix":"services-it"}}}}' \
+    | jq -r '.prompt_id // empty')
+  local outputs=""
+  waited=0
+  if [ -n "$prompt_id" ]; then
+    while [ "$waited" -le 120 ]; do
+      outputs=$(curl -s -m 10 "$cu/history/$prompt_id" \
+        | jq -er ".\"$prompt_id\".outputs | length > 0" 2>/dev/null)
+      [ "$outputs" = "true" ] && break
+      sleep 5; waited=$((waited + 5))
+    done
+  fi
+  if [ "$outputs" = "true" ]; then
+    record PASS "I7 comfyui workflow executed" "prompt_id $prompt_id"
+  else
+    record FAIL "I7 comfyui workflow executed" "prompt_id: ${prompt_id:-none}"
+  fi
+
+  teardown
+}
+
 list_groups() {
   cat <<'EOF'
 A  llamacpp webui boost litellm aichat   (llamacpp backend + OpenAI satellites)
@@ -497,6 +684,7 @@ E  comfyui                               (GPU-optional; excluded by default, CPU
 F  jupyter chatui librechat promptfoo    (web services batch 2)
 G  fabric cmdh                           (run-style CLIs via ollama)
 H  kobold speaches txtairag plandex webtop (batch 3, two sub-batches)
+I  webui searxng litellm boost jupyter promptfoo comfyui (depth: chat/eval/kernel/workflow)
 EOF
 }
 
@@ -521,8 +709,8 @@ main() {
   local g
   for g in $groups; do
     case "$g" in
-      A|B|C|D|E|F|G|H) ;;
-      *) echo "Unknown group: $g (valid: A-H)" >&2; exit 2 ;;
+      A|B|C|D|E|F|G|H|I) ;;
+      *) echo "Unknown group: $g (valid: A-I)" >&2; exit 2 ;;
     esac
   done
 

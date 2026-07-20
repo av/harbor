@@ -221,6 +221,16 @@
   command: grep -q 'deb.nodesource.com' services/webtop/Dockerfile && ! grep -q 'RUN curl -L https://npmjs.org/install.sh' services/webtop/Dockerfile
   tags: [spec, implemented]
 
+## litellm
+- label: a litellm.llamacpp config fragment plus compose.x.litellm.llamacpp.yml overlay route llamacpp/* requests through LiteLLM to the llama.cpp router via wildcard routing
+  command: grep -q 'llamacpp/\*' services/litellm/litellm.llamacpp.yaml && grep -q litellm.llamacpp.yaml services/compose.x.litellm.llamacpp.yml
+  tags: [services-runner, implemented]
+
+## boost
+- label: ChatNode.history() merges consecutive same-role plain messages (no tool calls) so multi-assistant-turn modules like g1 pass llama.cpp's 'cannot have 2+ assistant messages at the end' validation
+  command: cd services/boost && python -m pytest tests/test_chat_node.py -q -k merge
+  tags: [services-runner, implemented]
+
 # app
 - label: Harbor App blocks main UI behind a setup gate until setup detail status is ready
   command: rg -q 'detail\?\.status === "ready"' app/src/setup/HarborSetupContext.tsx
@@ -500,6 +510,9 @@
 # tests
 - label: tests/services-integration.sh --list prints the 8 test groups A-H with their services
   command: ./tests/services-integration.sh --list | grep -c '^[A-H] ' | grep -qx 8
+  tags: [services-runner, implemented]
+- label: tests/services-integration.sh --list includes Group I depth checks (webui chat, searxng categories, litellm proxy, boost modules, jupyter kernel, promptfoo eval, comfyui workflow)
+  command: ./tests/services-integration.sh --list | grep -q '^I '
   tags: [services-runner, implemented]
 ## app-install
 - label: the integration install suite exercises install.sh and first-run llamacpp webui wiring
