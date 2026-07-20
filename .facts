@@ -495,6 +495,9 @@
   tags: [implemented]
 
 # tests
+- label: tests/services-integration.sh --list prints the 8 test groups A-H with their services
+  command: ./tests/services-integration.sh --list | grep -c '^[A-H] ' | grep -qx 8
+  tags: [services-runner, implemented]
 ## app-install
 - label: the integration install suite exercises install.sh and first-run llamacpp webui wiring
   command: rg -q 'install.sh' tests/suites/01-install.sh && rg -q 'harbor up --no-defaults llamacpp webui' tests/suites/01-install.sh

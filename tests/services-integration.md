@@ -11,6 +11,13 @@ Run groups **serially** (services share ports and the GPU). Always run
 
 ## Prerequisites
 
+> Automated runner: `./tests/services-integration.sh` executes this spec's
+> checks group by group (`--list` shows groups, `--groups B,G` selects a
+> subset; Group E is opt-in). It encodes the operational notes below —
+> serial groups with teardown, token budgets, run-style invocation, stray
+> run-container cleanup, config save/restore — and prints PASS/FAIL per
+> check with a nonzero exit on any failure.
+
 - Docker with the compose plugin; current user can run `docker`.
 - Harbor checkout at repo root; all commands below run from repo root.
 - At least one GGUF model in the HF cache (`~/.cache/huggingface/hub`) for
