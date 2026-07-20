@@ -178,6 +178,21 @@
   command: grep -q 'langflow-init' services/compose.langflow.yml && test -f services/langflow/workspace-init.sh
   tags: [spec, implemented]
 
+## librechat
+- label: librechat-rag waits for librechat-vector (pgvector) readiness: compose.librechat.yml has a pg_isready healthcheck on librechat-vector and librechat-rag depends_on it with condition service_healthy, preventing first-boot 'connection refused' crash
+  command: grep -q pg_isready services/compose.librechat.yml && grep -q 'service_healthy' services/compose.librechat.yml
+  tags: [spec, implemented]
+
+## fabric
+- label: fabric config mounts into the image user's real home (/home/appuser/.config/fabric, image runs as appuser not root) and the entrypoint creates an empty .env if missing, since fabric hard-fails without one even when vendor/model come from environment
+  command: grep -q '/home/appuser/.config/fabric' services/compose.fabric.yml && grep -q 'touch /home/appuser/.config/fabric/.env' services/compose.fabric.yml
+  tags: [spec, implemented]
+
+## cmdh
+- label: cmdh's ollama adapter passes a literal JSON schema as the structured-output format (no zod-to-json-schema dependency), because zod-to-json-schema v3 with zod v4 silently produces an empty schema that Ollama rejects with 'invalid JSON schema in format'
+  command: grep -q 'format: CmdhResponseSchema' services/cmdh/ollama.ts && ! grep -q "from 'zod-to-json-schema'" services/cmdh/ollama.ts
+  tags: [spec, implemented]
+
 # app
 - label: Harbor App blocks main UI behind a setup gate until setup detail status is ready
   command: rg -q 'detail\?\.status === "ready"' app/src/setup/HarborSetupContext.tsx
@@ -623,3 +638,10 @@
 - label: harbor pull rejects a bare unknown token (no slash or colon, not a service) with an unknown-service error and starts nothing
   command: timeout 60 ./harbor.sh pull definitely-not-a-real-service-xyz 2>&1 | grep -qi 'unknown service' && ! timeout 60 ./harbor.sh pull definitely-not-a-real-service-xyz >/dev/null 2>&1
   tags: [spec, pull-unknown-reject, implemented]
+
+# tools
+
+## lint
+- label: the lint file collector never descends into service runtime dirs (services/*/data, workspace, vectordb, meili_data*) — gitignored container-generated trees that contain root-owned dirs and third-party scripts which crash or fail the scan
+  command: grep -q 'services/\*/workspace' .scripts/lint/util.ts && grep -q 'services/\*/vectordb' .scripts/lint/util.ts
+  tags: [spec, implemented]

@@ -8,6 +8,6 @@ RUN git clone https://github.com/pgibler/cmdh.git && cd cmdh
 # Little switcheroo
 COPY ./ollama.ts /app/cmdh/src/api/ollama.ts
 RUN cd /app/cmdh && ./install.sh
-RUN npm i tsx zod zod-to-json-schema
+RUN npm i tsx
 
 ENTRYPOINT [ "/app/node_modules/.bin/tsx", "/app/cmdh/src/cmdh.ts" ]

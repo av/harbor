@@ -6,6 +6,11 @@ services:
       - ./services/fabric/override.env
     image: ${HARBOR_FABRIC_IMAGE}:${HARBOR_FABRIC_VERSION}
     volumes:
-      - ${HARBOR_FABRIC_CONFIG_PATH}:/root/.config/fabric
+      # The image runs as "appuser" (uid 1000), not root — mount the config
+      # into its actual home so fabric finds ~/.config/fabric/.env
+      - ${HARBOR_FABRIC_CONFIG_PATH}:/home/appuser/.config/fabric
+    # fabric hard-fails when ~/.config/fabric/.env is missing, even with
+    # vendor/model provided via environment — ensure the file exists
+    entrypoint: ["/bin/sh", "-c", "touch /home/appuser/.config/fabric/.env 2>/dev/null; exec fabric \"$@\"", "--"]
     networks:
       - harbor-network

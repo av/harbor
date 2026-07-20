@@ -20,7 +20,12 @@ export async function collectFiles(
     root,
     includeDirs: false,
     globstar: true,
-    exclude: ["services/*/data"],
+    exclude: [
+      "services/*/data",
+      "services/*/workspace",
+      "services/*/vectordb",
+      "services/*/meili_data*",
+    ],
   };
   const seen = new Set<string>();
   for (const g of globs) {

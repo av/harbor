@@ -53,6 +53,12 @@ and reuse it in all LLM checks below.
 | ollama   | LLM backend           | D     | pulls a small model (CPU OK) |
 | gptme    | container CLI agent   | D     | via ollama |
 | comfyui  | image gen (optional)  | E     | GPU + checkpoint; startup-only check |
+| jupyter  | notebook server       | F     | none (CUDA base image runs on CPU) |
+| chatui   | web frontend          | F     | via ollama overlay (startup check) |
+| librechat| web frontend (5 ctrs) | F     | none for startup |
+| promptfoo| eval web server       | F     | none for startup |
+| fabric   | container CLI         | G     | via ollama |
+| cmdh     | container CLI         | G     | via ollama |
 
 ## Group A — llamacpp backend + OpenAI-compatible satellites
 
@@ -245,6 +251,81 @@ Start: `./harbor.sh up comfyui`
 
 Teardown: `./harbor.sh down`
 
+## Group F — web services batch 2 (jupyter, chatui, librechat, promptfoo)
+
+Start: `./harbor.sh up ollama jupyter chatui librechat promptfoo`
+
+(ollama is included so the chatui/librechat-rag ollama overlays resolve their
+backend URL; no model pull is required — Group F checks are startup + HTTP
+probes only. jupyter is a local build on a large PyTorch CUDA base image; the
+first `up` may spend several minutes pulling/building — it runs fine on CPU.)
+
+### F1. jupyter
+
+- Ready: 200 probe on `$(./harbor.sh url jupyter)/api` (≤600 s; first boot
+  pulls/builds the PyTorch base image).
+- Function: `curl -s "$(./harbor.sh url jupyter)/api" | jq -er '.version'`
+  exits 0 (Harbor disables the token, so the API is reachable unauthenticated).
+
+### F2. chatui
+
+- Ready: container `harbor.chatui-db` healthy, then 200 probe on
+  `$(./harbor.sh url chatui)/` (≤300 s).
+- Function: front page serves the SPA:
+  `curl -s "$(./harbor.sh url chatui)/" | grep -qi '<html'` exits 0.
+
+### F3. librechat
+
+- Ready: 200 probe on `$(./harbor.sh url librechat)/` (≤300 s; five
+  containers: app, mongo, meilisearch, pgvector, rag).
+- Function: `curl -s "$(./harbor.sh url librechat)/api/config" | jq -er '.appTitle'`
+  exits 0 (unauthenticated config endpoint).
+
+### F4. promptfoo
+
+- Ready: 200 probe on `$(./harbor.sh url promptfoo)/` (≤120 s).
+- Function: `curl -s "$(./harbor.sh url promptfoo)/health" | jq -er '.status'`
+  exits 0 (server health endpoint; if the path differs in a newer image,
+  a 200 on `/` with an `<html` body is the fallback PASS).
+
+Teardown: `./harbor.sh down`
+
+## Group G — container CLIs batch 2 (fabric, cmdh) via ollama
+
+Both are run-style containers (like aichat/gptme): never include them in
+`harbor up`; invoke via their dedicated `harbor fabric` / `harbor cmdh`
+subcommands, which `docker compose run` the container with the active
+backend's overlay.
+
+Pre: `./harbor.sh up ollama`; wait for D1 readiness;
+`./harbor.sh exec ollama ollama pull qwen3:0.6b`.
+
+### G1. fabric
+
+- Pre: save current value, then `./harbor.sh config set fabric.model qwen3:0.6b`
+  (shipped default `qwen3.5:4b` is not pulled); restore afterwards.
+- Function:
+  `echo 'Reply with exactly: PONG' | timeout 300 ./harbor.sh fabric`
+  Expected: exit 0, non-empty stdout with model output (fabric sends raw
+  stdin to the default vendor/model — Ollama via the
+  compose.x.fabric.ollama.yml overlay).
+
+### G2. cmdh
+
+- Pre: save current value, then `./harbor.sh config set cmdh.model qwen3:0.6b`;
+  restore afterwards. Default host is `ollama`
+  (`cmdh.llm.host`), so only the model needs overriding.
+- Function:
+  `timeout 300 ./harbor.sh cmdh 'print the current directory' </dev/null`
+  Expected: exit 0 (or clean non-interactive exit), stdout contains a
+  generated shell command (e.g. `pwd`). cmdh prompts to run the command;
+  with stdin closed it must not hang — if it does, treat the printed
+  suggestion before the prompt as the functional evidence and kill via
+  timeout, recording the observed behavior.
+
+Teardown: `./harbor.sh down`; remove any leftover
+`harbor.fabric` / `harbor.cmdh-cli` run containers.
+
 ## Results
 
 Execution results are appended per run as:
@@ -424,5 +505,51 @@ COMMAND: `curl -s "$URL/system_stats" | jq -er '.system'`
 EXPECTED: exit 0
 ACTUAL: exit 0 — `comfyui_version v0.2.2`, device type `cpu`
 RESULT: PASS
+
+### Run 2026-07-20 — Group F
+
+CHECK: F1 jupyter ready + version
+COMMAND: 200 probe on `$(./harbor.sh url jupyter)/api`; `curl -s $URL/api | jq -er '.version'`
+EXPECTED: 200 ≤600 s; version string
+ACTUAL: 200 on first poll; `2.20.0`
+RESULT: PASS (image was already built locally; first-time builds pull the large PyTorch base)
+
+CHECK: F2 chatui front page
+COMMAND: 200 probe on `$(./harbor.sh url chatui)/`; `curl -s $URL/ | grep -qi '<html'`
+EXPECTED: 200; HTML body
+ACTUAL: 200 on first poll; `<html` present
+RESULT: PASS
+
+CHECK: F3 librechat ready + config API
+COMMAND: 200 probe on `$(./harbor.sh url librechat)/`; `curl -s $URL/api/config | jq -er '.appTitle'`
+EXPECTED: 200 ≤300 s; app title
+ACTUAL: first `harbor up` FAILED — `harbor.librechat-rag` Exited(1): pgvector connection refused at import time (rag raced `librechat-vector`, which had no healthcheck; rag had bare `depends_on` and no restart policy). After fix: all 5 containers Up, probe 200, `LibreChat`
+RESULT: PASS — product defect fixed in `services/compose.librechat.yml`: added `pg_isready` healthcheck to librechat-vector and gated librechat-rag with `depends_on: condition: service_healthy`. Fact 183.
+
+CHECK: F4 promptfoo ready + health
+COMMAND: 200 probe on `$(./harbor.sh url promptfoo)/`; `curl -s $URL/health | jq -er '.status'`
+EXPECTED: 200 ≤120 s; status string
+ACTUAL: 200 on first poll; `{"status":"OK","version":"0.121.11"}`
+RESULT: PASS
+
+Teardown: `./harbor.sh down` executed; no containers left.
+
+### Run 2026-07-20 — Group G
+
+Pre: `./harbor.sh up ollama`; `ollama pull qwen3:0.6b` → success.
+
+CHECK: G1 fabric one-shot
+COMMAND: `echo 'Reply with exactly: PONG' | timeout 300 ./harbor.sh fabric` (after `harbor config set fabric.model qwen3:0.6b`)
+EXPECTED: exit 0, model output on stdout
+ACTUAL: first run FAILED — `error loading .env file: open /home/appuser/.config/fabric/.env: no such file or directory`, exit 1. Two causes: (1) `compose.fabric.yml` mounted the config to `/root/.config/fabric` but current `ghcr.io/ksylvan/fabric` runs as `appuser` (uid 1000, home `/home/appuser`); (2) fabric hard-fails when `~/.config/fabric/.env` is missing even with vendor/model set via environment. After fix: exit 0, stdout `PONG`
+RESULT: PASS — product defect fixed in `services/compose.fabric.yml`: mount target changed to `/home/appuser/.config/fabric` and entrypoint touches `.env` before exec'ing fabric. Fact us5. (One transient ghcr.io pull timeout retried — environment, not a defect.)
+
+CHECK: G2 cmdh one-shot
+COMMAND: `timeout 300 ./harbor.sh cmdh 'print the current directory' </dev/null` (after `harbor config set cmdh.model qwen3:0.6b`)
+EXPECTED: exit 0 (or clean non-interactive exit), stdout contains a generated command
+ACTUAL: first run FAILED — `Error: invalid JSON schema in format` from the ollama client. Root cause: `services/cmdh/Dockerfile` installs unpinned `zod` (now v4) while `zod-to-json-schema` v3 only understands zod v3 internals — it silently emitted `{"$schema": "..."}` (empty schema), which Ollama rejects. After fix: exit 0; `desired command: pwd`, assistant message present, option prompt exits cleanly on closed stdin
+RESULT: PASS — product defect fixed: `services/cmdh/ollama.ts` now passes a literal JSON schema as `format` (zod/zod-to-json-schema dropped from the adapter and Dockerfile). Fact iqb.
+
+Triage summary Groups F+G: three real product defects fixed (librechat-rag startup race — fact 183; fabric config mount vs image user + missing-.env hard fail — fact us5; cmdh empty structured-output schema from zod v3/v4 mismatch — fact iqb). One dev-tooling fix: lint file collector now skips service runtime dirs (workspace/vectordb/meili_data*) that crashed the strict scan — fact nal. No bad spec expectations. Teardown: `./harbor.sh down`; fabric.model and cmdh.model restored to `qwen3.5:4b`.
 
 Triage summary Group E: no product defects. One environment limitation (CUDA-only default image on a non-NVIDIA host) with a documented config workaround (`comfyui.args "--cpu"`). Teardown: `./harbor.sh down`; comfyui.args restored to empty.
