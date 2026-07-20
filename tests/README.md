@@ -118,6 +118,26 @@ The orchestrator materializes a git-tracked repo artifact once per run
 
 Shared helpers live in `tests/lib/boost-agentic.sh`.
 
+## Services integration runner
+
+`tests/services-integration.sh` is a separate, host-run soak that starts real
+Harbor services on the host docker (not the container matrix above) and
+verifies each one works — startup, health endpoints, and an actual LLM
+round-trip where applicable. It automates the spec in
+`tests/services-integration.md`, which documents every check and the
+prerequisites (CPU-friendly GGUF model in the HF cache, host-installed
+`hermes`/`opencode` for Group C — both auto-skipped when absent).
+
+```bash
+./tests/services-integration.sh                 # all CPU-safe groups (A B C D F G H)
+./tests/services-integration.sh --groups B,G    # selected groups only
+./tests/services-integration.sh --list          # list groups and checks
+```
+
+Groups run serially (services share ports/GPU) and each group ends with
+`harbor down`, even on failure. Group E (comfyui) is opt-in via `--groups E`.
+Prints one PASS/FAIL line per check plus a summary; exits non-zero on any FAIL.
+
 ## Artifacts
 
 Each run gets `tests/artifacts/<run-id>/<row>/`, where `<run-id>` is
