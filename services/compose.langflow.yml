@@ -11,6 +11,30 @@ services:
     env_file:
       - ./.env
       - ./services/langflow/override.env
+    # Wait for the init sidecar to chown the data bind mount — Docker creates
+    # missing bind-mount targets as root:root, and langflow runs as a
+    # non-root user, failing on first boot writing /var/lib/langflow.
+    depends_on:
+      langflow-init:
+        condition: service_completed_successfully
     labels:
       - "harbor.service=langflow"
       - "harbor.port=7860"
+
+  # Init sidecar: chowns the data bind mount to HARBOR_USER_ID:HARBOR_GROUP_ID
+  # before langflow starts. Mirrors the kotaemon/unsloth-studio/beszel pattern.
+  langflow-init:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.langflow-init
+    image: alpine:3.20
+    env_file:
+      - ./.env
+      - ./services/langflow/override.env
+    environment:
+      TARGET_UID: ${HARBOR_USER_ID}
+      TARGET_GID: ${HARBOR_GROUP_ID}
+    entrypoint: ["/bin/sh", "/init.sh"]
+    volumes:
+      - ./services/langflow/workspace-init.sh:/init.sh:ro
+      - ${HARBOR_LANGFLOW_WORKSPACE}/data:/workspace
+    networks:
+      - harbor-network

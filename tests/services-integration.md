@@ -178,6 +178,13 @@ Pre: `./harbor.sh up llamacpp` and wait for A1 readiness (reuse `$MODEL`).
 - Expected: exit 0, non-empty stdout. `opencode run` is the documented
   non-interactive mode; the launch adapter injects `OPENCODE_CONFIG_CONTENT`
   pointing the `harbor` provider at llamacpp.
+- Model caveat: opencode sends a system message that is not first in the
+  request; models whose chat template raises on that (e.g. Qwen3.5's
+  "System message must be at the beginning") make llama.cpp return 400
+  during automatic tool-parser generation. Use a template-tolerant model
+  (e.g. `LiquidAI/LFM2.5-8B-A1B-GGUF:Q8_0`) for this check. Note:
+  `opencode run` exits 0 even on API errors — assert on output content,
+  not exit code alone.
 
 Teardown: `./harbor.sh down`
 
@@ -315,3 +322,51 @@ no litellm-llamacpp overlay by design).
 
 Teardown: `./harbor.sh down` executed; `aichat.model` restored to
 `qwen3.5:4b`.
+
+### Run 2026-07-20 — Group B
+
+CHECK: B1 searxng ready
+COMMAND: 200 probe on `$(./harbor.sh url searxng)/`
+EXPECTED: 200 within 120 s
+ACTUAL: first `harbor up` failed — container crash-looped on boot; after fixes, `Up (healthy)`, probe 200
+RESULT: PASS — after two product-defect fixes in `services/searxng/settings.yml`: (1) typo `requires_api_key` (vs `require_api_key`) in the gpodder engine, rejected by current image's strict about-schema validation; (2) the whole shipped settings.yml was stale vs `searxng/searxng:latest` (2026.7.19) — next crash `mojeek language_support should be set to True`. Regenerated settings.yml from the image's own `settings.yml.new`, re-applying Harbor deltas (instance_name `searxng`, `json` in search.formats, existing secret_key). Fact 5b8.
+
+CHECK: B1 searxng JSON search
+COMMAND: `curl -s "$URL/search?q=harbor&format=json" | jq -er '.results | type == "array"'`
+EXPECTED: `true`, exit 0
+ACTUAL: `true`, exit 0
+RESULT: PASS
+
+CHECK: B2 langflow ready
+COMMAND: 200 probe on `$(./harbor.sh url langflow)/health`
+EXPECTED: 200 within 300 s
+ACTUAL: first boot Exited(1): `PermissionError: /var/lib/langflow/secret_key` — Docker created the `services/langflow/data` bind mount root:root; langflow runs as uid 1000. After fix, probe 200 in <60 s
+RESULT: PASS — product defect fixed: added `langflow-init` chown sidecar (services/compose.langflow.yml + services/langflow/workspace-init.sh), mirroring the kotaemon/unsloth-studio/beszel pattern. Fact fqo.
+
+CHECK: B2 langflow version
+COMMAND: `curl -s "$URL/api/v1/version" | jq -er '.version'`
+EXPECTED: exit 0
+ACTUAL: `1.10.2`, exit 0
+RESULT: PASS
+
+Teardown: `./harbor.sh down` executed.
+
+### Run 2026-07-20 — Group C
+
+Pre: `./harbor.sh up llamacpp`; health 200; `MODEL=unsloth/Qwen3.5-0.8B-GGUF:Q4_K_M`.
+
+CHECK: C1 hermes one-shot
+COMMAND: `timeout 300 ./harbor.sh launch --backend llamacpp --model "$MODEL" hermes -z "Reply with exactly: PONG and nothing else" </dev/null` (hermes' non-interactive flag is `-z PROMPT`)
+EXPECTED: exit 0, non-empty model output
+ACTUAL: exit 0, stdout `PONG`
+RESULT: PASS
+
+CHECK: C2 opencode run
+COMMAND: `timeout 600 ./harbor.sh launch --backend llamacpp --model 'LiquidAI/LFM2.5-8B-A1B-GGUF:Q8_0' opencode run "Reply with exactly: PONG and nothing else" </dev/null`
+EXPECTED: exit 0, output contains model reply
+ACTUAL: exit 0, stdout ends with `PONG`
+RESULT: PASS — after spec fix: with `$MODEL` (Qwen3.5) llama.cpp returned 400 "Jinja Exception: System message must be at the beginning" during automatic tool-parser generation, because opencode sends a non-first system message and Qwen3.5's template raises on it (reproduced with bare curl: `[user, system]` message order 400s; tools alone are fine). Not a Harbor defect — upstream opencode/model-template interaction; spec updated to use a template-tolerant model and to assert on output (opencode run exits 0 even on API errors).
+
+Triage summary Group B+C: two real product defects fixed (searxng stale/typo'd settings.yml — fact 5b8; langflow first-boot bind-mount ownership — fact fqo, init-sidecar pattern). One bad spec expectation fixed (C2 model choice + exit-code assertion). No environment-only failures.
+
+Teardown: `./harbor.sh down` executed.

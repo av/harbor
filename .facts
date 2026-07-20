@@ -168,6 +168,16 @@
   command: ! grep -rq 'harbor hermes server' docs/
   tags: [implemented, bughunt]
 
+## searxng
+- label: shipped settings.yml passes SearXNG engine about-schema validation: every engine about section uses require_api_key (no requires_api_key typo)
+  command: ! grep -q 'requires_api_key' services/searxng/settings.yml
+  tags: [spec, implemented]
+
+## langflow
+- label: langflow data bind mount is chowned to the host user by a langflow-init sidecar before langflow starts (compose.langflow.yml depends_on langflow-init service_completed_successfully; services/langflow/workspace-init.sh)
+  command: grep -q 'langflow-init' services/compose.langflow.yml && test -f services/langflow/workspace-init.sh
+  tags: [spec, implemented]
+
 # app
 - label: Harbor App blocks main UI behind a setup gate until setup detail status is ready
   command: rg -q 'detail\?\.status === "ready"' app/src/setup/HarborSetupContext.tsx
