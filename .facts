@@ -522,6 +522,9 @@
 - label: tests/services-integration.sh --list includes Group I depth checks (webui chat, searxng categories, litellm proxy, boost modules, jupyter kernel, promptfoo eval, comfyui workflow)
   command: ./tests/services-integration.sh --list | grep -q '^I '
   tags: [services-runner, implemented]
+- label: tests/services-integration.sh --list includes Group J ROCm paths (llamacpp/ollama/lemonade/localai/voicebox/vllm), gated behind ROCm-host detection and excluded from the default group list
+  command: ./tests/services-integration.sh --list | grep -q '^J .*ROCm' && grep -q 'has_rocm_host' tests/services-integration.sh && ! grep -q 'DEFAULT_GROUPS=.*J' tests/services-integration.sh
+  tags: [services-runner, implemented]
 ## app-install
 - label: the integration install suite exercises install.sh and first-run llamacpp webui wiring
   command: rg -q 'install.sh' tests/suites/01-install.sh && rg -q 'harbor up --no-defaults llamacpp webui' tests/suites/01-install.sh

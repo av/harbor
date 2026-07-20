@@ -544,6 +544,102 @@ Pre: `./harbor.sh up llamacpp ollama chatui librechat langflow`; pull
 
 Teardown after each sub-batch: `./harbor.sh down` + config restore.
 
+## Group J — ROCm/GPU paths (Batch J of the Coverage Plan)
+
+AMD-GPU-only group; automated in `tests/services-integration.sh --groups J`
+but **excluded from the default group list**. The runner gates the whole group
+behind host ROCm detection (same predicate as `harbor.sh has_rocm`: `/dev/kfd`
+exists, `/dev/dri/renderD*` exists, `amdgpu` kernel module loaded) and SKIPs
+every check cleanly on non-ROCm hosts.
+
+How Harbor selects ROCm variants: `services/compose.x.<svc>.rocm.yml` are
+*capability* overlay files — `harbor.sh` auto-includes them when `has_rocm()`
+passes (no config flag needed). The overlays pass `/dev/kfd` + `/dev/dri` into
+the container and switch the image/env: llamacpp → `HARBOR_LLAMACPP_IMAGE_ROCM`,
+ollama → `${HARBOR_OLLAMA_IMAGE}:rocm`, localai →
+`${HARBOR_LOCALAI_IMAGE}:${HARBOR_LOCALAI_ROCM_VERSION}` (latest-gpu-hipblas),
+lemonade → `LEMONADE_LLAMACPP=rocm`, vllm/voicebox → devices only.
+
+Groups run serially, one service at a time (they contend for the iGPU).
+
+### J1. llamacpp.rocm
+
+- `./harbor.sh up llamacpp` → container uses `$HARBOR_LLAMACPP_IMAGE_ROCM`
+  with `/dev/kfd` + `/dev/dri` (docker inspect).
+- `docker logs harbor.llamacpp` contains a `ROCm0` device line (e.g.
+  `ROCm0 : AMD Radeon 8060S Graphics`).
+- Chat completion with `$MODEL` returns non-empty content (GPU-fast: ~4 s
+  where the CPU path needs ~30 s+).
+- Note: this host overrides `llamacpp.image_rocm` to
+  `kyuz0/amd-strix-halo-toolboxes` (Strix Halo build); the check is
+  image-agnostic — it only asserts ROCm device init + inference.
+
+### J2. ollama.rocm
+
+- `./harbor.sh up ollama` → image `ollama/ollama:rocm`, devices passed.
+- Logs contain `library=ROCm` on the `inference compute` line
+  (e.g. `compute=gfx1151 name=ROCm0`).
+- Pull `qwen3:0.6b`, `/api/generate` non-empty; `ollama ps` shows
+  `100% GPU`. Observed 228 tok/s eval on gfx1151.
+
+### J3. lemonade
+
+- `./harbor.sh up lemonade` → container env `LEMONADE_LLAMACPP=rocm` (overlay
+  wins over the `cpu` default), devices passed; `/live` 200.
+- `/api/v1/system-info` reports the rocm llamacpp backend `state: installed`
+  with device `amd_gpu` (backend binaries ship in the image).
+- Register the cached GGUF (HF cache is mounted):
+  `POST /api/v1/pull {"model_name":"user.qwen-tiny","checkpoint":"unsloth/Qwen3.5-0.8B-GGUF:Q4_K_M","recipe":"llamacpp"}`
+  → status success, no download.
+- Chat completion on `user.qwen-tiny` returns non-empty content or
+  reasoning_content (thinking model; use max_tokens 4000). Logs show
+  `ROCm0 model buffer` lines.
+- **Do NOT clean up with `POST /api/v1/delete`**: lemonade's delete removes
+  the checkpoint files from the shared HF cache (observed: it deleted
+  `Qwen3.5-0.8B Q4_K_M`, which the llamacpp router and other groups' model
+  discovery then lost). Registration is idempotent; leave it in place.
+
+### J4. localai.rocm
+
+- `./harbor.sh up localai` → image tag `latest-gpu-hipblas` (~4.3 GB
+  compressed pull on first run), devices passed; `/readyz` 200.
+- Install a small model from the gallery: `POST /models/apply {"id":"qwen3-0.6b"}`,
+  poll `/v1/models` until listed. First model load also auto-installs the
+  `rocm-hipblas-llama-cpp` OCI backend (~3.1 GB) — GPU-detected selection is
+  itself the ROCm evidence, along with `n_gpu_layers=99999999` in the load
+  line and non-zero `rocm-smi` GPU use during generation.
+- Chat completion returns non-empty content (~3.5 s observed).
+- The runner gives J4 generous timeouts (first run downloads ~8 GB total).
+
+### J5. voicebox (startup + device check only)
+
+- `./harbor.sh up voicebox` (git build on first run) → devices `/dev/kfd`,
+  `/dev/dri` and `group_add: video` present; `/health` 200.
+- **Documented limitation, not a defect fixed here**: the upstream voicebox
+  Dockerfile installs CPU-only PyTorch (`torch.version.hip = None`), so
+  `/health` reports `"gpu_available": false, "backend_variant": "cpu"` even
+  with the devices passed. The `compose.x.voicebox.rocm.yml` overlay is
+  currently ineffective beyond device passthrough; GPU support needs a
+  ROCm-torch image upstream. J5 asserts startup + devices only.
+
+### J6. vllm.rocm (manual image switch; SKIPped unless configured)
+
+- The default `HARBOR_VLLM_IMAGE=vllm/vllm-openai` is a **CUDA build** — the
+  rocm overlay passes devices but the stock image cannot init HIP. The runner
+  SKIPs J6 when `vllm.image` is still the default.
+- Verified procedure on this host (2026-07-20):
+  `harbor config set vllm.image kyuz0/vllm-therock-gfx1151`,
+  `vllm.version stable`, `vllm.model Qwen/Qwen3-0.6B`,
+  `vllm.model_specifier "--model Qwen/Qwen3-0.6B"`,
+  `vllm.extra_args "--max-model-len 4096 --gpu-memory-utilization 0.35"`,
+  `harbor build vllm`, `harbor up vllm` → health 200 in ~140 s, logs show
+  ROCm attention backend selection (`rocm.py … ROCM_ATTN`), completion in
+  ~4.8 s. Restore all five config keys afterwards.
+- When configured with a non-default image, the runner runs health +
+  completion checks.
+
+Teardown after each check: `./harbor.sh down`.
+
 ## Results
 
 Execution results are appended per run as:
@@ -988,3 +1084,74 @@ model expectation, fixed in runner+spec and re-verified green. Two real
 product defects fixed (chatui envify OPENAI_* bridge — fact zfx; librechat
 Ollama baseURL — fact 4kv). Teardown: harbor down, test users removed, no
 config drift (I-d sets no config).
+
+### Run 2026-07-20 — Group J (ROCm paths, AMD Strix Halo / gfx1151)
+
+Runner: `./tests/services-integration.sh --groups J` → 17 passed, 0 failed,
+1 skipped (J6, by design — see below).
+
+CHECK: J1 llamacpp.rocm
+COMMAND: harbor up llamacpp; docker inspect + docker logs + chat completion
+EXPECTED: rocm overlay image + /dev/kfd,/dev/dri; ROCm0 device line; inference
+ACTUAL: image kyuz0/amd-strix-halo-toolboxes:rocm-7.2.4 (host override of
+  llamacpp.image_rocm), devices passed; `ROCm0 : AMD Radeon 8060S Graphics
+  (122880 MiB)`; Qwen3.5-0.8B completion ~4 s (156 tok/s eval observed)
+RESULT: PASS
+
+CHECK: J2 ollama.rocm
+COMMAND: harbor up ollama; logs; pull qwen3:0.6b; /api/generate; ollama ps
+EXPECTED: ollama/ollama:rocm, library=ROCm, generation on GPU
+ACTUAL: `inference compute … library=ROCm compute=gfx1151 name=ROCm0
+  description="Radeon 8060S Graphics"`; generate ok; `ollama ps` 100% GPU;
+  228 tok/s eval
+RESULT: PASS
+
+CHECK: J3 lemonade (rocm overlay)
+COMMAND: harbor up lemonade; env check; register cached GGUF; chat
+EXPECTED: LEMONADE_LLAMACPP=rocm, rocm backend used, inference
+ACTUAL: env set by overlay; system-info: rocm backend `installed`, device
+  amd_gpu; `Using LlamaCpp Backend: rocm-preview`, `loaded ROCm backend
+  (libggml-hip.so)`, ROCm0 model/KV buffers; completion ok
+RESULT: PASS
+
+CHECK: J4 localai.rocm
+COMMAND: harbor up localai; gallery install qwen3-0.6b; chat
+EXPECTED: latest-gpu-hipblas image, GPU inference
+ACTUAL: image localai/localai:latest-gpu-hipblas (4.3 GB pull), devices
+  passed; auto-installed `rocm-hipblas-llama-cpp` OCI backend (3.1 GB,
+  GPU-detected selection), n_gpu_layers=99999999; completion ~3.5 s;
+  rocm-smi showed 14% GPU use mid-generation
+RESULT: PASS
+
+CHECK: J5 voicebox (rocm overlay)
+COMMAND: harbor up voicebox; docker inspect; /health
+EXPECTED: devices + video group passed, health 200
+ACTUAL: /dev/kfd,/dev/dri + group video present, health 200 — but
+  `"gpu_available": false, "backend_variant": "cpu"`; torch.version.hip=None
+  (upstream Dockerfile installs CPU torch). Startup+devices PASS; GPU use is
+  an upstream image limitation, documented in the spec (not fixed here)
+RESULT: PASS (limitation documented)
+
+CHECK: J6 vllm.rocm
+COMMAND: runner SKIPs on default CUDA image; manual procedure verified
+EXPECTED: SKIP by default; documented ROCm procedure works
+ACTUAL: SKIP recorded. Manually verified 2026-07-20: vllm.image
+  kyuz0/vllm-therock-gfx1151:stable + Qwen/Qwen3-0.6B +
+  `--max-model-len 4096 --gpu-memory-utilization 0.35` → health 200 in
+  ~140 s, ROCm attention backend (`ROCM_ATTN`) selected, completion in
+  ~4.8 s. All five vllm config keys restored afterwards
+RESULT: SKIP (default) / PASS (manual)
+
+Triage notes from stabilizing this group (all runner bugs, no product
+defects):
+- `grep -q` on `docker logs |` pipelines under `set -o pipefail` SIGPIPEs
+  docker logs on match → pipeline reports failure on success. Fixed by using
+  full-read `grep >/dev/null`.
+- llamacpp ROCm0 device line only appears once a model loads — the grep must
+  run after the inference, not at startup.
+- lemonade `POST /api/v1/delete` deletes checkpoint files from the SHARED HF
+  cache (removed Qwen3.5-0.8B Q4_K_M used by other groups; re-downloaded to
+  restore). The runner no longer deletes its registered model.
+- Q4_K_M Qwen3.5-0.8B deterministically spends the whole budget on
+  reasoning_content; GPU inference checks accept content OR
+  reasoning_content.

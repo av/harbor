@@ -9,7 +9,9 @@
 # Groups run SERIALLY (services share ports/GPU); every group ends with
 # `harbor down` teardown, even on failure. Group E (comfyui) is excluded by
 # default: the shipped image is CUDA-only — on a non-NVIDIA host the runner
-# applies the `--cpu` workaround, but it is opt-in via `--groups E`.
+# applies the `--cpu` workaround, but it is opt-in via `--groups E`. Group J
+# (ROCm paths) is likewise opt-in via `--groups J` and self-skips on hosts
+# without an AMD GPU (/dev/kfd + renderD* + amdgpu module).
 #
 # Never uses `harbor logs` (tails forever) — uses `docker logs` when needed.
 # Prints one PASS/FAIL line per check plus a final summary; exits non-zero if
@@ -768,6 +770,195 @@ km.shutdown_kernel()
   teardown
 }
 
+has_rocm_host() {
+  # Same predicate as harbor.sh has_rocm(): kfd + render nodes + amdgpu module.
+  [ -e /dev/kfd ] || return 1
+  ls /dev/dri/renderD* >/dev/null 2>&1 || return 1
+  lsmod 2>/dev/null | grep -q '^amdgpu ' || return 1
+}
+
+# Assert the container got /dev/kfd via the rocm capability overlay.
+# rocm_devices <check-id> <container>
+rocm_devices() {
+  local id="$1" ctr="$2" devs
+  devs=$(docker inspect "$ctr" --format '{{range .HostConfig.Devices}}{{.PathOnHost}} {{end}}' 2>/dev/null)
+  if echo "$devs" | grep -q '/dev/kfd'; then
+    record PASS "$id" "devices: $devs"
+  else
+    record FAIL "$id" "no /dev/kfd in devices: ${devs:-none}"
+  fi
+}
+
+group_J() {
+  log "Group J: ROCm paths — llamacpp ollama lemonade localai voicebox (vllm gated)"
+  if ! has_rocm_host; then
+    local c
+    for c in "J1 llamacpp.rocm" "J2 ollama.rocm" "J3 lemonade rocm" \
+             "J4 localai.rocm" "J5 voicebox rocm devices" "J6 vllm.rocm"; do
+      record SKIP "$c" "not a ROCm host (/dev/kfd, renderD*, amdgpu required)"
+    done
+    return
+  fi
+
+  # J1 llamacpp.rocm — capability overlay auto-applies HARBOR_LLAMACPP_IMAGE_ROCM.
+  "$HARBOR" up llamacpp >/dev/null 2>&1
+  rocm_devices "J1 llamacpp rocm devices" harbor.llamacpp
+  wait_llamacpp_ready "J1 llamacpp ready"
+  local out
+  # This check proves GPU inference, not prompt adherence: heavily-quantized
+  # thinking models (Q4_K_M) reliably burn the whole budget on
+  # reasoning_content, so accept content OR reasoning_content.
+  resolve_model
+  out=$(curl -s -m 300 "$(svc_url llamacpp)/v1/chat/completions" \
+    -H 'Content-Type: application/json' \
+    -d "{\"model\":\"$MODEL\",\"messages\":[{\"role\":\"user\",\"content\":\"Say PONG\"}],\"max_tokens\":$MAX_TOKENS}" \
+    | jq -r '.choices[0].message | (.content // "") + (.reasoning_content // "")' 2>/dev/null)
+  if [ -n "$out" ]; then
+    record PASS "J1 llamacpp GPU inference" "${out:0:40}"
+  else
+    record FAIL "J1 llamacpp GPU inference" "no content/reasoning_content"
+  fi
+  # The ROCm0 device line is only emitted when a model loads — grep after
+  # the inference above, not at startup.
+  # Note: no `grep -q` on docker-logs pipelines — under pipefail, -q's
+  # early exit SIGPIPEs docker logs (141) and fails the pipeline on a match.
+  if docker logs harbor.llamacpp 2>&1 | grep 'ROCm0' >/dev/null; then
+    record PASS "J1 llamacpp ROCm device init" \
+      "$(docker logs harbor.llamacpp 2>&1 | grep -m1 -o 'ROCm0.*' | cut -c1-80)"
+  else
+    record FAIL "J1 llamacpp ROCm device init" "no ROCm0 line in logs after inference"
+  fi
+  "$HARBOR" down >/dev/null 2>&1
+
+  # J2 ollama.rocm — image switches to ollama/ollama:rocm via overlay.
+  "$HARBOR" up ollama >/dev/null 2>&1
+  rocm_devices "J2 ollama rocm devices" harbor.ollama
+  local oll
+  oll=$(svc_url ollama)
+  probe_200 "J2 ollama ready" "$oll/" 120
+  if docker logs harbor.ollama 2>&1 | grep 'inference compute' | grep 'library=ROCm' >/dev/null; then
+    record PASS "J2 ollama ROCm compute" \
+      "$(docker logs harbor.ollama 2>&1 | grep -m1 -o 'library=ROCm compute=[^ ]*')"
+  else
+    record FAIL "J2 ollama ROCm compute" "no library=ROCm in inference compute line"
+  fi
+  docker exec harbor.ollama ollama pull "$OLLAMA_TINY_MODEL" >/dev/null 2>&1
+  out=$(curl -s -m 300 "$oll/api/generate" \
+    -d "{\"model\":\"$OLLAMA_TINY_MODEL\",\"prompt\":\"Say PONG\",\"stream\":false,\"think\":false}" \
+    | jq -r '.response // empty')
+  if [ -n "$out" ] && docker exec harbor.ollama ollama ps 2>/dev/null | grep -q 'GPU'; then
+    record PASS "J2 ollama GPU generate" "${out:0:40}"
+  else
+    record FAIL "J2 ollama GPU generate" "response empty or model not on GPU"
+  fi
+  "$HARBOR" down >/dev/null 2>&1
+
+  # J3 lemonade — overlay sets LEMONADE_LLAMACPP=rocm; rocm backend ships installed.
+  "$HARBOR" up lemonade >/dev/null 2>&1
+  local lem
+  lem=$(svc_url lemonade)
+  rocm_devices "J3 lemonade rocm devices" harbor.lemonade
+  probe_200 "J3 lemonade live" "$lem/live" 300
+  if docker inspect harbor.lemonade --format '{{range .Config.Env}}{{.}} {{end}}' \
+      | grep -q 'LEMONADE_LLAMACPP=rocm'; then
+    record PASS "J3 lemonade rocm env"
+  else
+    record FAIL "J3 lemonade rocm env" "LEMONADE_LLAMACPP=rocm not set (overlay not applied)"
+  fi
+  # Register the already-cached GGUF (HF cache is mounted) — no download.
+  # Right after boot the model manager may not accept registrations yet:
+  # retry the pull until the model shows up in /api/v1/models.
+  local lem_waited=0
+  while [ "$lem_waited" -lt 120 ]; do
+    curl -s -m 120 -X POST "$lem/api/v1/pull" -H 'Content-Type: application/json' \
+      -d '{"model_name":"user.services-it-tiny","checkpoint":"unsloth/Qwen3.5-0.8B-GGUF:Q4_K_M","recipe":"llamacpp"}' \
+      >/dev/null 2>&1
+    curl -s -m 30 "$lem/api/v1/models" \
+      | jq -e '.data[] | select(.id=="user.services-it-tiny")' >/dev/null 2>&1 && break
+    sleep 10; lem_waited=$((lem_waited + 10))
+  done
+  # Thinking model: accept content or reasoning_content. One retry, first
+  # call also loads the model.
+  out=""
+  for _ in 1 2; do
+    out=$(curl -s -m 300 "$lem/api/v1/chat/completions" -H 'Content-Type: application/json' \
+      -d '{"model":"user.services-it-tiny","messages":[{"role":"user","content":"Say PONG"}],"max_tokens":4000}' \
+      | jq -r '.choices[0].message | (.content // "") + (.reasoning_content // "")' 2>/dev/null)
+    [ -n "$out" ] && break
+  done
+  if [ -z "$out" ]; then
+    record FAIL "J3 lemonade GPU inference" "no output (registration or chat failed)"
+  elif ! docker logs harbor.lemonade 2>&1 | grep 'ROCm0' >/dev/null; then
+    record FAIL "J3 lemonade GPU inference" "output ok but no ROCm0 in logs (CPU/vulkan path?)"
+  else
+    record PASS "J3 lemonade GPU inference" "ROCm0 buffers + output: ${out:0:30}"
+  fi
+  # Deliberately NO /api/v1/delete cleanup: lemonade's delete removes the
+  # checkpoint files from the SHARED HF cache (it deleted Qwen3.5-0.8B
+  # Q4_K_M that other groups' model discovery relies on). The registration
+  # is idempotent and points at cached files — leaving it is harmless.
+  "$HARBOR" down >/dev/null 2>&1
+
+  # J4 localai.rocm — hipblas image; first run pulls ~4.3GB image + ~3.1GB
+  # rocm backend + model, hence the generous timeouts.
+  "$HARBOR" up localai >/dev/null 2>&1
+  local la waited
+  la=$(svc_url localai)
+  rocm_devices "J4 localai rocm devices" harbor.localai
+  probe_200 "J4 localai ready" "$la/readyz" 600
+  if ! curl -s -m 30 "$la/v1/models" | jq -e '.data[] | select(.id=="qwen3-0.6b")' >/dev/null 2>&1; then
+    curl -s -m 60 -X POST "$la/models/apply" -H 'Content-Type: application/json' \
+      -d '{"id":"qwen3-0.6b"}' >/dev/null 2>&1
+    waited=0
+    while [ "$waited" -lt 600 ]; do
+      curl -s -m 30 "$la/v1/models" | jq -e '.data[] | select(.id=="qwen3-0.6b")' >/dev/null 2>&1 && break
+      sleep 10; waited=$((waited + 10))
+    done
+  fi
+  out=$(curl -s -m 900 "$la/v1/chat/completions" -H 'Content-Type: application/json' \
+    -d "{\"model\":\"qwen3-0.6b\",\"messages\":[{\"role\":\"user\",\"content\":\"Say PONG\"}],\"max_tokens\":$MAX_TOKENS}" \
+    | jq -r '.choices[0].message.content // empty')
+  if [ -n "$out" ]; then
+    record PASS "J4 localai rocm inference" "${out:0:40}"
+  else
+    record FAIL "J4 localai rocm inference" "empty content (backend/model download may have failed)"
+  fi
+  "$HARBOR" down >/dev/null 2>&1
+
+  # J5 voicebox — startup + device passthrough only: upstream image ships
+  # CPU-only torch, so GPU cannot be used yet (documented limitation).
+  "$HARBOR" up voicebox >/dev/null 2>&1
+  rocm_devices "J5 voicebox rocm devices" harbor.voicebox
+  probe_200 "J5 voicebox health" "$(svc_url voicebox)/health" 600
+  "$HARBOR" down >/dev/null 2>&1
+
+  # J6 vllm — default image is a CUDA build; only run when the user has
+  # configured a ROCm vllm image (see spec for the verified procedure).
+  local vllm_image
+  vllm_image=$("$HARBOR" config get vllm.image 2>/dev/null)
+  if [ "$vllm_image" = "vllm/vllm-openai" ]; then
+    record SKIP "J6 vllm.rocm" "default CUDA image configured; see spec J6 for the ROCm procedure"
+  else
+    "$HARBOR" up vllm >/dev/null 2>&1
+    rocm_devices "J6 vllm rocm devices" harbor.vllm
+    local vurl vmodel
+    vurl=$(svc_url vllm)
+    probe_200 "J6 vllm health" "$vurl/health" 900
+    vmodel=$("$HARBOR" config get vllm.model 2>/dev/null)
+    out=$(curl -s -m 300 "$vurl/v1/chat/completions" -H 'Content-Type: application/json' \
+      -d "{\"model\":\"$vmodel\",\"messages\":[{\"role\":\"user\",\"content\":\"Say PONG\"}],\"max_tokens\":1000}" \
+      | jq -r '.choices[0].message.content // empty')
+    if [ -n "$out" ]; then
+      record PASS "J6 vllm rocm inference" "${out:0:40}"
+    else
+      record FAIL "J6 vllm rocm inference" "empty content"
+    fi
+    "$HARBOR" down >/dev/null 2>&1
+  fi
+
+  teardown
+}
+
 list_groups() {
   cat <<'EOF'
 A  llamacpp webui boost litellm aichat   (llamacpp backend + OpenAI satellites)
@@ -779,6 +970,7 @@ F  jupyter chatui librechat promptfoo    (web services batch 2)
 G  fabric cmdh                           (run-style CLIs via ollama)
 H  kobold speaches txtairag plandex webtop (batch 3, two sub-batches)
 I  webui searxng litellm boost jupyter promptfoo comfyui chatui librechat langflow (depth: chat/eval/kernel/workflow/flow)
+J  llamacpp ollama lemonade localai voicebox vllm (ROCm paths; skipped on non-ROCm hosts, excluded by default)
 EOF
 }
 
@@ -803,8 +995,8 @@ main() {
   local g
   for g in $groups; do
     case "$g" in
-      A|B|C|D|E|F|G|H|I) ;;
-      *) echo "Unknown group: $g (valid: A-I)" >&2; exit 2 ;;
+      A|B|C|D|E|F|G|H|I|J) ;;
+      *) echo "Unknown group: $g (valid: A-J)" >&2; exit 2 ;;
     esac
   done
 
