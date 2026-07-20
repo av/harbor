@@ -18,23 +18,24 @@ services:
     environment:
       - GOENV=development
       - PLANDEX_SKIP_UPGRADE=1
-      - PLANDEX_API_HOST=http://plandex-server:8080
+      # Official image in GOENV=development listens on 8099
+      - PLANDEX_API_HOST=http://plandex-server:8099
       # These will inject the default OpenAI API key and URL
       # See .x. files for the connections with other Harbor services
       - OPENAI_API_KEY=${HARBOR_OPENAI_KEY}
       - OPENAI_API_BASE=${HARBOR_OPENAI_URL}
 
   plandex-server:
-    image: ghcr.io/wipash/plandex:rolling
+    image: plandexai/plandex-server:latest
     container_name: ${HARBOR_CONTAINER_PREFIX}.plandex-server
     volumes:
       - ./services/plandex/data:/app/data
-      # There's a bug with incorrect timezone that might
-      # make it impossible to invalidate the email pin
-      - /etc/timezone:/etc/timezone:ro
+      # Timezone parity with the host (avoids an email-pin invalidation bug).
+      # /etc/timezone is intentionally not mounted: it does not exist on
+      # Fedora-family hosts and docker would create it as a directory.
       - /etc/localtime:/etc/localtime:ro
     ports:
-      - ${HARBOR_PLANDEX_HOST_PORT}:8080
+      - ${HARBOR_PLANDEX_HOST_PORT}:8099
     env_file:
       - ./.env
       - ./services/plandex/override.env
@@ -55,7 +56,8 @@ services:
       ]
 
   plandex-db:
-    image: postgres
+# postgres:18+ refuses the /var/lib/postgresql/data mount layout — keep 17
+    image: postgres:17
     container_name: ${HARBOR_CONTAINER_PREFIX}.plandex-db
     env_file:
       - ./.env
@@ -63,9 +65,9 @@ services:
     ports:
       - ${HARBOR_PLANDEX_DB_HOST_PORT}:5432
     volumes:
-      # There's a bug with incorrect timezone that might
-      # make it impossible to invalidate the email pin
-      - /etc/timezone:/etc/timezone:ro
+      # Timezone parity with the host (avoids an email-pin invalidation bug).
+      # /etc/timezone is intentionally not mounted: it does not exist on
+      # Fedora-family hosts and docker would create it as a directory.
       - /etc/localtime:/etc/localtime:ro
       - ./services/plandex/db:/var/lib/postgresql/data
     environment:

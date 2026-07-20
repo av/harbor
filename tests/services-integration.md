@@ -326,6 +326,67 @@ Pre: `./harbor.sh up ollama`; wait for D1 readiness;
 Teardown: `./harbor.sh down`; remove any leftover
 `harbor.fabric` / `harbor.cmdh-cli` run containers.
 
+## Group H — batch 3 web/API services (kobold, speaches, txtairag, plandex, webtop)
+
+All five are up-style containers with prebuilt images (webtop builds a thin
+Dockerfile layer). Run in two sub-batches to bound downloads/RAM, `down`
+between them. All are CPU-friendly.
+
+### H-a: kobold + speaches
+
+Pre: `./harbor.sh up kobold speaches` (also brings up default services).
+
+#### H1. kobold (koboldcpp)
+
+- Downloads its default model on first start
+  (`HARBOR_KOBOLD_MODEL` — KobbleTiny-Q4_K, ~670 MB); allow up to 10 min.
+- Ready: 200 on `$(./harbor.sh url kobold)/api/v1/model` and the response
+  names the loaded model (non-empty `result`).
+- Function: `curl -s $URL/api/v1/generate -d '{"prompt":"Reply with exactly: PONG\n","max_length":16}'`
+  → HTTP 200, JSON `.results[0].text` non-empty.
+
+#### H2. speaches (STT/TTS)
+
+- The `speaches-init` sidecar registers/downloads the STT model
+  (`Systran/faster-distil-whisper-small.en`) and TTS model (Kokoro int8);
+  wait for `harbor.speaches-init` to exit 0 (allow up to 10 min).
+- Ready: `curl -s $(./harbor.sh url speaches)/health` → 200.
+- Registry: `curl -s $URL/v1/models` lists the STT model id.
+- Function (round trip): POST `/v1/audio/speech`
+  (`{"model": <tts>, "voice": "af_bella", "input": "hello world", "response_format": "wav"}`)
+  → non-empty wav; then POST that wav to `/v1/audio/transcriptions`
+  (multipart, `model=<stt>`) → 200, JSON `.text` contains "hello"
+  (case-insensitive). If TTS model fails to provision, fall back to STT-only
+  on any wav with 200 + valid JSON as the pass bar, recording why.
+
+Teardown: `./harbor.sh down`.
+
+### H-b: txtairag + plandex + webtop
+
+Pre: `./harbor.sh up txtairag plandex webtop` (plandex CLI container is
+run-style — expect `plandex-server` + `plandex-db` up; webtop builds its
+image on first up).
+
+#### H3. txtairag
+
+- Startup-only: Streamlit downloads the wiki-slim embeddings index on first
+  request; check 200 on `$(./harbor.sh url txtairag)/` within 300 s and
+  `/healthz` (Streamlit health) returns `ok`. Full RAG query needs the
+  qwen3.5:4b LLM via ollama overlay — out of scope for CPU batch.
+
+#### H4. plandex
+
+- Ready: `curl -s $(./harbor.sh url plandex)/health` (plandex-server) → 200
+  within 120 s. If `/health` is not the path, discover via
+  `docker logs harbor.plandex-server` and record the actual endpoint.
+
+#### H5. webtop
+
+- Ready: 200 on `$(./harbor.sh url webtop)/` within 300 s (KDE web desktop
+  login page; selkies/kasmVNC serves HTTP on 3000).
+
+Teardown: `./harbor.sh down`; verify no `harbor.*` containers remain.
+
 ## Results
 
 Execution results are appended per run as:
@@ -553,3 +614,46 @@ RESULT: PASS — product defect fixed: `services/cmdh/ollama.ts` now passes a li
 Triage summary Groups F+G: three real product defects fixed (librechat-rag startup race — fact 183; fabric config mount vs image user + missing-.env hard fail — fact us5; cmdh empty structured-output schema from zod v3/v4 mismatch — fact iqb). One dev-tooling fix: lint file collector now skips service runtime dirs (workspace/vectordb/meili_data*) that crashed the strict scan — fact nal. No bad spec expectations. Teardown: `./harbor.sh down`; fabric.model and cmdh.model restored to `qwen3.5:4b`.
 
 Triage summary Group E: no product defects. One environment limitation (CUDA-only default image on a non-NVIDIA host) with a documented config workaround (`comfyui.args "--cpu"`). Teardown: `./harbor.sh down`; comfyui.args restored to empty.
+
+### Run 2026-07-20 — Group H-a (kobold, speaches)
+
+Pre: `./harbor.sh up kobold speaches` — all containers Up, `speaches-init` Exited (0).
+
+CHECK: H1 kobold ready + generate
+COMMAND: `curl $URL/api/v1/model`; `curl $URL/api/v1/generate -d '{"prompt":"Reply with exactly: PONG\n","max_length":16}'`
+EXPECTED: model name non-empty; 200 with non-empty `.results[0].text`
+ACTUAL: `{"result": "koboldcpp/KobbleTiny-Q4_K"}`; generate 200, `.results[0].text` non-empty (base completion model rambles rather than obeying — expected for a 1.1B base model; non-empty text is the bar)
+RESULT: PASS
+
+CHECK: H2 speaches health + registry + TTS→STT round trip
+COMMAND: `curl $URL/health`; `curl $URL/v1/models`; POST `/v1/audio/speech` (Kokoro int8, af_bella, "hello world", wav) then POST the wav to `/v1/audio/transcriptions` (Systran/faster-distil-whisper-small.en)
+EXPECTED: 200; STT model listed; transcription text contains "hello"
+ACTUAL: health 200; models list both `speaches-ai/Kokoro-82M-v1.0-ONNX-int8` and `Systran/faster-distil-whisper-small.en`; TTS 200 → 42 KB RIFF wav; STT → `{"text":"Hello world."}`
+RESULT: PASS
+
+Teardown: `./harbor.sh down`; no containers left.
+
+### Run 2026-07-20 — Group H-b (txtairag, plandex, webtop)
+
+Pre: `./harbor.sh up txtairag plandex webtop`. First attempts FAILED on four
+independent product defects (fixed below) before all services came up.
+
+CHECK: H3 txtairag Streamlit up
+COMMAND: 200 probe on `$(harbor url txtairag)/` and `/healthz`
+EXPECTED: 200 within 300 s; healthz 200
+ACTUAL: 200 on first poll after start; `/healthz` 200 (Streamlit serves the SPA shell on both paths)
+RESULT: PASS
+
+CHECK: H4 plandex server health
+COMMAND: `curl $(harbor url plandex)/health`
+EXPECTED: 200 within 120 s
+ACTUAL: three defects on the way: (1) CLI image build failed — `plandex.ai` domain is NXDOMAIN, `wget https://plandex.ai/install.sh` exit 1, and the repo installer also resolves its version from plandex.ai (curl exit 6); (2) `ghcr.io/wipash/plandex:rolling` server crashed in a loop — its embedded LiteLLM launch dies on `No module named uvicorn` (broken third-party image); (3) `- /etc/timezone:/etc/timezone:ro` mount failed on Fedora ("not a directory": docker had created the missing host path as a directory); (4) `postgres` (unpinned → 18) refused the `/var/lib/postgresql/data` mount layout. After fixes: `OK`, 200 in <15 s
+RESULT: PASS — fixes: Dockerfile fetches the installer from GitHub raw and derives PLANDEX_VERSION from the latest `cli/v*` release (fact 2vy); server image switched to official `plandexai/plandex-server:latest` listening on 8099 in development mode — port mapping + `PLANDEX_API_HOST` updated (facts 843, zn5); `/etc/timezone` mounts dropped, `/etc/localtime` kept (fact nre); db pinned `postgres:17` (fact m3u). Note: the `plandex` CLI container is run-style and exits at its interactive auth prompt without a TTY — a fresh `harbor up plandex` may report failure on that container even when server+db are healthy.
+
+CHECK: H5 webtop desktop up
+COMMAND: 200 probe on `$(harbor url webtop)/`
+EXPECTED: 200 within 300 s
+ACTUAL: image build FAILED twice first: `neofetch` no longer exists in the Ubuntu base (apt exit 100), and the legacy `npmjs.org/install.sh` npm bootstrap is defunct (exit 1; distro `nodejs`+`npm` also mutually conflict in this base). After fixes (drop neofetch — fact dfh; NodeSource node 22 which bundles npm — fact uv2): build OK, 200 on first poll
+RESULT: PASS
+
+Triage summary Group H: six real product defects fixed across plandex (installer domain dead, broken third-party server image, port drift, fragile /etc/timezone mount, unpinned postgres hitting the PG18 layout change) and webtop (removed apt package, defunct npm bootstrap). No Harbor defects in kobold/speaches/txtairag. Teardown: `./harbor.sh down`; no config overrides were changed in this group; stale root-owned runtime dirs removed via alpine before linting.

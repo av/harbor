@@ -14,7 +14,6 @@ RUN sudo apt-get update \
   wmctrl \
   libreoffice \
   fonts-noto-cjk \
-  neofetch \
   python3-requests \
   python3-numpy \
   python3-pandas \
@@ -24,7 +23,10 @@ RUN sudo apt-get update \
   python3-reportlab
 
 
-RUN curl -L https://npmjs.org/install.sh | sh
+# The legacy npmjs.org/install.sh bootstrap is defunct; distro nodejs/npm
+# packages conflict in this base — use NodeSource (bundles npm)
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | sudo bash - \
+  && sudo apt-get install -y nodejs
 RUN npm install -g --unsafe-perm yarn
 RUN sudo chown -R abc:abc /usr/lib/node_modules
 

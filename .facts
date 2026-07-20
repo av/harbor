@@ -193,6 +193,31 @@
   command: grep -q 'format: CmdhResponseSchema' services/cmdh/ollama.ts && ! grep -q "from 'zod-to-json-schema'" services/cmdh/ollama.ts
   tags: [spec, implemented]
 
+## plandex
+- label: services/plandex/Dockerfile installs the plandex CLI from the GitHub raw install script (app/cli/install.sh), not the dead plandex.ai domain
+  command: grep -q 'raw.githubusercontent.com/plandex-ai/plandex/main/app/cli/install.sh' services/plandex/Dockerfile
+  tags: [spec, implemented]
+- label: plandex-db pins postgres:17 — postgres:18+ images refuse the /var/lib/postgresql/data bind-mount layout used by Harbor
+  command: grep -q 'image: postgres:17' services/compose.plandex.yml
+  tags: [spec, implemented]
+- label: plandex-server uses the official plandexai/plandex-server image (the ghcr.io/wipash rolling image crashes: bundled litellm launch fails on missing uvicorn)
+  command: grep -q 'plandexai/plandex-server' services/compose.plandex.yml
+  tags: [spec, implemented]
+- label: compose.plandex.yml does not bind-mount /etc/timezone (absent on Fedora-family hosts; docker creates it as a directory and the mount then fails against the image's file)
+  command: ! grep -q -- '- /etc/timezone' services/compose.plandex.yml
+  tags: [spec, implemented]
+- label: plandex-server port mapping and the CLI's PLANDEX_API_HOST use port 8099 (official image in GOENV=development listens on 8099, not 8080)
+  command: grep -q 'plandex-server:8099' services/compose.plandex.yml && grep -q ':8099$' services/compose.plandex.yml
+  tags: [spec, implemented]
+
+## webtop
+- label: services/webtop/Dockerfile does not install neofetch (package removed from current Ubuntu base of the webtop image; it broke the build)
+  command: ! grep -q neofetch services/webtop/Dockerfile
+  tags: [spec, implemented]
+- label: services/webtop/Dockerfile installs node via NodeSource (bundles npm; the legacy npmjs.org/install.sh bootstrap is defunct and distro nodejs/npm conflict) and installs yarn via npm
+  command: grep -q 'deb.nodesource.com' services/webtop/Dockerfile && ! grep -q 'RUN curl -L https://npmjs.org/install.sh' services/webtop/Dockerfile
+  tags: [spec, implemented]
+
 # app
 - label: Harbor App blocks main UI behind a setup gate until setup detail status is ready
   command: rg -q 'detail\?\.status === "ready"' app/src/setup/HarborSetupContext.tsx
