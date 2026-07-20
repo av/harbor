@@ -182,6 +182,9 @@
 - label: librechat-rag waits for librechat-vector (pgvector) readiness: compose.librechat.yml has a pg_isready healthcheck on librechat-vector and librechat-rag depends_on it with condition service_healthy, preventing first-boot 'connection refused' crash
   command: grep -q pg_isready services/compose.librechat.yml && grep -q 'service_healthy' services/compose.librechat.yml
   tags: [spec, implemented]
+- label: the Ollama custom endpoint baseURL in librechat.yml is the API root (.../v1) without a /chat/completions suffix — LibreChat's client appends the path itself and 404s on a full path
+  command: grep -q 'INTERNAL_URL}/v1"' services/librechat/librechat.yml && ! grep -q 'INTERNAL_URL}/v1/chat/completions' services/librechat/librechat.yml
+  tags: [spec, services-it, implemented]
 
 ## fabric
 - label: fabric config mounts into the image user's real home (/home/appuser/.config/fabric, image runs as appuser not root) and the entrypoint creates an empty .env if missing, since fabric hard-fails without one even when vendor/model come from environment
@@ -230,6 +233,11 @@
 - label: ChatNode.history() merges consecutive same-role plain messages (no tool calls) so multi-assistant-turn modules like g1 pass llama.cpp's 'cannot have 2+ assistant messages at the end' validation
   command: cd services/boost && python -m pytest tests/test_chat_node.py -q -k merge
   tags: [services-runner, implemented]
+
+## chatui
+- label: envify.js bridges Harbor's legacy MODELS config to chat-ui >= 0.10's single-provider scheme by emitting OPENAI_BASE_URL and OPENAI_API_KEY from the first configured openai endpoint, so per-backend configs (chatui.llamacpp.yml etc.) still take effect
+  command: grep -q OPENAI_BASE_URL services/chatui/envify.js
+  tags: [spec, services-it, implemented]
 
 # app
 - label: Harbor App blocks main UI behind a setup gate until setup detail status is ready

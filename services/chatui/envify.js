@@ -22,5 +22,17 @@ Object.entries(vars).forEach(([key, value]) => {
 	localEnv += `${key}=\`${value}\`\n`;
 });
 
+// chat-ui >= 0.10 replaced the MODELS list with a single OpenAI-compatible
+// provider configured via OPENAI_BASE_URL / OPENAI_API_KEY (models are
+// discovered from its /models endpoint). Bridge the legacy Harbor MODELS
+// config to the new scheme using the first configured endpoint so the
+// per-backend configs (chatui.llamacpp.yml etc.) keep working.
+const firstEndpoint = vars.MODELS?.[0]?.endpoints?.find((e) => e.type === "openai");
+
+if (firstEndpoint && !vars.OPENAI_BASE_URL) {
+  localEnv += `OPENAI_BASE_URL=\`${firstEndpoint.baseURL}\`\n`;
+  localEnv += `OPENAI_API_KEY=\`${firstEndpoint.apiKey ?? "sk-chatui"}\`\n`;
+}
+
 // Write full_config to .env.local
 fs.writeFileSync(".env.local", localEnv);

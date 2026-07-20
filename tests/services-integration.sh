@@ -672,6 +672,100 @@ km.shutdown_kernel()
   fi
 
   teardown
+
+  log "Group I-d: chatui/librechat chat round trips, langflow flow execution"
+  "$HARBOR" up llamacpp ollama chatui librechat langflow >/dev/null 2>&1
+  wait_llamacpp_ready "I8 llamacpp ready" || { teardown; return; }
+  resolve_model || { record FAIL "I8 model discovery"; teardown; return; }
+  wait_ollama_ready "I9 ollama ready" || { teardown; return; }
+  "$HARBOR" exec ollama ollama pull "$OLLAMA_TINY_MODEL" >/dev/null 2>&1
+
+  # I8 chatui chat round trip. chat-ui >= 0.10 serves the models of the single
+  # OPENAI_BASE_URL provider (bridged from Harbor's config by envify.js), i.e.
+  # the llamacpp router. chatui sends no max_tokens, so a thinking model
+  # (Qwen3.5) can ramble to context exhaustion — use the non-thinking
+  # template-tolerant model instead. The anonymous-session cookie (hf-chat)
+  # is minted on the first response; message POSTs are multipart and require
+  # a matching Origin header.
+  probe_200 "I8 chatui ready" "$(svc_url chatui)/" 300
+  local cu cujar conv cu_cid cu_root cu_reply
+  cu=$(svc_url chatui)
+  cujar=$(mktemp -t harbor.cujar.XXXXXX)
+  conv=$(curl -s -c "$cujar" -m 30 -X POST "$cu/conversation" \
+    -H 'Content-Type: application/json' -d "{\"model\":\"$OPENCODE_MODEL\"}")
+  cu_cid=$(echo "$conv" | jq -r '.conversationId // empty')
+  cu_root=$(echo "$conv" | jq -r '.conversation | fromjson | .json.rootMessageId // empty' 2>/dev/null)
+  cu_reply=""
+  if [ -n "$cu_cid" ] && [ -n "$cu_root" ]; then
+    curl -s -b "$cujar" -m 600 -H "Origin: $cu" -X POST "$cu/conversation/$cu_cid" \
+      -F "data={\"inputs\":\"Reply with exactly: PONG\",\"id\":\"$cu_root\",\"is_retry\":false,\"is_continue\":false,\"web_search\":false,\"tools\":[]}" \
+      >/dev/null 2>&1
+    cu_reply=$(curl -s -b "$cujar" -m 30 "$cu/api/v2/conversations/$cu_cid" \
+      | jq -r '[.json.messages[] | select(.from=="assistant") | .content] | join("")' 2>/dev/null)
+  fi
+  rm -f "$cujar"
+  if [ -n "$cu_reply" ]; then
+    record PASS "I8 chatui chat round trip" "$OPENCODE_MODEL"
+  else
+    record FAIL "I8 chatui chat round trip" "cid: ${cu_cid:-none}, assistant reply empty"
+  fi
+
+  # I9 librechat chat round trip. Registration is disabled by default, so the
+  # test user is seeded via the bundled create-user script and removed from
+  # mongo afterwards. Chat requires: a browser-like User-Agent (uaParser
+  # middleware rejects others), a /api/models fetch to warm the endpoint model
+  # cache, and endpoint "ollama" (lowercase — the custom endpoint named
+  # "Ollama" is normalized) with endpointType "custom". The chat POST returns
+  # a stream id immediately; the reply is polled from /api/messages.
+  probe_200 "I9 librechat ready" "$(svc_url librechat)/" 300
+  local lc lc_ua lc_email lc_tok lc_cid lc_out
+  lc=$(svc_url librechat)
+  lc_ua='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
+  lc_email="services-it@harbor.test"
+  docker exec harbor.librechat node /app/config/create-user.js \
+    "$lc_email" services-it servicesit Services-IT-1234 --email-verified=true >/dev/null 2>&1
+  lc_tok=$(curl -s -m 30 -X POST "$lc/api/auth/login" -H 'Content-Type: application/json' \
+    -d "{\"email\":\"$lc_email\",\"password\":\"Services-IT-1234\"}" | jq -r '.token // empty')
+  lc_out=""
+  if [ -n "$lc_tok" ]; then
+    curl -s -m 60 -A "$lc_ua" -H "Authorization: Bearer $lc_tok" "$lc/api/models" >/dev/null 2>&1
+    lc_cid=$(curl -s -N -m 600 -A "$lc_ua" -X POST "$lc/api/agents/chat/ollama" \
+      -H "Authorization: Bearer $lc_tok" -H 'Content-Type: application/json' \
+      -d "{\"text\":\"Reply with exactly: PONG\",\"endpoint\":\"ollama\",\"endpointType\":\"custom\",\"model\":\"$OLLAMA_TINY_MODEL\",\"conversationId\":null,\"parentMessageId\":\"00000000-0000-0000-0000-000000000000\",\"isCreatedByUser\":true,\"error\":false,\"generation\":\"\"}" \
+      | jq -r '.conversationId // empty' 2>/dev/null)
+    waited=0
+    while [ -n "$lc_cid" ] && [ "$waited" -le 300 ]; do
+      lc_out=$(curl -s -m 30 -A "$lc_ua" -H "Authorization: Bearer $lc_tok" "$lc/api/messages/$lc_cid" \
+        | jq -r '[.[] | select(.isCreatedByUser==false) | (.text // "") + ([.content[]? | select(.type=="text") | .text] | join(""))] | join("")' 2>/dev/null)
+      [ -n "$lc_out" ] && break
+      sleep 5; waited=$((waited + 5))
+    done
+  fi
+  if [ -n "$lc_out" ]; then
+    record PASS "I9 librechat chat round trip" "ollama/$OLLAMA_TINY_MODEL"
+  else
+    record FAIL "I9 librechat chat round trip" "token: ${lc_tok:+set}${lc_tok:-missing}, cid: ${lc_cid:-none}, reply empty"
+  fi
+  docker exec harbor.librechat-db mongosh LibreChat --quiet \
+    --eval "db.users.deleteOne({email:'$lc_email'})" >/dev/null 2>&1
+
+  # I10 langflow flow execution: import a minimal ChatInput -> ChatOutput
+  # passthrough flow (built from the live component catalog), run it via the
+  # run API (x-api-key minted via /api/v1/api_key), assert the output echoes
+  # the input, delete the flow. Auth token comes from auto_login
+  # (LANGFLOW_AUTO_LOGIN=true in Harbor's defaults).
+  probe_200 "I10 langflow ready" "$(svc_url langflow)/health" 300
+  local lf lf_tok lf_out
+  lf=$(svc_url langflow)
+  lf_tok=$(curl -s -m 30 "$lf/api/v1/auto_login" | jq -r '.access_token // empty')
+  lf_out=$(python3 tests/lib/langflow-flow.py "$lf" "$lf_tok" 2>/dev/null)
+  if [ "$lf_out" = "PONG-services-it" ]; then
+    record PASS "I10 langflow flow execution" "passthrough echo"
+  else
+    record FAIL "I10 langflow flow execution" "got: ${lf_out:-nothing}"
+  fi
+
+  teardown
 }
 
 list_groups() {
@@ -684,7 +778,7 @@ E  comfyui                               (GPU-optional; excluded by default, CPU
 F  jupyter chatui librechat promptfoo    (web services batch 2)
 G  fabric cmdh                           (run-style CLIs via ollama)
 H  kobold speaches txtairag plandex webtop (batch 3, two sub-batches)
-I  webui searxng litellm boost jupyter promptfoo comfyui (depth: chat/eval/kernel/workflow)
+I  webui searxng litellm boost jupyter promptfoo comfyui chatui librechat langflow (depth: chat/eval/kernel/workflow/flow)
 EOF
 }
 

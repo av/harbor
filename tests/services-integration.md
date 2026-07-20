@@ -401,9 +401,7 @@ Teardown: `./harbor.sh down`; verify no `harbor.*` containers remain.
 
 ## Group I — depth + integrations of covered services (Batch I of the Coverage Plan)
 
-Three serial sub-batches; automated in `tests/services-integration.sh --groups I`.
-Deferred to a later batch: chatui/librechat chat round trips (need session/auth
-bootstrapping) and langflow flow execution (needs a flow definition import).
+Four serial sub-batches; automated in `tests/services-integration.sh --groups I`.
 
 ### I-a: webui chat, searxng categories, litellm proxy, boost modules
 
@@ -475,6 +473,74 @@ Pre: `harbor config set comfyui.args "--cpu"` + recreate (Group E workaround).
 - `POST /prompt` with a model-free graph `EmptyImage → SaveImage` → `prompt_id`;
   poll `GET /history/<prompt_id>` until `.outputs | length > 0` (≤120 s).
   Exercises queueing, execution, and history without checkpoints.
+
+### I-d: chatui/librechat chat round trips, langflow flow execution
+
+Pre: `./harbor.sh up llamacpp ollama chatui librechat langflow`; pull
+`qwen3:0.6b` into ollama.
+
+#### I8. chatui chat round trip
+
+- chat-ui >= 0.10 dropped the `MODELS` env list for a single OpenAI-compatible
+  provider (`OPENAI_BASE_URL`/`OPENAI_API_KEY`); models are discovered from
+  its `/models` endpoint. Harbor's `envify.js` bridges the legacy per-backend
+  `MODELS` configs to the new scheme using the first configured endpoint
+  (product defect found here: without the bridge, chatui silently ignored
+  Harbor's config and served HuggingFace's default router catalog).
+- chatui sends no `max_tokens`, so a thinking model (Qwen3.5) can ramble to
+  context exhaustion (observed: 74k+ tokens decoded, request never returns) —
+  use the non-thinking template-tolerant model (LFM2.5, same as opencode/rcn/g1).
+- `POST /conversation` (JSON `{"model": "<LFM2.5 router id>"}`) → mints the
+  anonymous `hf-chat` session cookie and returns `conversationId` +
+  `rootMessageId`.
+- `POST /conversation/<id>` — multipart field `data` with
+  `{"inputs": ..., "id": "<rootMessageId>", "is_retry": false,
+  "is_continue": false, "web_search": false, "tools": []}`. Requires an
+  `Origin` header matching the service URL ("Non-JSON form requests need to
+  have an origin" otherwise). Streams until `{"status":"finished"}`.
+- `GET /api/v2/conversations/<id>` → assistant message `content` non-empty.
+
+#### I9. librechat chat round trip
+
+- Registration is disabled by default (`Registration is not allowed.`), so
+  seed the test user via the bundled script:
+  `docker exec harbor.librechat node /app/config/create-user.js <email> <name>
+  <username> <password> --email-verified=true`.
+- `POST /api/auth/login` → `.token`.
+- Chat needs: a browser-like `User-Agent` (the uaParser middleware answers
+  `Illegal request` to anything ua-parser-js does not recognize as a browser),
+  one `GET /api/models` to warm the endpoint model cache
+  (`endpoint_models_not_loaded` otherwise), and endpoint name `ollama` in
+  lowercase (the custom endpoint named "Ollama" is normalized to the known
+  ollama type; the literal name fails with `Unknown endpoint`).
+- `POST /api/agents/chat/ollama` with `{"text": ..., "endpoint": "ollama",
+  "endpointType": "custom", "model": "qwen3:0.6b", "conversationId": null,
+  "parentMessageId": "00000000-0000-0000-0000-000000000000",
+  "isCreatedByUser": true, ...}` → returns `conversationId` immediately;
+  poll `GET /api/messages/<cid>` until a non-user message has text (top-level
+  `.text` or `content[]` entries of type `text` — reasoning models put the
+  reply only in the content array) (≤300 s).
+- Product defect found here: `librechat.yml` set the Ollama endpoint baseURL
+  to `.../v1/chat/completions`; LibreChat's (langchain-based) client appends
+  `/chat/completions` itself → 404. Fixed to `.../v1`.
+- Cleanup: `db.users.deleteOne` via mongosh in harbor.librechat-db (the
+  interactive delete-user script hangs without a TTY).
+
+#### I10. langflow flow execution
+
+- Auth: `GET /api/v1/auto_login` → `access_token` (Harbor ships
+  `LANGFLOW_AUTO_LOGIN=true`). Note some endpoints gzip regardless of
+  `Accept-Encoding`.
+- `tests/lib/langflow-flow.py` builds a minimal ChatInput → ChatOutput
+  passthrough flow using node templates taken from the live
+  `GET /api/v1/all` catalog (so it tracks the installed component versions),
+  imports it via `POST /api/v1/flows/`, mints an API key via
+  `POST /api/v1/api_key/` (the run API 403s on the JWT alone), executes
+  `POST /api/v1/run/<flow_id>` with `input_value=PONG-services-it`, asserts
+  the chat output echoes the input exactly, and deletes the flow.
+- A pure passthrough is used deliberately: it exercises flow import, graph
+  validation, execution, and the run API without pinning an LLM component
+  schema; LLM-backed flows are covered by other checks.
 
 Teardown after each sub-batch: `./harbor.sh down` + config restore.
 
@@ -865,3 +931,60 @@ RESULT: PASS
 
 Deferred to a later batch: chatui/librechat chat round trips (session/auth
 bootstrap), langflow flow execution (needs flow import).
+
+### Run 2026-07-20 — Group I (full re-run incl. new I8–I10)
+
+`./tests/services-integration.sh --groups I` after adding sub-batch I-d.
+
+CHECK: I0–I7 (previously established depth checks)
+ACTUAL: all PASS — webui chat, searxng categories (images/it), litellm proxy
+(models + llamacpp/$MODEL completion), boost modules klmbr/rcn/g1/mcts/eli5/
+concept/ponder, jupyter kernel 6*7→42, promptfoo eval rc=0, comfyui workflow
+prompt_id e403cce4
+RESULT: PASS (22 checks)
+
+CHECK: I8 chatui chat round trip
+COMMAND: POST /conversation (model) → POST /conversation/<id> multipart data
+with rootMessageId + Origin header → GET /api/v2/conversations/<id> assistant
+content non-empty
+EXPECTED: non-empty assistant reply
+ACTUAL: first scripted run FAIL with $MODEL (Qwen3.5-0.8B): chatui sends no
+max_tokens and the thinking model decoded 74k+ tokens without stopping (the
+message POST never returns). Bad expectation — switched I8 to the
+non-thinking LFM2.5 model; re-verified: stream reaches
+{"status":"finished"}, assistant content ends with "PONG"
+RESULT: PASS (after model fix). Product defect found and fixed on the way in
+(fact zfx): chat-ui >= 0.10 ignores the MODELS env — Harbor's config was
+silently dropped and chatui served HuggingFace's default catalog;
+envify.js now bridges the first configured endpoint to
+OPENAI_BASE_URL/OPENAI_API_KEY, after which chatui lists the llamacpp
+router models
+
+CHECK: I9 librechat chat round trip
+COMMAND: create-user script → /api/auth/login → GET /api/models →
+POST /api/agents/chat/ollama (browser UA, endpoint "ollama",
+endpointType "custom", model qwen3:0.6b) → poll /api/messages/<cid>
+EXPECTED: non-user message with text
+ACTUAL: PASS — assistant reply present (content[] type "text"); test user
+deleted via mongosh afterwards
+RESULT: PASS. Product defect found and fixed (fact 4kv): librechat.yml set
+the Ollama baseURL to .../v1/chat/completions; LibreChat's client appends
+/chat/completions itself → 404 MODEL_NOT_FOUND on every chat. Fixed to
+.../v1. Also documented: uaParser rejects non-browser UAs ("Illegal
+request"), endpoint name must be lowercase "ollama" ("Unknown endpoint"
+otherwise), /api/models must be fetched first (endpoint_models_not_loaded)
+
+CHECK: I10 langflow flow execution
+COMMAND: tests/lib/langflow-flow.py — auto_login token → build ChatInput→
+ChatOutput passthrough from live /api/v1/all catalog → POST /api/v1/flows/ →
+mint API key → POST /api/v1/run/<id> input "PONG-services-it" → delete flow
+EXPECTED: output text echoes input exactly
+ACTUAL: PASS — output "PONG-services-it"; run API 403s on JWT alone
+(x-api-key required), some endpoints gzip regardless of Accept-Encoding
+RESULT: PASS
+
+Summary: 29 passed, 1 failed on first scripted run; sole FAIL (I8) was a bad
+model expectation, fixed in runner+spec and re-verified green. Two real
+product defects fixed (chatui envify OPENAI_* bridge — fact zfx; librechat
+Ollama baseURL — fact 4kv). Teardown: harbor down, test users removed, no
+config drift (I-d sets no config).
