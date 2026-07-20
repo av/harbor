@@ -56,7 +56,11 @@ and reuse it in all LLM checks below.
 
 ## Group A — llamacpp backend + OpenAI-compatible satellites
 
-Start: `./harbor.sh up llamacpp webui boost litellm aichat`
+Start: `./harbor.sh up llamacpp webui boost litellm`
+
+(Do **not** include `aichat` in `up` — it is a run-style CLI container that
+exits immediately without a TTY, which makes `harbor up` report a startup
+failure. It is exercised via `harbor run` in A5.)
 
 ### A1. llamacpp
 
@@ -65,10 +69,12 @@ Start: `./harbor.sh up llamacpp webui boost litellm aichat`
   ```
   curl -s "$(./harbor.sh url llamacpp)/v1/chat/completions" \
     -H 'Content-Type: application/json' \
-    -d "{\"model\":\"$MODEL\",\"messages\":[{\"role\":\"user\",\"content\":\"Reply with exactly: PONG\"}],\"max_tokens\":30}" \
+    -d "{\"model\":\"$MODEL\",\"messages\":[{\"role\":\"user\",\"content\":\"Reply with exactly: PONG\"}],\"max_tokens\":2000}" \
     | jq -er '.choices[0].message.content | length > 0'
   ```
-  Expected: exit 0, prints `true`.
+  Expected: exit 0, prints `true`. (`max_tokens` must be generous: Qwen3.5 is
+  a thinking model — a small budget is consumed entirely by
+  `reasoning_content`, leaving `content` empty.)
 
 ### A2. webui (Open WebUI)
 
@@ -88,10 +94,10 @@ Start: `./harbor.sh up llamacpp webui boost litellm aichat`
   ```
   curl -s -H 'Authorization: Bearer sk-boost' "$(./harbor.sh url boost)/v1/models" \
     | jq -er '.data | length > 0'
-  BOOSTED=$(curl -s -H 'Authorization: Bearer sk-boost' "$(./harbor.sh url boost)/v1/models" | jq -r '.data[].id' | head -1)
+  BOOSTED=$(curl -s -H 'Authorization: Bearer sk-boost' "$(./harbor.sh url boost)/v1/models" | jq -r '.data[].id' | grep -i "$MODEL" | head -1)
   curl -s "$(./harbor.sh url boost)/v1/chat/completions" \
     -H 'Authorization: Bearer sk-boost' -H 'Content-Type: application/json' \
-    -d "{\"model\":\"$BOOSTED\",\"messages\":[{\"role\":\"user\",\"content\":\"Say OK\"}],\"max_tokens\":30}" \
+    -d "{\"model\":\"$BOOSTED\",\"messages\":[{\"role\":\"user\",\"content\":\"Say OK\"}],\"max_tokens\":2000}" \
     | jq -er '.choices[0].message.content | length > 0'
   ```
   Expected: both jq commands exit 0.
@@ -102,14 +108,25 @@ Start: `./harbor.sh up llamacpp webui boost litellm aichat`
 - Ready: 200 probe on `$(./harbor.sh url litellm)/health/liveliness` (≤120 s).
 - Function: `curl -s -H "Authorization: Bearer sk-litellm" "$(./harbor.sh url litellm)/v1/models" | jq -er '.data'` exits 0
   (key: `./harbor.sh config get litellm.master.key`; use that value if it
-  differs from `sk-litellm`).
+  differs from `sk-litellm`). Note: Harbor ships no
+  `compose.x.litellm.llamacpp.yml` overlay, so the list is `[]` when only
+  llamacpp runs — an empty array is a PASS for this check.
 
 ### A5. aichat (container CLI)
 
+- Pre: aichat's model id must match a llamacpp router id — the shipped
+  default (`qwen3.5:4b`) is an ollama-style tag that llamacpp rejects with
+  "model not found". Save the current value, then
+  `./harbor.sh config set aichat.model "$MODEL"`; restore afterwards.
 - Function (doubles as readiness):
-  `./harbor.sh run aichat -e 'Reply with exactly: PONG'` — capture stdout;
-  Expected: exit 0 and non-empty stdout (LLM output; do not require exact
-  string match, only `[ -n "$out" ]`).
+  `timeout 600 ./harbor.sh run aichat --no-stream 'Reply with exactly: PONG' </dev/null`
+  — capture stdout; Expected: exit 0 and non-empty stdout (LLM output; do
+  not require exact string match, only `[ -n "$out" ]`).
+  Do **not** use `-e` (execute-command mode prompts for confirmation and
+  hangs unattended runs); pass `</dev/null` and `--no-stream` so the
+  one-shot never blocks on a TTY. If the run times out, remove leftover
+  `harbor-aichat-run-*` containers — abandoned runs keep llamacpp slots
+  generating and can exhaust the context for later requests.
 
 Teardown: `./harbor.sh down`
 
@@ -220,3 +237,81 @@ RESULT: PASS | FAIL | SKIP (<reason>)
 
 Failures are triaged as product defect (fix in repo, fact-driven) vs.
 environment issue (document only).
+
+### Run 2026-07-20 — Group A
+
+`MODEL=unsloth/Qwen3.5-0.8B-GGUF:Q4_K_M` (llamacpp router auto-discovered).
+
+CHECK: A1 llamacpp ready
+COMMAND: 200 probe on `$(./harbor.sh url llamacpp)/health` (poll 5 s)
+EXPECTED: 200 within 300 s
+ACTUAL: 200 on first poll
+RESULT: PASS
+
+CHECK: A1 llamacpp chat completion
+COMMAND: `curl -s $URL/v1/chat/completions -d '{"model":"'$MODEL'","messages":[{"role":"user","content":"Reply with exactly: PONG"}],"max_tokens":2000}' | jq -er '.choices[0].message.content | length > 0'`
+EXPECTED: prints `true`, exit 0
+ACTUAL: `true` (content `PONG`, finish_reason `stop`, 824 completion tokens incl. reasoning)
+RESULT: PASS — after spec fix: original `max_tokens:30` was entirely consumed by `reasoning_content` (thinking model), leaving empty `content`. Bad spec expectation, not a defect; spec updated to 2000.
+
+CHECK: A2 webui ready
+COMMAND: `docker inspect -f '{{.State.Health.Status}}' harbor.webui`; 200 probe on `$URL/health`
+EXPECTED: `healthy` + 200 within 300 s
+ACTUAL: `healthy`, probe 200
+RESULT: PASS
+
+CHECK: A2 webui version
+COMMAND: `curl -s $URL/api/version | jq -er '.version'`
+EXPECTED: semver, exit 0
+ACTUAL: `0.9.6`
+RESULT: PASS
+
+CHECK: A3 boost ready
+COMMAND: 200 probe on `$(./harbor.sh url boost)/health`
+EXPECTED: 200 within 120 s
+ACTUAL: 200 on first poll
+RESULT: PASS
+
+CHECK: A3 boost model list
+COMMAND: `curl -s -H 'Authorization: Bearer sk-boost' $URL/v1/models | jq -er '.data | length > 0'`
+EXPECTED: `true`, exit 0
+ACTUAL: `true` (boosted ids e.g. `autotemp-unsloth/Qwen3.5-0.8B-GGUF:Q4_K_M`)
+RESULT: PASS
+
+CHECK: A3 boost completion
+COMMAND: completion via `autotemp-unsloth/Qwen3.5-0.8B-GGUF:Q4_K_M`, max_tokens 2000
+EXPECTED: non-empty content, exit 0
+ACTUAL: `true`
+RESULT: PASS
+
+CHECK: A3 boost 401 without auth
+COMMAND: same completion without Bearer header, `-w '%{http_code}'`
+EXPECTED: 401
+ACTUAL: 401
+RESULT: PASS
+
+CHECK: A4 litellm ready
+COMMAND: 200 probe on `$URL/health/liveliness`
+EXPECTED: 200 within 120 s
+ACTUAL: 200 on first poll
+RESULT: PASS
+
+CHECK: A4 litellm models
+COMMAND: `curl -s -H "Authorization: Bearer sk-litellm" $URL/v1/models | jq -er '.data'`
+EXPECTED: exit 0
+ACTUAL: `[]`, exit 0 — expected: no `compose.x.litellm.llamacpp.yml` overlay exists, so llamacpp adds no litellm models
+RESULT: PASS
+
+CHECK: A5 aichat one-shot
+COMMAND: `timeout 600 ./harbor.sh run aichat --no-stream 'Reply with exactly: PONG' </dev/null` (after `harbor config set aichat.model "$MODEL"`)
+EXPECTED: exit 0, non-empty stdout
+ACTUAL: exit 0, model output produced (thinking preamble + answer)
+RESULT: PASS — after two spec fixes: (1) `-e` flag hangs (execute-command confirmation prompt) — replaced with plain prompt + `--no-stream` + `</dev/null`; (2) shipped default `aichat.model=qwen3.5:4b` is an ollama-style tag rejected by llamacpp ("model not found") — the check must set aichat.model to a llamacpp router id. Also observed: timed-out `harbor run` containers keep llamacpp generating until context exhaustion; cleanup of `harbor-aichat-run-*` containers required before retry.
+
+Triage summary: no product defects. Two bad spec expectations fixed
+(max_tokens too small for thinking models; aichat `-e` interactive hang) and
+one environment/config note (aichat default model id vs llamacpp ids;
+no litellm-llamacpp overlay by design).
+
+Teardown: `./harbor.sh down` executed; `aichat.model` restored to
+`qwen3.5:4b`.
