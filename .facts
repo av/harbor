@@ -847,6 +847,12 @@
 - label: The macOS requirements test battery re-executes itself inside a bash:3.2 container (stock macOS bash), asserting the sourced requirements.sh path and the test harness itself contain no bash-4-only constructs
   command: bash .scripts/test-requirements-macos.sh
   tags: [spec, bash32-compat, implemented]
+- label: Host-run scripts (harbor.sh, install.sh, requirements.sh) contain no GNU-only regex escapes: whitespace uses [[:space:]] not \s, word matches use grep -w not \b, alternation uses grep -E not BRE \|, so conditionals behave identically under BSD grep/sed on macOS
+  command: ! grep -nE '\b(grep|sed)\b[^|;#]*\\(s|b|w|d|\|)' harbor.sh install.sh requirements.sh
+  tags: [spec, bash32-compat, implemented]
+- label: Lint rule HARBOR013 (error severity) flags grep -P and GNU-only regex escapes in grep/sed invocations in host-run scripts, with pass/fail fixtures validated by lint-self-test
+  command: grep -q HARBOR013 .scripts/lint/rules.yaml && test -f .scripts/lint/fixtures/HARBOR013/fail.sh && test -f .scripts/lint/fixtures/HARBOR013/pass.sh
+  tags: [spec, bash32-compat, implemented]
 
 ## source-path
 - label: When --source-path targets a git work tree, install.sh copies only tracked and untracked-but-not-ignored files (git ls-files --cached --others --exclude-standard piped to tar), so multi-GB gitignored service caches in a live dev tree are not copied into the install

@@ -151,7 +151,7 @@ detect_platform() {
             # WSL1 has a translation layer (Microsoft). WSL_INTEROP only exists in WSL2.
             if [ -n "${WSL_INTEROP:-}" ]; then
                 WSL_VERSION="2"
-            elif grep -qi "microsoft-standard\|microsoft-WSL2" /proc/version 2>/dev/null; then
+            elif grep -qiE "microsoft-standard|microsoft-WSL2" /proc/version 2>/dev/null; then
                 WSL_VERSION="2"
             else
                 WSL_VERSION="1"
@@ -873,7 +873,7 @@ is_wsl_docker_desktop() {
     local docker_info_output
     if [ -S "/var/run/docker.sock" ] && docker_info_output=$(_with_timeout 10 docker info 2>/dev/null); then
         # Check if docker info references Docker Desktop
-        if echo "$docker_info_output" | grep -qi "docker desktop\|com.docker.depi"; then
+        if echo "$docker_info_output" | grep -qiE "docker desktop|com\.docker\.depi"; then
             return 0
         fi
         # Docker Desktop WSL integration creates a special context
@@ -1064,7 +1064,7 @@ verify_docker_access() {
         return 0
     fi
 
-    if echo "$docker_access_output" | grep -qi "permission denied\|got permission denied while trying to connect to the docker daemon socket"; then
+    if echo "$docker_access_output" | grep -qiE "permission denied|got permission denied while trying to connect to the docker daemon socket"; then
         local remediation_user user_in_docker_group add_group_cmd add_user_cmd
         remediation_user="${SUDO_USER:-${USER:-$(id -un 2>/dev/null || echo unknown)}}"
         if [ "$remediation_user" = "root" ] && [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "root" ]; then

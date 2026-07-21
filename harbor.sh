@@ -544,7 +544,7 @@ run_harbor_doctor() {
             local exit_code=$?
             if [ "$exit_code" -eq 124 ]; then
                 log_error "${nok} Docker daemon is not responding (timed out after 10s). It may still be starting up - try again in a moment."
-            elif echo "$docker_access_output" | grep -qi "permission denied\|got permission denied while trying to connect to the docker daemon socket"; then
+            elif echo "$docker_access_output" | grep -qiE "permission denied|got permission denied while trying to connect to the docker daemon socket"; then
                 log_error "${nok} Docker requires sudo for this user. Add your user to the 'docker' group and re-login."
             else
                 log_error "${nok} Docker daemon is not running or not reachable."
@@ -658,7 +658,7 @@ run_harbor_doctor() {
     # WSL-specific diagnostics
     if grep -qiE "microsoft|wsl" /proc/version 2>/dev/null || [ -n "${WSL_INTEROP:-}" ]; then
         local wsl_ver="unknown"
-        if [ -n "${WSL_INTEROP:-}" ] || grep -qi "microsoft-standard\|microsoft-WSL2" /proc/version 2>/dev/null; then
+        if [ -n "${WSL_INTEROP:-}" ] || grep -qiE "microsoft-standard|microsoft-WSL2" /proc/version 2>/dev/null; then
             wsl_ver="2"
         else
             wsl_ver="1"
@@ -806,7 +806,7 @@ run_harbor_doctor() {
         # Check for duplicate keys (docker compose uses last value,
         # but scripts that source .env use the first — silent misbehavior)
         local dup_keys
-        dup_keys=$(grep -v '^\s*#' .env | grep -v '^\s*$' | grep '=' | sed 's/=.*//' | sort | uniq -d)
+        dup_keys=$(grep -v '^[[:space:]]*#' .env | grep -v '^[[:space:]]*$' | grep '=' | sed 's/=.*//' | sort | uniq -d)
         if [ -n "$dup_keys" ]; then
             local dup_count
             dup_count=$(echo "$dup_keys" | wc -l)
@@ -1716,13 +1716,13 @@ run_down() {
     done
 
     if [ ${#requested_services[@]} -eq 0 ]; then
-        if echo "$services" | grep -q '\bdmr\b'; then
+        if echo "$services" | grep -qw 'dmr'; then
             stop_dmr=true
         fi
-        if echo "$services" | grep -q '\bmlx\b'; then
+        if echo "$services" | grep -qw 'mlx'; then
             stop_mlx=true
         fi
-        if echo "$services" | grep -q '\bomlx\b'; then
+        if echo "$services" | grep -qw 'omlx'; then
             stop_omlx=true
         fi
     fi

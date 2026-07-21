@@ -187,3 +187,22 @@ rules:
         while IFS= read -r line; do arr+=("$line"); done <<< "$input"
       Replace associative arrays with parallel indexed arrays or a
       case statement.
+
+  - id: HARBOR013
+    name: gnu-regex-escapes
+    severity: error
+    # macOS ships BSD grep/sed; GNU-only regex escapes (\s \b \w \d and
+    # BRE alternation \|) silently fail to match there — conditionals
+    # take the wrong branch with no error (incident: `harbor down` never
+    # detected dmr/mlx/omlx on macOS because of \bdmr\b).
+    pattern: |-
+      \bgrep\s+-[a-zA-Z]*P\b|\b(grep|sed)\b[^|;#]*\\(s|b|w|d|\|)
+    files: ["harbor.sh", "install.sh", "requirements.sh", "shared/**/*.sh", ".scripts/**/*.sh"]
+    message: |
+      GNU-only regex escape (`\s`, `\b`, `\w`, `\d`, `\|`) or `grep -P`
+      in a host-run script. BSD grep/sed on macOS does not support these
+      in BRE — the pattern silently never matches.
+    fix: |
+      Use POSIX classes and ERE: `[[:space:]]` for `\s`, `grep -w` or
+      `(^| )x( |$)` with `-E` for `\b`, `grep -E "a|b"` for `\|`,
+      `[[:alnum:]_]` for `\w`, `[0-9]` for `\d`. Never use `grep -P`.
