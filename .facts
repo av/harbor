@@ -146,7 +146,7 @@
   command: test $(find services -maxdepth 1 -name 'compose.x.*.yml' | wc -l) -ge 300
 - label: profiles/default.env contains over 800 HARBOR configuration keys
   command: test $(grep -c '^HARBOR_' profiles/default.env) -ge 800
-- label: default services on harbor up without handles are ollama and webui
+- label: default services on harbor up without handles are webui and llamacpp
   command: grep -q 'HARBOR_SERVICES_DEFAULT="ollama;webui"' profiles/default.env
   tags: [implemented]
 - label: dmr mlx and omlx are host-managed backends proxied by Caddy containers on the harbor network
@@ -795,3 +795,9 @@
   command: grep -q DICT_VALUE_KEYS shared/json_config_merger.py && grep -q 'openai.enable' shared/json_config_merger.py
   tags: [spec, speaches-webui, implemented]
 - On a fresh boot of 'harbor up webui speaches', Open WebUI's config rows point STT and TTS at http://speaches:8000/v1 and TTS/STT requests through Open WebUI's audio API succeed against speaches @spec @speaches-webui @implemented
+
+## webui config fragments
+- label: Every services/webui/configs/config.*.json fragment flattens cleanly via json_config_merger flatten_config, and each resulting dot-path key (after the startup rag.web -> web rename) matches a registered Open WebUI per-key config key
+  command: python3 -c "import json,sys; sys.path.insert(0,'shared'); from json_config_merger import flatten_config; import os; d='services/webui/configs'; [flatten_config(json.load(open(os.path.join(d,f)))) for f in os.listdir(d) if f.endswith('.json')]"
+  tags: [webui-config-fragments, spec, implemented]
+- On a fresh webui DB with searxng, openterminal, and comfyui fragments mounted, terminal_server.connections, web.search.*, and image_generation.* config rows land correctly; web search returns real results and the terminal server verify endpoint reports status true @webui-config-fragments @spec @implemented
