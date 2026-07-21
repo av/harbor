@@ -801,3 +801,8 @@
   command: python3 -c "import json,sys; sys.path.insert(0,'shared'); from json_config_merger import flatten_config; import os; d='services/webui/configs'; [flatten_config(json.load(open(os.path.join(d,f)))) for f in os.listdir(d) if f.endswith('.json')]"
   tags: [webui-config-fragments, spec, implemented]
 - On a fresh webui DB with searxng, openterminal, and comfyui fragments mounted, terminal_server.connections, web.search.*, and image_generation.* config rows land correctly; web search returns real results and the terminal server verify endpoint reports status true @webui-config-fragments @spec @implemented
+
+## env
+- label: install.sh defaults its install path to HARBOR_HOME when set (explicit HARBOR_INSTALL_PATH still wins), so a curl-install on a machine with HARBOR_HOME exported lands where harbor.sh resolves its home instead of ~/.harbor
+  command: grep -q 'HARBOR_INSTALL_PATH:-${HARBOR_HOME:-' install.sh
+  tags: [spec, install-harbor-home, implemented]

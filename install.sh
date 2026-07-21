@@ -23,7 +23,10 @@ set -e
 
 # ========================================
 
-HARBOR_INSTALL_PATH="${HARBOR_INSTALL_PATH:-${HOME}/.harbor}"
+# Honor HARBOR_HOME when set: harbor.sh resolves its home from HARBOR_HOME,
+# so installing anywhere else leaves the CLI pointing at an empty directory
+# ("Default profile not found") while install.sh reports success.
+HARBOR_INSTALL_PATH="${HARBOR_INSTALL_PATH:-${HARBOR_HOME:-${HOME}/.harbor}}"
 # Strip trailing slash — a trailing slash causes the lock file path
 # ("$HARBOR_INSTALL_PATH.lock") to land inside the install directory,
 # where rm -rf during source-path install can delete the active lock.
