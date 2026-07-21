@@ -20,7 +20,7 @@ if [ -r /run/unsloth-studio-auth/api_key.txt ]; then
 fi
 
 echo "JSON Merger is starting..."
-python /app/json_config_merger.py --pattern ".json" --output "/app/backend/data/config.json" --directory "/app/configs"
+python /app/json_config_merger.py --pattern ".json" --output "/app/backend/data/config.json" --directory "/app/configs" --flatten
 
 echo "Merged Configs:"
 cat /app/backend/data/config.json

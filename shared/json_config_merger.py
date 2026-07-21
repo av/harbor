@@ -93,7 +93,47 @@ def merge_dicts(dict1, dict2):
             result[key] = value
     return result
 
-def merge_json_files(directory, pattern, output_file):
+# Open WebUI config keys whose registered value is a dict — flattening must
+# stop at these paths so the whole object lands under a single config row.
+DICT_VALUE_KEYS = {
+    "models.default_params",
+    "models.default_metadata",
+    "openai.api_configs",
+    "ollama.api_configs",
+    "user.permissions",
+    "audio.tts.openai.params",
+    "image_generation.openai.params",
+    "image_generation.automatic1111.api_params",
+    "rag.mineru_params",
+    "rag.docling_params",
+    "rag.external_document_loader_headers",
+    "web.search.linkup_search_params",
+    "rag.web.search.linkup_search_params",
+}
+
+# Legacy Harbor config keys -> current Open WebUI registered key paths.
+FLAT_KEY_ALIASES = {
+    "openai.enabled": "openai.enable",
+    "ollama.enabled": "ollama.enable",
+}
+
+def flatten_config(data, prefix=""):
+    """
+    Flatten nested config into dot-path keys, e.g.
+    {"audio": {"tts": {"engine": "openai"}}} -> {"audio.tts.engine": "openai"}.
+    Newer Open WebUI imports data/config.json as flat per-key config rows,
+    so nested sections are silently ignored unless flattened.
+    """
+    flat = {}
+    for key, value in data.items():
+        path = f"{prefix}{key}"
+        if isinstance(value, dict) and value and path not in DICT_VALUE_KEYS:
+            flat.update(flatten_config(value, f"{path}."))
+        else:
+            flat[FLAT_KEY_ALIASES.get(path, path)] = value
+    return flat
+
+def merge_json_files(directory, pattern, output_file, flatten=False):
     merged_data = {}
 
     for filename in sorted(os.listdir(directory)):
@@ -107,6 +147,9 @@ def merge_json_files(directory, pattern, output_file):
             # Merge the data
             merged_data = merge_dicts(merged_data, json_data)
 
+    if flatten:
+        merged_data = flatten_config(merged_data)
+
     # Write the merged data to the output file
     write_json(merged_data, output_file)
 
@@ -115,10 +158,11 @@ def main():
     parser.add_argument('--pattern', default='.json', help='File pattern to match (default: .json)')
     parser.add_argument('--output', default='merged_output.json', help='Output file name (default: merged_output.json)')
     parser.add_argument('--directory', default='.', help='Directory to search for JSON files (default: current directory)')
+    parser.add_argument('--flatten', action='store_true', help='Flatten merged config into dot-path keys (Open WebUI per-key config format)')
 
     args = parser.parse_args()
 
-    merge_json_files(args.directory, args.pattern, args.output)
+    merge_json_files(args.directory, args.pattern, args.output, flatten=args.flatten)
     print(f"Merged JSON files matching '{args.pattern}' into '{args.output}' with environment variables rendered")
 
 if __name__ == '__main__':

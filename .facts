@@ -786,3 +786,12 @@
 - label: Cognee's dependency on ollama-init lives in the cross-file compose.x.cognee.ollama.yml, not the base compose.cognee.yml, so 'harbor up cognee' resolves without ollama in the default services
   command: grep -A2 "depends_on" services/compose.cognee.yml | grep -q ollama-init && exit 1 || grep -q "ollama-init" services/compose.x.cognee.ollama.yml
   tags: [spec, default-services-no-ollama, implemented]
+
+## webui speaches
+- label: start_webui.sh runs json_config_merger.py with --flatten so the merged Open WebUI config lands as dot-path keys (audio.tts.engine, openai.api_base_urls) matching Open WebUI's per-key config import
+  command: grep -q -- --flatten services/webui/start_webui.sh
+  tags: [spec, speaches-webui, implemented]
+- label: json_config_merger.py flatten mode stops at Open WebUI's dict-valued registered keys (models.default_params, openai.api_configs, ...) and rewrites legacy openai.enabled/ollama.enabled to openai.enable/ollama.enable
+  command: grep -q DICT_VALUE_KEYS shared/json_config_merger.py && grep -q 'openai.enable' shared/json_config_merger.py
+  tags: [spec, speaches-webui, implemented]
+- On a fresh boot of 'harbor up webui speaches', Open WebUI's config rows point STT and TTS at http://speaches:8000/v1 and TTS/STT requests through Open WebUI's audio API succeed against speaches @spec @speaches-webui @implemented
