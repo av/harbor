@@ -775,3 +775,11 @@
 
 ## macos
 - requirements.sh brew_install treats a bare docker CLI without any engine provider (Docker.app/OrbStack.app present, colima installed, or reachable daemon) as missing Docker and installs the Docker Desktop cask instead of proceeding with a broken setup @spec @macos-docker-provider @implemented
+
+## defaults
+- label: The distributed default profile (profiles/default.env) sets HARBOR_SERVICES_DEFAULT to webui;llamacpp — ollama is not a default service, so fresh installs avoid large Ollama downloads
+  command: grep -q "HARBOR_SERVICES_DEFAULT=\"webui;llamacpp\"" profiles/default.env
+  tags: [spec, default-services-no-ollama, implemented]
+- label: Cognee's dependency on ollama-init lives in the cross-file compose.x.cognee.ollama.yml, not the base compose.cognee.yml, so 'harbor up cognee' resolves without ollama in the default services
+  command: grep -A2 "depends_on" services/compose.cognee.yml | grep -q ollama-init && exit 1 || grep -q "ollama-init" services/compose.x.cognee.ollama.yml
+  tags: [spec, default-services-no-ollama, implemented]

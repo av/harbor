@@ -33,9 +33,6 @@ services:
       - REQUIRE_AUTHENTICATION=False
       - ENABLE_BACKEND_ACCESS_CONTROL=false
       - TELEMETRY_DISABLED=1
-    depends_on:
-      ollama-init:
-        condition: service_completed_successfully
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
@@ -111,7 +108,5 @@ services:
     depends_on:
       cognee:
         condition: service_healthy
-      ollama-init:
-        condition: service_completed_successfully
     networks:
       - harbor-network
