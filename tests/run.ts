@@ -53,10 +53,11 @@ function parseArgs(raw: string[]): Args {
     installSource: "github",
     jobs: defaultJobs(),
     json: false,
-    // 1800s per row accommodates first-run image builds + the full suite set
-    // on the slowest distro (fedora-43 routinely ~10m for install+smoke).
+    // 3600s per row accommodates first-run image builds + the full suite set
+    // on the slowest distro (fedora-43 routinely ~10m for install+smoke) plus
+    // the defaults-up suite's webui/llamacpp image pulls in the nested dockerd.
     // Override via --timeout. 0 disables.
-    timeoutSeconds: 1800,
+    timeoutSeconds: 3600,
     help: false,
   };
 

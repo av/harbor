@@ -41,7 +41,8 @@ tests/
   on pass. Prints one `[<suite>] <step>` line per logical step. Cleans
   up its own state on exit via `trap`. Suites run in filename order, so
   `01-install.sh` reliably precedes `02-cli.sh`, `03-smoke.sh`,
-  `04-integration.sh`, `05-launch-smoke.sh`, and `06-boost-agentic-smoke.sh`.
+  `04-integration.sh`, `05-launch-smoke.sh`, `06-boost-agentic-smoke.sh`,
+  and `07-defaults-up.sh`.
   When `--suite` selects a suite that assumes an installed harbor (every
   suite except `install` and the self-bootstrapping `boost-agentic-smoke`)
   without also selecting `install`, the orchestrator auto-prepends the
@@ -110,6 +111,21 @@ test tools into the service image.
 ```bash
 harbor dev test --suite boost-agentic-smoke   # defaults to fedora-43, --jobs 1
 HARBOR_TEST_AGENTIC_MODE=host bash tests/suites/06-boost-agentic-smoke.sh
+```
+
+### Defaults up (`07-defaults-up.sh`)
+
+Guards the fresh-install defaults path: a bare `harbor up` must start exactly
+webui + llamacpp (no ollama), print the first-boot notices (webui model
+download, llamacpp empty HF cache), hold `--wait` until webui is healthy, keep
+the llamacpp router answering `/v1/models` on an empty cache, and land webui's
+merged config as flat per-key dot-path rows (guards the `--flatten` merger and
+the `*.enabled` → `*.enable` alias). Heavy — it pulls the real webui and
+llamacpp images inside the nested dockerd, so `HEAVY_SUITE_DEFAULTS` pins it
+to ubuntu-2404 with `--jobs 1` unless overridden.
+
+```bash
+harbor dev test --suite defaults-up          # defaults to ubuntu-2404, --jobs 1
 ```
 
 The orchestrator materializes a git-tracked repo artifact once per run

@@ -29,6 +29,9 @@ export const HEAVY_SUITE_DEFAULTS: Record<
   { distros: string[]; jobs: number }
 > = {
   "boost-agentic-smoke": { distros: ["fedora-43"], jobs: 1 },
+  // Pulls the full webui + llamacpp images inside the nested dockerd — one
+  // fast row is enough to guard the fresh-install defaults path.
+  "defaults-up": { distros: ["ubuntu-2404"], jobs: 1 },
 };
 
 type CmdResult = { code: number; stdout: string; stderr: string };

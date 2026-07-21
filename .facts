@@ -611,6 +611,17 @@
   command: grep -q 'SELF_SUFFICIENT_SUITES' tests/run.ts && grep -q 'auto-prepending' tests/run.ts
   tags: [spec, implemented]
 
+## defaults-up
+- label: tests/suites/07-defaults-up.sh asserts a bare 'harbor up' on a fresh install starts webui+llamacpp only (no ollama), prints both first-boot notices, webui reaches healthy, and llamacpp /v1/models answers with an empty HF cache
+  command: test -x tests/suites/07-defaults-up.sh && grep -q 'llama.cpp has no local models yet' tests/suites/07-defaults-up.sh && grep -q 'v1/models' tests/suites/07-defaults-up.sh
+  tags: [spec, defaults-up, implemented]
+- label: 07-defaults-up.sh guards the --flatten merger: merged webui config and the webui config DB table contain flat dot-path per-key rows (openai.enable) and no nested legacy top-level blobs
+  command: grep -q 'openai.enable' tests/suites/07-defaults-up.sh && grep -q 'flatten' tests/suites/07-defaults-up.sh
+  tags: [spec, defaults-up, implemented]
+- label: defaults-up is registered in HEAVY_SUITE_DEFAULTS pinning it to ubuntu-2404 with jobs=1
+  command: grep -q 'defaults-up' tests/stage-repo.ts && grep -A1 '"defaults-up"' tests/stage-repo.ts | grep -q ubuntu-2404 || grep '"defaults-up"' tests/stage-repo.ts | grep -q ubuntu-2404
+  tags: [spec, defaults-up, implemented]
+
 # project > distribution
 - label: requirements.sh apt package availability checks verify real package metadata: every apt-cache show probe greps for ^Package: so empty-output false positives (e.g. docker-ce on Ubuntu 24.04 without the Docker repo) fall through to the docker.io / distro fallback
   command: test $(grep -cE "apt-cache show (docker-ce|docker-compose-v2|docker-compose-plugin)" requirements.sh) -gt 0 && ! grep -E "apt-cache show (docker-ce|docker-compose-v2|docker-compose-plugin)" requirements.sh | grep -v "Package:" | grep -q .
