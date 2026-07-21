@@ -1,4 +1,7 @@
 - app > Harbor App setup gate shows heading 'Almost done' with status refresh-required when harbor doctor --check fails (Docker daemon down or not yet in group), with error text distinguishing the two sub-cases; there is no separate 'Environment issue' heading @spec @setup-gate-docker-down-copy @implemented
+- install > webui first boot > compose.webui.yml healthcheck grants a 15m start_period so first-boot model downloads keep the container in 'starting' (not 'unhealthy') and 'up -d --wait' does not fail mid-download @spec @webui-first-boot @implemented
+- install > webui first boot > run_up prints a first-start notice about embedding/audio model downloads when webui is being started and services/webui/cache/embedding does not exist @spec @webui-first-boot @implemented
+- install > webui first boot > run_open waits (up to 900s) for a container in health status 'starting' to become healthy before opening the browser, warning if it turns unhealthy @spec @webui-first-boot @implemented
 # project
 
 ## domain

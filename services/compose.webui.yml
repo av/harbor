@@ -14,10 +14,14 @@ services:
     entrypoint: ["/app/start_webui.sh"]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
-      interval: 2s
+      interval: 5s
       timeout: 10s
       retries: 10
-      start_period: 2s
+      # On first boot, Open WebUI downloads embedding/whisper models before
+      # the HTTP port starts serving - give it a long grace period so the
+      # container reports "starting" instead of "unhealthy" and
+      # "up --wait" doesn't bail out mid-download.
+      start_period: 15m
     ports:
       - ${HARBOR_WEBUI_HOST_PORT}:8080
     networks:

@@ -1539,6 +1539,15 @@ run_up() {
         fi
     fi
 
+    # First boot of Open WebUI downloads embedding/whisper models before its
+    # HTTP port starts serving - warn the user so the wait isn't a silent hang.
+    for service in "${display_services[@]}"; do
+        if [ "$service" = "webui" ] && [ ! -d "$harbor_home/services/webui/cache/embedding" ]; then
+            log_info "First Open WebUI start downloads embedding/audio models - this can take a few minutes depending on your connection."
+            break
+        fi
+    done
+
     $(compose_with_options "${up_args[@]}" "${filtered_args[@]}") up -d --wait
     local up_exit=$?
 
@@ -5718,6 +5727,25 @@ run_open() {
     fi
 
     _check_docker || return 1
+
+    # If the container is still starting (e.g. Open WebUI downloading models
+    # on first boot), wait for it to become healthy before opening the browser
+    # so the user doesn't land on a dead page.
+    local container_name health waited
+    container_name=$(get_container_name "$service_handle")
+    health=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$container_name" 2>/dev/null)
+    if [ "$health" = "starting" ]; then
+        log_info "$service_handle is still starting - first start may download models, this can take a few minutes. Waiting..."
+        waited=0
+        while [ "$health" = "starting" ] && [ "$waited" -lt 900 ]; do
+            sleep 2
+            waited=$((waited + 2))
+            health=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$container_name" 2>/dev/null)
+        done
+        if [ "$health" = "unhealthy" ]; then
+            log_warn "$service_handle reports unhealthy - opening anyway. Check: docker logs $container_name"
+        fi
+    fi
 
     # Use docker port for the final fallback
     if service_url=$(get_url "$service_handle"); then
