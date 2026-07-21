@@ -1860,7 +1860,7 @@ run_restart() {
     local active_services_arr=()
     if [ -n "$active_services" ]; then
         # get_active_services emits one space-separated line; word-split it
-        # (bash 3.2 compatible - no mapfile)
+        # (bash 3.2 compatible - avoids bash-4-only array builtins)
         local word
         for word in $active_services; do
             active_services_arr+=("$word")

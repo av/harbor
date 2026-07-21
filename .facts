@@ -789,6 +789,12 @@
 
 ## macos
 - requirements.sh brew_install treats a bare docker CLI without any engine provider (Docker.app/OrbStack.app present, colima installed, or reachable daemon) as missing Docker and installs the Docker Desktop cask instead of proceeding with a broken setup @spec @macos-docker-provider @implemented
+- label: Stubbed unit tests in .scripts/test-requirements-macos.sh (harbor dev test-requirements-macos) source requirements.sh with PATH shims for uname/brew/docker/open and assert brew_install branch behavior: no docker -> cask install; bare CLI without provider -> warning + cask install; CLI with provider (OrbStack.app) -> no cask; reachable daemon -> proceed with no warnings; plus all macos_has_docker_provider detection variants
+  command: bash .scripts/test-requirements-macos.sh --no-bash32
+  tags: [spec, macos-docker-provider, implemented]
+- label: requirements.sh executes main only when HARBOR_REQUIREMENTS_SOURCE_ONLY is unset, so test harnesses can source its functions without triggering the install flow
+  command: grep -q 'HARBOR_REQUIREMENTS_SOURCE_ONLY' requirements.sh && bash -c 'HARBOR_REQUIREMENTS_SOURCE_ONLY=1 . ./requirements.sh && type brew_install >/dev/null'
+  tags: [spec, macos-docker-provider, implemented]
 
 ## defaults
 - label: The distributed default profile (profiles/default.env) sets HARBOR_SERVICES_DEFAULT to webui;llamacpp — ollama is not a default service, so fresh installs avoid large Ollama downloads
@@ -838,6 +844,9 @@
 - label: run_restart word-splits get_active_services output (a single space-separated line), so restarting with multiple active services restarts each service instead of failing on a bogus combined name like 'llamacpp webui'
   command: grep -A3 'emits one space-separated line' harbor.sh | grep -q 'for word in $active_services'
   tags: [spec, restart-multi-service, implemented]
+- label: The macOS requirements test battery re-executes itself inside a bash:3.2 container (stock macOS bash), asserting the sourced requirements.sh path and the test harness itself contain no bash-4-only constructs
+  command: bash .scripts/test-requirements-macos.sh
+  tags: [spec, bash32-compat, implemented]
 
 ## source-path
 - label: When --source-path targets a git work tree, install.sh copies only tracked and untracked-but-not-ignored files (git ls-files --cached --others --exclude-standard piped to tar), so multi-GB gitignored service caches in a live dev tree are not copied into the install

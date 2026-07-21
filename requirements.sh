@@ -1362,4 +1362,8 @@ main() {
     fi
 }
 
-main
+# Allow test harnesses to source this file for its functions without
+# executing the install flow (see .scripts/test-requirements-macos.sh).
+if [ -z "${HARBOR_REQUIREMENTS_SOURCE_ONLY:-}" ]; then
+    main
+fi

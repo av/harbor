@@ -154,6 +154,26 @@ Groups run serially (services share ports/GPU) and each group ends with
 `harbor down`, even on failure. Group E (comfyui) is opt-in via `--groups E`.
 Prints one PASS/FAIL line per check plus a summary; exits non-zero on any FAIL.
 
+## macOS install-path unit tests
+
+The container matrix cannot run macOS, so the Darwin-only branch logic in
+`requirements.sh` (`macos_has_docker_provider`, `brew_install`'s Docker
+Desktop cask decisions) is covered by a stubbed unit battery at
+`.scripts/test-requirements-macos.sh`:
+
+```bash
+harbor dev test-requirements-macos               # full battery + bash 3.2 pass
+harbor dev test-requirements-macos --no-bash32   # skip the container pass
+```
+
+It shims `uname`/`brew`/`docker`/`open` as PATH stubs, sources
+`requirements.sh` with `HARBOR_REQUIREMENTS_SOURCE_ONLY=1` (which skips
+`main`), and asserts: no docker → cask install; bare docker CLI without an
+engine provider → warning + cask install; CLI with a provider (OrbStack.app
+etc.) → no cask; reachable daemon → proceed with no warnings. The battery
+then re-executes itself inside a `bash:3.2` container (stock macOS bash) to
+assert the sourced path has no bash-4-only constructs.
+
 ## Artifacts
 
 Each run gets `tests/artifacts/<run-id>/<row>/`, where `<run-id>` is
