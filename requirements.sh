@@ -717,6 +717,33 @@ install_homebrew() {
     fi
 }
 
+# A docker CLI alone is not a working setup on macOS — an engine provider
+# (Docker Desktop, OrbStack, colima, ...) must exist to run containers.
+# `brew install docker` (the formula) installs only the CLI, which is a
+# common broken state on fresh machines.
+macos_has_docker_provider() {
+    # A reachable daemon means some provider is installed and running
+    if _with_timeout 10 docker info >/dev/null 2>&1; then
+        return 0
+    fi
+    local app
+    for app in \
+        "/Applications/Docker.app" \
+        "$HOME/Applications/Docker.app" \
+        "/Applications/OrbStack.app" \
+        "$HOME/Applications/OrbStack.app" \
+        "/Applications/Rancher Desktop.app" \
+        "$HOME/Applications/Rancher Desktop.app"; do
+        if [ -d "$app" ]; then
+            return 0
+        fi
+    done
+    if check_command colima || check_command podman; then
+        return 0
+    fi
+    return 1
+}
+
 start_macos_docker_desktop() {
     if [ "$PLATFORM" != "macos" ] || ! check_command open; then
         return 1
@@ -769,7 +796,20 @@ brew_install() {
         log_info "git and curl are already installed"
     fi
 
+    # Install Docker Desktop when docker is entirely missing, OR when only a
+    # bare docker CLI exists with no engine provider behind it (e.g. from
+    # `brew install docker` — the formula ships just the CLI). Without this,
+    # the install "succeeds" but no container can ever start.
+    local need_desktop=false
     if ! check_command docker; then
+        need_desktop=true
+    elif ! macos_has_docker_provider; then
+        log_warn "A docker CLI is installed, but no container engine was found (Docker Desktop, OrbStack, colima, ...)."
+        log_warn "The docker CLI alone cannot run containers — installing Docker Desktop."
+        need_desktop=true
+    fi
+
+    if [ "$need_desktop" = true ]; then
         log_info "Installing Docker Desktop via Homebrew cask"
         if ! brew install --cask docker; then
             log_error "Failed to install Docker Desktop via Homebrew."

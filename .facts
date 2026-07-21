@@ -770,3 +770,8 @@
 - label: compose.libretranslate.yml runs the container as the host user (user: HARBOR_USER_ID:HARBOR_GROUP_ID with HOME=/home/libretranslate) — upstream image uid 1032 cannot write workspace mounts chowned to the host user by the init sidecar
   command: grep -q 'user: "${HARBOR_USER_ID}:${HARBOR_GROUP_ID}"' services/compose.libretranslate.yml && grep -q 'HOME=/home/libretranslate' services/compose.libretranslate.yml && grep -q 'XDG_DATA_HOME=/home/libretranslate/.local/share' services/compose.libretranslate.yml
   tags: [spec, implemented]
+
+# install
+
+## macos
+- requirements.sh brew_install treats a bare docker CLI without any engine provider (Docker.app/OrbStack.app present, colima installed, or reachable daemon) as missing Docker and installs the Docker Desktop cask instead of proceeding with a broken setup @spec @macos-docker-provider @implemented
