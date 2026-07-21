@@ -806,3 +806,8 @@
 - label: install.sh defaults its install path to HARBOR_HOME when set (explicit HARBOR_INSTALL_PATH still wins), so a curl-install on a machine with HARBOR_HOME exported lands where harbor.sh resolves its home instead of ~/.harbor
   command: grep -q 'HARBOR_INSTALL_PATH:-${HARBOR_HOME:-' install.sh
   tags: [spec, install-harbor-home, implemented]
+
+## first-run
+- label: When 'harbor up' includes llamacpp with no model specifier and no *.gguf in the HF cache, the CLI prints a notice with a concrete 'harbor pull' example instead of leaving frontends with an empty model list
+  command: grep -q 'llama.cpp has no local models yet' harbor.sh
+  tags: [spec, llamacpp-empty-cache-notice, implemented]

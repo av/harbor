@@ -1548,6 +1548,22 @@ run_up() {
         fi
     done
 
+    # llama.cpp in router mode (no model specifier) starts fine with an empty
+    # HF cache but serves zero models - frontends then show an empty model
+    # list. Tell the user how to get a first model instead of leaving them
+    # staring at an empty picker.
+    for service in "${display_services[@]}"; do
+        if [ "$service" = "llamacpp" ] && [ -z "$(env_manager get llamacpp.model.specifier)" ]; then
+            local hf_cache_path
+            hf_cache_path=$(env_manager get hf.cache)
+            hf_cache_path="${hf_cache_path/#\~/$HOME}"
+            if [ -z "$(find "$hf_cache_path" -maxdepth 5 -name '*.gguf' -print -quit 2>/dev/null)" ]; then
+                log_info "llama.cpp has no local models yet - pull one with e.g. 'harbor pull unsloth/Qwen3.5-4B-GGUF:Q4_K_M' and it will appear in connected frontends."
+            fi
+            break
+        fi
+    done
+
     $(compose_with_options "${up_args[@]}" "${filtered_args[@]}") up -d --wait
     local up_exit=$?
 
