@@ -95,7 +95,7 @@ Use these decision trees to determine what action to take for common user reques
 
 1. Check prerequisites
 2. Install Harbor CLI
-3. Start default services (Ollama + Open WebUI)
+3. Start default services (Open WebUI + llama.cpp)
 4. Pull a model
 5. Verify the setup
 
@@ -148,8 +148,8 @@ harbor up
 
 First run downloads images (may take several minutes). Wait for healthy output:
 ```
-✔ Container harbor.ollama  Healthy
-✔ Container harbor.webui   Healthy
+✔ Container harbor.llamacpp  Healthy
+✔ Container harbor.webui     Healthy
 ```
 
 Open UI: `harbor open`
@@ -159,11 +159,11 @@ First launch requires creating a local admin account in the browser.
 ### Step 4: Pull a Model
 
 ```bash
-# Recommended small model
-harbor pull qwen3:4b
+# Recommended small model (GGUF, served by llama.cpp)
+harbor pull unsloth/Qwen3.5-4B-GGUF:Q4_K_M
 
 # Verify
-harbor ollama list
+harbor models ls
 ```
 
 ### Step 5: Verify
@@ -253,7 +253,7 @@ harbor hf cache /path/to/cache # Change cache location
 
 ## Service: Ollama
 
-> Handle: `ollama` | Port: 33821 | Default service (starts with `harbor up`)
+> Handle: `ollama` | Port: 33821
 
 Ergonomic wrapper around llama.cpp with model management, auto-pull, and OpenAI-compatible API.
 
@@ -386,7 +386,7 @@ harbor restart ollama        # Restart if needed
 
 ## Service: llama.cpp
 
-> Handle: `llamacpp` | Port: 33831
+> Handle: `llamacpp` | Port: 33831 | Default service (starts with `harbor up`)
 
 LLM inference in C/C++. Bypasses Ollama's release cycle for access to latest models and features.
 
@@ -1268,8 +1268,8 @@ harbor top                   # nvtop for GPU usage
 | Service | Handle | Port | CLI | Purpose |
 |---------|--------|------|-----|---------|
 | Open WebUI | `webui` | 33801 | `harbor webui` | Chat UI (default) |
-| Ollama | `ollama` | 33821 | `harbor ollama` | LLM backend (default) |
-| llama.cpp | `llamacpp` | 33831 | `harbor llamacpp` | GGUF backend |
+| Ollama | `ollama` | 33821 | `harbor ollama` | LLM backend |
+| llama.cpp | `llamacpp` | 33831 | `harbor llamacpp` | GGUF backend (default) |
 | vLLM | `vllm` | 33911 | `harbor vllm` | Production backend |
 | SearXNG | `searxng` | 33811 | — | Web search |
 | Open Terminal | `openterminal` | 34771 | — | Terminal + notebooks |

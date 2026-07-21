@@ -147,7 +147,7 @@
 - label: profiles/default.env contains over 800 HARBOR configuration keys
   command: test $(grep -c '^HARBOR_' profiles/default.env) -ge 800
 - label: default services on harbor up without handles are webui and llamacpp
-  command: grep -q 'HARBOR_SERVICES_DEFAULT="ollama;webui"' profiles/default.env
+  command: grep -q 'HARBOR_SERVICES_DEFAULT="webui;llamacpp"' profiles/default.env
   tags: [implemented]
 - label: dmr mlx and omlx are host-managed backends proxied by Caddy containers on the harbor network
   command: test -f services/compose.dmr.yml && test -f services/compose.mlx.yml && test -f services/compose.omlx.yml && test -f services/dmr/Caddyfile
@@ -163,6 +163,9 @@
   tags: [implemented]
 - label: facts is a CLI satellite run via harbor facts with the caller workspace bind-mounted
   command: test -f services/compose.facts.yml && rg -q 'run_facts_command' harbor.sh
+  tags: [implemented]
+- label: agent skills and install docs describe defaults as webui plus llamacpp, not ollama
+  command: grep -q 'llamacpp` | Port: 33831 | Default service' skills/run-llms/SKILL.md && ! grep -q 'Ollama + Open WebUI' docs/1.0.-Installing-Harbor.md && ! grep -rq 'Port: 33821 | Default service' skills/
   tags: [implemented]
 
 ## hermes

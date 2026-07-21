@@ -10,14 +10,14 @@ Harbor is a containerized LLM toolkit — a Docker Compose project with a CLI fo
 
 ## Core Workflow
 
-1. **Start services**: `harbor up ollama webui`
+1. **Start services**: `harbor up` (defaults: `webui` + `llamacpp`) or `harbor up <service>...`
 2. **Check status**: `harbor ps`
 3. **Configure**: `harbor config set OLLAMA_MODEL llama3.2`
 4. **Use**: `harbor open webui` or `harbor url webui`
 5. **Stop**: `harbor down`
 
 ```bash
-harbor up ollama webui
+harbor up            # defaults: webui + llamacpp
 harbor ps
 harbor open webui
 harbor down
