@@ -823,6 +823,10 @@
   command: grep -q 'llama.cpp has no local models yet' harbor.sh
   tags: [spec, llamacpp-empty-cache-notice, implemented]
 - 'harbor pull <org/repo:quant>' on a default config auto-detects a GGUF HuggingFace repo and downloads it via an ephemeral llamacpp container into HARBOR_HF_CACHE, creating the hub cache layout; verified end-to-end with ggml-org/tiny-llamas:stories15M-q4_0 on an isolated install @spec @pull-first-run @implemented
+- label: run_llamacpp_pull runs the ephemeral llamacpp container as the host user (--user id -u:id -g) with HOME remapped to /tmp and the HF and llama.cpp caches mounted at the remapped location, so pulled model blobs land owned by the host user on the host
+  command: grep -A12 'llamacpp_cache_path=$(env_manager get llamacpp.cache)' harbor.sh | grep -q -- '--user "$(id -u):$(id -g)"' && grep -A14 'llamacpp_cache_path=$(env_manager get llamacpp.cache)' harbor.sh | grep -q 'HOME=/tmp'
+  tags: [spec, pull-ownership, implemented]
+- After 'harbor pull ggml-org/tiny-llamas:stories15M-q4_0' into a fresh HARBOR_HF_CACHE, every file under the cache is owned by the host user and a subsequent 'harbor up llamacpp' discovers the model via /v1/models with need_download false @spec @pull-ownership @implemented
 
 ## bash32
 - label: harbor.sh contains no bash-4-only builtins (mapfile/readarray/associative arrays); run_restart collects active services with a while-read loop so 'harbor restart' works on stock macOS bash 3.2

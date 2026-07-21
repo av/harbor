@@ -2320,8 +2320,21 @@ run_llamacpp_pull() {
     done
     "
 
+    # Run as the host user so downloaded blobs land user-owned on the host.
+    # The image's /root is 0700, unreachable for a non-root user, so HOME is
+    # remapped to /tmp and the caches are mounted at the remapped location.
+    # Host cache dirs are pre-created, otherwise docker creates them as root.
+    local llamacpp_cache_path
+    llamacpp_cache_path=$(env_manager get llamacpp.cache)
+    llamacpp_cache_path="${llamacpp_cache_path/#\~/$HOME}"
+    mkdir -p "$hf_cache_path" "$llamacpp_cache_path"
+
     $(compose_with_options "llamacpp") run \
         --rm \
+        --user "$(id -u):$(id -g)" \
+        -e HOME=/tmp \
+        -v "$hf_cache_path:/tmp/.cache/huggingface" \
+        -v "$llamacpp_cache_path:/tmp/.cache/llama.cpp" \
         --entrypoint /bin/sh \
         llamacpp \
         -c "$cmd"
