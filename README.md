@@ -17,7 +17,7 @@ https://github.com/user-attachments/assets/e4897391-c5a8-4391-93c3-9f8b76155f11
 Setup your local LLM stack effortlessly.
 
 ```bash
-# Starts fully configured Open WebUI and Ollama
+# Starts fully configured Open WebUI and llama.cpp
 harbor up
 
 # Now, Open WebUI can do Web RAG and TTS/STT
@@ -306,7 +306,7 @@ See [services documentation](https://github.com/av/harbor/wiki/2.-Services) for 
 
 ```bash
 # Run Harbor with default services:
-# Open WebUI and Ollama
+# Open WebUI and llama.cpp
 harbor up
 
 # Run Harbor with additional services

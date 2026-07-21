@@ -238,13 +238,23 @@ install_or_update_project() {
     fi
     rm -rf "$HARBOR_INSTALL_PATH"
     mkdir -p "$HARBOR_INSTALL_PATH"
+    # A live dev tree can hold many GB of gitignored service data (HF/model
+    # caches under services/, workspace dirs). When the source is a git repo,
+    # copy only tracked + untracked-but-not-ignored files; otherwise fall back
+    # to a plain tar copy with the heaviest known paths excluded.
     if ! (set -o pipefail; (
       cd "$HARBOR_INSTALL_SOURCE_PATH"
-      tar \
-        --exclude='./.git' \
-        --exclude='./.env' \
-        --exclude='./tests/artifacts' \
-        -cf - .
+      if [ -d .git ] && command -v git >/dev/null 2>&1 &&
+        git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        git ls-files -z --cached --others --exclude-standard |
+          tar --null -T - -cf -
+      else
+        tar \
+          --exclude='./.git' \
+          --exclude='./.env' \
+          --exclude='./tests/artifacts' \
+          -cf - .
+      fi
     ) | tar -C "$HARBOR_INSTALL_PATH" -xf -); then
       echo "Error: Failed to copy from source path: $HARBOR_INSTALL_SOURCE_PATH" >&2
       if [ -n "$_BACKUP_DIR" ]; then
