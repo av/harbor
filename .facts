@@ -829,12 +829,15 @@
 - After 'harbor pull ggml-org/tiny-llamas:stories15M-q4_0' into a fresh HARBOR_HF_CACHE, every file under the cache is owned by the host user and a subsequent 'harbor up llamacpp' discovers the model via /v1/models with need_download false @spec @pull-ownership @implemented
 
 ## bash32
-- label: harbor.sh contains no bash-4-only builtins (mapfile/readarray/associative arrays); run_restart collects active services with a while-read loop so 'harbor restart' works on stock macOS bash 3.2
+- label: harbor.sh contains no bash-4-only builtins (mapfile/readarray/associative arrays); run_restart collects active services via word-splitting so 'harbor restart' works on stock macOS bash 3.2
   command: ! grep -nE '\bmapfile\b|\breadarray\b|declare -A' harbor.sh
   tags: [spec, bash32-compat, implemented]
 - label: Lint rule HARBOR012 (error severity) flags mapfile/readarray/declare -A in host-run scripts (harbor.sh, install.sh, requirements.sh, shared, tests, .scripts) with fixtures validated by lint-self-test
   command: grep -q 'id: HARBOR012' .scripts/lint/rules.yaml && test -f .scripts/lint/fixtures/HARBOR012/fail.sh && test -f .scripts/lint/fixtures/HARBOR012/pass.sh
   tags: [spec, bash32-compat, implemented]
+- label: run_restart word-splits get_active_services output (a single space-separated line), so restarting with multiple active services restarts each service instead of failing on a bogus combined name like 'llamacpp webui'
+  command: grep -A3 'emits one space-separated line' harbor.sh | grep -q 'for word in $active_services'
+  tags: [spec, restart-multi-service, implemented]
 
 ## source-path
 - label: When --source-path targets a git work tree, install.sh copies only tracked and untracked-but-not-ignored files (git ls-files --cached --others --exclude-standard piped to tar), so multi-GB gitignored service caches in a live dev tree are not copied into the install

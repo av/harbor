@@ -1842,11 +1842,12 @@ run_restart() {
     local unique_services=()
     local active_services_arr=()
     if [ -n "$active_services" ]; then
-        # while-read loop for bash 3.2 (macOS) compatibility
-        local line
-        while IFS= read -r line; do
-            [ -n "$line" ] && active_services_arr+=("$line")
-        done <<< "$active_services"
+        # get_active_services emits one space-separated line; word-split it
+        # (bash 3.2 compatible - no mapfile)
+        local word
+        for word in $active_services; do
+            active_services_arr+=("$word")
+        done
     fi
     local all_services=("${active_services_arr[@]}" "${services[@]}")
 
