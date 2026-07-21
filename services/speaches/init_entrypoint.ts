@@ -1,11 +1,17 @@
-const SPEACHES_URL = process.env.SPEACHES_URL || 'http://speaches:8000';
-const TTS_MODEL = process.env.HARBOR_SPEACHES_TTS_MODEL;
-const STT_MODEL = process.env.HARBOR_SPEACHES_STT_MODEL;
+/// <reference lib="deno.ns" />
+const SPEACHES_URL = Deno.env.get('SPEACHES_URL') || 'http://speaches:8000';
+const TTS_MODEL = Deno.env.get('HARBOR_SPEACHES_TTS_MODEL');
+const STT_MODEL = Deno.env.get('HARBOR_SPEACHES_STT_MODEL');
 
-const STARTUP_RETRIES = 30;
-const STARTUP_RETRY_INTERVAL = 500;
-const MODEL_RETRIES = 20;
-const MODEL_RETRY_INTERVAL = 1000;
+const STARTUP_RETRIES = 60;
+const STARTUP_RETRY_INTERVAL = 1000;
+// The pull request (POST /v1/models/{id}) blocks while speaches downloads the
+// model, so these retries only cover transient failures - each retry restarts
+// the (resumable) download.
+const PULL_RETRIES = 5;
+const PULL_RETRY_INTERVAL = 2000;
+const MODEL_RETRIES = 30;
+const MODEL_RETRY_INTERVAL = 2000;
 
 async function retryWithBackoff<T>(
   operation: () => Promise<T>,
@@ -66,10 +72,20 @@ async function waitForModel(modelName: string) {
   );
 }
 
-async function setupModel(modelId: string, modelType: string) {
+async function setupModel(modelId: string | undefined, modelType: string) {
   if (!modelId) return;
 
-  await fetch(`${SPEACHES_URL}/v1/models/${modelId}`, { method: 'POST' });
+  await retryWithBackoff(
+    () => fetch(`${SPEACHES_URL}/v1/models/${modelId}`, { method: 'POST' }),
+    // 201 = downloaded now, 409 = already present
+    (response) => response.ok || response.status === 409,
+    {
+      retries: PULL_RETRIES,
+      interval: PULL_RETRY_INTERVAL,
+      operationName: `Pulling ${modelType} model ${modelId} (first pull downloads it - this can take a while)`,
+      successMessage: `${modelType} model ${modelId} is pulled`
+    }
+  );
   await waitForModel(modelId);
 }
 
@@ -79,4 +95,9 @@ async function main() {
   await setupModel(STT_MODEL, 'STT');
 }
 
-main().catch(console.error);
+main().catch((error) => {
+  console.error(error);
+  // Non-zero exit makes `docker compose up --wait` surface the failure
+  // instead of silently leaving speaches without its default models.
+  Deno.exit(1);
+});

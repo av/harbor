@@ -846,3 +846,12 @@
 
 ## link
 - 'harbor ln' with SHELL=zsh appends the PATH export and completion fpath to ~/.zshrc (creating it if absent) and a second run adds no duplicate lines @spec @zsh-path @implemented
+
+## speaches first boot
+- label: The speaches service defines a compose healthcheck against /health with a generous start_period, and speaches-init depends on it via service_healthy, so 'harbor up --wait' gates on the API being up before model pulls begin
+  command: grep -A6 'healthcheck:' services/compose.speaches.yml | grep -q '8000/health' && grep -q 'service_healthy' services/compose.speaches.yml
+  tags: [spec, speaches-first-boot, implemented]
+- label: speaches-init retries the model pull POST, treats 409 as already-present, and exits non-zero on failure so 'docker compose up --wait' surfaces a failed default-model pull instead of silently succeeding
+  command: grep -q 'Deno.exit(1)' services/speaches/init_entrypoint.ts && grep -q '409' services/speaches/init_entrypoint.ts
+  tags: [spec, speaches-first-boot, implemented]
+- When 'harbor up' includes speaches and a configured default STT/TTS model is missing from the HF cache hub layout, run_up prints a first-boot download notice; with a warm cache the notice is suppressed; verified live on a fresh scratch HF cache including a TTS->STT round-trip @spec @speaches-first-boot @implemented

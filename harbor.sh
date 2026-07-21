@@ -1548,6 +1548,23 @@ run_up() {
         fi
     done
 
+    # First boot of speaches pulls its default STT/TTS models before the init
+    # container completes - warn the user so the wait isn't a silent hang.
+    for service in "${display_services[@]}"; do
+        if [ "$service" = "speaches" ]; then
+            local speaches_cache_path speaches_model
+            speaches_cache_path=$(env_manager get hf.cache)
+            speaches_cache_path="${speaches_cache_path/#\~/$HOME}"
+            for speaches_model in "$(env_manager get speaches.stt.model)" "$(env_manager get speaches.tts.model)"; do
+                if [ -n "$speaches_model" ] && [ ! -d "$speaches_cache_path/hub/models--${speaches_model//\//--}" ]; then
+                    log_info "First speaches start downloads STT/TTS models - this can take a few minutes depending on your connection."
+                    break
+                fi
+            done
+            break
+        fi
+    done
+
     # llama.cpp in router mode (no model specifier) starts fine with an empty
     # HF cache but serves zero models - frontends then show an empty model
     # list. Tell the user how to get a first model instead of leaving them
