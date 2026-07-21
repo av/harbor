@@ -167,3 +167,23 @@ rules:
     fix: |
       Branch on `$(uname)` or wrap in a helper (see requirements.sh for
       existing `detect_platform` pattern).
+
+  - id: HARBOR012
+    name: bash4-builtins
+    severity: error
+    # macOS ships bash 3.2 as /bin/bash; harbor.sh, install.sh and
+    # requirements.sh must run on it. mapfile/readarray and associative
+    # arrays are bash 4+ and abort at runtime with "command not found" /
+    # "invalid option" (incident: harbor restart broke on stock macOS).
+    pattern: |-
+      \b(mapfile|readarray)\b|\b(declare|local|typeset)\s+-[a-zA-Z]*A\b
+    files: ["harbor.sh", "install.sh", "requirements.sh", "shared/**/*.sh", "tests/**/*.sh", ".scripts/**/*.sh"]
+    message: |
+      `mapfile`/`readarray` and associative arrays (`declare -A`) are
+      bash 4+ only. macOS ships bash 3.2 — host-run scripts fail at
+      runtime with "mapfile: command not found".
+    fix: |
+      Read lines portably:
+        while IFS= read -r line; do arr+=("$line"); done <<< "$input"
+      Replace associative arrays with parallel indexed arrays or a
+      case statement.
