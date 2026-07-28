@@ -77,7 +77,7 @@
   command: rg -q 'open_target="\$\{display_services\[0\]:-\}"' harbor.sh
   tags: [spec, implemented]
 - label: harbor doctor --check reports Docker, Compose, Harbor home, git, curl, and git-repository status before returning, while only critical environment failures make it exit nonzero
-  command: bash tests/suites/02-cli.sh
+  command: out="$(bash ./harbor.sh doctor --check 2>&1)" && rc=$? || rc=$?; [ "$rc" -eq 0 ] && echo "$out" | grep -q "Docker is installed" && echo "$out" | grep -q "Compose" && echo "$out" | grep -q "Harbor home" && echo "$out" | grep -q "git is installed" && echo "$out" | grep -q "curl is installed" && echo "$out" | grep -q "essential checks passed" && grep -q "not a git repository" harbor.sh
   tags: [spec, release-validation, implemented]
 - label: host deno invocations set DENO_NO_UPDATE_CHECK=1 to suppress the update-check nag and its dl.deno.land telemetry
   command: test $(grep -c 'DENO_NO_UPDATE_CHECK=1 deno run' harbor.sh) -eq 3
@@ -306,6 +306,48 @@
 - label: compose.mcp-inspector.yml runs the inspector with HOST=0.0.0.0 and ALLOWED_ORIGINS for the remapped host port, with no socat entrypoint — the old socat forwarder self-connect-looped (inspector binds ::1, socat forwarded 127.0.0.1 into its own wildcard listener), leaving both published ports dead
   command: grep -q 'HOST=0.0.0.0' services/compose.mcp-inspector.yml && ! grep -q 'inspector-entrypoint' services/compose.mcp-inspector.yml && [ ! -f services/mcp/inspector-entrypoint.sh ]
   tags: [services-it, implemented]
+
+## s2s
+- s2s wraps huggingface/speech-to-speech, the modular VAD-STT-LLM-TTS realtime voice pipeline, as a Harbor backend service @spec
+- label: s2s has a compose file at services/compose.s2s.yml defining an s2s service on the harbor network
+  command: test -f services/compose.s2s.yml && grep -q 'harbor-network' services/compose.s2s.yml
+  tags: [spec]
+- label: s2s has a service directory services/s2s with a Dockerfile building the pipeline from the upstream repo since no official image is published
+  command: test -d services/s2s && grep -qi 'speech-to-speech' services/s2s/Dockerfile
+  tags: [spec]
+- label: s2s runs in realtime mode exposing the OpenAI Realtime-compatible WebSocket endpoint /v1/realtime on container port 8765, published via HARBOR_S2S_HOST_PORT
+  command: grep -q 'HARBOR_S2S_HOST_PORT' profiles/default.env && grep -q '8765' services/compose.s2s.yml
+  tags: [spec]
+- label: s2s LLM backend defaults to responses-api pointed at an OpenAI-compatible endpoint, configurable via HARBOR_S2S_OPENAI_URL, HARBOR_S2S_OPENAI_KEY and HARBOR_S2S_MODEL
+  command: grep -q 'HARBOR_S2S_OPENAI_URL' profiles/default.env && grep -q 'HARBOR_S2S_OPENAI_KEY' profiles/default.env && grep -q 'HARBOR_S2S_MODEL' profiles/default.env
+  tags: [spec]
+- label: s2s STT and TTS components are selectable via HARBOR_S2S_STT and HARBOR_S2S_TTS with upstream defaults (parakeet-tdt STT, qwen3 TTS)
+  command: grep -q 'HARBOR_S2S_STT' profiles/default.env && grep -q 'HARBOR_S2S_TTS' profiles/default.env
+  tags: [spec]
+- label: s2s system prompt is configurable via HARBOR_S2S_SYSTEM_PROMPT passed as --init_chat_prompt with --init_chat_role system
+  command: grep -q 'HARBOR_S2S_SYSTEM_PROMPT' profiles/default.env && grep -q 'init_chat_prompt' services/compose.s2s.yml
+  tags: [spec]
+- label: s2s extra pipeline CLI flags can be appended via HARBOR_S2S_EXTRA_ARGS
+  command: grep -q 'HARBOR_S2S_EXTRA_ARGS' profiles/default.env
+  tags: [spec]
+- label: s2s persists HuggingFace model cache via the shared global cache mount so models are not re-downloaded across restarts
+  command: grep -q '.cache' services/compose.s2s.yml
+  tags: [spec]
+- label: s2s has a compose.x integration with llamacpp routing the LLM stage to the llamacpp OpenAI-compatible API
+  command: test -f services/compose.x.s2s.llamacpp.yml
+  tags: [spec]
+- label: s2s supports NVIDIA GPU via the standard compose.s2s.nvidia.yml overlay and runs on CPU without it
+  command: test -f services/compose.s2s.nvidia.yml
+  tags: [spec]
+- label: harbor ls includes s2s and harbor up s2s resolves a valid compose configuration
+  command: ./harbor.sh ls | grep -q '^s2s$'
+  tags: [spec]
+- label: s2s has a documentation page in docs/ covering the realtime client (scripts/listen_and_play_realtime.py --host <host> --port <port>), env vars, and backend integration
+  command: ls docs/ | grep -qi 's2s'
+  tags: [spec]
+- label: s2s has metadata (name, tags, logo) registered in app/src/serviceMetadata.ts
+  command: grep -q "s2s" app/src/serviceMetadata.ts
+  tags: [spec]
 
 # app
 - label: Harbor App blocks main UI behind a setup gate until setup detail status is ready
@@ -873,3 +915,14 @@
   command: grep -q 'Deno.exit(1)' services/speaches/init_entrypoint.ts && grep -q '409' services/speaches/init_entrypoint.ts
   tags: [spec, speaches-first-boot, implemented]
 - When 'harbor up' includes speaches and a configured default STT/TTS model is missing from the HF cache hub layout, run_up prints a first-boot download notice; with a warm cache the notice is suppressed; verified live on a fresh scratch HF cache including a TTS->STT round-trip @spec @speaches-first-boot @implemented
+
+# speaches-webui
+- label: tests/suites/08-speaches-webui.sh guards the speaches↔webui integration: up --no-defaults webui speaches prints the speaches first-boot notice, speaches-init exits 0, and webui config rows (merged file and DB) point audio.tts/stt openai api_base_url at http://speaches:8000/v1
+  command: test -x tests/suites/08-speaches-webui.sh && grep -q 'First speaches start downloads STT/TTS models' tests/suites/08-speaches-webui.sh && grep -q 'audio.tts.openai.api_base_url' tests/suites/08-speaches-webui.sh && grep -q 'speaches:8000' tests/suites/08-speaches-webui.sh
+  tags: [spec, speaches-webui]
+- label: 08-speaches-webui.sh exercises the webui-proxied audio path end to end: signup token, TTS via /api/v1/audio/speech returning real audio (>1000 bytes, not an error payload), and an STT round-trip via /api/v1/audio/transcriptions whose transcript contains hello+harbor
+  command: grep -q 'api/v1/audio/speech' tests/suites/08-speaches-webui.sh && grep -q 'api/v1/audio/transcriptions' tests/suites/08-speaches-webui.sh && grep -q 'auths/signup' tests/suites/08-speaches-webui.sh && grep -q 'hello.harbor' tests/suites/08-speaches-webui.sh
+  tags: [spec, speaches-webui]
+- label: speaches-webui is registered in HEAVY_SUITE_DEFAULTS pinning it to ubuntu-2404 with jobs=1 and documented in tests/README.md
+  command: grep '"speaches-webui"' tests/stage-repo.ts | grep -q ubuntu-2404 && grep -q 'speaches-webui' tests/README.md
+  tags: [spec, speaches-webui]
