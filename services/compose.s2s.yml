@@ -1,0 +1,40 @@
+services:
+  s2s:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.s2s
+    build:
+      context: ${HARBOR_S2S_GIT_REF}
+      dockerfile: Dockerfile
+    env_file:
+      - ./.env
+      - ./services/s2s/override.env
+    ports:
+      - ${HARBOR_S2S_HOST_PORT}:8765
+    volumes:
+      - ${HARBOR_HF_CACHE:-./services/s2s/.hf-cache}:/root/.cache/huggingface
+    # Upstream image has no entrypoint - the full pipeline command is assembled
+    # here. $$-escaped vars resolve inside the container at runtime so that
+    # cross-files (e.g. llamacpp) can override them via 'environment'.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >
+        exec speech-to-speech
+        --mode realtime
+        --stt "$$HARBOR_S2S_STT"
+        --tts "$$HARBOR_S2S_TTS"
+        --llm_backend responses-api
+        --model_name "$$HARBOR_S2S_MODEL"
+        --responses_api_base_url "$$HARBOR_S2S_OPENAI_URL"
+        --responses_api_api_key "$$HARBOR_S2S_OPENAI_KEY"
+        --init_chat_role system
+        --init_chat_prompt "$$HARBOR_S2S_SYSTEM_PROMPT"
+        $$HARBOR_S2S_EXTRA_ARGS
+    healthcheck:
+      # WebSocket-only server - a plain TCP connect is the only cheap probe.
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('localhost', 8765), timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 3
+      start_period: 120s
+    networks:
+      - harbor-network

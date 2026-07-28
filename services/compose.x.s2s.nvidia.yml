@@ -1,0 +1,9 @@
+services:
+  s2s:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

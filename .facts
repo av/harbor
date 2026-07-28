@@ -312,8 +312,8 @@
 - label: s2s has a compose file at services/compose.s2s.yml defining an s2s service on the harbor network
   command: test -f services/compose.s2s.yml && grep -q 'harbor-network' services/compose.s2s.yml
   tags: [spec]
-- label: s2s has a service directory services/s2s with a Dockerfile building the pipeline from the upstream repo since no official image is published
-  command: test -d services/s2s && grep -qi 'speech-to-speech' services/s2s/Dockerfile
+- label: s2s builds its image from the upstream repo's own Dockerfile via the HARBOR_S2S_GIT_REF build context since no official image is published
+  command: grep -q 'HARBOR_S2S_GIT_REF' services/compose.s2s.yml && grep -q 'HARBOR_S2S_GIT_REF' profiles/default.env
   tags: [spec]
 - label: s2s runs in realtime mode exposing the OpenAI Realtime-compatible WebSocket endpoint /v1/realtime on container port 8765, published via HARBOR_S2S_HOST_PORT
   command: grep -q 'HARBOR_S2S_HOST_PORT' profiles/default.env && grep -q '8765' services/compose.s2s.yml
@@ -336,8 +336,8 @@
 - label: s2s has a compose.x integration with llamacpp routing the LLM stage to the llamacpp OpenAI-compatible API
   command: test -f services/compose.x.s2s.llamacpp.yml
   tags: [spec]
-- label: s2s supports NVIDIA GPU via the standard compose.s2s.nvidia.yml overlay and runs on CPU without it
-  command: test -f services/compose.s2s.nvidia.yml
+- label: s2s supports NVIDIA GPU via the standard compose.x.s2s.nvidia.yml overlay and runs on CPU without it
+  command: test -f services/compose.x.s2s.nvidia.yml
   tags: [spec]
 - label: harbor ls includes s2s and harbor up s2s resolves a valid compose configuration
   command: ./harbor.sh ls | grep -q '^s2s$'

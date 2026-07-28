@@ -1113,4 +1113,12 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         wikiUrl: `${wikiUrl}/2.3.92-Satellite-Daytona`,
         tooltip: 'Self-hosted sandbox platform for AI agents with Docker-in-Docker, computer use, and GPU support.',
     },
+    s2s: {
+        name: 'Speech To Speech',
+        tags: [HST.backend, HST.audio, HST.api],
+        projectUrl: 'https://github.com/huggingface/speech-to-speech',
+        logo: 'https://github.com/huggingface.png?size=200',
+        wikiUrl: `${wikiUrl}/2.2.25-Backend-Speech-To-Speech`,
+        tooltip: 'Modular realtime voice pipeline (VAD, STT, LLM, TTS) exposing an OpenAI Realtime-compatible WebSocket API.',
+    },
 };
