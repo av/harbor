@@ -343,7 +343,7 @@
   command: ./harbor.sh ls | grep -q '^s2s$'
   tags: [spec]
 - label: s2s has a documentation page in docs/ covering the realtime client (scripts/listen_and_play_realtime.py --host <host> --port <port>), env vars, and backend integration
-  command: ls docs/ | grep -qi 's2s'
+  command: ls docs/ | grep -qi 'speech-to-speech'
   tags: [spec]
 - label: s2s has metadata (name, tags, logo) registered in app/src/serviceMetadata.ts
   command: grep -q "s2s" app/src/serviceMetadata.ts
