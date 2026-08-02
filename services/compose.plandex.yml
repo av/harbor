@@ -15,6 +15,10 @@ services:
       - ${HARBOR_PLANDEX_HOME}:/root/.plandex-home
     networks:
       - harbor-network
+    # The image entrypoint is the plandex CLI itself, which hits an
+    # interactive auth prompt without a TTY and exits(1) under `harbor up`.
+    # Idle instead; `harbor plandex ...` runs the CLI via compose run.
+    entrypoint: ["sleep", "infinity"]
     environment:
       - GOENV=development
       - PLANDEX_SKIP_UPGRADE=1
