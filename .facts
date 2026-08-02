@@ -538,6 +538,16 @@
   command: grep -q 'perplexideez-service:' services/compose.x.perplexideez.ollama.yml && grep -q 'perplexideez-service:' services/compose.x.perplexideez.searxng.yml && grep -q 'LLM_MODE=ollama' services/compose.x.perplexideez.ollama.yml
   tags: [sweep7, implemented]
 
+## bolt
+- label: bolt runs the prebuilt bolt.diy image without an in-container rebuild; startup fetches wrangler@4 via npx because the upstream production image prunes it
+  command: grep -q 'npx -y wrangler@4' services/compose.bolt.yml && ! grep -q 'pnpm run build' services/compose.bolt.yml
+  tags: [sweep5, implemented]
+
+## airweave
+- label: airweave backend receives required upstream settings (STATE_SECRET, SVIX_JWT_SECRET, DENSE_EMBEDDER local_minilm, EMBEDDING_DIMENSIONS 384, SPARSE_EMBEDDER fastembed_bm25) and reaches the text2vec service through the /health-rewriting nginx shim
+  command: grep -q STATE_SECRET services/compose.airweave.yml && grep -q airweave-embeddings-proxy services/compose.airweave.yml && grep -q HARBOR_AIRWEAVE_EMBEDDING_DIMENSIONS profiles/default.env && test -f services/airweave/embeddings-proxy.conf
+  tags: [sweep5, implemented]
+
 ## opencode
 - label: opencode data/config defaults live under ./services/opencode/ with the data dir gitignored, so runtime sqlite/logs never dirty the repo
   command: grep -q 'HARBOR_OPENCODE_DATA="./services/opencode/data"' profiles/default.env && grep -q 'HARBOR_OPENCODE_CONFIG="./services/opencode/config"' profiles/default.env && git check-ignore -q services/opencode/data && git ls-files --error-unmatch services/opencode/config/opencode.json
