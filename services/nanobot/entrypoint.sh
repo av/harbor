@@ -1,7 +1,9 @@
 #!/bin/sh
 set -e
 
-CONFIG_DIR="/root/.nanobot"
+# nanobot resolves its config dir from HOME (/home/nanobot in the upstream
+# image, which runs as root regardless)
+CONFIG_DIR="${HOME:-/root}/.nanobot"
 CONFIG_FILE="$CONFIG_DIR/config.json"
 
 mkdir -p "$CONFIG_DIR"
@@ -23,6 +25,12 @@ except (FileNotFoundError, json.JSONDecodeError):
     config = {}
 
 changed = False
+
+# Bind the gateway (health endpoint) beyond loopback so the published
+# container port is reachable from the host
+if config.setdefault('gateway', {}).get('host') != '0.0.0.0':
+    config['gateway']['host'] = '0.0.0.0'
+    changed = True
 
 # Configure backend URL if provided (e.g. Ollama, llamacpp integration)
 backend_url = os.environ.get('HARBOR_BACKEND_URL', '')

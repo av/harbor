@@ -11,7 +11,9 @@ services:
     environment:
       - TERM=xterm-256color
     volumes:
-      - ${HARBOR_NANOBOT_CONFIG_DIR}:/root/.nanobot
+      # The upstream image sets HOME=/home/nanobot (even though it runs as
+      # root), and nanobot resolves its config dir from HOME
+      - ${HARBOR_NANOBOT_CONFIG_DIR}:/home/nanobot/.nanobot
       - ./services/nanobot/entrypoint.sh:/entrypoint.sh
     ports:
       - ${HARBOR_NANOBOT_HOST_PORT}:18790
