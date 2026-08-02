@@ -4,7 +4,11 @@ services:
     image: ${HARBOR_PRESENTON_IMAGE}:${HARBOR_PRESENTON_VERSION}
     ports:
       - ${HARBOR_PRESENTON_HOST_PORT}:80
+    # Entrypoint wrapper: chown app_data/nginx paths as root, then setpriv-drop
+    # to the host user so bind-mount writes stay host-owned.
+    entrypoint: ["/bin/bash", "/harbor-entrypoint.sh"]
     volumes:
+      - ./services/presenton/entrypoint.sh:/harbor-entrypoint.sh:ro
       - ./services/presenton/app_data:/app_data
       - ${HARBOR_OLLAMA_CACHE}:/root/.ollama
       - ${HARBOR_HF_CACHE:-./services/presenton/.hf-cache}:/app/models
@@ -13,6 +17,11 @@ services:
       - ./.env
       - ./services/presenton/override.env
     environment:
+      - TARGET_UID=${HARBOR_USER_ID}
+      - TARGET_GID=${HARBOR_GROUP_ID}
+      # Keep HF/fastembed caches off /root — the runtime user is non-root
+      - HF_HOME=/tmp/hf
+      - PRESENTON_FASTEMBED_ICON_CACHE_DIR=/tmp/fastembed-icons
       - CAN_CHANGE_KEYS=${HARBOR_PRESENTON_CAN_CHANGE_KEYS}
       - DISABLE_AUTH=${HARBOR_PRESENTON_DISABLE_AUTH}
       - LLM=${HARBOR_PRESENTON_LLM}
