@@ -10,6 +10,32 @@ services:
     env_file:
       - ./.env
       - ./services/morphic/override.env
+    environment:
+      - DATABASE_URL=postgresql://morphic:morphic@morphic-db:5432/morphic
+      - DATABASE_RESTRICTED_URL=postgresql://morphic:morphic@morphic-db:5432/morphic
+      - DATABASE_SSL_DISABLED=true
+      - ENABLE_AUTH=false
+      - MORPHIC_CLOUD_DEPLOYMENT=false
+    depends_on:
+      morphic-db:
+        condition: service_healthy
+    networks:
+      - harbor-network
+
+  morphic-db:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.morphic-db
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: morphic
+      POSTGRES_PASSWORD: morphic
+      POSTGRES_DB: morphic
+    volumes:
+      - ./services/morphic/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U morphic']
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - harbor-network
 

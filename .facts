@@ -358,6 +358,11 @@
   command: grep -q "s2s" app/src/serviceMetadata.ts
   tags: [spec]
 
+## morphic
+- label: compose.morphic.yml includes a morphic-db PostgreSQL sidecar (postgres:17-alpine, data in services/morphic/postgres) that morphic depends_on with service_healthy, and sets DATABASE_URL/DATABASE_RESTRICTED_URL to it plus DATABASE_SSL_DISABLED, ENABLE_AUTH=false, MORPHIC_CLOUD_DEPLOYMENT=false — required since upstream morphic main runs drizzle migrations at startup
+  command: grep -q 'morphic-db' services/compose.morphic.yml && grep -q 'DATABASE_URL=postgresql://morphic:morphic@morphic-db:5432/morphic' services/compose.morphic.yml && grep -q 'service_healthy' services/compose.morphic.yml
+  tags: [spec, morphic-postgres, implemented]
+
 # app
 - label: Harbor App blocks main UI behind a setup gate until setup detail status is ready
   command: rg -q 'detail\?\.status === "ready"' app/src/setup/HarborSetupContext.tsx
@@ -990,3 +995,14 @@
 - label: mcpo launches via uvx with an mcp<2 pin because mcpo 0.0.20 breaks on mcp 2.0.0
   command: grep -q "uvx --with 'mcp<2' mcpo" services/mcpo/start_mcpo.sh
   tags: [implemented]
+
+# nexa
+- label: the nexa Dockerfile installs the pinned GitHub release installer (HARBOR_NEXA_VERSION, default v0.2.73 — the last NexaAI x86_64 Linux release before the Qualcomm GenieX ARM64-only rebrand) instead of the dead public-storage.nexa4ai.com installer
+  command: grep -q 'releases/download/${HARBOR_NEXA_VERSION}/nexa-cli_linux_x86_64.sh' services/nexa/Dockerfile && ! grep -rq 'public-storage.nexa4ai.com' services/nexa
+  tags: [services-it, nexa]
+- label: compose.nexa.yml runs a single nexa service ('serve' via entrypoint binding 0.0.0.0:8000 with published HARBOR_NEXA_HOST_PORT); the nexa-proxy sidecar is gone and webui/cognee/optillm cross-configs point at http://nexa:8000/v1
+  command: grep -q 'command: serve' services/compose.nexa.yml && ! grep -rq 'nexa-proxy' services/ --include='*.yml' --include='*.json' && [ ! -f services/nexa/proxy_server.py ]
+  tags: [services-it, nexa]
+- label: the nexa entrypoint pre-pulls HARBOR_NEXA_MODEL under a fake TTY (script -qec with piped newlines) because the v0.2.x nexa CLI hard-requires /dev/tty for its prompts, then execs nexa serve
+  command: grep -q "script -qec" services/nexa/entrypoint.sh && grep -q 'HARBOR_NEXA_MODEL' services/nexa/entrypoint.sh
+  tags: [services-it, nexa]
