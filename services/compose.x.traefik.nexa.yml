@@ -4,3 +4,11 @@ services:
   nexa:
     labels:
       - "traefik.enable=true"
+      - "traefik.http.routers.nexa.rule=Host(`nexa.${HARBOR_TRAEFIK_DOMAIN}`)"
+      - "traefik.http.services.nexa.loadbalancer.server.port=8000"
+      - "traefik.http.routers.nexa.entrypoints=websecure"
+      - "traefik.http.routers.nexa.tls=true"
+      - "traefik.http.routers.nexa.service=nexa"
+
+    networks:
+      - traefik-public
