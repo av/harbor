@@ -146,8 +146,7 @@ skills-lock.json
 .claude/scheduled_tasks.lock
 
 # Lemonade
-lemonade/cache/
-lemonade/llama/
+services/lemonade/data/
 
 # Parcel
 .parcel-cache

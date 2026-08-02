@@ -553,6 +553,11 @@
   command: grep -q 'HARBOR_OPENCODE_DATA="./services/opencode/data"' profiles/default.env && grep -q 'HARBOR_OPENCODE_CONFIG="./services/opencode/config"' profiles/default.env && git check-ignore -q services/opencode/data && git ls-files --error-unmatch services/opencode/config/opencode.json
   tags: [sweep8, implemented]
 
+## lemonade
+- label: lemonade workspace default lives under ./services/lemonade/data (gitignored), not a stray ./lemonade dir at repo root
+  command: grep -q 'HARBOR_LEMONADE_WORKSPACE="./services/lemonade/data"' profiles/default.env && grep -q 'services/lemonade/data/' .gitignore
+  tags: [sweep8, implemented]
+
 # app
 - label: Harbor App blocks main UI behind a setup gate until setup detail status is ready
   command: rg -q 'detail\?\.status === "ready"' app/src/setup/HarborSetupContext.tsx
