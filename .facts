@@ -964,9 +964,21 @@
   command: grep -qi 'unmaintained' 'docs/2.1.2-Frontend&colon-ComfyUI.md' && grep -q 'comfyui.image' 'docs/2.1.2-Frontend&colon-ComfyUI.md'
   tags: [comfyui, spec, implemented]
 
+# runner
+- label: stage-repo.ts exports resolveSuitePlan: with no explicit --distros, heavy suites resolve to their HEAVY_SUITE_DEFAULTS pins while light suites resolve to the full discovered row list; explicit --distros overrides both for all selected suites
+  command: grep -q 'resolveSuitePlan' tests/stage-repo.ts && grep -q 'resolveSuitePlan' tests/run.ts
+  tags: [spec, per-suite-distros, implemented]
+- label: run.ts filters suites per row from the resolved plan so a row only executes suites whose distro list includes it, and logs the per-suite distro plan
+  command: grep -q 'suitesForRow' tests/run.ts
+  tags: [spec, per-suite-distros, implemented]
+- label: run-stage.test.ts covers resolveSuitePlan: mixed light+heavy selection keeps light suites on all rows and heavy suites pinned; explicit distros and jobs overrides respected
+  command: deno test -A --quiet tests/run-stage.test.ts
+  tags: [spec, per-suite-distros, implemented]
+
 # mistralrs
 - label: mistralrs defaults to image version 0.6.0 (newest upstream tag whose cpu- image binary matches its glibc; 0.7.0-0.9.0 cpu images are broken upstream)
   command: grep -q 'HARBOR_MISTRALRS_VERSION="0.6.0"' profiles/default.env
   tags: [implemented]
 - label: mistralrs default model specifier omits -a: architecture is auto-detected from model config (explicit -a qwen3 selects a wrong loader in 0.6.0)
   command: grep -q 'HARBOR_MISTRALRS_MODEL_SPECIFIER="plain -m Qwen/Qwen3-4B"' profiles/default.env
+  tags: [implemented]

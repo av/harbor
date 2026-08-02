@@ -1,9 +1,9 @@
 /// <reference lib="deno.ns" />
 
 import {
-  applyHeavySuiteDefaults,
   HEAVY_SUITE_DEFAULTS,
   materializeTrackedRepo,
+  resolveSuitePlan,
   STAGED_REPO_MAX_BYTES,
 } from "./stage-repo.ts";
 
@@ -38,51 +38,102 @@ Deno.test("run.ts does not bind-mount REPO_ROOT into containers", async () => {
   }
 });
 
-Deno.test("applyHeavySuiteDefaults pins boost-agentic-smoke matrix", () => {
-  const args = {
-    suites: ["boost-agentic-smoke"],
-    distros: null as string[] | null,
-    jobs: 4,
-  };
-  applyHeavySuiteDefaults(args, ["--suite", "boost-agentic-smoke"], [
-    "install",
-    "boost-agentic-smoke",
-  ]);
+const ALL_ROWS = [
+  "alpine-3",
+  "archlinux",
+  "debian-12",
+  "fedora-43",
+  "rocky-9",
+  "ubuntu-2204",
+  "ubuntu-2404",
+];
+
+Deno.test("resolveSuitePlan pins heavy-only selection to its defaults", () => {
+  const plan = resolveSuitePlan(
+    {
+      suiteShorts: ["boost-agentic-smoke"],
+      allRows: ALL_ROWS,
+      distros: null,
+      jobs: 4,
+    },
+    ["--suite", "boost-agentic-smoke"],
+  );
   const expected = HEAVY_SUITE_DEFAULTS["boost-agentic-smoke"];
-  if (JSON.stringify(args.distros) !== JSON.stringify(expected.distros)) {
-    throw new Error(`distros not defaulted: ${args.distros}`);
+  if (JSON.stringify(plan.rows) !== JSON.stringify(expected.distros)) {
+    throw new Error(`rows not pinned: ${plan.rows}`);
   }
-  if (args.jobs !== 1) {
-    throw new Error(`jobs not capped to 1: ${args.jobs}`);
+  if (plan.jobs !== 1) {
+    throw new Error(`jobs not capped to 1: ${plan.jobs}`);
   }
 });
 
-Deno.test("applyHeavySuiteDefaults respects explicit --distros and --jobs", () => {
-  const withDistros = {
-    suites: ["boost-agentic-smoke"],
-    distros: ["ubuntu-2404"] as string[] | null,
-    jobs: 4,
-  };
-  applyHeavySuiteDefaults(withDistros, ["--distros", "ubuntu-2404"], [
-    "boost-agentic-smoke",
-  ]);
-  if (withDistros.distros?.[0] !== "ubuntu-2404") {
-    throw new Error("distros should not be overridden when user passes --distros");
+Deno.test("resolveSuitePlan resolves distros per suite for mixed selections", () => {
+  const plan = resolveSuitePlan(
+    {
+      suiteShorts: ["install", "defaults-up"],
+      allRows: ALL_ROWS,
+      distros: null,
+      jobs: 4,
+    },
+    ["--suite", "install,defaults-up"],
+  );
+  // Light suite keeps the full default row list.
+  if (JSON.stringify(plan.suiteDistros.get("install")) !== JSON.stringify(ALL_ROWS)) {
+    throw new Error(`install narrowed by heavy pin: ${plan.suiteDistros.get("install")}`);
+  }
+  // Heavy suite keeps its pin.
+  const expected = HEAVY_SUITE_DEFAULTS["defaults-up"];
+  if (
+    JSON.stringify(plan.suiteDistros.get("defaults-up")) !==
+      JSON.stringify(expected.distros)
+  ) {
+    throw new Error(`defaults-up not pinned: ${plan.suiteDistros.get("defaults-up")}`);
+  }
+  // Union of rows equals the full list; heavy jobs cap still applies.
+  if (JSON.stringify(plan.rows) !== JSON.stringify(ALL_ROWS)) {
+    throw new Error(`row union wrong: ${plan.rows}`);
+  }
+  if (plan.jobs !== 1) {
+    throw new Error(`jobs not capped by heavy suite: ${plan.jobs}`);
+  }
+});
+
+Deno.test("resolveSuitePlan respects explicit --distros and --jobs", () => {
+  const withDistros = resolveSuitePlan(
+    {
+      suiteShorts: ["install", "boost-agentic-smoke"],
+      allRows: ALL_ROWS,
+      distros: ["ubuntu-2404"],
+      jobs: 4,
+    },
+    ["--distros", "ubuntu-2404"],
+  );
+  if (JSON.stringify(withDistros.rows) !== JSON.stringify(["ubuntu-2404"])) {
+    throw new Error(`explicit --distros not honored: ${withDistros.rows}`);
+  }
+  if (
+    JSON.stringify(withDistros.suiteDistros.get("boost-agentic-smoke")) !==
+      JSON.stringify(["ubuntu-2404"])
+  ) {
+    throw new Error("explicit --distros must override heavy pins");
   }
   if (withDistros.jobs !== 1) {
     throw new Error(`jobs should still cap to 1: ${withDistros.jobs}`);
   }
 
-  const withJobs = {
-    suites: ["boost-agentic-smoke"],
-    distros: null as string[] | null,
-    jobs: 3,
-  };
-  applyHeavySuiteDefaults(withJobs, ["--jobs", "3"], ["boost-agentic-smoke"]);
+  const withJobs = resolveSuitePlan(
+    {
+      suiteShorts: ["boost-agentic-smoke"],
+      allRows: ALL_ROWS,
+      distros: null,
+      jobs: 3,
+    },
+    ["--jobs", "3"],
+  );
   if (withJobs.jobs !== 3) {
     throw new Error(`jobs should stay 3 when user passes --jobs: ${withJobs.jobs}`);
   }
-  if (JSON.stringify(withJobs.distros) !== JSON.stringify(["fedora-43"])) {
-    throw new Error(`distros should default when only --jobs set: ${withJobs.distros}`);
+  if (JSON.stringify(withJobs.rows) !== JSON.stringify(["fedora-43"])) {
+    throw new Error(`distros should default when only --jobs set: ${withJobs.rows}`);
   }
 });

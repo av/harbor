@@ -192,15 +192,32 @@ export async function assertDiskHeadroom(
   }
 }
 
-export function applyHeavySuiteDefaults(
-  args: {
-    suites: string[] | null;
+export type SuitePlan = {
+  /** Union of every suite's resolved distros, in discovery order. */
+  rows: string[];
+  /** suite short → distros that suite runs on. */
+  suiteDistros: Map<string, string[]>;
+  jobs: number;
+};
+
+/**
+ * Resolve which distros each selected suite runs on.
+ *
+ * Distros are resolved per suite: heavy suites (HEAVY_SUITE_DEFAULTS) keep
+ * their pinned distros, every other suite keeps the full discovered row list.
+ * An explicit --distros overrides both for all selected suites. Selecting a
+ * heavy suite still caps --jobs (unless the user set it) since the pinned
+ * rows are resource-heavy regardless of what else runs.
+ */
+export function resolveSuitePlan(
+  opts: {
+    suiteShorts: string[];
+    allRows: string[];
     distros: string[] | null;
     jobs: number;
   },
   rawArgv: string[],
-  discoveredSuiteShorts: string[],
-): void {
+): SuitePlan {
   const userSetDistros = rawArgv.some((a) =>
     a === "--distro" || a === "--distros" || a.startsWith("--distro=") ||
     a.startsWith("--distros=")
@@ -209,15 +226,28 @@ export function applyHeavySuiteDefaults(
     a === "--jobs" || a.startsWith("--jobs=")
   );
 
-  const selected = args.suites ?? discoveredSuiteShorts;
-  for (const short of selected) {
-    const defaults = HEAVY_SUITE_DEFAULTS[short];
-    if (!defaults) continue;
-    if (!userSetDistros && args.distros === null) {
-      args.distros = [...defaults.distros];
+  let jobs = opts.jobs;
+  const suiteDistros = new Map<string, string[]>();
+  for (const short of opts.suiteShorts) {
+    const heavy = HEAVY_SUITE_DEFAULTS[short];
+    if (heavy && !userSetJobs) {
+      jobs = Math.min(jobs, heavy.jobs);
     }
-    if (!userSetJobs) {
-      args.jobs = Math.min(args.jobs, defaults.jobs);
+    if (userSetDistros && opts.distros !== null) {
+      suiteDistros.set(short, [...opts.distros]);
+    } else if (heavy) {
+      suiteDistros.set(short, [...heavy.distros]);
+    } else {
+      suiteDistros.set(short, [...opts.allRows]);
     }
   }
+
+  const rowSet = new Set([...suiteDistros.values()].flat());
+  const rows = [
+    ...opts.allRows.filter((r) => rowSet.has(r)),
+    // Preserve heavy pins that are missing from discovery so the caller's
+    // row validation can report them as unknown instead of silently dropping.
+    ...[...rowSet].filter((r) => !opts.allRows.includes(r)),
+  ];
+  return { rows, suiteDistros, jobs };
 }

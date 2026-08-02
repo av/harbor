@@ -179,7 +179,7 @@ Examples:
 }
 
 import {
-  applyHeavySuiteDefaults,
+  resolveSuitePlan,
   assertDiskHeadroom,
   materializeTrackedRepo,
 } from "./stage-repo.ts";
@@ -1148,11 +1148,24 @@ async function main() {
 
   let rows: string[];
   let suites: Suite[];
+  let suiteDistros: Map<string, string[]>;
   try {
     suites = await discoverSuites(args.suites);
-    const allSuiteShorts = (await discoverSuites(null)).map((s) => s.short);
-    applyHeavySuiteDefaults(args, Deno.args, allSuiteShorts);
-    rows = await discoverRows(args.distros);
+    const allRows = await discoverRows(null);
+    // Validate explicit --distros against discovery before planning.
+    if (args.distros !== null) await discoverRows(args.distros);
+    const plan = resolveSuitePlan(
+      {
+        suiteShorts: suites.map((s) => s.short),
+        allRows,
+        distros: args.distros,
+        jobs: args.jobs,
+      },
+      Deno.args,
+    );
+    rows = await discoverRows(plan.rows);
+    suiteDistros = plan.suiteDistros;
+    args.jobs = plan.jobs;
   } catch (e) {
     console.error(`[test] ${e instanceof Error ? e.message : e}`);
     Deno.exit(2);
@@ -1170,6 +1183,12 @@ async function main() {
   log("test", `run-id=${runId}`);
   log("test", `rows: ${rows.join(", ")}`);
   log("test", `suites: ${suites.map((s) => s.short).join(", ")}`);
+  for (const s of suites) {
+    const d = suiteDistros.get(s.short) ?? [];
+    if (d.length !== rows.length) {
+      log("test", `suite '${s.short}' pinned to: ${d.join(", ")}`);
+    }
+  }
   log("test", `jobs=${args.jobs} install-source=${args.installSource}`);
   if (args.installSource === "github") {
     const hasToken = Boolean(Deno.env.get("GITHUB_TOKEN") ?? Deno.env.get("GH_TOKEN"));
@@ -1206,8 +1225,12 @@ async function main() {
     Deno.exit(1);
   }
 
+  // Per-suite distro resolution: a row only runs the suites planned for it.
+  const suitesForRow = (row: string) =>
+    suites.filter((s) => (suiteDistros.get(s.short) ?? []).includes(row));
+
   const outcomes = await runInPool(rows, args.jobs, (row) =>
-    runRow(probe, row, suites, runId, stagedRepoDir, {
+    runRow(probe, row, suitesForRow(row), runId, stagedRepoDir, {
       keep: args.keep,
       rebuild: args.rebuild,
       installSource: args.installSource,

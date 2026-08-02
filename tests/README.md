@@ -20,6 +20,17 @@ harbor dev test --json                          # machine-readable
 
 Exit code is `0` iff every `(row, suite)` pair passed.
 
+### Per-suite distro resolution
+
+Distros are resolved per suite, not per run. Heavy suites (registered in
+`HEAVY_SUITE_DEFAULTS` in `stage-repo.ts`) run only on their pinned distros;
+every other suite runs on the full default row list. Mixing them is safe:
+`--suite install,defaults-up` runs install on all rows while defaults-up
+stays pinned to ubuntu-2404 — rows not planned for a suite show `-` in the
+matrix. Explicit `--distros` overrides both and applies to every selected
+suite. Selecting any heavy suite still caps `--jobs` to its pin unless
+`--jobs` is passed explicitly.
+
 ### GitHub rate limits (`--install-source github`)
 
 The github install path calls `api.github.com/.../releases/latest`, which is
