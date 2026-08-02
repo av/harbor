@@ -131,7 +131,9 @@ const rules: LintRule[] = [
         if (!envFile) continue;
         for (const ef of envFile) {
           if (ef === "./.env") continue;
-          const overrideRe = /^\.\/services\/[\w-]+\/(override\.env|\.env)$/;
+          // Allow the standard override.env plus a service-named base env
+          // file (e.g. ./services/dify/dify.env) shipping default config.
+          const overrideRe = /^\.\/services\/([\w-]+)\/(override\.env|\.env|\1\.env)$/;
           if (!overrideRe.test(ef)) {
             msgs.push(
               finding(

@@ -27,6 +27,7 @@ services:
     image: langgenius/dify-api:${HARBOR_DIFY_VERSION}
     env_file:
       - ./.env
+      - ./services/dify/dify.env
       - ./services/dify/override.env
     environment:
       MODE: api
@@ -49,6 +50,7 @@ services:
     image: langgenius/dify-api:${HARBOR_DIFY_VERSION}
     env_file:
       - ./.env
+      - ./services/dify/dify.env
       - ./services/dify/override.env
     environment:
       MODE: worker
@@ -69,6 +71,7 @@ services:
     image: langgenius/dify-api:${HARBOR_DIFY_VERSION}
     env_file:
       - ./.env
+      - ./services/dify/dify.env
       - ./services/dify/override.env
     environment:
       MODE: beat
@@ -87,6 +90,7 @@ services:
     image: langgenius/dify-web:${HARBOR_DIFY_VERSION}
     env_file:
       - ./.env
+      - ./services/dify/dify.env
       - ./services/dify/override.env
     networks:
       - harbor-network
@@ -96,6 +100,7 @@ services:
     image: postgres:15-alpine
     env_file:
       - ./.env
+      - ./services/dify/dify.env
       - ./services/dify/override.env
     volumes:
       - ${HARBOR_DIFY_WORKSPACE}/db/data:/var/lib/postgresql/data
@@ -114,6 +119,7 @@ services:
     image: redis:6-alpine
     env_file:
       - ./.env
+      - ./services/dify/dify.env
       - ./services/dify/override.env
     volumes:
       - ${HARBOR_DIFY_WORKSPACE}/redis/data:/data
@@ -130,6 +136,7 @@ services:
     image: langgenius/dify-sandbox:${HARBOR_DIFY_SANDBOX_VERSION}
     env_file:
       - ./.env
+      - ./services/dify/dify.env
       - ./services/dify/override.env
     environment:
       API_KEY: dify-sandbox
@@ -151,6 +158,7 @@ services:
     image: langgenius/dify-plugin-daemon:${HARBOR_DIFY_PLUGIN_DAEMON_VERSION}
     env_file:
       - ./.env
+      - ./services/dify/dify.env
       - ./services/dify/override.env
     environment:
       DB_DATABASE: dify_plugin
@@ -179,6 +187,7 @@ services:
     image: langgenius/dify-agent-backend:${HARBOR_DIFY_VERSION}
     env_file:
       - ./.env
+      - ./services/dify/dify.env
       - ./services/dify/override.env
     depends_on:
       dify-redis:
@@ -228,6 +237,7 @@ services:
     image: ubuntu/squid:latest
     env_file:
       - ./.env
+      - ./services/dify/dify.env
       - ./services/dify/override.env
     volumes:
       - ./services/dify/ssrf_proxy/squid.conf.template:/etc/squid/squid.conf.template
@@ -245,6 +255,7 @@ services:
     image: certbot/certbot
     env_file:
       - ./.env
+      - ./services/dify/dify.env
       - ./services/dify/override.env
     volumes:
       - ${HARBOR_DIFY_WORKSPACE}/certbot/conf:/etc/letsencrypt
@@ -274,6 +285,7 @@ services:
     entrypoint: [ "sh", "-c", "cp /docker-entrypoint-mount.sh /docker-entrypoint.sh && sed -i 's/\r$$//' /docker-entrypoint.sh && chmod +x /docker-entrypoint.sh && /docker-entrypoint.sh" ]
     env_file:
       - ./.env
+      - ./services/dify/dify.env
       - ./services/dify/override.env
     depends_on:
       - dify-api
@@ -290,6 +302,7 @@ services:
       - ${HARBOR_DIFY_WORKSPACE}/weaviate:/var/lib/weaviate
     env_file:
       - ./.env
+      - ./services/dify/dify.env
       - ./services/dify/override.env
     networks:
       - harbor-network
@@ -303,6 +316,7 @@ services:
       - ${HARBOR_DIFY_D2O_HOST_PORT}:3000
     env_file:
       - ./.env
+      - ./services/dify/dify.env
       - ./services/dify/override.env
     volumes:
       - ./services/dify/openai/app.js:/dify2openai/app.js
