@@ -963,6 +963,9 @@
 - label: the lint file collector never descends into service runtime dirs (services/*/data, workspace, vectordb, meili_data*) — gitignored container-generated trees that contain root-owned dirs and third-party scripts which crash or fail the scan
   command: grep -q 'services/\*/workspace' .scripts/lint/util.ts && grep -q 'services/\*/vectordb' .scripts/lint/util.ts
   tags: [spec, implemented]
+- label: the lint file walker (safeGlob in .scripts/lint/util.ts) never crashes on unreadable or vanished filesystem entries — PermissionDenied, NotFound, and NotADirectory during a walk skip the entry instead of aborting the run; RUNTIME_DIR_EXCLUDES is a performance skip-list only, not the crash defense
+  command: grep -q isTransientFsError .scripts/lint/util.ts && ! grep -rq 'import.*expandGlob' .scripts/lint/
+  tags: [spec, implemented]
 
 # libretranslate
 - label: compose.libretranslate.yml runs the container as the host user (user: HARBOR_USER_ID:HARBOR_GROUP_ID with HOME=/home/libretranslate) — upstream image uid 1032 cannot write workspace mounts chowned to the host user by the init sidecar

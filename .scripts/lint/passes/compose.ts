@@ -8,12 +8,11 @@
 // build context, etc.). Output is lifted into the shared Finding shape so
 // the orchestrator can treat all three passes uniformly.
 
-import { expandGlob } from "https://deno.land/std/fs/mod.ts";
 import { basename, join } from "https://deno.land/std/path/mod.ts";
 import { parse as parseYaml } from "https://deno.land/std/yaml/mod.ts";
 
 import type { Finding } from "../types.ts";
-import { relative } from "../util.ts";
+import { relative, safeGlob } from "../util.ts";
 
 interface LintContext {
   filePath: string;
@@ -414,8 +413,8 @@ export async function runCompose(opts: ComposeOptions): Promise<Finding[]> {
     ? (opts.globPattern.startsWith("/") ? opts.globPattern : join(opts.root, opts.globPattern))
     : join(opts.root, "services", opts.composeGlob ?? "compose.*.yml");
   const files: string[] = [];
-  for await (const entry of expandGlob(pattern)) {
-    if (entry.isFile) files.push(entry.path);
+  for await (const entry of safeGlob(pattern, { root: opts.root })) {
+    files.push(entry.path);
   }
   files.sort();
   const findings: Finding[] = [];
