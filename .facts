@@ -568,6 +568,11 @@
   command: grep -q 'HARBOR_BENCH_TASKS="./services/bench/defaultTasks.yml"' profiles/default.env && grep -q 'HARBOR_BENCH_RESULTS="./services/bench/results"' profiles/default.env && test -f services/bench/defaultTasks.yml
   tags: [sweep8, implemented]
 
+## tts
+- label: tts mounts Harbor's tracked services/tts/config customization and keeps downloaded voices in gitignored services/tts/voices instead of a stray repo-root ./tts dir
+  command: grep -q 'HARBOR_TTS_CONFIG_FOLDER="./services/tts/config"' profiles/default.env && grep -q 'HARBOR_TTS_VOICES_FOLDER="./services/tts/voices"' profiles/default.env && git check-ignore -q services/tts/voices && git ls-files --error-unmatch services/tts/config/pre_process_map.yaml
+  tags: [sweep8, implemented]
+
 # app
 - label: Harbor App blocks main UI behind a setup gate until setup detail status is ready
   command: rg -q 'detail\?\.status === "ready"' app/src/setup/HarborSetupContext.tsx
