@@ -218,6 +218,7 @@
 - label: cmdh's ollama adapter passes a literal JSON schema as the structured-output format (no zod-to-json-schema dependency), because zod-to-json-schema v3 with zod v4 silently produces an empty schema that Ollama rejects with 'invalid JSON schema in format'
   command: grep -q 'format: CmdhResponseSchema' services/cmdh/ollama.ts && ! grep -q "from 'zod-to-json-schema'" services/cmdh/ollama.ts
   tags: [spec, implemented]
+- When LLM_HOST is OpenAI and OPENAI_MODEL_NAME is unset, cmdh's openai adapter (services/cmdh/openai.ts, mounted over the upstream source) resolves the model by listing the backend's /v1/models and using the first entry, so OpenAI-mode cross-files (llamacpp, dmr, mlx, omlx, tgi) work without an explicit model name @spec @implemented
 
 ## plandex
 - label: services/plandex/Dockerfile installs the plandex CLI from the GitHub raw install script (app/cli/install.sh), not the dead plandex.ai domain

@@ -9,6 +9,7 @@ services:
       - ./services/cmdh/override.env
     volumes:
       - ./services/cmdh/ollama.ts:/app/cmdh/src/api/ollama.ts
+      - ./services/cmdh/openai.ts:/app/cmdh/src/api/openai.ts
       - ./services/cmdh/override.env:/app/.env
       - ./services/cmdh/system.prompt:/app/system.prompt
     networks:
