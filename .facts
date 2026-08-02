@@ -2,6 +2,12 @@
 - install > webui first boot > compose.webui.yml healthcheck grants a 15m start_period so first-boot model downloads keep the container in 'starting' (not 'unhealthy') and 'up -d --wait' does not fail mid-download @spec @webui-first-boot @implemented
 - install > webui first boot > run_up prints a first-start notice about embedding/audio model downloads when webui is being started and services/webui/cache/embedding does not exist @spec @webui-first-boot @implemented
 - install > webui first boot > run_open waits (up to 900s) for a container in health status 'starting' to become healthy before opening the browser, warning if it turns unhealthy @spec @webui-first-boot @implemented
+- label: services > webui x searxng > config.searxng.json seeds Open WebUI's current web.search.* config keys (enable, engine searxng, searxng_query_url from SEARXNG_QUERY_URL env) instead of the legacy rag.web.search.* prefix that Open WebUI's rename_prefix migration discards when web.search.* rows already exist
+  command: python3 -c "import json; c=json.load(open('services/webui/configs/config.searxng.json')); w=c['web']['search']; assert w['enable'] is True and w['engine']=='searxng' and w['searxng_query_url']=='$'+'{SEARXNG_QUERY_URL}' and 'web' not in c.get('rag',{}), c" && echo ok
+  tags: [spec, core-integration, implemented]
+- label: services > webui x searxng x ollama > config.x.searxng.ollama.json sets rag.ollama.base_url to HARBOR_OLLAMA_INTERNAL_URL (not Open WebUI's host.docker.internal default) and uses the auto-pulled nomic-embed-text:latest embedding model
+  command: python3 -c "import json; r=json.load(open('services/webui/configs/config.x.searxng.ollama.json'))['rag']; assert r['ollama']['base_url']=='$'+'{HARBOR_OLLAMA_INTERNAL_URL}' and r['embedding_model']=='nomic-embed-text:latest', r" && echo ok
+  tags: [spec, core-integration, implemented]
 # project
 
 ## domain
