@@ -2528,6 +2528,27 @@ launch_supported_service_cli_handles() {
     echo "aider aichat cmdh fabric facts gptme nanobot nexa npcsh openhands oh opint interpreter plandex pdx promptfoo pf repopack tokscale"
 }
 
+# Supported launch backends from services.default first, then the rest.
+launch_default_backends() {
+    local svc
+    local ordered=()
+
+    for svc in $(env_manager --silent get services.default 2>/dev/null | tr ';' ' '); do
+        if launch_backend_is_supported "$svc"; then
+            ordered+=("$svc")
+        fi
+    done
+
+    for svc in $(launch_supported_backends); do
+        case " ${ordered[*]-} " in
+        *" $svc "*) ;;
+        *) ordered+=("$svc") ;;
+        esac
+    done
+
+    echo "${ordered[@]}"
+}
+
 launch_detect_backend() {
     local explicit_backend="$1"
     local backend
@@ -2562,7 +2583,7 @@ launch_detect_backend() {
         return 0
     fi
 
-    for backend in $(launch_supported_backends); do
+    for backend in $(launch_default_backends); do
         if is_service_running "$backend" && launch_backend_is_reachable "$backend"; then
             echo "$backend"
             return 0

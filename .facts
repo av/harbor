@@ -120,6 +120,9 @@
 - label: harbor launch --workflow accepts Boost module names but does not advertise built-in workflow presets when none ship
   command: ./harbor.sh launch --help | rg -q 'Boost module' && ./harbor.sh launch --help | rg -q 'No built-in workflow presets ship by default' && ! ./harbor.sh launch --help | rg -q 'workflow presets:'
   tags: [spec, reported-regression, implemented]
+- label: harbor launch prefers a reachable backend listed in services.default over other running backends when --backend is not given
+  command: grep -q 'launch_default_backends' harbor.sh && grep -A4 'launch_detect_backend()' harbor.sh >/dev/null
+  tags: [spec, implemented]
 ## models
 - label: harbor models supports source-aware list, pull, and rm for ollama, llamacpp, dmr, mlx, and omlx
   command: rg -q 'run_models_routine' harbor.sh && rg -q 'dmr' routines/models.ts && rg -q 'mlx' routines/models.ts && rg -q 'omlx' routines/models.ts
