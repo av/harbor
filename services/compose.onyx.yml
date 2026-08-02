@@ -50,11 +50,17 @@ services:
       - ./services/onyx/override.env
     environment:
       AUTH_TYPE: ${HARBOR_ONYX_AUTH_TYPE:-disabled}
+      USER_AUTH_SECRET: ${HARBOR_ONYX_USER_AUTH_SECRET}
       POSTGRES_HOST: onyx-db
       POSTGRES_USER: ${HARBOR_ONYX_DB_USER:-postgres}
       POSTGRES_PASSWORD: ${HARBOR_ONYX_DB_PASSWORD:-onyx}
       POSTGRES_DB: ${HARBOR_ONYX_DB_NAME:-onyx}
       VESPA_HOST: onyx-index
+      # Harbor ships Vespa as the document index; newer Onyx images default
+      # to probing an OpenSearch sidecar and the background worker exits
+      # when it never becomes ready.
+      ENABLE_OPENSEARCH_INDEXING_FOR_ONYX: "false"
+      ONYX_DISABLE_VESPA: "false"
       REDIS_HOST: onyx-cache
       MODEL_SERVER_HOST: ${HARBOR_ONYX_MODEL_SERVER_HOST:-}
       MODEL_SERVER_PORT: ${HARBOR_ONYX_MODEL_SERVER_PORT:-11434}
@@ -93,11 +99,17 @@ services:
     environment:
       USE_LIGHTWEIGHT_BACKGROUND_WORKER: "true"
       AUTH_TYPE: ${HARBOR_ONYX_AUTH_TYPE:-disabled}
+      USER_AUTH_SECRET: ${HARBOR_ONYX_USER_AUTH_SECRET}
       POSTGRES_HOST: onyx-db
       POSTGRES_USER: ${HARBOR_ONYX_DB_USER:-postgres}
       POSTGRES_PASSWORD: ${HARBOR_ONYX_DB_PASSWORD:-onyx}
       POSTGRES_DB: ${HARBOR_ONYX_DB_NAME:-onyx}
       VESPA_HOST: onyx-index
+      # Harbor ships Vespa as the document index; newer Onyx images default
+      # to probing an OpenSearch sidecar and the background worker exits
+      # when it never becomes ready.
+      ENABLE_OPENSEARCH_INDEXING_FOR_ONYX: "false"
+      ONYX_DISABLE_VESPA: "false"
       REDIS_HOST: onyx-cache
       MODEL_SERVER_HOST: ${HARBOR_ONYX_MODEL_SERVER_HOST:-}
       MODEL_SERVER_PORT: ${HARBOR_ONYX_MODEL_SERVER_PORT:-11434}
@@ -169,9 +181,34 @@ services:
       VESPA_SKIP_UPGRADE_CHECK: "true"
     volumes:
       - ${HARBOR_ONYX_WORKSPACE}/vespa:/opt/vespa/var
+    # Vespa runs as a non-root user; the workspace bind mount must be
+    # chowned by the init sidecar before it starts or it fatally fails
+    # with "mkdir var/tmp: permission denied".
+    depends_on:
+      onyx-init:
+        condition: service_completed_successfully
     networks:
       - harbor-network
     restart: unless-stopped
+
+  # Init sidecar: chowns workspace bind-mount subdirs to
+  # HARBOR_USER_ID:HARBOR_GROUP_ID before the main containers start.
+  # Mirrors the pattern used for mindsdb and unsloth-studio.
+  onyx-init:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.onyx-init
+    image: alpine:3.20
+    env_file:
+      - ./.env
+      - ./services/onyx/override.env
+    environment:
+      TARGET_UID: ${HARBOR_USER_ID}
+      TARGET_GID: ${HARBOR_GROUP_ID}
+    entrypoint: ["/bin/sh", "/init.sh"]
+    volumes:
+      - ./services/onyx/workspace-init.sh:/init.sh:ro
+      - ${HARBOR_ONYX_WORKSPACE}:/workspace
+    networks:
+      - harbor-network
 
   onyx-minio:
     image: minio/minio:${HARBOR_ONYX_MINIO_VERSION}

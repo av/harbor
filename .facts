@@ -368,6 +368,17 @@
   command: bash -c 'for f in services/compose.x.mindsdb.{llamacpp,vllm,dmr,mlx,omlx,ollama}.yml; do grep -q LLM_FUNCTION_MODEL $f || exit 1; done'
   tags: [spec, mindsdb-llm-model, implemented]
 
+## onyx
+- label: onyx-index (Vespa) depends on an onyx-init sidecar that chowns workspace bind-mount subdirs (vespa, api_logs, background_logs, minio — not db) to HARBOR_USER_ID:HARBOR_GROUP_ID, since Vespa runs non-root and fatally fails on a root-owned /opt/vespa/var
+  command: bash -c 'grep -q onyx-init services/compose.onyx.yml && grep -q vespa services/onyx/workspace-init.sh && ! grep -qE "^  chown.*workspace\"?$" services/onyx/workspace-init.sh'
+  tags: [spec, onyx-startup, implemented]
+- label: onyx-api receives USER_AUTH_SECRET from HARBOR_ONYX_USER_AUTH_SECRET (non-empty default in profiles/default.env) because Onyx refuses to start with an empty auth secret
+  command: bash -c 'grep -q "USER_AUTH_SECRET: ..HARBOR_ONYX_USER_AUTH_SECRET." services/compose.onyx.yml && grep -qE "^HARBOR_ONYX_USER_AUTH_SECRET=.+" profiles/default.env'
+  tags: [spec, onyx-startup, implemented]
+- label: onyx api and background workers run with ENABLE_OPENSEARCH_INDEXING_FOR_ONYX=false and ONYX_DISABLE_VESPA=false so the Vespa-backed Harbor deployment neither probes a nonexistent OpenSearch sidecar nor rejects the Vespa index
+  command: bash -c '[ $(grep -c "ENABLE_OPENSEARCH_INDEXING_FOR_ONYX: .false." services/compose.onyx.yml) -eq 2 ] && [ $(grep -c "ONYX_DISABLE_VESPA: .false." services/compose.onyx.yml) -eq 2 ]'
+  tags: [spec, onyx-startup, implemented]
+
 # app
 - label: Harbor App blocks main UI behind a setup gate until setup detail status is ready
   command: rg -q 'detail\?\.status === "ready"' app/src/setup/HarborSetupContext.tsx
@@ -1008,6 +1019,6 @@
 - label: compose.nexa.yml runs a single nexa service ('serve' via entrypoint binding 0.0.0.0:8000 with published HARBOR_NEXA_HOST_PORT); the nexa-proxy sidecar is gone and webui/cognee/optillm cross-configs point at http://nexa:8000/v1
   command: grep -q 'command: serve' services/compose.nexa.yml && ! grep -rq 'nexa-proxy' services/ --include='*.yml' --include='*.json' && [ ! -f services/nexa/proxy_server.py ]
   tags: [services-it, nexa]
-- label: the nexa entrypoint pre-pulls HARBOR_NEXA_MODEL under a fake TTY (script -qec with piped newlines) because the v0.2.x nexa CLI hard-requires /dev/tty for its prompts, then execs nexa serve
-  command: grep -q "script -qec" services/nexa/entrypoint.sh && grep -q 'HARBOR_NEXA_MODEL' services/nexa/entrypoint.sh
+- label: the nexa entrypoint pre-pulls HARBOR_NEXA_MODEL with 'nexa pull --model-type llm' and stdin closed — the flag skips the CLI's interactive Choose-Model-Type prompt which hard-requires a TTY and would hang the container — then execs nexa serve on 0.0.0.0:8000
+  command: grep -q -- '--model-type llm' services/nexa/entrypoint.sh && grep -q 'exec nexa serve' services/nexa/entrypoint.sh
   tags: [services-it, nexa]
