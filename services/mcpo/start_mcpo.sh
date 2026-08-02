@@ -22,6 +22,8 @@ shutdown() {
 trap shutdown SIGTERM SIGINT
 
 # Original entrypoint
-uvx mcpo --config /app/config.json &
+# mcp<2 pin: mcpo 0.0.20 declares mcp>=1.17.0 but breaks on mcp 2.0.0
+# (streamablehttp_client import removed upstream)
+uvx --with 'mcp<2' mcpo --config /app/config.json &
 # Wait for the process to finish or for a signal to be caught
 wait $!
