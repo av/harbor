@@ -172,7 +172,8 @@ harbor dev test --suite speaches-webui       # defaults to ubuntu-2404, --jobs 1
 
 The orchestrator materializes a git-tracked repo artifact once per run
 (`git ls-files` — local gitignored blobs never enter rows). Regression:
-`deno test --allow-read --allow-write --allow-run tests/run-stage.test.ts`.
+`deno test -A` inside `tests/` (staged repos under `tests/artifacts/` are
+excluded from discovery via the root `deno.json` `exclude`).
 
 Shared helpers live in `tests/lib/boost-agentic.sh`.
 

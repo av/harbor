@@ -9,6 +9,15 @@
   command: python3 -c "import json; r=json.load(open('services/webui/configs/config.x.searxng.ollama.json'))['rag']; assert r['ollama']['base_url']=='$'+'{HARBOR_OLLAMA_INTERNAL_URL}' and r['embedding_model']=='nomic-embed-text:latest', r" && echo ok
   tags: [spec, core-integration, implemented]
 - services > dify > the dify-openai bridge translates OpenAI chat completions to Dify 1.x APIs: Chat via /v1/chat-messages, Workflow via /v1/workflows/run including the blocking-mode single-JSON response shape and OUTPUT_VARIABLE selection from workflow outputs @dify-1x @spec
+- label: vllm default CUDA image is vllm/vllm-openai pinned to v0.26.0 (entrypoint 'vllm serve'; the '--model' flag command Harbor passes remains valid)
+  command: grep -q 'HARBOR_VLLM_VERSION="v0.26.0"' profiles/default.env
+  tags: [vllm, rocm-followup]
+- label: vllm ROCm overlay services/compose.x.vllm.rocm.yml mounts /dev/kfd+/dev/dri and rebuilds on a configurable ROCm base image via HARBOR_VLLM_ROCM_IMAGE/HARBOR_VLLM_ROCM_VERSION build args (default rocm/vllm)
+  command: grep -q 'HARBOR_VLLM_ROCM_IMAGE' services/compose.x.vllm.rocm.yml profiles/default.env && grep -q /dev/kfd services/compose.x.vllm.rocm.yml
+  tags: [vllm, rocm, rocm-followup]
+- label: vllm ROCm overlay keeps an image-agnostic entrypoint override (python3 -m vllm.entrypoints.openai.api_server) so non-vllm-openai ROCm bases still start the OpenAI server
+  command: grep -q 'vllm.entrypoints.openai.api_server' services/compose.x.vllm.rocm.yml
+  tags: [vllm, rocm, rocm-followup]
 # project
 
 ## domain
@@ -753,6 +762,9 @@
 - label: the orchestrator forwards host GITHUB_TOKEN or GH_TOKEN into each test row's suite environment so GitHub API calls during --install-source github are authenticated when a token is present
   command: grep -q 'GITHUB_TOKEN' tests/run.ts
   tags: [spec, gh-rate-limit, implemented]
+- label: bare deno test -A inside tests/ discovers only tracked test files; staged repos under tests/artifacts are excluded from Deno tooling via the root deno.json exclude
+  command: cd tests && deno test -A
+  tags: [spec, implemented]
 
 ## defaults-up
 - label: tests/suites/07-defaults-up.sh asserts a bare 'harbor up' on a fresh install starts webui+llamacpp only (no ollama), prints both first-boot notices, webui reaches healthy, and llamacpp /v1/models answers with an empty HF cache

@@ -1,5 +1,8 @@
 {
   "nodeModulesDir": "auto",
+  "exclude": [
+    "tests/artifacts"
+  ],
   "unstable": [
     "sloppy-imports"
   ],
