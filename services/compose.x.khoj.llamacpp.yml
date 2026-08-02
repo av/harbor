@@ -5,4 +5,4 @@ services:
     environment:
       - OPENAI_BASE_URL=http://llamacpp:8080/v1/
       - OPENAI_API_KEY=sk-llamacpp
-      - KHOJ_DEFAULT_CHAT_MODEL=${HARBOR_KHOJ_DEFAULT_MODEL}
+      - KHOJ_DEFAULT_CHAT_MODEL=${HARBOR_KHOJ_LLAMACPP_MODEL}

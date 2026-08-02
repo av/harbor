@@ -461,6 +461,11 @@
   command: grep -q 'HARBOR_CHATNIO_SECRET="harbor-chatnio-secret-change-me-32chars"' profiles/default.env && grep -q 'HARBOR_CHATNIO_SECRET' services/chatnio/start_chatnio.sh
   tags: [spec, implemented]
 
+## khoj x llamacpp
+- label: compose.x.khoj.llamacpp.yml sets KHOJ_DEFAULT_CHAT_MODEL from HARBOR_KHOJ_LLAMACPP_MODEL (default LiquidAI/LFM2.5-8B-A1B-GGUF:Q8_0, a non-qwen3-named model, dodging khoj's Qwen stream-processor crash on llama.cpp's content:null reasoning chunks); HARBOR_KHOJ_DEFAULT_MODEL stays ollama-only
+  command: grep -q 'KHOJ_DEFAULT_CHAT_MODEL=${HARBOR_KHOJ_LLAMACPP_MODEL}' services/compose.x.khoj.llamacpp.yml && grep -q 'HARBOR_KHOJ_LLAMACPP_MODEL="LiquidAI/LFM2.5-8B-A1B-GGUF:Q8_0"' profiles/default.env
+  tags: [spec, khoj-llamacpp, implemented]
+
 # app
 - label: Harbor App blocks main UI behind a setup gate until setup detail status is ready
   command: rg -q 'detail\?\.status === "ready"' app/src/setup/HarborSetupContext.tsx
