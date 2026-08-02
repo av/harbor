@@ -926,6 +926,9 @@
 - label: speaches-webui is registered in HEAVY_SUITE_DEFAULTS pinning it to ubuntu-2404 with jobs=1 and documented in tests/README.md
   command: grep '"speaches-webui"' tests/stage-repo.ts | grep -q ubuntu-2404 && grep -q 'speaches-webui' tests/README.md
   tags: [spec, speaches-webui, implemented]
+- label: The speaches container runs as ${HARBOR_USER_ID}:${HARBOR_GROUP_ID} so the bind-mounted HF/ollama/llamacpp/vllm caches stay writable for any invoking uid (image default 'ubuntu' uid 1000 broke root installs with HTTP 500 on model pull)
+  command: grep -q 'HARBOR_USER_ID' services/compose.speaches.yml
+  tags: [speaches-webui, implemented]
 
 # comfyui
 - label: comfyui has a ROCm overlay services/compose.x.comfyui.rocm.yml that mounts /dev/kfd and /dev/dri and switches the image to ghcr.io/ai-dock/comfyui:latest-rocm, auto-applied on ROCm hosts
@@ -934,3 +937,9 @@
 - label: comfyui docs document the CPU fallback (comfyui.args --cpu) for hosts where neither GPU path works
   command: grep -q -- "--cpu" 'docs/2.1.2-Frontend&colon-ComfyUI.md'
   tags: [comfyui, rocm, implemented]
+- label: comfyui image repository is configurable via HARBOR_COMFYUI_IMAGE (default ghcr.io/ai-dock/comfyui); the base compose composes it with HARBOR_COMFYUI_VERSION as the tag and the ROCm overlay composes it with the latest-rocm tag
+  command: grep -q 'HARBOR_COMFYUI_IMAGE' profiles/default.env services/compose.comfyui.yml services/compose.x.comfyui.rocm.yml
+  tags: [comfyui, spec]
+- label: comfyui docs state the ai-dock upstream image is unmaintained (ComfyUI v0.2.2, ROCm 6.0) and document maintained alternative images and how to switch via comfyui.image
+  command: grep -qi 'unmaintained' 'docs/2.1.2-Frontend&colon-ComfyUI.md' && grep -q 'comfyui.image' 'docs/2.1.2-Frontend&colon-ComfyUI.md'
+  tags: [comfyui, spec]

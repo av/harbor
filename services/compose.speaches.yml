@@ -5,6 +5,11 @@ services:
     env_file:
       - ./.env
       - ./services/speaches/override.env
+    # The image's default `ubuntu` user (uid 1000) cannot write the
+    # bind-mounted caches when the host user is a different uid (e.g. root
+    # installs) — run as the invoking user instead. HOME stays /home/ubuntu,
+    # so all cache paths below keep working.
+    user: "${HARBOR_USER_ID}:${HARBOR_GROUP_ID}"
     ports:
       - ${HARBOR_SPEACHES_HOST_PORT}:8000
     volumes:

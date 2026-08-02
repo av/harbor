@@ -47,6 +47,10 @@ init_exit="$(docker inspect --format '{{.State.ExitCode}}' harbor.speaches-init)
 [ "$init_exit" = "0" ] || {
   suite_log "FAIL: speaches-init exit=${init_exit}"
   docker logs harbor.speaches-init >&2 || true
+  # The init container only sees HTTP status codes — the real failure
+  # (e.g. an HF download error behind a 500) is in the speaches server log.
+  suite_log "speaches server log (last 100 lines):"
+  docker logs --tail 100 harbor.speaches >&2 || true
   exit 1
 }
 
