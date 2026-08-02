@@ -563,6 +563,11 @@
   command: docker compose --env-file .env -f compose.yml -f services/compose.omniparser.yml -f services/compose.x.omniparser.nvidia.yml config --quiet
   tags: [sweep8, implemented]
 
+## bench
+- label: profiles/default.env points HARBOR_BENCH_TASKS/RESULTS under ./services/bench (the bundled defaultTasks.yml actually exists there), so 'harbor bench run' mounts a file, not a docker-created empty directory
+  command: grep -q 'HARBOR_BENCH_TASKS="./services/bench/defaultTasks.yml"' profiles/default.env && grep -q 'HARBOR_BENCH_RESULTS="./services/bench/results"' profiles/default.env && test -f services/bench/defaultTasks.yml
+  tags: [sweep8, implemented]
+
 # app
 - label: Harbor App blocks main UI behind a setup gate until setup detail status is ready
   command: rg -q 'detail\?\.status === "ready"' app/src/setup/HarborSetupContext.tsx

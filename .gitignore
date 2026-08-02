@@ -89,7 +89,7 @@ bionicgpt/db
 omnichain/data/
 
 # Bench
-bench/results/
+services/bench/results/
 
 # lm_eval
 lmeval/cache/
