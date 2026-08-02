@@ -474,6 +474,19 @@
   command: grep -q 'app/.cache/llama.cpp' services/llamaswap/config.yaml && ! grep -q 'root/.cache' services/llamaswap/config.yaml
   tags: [implemented]
 
+## langfuse
+- label: clickhouse in the langfuse compose stack starts without a pinned user so the official entrypoint can chown bind-mounted data dirs on first boot
+  command: test "$(grep -c "user: .101:101." services/compose.langfuse.yml)" -eq 0
+  tags: [spec, implemented]
+
+## kotaemon
+- label: compose.x.kotaemon.llamacpp.yml sets OPENAI_CHAT_MODEL from HARBOR_KOTAEMON_LLAMACPP_MODEL and does not set LOCAL_MODEL
+  command: grep -q 'OPENAI_CHAT_MODEL=${HARBOR_KOTAEMON_LLAMACPP_MODEL}' services/compose.x.kotaemon.llamacpp.yml && ! grep -q 'LOCAL_MODEL=' services/compose.x.kotaemon.llamacpp.yml && grep -q HARBOR_KOTAEMON_LLAMACPP_MODEL profiles/default.env
+  tags: [spec, implemented]
+- label: kotaemon container entrypoint uses the image venv python (/app/.venv/bin/python app.py)
+  command: grep -q '/app/.venv/bin/python' services/compose.kotaemon.yml
+  tags: [spec, implemented]
+
 # app
 - label: Harbor App blocks main UI behind a setup gate until setup detail status is ready
   command: rg -q 'detail\?\.status === "ready"' app/src/setup/HarborSetupContext.tsx

@@ -1,7 +1,12 @@
 services:
   kotaemon:
     environment:
+      # Registers kotaemon's "openai" LLM/embeddings pair against llamacpp.
+      # A real (non-placeholder) OPENAI_API_KEY makes it the default LLM.
       - OPENAI_API_BASE=http://llamacpp:8080/v1
       - OPENAI_API_KEY=sk-llamacpp
-      - LOCAL_MODEL=${HARBOR_KOTAEMON_LOCAL_MODEL}
-      - LOCAL_MODEL_EMBEDDINGS=${HARBOR_KOTAEMON_LOCAL_MODEL_EMBEDDINGS}
+      # Must be a model id llamacpp actually serves (see /v1/models);
+      # Ollama-style tags match nothing here. LOCAL_MODEL is intentionally
+      # not set: it registers Ollama-URL entries that are dead without
+      # Ollama running.
+      - OPENAI_CHAT_MODEL=${HARBOR_KOTAEMON_LLAMACPP_MODEL}
