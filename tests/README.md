@@ -42,7 +42,7 @@ tests/
   up its own state on exit via `trap`. Suites run in filename order, so
   `01-install.sh` reliably precedes `02-cli.sh`, `03-smoke.sh`,
   `04-integration.sh`, `05-launch-smoke.sh`, `06-boost-agentic-smoke.sh`,
-  and `07-defaults-up.sh`.
+  `07-defaults-up.sh`, and `08-speaches-webui.sh`.
   When `--suite` selects a suite that assumes an installed harbor (every
   suite except `install` and the self-bootstrapping `boost-agentic-smoke`)
   without also selecting `install`, the orchestrator auto-prepends the
@@ -126,6 +126,24 @@ to ubuntu-2404 with `--jobs 1` unless overridden.
 
 ```bash
 harbor dev test --suite defaults-up          # defaults to ubuntu-2404, --jobs 1
+```
+
+### Speaches ↔ Open WebUI (`08-speaches-webui.sh`)
+
+Guards the speaches STT/TTS integration with Open WebUI:
+`harbor up --no-defaults webui speaches` must print the speaches first-boot
+notice, hold `--wait` while `speaches-init` pulls the Kokoro TTS and whisper
+STT models (init must exit 0), land webui's audio config as flat per-key rows
+pointing both STT and TTS at `http://speaches:8000/v1` (merged file AND the
+config DB table), then exercise the real proxied path: signup for an API
+token, TTS via `/api/v1/audio/speech` (must return audio, not an error
+payload), and an STT round-trip via `/api/v1/audio/transcriptions` whose
+transcript must contain the spoken words. Heavy — pulls webui + speaches
+images and the audio models inside the nested dockerd, so
+`HEAVY_SUITE_DEFAULTS` pins it to ubuntu-2404 with `--jobs 1`.
+
+```bash
+harbor dev test --suite speaches-webui       # defaults to ubuntu-2404, --jobs 1
 ```
 
 The orchestrator materializes a git-tracked repo artifact once per run

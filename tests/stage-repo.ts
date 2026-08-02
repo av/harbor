@@ -32,6 +32,9 @@ export const HEAVY_SUITE_DEFAULTS: Record<
   // Pulls the full webui + llamacpp images inside the nested dockerd — one
   // fast row is enough to guard the fresh-install defaults path.
   "defaults-up": { distros: ["ubuntu-2404"], jobs: 1 },
+  // Pulls webui + speaches images and the Kokoro/whisper models inside the
+  // nested dockerd — guards the speaches ↔ Open WebUI STT/TTS integration.
+  "speaches-webui": { distros: ["ubuntu-2404"], jobs: 1 },
 };
 
 type CmdResult = { code: number; stdout: string; stderr: string };

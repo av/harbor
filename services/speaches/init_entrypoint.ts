@@ -78,7 +78,15 @@ async function setupModel(modelId: string | undefined, modelType: string) {
   await retryWithBackoff(
     () => fetch(`${SPEACHES_URL}/v1/models/${modelId}`, { method: 'POST' }),
     // 201 = downloaded now, 409 = already present
-    (response) => response.ok || response.status === 409,
+    (response) => {
+      if (response.ok || response.status === 409) return true;
+      // Surface why speaches rejected the pull — otherwise failures are opaque.
+      response.text().then(
+        (body) => console.error(`Harbor: pull ${modelId} -> HTTP ${response.status}: ${body.slice(0, 500)}`),
+        () => console.error(`Harbor: pull ${modelId} -> HTTP ${response.status} (unreadable body)`),
+      );
+      return false;
+    },
     {
       retries: PULL_RETRIES,
       interval: PULL_RETRY_INTERVAL,
