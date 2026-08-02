@@ -24,6 +24,9 @@ export const RUNTIME_DIR_EXCLUDES = [
   "services/mcp/cache",
   "services/netdata/cache",
   "services/netdata/lib",
+  // morphic's db volumes are root-owned bind mounts (see compose.morphic.yml).
+  "services/morphic/postgres",
+  "services/morphic/redis",
   // dify keeps its runtime volumes at the repo root (see compose.dify.yml).
   "dify/volumes",
 ];
