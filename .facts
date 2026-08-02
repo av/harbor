@@ -499,6 +499,11 @@
   command: grep -q ':${HOME}/.cache/huggingface:ro' services/compose.localai.yml
   tags: [spec, cache-symlinks, implemented]
 
+## lmdeploy
+- label: lmdeploy compose uses HARBOR_LMDEPLOY_VERSION for the image tag and HARBOR_LMDEPLOY_MODEL for the served model instead of hardcoded values
+  command: bash -c 'grep -q "lmdeploy:\${HARBOR_LMDEPLOY_VERSION}" services/compose.lmdeploy.yml && grep -q "HARBOR_LMDEPLOY_MODEL" services/compose.lmdeploy.yml && grep -q "HARBOR_LMDEPLOY_VERSION=" profiles/default.env && grep -q "HARBOR_LMDEPLOY_MODEL=" profiles/default.env'
+  tags: [sweep6, implemented]
+
 # app
 - label: Harbor App blocks main UI behind a setup gate until setup detail status is ready
   command: rg -q 'detail\?\.status === "ready"' app/src/setup/HarborSetupContext.tsx
@@ -742,6 +747,11 @@
 - label: BionicGPT compose exposes upstream default DNS names for its bundled LLM and embeddings APIs
   command: grep -A10 '^  bionicgpt-llmapi:' services/compose.bionicgpt.yml | grep -q 'llm-api' && grep -A10 '^  bionicgpt-embeddingsapi:' services/compose.bionicgpt.yml | grep -q 'embeddings-api'
   tags: [implemented]
+
+## backends
+- label: sglang, lmdeploy, and aphrodite docs each carry an explicit NVIDIA-only note (upstream images are CUDA-only)
+  command: bash -c 'grep -qi nvidia "docs/2.2.12-Backend&colon-SGLang.md" && grep -qi nvidia "docs/2.2.10-Backend&colon-lmdeploy.md" && grep -qi nvidia "docs/2.2.5-Backend&colon-Aphrodite-Engine.md"'
+  tags: [sweep6, implemented]
 
 # ci
 - label: CI includes GitHub Actions workflows for app-release bench-docker boost-docker lint and test
@@ -1171,3 +1181,10 @@
 - label: compose.x.presenton.llamacpp.yml wires Presenton's custom provider to llamacpp with CUSTOM_MODEL from HARBOR_PRESENTON_LLAMACPP_MODEL
   command: grep -q 'CUSTOM_MODEL=${HARBOR_PRESENTON_LLAMACPP_MODEL}' services/compose.x.presenton.llamacpp.yml && grep -q 'LLM=custom' services/compose.x.presenton.llamacpp.yml && grep -q HARBOR_PRESENTON_LLAMACPP_MODEL profiles/default.env
   tags: [implemented]
+
+# config
+
+## ports
+- label: profiles/default.env assigns every HARBOR_*_HOST_PORT a unique value (no host-port collisions across services)
+  command: bash -c '! grep -oE "^HARBOR_[A-Z0-9_]*HOST_PORT=[0-9]+" profiles/default.env | cut -d= -f2 | sort | uniq -d | grep .'
+  tags: [sweep6, implemented]

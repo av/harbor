@@ -1,6 +1,6 @@
 services:
   lmdeploy:
-    image: openmmlab/lmdeploy:latest
+    image: openmmlab/lmdeploy:${HARBOR_LMDEPLOY_VERSION}
     container_name: ${HARBOR_CONTAINER_PREFIX}.lmdeploy
     env_file:
       - ./.env
@@ -10,6 +10,8 @@ services:
     ports:
       - ${HARBOR_LMDEPLOY_HOST_PORT}:23333
     ipc: host
-    command: lmdeploy serve api_server Weni/ZeroShot-Agents-Llama3-4.0.43-ORPO-AWQ
+    environment:
+      - HF_TOKEN=${HARBOR_HF_TOKEN}
+    command: lmdeploy serve api_server ${HARBOR_LMDEPLOY_MODEL} ${HARBOR_LMDEPLOY_EXTRA_ARGS}
     networks:
       - harbor-network

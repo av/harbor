@@ -217,7 +217,7 @@ async function configurePublicUrls(ctx: ComposeContext): Promise<void> {
     env.getValue("surfsense.public.zero.url"),
   ]);
 
-  const origin = `http://${getAddressableHost()}:${hostPort || "34851"}`;
+  const origin = `http://${getAddressableHost()}:${hostPort || "35021"}`;
   const publicFrontendUrl = isDefaultLocalUrl(frontendUrl)
     ? origin
     : frontendUrl;
