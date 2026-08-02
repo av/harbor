@@ -12,6 +12,10 @@ services:
       # socat-forwarding entrypoint self-connected in a loop (inspector binds
       # ::1, socat forwarded to 127.0.0.1 — its own listener).
       - HOST=0.0.0.0
+      # Inspector >=2.0.0 refuses non-loopback binds without this opt-in;
+      # safe here — the bind is scoped to the container, exposure is
+      # controlled by the published Harbor ports.
+      - DANGEROUSLY_BIND_ALL_INTERFACES=true
       # The proxy validates Origin against the UI's own origin; allow the
       # remapped Harbor host port.
       - ALLOWED_ORIGINS=http://localhost:${HARBOR_MCP_INSPECTOR_HOST_PORT}
