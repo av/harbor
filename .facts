@@ -919,10 +919,10 @@
 # speaches-webui
 - label: tests/suites/08-speaches-webui.sh guards the speaches↔webui integration: up --no-defaults webui speaches prints the speaches first-boot notice, speaches-init exits 0, and webui config rows (merged file and DB) point audio.tts/stt openai api_base_url at http://speaches:8000/v1
   command: test -x tests/suites/08-speaches-webui.sh && grep -q 'First speaches start downloads STT/TTS models' tests/suites/08-speaches-webui.sh && grep -q 'audio.tts.openai.api_base_url' tests/suites/08-speaches-webui.sh && grep -q 'speaches:8000' tests/suites/08-speaches-webui.sh
-  tags: [spec, speaches-webui]
+  tags: [spec, speaches-webui, implemented]
 - label: 08-speaches-webui.sh exercises the webui-proxied audio path end to end: signup token, TTS via /api/v1/audio/speech returning real audio (>1000 bytes, not an error payload), and an STT round-trip via /api/v1/audio/transcriptions whose transcript contains hello+harbor
   command: grep -q 'api/v1/audio/speech' tests/suites/08-speaches-webui.sh && grep -q 'api/v1/audio/transcriptions' tests/suites/08-speaches-webui.sh && grep -q 'auths/signup' tests/suites/08-speaches-webui.sh && grep -q 'hello.harbor' tests/suites/08-speaches-webui.sh
-  tags: [spec, speaches-webui]
+  tags: [spec, speaches-webui, implemented]
 - label: speaches-webui is registered in HEAVY_SUITE_DEFAULTS pinning it to ubuntu-2404 with jobs=1 and documented in tests/README.md
   command: grep '"speaches-webui"' tests/stage-repo.ts | grep -q ubuntu-2404 && grep -q 'speaches-webui' tests/README.md
-  tags: [spec, speaches-webui]
+  tags: [spec, speaches-webui, implemented]
