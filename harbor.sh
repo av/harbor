@@ -10930,6 +10930,10 @@ run_comfyui_command() {
         shift
         env_manager_alias comfyui.version "$@"
         ;;
+    image)
+        shift
+        env_manager_alias comfyui.image "$@"
+        ;;
     user)
         shift
         env_manager_alias comfyui.user "$@"
@@ -10957,6 +10961,7 @@ run_comfyui_command() {
         echo
         echo "Commands:"
         echo "  harbor comfyui version [version]   - Get or set the ComfyUI version docker tag"
+        echo "  harbor comfyui image [image]       - Get or set the ComfyUI image repository"
         echo "  harbor comfyui user [username]     - Get or set the ComfyUI username"
         echo "  harbor comfyui password [password] - Get or set the ComfyUI password"
         echo "  harbor comfyui auth [true|false]   - Enable/disable ComfyUI authentication"

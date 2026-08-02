@@ -4,7 +4,7 @@ services:
       - ./.env
       - ./services/comfyui/override.env
     container_name: ${HARBOR_CONTAINER_PREFIX}.comfyui
-    image: ghcr.io/ai-dock/comfyui:${HARBOR_COMFYUI_VERSION}
+    image: ${HARBOR_COMFYUI_IMAGE}:${HARBOR_COMFYUI_VERSION}
     environment:
       # Auto-update - should be done with "harbor comfyui version" and
       # docker image pinning

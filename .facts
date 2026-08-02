@@ -655,6 +655,9 @@
 - label: the test orchestrator auto-prepends 01-install when a selected suite requires an installed harbor (all except install and boost-agentic-smoke) and install was not selected
   command: grep -q 'SELF_SUFFICIENT_SUITES' tests/run.ts && grep -q 'auto-prepending' tests/run.ts
   tags: [spec, implemented]
+- label: the orchestrator forwards host GITHUB_TOKEN or GH_TOKEN into each test row's suite environment so GitHub API calls during --install-source github are authenticated when a token is present
+  command: grep -q 'GITHUB_TOKEN' tests/run.ts
+  tags: [spec, gh-rate-limit]
 
 ## defaults-up
 - label: tests/suites/07-defaults-up.sh asserts a bare 'harbor up' on a fresh install starts webui+llamacpp only (no ollama), prints both first-boot notices, webui reaches healthy, and llamacpp /v1/models answers with an empty HF cache
@@ -666,6 +669,14 @@
 - label: defaults-up is registered in HEAVY_SUITE_DEFAULTS pinning it to ubuntu-2404 with jobs=1
   command: grep -q 'defaults-up' tests/stage-repo.ts && grep -A1 '"defaults-up"' tests/stage-repo.ts | grep -q ubuntu-2404 || grep '"defaults-up"' tests/stage-repo.ts | grep -q ubuntu-2404
   tags: [spec, defaults-up, implemented]
+
+## install
+- label: install.sh resolve_harbor_version sends an Authorization Bearer header on the GitHub releases API call when GITHUB_TOKEN or GH_TOKEN is set
+  command: grep -q 'Authorization: Bearer' install.sh
+  tags: [spec, gh-rate-limit]
+- label: when --install-source github fails inside a row, 01-install falls back to the staged local install with a clear warning instead of failing the row
+  command: grep -q 'falling back to source=local' tests/suites/01-install.sh
+  tags: [spec, gh-rate-limit]
 
 # project > distribution
 - label: requirements.sh apt package availability checks verify real package metadata: every apt-cache show probe greps for ^Package: so empty-output false positives (e.g. docker-ce on Ubuntu 24.04 without the Docker repo) fall through to the docker.io / distro fallback
@@ -937,9 +948,9 @@
 - label: comfyui docs document the CPU fallback (comfyui.args --cpu) for hosts where neither GPU path works
   command: grep -q -- "--cpu" 'docs/2.1.2-Frontend&colon-ComfyUI.md'
   tags: [comfyui, rocm, implemented]
-- label: comfyui image repository is configurable via HARBOR_COMFYUI_IMAGE (default ghcr.io/ai-dock/comfyui); the base compose composes it with HARBOR_COMFYUI_VERSION as the tag and the ROCm overlay composes it with the latest-rocm tag
-  command: grep -q 'HARBOR_COMFYUI_IMAGE' profiles/default.env services/compose.comfyui.yml services/compose.x.comfyui.rocm.yml
-  tags: [comfyui, spec]
+- label: comfyui image repository is configurable via HARBOR_COMFYUI_IMAGE (default ghcr.io/ai-dock/comfyui); the base compose composes it with HARBOR_COMFYUI_VERSION and the ROCm overlay with HARBOR_COMFYUI_ROCM_VERSION (default latest-rocm)
+  command: grep -q 'HARBOR_COMFYUI_IMAGE' profiles/default.env services/compose.comfyui.yml services/compose.x.comfyui.rocm.yml && grep -q 'HARBOR_COMFYUI_ROCM_VERSION' profiles/default.env services/compose.x.comfyui.rocm.yml
+  tags: [comfyui, spec, implemented]
 - label: comfyui docs state the ai-dock upstream image is unmaintained (ComfyUI v0.2.2, ROCm 6.0) and document maintained alternative images and how to switch via comfyui.image
   command: grep -qi 'unmaintained' 'docs/2.1.2-Frontend&colon-ComfyUI.md' && grep -q 'comfyui.image' 'docs/2.1.2-Frontend&colon-ComfyUI.md'
-  tags: [comfyui, spec]
+  tags: [comfyui, spec, implemented]

@@ -5,4 +5,7 @@ services:
       - /dev/dri
     # ai-dock publishes a dedicated ROCm variant; the version-pinned
     # "*-cuda" tags fail on hosts without an NVIDIA driver.
-    image: ghcr.io/ai-dock/comfyui:latest-rocm
+    # The default "latest-rocm" tag is ai-dock's naming; when pointing
+    # comfyui.image at another repository, set comfyui.rocm_version to
+    # that image's ROCm tag.
+    image: ${HARBOR_COMFYUI_IMAGE}:${HARBOR_COMFYUI_ROCM_VERSION}
