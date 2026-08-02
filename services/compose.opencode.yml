@@ -23,17 +23,24 @@ services:
             rm -rf /tmp/docker /tmp/docker.tgz
         RUN curl -fsSL https://opencode.ai/install | bash && \
             ln -s /root/.opencode/bin/opencode /usr/local/bin/opencode
+    # Entrypoint wrapper: chown /root (opencode install + bind mounts) as
+    # root, then setpriv-drop to the host user so data/config writes stay
+    # host-owned.
+    entrypoint: ["/bin/bash", "/harbor-entrypoint.sh"]
     command: ["opencode", "serve", "--hostname=0.0.0.0", "--port=4096"]
     env_file:
       - ./.env
       - ./services/opencode/override.env
     environment:
+      - TARGET_UID=${HARBOR_USER_ID}
+      - TARGET_GID=${HARBOR_GROUP_ID}
       - OPENCODE_CONFIG_DIR=/root/.config/opencode
       - OPENCODE_SERVER_USERNAME=${HARBOR_OPENCODE_USERNAME}
       - OPENCODE_SERVER_PASSWORD=${HARBOR_OPENCODE_PASSWORD}
     ports:
       - "${HARBOR_OPENCODE_HOST_PORT}:4096"
     volumes:
+      - ./services/opencode/entrypoint.sh:/harbor-entrypoint.sh:ro
       - ${HARBOR_OPENCODE_DATA}:/root/.local/share/opencode
       - ${HARBOR_OPENCODE_CONFIG}:/root/.config/opencode
     working_dir: /root
