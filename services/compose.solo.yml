@@ -12,5 +12,6 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${HARBOR_SOLO_WORKSPACE}/config:/root/.solo
       - ${HARBOR_SOLO_WORKSPACE}/data:/app/data
+      - ${HARBOR_HF_CACHE}:/root/.cache/huggingface
     networks:
       - harbor-network
