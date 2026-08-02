@@ -410,6 +410,24 @@
   command: grep -q "http://dify-plugin-daemon:5002" services/dify/nginx/conf.d/default.conf.template && grep -q "dstdomain dify-agent" services/dify/ssrf_proxy/squid-agent.conf.template
   tags: [spec, dify-1x, implemented]
 
+## k6
+- label: HARBOR_K6_GRAFANA_VERSION in profiles/default.env pins grafana 11.6.1, verified to provision both shipped dashboards and the influxdb datasource
+  command: grep -q 'HARBOR_K6_GRAFANA_VERSION="11.6.1"' profiles/default.env
+  tags: [spec, svc-testing, implemented]
+
+## ol1
+- label: services/ol1/Dockerfile builds without cloning the deleted upstream tcsenpai/ol1 repo, copying Harbor's own app.py instead
+  command: ! grep -q 'git clone' services/ol1/Dockerfile && grep -q 'COPY app.py' services/ol1/Dockerfile
+  tags: [spec, svc-testing, implemented]
+
+## omnichain
+- label: openai.ts /v1/models returns an empty model list (not 500) when data/chains does not exist yet on a fresh install
+  command: grep -q 'existsSync(chainsDir)' services/omnichain/openai.ts
+  tags: [spec, svc-testing, implemented]
+- label: omnichain image installs socat so entrypoint.sh port forwarding does not error with command-not-found
+  command: grep -q socat services/omnichain/Dockerfile
+  tags: [spec, svc-testing, implemented]
+
 # app
 - label: Harbor App blocks main UI behind a setup gate until setup detail status is ready
   command: rg -q 'detail\?\.status === "ready"' app/src/setup/HarborSetupContext.tsx
