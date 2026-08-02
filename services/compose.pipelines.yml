@@ -5,6 +5,16 @@ services:
     env_file:
       - ./.env
       - ./services/pipelines/override.env
+    # Run as the host user so files in the persistence bind mount stay
+    # host-owned. /app in the upstream image is group-writable by gid 0
+    # (setgid), so keep root as a supplementary group; HOME=/tmp lets pip
+    # fall back to user installs for pipeline requirements.
+    user: ${HARBOR_USER_ID}:${HARBOR_GROUP_ID}
+    group_add:
+      - "0"
+    depends_on:
+      pipelines-init:
+        condition: service_completed_successfully
     volumes:
       - ./services/pipelines/persistent:${HARBOR_PIPELINES_DIR}
     entrypoint: [ "/bin/bash", "/app/start.sh" ]
@@ -21,8 +31,25 @@ services:
     networks:
       - harbor-network
     environment:
+      - HOME=/tmp
       - PIPELINES_API_KEY=${HARBOR_PIPELINES_API_KEY}
       - PIPELINES_URLS=${HARBOR_PIPELINES_URLS}
       - PIPELINES_REQUIREMENTS_PATH=${HARBOR_PIPELINES_REQUIREMENTS_PATH}
       - PIPELINES_DIR=${HARBOR_PIPELINES_DIR}
       - RESET_PIPELINES_DIR=${HARBOR_PIPELINES_RESET_DIR}
+
+  pipelines-init:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.pipelines-init
+    image: alpine:3.20
+    env_file:
+      - ./.env
+      - ./services/pipelines/override.env
+    environment:
+      TARGET_UID: ${HARBOR_USER_ID}
+      TARGET_GID: ${HARBOR_GROUP_ID}
+    entrypoint: ["/bin/sh", "/init.sh"]
+    volumes:
+      - ./services/pipelines/persistent-init.sh:/init.sh:ro
+      - ./services/pipelines/persistent:/persistent
+    networks:
+      - harbor-network
