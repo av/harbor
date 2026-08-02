@@ -10,13 +10,13 @@ logRequests: true
 
 
 models:
-  # llamacpp cache is available at /root/.cache/llama.cpp
+  # llamacpp cache is available at /app/.cache/llama.cpp
   # Download models according to the llama.cpp wiki instructions
   "swap-llamacpp":
     cmd: >
       ./llama-server
       --port 9001
-      -m /root/.cache/llama.cpp/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf
+      -m /app/.cache/llama.cpp/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf
     proxy: http://0.0.0.0:9001
 
     # list of model name aliases this llama.cpp instance can serve
