@@ -64,6 +64,10 @@ services:
     entrypoint:
       - /app/.venv/bin/python
       - /app/harbor-start-mcp-http.py
+    # The upstream MCP image defaults to the non-root `cognee` user, but the
+    # workspace shared with the API container is created root-owned by the
+    # API image — align uids so both can write the same sqlite/kuzu/lancedb files.
+    user: root
     ports:
       - ${HARBOR_COGNEE_MCP_HOST_PORT}:8000
     environment:

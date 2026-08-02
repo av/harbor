@@ -4,9 +4,9 @@ services:
       ollama:
         condition: service_healthy
       ollama-init:
-        condition: service_completed_successfully
+        condition: service_healthy
 
   cognee-mcp:
     depends_on:
       ollama-init:
-        condition: service_completed_successfully
+        condition: service_healthy
