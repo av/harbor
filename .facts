@@ -1022,3 +1022,4 @@
 - label: the nexa entrypoint pre-pulls HARBOR_NEXA_MODEL with 'nexa pull --model-type llm' and stdin closed — the flag skips the CLI's interactive Choose-Model-Type prompt which hard-requires a TTY and would hang the container — then execs nexa serve on 0.0.0.0:8000
   command: grep -q -- '--model-type llm' services/nexa/entrypoint.sh && grep -q 'exec nexa serve' services/nexa/entrypoint.sh
   tags: [services-it, nexa, implemented]
+- nexa > the nexa OpenAI API accepts the bare HARBOR_NEXA_MODEL repo name (e.g. Qwen/Qwen3-0.6B-GGUF) in completions even though /v1/models reports the quant-suffixed id (:Q8_0), so cross-service consumers (cognee LLM_MODEL, webui, optillm) need no suffix rendering @services-it @nexa @implemented
