@@ -1121,4 +1121,27 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         wikiUrl: `${wikiUrl}/2.2.25-Backend-Speech-To-Speech`,
         tooltip: 'Modular realtime voice pipeline (VAD, STT, LLM, TTS) exposing an OpenAI Realtime-compatible WebSocket API.',
     },
+    landing: {
+        name: 'Harbor Landing',
+        tags: [HST.satellite, HST.builtIn],
+        projectUrl: 'https://github.com/av/harbor',
+        logo: 'https://github.com/av.png?size=200',
+        wikiUrl: `${wikiUrl}/2.3.68-Satellite-Landing`,
+        tooltip: 'Harbor\'s own landing page served locally.',
+    },
+    'mock-openai': {
+        name: 'Mock OpenAI',
+        tags: [HST.satellite, HST.builtIn, HST.api],
+        projectUrl: 'https://github.com/av/harbor',
+        logo: 'https://github.com/av.png?size=200',
+        tooltip: 'Built-in mock OpenAI-compatible API server for testing and development.',
+    },
+    'harbor-cli': {
+        name: 'Harbor CLI',
+        tags: [HST.satellite, HST.cli, HST.builtIn],
+        projectUrl: 'https://github.com/av/harbor',
+        logo: 'https://github.com/av.png?size=200',
+        wikiUrl: `${wikiUrl}/3.-Harbor-CLI-Reference`,
+        tooltip: 'Containerized Harbor CLI for running Harbor commands without a host install.',
+    },
 };
