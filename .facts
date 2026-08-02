@@ -399,6 +399,17 @@
   command: grep -q 'HARBOR_KARAKEEP_MEILI_VERSION="v1.41.0"' profiles/default.env && grep -q 'MEILI_EXPERIMENTAL_DUMPLESS_UPGRADE=true' services/compose.karakeep.yml
   tags: [implemented]
 
+## dify
+- label: compose.dify.yml runs Dify 1.16.1 with the 1.x service set: api, worker, worker-beat, web, plugin daemon (own dify_plugin Postgres DB auto-created on first start), agent backend with dify-local-sandbox and dify-agent-ssrf, code sandbox, ssrf proxy, nginx front door, weaviate, certbot, and the dify-openai shim
+  command: grep -q "dify-plugin-daemon" services/compose.dify.yml && grep -q "dify-agent:" services/compose.dify.yml && grep -q "MODE: beat" services/compose.dify.yml
+  tags: [spec, dify-1x, implemented]
+- label: profiles/default.env pins HARBOR_DIFY_VERSION 1.16.1, HARBOR_DIFY_SANDBOX_VERSION 0.2.15, HARBOR_DIFY_PLUGIN_DAEMON_VERSION 0.6.3-local, HARBOR_DIFY_WEAVIATE_VERSION 1.27.0
+  command: grep -q "HARBOR_DIFY_VERSION=\"1.16.1\"" profiles/default.env && grep -q "HARBOR_DIFY_PLUGIN_DAEMON_VERSION=\"0.6.3-local\"" profiles/default.env && grep -q "HARBOR_DIFY_SANDBOX_VERSION=\"0.2.15\"" profiles/default.env && grep -q "HARBOR_DIFY_WEAVIATE_VERSION=\"1.27.0\"" profiles/default.env
+  tags: [spec, dify-1x, implemented]
+- label: vendored nginx/ssrf templates under services/dify are the upstream 1.16.1 docker templates with hostnames rewritten to Harbor dify-* service names
+  command: grep -q "http://dify-plugin-daemon:5002" services/dify/nginx/conf.d/default.conf.template && grep -q "dstdomain dify-agent" services/dify/ssrf_proxy/squid-agent.conf.template
+  tags: [spec, dify-1x, implemented]
+
 # app
 - label: Harbor App blocks main UI behind a setup gate until setup detail status is ready
   command: rg -q 'detail\?\.status === "ready"' app/src/setup/HarborSetupContext.tsx

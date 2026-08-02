@@ -61,7 +61,7 @@ plandex/db
 
 # Dify
 dify/volumes/
-dify/nginx/conf.d/default.conf
+services/dify/nginx/conf.d/default.conf
 
 # TextGrad
 textgrad/workspace/*
