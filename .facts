@@ -1370,3 +1370,23 @@
 - label: tts runs as the host user behind a tts-init chown sidecar, with the HF cache mounted at /app/.cache/huggingface instead of /root, so voice/config/cache files stay host-owned
   command: grep -q 'user: "${HARBOR_USER_ID}:${HARBOR_GROUP_ID}"' services/compose.tts.yml && grep -q 'tts-init' services/compose.tts.yml && grep -q '/app/.cache/huggingface' services/compose.tts.yml
   tags: [ownership, implemented]
+
+# services > ownership
+- label: karakeep and karakeep-meilisearch run as the host user (HARBOR_USER_ID) with an exec tmpfs on /run for rootless s6-overlay, so workspace files (db.db, queue.db, meilisearch) stay host-owned
+  command: grep -q 'user: ${HARBOR_USER_ID}:${HARBOR_GROUP_ID}' services/compose.karakeep.yml && grep -q '/run:exec' services/compose.karakeep.yml
+  tags: [ownership3, spec, implemented]
+- label: chatui-db (mongo) runs as the host user with a chatui-db-init sidecar chowning ./services/chatui/data, so mongo data files stay host-owned
+  command: grep -q 'chatui-db-init' services/compose.chatui.yml && test -f services/chatui/db-init.sh
+  tags: [ownership3, spec, implemented]
+- label: cognee and cognee-mcp both run as the host user (HOME=/tmp) with a cognee-init sidecar chowning the shared workspace, so sqlite/kuzu/lancedb files stay host-owned
+  command: grep -q 'cognee-init' services/compose.cognee.yml && ! grep -q 'user: root' services/compose.cognee.yml
+  tags: [ownership3, spec, implemented]
+- label: presenton starts via a Harbor entrypoint wrapper that chowns app_data and nginx runtime paths then setpriv-drops to the host user; all processes (nginx included) run non-root and app_data writes stay host-owned
+  command: grep -q 'harbor-entrypoint.sh' services/compose.presenton.yml && grep -q setpriv services/presenton/entrypoint.sh
+  tags: [ownership3, spec, implemented]
+- label: pipelines runs as the host user with supplementary gid 0 (upstream /app is setgid group-writable) and a pipelines-init sidecar chowning ./services/pipelines/persistent
+  command: grep -q 'group_add' services/compose.pipelines.yml && grep -q 'pipelines-init' services/compose.pipelines.yml
+  tags: [ownership3, spec, implemented]
+- label: opencode starts via a Harbor entrypoint wrapper that chowns /root (opencode install + data/config bind mounts) then setpriv-drops to the host user, so opencode.db and config stay host-owned
+  command: grep -q 'harbor-entrypoint.sh' services/compose.opencode.yml && grep -q setpriv services/opencode/entrypoint.sh
+  tags: [ownership3, spec, implemented]
