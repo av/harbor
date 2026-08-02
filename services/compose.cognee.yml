@@ -7,9 +7,16 @@ services:
     env_file:
       - ./.env
       - ./services/cognee/override.env
+    # Run as the host user so files in the workspace bind mount stay
+    # host-owned; the init sidecar chowns pre-existing root-owned data.
+    user: ${HARBOR_USER_ID}:${HARBOR_GROUP_ID}
+    depends_on:
+      cognee-init:
+        condition: service_completed_successfully
     ports:
       - ${HARBOR_COGNEE_HOST_PORT}:8000
     environment:
+      - HOME=/tmp
       - HOST=0.0.0.0
       - ENVIRONMENT=local
       - DEBUG=false
@@ -64,13 +71,13 @@ services:
     entrypoint:
       - /app/.venv/bin/python
       - /app/harbor-start-mcp-http.py
-    # The upstream MCP image defaults to the non-root `cognee` user, but the
-    # workspace shared with the API container is created root-owned by the
-    # API image — align uids so both can write the same sqlite/kuzu/lancedb files.
-    user: root
+    # Both containers run as the host user so the shared workspace stays
+    # host-owned and both can write the same sqlite/kuzu/lancedb files.
+    user: ${HARBOR_USER_ID}:${HARBOR_GROUP_ID}
     ports:
       - ${HARBOR_COGNEE_MCP_HOST_PORT}:8000
     environment:
+      HOME: /tmp
       HOST: 0.0.0.0
       ENVIRONMENT: local
       DEBUG: "false"
@@ -112,5 +119,21 @@ services:
     depends_on:
       cognee:
         condition: service_healthy
+    networks:
+      - harbor-network
+
+  cognee-init:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.cognee-init
+    image: alpine:3.20
+    env_file:
+      - ./.env
+      - ./services/cognee/override.env
+    environment:
+      TARGET_UID: ${HARBOR_USER_ID}
+      TARGET_GID: ${HARBOR_GROUP_ID}
+    entrypoint: ["/bin/sh", "/init.sh"]
+    volumes:
+      - ./services/cognee/workspace-init.sh:/init.sh:ro
+      - ${HARBOR_COGNEE_WORKSPACE}:/workspace
     networks:
       - harbor-network
