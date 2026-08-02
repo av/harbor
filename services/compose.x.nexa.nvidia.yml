@@ -4,7 +4,7 @@ services:
       # This is a CUDA-enabled override for the base
       # image that is CPU-only
       args:
-        - HARBOR_NEXA_IMAGE=nvidia/cuda:12.4.0-base-ubuntu22.04
+        - HARBOR_NEXA_IMAGE=nvidia/cuda:12.6.3-base-ubuntu24.04
     deploy:
       resources:
         reservations:

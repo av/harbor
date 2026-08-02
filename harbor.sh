@@ -11729,7 +11729,7 @@ run_nexa_command() {
         echo "Usage: harbor [nexa] <command>"
         echo
         echo "Commands:"
-        echo "  harbor nexa model   - Alias for 'harbor lmeval args get|set model'"
+        echo "  harbor nexa model   - Get or set the model (HARBOR_NEXA_MODEL) the server pre-pulls"
         echo
         echo "Original CLI help:"
         ;;
