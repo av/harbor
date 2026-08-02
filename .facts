@@ -18,6 +18,12 @@
 - label: vllm ROCm overlay keeps an image-agnostic entrypoint override (python3 -m vllm.entrypoints.openai.api_server) so non-vllm-openai ROCm bases still start the OpenAI server
   command: grep -q 'vllm.entrypoints.openai.api_server' services/compose.x.vllm.rocm.yml
   tags: [vllm, rocm, rocm-followup, implemented]
+- sim > compose.sim.yml passes INTERNAL_API_SECRET (HARBOR_SIM_INTERNAL_API_SECRET) to the sim-realtime container; realtime's env schema requires it and crash-loops without it @sim @notable-sweep @spec @implemented
+- deerflow > build contexts are configurable via HARBOR_DEERFLOW_GIT_REF, pinned to the last v1.x commit 06248fa6 (upstream's v2 merge removed the root Dockerfile and web/ directory Harbor builds from) @deerflow @notable-sweep @spec @implemented
+- cli > get_service_port prefers the configured <service>.host_port when it is among the container's published ports, so multi-port services (browseruse UI vs VNC) resolve harbor url to the main UI port @cli @notable-sweep @spec @implemented
+- label: photoprism > HARBOR_PHOTOPRISM_STORAGE defaults to ./services/photoprism/storage (was ./photoprism/storage, which created a stray root-owned photoprism/ dir at the repo root)
+  command: grep -q 'HARBOR_PHOTOPRISM_STORAGE="./services/photoprism/storage"' profiles/default.env
+  tags: [photoprism, notable-sweep, spec, implemented]
 # project
 
 ## domain
