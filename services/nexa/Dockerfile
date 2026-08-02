@@ -10,6 +10,10 @@ RUN chmod +x /nvidia.sh && /nvidia.sh
 
 # Install nexa
 RUN apt-get update && apt-get install -y curl
-RUN curl -fsSL https://public-storage.nexa4ai.com/install.sh | sh
+# Download and run in separate steps so a failed download
+# fails the build instead of piping nothing into sh
+RUN curl -fsSL https://public-storage.nexa4ai.com/install.sh -o /tmp/nexa-install.sh \
+  && sh /tmp/nexa-install.sh \
+  && command -v nexa
 
 ENTRYPOINT [ "nexa" ]

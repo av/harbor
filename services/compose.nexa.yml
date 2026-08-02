@@ -15,7 +15,6 @@ services:
       - ${HARBOR_LLAMACPP_CACHE}:/root/.cache/llama.cpp
       - ${HARBOR_VLLM_CACHE}:/root/.cache/vllm
       - ${HARBOR_NEXA_CACHE}:/root/.cache/nexa
-      - ./services/nexa/openai_models.py:/usr/local/lib/python3.9/dist-packages/nexa/openai_models.py
     env_file:
       - ./.env
       - ./services/nexa/override.env
