@@ -1021,4 +1021,4 @@
   tags: [services-it, nexa, implemented]
 - label: the nexa entrypoint pre-pulls HARBOR_NEXA_MODEL with 'nexa pull --model-type llm' and stdin closed — the flag skips the CLI's interactive Choose-Model-Type prompt which hard-requires a TTY and would hang the container — then execs nexa serve on 0.0.0.0:8000
   command: grep -q -- '--model-type llm' services/nexa/entrypoint.sh && grep -q 'exec nexa serve' services/nexa/entrypoint.sh
-  tags: [services-it, nexa]
+  tags: [services-it, nexa, implemented]
