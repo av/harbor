@@ -4,12 +4,12 @@ services:
     env_file:
       - ./.env
       - ./services/openhands/override.env
-    image: docker.all-hands.dev/all-hands-ai/openhands:${HARBOR_OPENHANDS_VERSION}
+    image: ghcr.io/all-hands-ai/openhands:${HARBOR_OPENHANDS_VERSION}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ./services/openhands/state:/.openhands-state
+      - ./services/openhands/state:/.openhands
     environment:
-      - SANDBOX_RUNTIME_CONTAINER_IMAGE=docker.all-hands.dev/all-hands-ai/runtime:${HARBOR_OPENHANDS_VERSION}-nikolaik
+      - SANDBOX_RUNTIME_CONTAINER_IMAGE=ghcr.io/all-hands-ai/runtime:${HARBOR_OPENHANDS_VERSION}-nikolaik
       - SANDBOX_USER_ID=${HARBOR_USER_ID}
     networks:
       - harbor-network
@@ -17,4 +17,23 @@ services:
       - ${HARBOR_OPENHANDS_HOST_PORT}:3000
     extra_hosts:
       - host.docker.internal:host-gateway
+    depends_on:
+      openhands-init:
+        condition: service_completed_successfully
+
+  # Init sidecar: chowns the state bind mount to HARBOR_USER_ID before
+  # openhands starts — the entrypoint remaps its app user to SANDBOX_USER_ID
+  # and first boot otherwise crashes on a root-owned /.openhands.
+  # Mirrors the anythingllm/langflow/kotaemon pattern.
+  openhands-init:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.openhands-init
+    image: alpine:3.20
+    env_file:
+      - ./.env
+    entrypoint: ["/bin/sh", "/init.sh"]
+    volumes:
+      - ./services/openhands/state-init.sh:/init.sh:ro
+      - ./services/openhands/state:/state
+    networks:
+      - harbor-network
 
