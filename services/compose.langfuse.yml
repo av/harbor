@@ -51,7 +51,11 @@ services:
   langfuse-clickhouse:
     image: clickhouse/clickhouse-server
     restart: always
-    user: "101:101"
+    # Unlike upstream Langfuse compose (named volumes seeded with image
+    # ownership + a pinned uid 101 user), Harbor bind-mounts the workspace.
+    # Docker creates missing bind-mount dirs as root:root, so a pinned
+    # 101:101 user can't write on first boot. Starting as root lets the
+    # official entrypoint chown the data dirs and drop privileges itself.
     container_name: ${HARBOR_CONTAINER_PREFIX}.langfuse-clickhouse
     hostname: langfuse-clickhouse
     env_file:
