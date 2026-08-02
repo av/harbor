@@ -62,6 +62,8 @@ services:
     environment:
       - MEILI_MASTER_KEY=${HARBOR_KARAKEEP_MEILI_MASTER_KEY}
       - MEILI_NO_ANALYTICS=true
+      # Allows in-place index upgrade when the pinned Meilisearch version is bumped
+      - MEILI_EXPERIMENTAL_DUMPLESS_UPGRADE=true
     depends_on:
       karakeep-init:
         condition: service_completed_successfully
