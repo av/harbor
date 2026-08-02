@@ -10939,19 +10939,16 @@ run_comfyui_workspace_command() {
     case "$1" in
     open)
         shift
-        sys_open "$harbor_home/services/comfyui/workspace"
+        sys_open "$harbor_home/$(env_manager get comfyui.workspace)"
         ;;
     sync)
         shift
-        log_info "Cleaning up ComfyUI environment..."
-        run_exec comfyui rm -rf /workspace/environments/python/comfyui
-        log_info "Syncing installed custom nodes to persistent storage..."
-        run_exec comfyui venv-sync comfyui
+        log_warn "'harbor comfyui workspace sync' is deprecated: the comfyui-boot image persists everything (ComfyUI, custom nodes, models) directly in the workspace — no sync needed."
         ;;
     clear)
         shift
         log_info "Cleaning up ComfyUI workspace..."
-        run_gum confirm "This operation will delete all stored ComfyUI configuration. Continue?" && run_exec comfyui rm -rf /workspace/* || echo "Cleanup aborted."
+        run_gum confirm "This operation will delete all stored ComfyUI configuration and models. Continue?" && run_exec comfyui sh -c 'rm -rf /root/* /root/.cache' || echo "Cleanup aborted."
         log_info "Restart Harbor to re-init Comfy UI"
         ;;
     *)
@@ -10970,17 +10967,10 @@ run_comfyui_command() {
         shift
         env_manager_alias comfyui.image "$@"
         ;;
-    user)
+    user | password | auth)
         shift
-        env_manager_alias comfyui.user "$@"
-        ;;
-    password)
-        shift
-        env_manager_alias comfyui.password "$@"
-        ;;
-    auth)
-        shift
-        env_manager_alias comfyui.auth "$@"
+        log_warn "'harbor comfyui user/password/auth' is deprecated: upstream ComfyUI has no built-in authentication (the old ai-dock image provided it)."
+        log_warn "To expose ComfyUI over the network, use 'harbor tunnel comfyui' or put it behind traefik with auth middleware."
         ;;
     workspace)
         shift
@@ -10988,7 +10978,7 @@ run_comfyui_command() {
         ;;
     output)
         shift
-        sys_open "$harbor_home/services/comfyui/workspace/ComfyUI/output"
+        sys_open "$harbor_home/$(env_manager get comfyui.workspace)/ComfyUI/output"
         ;;
     -h | --help | help)
         echo "Please note that this is not ComfyUI CLI, but a Harbor CLI to manage ComfyUI service."
@@ -10998,13 +10988,13 @@ run_comfyui_command() {
         echo "Commands:"
         echo "  harbor comfyui version [version]   - Get or set the ComfyUI version docker tag"
         echo "  harbor comfyui image [image]       - Get or set the ComfyUI image repository"
-        echo "  harbor comfyui user [username]     - Get or set the ComfyUI username"
-        echo "  harbor comfyui password [password] - Get or set the ComfyUI password"
-        echo "  harbor comfyui auth [true|false]   - Enable/disable ComfyUI authentication"
-        echo "  harbor comfyui workspace sync    - Sync installed custom nodes to persistent storage"
         echo "  harbor comfyui workspace open    - Open folder containing ComfyUI workspace in the File Manager"
         echo "  harbor comfyui workspace clear   - Clear ComfyUI workspace, including all configurations and models"
         echo "  harbor comfyui output             - Open folder containing ComfyUI output in the File Manager"
+        echo
+        echo "Deprecated (were features of the old ai-dock image):"
+        echo "  harbor comfyui user/password/auth  - upstream ComfyUI has no built-in authentication"
+        echo "  harbor comfyui workspace sync      - comfyui-boot persists everything in the workspace"
         ;;
     *)
         return 1

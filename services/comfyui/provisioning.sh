@@ -1,215 +1,93 @@
 #!/bin/bash
 
-# Adapted from
-# the original script in the
-# https://github.com/ai-dock/comfyui/blob/main/config/provisioning/flux.sh
+# Harbor provisioning for the yanwk/comfyui-boot image.
+#
+# Mounted as /root/user-scripts/pre-start.sh — the image's entrypoint
+# sources it on every container start, after ComfyUI is unpacked to
+# /root/ComfyUI and before it launches. Downloads the Flux.1-schnell
+# model set expected by Harbor's Open WebUI image-generation integration.
+#
+# NOTE: sourced under `set -e` — every step must tolerate failure so a
+# flaky download never prevents ComfyUI from starting.
 
-echo "Running ComfyUI provisioning..."
-echo "WORKSPACE: $WORKSPACE"
+harbor_provisioning() {
+    local models_dir="/root/ComfyUI/models"
 
-DEFAULT_WORKFLOW="https://raw.githubusercontent.com/av/harbor/refs/heads/main/comfyui/default-workflow.json"
-
-APT_PACKAGES=(
-)
-
-PIP_PACKAGES=(
-)
-
-NODES=()
-
-CHECKPOINT_MODELS=(
-)
-
-CLIP_MODELS=(
-    "https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/clip_l.safetensors"
-    "https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/t5xxl_fp16.safetensors"
-)
-
-UNET_MODELS=(
-)
-
-VAE_MODELS=(
-)
-
-LORA_MODELS=(
-)
-
-ESRGAN_MODELS=(
-    "https://huggingface.co/ai-forever/Real-ESRGAN/resolve/main/RealESRGAN_x4.pth"
-    "https://huggingface.co/FacehugmanIII/4x_foolhardy_Remacri/resolve/main/4x_foolhardy_Remacri.pth"
-    "https://huggingface.co/Akumetsu971/SD_Anime_Futuristic_Armor/resolve/main/4x_NMKD-Siax_200k.pth"
-)
-
-CONTROLNET_MODELS=(
-)
-
-### DO NOT EDIT BELOW HERE UNLESS YOU KNOW WHAT YOU ARE DOING ###
-
-function provisioning_start() {
-    if [[ ! -d /opt/environments/python ]]; then
-        export MAMBA_BASE=true
+    if [[ "${HARBOR_COMFYUI_PROVISIONING,,}" != "true" ]]; then
+        echo "[Harbor] Provisioning disabled (HARBOR_COMFYUI_PROVISIONING != true), skipping."
+        return 0
     fi
-    source /opt/ai-dock/etc/environment.sh
-    source /opt/ai-dock/bin/venv-set.sh comfyui
 
-    UNET_MODELS+=("https://huggingface.co/black-forest-labs/FLUX.1-schnell/resolve/main/flux1-schnell.safetensors")
-    VAE_MODELS+=("https://huggingface.co/black-forest-labs/FLUX.1-schnell/resolve/main/ae.safetensors")
-    # Runs inside ai-dock/comfyui's container provisioning hook on start;
-    # never touches a BSD host.
-    sed -i 's/flux1-dev\.safetensors/flux1-schnell.safetensors/g' /opt/ComfyUI/web/scripts/defaultGraph.js  # harbor-lint disable=HARBOR002
+    echo "[Harbor] Provisioning ComfyUI models (idempotent, skips existing files)..."
 
-    provisioning_print_header
-    provisioning_get_apt_packages
-    provisioning_get_default_workflow
-    provisioning_get_nodes
-    provisioning_get_pip_packages
-    provisioning_get_models \
-        "${WORKSPACE}/storage/stable_diffusion/models/ckpt" \
-        "${CHECKPOINT_MODELS[@]}"
-    provisioning_get_models \
-        "${WORKSPACE}/storage/stable_diffusion/models/unet" \
-        "${UNET_MODELS[@]}"
-    provisioning_get_models \
-        "${WORKSPACE}/storage/stable_diffusion/models/lora" \
-        "${LORA_MODELS[@]}"
-    provisioning_get_models \
-        "${WORKSPACE}/storage/stable_diffusion/models/controlnet" \
-        "${CONTROLNET_MODELS[@]}"
-    provisioning_get_models \
-        "${WORKSPACE}/storage/stable_diffusion/models/vae" \
-        "${VAE_MODELS[@]}"
-    provisioning_get_models \
-        "${WORKSPACE}/storage/stable_diffusion/models/clip" \
-        "${CLIP_MODELS[@]}"
-    provisioning_get_models \
-        "${WORKSPACE}/storage/stable_diffusion/models/esrgan" \
-        "${ESRGAN_MODELS[@]}"
-    provisioning_print_end
-}
+    harbor_download "${models_dir}/clip" \
+        "https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/clip_l.safetensors" \
+        "https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/t5xxl_fp16.safetensors"
 
-function pip_install() {
-    if [[ -z $MAMBA_BASE ]]; then
-            "$COMFYUI_VENV_PIP" install --no-cache-dir --target /opt/comfyui-packages "$@"
-        else
-            micromamba run -n comfyui pip install --no-cache-dir --target /opt/comfyui-packages "$@"
-        fi
-}
+    harbor_download "${models_dir}/diffusion_models" \
+        "https://huggingface.co/black-forest-labs/FLUX.1-schnell/resolve/main/flux1-schnell.safetensors"
 
-function provisioning_get_apt_packages() {
-    if [[ ${#APT_PACKAGES[@]} -gt 0 ]]; then
-            sudo $APT_INSTALL "${APT_PACKAGES[@]}"
+    harbor_download "${models_dir}/vae" \
+        "https://huggingface.co/black-forest-labs/FLUX.1-schnell/resolve/main/ae.safetensors"
+
+    harbor_download "${models_dir}/upscale_models" \
+        "https://huggingface.co/ai-forever/Real-ESRGAN/resolve/main/RealESRGAN_x4.pth" \
+        "https://huggingface.co/FacehugmanIII/4x_foolhardy_Remacri/resolve/main/4x_foolhardy_Remacri.pth" \
+        "https://huggingface.co/Akumetsu971/SD_Anime_Futuristic_Armor/resolve/main/4x_NMKD-Siax_200k.pth"
+
+    # Make Harbor's starter Flux workflow available in the UI
+    # (Workflows sidebar -> browse workflows)
+    if [[ -f /opt/harbor/default-workflow.json ]]; then
+        mkdir -p /root/ComfyUI/user/default/workflows || true
+        cp -n /opt/harbor/default-workflow.json \
+            /root/ComfyUI/user/default/workflows/harbor-flux.json 2>/dev/null || true
     fi
+
+    echo "[Harbor] Provisioning complete."
 }
 
-function provisioning_get_pip_packages() {
-    if [[ ${#PIP_PACKAGES[@]} -gt 0 ]]; then
-            pip_install "${PIP_PACKAGES[@]}"
-    fi
-}
-
-function provisioning_get_nodes() {
-    for repo in "${NODES[@]}"; do
-        dir="${repo##*/}"
-        path="/opt/ComfyUI/custom_nodes/${dir}"
-        requirements="${path}/requirements.txt"
-        if [[ -d $path ]]; then
-            if [[ ${AUTO_UPDATE,,} != "false" ]]; then
-                printf "Updating node: %s...\n" "${repo}"
-                ( cd "$path" && git pull )
-                if [[ -e $requirements ]]; then
-                   pip_install -r "$requirements"
-                fi
-            fi
-        else
-            printf "Downloading node: %s...\n" "${repo}"
-            git clone "${repo}" "${path}" --recursive
-            if [[ -e $requirements ]]; then
-                pip_install -r "${requirements}"
-            fi
-        fi
-    done
-}
-
-function provisioning_get_default_workflow() {
-    if [[ -n $DEFAULT_WORKFLOW ]]; then
-        workflow_json=$(curl -s "$DEFAULT_WORKFLOW")
-        if [[ -n $workflow_json ]]; then
-            echo "export const defaultGraph = $workflow_json;" > /opt/ComfyUI/web/scripts/defaultGraph.js
-        fi
-    fi
-}
-
-function provisioning_get_models() {
-    if [[ -z $2 ]]; then return 1; fi
-
-    dir="$1"
-    mkdir -p "$dir"
+# Download each URL into a directory; auth via HF/Civitai tokens when the
+# URL matches; `wget -nc` keeps re-runs idempotent.
+harbor_download() {
+    local dir="$1"
     shift
-    arr=("$@")
-    printf "Downloading %s model(s) to %s...\n" "${#arr[@]}" "$dir"
-    for url in "${arr[@]}"; do
-        printf "Downloading: %s\n" "${url}"
-        provisioning_download "${url}" "${dir}"
-        printf "\n"
+    mkdir -p "$dir" || return 0
+
+    local url auth_token
+    for url in "$@"; do
+        auth_token=""
+        if [[ -n $HF_TOKEN && $url =~ ^https://([a-zA-Z0-9_-]+\.)?huggingface\.co(/|$|\?) ]]; then
+            auth_token="$HF_TOKEN"
+        elif [[ -n $CIVITAI_TOKEN && $url =~ ^https://([a-zA-Z0-9_-]+\.)?civitai\.com(/|$|\?) ]]; then
+            auth_token="$CIVITAI_TOKEN"
+        fi
+
+        echo "[Harbor] Downloading: $url"
+        if ! command -v wget >/dev/null 2>&1; then
+            # Some slim variants may lack wget — fall back to python
+            python3 - "$url" "$dir" "$auth_token" <<'PYEOF' || echo "[Harbor] WARN: failed to download $url"
+import os, sys, urllib.request
+url, dir_, token = sys.argv[1], sys.argv[2], sys.argv[3]
+dest = os.path.join(dir_, url.rsplit("/", 1)[-1].split("?")[0])
+if not os.path.exists(dest):
+    req = urllib.request.Request(url)
+    if token:
+        req.add_header("Authorization", "Bearer " + token)
+    tmp = dest + ".part"
+    with urllib.request.urlopen(req) as r, open(tmp, "wb") as f:
+        while chunk := r.read(1 << 20):
+            f.write(chunk)
+    os.rename(tmp, dest)
+PYEOF
+        elif [[ -n $auth_token ]]; then
+            wget --header="Authorization: Bearer $auth_token" \
+                -qnc --content-disposition --show-progress -P "$dir" "$url" ||
+                echo "[Harbor] WARN: failed to download $url"
+        else
+            wget -qnc --content-disposition --show-progress -P "$dir" "$url" ||
+                echo "[Harbor] WARN: failed to download $url"
+        fi
     done
 }
 
-function provisioning_print_header() {
-    printf "\n##############################################\n#                                            #\n#          Provisioning container            #\n#                                            #\n#         This will take some time           #\n#                                            #\n# Your container will be ready on completion #\n#                                            #\n##############################################\n\n"
-    if [[ $DISK_GB_ALLOCATED -lt $DISK_GB_REQUIRED ]]; then
-        printf "WARNING: Your allocated disk size (%sGB) is below the recommended %sGB - Some models will not be downloaded\n" "$DISK_GB_ALLOCATED" "$DISK_GB_REQUIRED"
-    fi
-}
-
-function provisioning_print_end() {
-    printf "\nProvisioning complete:  Web UI will start now\n\n"
-}
-
-function provisioning_has_valid_hf_token() {
-    [[ -n "$HF_TOKEN" ]] || return 1
-    url="https://huggingface.co/api/whoami-v2"
-
-    response=$(curl -o /dev/null -s -w "%{http_code}" -X GET "$url" \
-        -H "Authorization: Bearer $HF_TOKEN" \
-        -H "Content-Type: application/json")
-
-    # Check if the token is valid
-    if [ "$response" -eq 200 ]; then
-        return 0
-    else
-        return 1
-    fi
-}
-
-function provisioning_has_valid_civitai_token() {
-    [[ -n "$CIVITAI_TOKEN" ]] || return 1
-    url="https://civitai.com/api/v1/models?hidden=1&limit=1"
-
-    response=$(curl -o /dev/null -s -w "%{http_code}" -X GET "$url" \
-        -H "Authorization: Bearer $CIVITAI_TOKEN" \
-        -H "Content-Type: application/json")
-
-    # Check if the token is valid
-    if [ "$response" -eq 200 ]; then
-        return 0
-    else
-        return 1
-    fi
-}
-
-# Download from $1 URL to $2 file path
-function provisioning_download() {
-    if [[ -n $HF_TOKEN && $1 =~ ^https://([a-zA-Z0-9_-]+\.)?huggingface\.co(/|$|\?) ]]; then
-        auth_token="$HF_TOKEN"
-    elif
-        [[ -n $CIVITAI_TOKEN && $1 =~ ^https://([a-zA-Z0-9_-]+\.)?civitai\.com(/|$|\?) ]]; then
-        auth_token="$CIVITAI_TOKEN"
-    fi
-    if [[ -n $auth_token ]];then
-        wget --header="Authorization: Bearer $auth_token" -qnc --content-disposition --show-progress -e dotbytes="${3:-4M}" -P "$2" "$1"
-    else
-        wget -qnc --content-disposition --show-progress -e dotbytes="${3:-4M}" -P "$2" "$1"
-    fi
-}
-
-provisioning_start
+harbor_provisioning || echo "[Harbor] WARN: provisioning encountered errors, continuing startup."

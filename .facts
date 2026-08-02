@@ -1070,18 +1070,35 @@
   tags: [speaches-webui, implemented]
 
 # comfyui
-- label: comfyui has a ROCm overlay services/compose.x.comfyui.rocm.yml that mounts /dev/kfd and /dev/dri and switches the image to ghcr.io/ai-dock/comfyui:latest-rocm, auto-applied on ROCm hosts
-  command: test -f services/compose.x.comfyui.rocm.yml && grep -q latest-rocm services/compose.x.comfyui.rocm.yml && grep -q /dev/kfd services/compose.x.comfyui.rocm.yml
+- label: comfyui has a ROCm overlay services/compose.x.comfyui.rocm.yml that mounts /dev/kfd and /dev/dri and switches the image tag to HARBOR_COMFYUI_ROCM_VERSION (default rocm7 on yanwk/comfyui-boot), auto-applied on ROCm hosts
+  command: grep -q "/dev/kfd" services/compose.x.comfyui.rocm.yml && grep -q "HARBOR_COMFYUI_ROCM_VERSION" services/compose.x.comfyui.rocm.yml
   tags: [comfyui, rocm, implemented]
 - label: comfyui docs document the CPU fallback (comfyui.args --cpu) for hosts where neither GPU path works
-  command: grep -q -- "--cpu" 'docs/2.1.2-Frontend&colon-ComfyUI.md'
+  command: grep -qi "\-\-cpu" "docs/2.1.2-Frontend&colon-ComfyUI.md"
   tags: [comfyui, rocm, implemented]
-- label: comfyui image repository is configurable via HARBOR_COMFYUI_IMAGE (default ghcr.io/ai-dock/comfyui); the base compose composes it with HARBOR_COMFYUI_VERSION and the ROCm overlay with HARBOR_COMFYUI_ROCM_VERSION (default latest-rocm)
-  command: grep -q 'HARBOR_COMFYUI_IMAGE' profiles/default.env services/compose.comfyui.yml services/compose.x.comfyui.rocm.yml && grep -q 'HARBOR_COMFYUI_ROCM_VERSION' profiles/default.env services/compose.x.comfyui.rocm.yml
+- label: comfyui image repository is configurable via HARBOR_COMFYUI_IMAGE (default yanwk/comfyui-boot); the base compose composes it with HARBOR_COMFYUI_VERSION and the ROCm overlay with HARBOR_COMFYUI_ROCM_VERSION
+  command: grep -q "HARBOR_COMFYUI_IMAGE" services/compose.comfyui.yml && grep -q "HARBOR_COMFYUI_IMAGE=\"yanwk/comfyui-boot\"" profiles/default.env
   tags: [comfyui, spec, implemented]
-- label: comfyui docs state the ai-dock upstream image is unmaintained (ComfyUI v0.2.2, ROCm 6.0) and document maintained alternative images and how to switch via comfyui.image
-  command: grep -qi 'unmaintained' 'docs/2.1.2-Frontend&colon-ComfyUI.md' && grep -q 'comfyui.image' 'docs/2.1.2-Frontend&colon-ComfyUI.md'
-  tags: [comfyui, spec, implemented]
+- comfyui docs document the migration off the unmaintained ai-dock image to yanwk/comfyui-boot, including how to roll back via comfyui.image/version/workspace @comfyui @spec @implemented
+- label: comfyui default image is yanwk/comfyui-boot (maintained) with CUDA tag cu130-slim-v2; the ROCm overlay tag default is rocm7
+  command: grep -q "HARBOR_COMFYUI_IMAGE=\"yanwk/comfyui-boot\"" profiles/default.env && grep -q "HARBOR_COMFYUI_VERSION=\"cu130-slim-v2\"" profiles/default.env && grep -q "HARBOR_COMFYUI_ROCM_VERSION=\"rocm7\"" profiles/default.env
+  tags: [comfyui, migration, spec, implemented]
+- label: comfyui compose exposes a single port: CLI_ARGS passes --port ${HARBOR_COMFYUI_HOST_PORT} so ComfyUI listens on the host port internally (webui/traefik integrations keep http://comfyui:34031); portal/Syncthing ports and WEB_USER/WEB_PASSWORD auth env are gone
+  command: grep -q "CLI_ARGS=--port \${HARBOR_COMFYUI_HOST_PORT}" services/compose.comfyui.yml && ! grep -q SYNCTHING services/compose.comfyui.yml && ! grep -q WEB_USER services/compose.comfyui.yml
+  tags: [comfyui, migration, spec, implemented]
+- label: comfyui workspace default is ./services/comfyui/root bind-mounted at /root (comfyui-boot layout); the legacy ai-dock ./services/comfyui/workspace dir is left untouched on disk for rollback
+  command: grep -q "HARBOR_COMFYUI_WORKSPACE=\"./services/comfyui/root\"" profiles/default.env && grep -q "\${HARBOR_COMFYUI_WORKSPACE}:/root" services/compose.comfyui.yml && test -d services/comfyui/workspace
+  tags: [comfyui, migration, spec, implemented]
+- label: comfyui provisioning.sh is mounted as /root/user-scripts/pre-start.sh (comfyui-boot hook); when HARBOR_COMFYUI_PROVISIONING=true it idempotently (wget -nc) downloads Flux.1-schnell, text encoders, VAE and ESRGAN models into /root/ComfyUI/models/{diffusion_models,clip,vae,upscale_models} with HF/Civitai token auth
+  command: grep -q "user-scripts/pre-start.sh" services/compose.comfyui.yml && grep -q "diffusion_models" services/comfyui/provisioning.sh && grep -q "HARBOR_COMFYUI_PROVISIONING" services/comfyui/provisioning.sh
+  tags: [comfyui, migration, spec, implemented]
+- label: upstream ComfyUI has no built-in auth: HARBOR_COMFYUI_AUTH/USER/PASSWORD are removed and harbor comfyui user/password/auth print a deprecation notice pointing at harbor tunnel/traefik
+  command: ! grep -q "HARBOR_COMFYUI_AUTH" profiles/default.env && grep -q "no built-in authentication" harbor.sh
+  tags: [comfyui, migration, spec, implemented]
+- label: harbor comfyui workspace sync is deprecated (comfyui-boot persists everything in /root, no venv-sync needed); workspace open/clear and output operate on the new /root layout via comfyui.workspace
+  command: grep -q "workspace sync" harbor.sh && ! grep -q "venv-sync comfyui" harbor.sh
+  tags: [comfyui, migration, spec, implemented]
+- comfyui docs (2.1.2) are rewritten for the comfyui-boot image: single port, no auth, pre-start provisioning, /root workspace layout, rocm7/cpu tags, rollback instructions to ai-dock @comfyui @migration @spec @implemented
 
 # runner
 - label: stage-repo.ts exports resolveSuitePlan: with no explicit --distros, heavy suites resolve to their HEAVY_SUITE_DEFAULTS pins while light suites resolve to the full discovered row list; explicit --distros overrides both for all selected suites

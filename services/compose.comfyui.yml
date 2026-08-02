@@ -6,37 +6,40 @@ services:
     container_name: ${HARBOR_CONTAINER_PREFIX}.comfyui
     image: ${HARBOR_COMFYUI_IMAGE}:${HARBOR_COMFYUI_VERSION}
     environment:
-      # Auto-update - should be done with "harbor comfyui version" and
-      # docker image pinning
-      # - AUTO_UPDATE=false
-      # Should not establish tunnels by default, "harbor tunnel"
-      # should be used instead
-      - CF_QUICK_TUNNELS=false
-      # Ensure that workspace is synced automatically
-      # - WORKSPACE_SYNC=true
-      - WORKSPACE=/workspace
-
-      # Ports
-      - COMFYUI_PORT_HOST=${HARBOR_COMFYUI_HOST_PORT}
-      - SERVICEPORTAL_PORT_HOST=${HARBOR_COMFYUI_PORTAL_HOST_PORT}
-      - SYNCTHING_UI_PORT_HOST=${HARBOR_COMFYUI_SYNCTHING_HOST_PORT}
-
-      # Env settings
-      - WEB_ENABLE_AUTH=${HARBOR_COMFYUI_AUTH}
-      - WEB_USER=${HARBOR_COMFYUI_USER}
-      - WEB_PASSWORD=${HARBOR_COMFYUI_PASSWORD}
-      - WEB_TOKEN=${HARBOR_COMFYUI_PASSWORD}
+      # comfyui-boot appends CLI_ARGS after its own "--listen --port 8188";
+      # argparse last-wins, so passing --port here makes ComfyUI listen on
+      # the host port internally too — keeps webui/traefik integrations
+      # (which target http://comfyui:${HARBOR_COMFYUI_HOST_PORT}) working.
+      - CLI_ARGS=--port ${HARBOR_COMFYUI_HOST_PORT} ${HARBOR_COMFYUI_ARGS}
       - HF_TOKEN=${HARBOR_HF_TOKEN}
       - CIVITAI_TOKEN=${HARBOR_CIVITAI_TOKEN}
-      - COMFYUI_ARGS=${HARBOR_COMFYUI_ARGS}
-      - PROVISIONING_SCRIPT=${HARBOR_COMFYUI_PROVISIONING}
+      # Toggles Harbor's pre-start model provisioning (Flux.1-schnell set
+      # used by the Open WebUI image-generation integration)
+      - HARBOR_COMFYUI_PROVISIONING=${HARBOR_COMFYUI_PROVISIONING}
+      - HARBOR_COMFYUI_HOST_PORT=${HARBOR_COMFYUI_HOST_PORT}
     ports:
       - ${HARBOR_COMFYUI_HOST_PORT}:${HARBOR_COMFYUI_HOST_PORT}
-      - ${HARBOR_COMFYUI_PORTAL_HOST_PORT}:${HARBOR_COMFYUI_PORTAL_HOST_PORT}
-      - ${HARBOR_COMFYUI_SYNCTHING_HOST_PORT}:${HARBOR_COMFYUI_SYNCTHING_HOST_PORT}
     volumes:
-      - ${HARBOR_COMFYUI_WORKSPACE}:/workspace
-      - ./services/comfyui/packages:/opt/comfyui-packages
+      # comfyui-boot persists everything (ComfyUI checkout, models,
+      # custom nodes, outputs) under /root
+      - ${HARBOR_COMFYUI_WORKSPACE}:/root
+      # comfyui-boot runs /root/user-scripts/pre-start.sh on every start;
+      # Harbor mounts its provisioning script there (rw — the entrypoint
+      # chmods it before sourcing)
+      - ./services/comfyui/provisioning.sh:/root/user-scripts/pre-start.sh
+      - ./services/comfyui/default-workflow.json:/opt/harbor/default-workflow.json:ro
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python3",
+          "-c",
+          "import urllib.request,os;urllib.request.urlopen('http://127.0.0.1:'+os.environ['HARBOR_COMFYUI_HOST_PORT']+'/system_stats')",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
     # Wait for the init sidecar to chown the workspace bind mount so the
     # host directory stays owned by the host user — recoverable without
     # `sudo`. Docker creates missing bind-mount targets as root:root by
@@ -65,4 +68,3 @@ services:
       - ${HARBOR_COMFYUI_WORKSPACE}:/workspace
     networks:
       - harbor-network
-

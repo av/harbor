@@ -3,9 +3,10 @@ services:
     devices:
       - /dev/kfd
       - /dev/dri
-    # ai-dock publishes a dedicated ROCm variant; the version-pinned
-    # "*-cuda" tags fail on hosts without an NVIDIA driver.
-    # The default "latest-rocm" tag is ai-dock's naming; when pointing
-    # comfyui.image at another repository, set comfyui.rocm_version to
-    # that image's ROCm tag.
+    # yanwk/comfyui-boot publishes a dedicated ROCm variant (the CUDA
+    # "cu*" tags fail on hosts without an NVIDIA driver). The default
+    # "rocm7" tag ships ROCm 7 PyTorch with support for recent AMD GPUs
+    # (incl. gfx1151 / Strix Halo). When pointing comfyui.image at
+    # another repository, set comfyui.rocm_version to that image's
+    # ROCm tag.
     image: ${HARBOR_COMFYUI_IMAGE}:${HARBOR_COMFYUI_ROCM_VERSION}
