@@ -68,13 +68,13 @@ textgrad/workspace/*
 !textgrad/workspace/000-sample.ipynb
 
 # ChatUI
-chatui/data/
+services/chatui/data/
 
 # ComfyUI
 comfyui/workspace/
 
 # Perplexica
-perplexica/data/
+services/perplexica/data/
 perplexica/config.toml
 
 # AutoGPT
@@ -111,7 +111,7 @@ jupyter/workspace/*
 **/__pycache__/
 
 # AnythingLLM
-anythingllm/storage/
+services/anythingllm/storage/
 
 # Build
 dist/
@@ -124,7 +124,7 @@ pipelines/*
 !pipelines/override.env
 
 # Qdrant
-qdrant/storage
+services/qdrant/storage
 
 # PhotoPrism
 services/photoprism/storage/
