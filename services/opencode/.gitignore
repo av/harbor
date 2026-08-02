@@ -1,2 +1,3 @@
 data/
-config/
+config/*
+!config/opencode.json

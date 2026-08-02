@@ -538,6 +538,11 @@
   command: grep -q 'perplexideez-service:' services/compose.x.perplexideez.ollama.yml && grep -q 'perplexideez-service:' services/compose.x.perplexideez.searxng.yml && grep -q 'LLM_MODE=ollama' services/compose.x.perplexideez.ollama.yml
   tags: [sweep7, implemented]
 
+## opencode
+- label: opencode data/config defaults live under ./services/opencode/ with the data dir gitignored, so runtime sqlite/logs never dirty the repo
+  command: grep -q 'HARBOR_OPENCODE_DATA="./services/opencode/data"' profiles/default.env && grep -q 'HARBOR_OPENCODE_CONFIG="./services/opencode/config"' profiles/default.env && git check-ignore -q services/opencode/data && git ls-files --error-unmatch services/opencode/config/opencode.json
+  tags: [sweep8, implemented]
+
 # app
 - label: Harbor App blocks main UI behind a setup gate until setup detail status is ready
   command: rg -q 'detail\?\.status === "ready"' app/src/setup/HarborSetupContext.tsx
