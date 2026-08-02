@@ -32,6 +32,12 @@ services:
     env_file:
       - ./.env
       - ./services/chatui/override.env
+    # Run mongod as the host user so files in the data bind mount stay
+    # host-owned; the init sidecar chowns pre-existing root-owned data.
+    user: ${HARBOR_USER_ID}:${HARBOR_GROUP_ID}
+    depends_on:
+      chatui-db-init:
+        condition: service_completed_successfully
     volumes:
       - ./services/chatui/data:/data/db
     networks:
@@ -42,4 +48,20 @@ services:
       timeout: 10s
       retries: 5
       start_period: 30s
+
+  chatui-db-init:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.chatui-db-init
+    image: alpine:3.20
+    env_file:
+      - ./.env
+      - ./services/chatui/override.env
+    environment:
+      TARGET_UID: ${HARBOR_USER_ID}
+      TARGET_GID: ${HARBOR_GROUP_ID}
+    entrypoint: ["/bin/sh", "/init.sh"]
+    volumes:
+      - ./services/chatui/db-init.sh:/init.sh:ro
+      - ./services/chatui/data:/data/db
+    networks:
+      - harbor-network
 
