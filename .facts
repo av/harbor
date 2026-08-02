@@ -1311,3 +1311,13 @@
 - label: gateway state (auth users, threads, sqlite) persists in the deerflow workspace data dir mounted at /app/backend/.deer-flow; frontend sessions are signed with HARBOR_DEERFLOW_AUTH_SECRET (32+ chars default)
   command: grep -q HARBOR_DEERFLOW_AUTH_SECRET profiles/default.env && grep -q /app/backend/.deer-flow services/compose.deerflow.yml
   tags: [deerflow, v2, spec, implemented]
+
+# resume-matcher
+- label: resume-matcher builds its frontend on node:22-alpine (upstream Next.js requires Node >=20.9) and healthchecks hit /api/v1/health (upstream 2.0 removed /ping)
+  command: grep -q 'node:22-alpine' services/compose.resume-matcher.yml && ! grep -q 'node:18-alpine' services/compose.resume-matcher.yml && grep -q 'localhost:8000/api/v1/health' services/compose.resume-matcher.yml && ! grep -q 'localhost:8000/ping' services/compose.resume-matcher.yml
+  tags: [sweep9, implemented]
+
+# solo
+- label: solo mounts the shared HF cache at /root/.cache/huggingface so solo list/download operate on Harbor's models
+  command: grep -q 'HARBOR_HF_CACHE}:/root/.cache/huggingface' services/compose.solo.yml
+  tags: [sweep9, implemented]
