@@ -11,13 +11,13 @@
 - services > dify > the dify-openai bridge translates OpenAI chat completions to Dify 1.x APIs: Chat via /v1/chat-messages, Workflow via /v1/workflows/run including the blocking-mode single-JSON response shape and OUTPUT_VARIABLE selection from workflow outputs @dify-1x @spec
 - label: vllm default CUDA image is vllm/vllm-openai pinned to v0.26.0 (entrypoint 'vllm serve'; the '--model' flag command Harbor passes remains valid)
   command: grep -q 'HARBOR_VLLM_VERSION="v0.26.0"' profiles/default.env
-  tags: [vllm, rocm-followup]
+  tags: [vllm, rocm-followup, implemented]
 - label: vllm ROCm overlay services/compose.x.vllm.rocm.yml mounts /dev/kfd+/dev/dri and rebuilds on a configurable ROCm base image via HARBOR_VLLM_ROCM_IMAGE/HARBOR_VLLM_ROCM_VERSION build args (default rocm/vllm)
   command: grep -q 'HARBOR_VLLM_ROCM_IMAGE' services/compose.x.vllm.rocm.yml profiles/default.env && grep -q /dev/kfd services/compose.x.vllm.rocm.yml
-  tags: [vllm, rocm, rocm-followup]
+  tags: [vllm, rocm, rocm-followup, implemented]
 - label: vllm ROCm overlay keeps an image-agnostic entrypoint override (python3 -m vllm.entrypoints.openai.api_server) so non-vllm-openai ROCm bases still start the OpenAI server
   command: grep -q 'vllm.entrypoints.openai.api_server' services/compose.x.vllm.rocm.yml
-  tags: [vllm, rocm, rocm-followup]
+  tags: [vllm, rocm, rocm-followup, implemented]
 # project
 
 ## domain

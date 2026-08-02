@@ -3,6 +3,17 @@ services:
     devices:
       - /dev/kfd
       - /dev/dri
+    # The default CUDA base (vllm/vllm-openai) has no ROCm support, so the
+    # ROCm overlay rebuilds the service image on a ROCm base. The default
+    # rocm/vllm tags are per-GPU-arch; set vllm.rocm_image / vllm.rocm_version
+    # to match your hardware (e.g. kyuz0/vllm-therock-gfx1151:stable on
+    # Strix Halo).
+    build:
+      args:
+        HARBOR_VLLM_IMAGE: ${HARBOR_VLLM_ROCM_IMAGE}
+        HARBOR_VLLM_VERSION: ${HARBOR_VLLM_ROCM_VERSION}
+    # Image-agnostic entrypoint: ROCm bases don't share vllm/vllm-openai's
+    # "vllm serve" entrypoint, but all expose the OpenAI server module.
     entrypoint:
       - python3
       - -m
