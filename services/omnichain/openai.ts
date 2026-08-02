@@ -44,11 +44,17 @@ export const setupOpenAiCompatibleAPI = (
     // Add the models endpoint
     routerOpenAi.get("/v1/models", async (ctx) => {
         try {
+            const chainsDir = path.join(globalServerConfig.dirData, 'chains');
+
+            // Fresh installs have no chains yet - report an empty model list
+            if (!fs.existsSync(chainsDir)) {
+                ctx.set('Content-Type', 'application/json');
+                ctx.body = JSON.stringify({ object: "list", data: [] });
+                return;
+            }
+
             const chainFiles = await fs.promises.readdir(
-                path.join(
-                    globalServerConfig.dirData,
-                    'chains',
-                ),
+                chainsDir,
                 { withFileTypes: true }
             );
 
