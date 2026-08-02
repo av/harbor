@@ -379,6 +379,14 @@
   command: bash -c '[ $(grep -c "ENABLE_OPENSEARCH_INDEXING_FOR_ONYX: .false." services/compose.onyx.yml) -eq 2 ] && [ $(grep -c "ONYX_DISABLE_VESPA: .false." services/compose.onyx.yml) -eq 2 ]'
   tags: [spec, onyx-startup, implemented]
 
+## cognee
+- label: cognee and cognee-mcp depend on ollama-init with condition service_healthy (ollama-init is a long-running healthy sidecar, never 'completed')
+  command: grep -A2 'ollama-init' services/compose.x.cognee.ollama.yml | grep -q 'service_healthy' && ! grep -q 'service_completed_successfully' services/compose.x.cognee.ollama.yml
+  tags: [services-it, cognee, implemented]
+- label: cognee-mcp runs as root so it can write the shared workspace created root-owned by the cognee API container
+  command: grep -A40 'cognee-mcp:' services/compose.cognee.yml | grep -q 'user: root'
+  tags: [services-it, cognee, implemented]
+
 # app
 - label: Harbor App blocks main UI behind a setup gate until setup detail status is ready
   command: rg -q 'detail\?\.status === "ready"' app/src/setup/HarborSetupContext.tsx
