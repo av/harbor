@@ -465,14 +465,21 @@
   tags: [spec, implemented]
 
 ## khoj x llamacpp
-- label: compose.x.khoj.llamacpp.yml sets KHOJ_DEFAULT_CHAT_MODEL from HARBOR_KHOJ_LLAMACPP_MODEL (default LiquidAI/LFM2.5-8B-A1B-GGUF:Q8_0, a non-qwen3-named model, dodging khoj's Qwen stream-processor crash on llama.cpp's content:null reasoning chunks); HARBOR_KHOJ_DEFAULT_MODEL stays ollama-only
+- label: compose.x.khoj.llamacpp.yml sets KHOJ_DEFAULT_CHAT_MODEL from HARBOR_KHOJ_LLAMACPP_MODEL (default LiquidAI/LFM2.5-8B-A1B-GGUF:Q8_0, a solid general default; qwen3-named models also work since the 2.0.0-beta.28 pin); HARBOR_KHOJ_DEFAULT_MODEL stays ollama-only
   command: grep -q 'KHOJ_DEFAULT_CHAT_MODEL=${HARBOR_KHOJ_LLAMACPP_MODEL}' services/compose.x.khoj.llamacpp.yml && grep -q 'HARBOR_KHOJ_LLAMACPP_MODEL="LiquidAI/LFM2.5-8B-A1B-GGUF:Q8_0"' profiles/default.env
   tags: [spec, khoj-llamacpp, implemented]
+- label: khoj image is pinned to 2.0.0-beta.28+, which includes the upstream None-content streaming fix (khoj-ai/khoj#1370), so qwen3-named llamacpp models stream without the TypeError crash
+  command: grep -q 'HARBOR_KHOJ_VERSION="2.0.0-beta.28"' profiles/default.env
+  tags: [spec, khoj-llamacpp, implemented]
+  id: m9n
 
 ## llamaswap
 - label: llamaswap default config points -m at /app/.cache/llama.cpp (the compose mount), not /root/.cache
   command: grep -q 'app/.cache/llama.cpp' services/llamaswap/config.yaml && ! grep -q 'root/.cache' services/llamaswap/config.yaml
   tags: [implemented]
+- label: compose.llamaswap.yml additionally binds HARBOR_HF_CACHE read-only at ${HOME}/.cache/huggingface (the host-absolute HF cache path) so GGUF symlinks in the llama.cpp cache that target absolute host HF-cache blob paths resolve inside the container
+  command: grep -q ':${HOME}/.cache/huggingface:ro' services/compose.llamaswap.yml
+  tags: [spec, cache-symlinks]
 
 ## langfuse
 - label: clickhouse in the langfuse compose stack starts without a pinned user so the official entrypoint can chown bind-mounted data dirs on first boot
@@ -1154,11 +1161,6 @@
   command: grep -q -- '--model-type llm' services/nexa/entrypoint.sh && grep -q 'exec nexa serve' services/nexa/entrypoint.sh
   tags: [services-it, nexa, implemented]
 - nexa > the nexa OpenAI API accepts the bare HARBOR_NEXA_MODEL repo name (e.g. Qwen/Qwen3-0.6B-GGUF) in completions even though /v1/models reports the quant-suffixed id (:Q8_0), so cross-service consumers (cognee LLM_MODEL, webui, optillm) need no suffix rendering @services-it @nexa @implemented
-
-# khoj x llamacpp
-- label: khoj image is pinned to 2.0.0-beta.28+, which includes the upstream None-content streaming fix (khoj-ai/khoj#1370), so qwen3-named llamacpp models stream without the TypeError crash
-  command: grep -q 'HARBOR_KHOJ_VERSION="2.0.0-beta.28"' profiles/default.env
-  tags: [spec, khoj-llamacpp]
 
 # presenton
 - label: compose.x.presenton.llamacpp.yml wires Presenton's custom provider to llamacpp with CUSTOM_MODEL from HARBOR_PRESENTON_LLAMACPP_MODEL
