@@ -398,16 +398,6 @@ engines:
     shortcut: aps
     disabled: true
 
-  # Requires Tor
-  - name: ahmia
-    engine: ahmia
-    # Might do up to two requests to perform a search.
-    # Since Tor is already slow by nature, the timeout is set very high.
-    timeout: 20.0
-    categories: onions
-    enable_http: true
-    shortcut: ah
-
   - name: anaconda
     engine: xpath
     paging: true
@@ -421,24 +411,6 @@ engines:
     timeout: 6.0
     shortcut: conda
     disabled: true
-
-  - name: aol
-    engine: aol
-    search_type: search
-    categories: [general]
-    shortcut: aol
-
-  - name: aol images
-    engine: aol
-    search_type: image
-    categories: [images]
-    shortcut: aoli
-
-  - name: aol videos
-    engine: aol
-    search_type: video
-    categories: [videos]
-    shortcut: aolv
 
   - name: arch linux wiki
     engine: archlinux
@@ -466,11 +438,6 @@ engines:
   - name: arxiv
     engine: arxiv
     shortcut: arx
-
-  - name: ask
-    engine: ask
-    shortcut: ask
-    disabled: true
 
   - name: azure
     engine: azure
@@ -1207,31 +1174,6 @@ engines:
     timeout: 3.0
     disabled: true
 
-  - name: karmasearch
-    engine: karmasearch
-    categories: [general, web]
-    search_type: web
-    shortcut: ka
-
-  - name: karmasearch images
-    engine: karmasearch
-    categories: [images, web]
-    search_type: images
-    shortcut: kai
-    paging: false
-
-  - name: karmasearch videos
-    engine: karmasearch
-    categories: [general, web]
-    search_type: videos
-    shortcut: kav
-
-  - name: karmasearch news
-    engine: karmasearch
-    categories: [news, web]
-    search_type: news
-    shortcut: kan
-
   - name: kickass
     engine: kickass
     base_url:
@@ -1687,55 +1629,6 @@ engines:
       # image proxy of https://pixiv.perennialte.ch
       # - https://pximg.perennialte.ch
 
-  - name: podcastindex
-    engine: podcastindex
-    shortcut: podcast
-
-  # Required dependency: psychopg2
-  #  - name: postgresql
-  #    engine: postgresql
-  #    database: postgres
-  #    username: postgres
-  #    password: postgres
-  #    limit: 10
-  #    query_str: 'SELECT * from my_table WHERE my_column = %(query)s'
-  #    shortcut : psql
-
-  - name: presearch
-    engine: presearch
-    search_type: search
-    categories: [general, web]
-    shortcut: ps
-    timeout: 4.0
-    disabled: true
-
-  - name: presearch images
-    engine: presearch
-    network: presearch
-    search_type: images
-    categories: [images, web]
-    timeout: 4.0
-    shortcut: psimg
-    disabled: true
-
-  - name: presearch videos
-    engine: presearch
-    network: presearch
-    search_type: videos
-    categories: [general, web]
-    timeout: 4.0
-    shortcut: psvid
-    disabled: true
-
-  - name: presearch news
-    engine: presearch
-    network: presearch
-    search_type: news
-    categories: [news, web]
-    timeout: 4.0
-    shortcut: psnews
-    disabled: true
-
   - name: pub.dev
     engine: xpath
     shortcut: pd
@@ -1836,12 +1729,6 @@ engines:
   - name: radio browser
     engine: radio_browser
     shortcut: rb
-
-  - name: reddit
-    engine: reddit
-    shortcut: re
-    page_size: 25
-    disabled: true
 
   - name: reuters
     engine: reuters
@@ -2073,19 +1960,6 @@ engines:
     disabled: true
 
   # Requires Tor
-  - name: torch
-    engine: xpath
-    paging: true
-    search_url:
-      http://xmh57jrknzkhv6y3ls3ubitzfqnkrwxhopf5aygthi7d6rplyvk3noyd.onion/cgi-bin/omega/omega?P={query}&DEFAULTOP=and
-    results_xpath: //table//tr
-    url_xpath: ./td[2]/a
-    title_xpath: ./td[2]/b
-    content_xpath: ./td[2]/small
-    categories: onions
-    enable_http: true
-    shortcut: tch
-
   # TubeArchivist is a self-hosted Youtube archivist software.
   # https://docs.searxng.org/dev/engines/online/tubearchivist.html
   #
@@ -2538,12 +2412,6 @@ engines:
       require_api_key: false
       results: HTML
       language: de
-
-  - name: svgrepo
-    engine: svgrepo
-    shortcut: svg
-    timeout: 10.0
-    disabled: true
 
   - name: tootfinder
     engine: tootfinder
