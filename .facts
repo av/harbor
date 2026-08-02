@@ -466,6 +466,11 @@
   command: grep -q 'KHOJ_DEFAULT_CHAT_MODEL=${HARBOR_KHOJ_LLAMACPP_MODEL}' services/compose.x.khoj.llamacpp.yml && grep -q 'HARBOR_KHOJ_LLAMACPP_MODEL="LiquidAI/LFM2.5-8B-A1B-GGUF:Q8_0"' profiles/default.env
   tags: [spec, khoj-llamacpp, implemented]
 
+## llamaswap
+- label: llamaswap default config points -m at /app/.cache/llama.cpp (the compose mount), not /root/.cache
+  command: grep -q 'app/.cache/llama.cpp' services/llamaswap/config.yaml && ! grep -q 'root/.cache' services/llamaswap/config.yaml
+  tags: [implemented]
+
 # app
 - label: Harbor App blocks main UI behind a setup gate until setup detail status is ready
   command: rg -q 'detail\?\.status === "ready"' app/src/setup/HarborSetupContext.tsx
