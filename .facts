@@ -573,6 +573,11 @@
   command: grep -q 'HARBOR_TTS_CONFIG_FOLDER="./services/tts/config"' profiles/default.env && grep -q 'HARBOR_TTS_VOICES_FOLDER="./services/tts/voices"' profiles/default.env && git check-ignore -q services/tts/voices && git ls-files --error-unmatch services/tts/config/pre_process_map.yaml
   tags: [sweep8, implemented]
 
+## lmeval
+- label: lmeval runtime cache/results dirs under services/lmeval are gitignored so eval runs never dirty the repo
+  command: git check-ignore -q services/lmeval/cache && git check-ignore -q services/lmeval/results
+  tags: [sweep8, implemented]
+
 # app
 - label: Harbor App blocks main UI behind a setup gate until setup detail status is ready
   command: rg -q 'detail\?\.status === "ready"' app/src/setup/HarborSetupContext.tsx

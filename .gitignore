@@ -92,8 +92,9 @@ omnichain/data/
 services/bench/results/
 
 # lm_eval
-lmeval/cache/
-lmeval/results/
+services/lmeval/cache/
+services/lmeval/results/
+services/lmeval/.hf-cache/
 
 # profiles
 profiles/*
