@@ -7797,7 +7797,8 @@ run_tokscale_cli() {
 check_hf_cache() {
     local maybe_cache_entry
 
-    maybe_cache_entry=$(run_hf_docker_cli scan-cache | grep -F "$1")
+    # "scan-cache" was removed in hf CLI 1.x in favor of "cache ls"
+    maybe_cache_entry=$(run_hf_docker_cli cache ls --no-truncate 2>/dev/null | grep -F "$1")
 
     if [ -z "$maybe_cache_entry" ]; then
         log_warn "$1 is missing in Hugging Face cache."
