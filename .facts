@@ -510,6 +510,11 @@
   command: bash -c 'grep -q "lmdeploy:\${HARBOR_LMDEPLOY_VERSION}" services/compose.lmdeploy.yml && grep -q "HARBOR_LMDEPLOY_MODEL" services/compose.lmdeploy.yml && grep -q "HARBOR_LMDEPLOY_VERSION=" profiles/default.env && grep -q "HARBOR_LMDEPLOY_MODEL=" profiles/default.env'
   tags: [sweep6, implemented]
 
+## daytona
+- label: daytona-dex writes its sqlite db as the host user: a dex-init sidecar pre-chowns the dex workspace dir and the dex container runs as HARBOR_USER_ID (fallback 1001), so first boot does not fail with 'touch /var/dex/dex.db: Permission denied'
+  command: bash -c 'grep -q daytona-dex-init services/compose.daytona.yml && grep -qF "user: \"\${HARBOR_USER_ID" services/compose.daytona.yml && test -f services/daytona/dex-init.sh'
+  tags: [sweep6, implemented]
+
 # app
 - label: Harbor App blocks main UI behind a setup gate until setup detail status is ready
   command: rg -q 'detail\?\.status === "ready"' app/src/setup/HarborSetupContext.tsx

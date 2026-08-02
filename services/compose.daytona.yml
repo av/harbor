@@ -198,7 +198,14 @@ services:
     volumes:
       - ./services/daytona/dex/config.yaml:/etc/dex/config.yaml
       - ${HARBOR_DAYTONA_WORKSPACE}/dex:/var/dex
+    # Run as the host user so dex can write its sqlite db in the bind mount
+    # pre-chowned by daytona-dex-init (dexidp/dex defaults to uid 1001,
+    # which cannot write a host-owned dir).
+    user: "${HARBOR_USER_ID:-1001}:${HARBOR_GROUP_ID:-1001}"
     entrypoint: ['sh', '-c', 'touch /var/dex/dex.db && exec dex serve /etc/dex/config.yaml']
+    depends_on:
+      daytona-dex-init:
+        condition: service_completed_successfully
     networks:
       - harbor-network
     ports:
@@ -208,6 +215,24 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+
+  # Init sidecar: pre-creates/chowns the dex data bind mount so the host
+  # directory stays owned by the host user. Mirrors the unsloth/beszel/dbhub
+  # workspace-init pattern.
+  daytona-dex-init:
+    # Upstream Daytona stack container — deliberately not wired to Harbor ./.env
+    x-harbor-lint-ignore: [env-file-main]
+    container_name: ${HARBOR_CONTAINER_PREFIX}.daytona-dex-init
+    image: alpine:3.20
+    environment:
+      HARBOR_USER_ID: ${HARBOR_USER_ID}
+      HARBOR_GROUP_ID: ${HARBOR_GROUP_ID}
+    entrypoint: ["/bin/sh", "/usr/local/bin/dex-init.sh"]
+    volumes:
+      - ./services/daytona/dex-init.sh:/usr/local/bin/dex-init.sh:ro
+      - ${HARBOR_DAYTONA_WORKSPACE}/dex:/var/dex
+    networks:
+      - harbor-network
 
   daytona-db:
     # Upstream Daytona stack container — deliberately not wired to Harbor ./.env
