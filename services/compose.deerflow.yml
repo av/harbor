@@ -1,8 +1,11 @@
 services:
   deerflow-backend:
     container_name: ${HARBOR_CONTAINER_PREFIX}.deerflow-backend
+    # The upstream image drops to 'appuser' but /app is root-owned; Harbor's
+    # entrypoint renders /app/conf.yaml at startup and needs write access
+    user: root
     build:
-      context: https://github.com/bytedance/deer-flow.git#main
+      context: ${HARBOR_DEERFLOW_GIT_REF}
       dockerfile: Dockerfile
     ports:
       - ${HARBOR_DEERFLOW_BACKEND_HOST_PORT}:8000
@@ -31,7 +34,7 @@ services:
   deerflow:
     container_name: ${HARBOR_CONTAINER_PREFIX}.deerflow
     build:
-      context: https://github.com/bytedance/deer-flow.git#main:web
+      context: ${HARBOR_DEERFLOW_GIT_REF}:web
       dockerfile: Dockerfile
       args:
         - NEXT_PUBLIC_API_URL=http://localhost:${HARBOR_DEERFLOW_BACKEND_HOST_PORT}/api
