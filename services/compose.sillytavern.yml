@@ -2,6 +2,9 @@ services:
   sillytavern:
     container_name: ${HARBOR_CONTAINER_PREFIX}.sillytavern
     image: ${HARBOR_SILLYTAVERN_IMAGE}:${HARBOR_SILLYTAVERN_VERSION}
+    # Run as the host user (matches the image's node uid 1000 layout) so
+    # files written into the workspace bind mounts stay host-owned
+    user: "${HARBOR_USER_ID}:${HARBOR_GROUP_ID}"
     env_file:
       - ./.env
       - ./services/sillytavern/override.env
