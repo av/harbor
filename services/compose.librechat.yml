@@ -64,7 +64,7 @@ services:
 
   librechat-search:
     container_name: ${HARBOR_CONTAINER_PREFIX}.librechat-search
-    image: getmeili/meilisearch:v1.12.3
+    image: getmeili/meilisearch:v1.35.1
     env_file:
       - ./.env
       - ./services/librechat/.env
@@ -73,7 +73,7 @@ services:
       - MEILI_HOST=http://librechat-search:7700
       - MEILI_NO_ANALYTICS=true
     volumes:
-      - ./services/librechat/meili_data_v1.12:/meili_data
+      - ./services/librechat/meili_data_v1.35:/meili_data
     networks:
       - harbor-network
 
