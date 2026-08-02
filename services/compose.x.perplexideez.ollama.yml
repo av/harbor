@@ -1,5 +1,6 @@
 services:
-  perplexideez:
+  # The app container — "perplexideez" is the nginx proxy and ignores these vars
+  perplexideez-service:
     environment:
-      - LLM_MODE="ollama"
+      - LLM_MODE=ollama
       - OLLAMA_URL=${HARBOR_OLLAMA_INTERNAL_URL}

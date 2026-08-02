@@ -19,7 +19,9 @@
   command: grep -q 'vllm.entrypoints.openai.api_server' services/compose.x.vllm.rocm.yml
   tags: [vllm, rocm, rocm-followup, implemented]
 - sim > compose.sim.yml passes INTERNAL_API_SECRET (HARBOR_SIM_INTERNAL_API_SECRET) to the sim-realtime container; realtime's env schema requires it and crash-loops without it @sim @notable-sweep @spec @implemented
-- deerflow > build contexts are configurable via HARBOR_DEERFLOW_GIT_REF, pinned to the last v1.x commit 06248fa6 (upstream's v2 merge removed the root Dockerfile and web/ directory Harbor builds from) @deerflow @notable-sweep @spec @implemented
+- label: deerflow > build contexts are configurable via HARBOR_DEERFLOW_GIT_REF, pinned to the upstream v2.0.0 tag; gateway builds from backend/Dockerfile and frontend from frontend/Dockerfile (target prod) at the repo root context
+  command: grep -q "deer-flow.git#v2.0.0" profiles/default.env && grep -q "dockerfile: backend/Dockerfile" services/compose.deerflow.yml && grep -q "dockerfile: frontend/Dockerfile" services/compose.deerflow.yml
+  tags: [deerflow, notable-sweep, spec, implemented]
 - cli > get_service_port prefers the configured <service>.host_port when it is among the container's published ports, so multi-port services (browseruse UI vs VNC) resolve harbor url to the main UI port @cli @notable-sweep @spec @implemented
 - label: photoprism > HARBOR_PHOTOPRISM_STORAGE defaults to ./services/photoprism/storage (was ./photoprism/storage, which created a stray root-owned photoprism/ dir at the repo root)
   command: grep -q 'HARBOR_PHOTOPRISM_STORAGE="./services/photoprism/storage"' profiles/default.env
@@ -167,6 +169,11 @@
 - label: service_compose_exists accepts cross-file-only selectors (tokens appearing as parts of compose.x.* filenames, e.g. mcp-server-time), keeping the documented 'harbor up mcpo mcp-server-time' flow working
   command: bash -c 'source /dev/null; ./harbor.sh cmd mcpo mcp-server-time >/dev/null'
   tags: [services-it, implemented]
+
+## hf
+- label: check_hf_cache in harbor.sh uses 'hf cache ls' (scan-cache was removed in hf CLI 1.x)
+  command: grep -q 'cache ls --no-truncate' harbor.sh && ! grep -q 'run_hf_docker_cli scan-cache' harbor.sh
+  tags: [sweep7, implemented]
 
 # services
 - label: compose.yml defines only the shared harbor-network without service definitions
@@ -350,6 +357,9 @@
 - label: compose.mcp-inspector.yml runs the inspector with HOST=0.0.0.0 and ALLOWED_ORIGINS for the remapped host port, with no socat entrypoint — the old socat forwarder self-connect-looped (inspector binds ::1, socat forwarded 127.0.0.1 into its own wildcard listener), leaving both published ports dead
   command: grep -q 'HOST=0.0.0.0' services/compose.mcp-inspector.yml && ! grep -q 'inspector-entrypoint' services/compose.mcp-inspector.yml && [ ! -f services/mcp/inspector-entrypoint.sh ]
   tags: [services-it, implemented]
+- label: compose.mcp-inspector.yml sets DANGEROUSLY_BIND_ALL_INTERFACES=true alongside HOST=0.0.0.0 so inspector >=2.0.0 starts in-container
+  command: grep -q DANGEROUSLY_BIND_ALL_INTERFACES=true services/compose.mcp-inspector.yml
+  tags: [sweep7, implemented]
 
 ## s2s
 - s2s wraps huggingface/speech-to-speech, the modular VAD-STT-LLM-TTS realtime voice pipeline, as a Harbor backend service @spec
@@ -517,6 +527,16 @@
 - label: daytona-dex writes its sqlite db as the host user: a dex-init sidecar pre-chowns the dex workspace dir and the dex container runs as HARBOR_USER_ID (fallback 1001), so first boot does not fail with 'touch /var/dex/dex.db: Permission denied'
   command: bash -c 'grep -q daytona-dex-init services/compose.daytona.yml && grep -qF "user: \"\${HARBOR_USER_ID" services/compose.daytona.yml && test -f services/daytona/dex-init.sh'
   tags: [sweep6, implemented]
+
+## hf
+- label: compose.hf.yml mounts the optional custom CA at /harbor/custom-ca.pem, outside /etc/ssl/certs, so the /dev/null placeholder does not break hf_xet TLS client construction
+  command: grep -q '/harbor/custom-ca.pem' services/compose.hf.yml && ! grep -q '/etc/ssl/certs/custom-ca.pem' services/compose.hf.yml
+  tags: [sweep7, implemented]
+
+## perplexideez
+- label: compose.x.perplexideez.{ollama,searxng}.yml set env on perplexideez-service (the app), not the perplexideez nginx proxy, and LLM_MODE carries no literal quotes
+  command: grep -q 'perplexideez-service:' services/compose.x.perplexideez.ollama.yml && grep -q 'perplexideez-service:' services/compose.x.perplexideez.searxng.yml && grep -q 'LLM_MODE=ollama' services/compose.x.perplexideez.ollama.yml
+  tags: [sweep7, implemented]
 
 # app
 - label: Harbor App blocks main UI behind a setup gate until setup detail status is ready
@@ -1202,3 +1222,14 @@
 - label: profiles/default.env assigns every HARBOR_*_HOST_PORT a unique value (no host-port collisions across services)
   command: bash -c '! grep -oE "^HARBOR_[A-Z0-9_]*HOST_PORT=[0-9]+" profiles/default.env | cut -d= -f2 | sort | uniq -d | grep .'
   tags: [sweep6, implemented]
+
+# deerflow
+- label: the v2 stack is four containers: deerflow (nginx entry on port 2026 routing /api to the gateway and everything else to the frontend), deerflow-frontend (Next.js, 3000), deerflow-backend (gateway API, 8001, healthcheck /health), and deerflow-redis (stream bridge)
+  command: grep -q deerflow-redis services/compose.deerflow.yml && grep -q deerflow-frontend services/compose.deerflow.yml && grep -q "nginx.conf" services/compose.deerflow.yml && grep -q "8001/health" services/compose.deerflow.yml
+  tags: [deerflow, v2, spec]
+- label: model access is a single OpenAI-compatible entry in services/deerflow/config.yaml resolved from container env DEERFLOW_MODEL, DEERFLOW_MODEL_BASE_URL, DEERFLOW_MODEL_API_KEY; base defaults point at llamacpp and compose.x.deerflow.ollama.yml overrides base_url to Harbor Ollama with HARBOR_DEERFLOW_MODEL
+  command: grep -q DEERFLOW_MODEL_BASE_URL services/compose.deerflow.yml && grep -q DEERFLOW_MODEL_BASE_URL services/compose.x.deerflow.ollama.yml && grep -q DEERFLOW_MODEL_BASE_URL services/deerflow/config.yaml
+  tags: [deerflow, v2, spec]
+- label: gateway state (auth users, threads, sqlite) persists in the deerflow workspace data dir mounted at /app/backend/.deer-flow; frontend sessions are signed with HARBOR_DEERFLOW_AUTH_SECRET (32+ chars default)
+  command: grep -q HARBOR_DEERFLOW_AUTH_SECRET profiles/default.env && grep -q /app/backend/.deer-flow services/compose.deerflow.yml
+  tags: [deerflow, v2, spec]
