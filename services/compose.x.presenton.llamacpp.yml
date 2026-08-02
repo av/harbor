@@ -1,0 +1,12 @@
+services:
+  presenton:
+    depends_on:
+      - llamacpp
+    environment:
+      # Presenton's "custom" provider is any OpenAI-compatible endpoint.
+      - LLM=custom
+      - CUSTOM_LLM_URL=http://llamacpp:8080/v1
+      - CUSTOM_LLM_API_KEY=sk-llamacpp
+      # Must be a model id llamacpp actually serves (see /v1/models);
+      # Ollama-style tags match nothing here.
+      - CUSTOM_MODEL=${HARBOR_PRESENTON_LLAMACPP_MODEL}
