@@ -21,7 +21,7 @@ services:
 
   metamcp-postgres:
     container_name: ${HARBOR_CONTAINER_PREFIX}.metamcp-postgres
-    image: postgres:16.2-alpine3.18
+    image: postgres:16-alpine
     env_file:
       - ./.env
       - ./services/metamcp/override.env
