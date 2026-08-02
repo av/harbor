@@ -98,6 +98,9 @@
 - label: harbor up with multiple services and -t tails logs for all requested services, not just the first
   command: rg -q "run_logs \"\\\$\\{filtered_args\\[@\\]\\}\"" harbor.sh
   tags: [spec, implemented]
+- label: harbor env <service> accepts --rm and --unset as aliases for unset: removal deletes the KEY line from services/<service>/override.env and never writes a literal __RM= entry
+  command: bash -c 'echo TESTKEY=1 >> services/webtop/override.env; ./harbor.sh env webtop --rm TESTKEY >/dev/null 2>&1; ! grep -q "__RM\|TESTKEY" services/webtop/override.env'
+  tags: [spec, env-fix, implemented]
 
 ## launch
 - label: harbor launch routes host tools codex, claude, opencode, pi, and others to OpenAI-compatible Harbor backends with optional --backend, --model, --config, --web, and --workflow
@@ -416,6 +419,9 @@
 - label: HARBOR_DIFY_INPUT_VARIABLE and HARBOR_DIFY_OUTPUT_VARIABLE are plumbed from profiles/default.env through compose.dify.yml into the dify-openai container
   command: grep -q 'INPUT_VARIABLE=${HARBOR_DIFY_INPUT_VARIABLE}' services/compose.dify.yml && grep -q HARBOR_DIFY_INPUT_VARIABLE profiles/default.env
   tags: [dify-1x, spec, implemented]
+- label: dify base configuration (upstream .env.example values with Harbor hostnames) lives in tracked services/dify/dify.env loaded via env_file before services/dify/override.env, so override.env stays an empty user-editable overlay like every other service
+  command: bash -c 'grep -q dify.env services/compose.dify.yml && grep -q "^DB_HOST=dify-db" services/dify/dify.env && ! grep -q "^DB_HOST=" services/dify/override.env'
+  tags: [spec, env-fix, implemented]
 
 ## k6
 - label: HARBOR_K6_GRAFANA_VERSION in profiles/default.env pins grafana 11.6.1, verified to provision both shipped dashboards and the influxdb datasource

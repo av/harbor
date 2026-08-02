@@ -6510,6 +6510,10 @@ env_manager() {
         case "$1" in
         get|set|ls|list|search|find|unset|rm|remove|--help|-h)
             ;;
+        --rm|--unset|--remove)
+            shift
+            set -- "unset" "$@"
+            ;;
         *)
             if [[ $# -eq 0 ]]; then
                 set -- "ls"
@@ -8765,6 +8769,12 @@ run_harbor_env() {
     local env_val=""
 
     case "$1" in
+    --rm|--unset|--remove)
+        mgr_cmd="unset"
+        env_var="${2:-}"
+        shift
+        [ $# -gt 0 ] && shift
+        ;;
     get|set|ls|list|search|find|unset|rm|remove)
         mgr_cmd=$1
         env_var="${2:-}"
@@ -8777,6 +8787,11 @@ run_harbor_env() {
         fi
         ;;
     "")
+        ;;
+    -*)
+        log_error "Unknown option: $1"
+        log_error "Usage: harbor env <service> [get|set|unset|ls|search] [key] [value]"
+        return 1
         ;;
     *)
         env_var=$1
