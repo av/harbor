@@ -311,3 +311,5 @@ services:
     environment:
       - DIFY_API_URL=http://harbor.dify:80
       - BOT_TYPE=${HARBOR_DIFY_BOT_TYPE}
+      - INPUT_VARIABLE=${HARBOR_DIFY_INPUT_VARIABLE}
+      - OUTPUT_VARIABLE=${HARBOR_DIFY_OUTPUT_VARIABLE}

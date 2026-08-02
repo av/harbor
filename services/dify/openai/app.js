@@ -122,21 +122,29 @@ const handleStreamResponse = async (res, stream, data) => {
   }
 };
 
+const extractWorkflowOutput = (outputs) => {
+  if (outputs === null || outputs === undefined) return "";
+  if (typeof outputs !== "object") return String(outputs);
+  if (config.OUTPUT_VARIABLE && config.OUTPUT_VARIABLE in outputs) {
+    return String(outputs[config.OUTPUT_VARIABLE]);
+  }
+  const values = Object.values(outputs);
+  if (values.length === 1) return String(values[0]);
+  return JSON.stringify(outputs);
+};
+
 const handleNonStreamResponse = async (res, stream, data) => {
   let result = "";
   let usageData = null;
   let hasError = false;
+  let buffer = "";
 
-  try {
-    for await (const chunk of stream) {
-      const lines = chunk.toString().split('\n').filter(line => line.trim() !== '');
-
-      for (let line of lines) {
+  const processLine = (line) => {
         if (line.startsWith('data:')) {
           line = line.slice(5).trim();
         }
         const jsonStr = line;
-        if (jsonStr === '[DONE]') continue;
+        if (jsonStr === '[DONE]') return;
 
         try {
           const chunkObj = JSON.parse(jsonStr);
@@ -155,12 +163,18 @@ const handleNonStreamResponse = async (res, stream, data) => {
               total_tokens: chunkObj.metadata.usage.total_tokens || 110,
             };
           } else if (chunkObj.event === "workflow_finished") {
-            const outputs = chunkObj.data.outputs;
-            result = outputs;
-            result = String(result);
+            result = extractWorkflowOutput(chunkObj.data.outputs);
             usageData = {
               prompt_tokens: chunkObj.metadata?.usage?.prompt_tokens || 100,
               completion_tokens: chunkObj.metadata?.usage?.completion_tokens || 10,
+              total_tokens: chunkObj.data.total_tokens || 110,
+            };
+          } else if (!chunkObj.event && chunkObj.workflow_run_id && chunkObj.data) {
+            // Workflow blocking mode returns a single JSON object, not SSE events (Dify 1.x)
+            result = extractWorkflowOutput(chunkObj.data.outputs);
+            usageData = {
+              prompt_tokens: 100,
+              completion_tokens: 10,
               total_tokens: chunkObj.data.total_tokens || 110,
             };
           } else if (chunkObj.event === "agent_thought") {
@@ -168,13 +182,29 @@ const handleNonStreamResponse = async (res, stream, data) => {
           } else if (chunkObj.event === "error") {
             console.error(`Error: ${chunkObj.code}, ${chunkObj.message}`);
             hasError = true;
-            break;
           }
         } catch (err) {
           console.error('Error parsing chunk:', err);
           hasError = true;
         }
+  };
+
+  try {
+    for await (const chunk of stream) {
+      buffer += chunk.toString();
+      const rawLines = buffer.split('\n');
+      buffer = rawLines.pop();
+
+      for (const line of rawLines) {
+        if (line.trim() === '') continue;
+        processLine(line);
+        if (hasError) break;
       }
+      if (hasError) break;
+    }
+
+    if (!hasError && buffer.trim() !== '') {
+      processLine(buffer);
     }
 
     if (hasError) {

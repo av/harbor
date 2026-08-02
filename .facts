@@ -8,6 +8,7 @@
 - label: services > webui x searxng x ollama > config.x.searxng.ollama.json sets rag.ollama.base_url to HARBOR_OLLAMA_INTERNAL_URL (not Open WebUI's host.docker.internal default) and uses the auto-pulled nomic-embed-text:latest embedding model
   command: python3 -c "import json; r=json.load(open('services/webui/configs/config.x.searxng.ollama.json'))['rag']; assert r['ollama']['base_url']=='$'+'{HARBOR_OLLAMA_INTERNAL_URL}' and r['embedding_model']=='nomic-embed-text:latest', r" && echo ok
   tags: [spec, core-integration, implemented]
+- services > dify > the dify-openai bridge translates OpenAI chat completions to Dify 1.x APIs: Chat via /v1/chat-messages, Workflow via /v1/workflows/run including the blocking-mode single-JSON response shape and OUTPUT_VARIABLE selection from workflow outputs @dify-1x @spec
 # project
 
 ## domain
@@ -409,6 +410,12 @@
 - label: vendored nginx/ssrf templates under services/dify are the upstream 1.16.1 docker templates with hostnames rewritten to Harbor dify-* service names
   command: grep -q "http://dify-plugin-daemon:5002" services/dify/nginx/conf.d/default.conf.template && grep -q "dstdomain dify-agent" services/dify/ssrf_proxy/squid-agent.conf.template
   tags: [spec, dify-1x, implemented]
+- label: the dify-openai bridge translates OpenAI chat completions to Dify 1.x APIs: Chat via /v1/chat-messages, Workflow via /v1/workflows/run including the blocking-mode single-JSON response shape and OUTPUT_VARIABLE selection from workflow outputs
+  command: grep -q 'workflow_run_id' services/dify/openai/app.js && grep -q 'extractWorkflowOutput' services/dify/openai/app.js
+  tags: [dify-1x, spec, implemented]
+- label: HARBOR_DIFY_INPUT_VARIABLE and HARBOR_DIFY_OUTPUT_VARIABLE are plumbed from profiles/default.env through compose.dify.yml into the dify-openai container
+  command: grep -q 'INPUT_VARIABLE=${HARBOR_DIFY_INPUT_VARIABLE}' services/compose.dify.yml && grep -q HARBOR_DIFY_INPUT_VARIABLE profiles/default.env
+  tags: [dify-1x, spec, implemented]
 
 ## k6
 - label: HARBOR_K6_GRAFANA_VERSION in profiles/default.env pins grafana 11.6.1, verified to provision both shipped dashboards and the influxdb datasource
