@@ -81,17 +81,20 @@ function generateEntrypointScript(configToml: string, config: OpenFangConfig): s
   return `
 set -e
 
-mkdir -p /root/.openfang
+# openfang resolves its home from OPENFANG_HOME (set to /data in compose);
+# writing to a hardcoded /root/.openfang would be silently ignored.
+CFG_DIR="$$\{OPENFANG_HOME:-/root/.openfang}"
+mkdir -p "$$CFG_DIR"
 
 cat > /tmp/harbor_config.toml << 'HARBOR_CONFIG_EOF'
 ${configToml}
 HARBOR_CONFIG_EOF
 
-if [ -f /root/.openfang/config.toml ]; then
+if [ -f "$$CFG_DIR/config.toml" ]; then
   python3 -c "
-import tomllib, copy
+import tomllib, copy, os
 
-with open('/root/.openfang/config.toml', 'rb') as f:
+with open(os.environ.get('OPENFANG_HOME','/root/.openfang') + '/config.toml', 'rb') as f:
     existing = tomllib.load(f)
 with open('/tmp/harbor_config.toml', 'rb') as f:
     harbor = tomllib.load(f)
@@ -116,21 +119,21 @@ for section, vals in tables.items():
     for k, v in vals.items():
         lines.append(f'{k} = {repr(v) if isinstance(v, str) else v}')
     lines.append('')
-with open('/root/.openfang/config.toml', 'w') as f:
+with open(os.environ.get('OPENFANG_HOME','/root/.openfang') + '/config.toml', 'w') as f:
     f.write(chr(10).join(lines))
 "
 else
-  cp /tmp/harbor_config.toml /root/.openfang/config.toml
+  cp /tmp/harbor_config.toml "$$CFG_DIR/config.toml"
 fi
 
 cat >> /tmp/harbor_model.toml << 'HARBOR_MODEL_EOF'
 ${modelSection}
 HARBOR_MODEL_EOF
 
-rm -rf /root/.openfang/agents_runtime
-cp -a /root/.openfang/agents /root/.openfang/agents_runtime
+rm -rf "$$CFG_DIR/agents_runtime"
+cp -a /root/.openfang/agents "$$CFG_DIR/agents_runtime"
 
-for agent_dir in /root/.openfang/agents_runtime/*/; do
+for agent_dir in "$$CFG_DIR"/agents_runtime/*/; do
   [ -f "$$agent_dir/agent.toml" ] || continue
   python3 -c "
 import tomllib, sys, os
@@ -178,7 +181,7 @@ for i in $$(seq 1 ${timeout}); do
   sleep 1
 done
 
-for agent_dir in /root/.openfang/agents_runtime/*/; do
+for agent_dir in "$$CFG_DIR"/agents_runtime/*/; do
   [ -f "$$agent_dir/agent.toml" ] || continue
   openfang agent spawn "$$agent_dir/agent.toml" 2>/dev/null || true
 done
