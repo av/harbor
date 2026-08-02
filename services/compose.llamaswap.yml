@@ -12,6 +12,9 @@ services:
     volumes:
       - ${HARBOR_OLLAMA_CACHE}:/app/.ollama
       - ${HARBOR_HF_CACHE:-./services/llamaswap/.hf-cache}:/app/.cache/huggingface
+      # GGUFs in the llama.cpp cache can be symlinks to absolute host HF-cache
+      # blob paths; bind the HF cache at the same host-absolute path so they resolve
+      - ${HARBOR_HF_CACHE:-./services/llamaswap/.hf-cache}:${HOME}/.cache/huggingface:ro
       - ${HARBOR_LLAMACPP_CACHE}:/app/.cache/llama.cpp
       - ${HARBOR_VLLM_CACHE}:/app/.cache/vllm
       - ./services/llamaswap/config.yaml:/app/config.yaml

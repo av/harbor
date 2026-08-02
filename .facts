@@ -479,7 +479,7 @@
   tags: [implemented]
 - label: compose.llamaswap.yml additionally binds HARBOR_HF_CACHE read-only at ${HOME}/.cache/huggingface (the host-absolute HF cache path) so GGUF symlinks in the llama.cpp cache that target absolute host HF-cache blob paths resolve inside the container
   command: grep -q ':${HOME}/.cache/huggingface:ro' services/compose.llamaswap.yml
-  tags: [spec, cache-symlinks]
+  tags: [spec, cache-symlinks, implemented]
 
 ## langfuse
 - label: clickhouse in the langfuse compose stack starts without a pinned user so the official entrypoint can chown bind-mounted data dirs on first boot
@@ -493,6 +493,11 @@
 - label: kotaemon container entrypoint uses the image venv python (/app/.venv/bin/python app.py)
   command: grep -q '/app/.venv/bin/python' services/compose.kotaemon.yml
   tags: [spec, implemented]
+
+## localai
+- label: compose.localai.yml additionally binds HARBOR_HF_CACHE read-only at ${HOME}/.cache/huggingface so llama.cpp-cache GGUF symlinks targeting absolute host HF-cache blob paths resolve inside the container
+  command: grep -q ':${HOME}/.cache/huggingface:ro' services/compose.localai.yml
+  tags: [spec, cache-symlinks, implemented]
 
 # app
 - label: Harbor App blocks main UI behind a setup gate until setup detail status is ready

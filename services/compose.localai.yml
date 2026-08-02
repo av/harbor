@@ -18,6 +18,9 @@ services:
     volumes:
       - ${HARBOR_LOCALAI_WORKSPACE}/models:/build/models
       - ${HARBOR_HF_CACHE:-./services/localai/.hf-cache}:/root/.cache/huggingface
+      # GGUFs in the llama.cpp cache can be symlinks to absolute host HF-cache
+      # blob paths; bind the HF cache at the same host-absolute path so they resolve
+      - ${HARBOR_HF_CACHE:-./services/localai/.hf-cache}:${HOME}/.cache/huggingface:ro
       - ${HARBOR_LLAMACPP_CACHE}:/root/.cache/llama.cpp
       - ${HARBOR_VLLM_CACHE}:/root/.cache/vllm
     # Wait for the init sidecar to chown the workspace bind mount so the
