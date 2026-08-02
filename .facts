@@ -1321,3 +1321,13 @@
 - label: solo mounts the shared HF cache at /root/.cache/huggingface so solo list/download operate on Harbor's models
   command: grep -q 'HARBOR_HF_CACHE}:/root/.cache/huggingface' services/compose.solo.yml
   tags: [sweep9, implemented]
+
+# services > kotaemon
+- label: kotaemon drops from root to the host user via a setpriv entrypoint wrapper (uv python under /root needs traversal opened first) so workspace bind-mount files stay host-owned
+  command: grep -q 'harbor-entrypoint.sh' services/compose.kotaemon.yml && grep -q 'setpriv --reuid "${HARBOR_USER_ID:-1000}"' services/kotaemon/entrypoint.sh && grep -q 'HOME=/tmp' services/compose.kotaemon.yml
+  tags: [ownership, implemented]
+
+# services > tts
+- label: tts runs as the host user behind a tts-init chown sidecar, with the HF cache mounted at /app/.cache/huggingface instead of /root, so voice/config/cache files stay host-owned
+  command: grep -q 'user: "${HARBOR_USER_ID}:${HARBOR_GROUP_ID}"' services/compose.tts.yml && grep -q 'tts-init' services/compose.tts.yml && grep -q '/app/.cache/huggingface' services/compose.tts.yml
+  tags: [ownership, implemented]

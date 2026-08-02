@@ -5,14 +5,41 @@ services:
     env_file:
       - ./.env
       - ./services/tts/override.env
+    # Image defaults to root; run as the host user so voice/config files
+    # written into the bind mounts stay host-owned (no sudo needed to manage
+    # them). The init sidecar fixes up ownership of pre-existing files first.
+    user: "${HARBOR_USER_ID}:${HARBOR_GROUP_ID}"
+    depends_on:
+      tts-init:
+        condition: service_completed_successfully
     ports:
       - ${HARBOR_TTS_HOST_PORT}:8000
     volumes:
       - ${HARBOR_TTS_VOICES_FOLDER}:/app/voices
       - ${HARBOR_TTS_CONFIG_FOLDER}:/app/config
-      - ${HARBOR_HF_CACHE:-./services/tts/.hf-cache}:/root/.cache/huggingface
+      # Not /root/.cache — the container no longer runs as root
+      - ${HARBOR_HF_CACHE:-./services/tts/.hf-cache}:/app/.cache/huggingface
     environment:
       - TTS_HOME=${HARBOR_TTS_HOME}
-      - HF_HOME=/root/.cache/huggingface
+      - HF_HOME=/app/.cache/huggingface
+      # Writable HOME for the non-root user (image bakes HOME=/root)
+      - HOME=/tmp
+    networks:
+      - harbor-network
+
+  # Init sidecar: chowns the voices/config bind mounts to the host user before
+  # the main container starts. Mirrors the kotaemon/mcpforge pattern.
+  tts-init:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.tts-init
+    image: alpine:3.20
+    env_file:
+      - ./.env
+    environment:
+      TARGET_UID: ${HARBOR_USER_ID}
+      TARGET_GID: ${HARBOR_GROUP_ID}
+    entrypoint: ["/bin/sh", "-c", "chown -R \"$${TARGET_UID:-1000}:$${TARGET_GID:-1000}\" /voices /config"]
+    volumes:
+      - ${HARBOR_TTS_VOICES_FOLDER}:/voices
+      - ${HARBOR_TTS_CONFIG_FOLDER}:/config
     networks:
       - harbor-network
