@@ -578,6 +578,11 @@
   command: git check-ignore -q services/lmeval/cache && git check-ignore -q services/lmeval/results
   tags: [sweep8, implemented]
 
+## raglite
+- label: raglite image installs llama-cpp-python explicitly because the raglite CLI unconditionally probes llama.cpp at startup while the package no longer hard-depends on it
+  command: grep -q 'pip install llama-cpp-python' services/raglite/Dockerfile
+  tags: [sweep8, implemented]
+
 # app
 - label: Harbor App blocks main UI behind a setup gate until setup detail status is ready
   command: rg -q 'detail\?\.status === "ready"' app/src/setup/HarborSetupContext.tsx
