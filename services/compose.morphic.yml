@@ -25,6 +25,9 @@ services:
   morphic-db:
     container_name: ${HARBOR_CONTAINER_PREFIX}.morphic-db
     image: postgres:17-alpine
+    env_file:
+      - ./.env
+      - ./services/morphic/override.env
     environment:
       POSTGRES_USER: morphic
       POSTGRES_PASSWORD: morphic
