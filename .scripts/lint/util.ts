@@ -20,6 +20,8 @@ export const RUNTIME_DIR_EXCLUDES = [
   "services/*/workspace",
   "services/*/vectordb",
   "services/*/meili_data*",
+  // mcp's npx cache holds ephemeral lock files that vanish mid-walk.
+  "services/mcp/cache",
   "services/netdata/cache",
   "services/netdata/lib",
   // dify keeps its runtime volumes at the repo root (see compose.dify.yml).
