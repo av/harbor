@@ -110,6 +110,9 @@
 - label: harbor env <service> accepts --rm and --unset as aliases for unset: removal deletes the KEY line from services/<service>/override.env and never writes a literal __RM= entry
   command: bash -c 'echo TESTKEY=1 >> services/webtop/override.env; ./harbor.sh env webtop --rm TESTKEY >/dev/null 2>&1; ! grep -q "__RM\|TESTKEY" services/webtop/override.env'
   tags: [spec, env-fix, implemented]
+- label: harbor url falls back to the configured <service>.host_port for host-networked containers with no docker port mappings
+  command: ./harbor.sh url homeassistant | grep -q 'http://localhost:8123'
+  tags: [implemented]
 
 ## launch
 - label: harbor launch routes host tools codex, claude, opencode, pi, and others to OpenAI-compatible Harbor backends with optional --backend, --model, --config, --web, and --workflow

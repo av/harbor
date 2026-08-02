@@ -5524,10 +5524,20 @@ get_service_port() {
     # Get the port mapping for the service
     if port=$(docker port "$target_name" | sed -n 's/.*:\([0-9][0-9]*\)$/\1/p' | head -n 1) && [ -n "$port" ]; then
         echo "$port"
-    else
-        log_error "No port mapping found for service '$1'. The service may not expose a port, or it may still be starting up."
-        return 1
+        return 0
     fi
+
+    # Host-networked containers have no docker port mappings; the service
+    # listens directly on the host, so fall back to the configured host port.
+    if [ "$(docker inspect --format '{{.HostConfig.NetworkMode}}' "$target_name" 2>/dev/null)" = "host" ]; then
+        if port=$(env_manager --silent get "${service_name}.host_port" 2>/dev/null) && [ -n "$port" ]; then
+            echo "$port"
+            return 0
+        fi
+    fi
+
+    log_error "No port mapping found for service '$1'. The service may not expose a port, or it may still be starting up."
+    return 1
 }
 
 get_service_url() {
