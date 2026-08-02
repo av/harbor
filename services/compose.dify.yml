@@ -45,6 +45,35 @@ services:
     networks:
       - harbor-network
 
+  # Optional collaboration websocket server. Off by default
+  # (replicas 0); see docs/2.3.3 for the enable recipe.
+  dify-websocket:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.dify-websocket
+    image: langgenius/dify-api:${HARBOR_DIFY_VERSION}
+    deploy:
+      replicas: ${HARBOR_DIFY_WEBSOCKET_REPLICAS}
+    env_file:
+      - ./.env
+      - ./services/dify/dify.env
+      - ./services/dify/override.env
+    environment:
+      MODE: api
+      SERVER_WORKER_AMOUNT: 1
+      SERVER_WORKER_CLASS: geventwebsocket.gunicorn.workers.GeventWebSocketWorker
+      SERVER_WORKER_CONNECTIONS: 1000
+      GUNICORN_TIMEOUT: 360
+    depends_on:
+      dify-init:
+        condition: service_completed_successfully
+      dify-db:
+        condition: service_healthy
+      dify-redis:
+        condition: service_started
+    volumes:
+      - ${HARBOR_DIFY_WORKSPACE}/app/storage:/app/api/storage
+    networks:
+      - harbor-network
+
   dify-worker:
     container_name: ${HARBOR_CONTAINER_PREFIX}.dify-worker
     image: langgenius/dify-api:${HARBOR_DIFY_VERSION}

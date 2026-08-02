@@ -434,6 +434,9 @@
 - label: dify base configuration (upstream .env.example values with Harbor hostnames) lives in tracked services/dify/dify.env loaded via env_file before services/dify/override.env, so override.env stays an empty user-editable overlay like every other service
   command: bash -c 'grep -q dify.env services/compose.dify.yml && grep -q "^DB_HOST=dify-db" services/dify/dify.env && ! grep -q "^DB_HOST=" services/dify/override.env'
   tags: [spec, env-fix, implemented]
+- label: compose.dify.yml defines a dify-websocket collaboration container (dify-api image, gevent websocket workers) gated by HARBOR_DIFY_WEBSOCKET_REPLICAS (default 0, so it does not start); enabling collaboration is replicas=1 plus ENABLE_COLLABORATION_MODE=true and NGINX_SOCKET_IO_UPSTREAM=dify-websocket:5001 via harbor env dify, as documented in docs/2.3.3
+  command: docker compose -f compose.yml -f services/compose.dify.yml config --services | grep -q dify-websocket && grep -q 'HARBOR_DIFY_WEBSOCKET_REPLICAS' profiles/default.env && grep -q 'dify-websocket' 'docs/2.3.3-Satellite&colon-Dify.md'
+  tags: [dify-websocket, spec, implemented]
 
 ## k6
 - label: HARBOR_K6_GRAFANA_VERSION in profiles/default.env pins grafana 11.6.1, verified to provision both shipped dashboards and the influxdb datasource
