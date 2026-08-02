@@ -3,14 +3,24 @@ services:
   flowise:
     container_name: ${HARBOR_CONTAINER_PREFIX}.flowise
     image: ${HARBOR_FLOWISE_IMAGE}:${HARBOR_FLOWISE_VERSION}
+    # Run as the host user (matches the image's node uid 1000 layout) so
+    # files written into the workspace bind mount stay host-owned across
+    # image versions (some tags run as root, newer ones as node)
+    user: "${HARBOR_USER_ID}:${HARBOR_GROUP_ID}"
     ports:
       - ${HARBOR_FLOWISE_HOST_PORT}:3000
     volumes:
-      # Persistence
-      - ${HARBOR_FLOWISE_WORKSPACE}:/root/.flowise
+      # Persistence. The upstream image runs as node (uid 1000) with
+      # HOME=/home/node, so data lives at /home/node/.flowise — mounting
+      # under root's home leaves persistence dead (unreachable for node).
+      - ${HARBOR_FLOWISE_WORKSPACE}:/home/node/.flowise
     env_file:
       - ./.env
       - ./services/flowise/override.env
+    environment:
+      # Default log path is inside the global node_modules install,
+      # unwritable for the non-root user
+      - LOG_PATH=/home/node/.flowise/logs
     # Wait for the init sidecar to chown the workspace bind mount so the
     # host directory stays owned by the host user — recoverable without
     # `sudo`. Docker creates missing bind-mount targets as root:root by

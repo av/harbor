@@ -5,7 +5,7 @@
 # them, leaving the host dir undeletable without `sudo`. Chowning here
 # before the main container starts keeps host ownership intact.
 #
-# flowise mounts ${HARBOR_FLOWISE_WORKSPACE} at /root/.flowise. Top-level
+# flowise mounts ${HARBOR_FLOWISE_WORKSPACE} at /home/node/.flowise. Top-level
 # chown is sufficient — flowise creates its own subdirs at runtime.
 set -e
 mkdir -p /workspace

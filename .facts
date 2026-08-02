@@ -616,6 +616,20 @@
   command: grep -q 'HARBOR_MI_LLAMACPP_MODEL="LiquidAI/LFM2.5-8B-A1B-GGUF:Q8_0"' profiles/default.env
   tags: [sweep9, implemented]
 
+## ownership
+- label: flowise persists data at /home/node/.flowise (image runs as node uid 1000, HOME=/home/node); the workspace bind mount targets that path, not /root/.flowise
+  command: grep -q '/home/node/.flowise' services/compose.flowise.yml && ! grep -q '/root/.flowise' services/compose.flowise.yml
+  tags: [ownership2, spec, implemented]
+- label: perplexica-be runs as the host user (HARBOR_USER_ID) with an init sidecar chowning ./services/perplexica/data, so db.sqlite stays host-owned
+  command: grep -q 'HARBOR_USER_ID' services/compose.perplexica.yml && grep -q 'perplexica-init' services/compose.perplexica.yml
+  tags: [ownership2, spec, implemented]
+- label: sillytavern runs as the host user (HARBOR_USER_ID), so files it writes into the workspace bind mounts stay host-owned
+  command: grep -q 'HARBOR_USER_ID' services/compose.sillytavern.yml
+  tags: [ownership2, spec, implemented]
+- label: flowise version is pinned to 3.1.3 (3.1.4/latest crash at startup in the vendored connect-sqlite3 session store)
+  command: grep -q 'HARBOR_FLOWISE_VERSION="3.1.3"' profiles/default.env
+  tags: [ownership2, spec, implemented]
+
 # app
 - label: Harbor App blocks main UI behind a setup gate until setup detail status is ready
   command: rg -q 'detail\?\.status === "ready"' app/src/setup/HarborSetupContext.tsx
