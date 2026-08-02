@@ -12,6 +12,11 @@ log "Harbor: custom chatnio entrypoint"
 log YAML Merger is starting...
 python /app/yaml_config_merger.py --pattern ".yml" --output "/config/config.yaml" --directory "/configs"
 
+# Upstream warns (and may panic in future versions) when the secret is <32 bytes
+if [ -n "$HARBOR_CHATNIO_SECRET" ]; then
+  sed "s|^secret:.*|secret: $HARBOR_CHATNIO_SECRET|" /config/config.yaml > /tmp/config.yaml && mv /tmp/config.yaml /config/config.yaml
+fi
+
 log "Merged Configs:"
 cat /config/config.yaml
 

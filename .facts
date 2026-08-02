@@ -252,6 +252,9 @@
 - label: H4 plandex health probe allows 300s — first boot does fresh postgres init + LiteLLM bootstrap + migrations before the listener opens
   command: grep -qE 'H4 plandex server health.+plandex-server./health.+ 300$' tests/services-integration.sh
   tags: [implemented]
+- label: the plandex CLI container idles under 'harbor up plandex' (compose overrides the image entrypoint with sleep infinity) so it never exits on the interactive auth prompt; 'harbor plandex ...' still runs the CLI via compose run --entrypoint plandex
+  command: grep -q 'sleep' services/compose.plandex.yml && grep -q -- '--entrypoint \"plandex\"' harbor.sh
+  tags: [spec, implemented]
 
 ## webtop
 - label: services/webtop/Dockerfile does not install neofetch (package removed from current Ubuntu base of the webtop image; it broke the build)
@@ -449,6 +452,11 @@
 - label: omnichain image installs socat so entrypoint.sh port forwarding does not error with command-not-found
   command: grep -q socat services/omnichain/Dockerfile
   tags: [spec, svc-testing, implemented]
+
+## chatnio
+- label: chatnio's app secret is configurable via HARBOR_CHATNIO_SECRET with a >=32-byte default; the entrypoint injects it into the merged /config/config.yaml so upstream's short-secret warning does not fire
+  command: grep -q 'HARBOR_CHATNIO_SECRET="harbor-chatnio-secret-change-me-32chars"' profiles/default.env && grep -q 'HARBOR_CHATNIO_SECRET' services/chatnio/start_chatnio.sh
+  tags: [spec, implemented]
 
 # app
 - label: Harbor App blocks main UI behind a setup gate until setup detail status is ready
