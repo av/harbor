@@ -8,16 +8,9 @@ By default, MCP Forge uses SQLite for data storage, which is suitable for develo
 
 ### SQLite Initialization
 
-For first-time setup, you need to create an empty database file before starting the service:
-
-```bash
-mkdir -p ./mcpforge/data
-touch ./mcpforge/data/mcp.db
-chmod 666 ./mcpforge/data/mcp.db
-chmod 777 ./mcpforge/data
-```
-
-Harbor will automatically handle this during the first `harbor up mcpforge` command.
+The `mcpforge-init` sidecar pre-creates `./services/mcpforge/data/mcp.db` with
+host-user ownership before the gateway starts, and the gateway runs as the host
+user — no manual setup is needed for `harbor up mcpforge`.
 
 ### Using PostgreSQL (Recommended for Production)
 

@@ -2,6 +2,12 @@ services:
   mcpforge:
     container_name: ${HARBOR_CONTAINER_PREFIX}.mcpforge
     image: ${HARBOR_MCPFORGE_IMAGE}:${HARBOR_MCPFORGE_VERSION}
+    # Image runs as uid 1001; run as the host user instead so the sqlite
+    # bind mount prepared by mcpforge-init stays host-owned.
+    user: "${HARBOR_USER_ID}:${HARBOR_GROUP_ID}"
+    depends_on:
+      mcpforge-init:
+        condition: service_completed_successfully
     ports:
       - ${HARBOR_MCPFORGE_HOST_PORT}:4444
     env_file:
@@ -25,5 +31,23 @@ services:
       - SECURE_COOKIES=false
     volumes:
       - ./services/mcpforge/data:/app/data
+    networks:
+      - harbor-network
+
+  # Init sidecar: pre-creates the sqlite db and chowns the data bind mount
+  # to the host user before the gateway starts.
+  mcpforge-init:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.mcpforge-init
+    image: alpine:3.20
+    env_file:
+      - ./.env
+      - ./services/mcpforge/override.env
+    environment:
+      TARGET_UID: ${HARBOR_USER_ID}
+      TARGET_GID: ${HARBOR_GROUP_ID}
+    entrypoint: ["/bin/sh", "/init.sh"]
+    volumes:
+      - ./services/mcpforge/data-init.sh:/init.sh:ro
+      - ./services/mcpforge/data:/workspace
     networks:
       - harbor-network
