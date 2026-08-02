@@ -963,3 +963,10 @@
 - label: comfyui docs state the ai-dock upstream image is unmaintained (ComfyUI v0.2.2, ROCm 6.0) and document maintained alternative images and how to switch via comfyui.image
   command: grep -qi 'unmaintained' 'docs/2.1.2-Frontend&colon-ComfyUI.md' && grep -q 'comfyui.image' 'docs/2.1.2-Frontend&colon-ComfyUI.md'
   tags: [comfyui, spec, implemented]
+
+# mistralrs
+- label: mistralrs defaults to image version 0.6.0 (newest upstream tag whose cpu- image binary matches its glibc; 0.7.0-0.9.0 cpu images are broken upstream)
+  command: grep -q 'HARBOR_MISTRALRS_VERSION="0.6.0"' profiles/default.env
+  tags: [implemented]
+- label: mistralrs default model specifier omits -a: architecture is auto-detected from model config (explicit -a qwen3 selects a wrong loader in 0.6.0)
+  command: grep -q 'HARBOR_MISTRALRS_MODEL_SPECIFIER="plain -m Qwen/Qwen3-4B"' profiles/default.env
