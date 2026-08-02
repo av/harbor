@@ -982,3 +982,8 @@
 - label: mistralrs default model specifier omits -a: architecture is auto-detected from model config (explicit -a qwen3 selects a wrong loader in 0.6.0)
   command: grep -q 'HARBOR_MISTRALRS_MODEL_SPECIFIER="plain -m Qwen/Qwen3-4B"' profiles/default.env
   tags: [implemented]
+
+# mcpo
+- label: mcpo launches via uvx with an mcp<2 pin because mcpo 0.0.20 breaks on mcp 2.0.0
+  command: grep -q "uvx --with 'mcp<2' mcpo" services/mcpo/start_mcpo.sh
+  tags: [implemented]
