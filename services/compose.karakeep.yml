@@ -19,6 +19,12 @@ services:
         condition: service_started
     ports:
       - ${HARBOR_KARAKEEP_HOST_PORT}:3000
+    # Run the whole s6 supervision tree as the host user so new files in the
+    # workspace bind mount stay host-owned. s6-overlay v3 supports rootless
+    # operation as long as /run is writable and executable by the runtime user.
+    user: ${HARBOR_USER_ID}:${HARBOR_GROUP_ID}
+    tmpfs:
+      - /run:exec,uid=${HARBOR_USER_ID},gid=${HARBOR_GROUP_ID}
     volumes:
       - ${HARBOR_KARAKEEP_WORKSPACE}:/data
     environment:
@@ -67,6 +73,9 @@ services:
     depends_on:
       karakeep-init:
         condition: service_completed_successfully
+    # Same host-user remap as the main container — meilisearch works under any
+    # uid as long as /meili_data is writable (init sidecar chowns it).
+    user: ${HARBOR_USER_ID}:${HARBOR_GROUP_ID}
     volumes:
       - ${HARBOR_KARAKEEP_WORKSPACE}/meilisearch:/meili_data
     networks:
