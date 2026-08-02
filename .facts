@@ -926,3 +926,11 @@
 - label: speaches-webui is registered in HEAVY_SUITE_DEFAULTS pinning it to ubuntu-2404 with jobs=1 and documented in tests/README.md
   command: grep '"speaches-webui"' tests/stage-repo.ts | grep -q ubuntu-2404 && grep -q 'speaches-webui' tests/README.md
   tags: [spec, speaches-webui, implemented]
+
+# comfyui
+- label: comfyui has a ROCm overlay services/compose.x.comfyui.rocm.yml that mounts /dev/kfd and /dev/dri and switches the image to ghcr.io/ai-dock/comfyui:latest-rocm, auto-applied on ROCm hosts
+  command: test -f services/compose.x.comfyui.rocm.yml && grep -q latest-rocm services/compose.x.comfyui.rocm.yml && grep -q /dev/kfd services/compose.x.comfyui.rocm.yml
+  tags: [comfyui, rocm, implemented]
+- label: comfyui docs document the CPU fallback (comfyui.args --cpu) for hosts where neither GPU path works
+  command: grep -q -- "--cpu" 'docs/2.1.2-Frontend&colon-ComfyUI.md'
+  tags: [comfyui, rocm, implemented]

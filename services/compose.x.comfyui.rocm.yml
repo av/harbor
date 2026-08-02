@@ -1,0 +1,8 @@
+services:
+  comfyui:
+    devices:
+      - /dev/kfd
+      - /dev/dri
+    # ai-dock publishes a dedicated ROCm variant; the version-pinned
+    # "*-cuda" tags fail on hosts without an NVIDIA driver.
+    image: ghcr.io/ai-dock/comfyui:latest-rocm
