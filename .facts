@@ -568,6 +568,14 @@
   command: grep -q 'HARBOR_BENCH_TASKS="./services/bench/defaultTasks.yml"' profiles/default.env && grep -q 'HARBOR_BENCH_RESULTS="./services/bench/results"' profiles/default.env && test -f services/bench/defaultTasks.yml
   tags: [sweep8, implemented]
 
+## nanobot
+- label: services/nanobot/entrypoint.sh forces gateway.host=0.0.0.0 in config.json so the health endpoint is reachable through the published container port
+  command: grep -q "config\['gateway'\]\['host'\] = '0.0.0.0'" services/nanobot/entrypoint.sh
+  tags: [sweep8, implemented]
+- label: compose.nanobot.yml mounts HARBOR_NANOBOT_CONFIG_DIR at /home/nanobot/.nanobot — the config dir nanobot resolves from the image's HOME — so Harbor's backend injection and persistence actually reach nanobot
+  command: grep -q ':/home/nanobot/.nanobot' services/compose.nanobot.yml && ! grep -q ':/root/.nanobot' services/compose.nanobot.yml
+  tags: [sweep8, implemented]
+
 ## tts
 - label: tts mounts Harbor's tracked services/tts/config customization and keeps downloaded voices in gitignored services/tts/voices instead of a stray repo-root ./tts dir
   command: grep -q 'HARBOR_TTS_CONFIG_FOLDER="./services/tts/config"' profiles/default.env && grep -q 'HARBOR_TTS_VOICES_FOLDER="./services/tts/voices"' profiles/default.env && git check-ignore -q services/tts/voices && git ls-files --error-unmatch services/tts/config/pre_process_map.yaml
@@ -582,6 +590,31 @@
 - label: raglite image installs llama-cpp-python explicitly because the raglite CLI unconditionally probes llama.cpp at startup while the package no longer hard-depends on it
   command: grep -q 'pip install llama-cpp-python' services/raglite/Dockerfile
   tags: [sweep8, implemented]
+
+## mcpforge
+- label: compose.mcpforge.yml runs the gateway as HARBOR_USER_ID and gates it on an mcpforge-init sidecar that pre-creates a host-owned sqlite db, so first boot succeeds
+  command: grep -q 'mcpforge-init' services/compose.mcpforge.yml && test -f services/mcpforge/data-init.sh
+  tags: [sweep9, implemented]
+
+## openfang
+- label: compose.openfang.ts entrypoint resolves the config dir from OPENFANG_HOME so the generated config.toml (api_listen + backend wiring) is actually read by the daemon
+  command: grep -q 'OPENFANG_HOME' services/compose.openfang.ts
+  tags: [sweep9, implemented]
+
+## ros-mcp-server
+- label: Dockerfile installs upstream via its pyproject (with headless opencv) and compose keeps stdin open so the stdio MCP server stays running under harbor up
+  command: grep -q 'pip install --no-cache-dir \.' services/ros-mcp-server/Dockerfile && grep -q 'stdin_open: true' services/compose.ros-mcp-server.yml
+  tags: [sweep9, implemented]
+
+## openclaw
+- label: entrypoint.sh update path guards missing gateway.auth/gateway.remote objects and no longer emits the removed controlUi.allowInsecureAuth key
+  command: grep -q 'if (!config.gateway.remote)' services/openclaw/entrypoint.sh && ! grep -q 'allowInsecureAuth": true' services/openclaw/entrypoint.sh
+  tags: [sweep9, implemented]
+
+## mi
+- label: HARBOR_MI_LLAMACPP_MODEL defaults to LiquidAI/LFM2.5-8B-A1B-GGUF:Q8_0, matching the fleet-wide llama.cpp default
+  command: grep -q 'HARBOR_MI_LLAMACPP_MODEL="LiquidAI/LFM2.5-8B-A1B-GGUF:Q8_0"' profiles/default.env
+  tags: [sweep9, implemented]
 
 # app
 - label: Harbor App blocks main UI behind a setup gate until setup detail status is ready
