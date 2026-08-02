@@ -16,9 +16,14 @@ services:
         condition: service_completed_successfully
     volumes:
       - ${HARBOR_HERMES_WORKSPACE}/data:/opt/data
+      - ./services/hermes/configure-provider.sh:/configure-provider.sh:ro
     shm_size: "1g"
     tty: true
     stdin_open: true
+    # Wrapper persists Harbor-selected backends into Hermes' config.yaml
+    # (Hermes ignores OPENAI_BASE_URL alone for provider selection), then
+    # execs the stock image entrypoint.
+    entrypoint: ["/bin/sh", "/configure-provider.sh"]
     command: ["gateway", "run"]
     environment:
       - API_SERVER_ENABLED=true

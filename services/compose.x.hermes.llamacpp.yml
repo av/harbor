@@ -4,3 +4,5 @@ services:
       - llamacpp
     environment:
       - OPENAI_BASE_URL=http://llamacpp:8080/v1
+      - HERMES_PROVIDER_BASE_URL=http://llamacpp:8080/v1
+      - HERMES_PROVIDER_MODEL=${HARBOR_HERMES_LLAMACPP_MODEL}

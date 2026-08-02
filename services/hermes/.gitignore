@@ -2,3 +2,4 @@
 !.gitignore
 !override.env
 !workspace-init.sh
+!configure-provider.sh

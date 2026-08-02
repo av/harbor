@@ -209,6 +209,9 @@
 - label: hermes docs do not advertise the nonexistent 'harbor hermes server' subcommand; the API server starts automatically with harbor up
   command: ! grep -rq 'harbor hermes server' docs/
   tags: [implemented, bughunt]
+- label: hermes llamacpp/ollama cross-files persist the backend into Hermes config.yaml via configure-provider.sh entrypoint (Hermes ignores OPENAI_BASE_URL env alone); model defaults from HARBOR_HERMES_LLAMACPP_MODEL / HARBOR_HERMES_OLLAMA_MODEL
+  command: grep -q HERMES_PROVIDER_BASE_URL services/compose.x.hermes.llamacpp.yml && grep -q HERMES_PROVIDER_BASE_URL services/compose.x.hermes.ollama.yml && grep -q configure-provider.sh services/compose.hermes.yml && grep -q HARBOR_HERMES_LLAMACPP_MODEL profiles/default.env
+  tags: [hermes-provider, implemented]
 
 ## searxng
 - label: shipped settings.yml passes SearXNG engine about-schema validation: every engine about section uses require_api_key (no requires_api_key typo)
