@@ -205,6 +205,9 @@
 - label: the Ollama custom endpoint baseURL in librechat.yml is the API root (.../v1) without a /chat/completions suffix — LibreChat's client appends the path itself and 404s on a full path
   command: grep -q 'INTERNAL_URL}/v1"' services/librechat/librechat.yml && ! grep -q 'INTERNAL_URL}/v1/chat/completions' services/librechat/librechat.yml
   tags: [spec, services-it, implemented]
+- label: compose.librechat.yml pins getmeili/meilisearch:v1.35.1 with data mounted at services/librechat/meili_data_v1.35 (version-suffixed dir so bumps start a fresh index)
+  command: grep -q 'meilisearch:v1.35.1' services/compose.librechat.yml && grep -q 'meili_data_v1.35:/meili_data' services/compose.librechat.yml
+  tags: [implemented]
 
 ## fabric
 - label: fabric config mounts into the image user's real home (/home/appuser/.config/fabric, image runs as appuser not root) and the entrypoint creates an empty .env if missing, since fabric hard-fails without one even when vendor/model come from environment
@@ -310,6 +313,9 @@
 - label: metamcp start-sse.mjs seeds a default project/profile/API key when the api_keys table is empty, so 'harbor up metamcp' succeeds headlessly on a fresh database instead of crash-looping until the UI is opened
   command: grep -q 'seeding default project/profile/key' services/metamcp/start-sse.mjs
   tags: [services-it, implemented]
+- label: metamcp-postgres uses postgres:16-alpine (floating 16.x patch tag, data-compatible within major 16)
+  command: grep -q 'postgres:16-alpine' services/compose.metamcp.yml
+  tags: [implemented]
 
 ## mcp-inspector
 - label: compose.mcp-inspector.yml runs the inspector with HOST=0.0.0.0 and ALLOWED_ORIGINS for the remapped host port, with no socat entrypoint — the old socat forwarder self-connect-looped (inspector binds ::1, socat forwarded 127.0.0.1 into its own wildcard listener), leaving both published ports dead
@@ -386,6 +392,11 @@
 - label: cognee-mcp runs as root so it can write the shared workspace created root-owned by the cognee API container
   command: grep -A40 'cognee-mcp:' services/compose.cognee.yml | grep -q 'user: root'
   tags: [services-it, cognee, implemented]
+
+## karakeep
+- label: karakeep pins Meilisearch v1.41.0 and sets MEILI_EXPERIMENTAL_DUMPLESS_UPGRADE=true so existing indexes upgrade in place on version bumps
+  command: grep -q 'HARBOR_KARAKEEP_MEILI_VERSION="v1.41.0"' profiles/default.env && grep -q 'MEILI_EXPERIMENTAL_DUMPLESS_UPGRADE=true' services/compose.karakeep.yml
+  tags: [implemented]
 
 # app
 - label: Harbor App blocks main UI behind a setup gate until setup detail status is ready
