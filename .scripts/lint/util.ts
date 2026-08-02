@@ -15,11 +15,15 @@ import { expandGlob } from "https://deno.land/std/fs/mod.ts";
 // dirs (cache/lib) are listed explicitly.
 export const RUNTIME_DIR_EXCLUDES = [
   "services/*/data",
+  "services/*/db",
+  "services/*/storage",
   "services/*/workspace",
   "services/*/vectordb",
   "services/*/meili_data*",
   "services/netdata/cache",
   "services/netdata/lib",
+  // dify keeps its runtime volumes at the repo root (see compose.dify.yml).
+  "dify/volumes",
 ];
 
 // Expand `globs` from `root`, then drop any path matched by `exclude`.
