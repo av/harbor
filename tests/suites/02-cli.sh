@@ -461,7 +461,7 @@ assert_ok    "harbor profile ls"     harbor profile ls
 # ---------------------------------------------------------------------------
 # 11. llamacpp is a default service (v0.5.0)
 #     The biggest user-facing change: `harbor up` with no args now starts
-#     llamacpp alongside ollama and webui. Verify the shipped profile and
+#     llamacpp alongside webui. Verify the shipped profile and
 #     the live config both include it.
 # ---------------------------------------------------------------------------
 assert_match "default services include llamacpp (profile)" \
@@ -471,10 +471,6 @@ assert_match "default services include llamacpp (profile)" \
 assert_match "default services include llamacpp (config)" \
   'llamacpp' \
   harbor config get services.default
-
-assert_match "default services include ollama (profile)" \
-  'ollama' \
-  grep 'HARBOR_SERVICES_DEFAULT' "$(harbor home)/profiles/default.env"
 
 assert_match "default services include webui (profile)" \
   'webui' \
@@ -1209,10 +1205,10 @@ if ! grep -q "^services:" <<< "$eject_output"; then
   fail "harbor eject output missing 'services:' key"
 fi
 
-# Default services should include ollama and webui.
-suite_log "eject: default output includes ollama"
-if ! grep -q "ollama" <<< "$eject_output"; then
-  fail "harbor eject default output does not mention ollama"
+# Default services should include llamacpp and webui.
+suite_log "eject: default output includes llamacpp"
+if ! grep -q "llamacpp" <<< "$eject_output"; then
+  fail "harbor eject default output does not mention llamacpp"
 fi
 
 suite_log "eject: default output includes webui"

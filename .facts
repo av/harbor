@@ -638,6 +638,9 @@
 - label: the lint file collector excludes services/netdata/cache and services/netdata/lib — netdata's workspace is services/netdata itself and its runtime dirs are root-owned, crashing the walk
   command: grep -q 'services/netdata/cache' .scripts/lint/util.ts && grep -q 'services/netdata/lib' .scripts/lint/util.ts
   tags: [spec, implemented]
+- label: tests: 02-cli asserts default services are webui and llamacpp only, with no ollama-as-default assertions
+  command: bash -c '! grep -q "default services include ollama" tests/suites/02-cli.sh && grep -q "default services include llamacpp" tests/suites/02-cli.sh'
+  tags: [implemented, defaults]
 ## app-install
 - label: the integration install suite exercises install.sh and first-run llamacpp webui wiring
   command: rg -q 'install.sh' tests/suites/01-install.sh && rg -q 'harbor up --no-defaults llamacpp webui' tests/suites/01-install.sh
