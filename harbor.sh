@@ -10046,7 +10046,7 @@ run_vllm_command() {
         env_manager set vllm.model.specifier "$spec"
 
         # Litellm model specifier for vLLM
-        override_yaml_value ./litellm/litellm.vllm.yaml "model:" "openai/$current_model"
+        override_yaml_value ./services/litellm/litellm.vllm.yaml "model:" "openai/$current_model"
     }
 
     case "$1" in
