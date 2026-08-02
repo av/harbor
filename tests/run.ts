@@ -829,9 +829,14 @@ async function execSuite(
   installSource: "local" | "github",
 ): Promise<SuiteOutcome> {
   const t0 = performance.now();
+  // Forward a GitHub token when the host has one — unauthenticated
+  // api.github.com calls (install.sh releases/latest lookup) are limited to
+  // 60/hour per IP, which parallel github-source rows exhaust quickly.
+  const ghToken = Deno.env.get("GITHUB_TOKEN") ?? Deno.env.get("GH_TOKEN");
   const cmd = [
     probe.runtime,
     "exec",
+    ...(ghToken ? ["-e", `GITHUB_TOKEN=${ghToken}`] : []),
     "-e", `HARBOR_TEST_INSTALL_SOURCE=${installSource}`,
     "-e", "HARBOR_TEST_REPO=/opt/harbor-test/repo",
     // Per-row writable harbor home — see prepareHarborWork above.
@@ -1166,6 +1171,15 @@ async function main() {
   log("test", `rows: ${rows.join(", ")}`);
   log("test", `suites: ${suites.map((s) => s.short).join(", ")}`);
   log("test", `jobs=${args.jobs} install-source=${args.installSource}`);
+  if (args.installSource === "github") {
+    const hasToken = Boolean(Deno.env.get("GITHUB_TOKEN") ?? Deno.env.get("GH_TOKEN"));
+    log(
+      "test",
+      hasToken
+        ? "github token found on host; forwarding into rows for API auth"
+        : "no GITHUB_TOKEN/GH_TOKEN on host; unauthenticated GitHub API calls may hit the 60/hour rate limit — rows fall back to source=local on failure",
+    );
+  }
 
   const stagedRepoDir = `${ARTIFACTS_DIR}/${runId}/staged-repo`;
   log("test", `staging git-tracked repo → ${stagedRepoDir}`);

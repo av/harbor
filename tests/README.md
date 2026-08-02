@@ -20,6 +20,19 @@ harbor dev test --json                          # machine-readable
 
 Exit code is `0` iff every `(row, suite)` pair passed.
 
+### GitHub rate limits (`--install-source github`)
+
+The github install path calls `api.github.com/.../releases/latest`, which is
+limited to 60 unauthenticated requests/hour per IP — parallel rows exhaust it
+quickly. Mitigations:
+
+- If `GITHUB_TOKEN` (or `GH_TOKEN`) is set on the host, the orchestrator
+  forwards it into every row and `install.sh` authenticates its API calls
+  (5000 req/hour). E.g. `GITHUB_TOKEN=$(gh auth token) harbor dev test ...`.
+- If the github install still fails inside a row, `01-install.sh` logs a
+  warning and falls back to installing from the staged local repo instead of
+  failing the row.
+
 ## Layout
 
 ```

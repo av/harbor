@@ -657,7 +657,7 @@
   tags: [spec, implemented]
 - label: the orchestrator forwards host GITHUB_TOKEN or GH_TOKEN into each test row's suite environment so GitHub API calls during --install-source github are authenticated when a token is present
   command: grep -q 'GITHUB_TOKEN' tests/run.ts
-  tags: [spec, gh-rate-limit]
+  tags: [spec, gh-rate-limit, implemented]
 
 ## defaults-up
 - label: tests/suites/07-defaults-up.sh asserts a bare 'harbor up' on a fresh install starts webui+llamacpp only (no ollama), prints both first-boot notices, webui reaches healthy, and llamacpp /v1/models answers with an empty HF cache
@@ -673,10 +673,10 @@
 ## install
 - label: install.sh resolve_harbor_version sends an Authorization Bearer header on the GitHub releases API call when GITHUB_TOKEN or GH_TOKEN is set
   command: grep -q 'Authorization: Bearer' install.sh
-  tags: [spec, gh-rate-limit]
+  tags: [spec, gh-rate-limit, implemented]
 - label: when --install-source github fails inside a row, 01-install falls back to the staged local install with a clear warning instead of failing the row
   command: grep -q 'falling back to source=local' tests/suites/01-install.sh
-  tags: [spec, gh-rate-limit]
+  tags: [spec, gh-rate-limit, implemented]
 
 # project > distribution
 - label: requirements.sh apt package availability checks verify real package metadata: every apt-cache show probe greps for ^Package: so empty-output false positives (e.g. docker-ce on Ubuntu 24.04 without the Docker repo) fall through to the docker.io / distro fallback

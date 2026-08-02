@@ -54,8 +54,15 @@ setup_stage() {
 
 resolve_harbor_version() {
   local response version attempt
+  # Unauthenticated GitHub API calls are limited to 60/hour per IP; a token
+  # (GITHUB_TOKEN or GH_TOKEN, e.g. in CI or test rows) lifts that to 5000/hour.
+  local -a auth_args=()
+  local gh_token="${GITHUB_TOKEN:-${GH_TOKEN:-}}"
+  if [ -n "$gh_token" ]; then
+    auth_args=(-H "Authorization: Bearer $gh_token")
+  fi
   for attempt in 1 2; do
-    response=$(curl -fsSL --connect-timeout 15 --max-time 30 "$HARBOR_RELEASE_URL" 2>/dev/null) || {
+    response=$(curl -fsSL --connect-timeout 15 --max-time 30 "${auth_args[@]}" "$HARBOR_RELEASE_URL" 2>/dev/null) || {
       if [ "$attempt" -eq 1 ]; then
         sleep 2
         continue

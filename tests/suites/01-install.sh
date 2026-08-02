@@ -29,8 +29,24 @@ case "$HARBOR_TEST_INSTALL_SOURCE" in
     ;;
   github)
     suite_log "source=github (curl https://.../install.sh)"
-    curl -fsSL https://raw.githubusercontent.com/av/harbor/refs/heads/main/install.sh \
-      | bash
+    # GITHUB_TOKEN (forwarded by the orchestrator when the host has one) is
+    # picked up by install.sh's releases/latest lookup. Without a token the
+    # unauthenticated GitHub API allows only 60 req/hour per IP, so a github
+    # install can fail on rate limiting alone — fall back to the staged local
+    # repo rather than failing the whole row on an environmental limit.
+    # HARBOR_INSTALL_PATH must match the row's HARBOR_HOME — otherwise the
+    # published installer clones to its default ~/.harbor while harbor.sh
+    # resolves state against HARBOR_HOME, and CLI linking fails.
+    if ! curl -fsSL https://raw.githubusercontent.com/av/harbor/refs/heads/main/install.sh \
+      | HARBOR_INSTALL_PATH="${HARBOR_HOME:-/opt/harbor-test/work}" bash; then
+      suite_log "WARNING: github install failed (likely GitHub API rate limit; set GITHUB_TOKEN on the host to authenticate)"
+      suite_log "WARNING: falling back to source=local (staged repo at ${HARBOR_TEST_REPO})"
+      HARBOR_INSTALL_SOURCE_PATH="${HARBOR_TEST_REPO}" \
+        HARBOR_REQUIREMENTS_PATH="${HARBOR_TEST_REPO}/requirements.sh" \
+        HARBOR_INSTALL_PATH="${HARBOR_HOME:-/opt/harbor-test/work}" \
+        HARBOR_INSTALL_VERSION=source \
+        bash "${HARBOR_TEST_REPO}/install.sh"
+    fi
     ;;
   *)
     echo "[install] ERROR: unknown HARBOR_TEST_INSTALL_SOURCE='${HARBOR_TEST_INSTALL_SOURCE}'" >&2
