@@ -2,4 +2,5 @@ services:
   mindsdb:
     environment:
       - LLM_FUNCTION_BASE_URL=http://mlx:8080/v1
+      - LLM_FUNCTION_MODEL=${HARBOR_MLX_MODEL}
       - OPENAI_API_KEY=sk-mlx

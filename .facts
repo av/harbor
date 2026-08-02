@@ -363,6 +363,11 @@
   command: grep -q 'morphic-db' services/compose.morphic.yml && grep -q 'DATABASE_URL=postgresql://morphic:morphic@morphic-db:5432/morphic' services/compose.morphic.yml && grep -q 'service_healthy' services/compose.morphic.yml
   tags: [spec, morphic-postgres, implemented]
 
+## mindsdb x backends
+- label: every mindsdb backend cross-file (llamacpp, vllm, dmr, mlx, omlx, ollama) sets LLM_FUNCTION_MODEL alongside LLM_FUNCTION_BASE_URL so the LLM() SQL function works out of the box (MindsDB errors on missing 'model_name' otherwise)
+  command: bash -c 'for f in services/compose.x.mindsdb.{llamacpp,vllm,dmr,mlx,omlx,ollama}.yml; do grep -q LLM_FUNCTION_MODEL $f || exit 1; done'
+  tags: [spec, mindsdb-llm-model, implemented]
+
 # app
 - label: Harbor App blocks main UI behind a setup gate until setup detail status is ready
   command: rg -q 'detail\?\.status === "ready"' app/src/setup/HarborSetupContext.tsx
