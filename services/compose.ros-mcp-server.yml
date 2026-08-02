@@ -11,6 +11,9 @@ services:
     environment:
       - ROSBRIDGE_HOST=${HARBOR_ROS_MCP_SERVER_ROSBRIDGE_HOST:-host.docker.internal}
       - ROSBRIDGE_PORT=${HARBOR_ROS_MCP_SERVER_ROSBRIDGE_PORT:-9090}
+    # MCP server speaks stdio; keep stdin open so `harbor up` doesn't
+    # immediately exit(0) when there is no attached client.
+    stdin_open: true
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
