@@ -7,11 +7,17 @@ services:
     env_file:
       - ./.env
       - ./services/bolt/override.env
-    # this repo can't work with actual env variables,
-    # so a .env.local file has to be supplied and it'll be
-    # bundled into the FE and CloudFlare workers
+    # bolt.diy reads .env.local at runtime (bindings.sh) — the image ships
+    # a prebuilt app, so no in-container rebuild is needed (and none is
+    # possible: the production image has no dev dependencies).
     volumes:
       - ./services/bolt/.env.local:/app/.env.local
-    command: bash -c "pnpm run build && pnpm run dockerstart"
+    # The upstream production image prunes dev dependencies but its own
+    # dockerstart script still expects the wrangler CLI — fetch a matching
+    # wrangler via npx at startup (upstream pins ^4).
+    command: >
+      bash -c 'bindings=$(./bindings.sh) &&
+      npx -y wrangler@4 pages dev ./build/client $bindings
+      --ip 0.0.0.0 --port 5173 --no-show-interactive-dev-session'
     networks:
       - harbor-network
