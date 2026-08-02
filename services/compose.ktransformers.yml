@@ -12,6 +12,9 @@ services:
       - ${HARBOR_KTRANSFORMERS_HOST_PORT}:12456
     volumes:
       - ${HARBOR_HF_CACHE:-./services/ktransformers/.hf-cache}:/root/.cache/huggingface
+      # GGUFs in the llama.cpp cache can be symlinks to absolute host HF-cache
+      # blob paths; bind the HF cache at the same host-absolute path so they resolve
+      - ${HARBOR_HF_CACHE:-./services/ktransformers/.hf-cache}:${HOME}/.cache/huggingface:ro
       - ${HARBOR_LLAMACPP_CACHE}:/root/.cache/llama.cpp
       # Monkey-patch to make compatible with Open WebUI
       - ./services/ktransformers/chat.py:/opt/conda/lib/python3.10/site-packages/ktransformers/server/api/openai/endpoints/chat.py

@@ -7,6 +7,9 @@ services:
       - ./services/llamacpp/override.env
     volumes:
       - ${HARBOR_HF_CACHE:-./services/llamacpp/.hf-cache}:/root/.cache/huggingface
+      # GGUFs in the llama.cpp cache can be symlinks to absolute host HF-cache
+      # blob paths; bind the HF cache at the same host-absolute path so they resolve
+      - ${HARBOR_HF_CACHE:-./services/llamacpp/.hf-cache}:${HOME}/.cache/huggingface:ro
       - ${HARBOR_LLAMACPP_CACHE}:/root/.cache/llama.cpp
       - ./services/llamacpp/data:/app/data
     ports:

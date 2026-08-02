@@ -630,6 +630,31 @@
   command: grep -q 'HARBOR_FLOWISE_VERSION="3.1.3"' profiles/default.env
   tags: [ownership2, spec, implemented]
 
+## llamacpp
+- label: compose.llamacpp.yml additionally binds HARBOR_HF_CACHE read-only at ${HOME}/.cache/huggingface so llama.cpp-cache GGUF symlinks targeting absolute host HF-cache blob paths resolve inside the container
+  command: grep -q ':${HOME}/.cache/huggingface:ro' services/compose.llamacpp.yml
+  tags: [spec, cache-symlinks, implemented]
+
+## ikllamacpp
+- label: compose.ikllamacpp.yml additionally binds HARBOR_HF_CACHE read-only at ${HOME}/.cache/huggingface so llama.cpp-cache GGUF symlinks targeting absolute host HF-cache blob paths resolve inside the container
+  command: grep -q ':${HOME}/.cache/huggingface:ro' services/compose.ikllamacpp.yml
+  tags: [spec, cache-symlinks, implemented]
+
+## ollama
+- label: compose.ollama.yml additionally binds HARBOR_HF_CACHE read-only at ${HOME}/.cache/huggingface so llama.cpp-cache GGUF symlinks targeting absolute host HF-cache blob paths resolve inside the container
+  command: grep -q ':${HOME}/.cache/huggingface:ro' services/compose.ollama.yml
+  tags: [spec, cache-symlinks, implemented]
+
+## ktransformers
+- label: compose.ktransformers.yml additionally binds HARBOR_HF_CACHE read-only at ${HOME}/.cache/huggingface so llama.cpp-cache GGUF symlinks targeting absolute host HF-cache blob paths resolve inside the container
+  command: grep -q ':${HOME}/.cache/huggingface:ro' services/compose.ktransformers.yml
+  tags: [spec, cache-symlinks, implemented]
+
+## jupyter
+- label: compose.jupyter.yml additionally binds HARBOR_HF_CACHE read-only at ${HOME}/.cache/huggingface so llama.cpp-cache GGUF symlinks targeting absolute host HF-cache blob paths resolve inside the container
+  command: grep -q ':${HOME}/.cache/huggingface:ro' services/compose.jupyter.yml
+  tags: [spec, cache-symlinks, implemented]
+
 # app
 - label: Harbor App blocks main UI behind a setup gate until setup detail status is ready
   command: rg -q 'detail\?\.status === "ready"' app/src/setup/HarborSetupContext.tsx

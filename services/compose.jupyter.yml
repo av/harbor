@@ -25,6 +25,9 @@ services:
       - ${HARBOR_JUPYTER_WORKSPACE}:/app/workspace
       - ${HARBOR_HF_CACHE:-./services/jupyter/.hf-cache}:/root/.cache/huggingface
       - ${HARBOR_VLLM_CACHE}:/root/.cache/vllm
+      # GGUFs in the llama.cpp cache can be symlinks to absolute host HF-cache
+      # blob paths; bind the HF cache at the same host-absolute path so they resolve
+      - ${HARBOR_HF_CACHE:-./services/jupyter/.hf-cache}:${HOME}/.cache/huggingface:ro
       - ${HARBOR_LLAMACPP_CACHE}:/root/.cache/llama.cpp
       - ${HARBOR_OLLAMA_CACHE}:/root/.ollama
     networks:
