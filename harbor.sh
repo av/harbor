@@ -5521,9 +5521,21 @@ get_service_port() {
         return 1
     fi
 
-    # Get the port mapping for the service
-    if port=$(docker port "$target_name" | sed -n 's/.*:\([0-9][0-9]*\)$/\1/p' | head -n 1) && [ -n "$port" ]; then
-        echo "$port"
+    # Get the port mappings for the service
+    local mapped_ports
+    mapped_ports=$(docker port "$target_name" | sed -n 's/.*:\([0-9][0-9]*\)$/\1/p')
+
+    if [ -n "$mapped_ports" ]; then
+        # With multiple mappings (e.g. UI + VNC + debug ports), docker port
+        # order is arbitrary — prefer the configured main host port when it
+        # is among the published ones
+        if port=$(env_manager --silent get "${service_name}.host_port" 2>/dev/null) \
+            && [ -n "$port" ] && echo "$mapped_ports" | grep -qx "$port"; then
+            echo "$port"
+            return 0
+        fi
+
+        echo "$mapped_ports" | head -n 1
         return 0
     fi
 
