@@ -18,9 +18,18 @@ services:
   perplexica-be:
     image: andypenno/perplexica-backend
     container_name: ${HARBOR_CONTAINER_PREFIX}.perplexica-be
+    # Run as the host user so db.sqlite in the bind mount stays host-owned
+    user: "${HARBOR_USER_ID}:${HARBOR_GROUP_ID}"
     env_file:
       - ./.env
       - ./services/perplexica/override.env
+    # Wait for the init sidecar to chown the data bind mount so the
+    # host directory stays owned by the host user — recoverable without
+    # `sudo`. Docker creates missing bind-mount targets as root:root by
+    # default; this fixup runs before the backend starts.
+    depends_on:
+      perplexica-init:
+        condition: service_completed_successfully
     ports:
       - ${HARBOR_PERPLEXICA_BACKEND_HOST_PORT}:3001
     volumes:
@@ -34,3 +43,23 @@ services:
       - OPENAI_API_KEY=${HARBOR_OPENAI_KEY}
       - GROQ_API_KEY=${HARBOR_GROQ_KEY}
       - ANTHROPIC_API_KEY=${HARBOR_ANTHROPIC_KEY}
+      # Non-root user has no writable $HOME in the image
+      - HOME=/tmp
+
+  # Init sidecar: chowns the data bind mount to HARBOR_USER_ID:HARBOR_GROUP_ID
+  # before the backend starts. Mirrors the pattern used for flowise/karakeep.
+  perplexica-init:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.perplexica-init
+    image: alpine:3.20
+    env_file:
+      - ./.env
+      - ./services/perplexica/override.env
+    environment:
+      TARGET_UID: ${HARBOR_USER_ID}
+      TARGET_GID: ${HARBOR_GROUP_ID}
+    entrypoint: ["/bin/sh", "/init.sh"]
+    volumes:
+      - ./services/perplexica/workspace-init.sh:/init.sh:ro
+      - ./services/perplexica/data:/workspace
+    networks:
+      - harbor-network
