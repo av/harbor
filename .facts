@@ -558,6 +558,11 @@
   command: grep -q 'HARBOR_LEMONADE_WORKSPACE="./services/lemonade/data"' profiles/default.env && grep -q 'services/lemonade/data/' .gitignore
   tags: [sweep8, implemented]
 
+## omniparser
+- label: omniparser attaches the NVIDIA GPU via a compose.x.omniparser.nvidia.yml capability overlay (CUDA-only image; without it the container never saw a GPU)
+  command: docker compose --env-file .env -f compose.yml -f services/compose.omniparser.yml -f services/compose.x.omniparser.nvidia.yml config --quiet
+  tags: [sweep8, implemented]
+
 # app
 - label: Harbor App blocks main UI behind a setup gate until setup detail status is ready
   command: rg -q 'detail\?\.status === "ready"' app/src/setup/HarborSetupContext.tsx
