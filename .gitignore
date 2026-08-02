@@ -159,3 +159,5 @@ integration/
 
 # Skill-creator runtime scripts
 .agents/skills/skill-creator/scripts/
+services/deerflow/data
+services/deerflow/redis

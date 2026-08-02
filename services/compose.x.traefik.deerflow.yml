@@ -5,7 +5,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.deerflow.rule=Host(`deerflow.${HARBOR_TRAEFIK_DOMAIN}`)"
-      - "traefik.http.services.deerflow.loadbalancer.server.port=3000"
+      - "traefik.http.services.deerflow.loadbalancer.server.port=2026"
       - "traefik.http.routers.deerflow.entrypoints=websecure"
       - "traefik.http.routers.deerflow.tls=true"
       - "traefik.http.routers.deerflow.service=deerflow"

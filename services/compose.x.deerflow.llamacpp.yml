@@ -1,0 +1,10 @@
+# DeerFlow llama.cpp Integration
+# Points the Harbor model entry at Harbor's llama.cpp server
+services:
+  deerflow-backend:
+    environment:
+      - DEERFLOW_MODEL=${HARBOR_DEERFLOW_LLAMACPP_MODEL}
+      - DEERFLOW_MODEL_BASE_URL=http://llamacpp:8080/v1
+      - DEERFLOW_MODEL_API_KEY=sk-llamacpp
+    depends_on:
+      - llamacpp

@@ -1,0 +1,40 @@
+# Harbor configuration for DeerFlow v2.
+# Mounted read-only at /app/backend/config.yaml (DEER_FLOW_CONFIG_PATH).
+# `$VAR` values are resolved by DeerFlow itself from the container environment;
+# Harbor's compose files set DEERFLOW_MODEL / DEERFLOW_MODEL_BASE_URL /
+# DEERFLOW_MODEL_API_KEY (cross-service files override them per backend).
+# Schema reference: config.example.yaml at the pinned upstream tag.
+
+config_version: 14
+
+log_level: info
+
+models:
+  - name: harbor
+    display_name: Harbor Backend
+    use: langchain_openai:ChatOpenAI
+    model: $DEERFLOW_MODEL
+    base_url: $DEERFLOW_MODEL_BASE_URL
+    api_key: $DEERFLOW_MODEL_API_KEY
+    request_timeout: 600.0
+    max_retries: 2
+    max_tokens: 8192
+    temperature: 0.7
+
+tool_groups:
+  - name: web
+  - name: file:read
+  - name: file:write
+  - name: bash
+
+sandbox:
+  use: deerflow.sandbox.local:LocalSandboxProvider
+  # LocalSandboxProvider is not a secure isolation boundary; keep host bash off
+  allow_host_bash: false
+
+tools:
+  # DuckDuckGo web search: no API key required
+  - name: web_search
+    group: web
+    use: deerflow.community.ddg_search.tools:web_search_tool
+    max_results: 5

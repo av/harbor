@@ -1,8 +1,10 @@
 # DeerFlow Ollama Integration
-# Mounts Ollama-specific config that overrides base_url to use Harbor's Ollama
+# Points the Harbor model entry at Harbor's Ollama (OpenAI-compatible endpoint)
 services:
   deerflow-backend:
-    volumes:
-      - ./services/deerflow/configs/deerflow.ollama.yaml:/app/configs/z.ollama.yaml
+    environment:
+      - DEERFLOW_MODEL=${HARBOR_DEERFLOW_MODEL}
+      - DEERFLOW_MODEL_BASE_URL=${HARBOR_OLLAMA_INTERNAL_URL}/v1
+      - DEERFLOW_MODEL_API_KEY=ollama
     depends_on:
       - ollama

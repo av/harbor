@@ -1,52 +1,93 @@
 services:
-  deerflow-backend:
-    container_name: ${HARBOR_CONTAINER_PREFIX}.deerflow-backend
-    # The upstream image drops to 'appuser' but /app is root-owned; Harbor's
-    # entrypoint renders /app/conf.yaml at startup and needs write access
-    user: root
-    build:
-      context: ${HARBOR_DEERFLOW_GIT_REF}
-      dockerfile: Dockerfile
-    ports:
-      - ${HARBOR_DEERFLOW_BACKEND_HOST_PORT}:8000
+  deerflow-redis:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.deerflow-redis
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
     env_file:
       - ./.env
       - ./services/deerflow/override.env
-    environment:
-      - ALLOWED_ORIGINS=http://localhost:${HARBOR_DEERFLOW_HOST_PORT}
     volumes:
-      # Base config (a. prefix ensures it's loaded first, before overrides)
-      - ./services/deerflow/configs/deerflow.config.yaml:/app/configs/a.config.yaml
-      # Config merger entrypoint
-      - ./services/deerflow/start_deerflow.sh:/app/start_deerflow.sh
-      # Data directory
-      - ${HARBOR_DEERFLOW_WORKSPACE}/data:/app/data
-    entrypoint: ["/app/start_deerflow.sh"]
+      - ${HARBOR_DEERFLOW_WORKSPACE}/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
     networks:
       - harbor-network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/docs"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
 
-  deerflow:
-    container_name: ${HARBOR_CONTAINER_PREFIX}.deerflow
+  deerflow-backend:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.deerflow-backend
     build:
-      context: ${HARBOR_DEERFLOW_GIT_REF}:web
-      dockerfile: Dockerfile
-      args:
-        - NEXT_PUBLIC_API_URL=http://localhost:${HARBOR_DEERFLOW_BACKEND_HOST_PORT}/api
+      context: ${HARBOR_DEERFLOW_GIT_REF}
+      dockerfile: backend/Dockerfile
     ports:
-      - ${HARBOR_DEERFLOW_HOST_PORT}:3000
+      - ${HARBOR_DEERFLOW_BACKEND_HOST_PORT}:8001
     env_file:
       - ./.env
       - ./services/deerflow/override.env
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:${HARBOR_DEERFLOW_BACKEND_HOST_PORT}/api
+      - CI=true
+      - DEER_FLOW_PROJECT_ROOT=/app
+      - DEER_FLOW_HOME=/app/backend/.deer-flow
+      - DEER_FLOW_CONFIG_PATH=/app/backend/config.yaml
+      - DEER_FLOW_STREAM_BRIDGE_REDIS_URL=redis://deerflow-redis:6379/0
+      - DEER_FLOW_CHANNELS_LANGGRAPH_URL=http://deerflow-backend:8001/api
+      - DEER_FLOW_CHANNELS_GATEWAY_URL=http://deerflow-backend:8001
+      # Resolved by DeerFlow inside services/deerflow/config.yaml ($VAR form)
+      - DEERFLOW_MODEL=${HARBOR_DEERFLOW_LLAMACPP_MODEL}
+      - DEERFLOW_MODEL_BASE_URL=${HARBOR_DEERFLOW_MODEL_BASE_URL}
+      - DEERFLOW_MODEL_API_KEY=${HARBOR_DEERFLOW_MODEL_API_KEY}
+    volumes:
+      - ./services/deerflow/config.yaml:/app/backend/config.yaml:ro
+      - ${HARBOR_DEERFLOW_WORKSPACE}/data:/app/backend/.deer-flow
+    depends_on:
+      deerflow-redis:
+        condition: service_healthy
+    healthcheck:
+      # Runtime image has no curl; python stdlib probe instead
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks:
+      - harbor-network
+
+  deerflow-frontend:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.deerflow-frontend
+    build:
+      context: ${HARBOR_DEERFLOW_GIT_REF}
+      dockerfile: frontend/Dockerfile
+      target: prod
+    env_file:
+      - ./.env
+      - ./services/deerflow/override.env
+    environment:
+      - BETTER_AUTH_SECRET=${HARBOR_DEERFLOW_AUTH_SECRET}
+      - DEER_FLOW_INTERNAL_GATEWAY_BASE_URL=http://deerflow-backend:8001
+      - DEER_FLOW_TRUSTED_ORIGINS=http://localhost:${HARBOR_DEERFLOW_HOST_PORT}
     depends_on:
       deerflow-backend:
         condition: service_healthy
+    networks:
+      - harbor-network
+
+  # Browser-facing entry point. The Next.js frontend bakes its /api rewrite
+  # targets at build time (127.0.0.1:8001), so upstream's nginx path-routing
+  # is required to reach the gateway from the browser.
+  deerflow:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.deerflow
+    image: nginx:alpine
+    ports:
+      - ${HARBOR_DEERFLOW_HOST_PORT}:2026
+    env_file:
+      - ./.env
+      - ./services/deerflow/override.env
+    volumes:
+      - ./services/deerflow/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - deerflow-frontend
+      - deerflow-backend
     networks:
       - harbor-network

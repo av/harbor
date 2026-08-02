@@ -1226,10 +1226,10 @@
 # deerflow
 - label: the v2 stack is four containers: deerflow (nginx entry on port 2026 routing /api to the gateway and everything else to the frontend), deerflow-frontend (Next.js, 3000), deerflow-backend (gateway API, 8001, healthcheck /health), and deerflow-redis (stream bridge)
   command: grep -q deerflow-redis services/compose.deerflow.yml && grep -q deerflow-frontend services/compose.deerflow.yml && grep -q "nginx.conf" services/compose.deerflow.yml && grep -q "8001/health" services/compose.deerflow.yml
-  tags: [deerflow, v2, spec]
+  tags: [deerflow, v2, spec, implemented]
 - label: model access is a single OpenAI-compatible entry in services/deerflow/config.yaml resolved from container env DEERFLOW_MODEL, DEERFLOW_MODEL_BASE_URL, DEERFLOW_MODEL_API_KEY; base defaults point at llamacpp and compose.x.deerflow.ollama.yml overrides base_url to Harbor Ollama with HARBOR_DEERFLOW_MODEL
   command: grep -q DEERFLOW_MODEL_BASE_URL services/compose.deerflow.yml && grep -q DEERFLOW_MODEL_BASE_URL services/compose.x.deerflow.ollama.yml && grep -q DEERFLOW_MODEL_BASE_URL services/deerflow/config.yaml
-  tags: [deerflow, v2, spec]
+  tags: [deerflow, v2, spec, implemented]
 - label: gateway state (auth users, threads, sqlite) persists in the deerflow workspace data dir mounted at /app/backend/.deer-flow; frontend sessions are signed with HARBOR_DEERFLOW_AUTH_SECRET (32+ chars default)
   command: grep -q HARBOR_DEERFLOW_AUTH_SECRET profiles/default.env && grep -q /app/backend/.deer-flow services/compose.deerflow.yml
-  tags: [deerflow, v2, spec]
+  tags: [deerflow, v2, spec, implemented]
