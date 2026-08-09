@@ -14,7 +14,7 @@ RUN sudo apt-get update \
   wmctrl \
   libreoffice \
   fonts-noto-cjk \
-  neofetch \
+  nodejs \
   python3-pip \
   python3-requests \
   python3-numpy \
@@ -26,7 +26,7 @@ RUN sudo apt-get update \
   && rm -rf /var/lib/apt/lists/*
 
 RUN curl -L https://npmjs.org/install.sh | sh
-RUN npm install -g --unsafe-perm yarn
+RUN npm install -g yarn
 RUN sudo chown -R abc:abc /usr/lib/node_modules
 
 # This is an alternative for CMD, as Webtop has
