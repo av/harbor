@@ -31,6 +31,9 @@
 - label: services > omnichain > services/omnichain/data is host-owned via a tracked .gitkeep and ignored via an anchored /services/omnichain/data/ gitignore entry (old unanchored omnichain/data/ never matched)
   command: git check-ignore -q services/omnichain/data/sample && grep -q '^/services/omnichain/data/\*' .gitignore && [ -f services/omnichain/data/.gitkeep ] && [ "$(stat -c %u services/omnichain/data)" = "$(id -u)" ]
   tags: [svc-testing, implemented]
+- label: nexa > the nexa entrypoint setpriv-drops to the host user (TARGET_UID/TARGET_GID from compose) and chowns the /root/.cache/nexa.ai bind mount so model downloads in HARBOR_NEXA_CACHE stay host-owned
+  command: grep -q setpriv services/nexa/entrypoint.sh && grep -q TARGET_UID services/compose.nexa.yml
+  tags: [services-it, nexa, nexa-ownership]
 # project
 
 ## domain
@@ -229,7 +232,7 @@
   tags: [gitignore-anchor, implemented]
 - label: hermes workspace defaults under services/hermes: HARBOR_HERMES_WORKSPACE=./services/hermes/data in profiles/default.env, so a fresh 'harbor up hermes' creates no repo-root ./hermes directory
   command: grep -qx 'HARBOR_HERMES_WORKSPACE=./services/hermes/data' profiles/default.env
-  tags: [hermes-workspace, spec]
+  tags: [hermes-workspace, spec, implemented]
 
 ## searxng
 - label: shipped settings.yml passes SearXNG engine about-schema validation: every engine about section uses require_api_key (no requires_api_key typo)
