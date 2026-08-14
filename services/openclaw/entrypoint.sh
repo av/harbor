@@ -124,13 +124,17 @@ else
 
     // Update gateway tokens (guard nested objects — user configs may
     // not carry gateway.auth / gateway.remote / controlUi at all)
-    if (!config.gateway) config.gateway = { mode: '${GATEWAY_MODE}' };
+    if (!config.gateway) config.gateway = {};
+    // Upstream blocks gateway start when gateway.mode is absent; backfill it
+    if (!config.gateway.mode) config.gateway.mode = '${GATEWAY_MODE}';
     if (!config.gateway.auth) config.gateway.auth = { mode: 'token' };
     if (!config.gateway.remote) config.gateway.remote = {};
     config.gateway.auth.token = '$GATEWAY_TOKEN';
     config.gateway.remote.token = '$GATEWAY_TOKEN';
     // Upstream removed controlUi.allowInsecureAuth; scrub it from older configs
     if (config.gateway.controlUi) delete config.gateway.controlUi.allowInsecureAuth;
+    // Upstream also dropped meta.lastTouchedAt from the schema
+    if (config.meta) delete config.meta.lastTouchedAt;
 
     // Update default model (with provider prefix)
     if (!config.agents) config.agents = {};
@@ -172,6 +176,10 @@ else
     fs.writeFileSync('$CONFIG_PATH', JSON.stringify(config, null, 2));
   "
 fi
+
+# Migrate legacy state (device identity, schema drift) that upstream
+# refuses to auto-repair at gateway start
+node dist/index.js doctor --fix --non-interactive >/dev/null 2>&1 || true
 
 rm -f /home/node/.openclaw/gateway*.loc /home/node/.openclaw/gateway*.lock /home/node/.openclaw/gateway*.pid
 

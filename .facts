@@ -613,6 +613,15 @@
 - label: entrypoint.sh update path guards missing gateway.auth/gateway.remote objects and no longer emits the removed controlUi.allowInsecureAuth key
   command: grep -q 'if (!config.gateway.remote)' services/openclaw/entrypoint.sh && ! grep -q 'allowInsecureAuth": true' services/openclaw/entrypoint.sh
   tags: [sweep9, implemented]
+- label: entrypoint.sh update path backfills gateway.mode on existing configs so upstream gateway start is not blocked by missing gateway.mode
+  command: grep -q 'config.gateway.mode' services/openclaw/entrypoint.sh
+  tags: [sweep9-boot, implemented]
+- label: entrypoint.sh update path scrubs the removed meta.lastTouchedAt key from older configs so upstream schema validation passes
+  command: grep -q 'lastTouchedAt' services/openclaw/entrypoint.sh
+  tags: [sweep9-boot, implemented]
+- label: entrypoint.sh runs openclaw doctor --fix non-interactively before gateway start on existing configs so legacy device identities and schema drift are migrated automatically
+  command: grep -q 'doctor --fix' services/openclaw/entrypoint.sh
+  tags: [sweep9-boot, implemented]
 
 ## mi
 - label: HARBOR_MI_LLAMACPP_MODEL defaults to LiquidAI/LFM2.5-8B-A1B-GGUF:Q8_0, matching the fleet-wide llama.cpp default
