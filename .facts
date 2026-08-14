@@ -25,6 +25,9 @@
 - label: photoprism > HARBOR_PHOTOPRISM_STORAGE defaults to ./services/photoprism/storage (was ./photoprism/storage, which created a stray root-owned photoprism/ dir at the repo root)
   command: grep -q 'HARBOR_PHOTOPRISM_STORAGE="./services/photoprism/storage"' profiles/default.env
   tags: [photoprism, notable-sweep, spec, implemented]
+- label: services > mcpo x mcp servers > uvx-launched stdio servers (mcp-server-time, mcp-server-fetch) pass --with 'mcp<2' because they import McpError, removed in mcp 2.0 - same pin as mcpo itself
+  command: test $(grep -l 'mcp<2' services/mcpo/configs/mcpo.mcp-server-time.json services/mcpo/configs/mcpo.mcp-server-fetch.json | wc -l) -eq 2
+  tags: [spec, implemented]
 # project
 
 ## domain
@@ -221,6 +224,9 @@
 - label: gitignore: the repo-root hermes workspace dir (HARBOR_HERMES_WORKSPACE=./hermes default) is ignored so hermes runtime data never shows as untracked
   command: git check-ignore hermes/
   tags: [gitignore-anchor, implemented]
+- label: hermes workspace defaults under services/hermes: HARBOR_HERMES_WORKSPACE=./services/hermes/data in profiles/default.env, so a fresh 'harbor up hermes' creates no repo-root ./hermes directory
+  command: grep -qx 'HARBOR_HERMES_WORKSPACE=./services/hermes/data' profiles/default.env
+  tags: [hermes-workspace, spec]
 
 ## searxng
 - label: shipped settings.yml passes SearXNG engine about-schema validation: every engine about section uses require_api_key (no requires_api_key typo)

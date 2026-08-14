@@ -3,6 +3,8 @@
     "fetch": {
       "command": "uvx",
       "args": [
+        "--with",
+        "mcp<2",
         "mcp-server-fetch"
       ]
     }
