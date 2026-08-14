@@ -26,6 +26,10 @@ services:
     entrypoint: ["/bin/sh", "/configure-provider.sh"]
     command: ["gateway", "run"]
     environment:
+      # s6 image remaps the in-container hermes user to these IDs during
+      # bootstrap, keeping the workspace bind mount host-owned.
+      - HERMES_UID=${HARBOR_USER_ID}
+      - HERMES_GID=${HARBOR_GROUP_ID}
       - API_SERVER_ENABLED=true
       - API_SERVER_HOST=0.0.0.0
       - API_SERVER_PORT=8642

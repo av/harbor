@@ -1429,4 +1429,7 @@
 # services > hermes
 - label: hermes configure-provider.sh execs the image's entrypoint-dispatch.sh (not the deprecated s6 shim docker/entrypoint.sh, which no longer execs CMD and exits 127)
   command: grep -q 'exec /opt/hermes/docker/entrypoint-dispatch.sh' services/hermes/configure-provider.sh
-  tags: [hermes-provider, spec]
+  tags: [hermes-provider, spec, implemented]
+- label: hermes compose sets HERMES_UID/HERMES_GID to HARBOR_USER_ID/HARBOR_GROUP_ID so the s6 image remaps the hermes user and workspace files stay host-owned
+  command: grep -q 'HERMES_UID=${HARBOR_USER_ID}' services/compose.hermes.yml && grep -q 'HERMES_GID=${HARBOR_GROUP_ID}' services/compose.hermes.yml
+  tags: [hermes-provider, spec, implemented]

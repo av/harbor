@@ -35,4 +35,7 @@ print(f"[harbor] hermes provider -> custom {model['base_url']} "
 EOF
 fi
 
-exec /opt/hermes/docker/entrypoint.sh "$@"
+# entrypoint-dispatch.sh is the image's real entrypoint (s6-overlay /init when
+# PID 1); the old docker/entrypoint.sh is a deprecated shim that no longer
+# execs the CMD.
+exec /opt/hermes/docker/entrypoint-dispatch.sh "$@"
