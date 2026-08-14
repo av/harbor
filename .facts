@@ -578,7 +578,7 @@
   tags: [sweep8, implemented]
 - label: services/bench/results exists in the repo (tracked .gitkeep) so the bench results bind mount stays host-owned instead of being docker-created as root
   command: test -f services/bench/results/.gitkeep && git ls-files --error-unmatch services/bench/results/.gitkeep >/dev/null 2>&1
-  tags: [sweep8, spec]
+  tags: [sweep8, spec, implemented]
 
 ## nanobot
 - label: services/nanobot/entrypoint.sh forces gateway.host=0.0.0.0 in config.json so the health endpoint is reachable through the published container port
