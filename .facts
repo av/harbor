@@ -595,8 +595,11 @@
 
 ## lmeval
 - label: lmeval runtime cache/results dirs under services/lmeval are gitignored so eval runs never dirty the repo
-  command: git check-ignore -q services/lmeval/cache && git check-ignore -q services/lmeval/results
+  command: git check-ignore -q services/lmeval/cache/anyfile && git check-ignore -q services/lmeval/results/anyfile
   tags: [sweep8, implemented]
+- label: services/lmeval cache and results dirs exist in the repo (tracked .gitkeep) so the bind mounts stay host-owned instead of docker-created as root
+  command: test -f services/lmeval/cache/.gitkeep && test -f services/lmeval/results/.gitkeep && git ls-files --error-unmatch services/lmeval/cache/.gitkeep services/lmeval/results/.gitkeep >/dev/null 2>&1
+  tags: [sweep8, spec, implemented]
 
 ## raglite
 - label: raglite image installs llama-cpp-python explicitly because the raglite CLI unconditionally probes llama.cpp at startup while the package no longer hard-depends on it
