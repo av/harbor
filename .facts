@@ -576,6 +576,9 @@
 - label: profiles/default.env points HARBOR_BENCH_TASKS/RESULTS under ./services/bench (the bundled defaultTasks.yml actually exists there), so 'harbor bench run' mounts a file, not a docker-created empty directory
   command: grep -q 'HARBOR_BENCH_TASKS="./services/bench/defaultTasks.yml"' profiles/default.env && grep -q 'HARBOR_BENCH_RESULTS="./services/bench/results"' profiles/default.env && test -f services/bench/defaultTasks.yml
   tags: [sweep8, implemented]
+- label: services/bench/results exists in the repo (tracked .gitkeep) so the bench results bind mount stays host-owned instead of being docker-created as root
+  command: test -f services/bench/results/.gitkeep && git ls-files --error-unmatch services/bench/results/.gitkeep >/dev/null 2>&1
+  tags: [sweep8, spec]
 
 ## nanobot
 - label: services/nanobot/entrypoint.sh forces gateway.host=0.0.0.0 in config.json so the health endpoint is reachable through the published container port
