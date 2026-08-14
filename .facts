@@ -33,7 +33,7 @@
   tags: [svc-testing, implemented]
 - label: nexa > the nexa entrypoint setpriv-drops to the host user (TARGET_UID/TARGET_GID from compose) and chowns the /root/.cache/nexa.ai bind mount so model downloads in HARBOR_NEXA_CACHE stay host-owned
   command: grep -q setpriv services/nexa/entrypoint.sh && grep -q TARGET_UID services/compose.nexa.yml
-  tags: [services-it, nexa, nexa-ownership]
+  tags: [services-it, nexa, nexa-ownership, implemented]
 # project
 
 ## domain

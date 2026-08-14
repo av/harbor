@@ -14,6 +14,9 @@ services:
       - harbor-network
     volumes:
       - ${HARBOR_NEXA_CACHE}:/root/.cache/nexa.ai
+    environment:
+      - TARGET_UID=${HARBOR_USER_ID}
+      - TARGET_GID=${HARBOR_GROUP_ID}
     env_file:
       - ./.env
       - ./services/nexa/override.env
