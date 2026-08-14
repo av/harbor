@@ -161,7 +161,11 @@ export default async function apply(ctx: ComposeContext): Promise<ComposeObject>
 
   if (activeBackends.length === 0) {
     if (hasHarborCli) {
+      // Chain through the setpriv wrapper from compose.opencode.yml so the
+      // root chown + drop-to-host-user behavior is preserved.
       compose.services.opencode.entrypoint = [
+        '/bin/bash',
+        '/harbor-entrypoint.sh',
         '/bin/bash',
         '-c',
         `${generateHarborCliInitScript()}\nexec "$$@"`,
@@ -178,7 +182,16 @@ export default async function apply(ctx: ComposeContext): Promise<ComposeObject>
 
   // Inject discovery script with only the active backends
   const discoveryScript = generateDiscoveryScript(activeBackends);
-  compose.services.opencode.entrypoint = ['/bin/bash', '-c', discoveryScript, '--'];
+  // Chain through the setpriv wrapper so root chowns the mounts first, then
+  // the discovery script and opencode itself run as the host user.
+  compose.services.opencode.entrypoint = [
+    '/bin/bash',
+    '/harbor-entrypoint.sh',
+    '/bin/bash',
+    '-c',
+    discoveryScript,
+    '--',
+  ];
 
   return compose;
 }
