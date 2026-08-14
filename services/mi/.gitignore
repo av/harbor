@@ -1,3 +1,4 @@
-data/
+data/*
+!data/.gitkeep
 cache/
 logs/

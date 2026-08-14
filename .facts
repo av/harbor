@@ -627,6 +627,9 @@
 - label: HARBOR_MI_LLAMACPP_MODEL defaults to LiquidAI/LFM2.5-8B-A1B-GGUF:Q8_0, matching the fleet-wide llama.cpp default
   command: grep -q 'HARBOR_MI_LLAMACPP_MODEL="LiquidAI/LFM2.5-8B-A1B-GGUF:Q8_0"' profiles/default.env
   tags: [sweep9, implemented]
+- label: services/mi/data exists in the repo (gitkeep) so the mi workspace bind mount is host-owned instead of docker-created root-owned
+  command: git ls-files --error-unmatch services/mi/data/.gitkeep
+  tags: [sweep9-boot, implemented]
 
 ## ownership
 - label: flowise persists data at /home/node/.flowise (image runs as node uid 1000, HOME=/home/node); the workspace bind mount targets that path, not /root/.flowise
