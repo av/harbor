@@ -5,3 +5,4 @@ services:
     environment:
       - HARBOR_S2S_OPENAI_URL=http://llamacpp:8080/v1
       - HARBOR_S2S_OPENAI_KEY=sk-llamacpp
+      - HARBOR_S2S_MODEL=${HARBOR_S2S_LLAMACPP_MODEL}

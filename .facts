@@ -34,6 +34,9 @@
 - label: nexa > the nexa entrypoint setpriv-drops to the host user (TARGET_UID/TARGET_GID from compose) and chowns the /root/.cache/nexa.ai bind mount so model downloads in HARBOR_NEXA_CACHE stay host-owned
   command: grep -q setpriv services/nexa/entrypoint.sh && grep -q TARGET_UID services/compose.nexa.yml
   tags: [services-it, nexa, nexa-ownership, implemented]
+- label: s2s > compose.x.s2s.llamacpp.yml sets HARBOR_S2S_MODEL to HARBOR_S2S_LLAMACPP_MODEL (default LiquidAI/LFM2.5-8B-A1B-GGUF:Q8_0 in default.env) so the responses-api warmup against the llamacpp router carries a model name instead of failing 400 'model name is missing'
+  command: grep -q 'HARBOR_S2S_MODEL=${HARBOR_S2S_LLAMACPP_MODEL}' services/compose.x.s2s.llamacpp.yml && grep -q 'HARBOR_S2S_LLAMACPP_MODEL=' profiles/default.env
+  tags: [services-it, s2s, implemented]
 # project
 
 ## domain
