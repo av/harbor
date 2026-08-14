@@ -73,6 +73,9 @@ services/chatui/data/
 # ComfyUI
 comfyui/workspace/
 
+# Hermes (default workspace lives at repo root)
+/hermes/
+
 # Perplexica
 services/perplexica/data/
 perplexica/config.toml
