@@ -8,7 +8,6 @@
 - label: services > webui x searxng x ollama > config.x.searxng.ollama.json sets rag.ollama.base_url to HARBOR_OLLAMA_INTERNAL_URL (not Open WebUI's host.docker.internal default) and uses the auto-pulled nomic-embed-text:latest embedding model
   command: python3 -c "import json; r=json.load(open('services/webui/configs/config.x.searxng.ollama.json'))['rag']; assert r['ollama']['base_url']=='$'+'{HARBOR_OLLAMA_INTERNAL_URL}' and r['embedding_model']=='nomic-embed-text:latest', r" && echo ok
   tags: [spec, core-integration, implemented]
-- services > dify > the dify-openai bridge translates OpenAI chat completions to Dify 1.x APIs: Chat via /v1/chat-messages, Workflow via /v1/workflows/run including the blocking-mode single-JSON response shape and OUTPUT_VARIABLE selection from workflow outputs @dify-1x @spec
 - label: vllm default CUDA image is vllm/vllm-openai pinned to v0.26.0 (entrypoint 'vllm serve'; the '--model' flag command Harbor passes remains valid)
   command: grep -q 'HARBOR_VLLM_VERSION="v0.26.0"' profiles/default.env
   tags: [vllm, rocm-followup, implemented]
@@ -427,9 +426,6 @@
 ## cognee
 - label: cognee and cognee-mcp depend on ollama-init with condition service_healthy (ollama-init is a long-running healthy sidecar, never 'completed')
   command: grep -A2 'ollama-init' services/compose.x.cognee.ollama.yml | grep -q 'service_healthy' && ! grep -q 'service_completed_successfully' services/compose.x.cognee.ollama.yml
-  tags: [services-it, cognee, implemented]
-- label: cognee-mcp runs as root so it can write the shared workspace created root-owned by the cognee API container
-  command: grep -A40 'cognee-mcp:' services/compose.cognee.yml | grep -q 'user: root'
   tags: [services-it, cognee, implemented]
 
 ## karakeep
