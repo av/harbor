@@ -28,6 +28,9 @@
 - label: services > mcpo x mcp servers > uvx-launched stdio servers (mcp-server-time, mcp-server-fetch) pass --with 'mcp<2' because they import McpError, removed in mcp 2.0 - same pin as mcpo itself
   command: test $(grep -l 'mcp<2' services/mcpo/configs/mcpo.mcp-server-time.json services/mcpo/configs/mcpo.mcp-server-fetch.json | wc -l) -eq 2
   tags: [spec, implemented]
+- label: services > omnichain > services/omnichain/data is host-owned via a tracked .gitkeep and ignored via an anchored /services/omnichain/data/ gitignore entry (old unanchored omnichain/data/ never matched)
+  command: git check-ignore -q services/omnichain/data/sample && grep -q '^/services/omnichain/data/\*' .gitignore && [ -f services/omnichain/data/.gitkeep ] && [ "$(stat -c %u services/omnichain/data)" = "$(id -u)" ]
+  tags: [svc-testing, implemented]
 # project
 
 ## domain

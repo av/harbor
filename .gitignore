@@ -89,7 +89,8 @@ autogpt/logs/
 bionicgpt/db
 
 # Omnichain
-omnichain/data/
+/services/omnichain/data/*
+!/services/omnichain/data/.gitkeep
 
 # Bench
 services/bench/results/
