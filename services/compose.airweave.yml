@@ -64,6 +64,9 @@ services:
       interval: 1s
       timeout: 10s
       retries: 10
+      # First boot runs DB migrations (~20s+); without a grace window the
+      # 10x1s budget expires and `harbor up` aborts before the UI starts
+      start_period: 60s
     env_file:
       - ./.env
       - ./services/airweave/override.env

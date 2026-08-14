@@ -553,6 +553,9 @@
 - label: airweave backend receives required upstream settings (STATE_SECRET, SVIX_JWT_SECRET, DENSE_EMBEDDER local_minilm, EMBEDDING_DIMENSIONS 384, SPARSE_EMBEDDER fastembed_bm25) and reaches the text2vec service through the /health-rewriting nginx shim
   command: grep -q STATE_SECRET services/compose.airweave.yml && grep -q airweave-embeddings-proxy services/compose.airweave.yml && grep -q HARBOR_AIRWEAVE_EMBEDDING_DIMENSIONS profiles/default.env && test -f services/airweave/embeddings-proxy.conf
   tags: [sweep5, implemented]
+- label: airweave backend healthcheck declares start_period 60s so first-boot migrations (~20s+) do not fail the initial harbor up
+  command: grep -A6 'http://localhost:8001/health' services/compose.airweave.yml | grep -q 'start_period: 60s' && echo PASS
+  tags: [airweave, spec, implemented]
 
 ## opencode
 - label: opencode data/config defaults live under ./services/opencode/ with the data dir gitignored, so runtime sqlite/logs never dirty the repo
@@ -1422,3 +1425,8 @@
 - label: opencode starts via a Harbor entrypoint wrapper that chowns /root (opencode install + data/config bind mounts) then setpriv-drops to the host user, so opencode.db and config stay host-owned
   command: grep -q 'harbor-entrypoint.sh' services/compose.opencode.yml && grep -q setpriv services/opencode/entrypoint.sh
   tags: [ownership3, spec, implemented]
+
+# services > hermes
+- label: hermes configure-provider.sh execs the image's entrypoint-dispatch.sh (not the deprecated s6 shim docker/entrypoint.sh, which no longer execs CMD and exits 127)
+  command: grep -q 'exec /opt/hermes/docker/entrypoint-dispatch.sh' services/hermes/configure-provider.sh
+  tags: [hermes-provider, spec]
