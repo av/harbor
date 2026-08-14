@@ -532,6 +532,12 @@
 - label: compose.hf.yml mounts the optional custom CA at /harbor/custom-ca.pem, outside /etc/ssl/certs, so the /dev/null placeholder does not break hf_xet TLS client construction
   command: grep -q '/harbor/custom-ca.pem' services/compose.hf.yml && ! grep -q '/etc/ssl/certs/custom-ca.pem' services/compose.hf.yml
   tags: [sweep7, implemented]
+- label: hf image entrypoint unsets empty SSL_CERT_FILE/REQUESTS_CA_BUNDLE (compose defines them empty when HARBOR_HF_SSL_CERT_FILE is unset; hf_xet reqwest errors on empty SSL_CERT_FILE)
+  command: grep -q 'unset SSL_CERT_FILE' services/hf/entrypoint.sh && grep -q 'entrypoint.sh' services/hf/Dockerfile
+  tags: [hf-xet, spec, implemented]
+- label: hf entrypoint setpriv-drops to the host user (TARGET_UID/GID from HARBOR_USER_ID/GROUP_ID) so downloads into the shared HF cache stay host-owned; no recursive chown of the cache mount
+  command: grep -q 'setpriv --reuid' services/hf/entrypoint.sh && grep -q 'TARGET_UID=${HARBOR_USER_ID}' services/compose.hf.yml
+  tags: [hf-xet, spec, implemented]
 
 ## perplexideez
 - label: compose.x.perplexideez.{ollama,searxng}.yml set env on perplexideez-service (the app), not the perplexideez nginx proxy, and LLM_MODE carries no literal quotes
