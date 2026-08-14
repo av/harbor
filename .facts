@@ -682,6 +682,11 @@
   command: grep -q ':${HOME}/.cache/huggingface:ro' services/compose.jupyter.yml
   tags: [spec, cache-symlinks, implemented]
 
+## solo
+- label: services/solo config and data dirs exist in the repo (tracked .gitkeep) so the workspace bind mounts stay host-owned instead of docker-created as root
+  command: test -f services/solo/config/.gitkeep && test -f services/solo/data/.gitkeep && git ls-files --error-unmatch services/solo/config/.gitkeep services/solo/data/.gitkeep >/dev/null 2>&1
+  tags: [sweep8, spec, implemented]
+
 # app
 - label: Harbor App blocks main UI behind a setup gate until setup detail status is ready
   command: rg -q 'detail\?\.status === "ready"' app/src/setup/HarborSetupContext.tsx
