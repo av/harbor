@@ -523,8 +523,8 @@
 - label: compose.x.kotaemon.llamacpp.yml sets OPENAI_CHAT_MODEL from HARBOR_KOTAEMON_LLAMACPP_MODEL and does not set LOCAL_MODEL
   command: grep -q 'OPENAI_CHAT_MODEL=${HARBOR_KOTAEMON_LLAMACPP_MODEL}' services/compose.x.kotaemon.llamacpp.yml && ! grep -q 'LOCAL_MODEL=' services/compose.x.kotaemon.llamacpp.yml && grep -q HARBOR_KOTAEMON_LLAMACPP_MODEL profiles/default.env
   tags: [spec, implemented]
-- label: kotaemon container entrypoint uses the image venv python (/app/.venv/bin/python app.py)
-  command: grep -q '/app/.venv/bin/python' services/compose.kotaemon.yml
+- label: kotaemon entrypoint wrapper launches the app with the image venv python (/app/.venv/bin/python app.py) after the setpriv drop
+  command: grep -q '/app/.venv/bin/python app.py' services/kotaemon/entrypoint.sh
   tags: [spec, implemented]
 
 ## localai
@@ -995,8 +995,8 @@
 - label: tests/services-integration.sh --list includes Group J ROCm paths (llamacpp/ollama/lemonade/localai/voicebox/vllm), gated behind ROCm-host detection and excluded from the default group list
   command: ./tests/services-integration.sh --list | grep -q '^J .*ROCm' && grep -q 'has_rocm_host' tests/services-integration.sh && ! grep -q 'DEFAULT_GROUPS=.*J' tests/services-integration.sh
   tags: [services-runner, implemented]
-- label: the lint file collector excludes services/netdata/cache and services/netdata/lib — netdata's workspace is services/netdata itself and its runtime dirs are root-owned, crashing the walk
-  command: grep -q 'services/netdata/cache' .scripts/lint/util.ts && grep -q 'services/netdata/lib' .scripts/lint/util.ts
+- label: the lint file collector excludes service runtime cache dirs via services/*/cache and services/netdata/lib — netdata's workspace is services/netdata itself and its runtime dirs are root-owned, crashing the walk
+  command: grep -q 'services/\*/cache' .scripts/lint/util.ts && grep -q 'services/netdata/lib' .scripts/lint/util.ts
   tags: [spec, implemented]
 - label: tests: 02-cli asserts default services are webui and llamacpp only, with no ollama-as-default assertions
   command: bash -c '! grep -q "default services include ollama" tests/suites/02-cli.sh && grep -q "default services include llamacpp" tests/suites/02-cli.sh'
@@ -1010,8 +1010,8 @@
   tags: [implemented]
 
 ## fix-tests
-- label: scripts/specs/fix-tests.md documents the test-run disk exhaustion incident as problem analysis only
-  command: test -f scripts/specs/fix-tests.md && grep -q '## Root Cause' scripts/specs/fix-tests.md && grep -q 'No remediation is specified here' scripts/specs/fix-tests.md
+- label: scripts/specs/fix-tests.md documents the test-run disk exhaustion incident with root-cause analysis and the implemented remediation
+  command: test -f scripts/specs/fix-tests.md && grep -q '## Root Cause' scripts/specs/fix-tests.md && grep -q '## Remediation (implemented)' scripts/specs/fix-tests.md
   tags: [spec, implemented]
 
 ## runner
