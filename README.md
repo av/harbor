@@ -30,7 +30,7 @@ Harbor is a CLI and companion app that lets you spin up a complete local LLM sta
 
 ## News
 
-- **v0.5.5** - New Speech-to-Speech (s2s) backend service, Dify upgraded to 1.x, and a large service repair sweep restoring Open WebUI web search, OpenHands, Perplexica, mistral.rs, TGI, Nexa, and a dozen more
+- **v0.5.5** - Workspace files now stay owned by your host user across 20+ services, new Speech-to-Speech (s2s) backend, Dify 1.x and DeerFlow v2 upgrades, and a large repair sweep restoring dozens of services on current upstream images
 - **v0.5.4** - Repairs first-boot and integration failures across 20+ services found by the new runnable integration suite, plus Boost error responses that propagate real backend status codes
 - **v0.5.3** - Boost agentic modules (`quickhop`, `deephop`, `autocheck`, `diffscope`) with `harbor launch --workflow` routing, grok CLI launch support, and faster HF downloads via `hf_transfer`
 - **v0.5.2** - Fixes `.env` corruption when several Harbor commands run at once and stops `harbor doctor` from hanging on non-interactive stdin
