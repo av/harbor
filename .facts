@@ -704,6 +704,26 @@
   command: test -f services/solo/config/.gitkeep && test -f services/solo/data/.gitkeep && git ls-files --error-unmatch services/solo/config/.gitkeep services/solo/data/.gitkeep >/dev/null 2>&1
   tags: [sweep8, spec, implemented]
 
+## autogpt
+- label: AutoGPT runs the current single-container AutoGPT Platform image on container port 3000, persists /data in a Docker-managed volume, and receives the exact browser-facing AUTOGPT_PUBLIC_URL
+  command: grep -q HARBOR_AUTOGPT_IMAGE services/compose.autogpt.yml && grep -q HARBOR_AUTOGPT_VERSION services/compose.autogpt.yml && grep -q 3000 services/compose.autogpt.yml && grep -q autogpt-data services/compose.autogpt.yml && grep -q AUTOGPT_PUBLIC_URL services/compose.autogpt.yml
+  tags: [autogpt-platform, implemented]
+- label: AutoGPT Platform does not mount or reuse the legacy Auto-GPT workspace, logs, data directories, or Azure-compatible Ollama shim
+  command: ! grep -R -n significantgravitas/auto-gpt services/compose.autogpt.yml services/autogpt && ! grep -R -n /app/auto_gpt_workspace services/compose.autogpt.yml services/autogpt && ! grep -R -n /app/logs services/compose.autogpt.yml services/autogpt && ! grep -R -n azure.yaml services/compose.autogpt.yml services/autogpt
+  tags: [autogpt-platform, implemented]
+- label: The AutoGPT Ollama integration routes primary chat and Graphiti through Ollama, preloads both generation and embedding models, and requests a 32768-token context window
+  command: grep -q CHAT_USE_LOCAL services/compose.x.autogpt.ollama.yml && grep -q GRAPHITI_EMBEDDER_MODEL services/compose.x.autogpt.ollama.yml && grep -q HARBOR_OLLAMA_DEFAULT_MODELS services/compose.x.autogpt.ollama.yml && grep -q HARBOR_AUTOGPT_OLLAMA_CONTEXT_LENGTH services/compose.x.autogpt.ollama.yml
+  tags: [autogpt-platform, implemented]
+- label: AutoGPT documentation covers fresh Platform storage, first-admin promotion and registration closure, remote and Ollama provider setup, and the local 1536-d semantic-search limitation
+  command: grep -q autogpt-admin docs/2.3.15-Satellite\&colon-AutoGPT.md && grep -q autogpt.allow.new.accounts docs/2.3.15-Satellite\&colon-AutoGPT.md && grep -q 1,536 docs/2.3.15-Satellite\&colon-AutoGPT.md && grep -q Ollama docs/2.3.15-Satellite\&colon-AutoGPT.md
+  tags: [autogpt-platform, implemented]
+- label: AutoGPT custom endpoints using host.docker.internal resolve to the Docker host on native Linux hosts
+  command: grep -q 'host.docker.internal:host-gateway' services/compose.autogpt.yml
+  tags: [autogpt-platform, implemented]
+- label: AutoGPT derives a route-appropriate direct or standard Traefik public URL when unset and honors one explicit exact-origin override for custom routes and ports
+  command: grep -q 'HARBOR_AUTOGPT_PUBLIC_URL:-http' services/compose.autogpt.yml && grep -q 'HARBOR_AUTOGPT_PUBLIC_URL:-https' services/compose.x.traefik.autogpt.yml
+  tags: [autogpt-platform, implemented]
+
 # app
 - label: Harbor App blocks main UI behind a setup gate until setup detail status is ready
   command: rg -q 'detail\?\.status === "ready"' app/src/setup/HarborSetupContext.tsx

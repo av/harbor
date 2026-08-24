@@ -5,10 +5,13 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.autogpt.rule=Host(`autogpt.${HARBOR_TRAEFIK_DOMAIN}`)"
-      - "traefik.http.services.autogpt.loadbalancer.server.port=8000"
+      - "traefik.http.services.autogpt.loadbalancer.server.port=3000"
       - "traefik.http.routers.autogpt.entrypoints=websecure"
       - "traefik.http.routers.autogpt.tls=true"
       - "traefik.http.routers.autogpt.service=autogpt"
+
+    environment:
+      AUTOGPT_PUBLIC_URL: ${HARBOR_AUTOGPT_PUBLIC_URL:-https://autogpt.${HARBOR_TRAEFIK_DOMAIN}}
 
     networks:
       - traefik-public
