@@ -1,0 +1,23 @@
+services:
+  autogpt:
+    depends_on:
+      ollama:
+        condition: service_healthy
+      ollama-init:
+        condition: service_healthy
+    environment:
+      CHAT_USE_LOCAL: "true"
+      CHAT_BASE_URL: ${HARBOR_OLLAMA_INTERNAL_URL}/v1
+      CHAT_API_KEY: ollama
+      CHAT_FAST_STANDARD_MODEL: ${HARBOR_AUTOGPT_OLLAMA_MODEL}
+      GRAPHITI_LLM_MODEL: ${HARBOR_AUTOGPT_OLLAMA_MODEL}
+      GRAPHITI_RERANKER_MODEL: ${HARBOR_AUTOGPT_OLLAMA_MODEL}
+      GRAPHITI_EMBEDDER_MODEL: ${HARBOR_AUTOGPT_OLLAMA_EMBEDDING_MODEL}
+
+  ollama:
+    environment:
+      OLLAMA_CONTEXT_LENGTH: ${HARBOR_AUTOGPT_OLLAMA_CONTEXT_LENGTH}
+
+  ollama-init:
+    environment:
+      HARBOR_OLLAMA_DEFAULT_MODELS: ${HARBOR_OLLAMA_DEFAULT_MODELS},${HARBOR_AUTOGPT_OLLAMA_MODEL},${HARBOR_AUTOGPT_OLLAMA_EMBEDDING_MODEL}
