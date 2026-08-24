@@ -1,16 +1,27 @@
 services:
   autogpt:
-    image: significantgravitas/auto-gpt
+    image: ${HARBOR_AUTOGPT_IMAGE}:${HARBOR_AUTOGPT_VERSION}
     container_name: ${HARBOR_CONTAINER_PREFIX}.autogpt
     env_file:
       - ./.env
       - ./services/autogpt/override.env
+    environment:
+      AUTOGPT_PUBLIC_URL: ${HARBOR_AUTOGPT_PUBLIC_URL:-http://localhost:${HARBOR_AUTOGPT_HOST_PORT}}
+      AUTH_ALLOW_NEW_ACCOUNTS: ${HARBOR_AUTOGPT_ALLOW_NEW_ACCOUNTS}
+      AUTH_SIGNUP_ALLOWLIST: ${HARBOR_AUTOGPT_SIGNUP_ALLOWLIST:-}
     ports:
-      - ${HARBOR_AUTOGPT_HOST_PORT}:8000
+      - ${HARBOR_AUTOGPT_HOST_PORT}:3000
     volumes:
-      - ./services/autogpt/workspace:/app/auto_gpt_workspace
-      - ./services/autogpt/data:/app/data
-      - ./services/autogpt/logs:/app/logs
-      - ./services/autogpt/backends/autogpt.ollama.yml:/app/azure.yaml
+      - autogpt-data:/data
+    shm_size: 2g
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - harbor-network
+
+volumes:
+  autogpt-data:
