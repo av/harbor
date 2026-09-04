@@ -1,0 +1,7 @@
+{
+	"ollama": {
+		"base_urls": [
+			"${HARBOR_LLMMAN_INTERNAL_URL}"
+		]
+	}
+}

@@ -1192,4 +1192,12 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         wikiUrl: `${wikiUrl}/2.3.95-Satellite-Paperless-GPT`,
         tooltip: 'LLM companion for Paperless-ngx: suggests titles, tags and correspondents, and does LLM-based OCR.',
     },
+    llmman: {
+        name: 'llmman',
+        tags: [HST.backend, HST.api],
+        projectUrl: 'https://github.com/llmmanorg/llmman',
+        logo: 'https://github.com/llmmanorg.png?size=200',
+        wikiUrl: `${wikiUrl}/2.2.27-Backend-llmman`,
+        tooltip: 'Host-native local model runner serving the Ollama API (plus OpenAI- and Anthropic-compatible APIs) on port 17434, proxied into Harbor.',
+    },
 };

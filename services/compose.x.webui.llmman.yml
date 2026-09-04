@@ -1,0 +1,4 @@
+services:
+  webui:
+    volumes:
+      - ./services/webui/configs/config.llmman.json:/app/configs/config.llmman.json

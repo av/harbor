@@ -204,6 +204,9 @@
 - label: harbor up dmr mlx or omlx starts the host runner before bringing up the proxy container
   command: rg -q 'run_dmr_command' harbor.sh && rg -q 'run_mlx_command' harbor.sh && rg -q 'run_omlx_command' harbor.sh
   tags: [implemented]
+- label: llmman is a host-managed Ollama-API backend proxied by a Caddy container to host port 17434, with a webui cross-file wiring it as an Ollama connection
+  command: test -f services/compose.llmman.yml && rg -q '17434' profiles/default.env && test -f services/compose.x.webui.llmman.yml && rg -q 'HARBOR_LLMMAN_INTERNAL_URL' services/webui/configs/config.llmman.json
+  tags: [implemented]
 - label: ml-intern is a satellite with cross-compose integrations for ollama llamacpp vllm dmr mlx and omlx
   command: test -f services/compose.ml-intern.yml && test -f services/compose.x.ml-intern.omlx.yml
   tags: [implemented]

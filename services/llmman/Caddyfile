@@ -1,0 +1,9 @@
+:8080 {
+	handle /health {
+		respond "ok" 200
+	}
+
+	handle {
+		reverse_proxy {$HARBOR_LLMMAN_UPSTREAM_URL}
+	}
+}
