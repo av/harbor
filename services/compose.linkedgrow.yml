@@ -1,0 +1,95 @@
+services:
+  linkedgrow:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.linkedgrow
+    image: ${HARBOR_LINKEDGROW_IMAGE}:${HARBOR_LINKEDGROW_VERSION}
+    # Harbor omits restart policies, but this service owns a queue that the
+    # worker drains: the app applies migrations at startup and the worker
+    # blocks on its health check, so an app that stays down strands every
+    # queued action. Same reasoning as linkwarden and windmill.
+    restart: unless-stopped
+    env_file:
+      - ./.env
+      - ./services/linkedgrow/override.env
+    ports:
+      - ${HARBOR_LINKEDGROW_HOST_PORT}:3000
+    environment:
+      # Empty is the supported value: the app then answers on whatever address
+      # the request arrived on, which is what a plain harbor up wants. Set it
+      # behind a reverse proxy, because the links in its emails use it.
+      - APP_URL=${HARBOR_LINKEDGROW_PUBLIC_URL}
+      - AUTH_SECRET=${HARBOR_LINKEDGROW_AUTH_SECRET}
+      # 64 hex characters, validated on boot. Changing it makes every stored
+      # LinkedIn password, 2FA secret and API key unreadable, so it belongs in
+      # the backup set with the database.
+      - ENCRYPTION_KEY=${HARBOR_LINKEDGROW_ENCRYPTION_KEY}
+      - LINKEDGROW_EDITION=self-hosted
+      - TURSO_DATABASE_URL=http://linkedgrow-db:8080
+      - TURSO_AUTH_TOKEN=
+    # Named volumes rather than a workspace bind mount, because both images run
+    # as uid 10001 and refuse to start on a directory they cannot write. Docker
+    # gives a fresh named volume the image's own ownership, while a bind mount
+    # target is created root-owned and cannot be fixed portably from a sidecar.
+    volumes:
+      - linkedgrow-config:/data/config
+      - linkedgrow-uploads:/data/uploads
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+    depends_on:
+      - linkedgrow-db
+    networks:
+      - harbor-network
+
+  # One real Chrome per connected LinkedIn account, under Xvfb, because
+  # LinkedIn has no API for reading a feed or sending a message. This is the
+  # memory cost of the service: HARBOR_LINKEDGROW_WORKER_SLOTS caps concurrent
+  # browsers, 2 fit 4GB of RAM and 12 need 16GB.
+  linkedgrow-worker:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.linkedgrow-worker
+    image: ${HARBOR_LINKEDGROW_WORKER_IMAGE}:${HARBOR_LINKEDGROW_VERSION}
+    restart: unless-stopped
+    env_file:
+      - ./.env
+      - ./services/linkedgrow/override.env
+    shm_size: ${HARBOR_LINKEDGROW_SHM_SIZE}
+    environment:
+      - APP_INTERNAL_URL=http://linkedgrow:3000
+      - ENCRYPTION_KEY=${HARBOR_LINKEDGROW_ENCRYPTION_KEY}
+      - LINKEDGROW_EDITION=self-hosted
+      - TURSO_DATABASE_URL=http://linkedgrow-db:8080
+      - TURSO_AUTH_TOKEN=
+      - WORKER_ENV=production
+      - WORKER_SLOTS=${HARBOR_LINKEDGROW_WORKER_SLOTS}
+    volumes:
+      # Read only: the app owns the secrets file and always starts first
+      - linkedgrow-config:/data/config:ro
+      - linkedgrow-profiles:/data/profiles
+      - linkedgrow-uploads:/data/uploads
+    depends_on:
+      linkedgrow:
+        condition: service_healthy
+    networks:
+      - harbor-network
+
+  linkedgrow-db:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.linkedgrow-db
+    image: ${HARBOR_LINKEDGROW_DB_IMAGE}:${HARBOR_LINKEDGROW_DB_VERSION}
+    restart: unless-stopped
+    env_file:
+      - ./.env
+    environment:
+      - SQLD_NODE=primary
+      - SQLD_DB_PATH=/var/lib/sqld/iku.db
+    volumes:
+      - linkedgrow-db-data:/var/lib/sqld
+    networks:
+      - harbor-network
+
+volumes:
+  linkedgrow-config:
+  linkedgrow-uploads:
+  linkedgrow-profiles:
+  linkedgrow-db-data:
