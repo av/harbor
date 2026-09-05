@@ -1192,4 +1192,12 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         wikiUrl: `${wikiUrl}/2.3.95-Satellite-Paperless-GPT`,
         tooltip: 'LLM companion for Paperless-ngx: suggests titles, tags and correspondents, and does LLM-based OCR.',
     },
+    linkedgrow: {
+        name: 'LinkedGrow',
+        tags: [HST.satellite, HST.tools],
+        projectUrl: 'https://github.com/DigiHold/LinkedGrow',
+        logo: 'https://www.google.com/s2/favicons?domain=linkedgrow.ai&sz=128',
+        wikiUrl: `${wikiUrl}/2.3.98-Satellite-LinkedGrow`,
+        tooltip: 'AI agents that find leads and clients on LinkedIn, driving a real browser because LinkedIn has no API.',
+    },
 };
