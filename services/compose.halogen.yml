@@ -1,0 +1,34 @@
+services:
+  halogen:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.halogen
+    image: ${HARBOR_HALOGEN_IMAGE}:${HARBOR_HALOGEN_VERSION}
+    command: ["all"]
+    env_file:
+      - ./.env
+      - ./services/halogen/override.env
+    environment:
+      - HALOGEN_DOWNLOAD=${HARBOR_HALOGEN_DOWNLOAD}
+      - HALOGEN_CTX=${HARBOR_HALOGEN_CTX}
+      - HALOGEN_KV_POOL_POSITIONS=${HARBOR_HALOGEN_KV_POOL_POSITIONS}
+      - HALOGEN_KV_SLOTS=${HARBOR_HALOGEN_KV_SLOTS}
+      - HALOGEN_MAX_TOK=${HARBOR_HALOGEN_MAX_TOK}
+    devices:
+      - /dev/kfd:/dev/kfd
+      - /dev/dri:/dev/dri
+    ipc: host
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    ports:
+      - ${HARBOR_HALOGEN_HOST_PORT}:8731
+    volumes:
+      - ${HARBOR_HALOGEN_WORKSPACE}/models:/models
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/halogen-healthcheck", "api"]
+      interval: 10s
+      timeout: 35s
+      retries: 3
+      start_period: 60m
+    networks:
+      - harbor-network

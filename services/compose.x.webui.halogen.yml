@@ -1,0 +1,7 @@
+services:
+  webui:
+    depends_on:
+      halogen:
+        condition: service_healthy
+    volumes:
+      - ./services/webui/configs/config.halogen.json:/app/configs/config.halogen.json

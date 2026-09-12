@@ -1192,6 +1192,14 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         wikiUrl: `${wikiUrl}/2.3.95-Satellite-Paperless-GPT`,
         tooltip: 'LLM companion for Paperless-ngx: suggests titles, tags and correspondents, and does LLM-based OCR.',
     },
+    halogen: {
+        name: 'Halogen Flash Server',
+        tags: [HST.backend, HST.api],
+        projectUrl: 'https://github.com/peonist-ai/halogen-flash-server',
+        logo: 'https://github.com/peonist-ai.png?size=200',
+        wikiUrl: `${wikiUrl}/2.2.28-Backend-Halogen`,
+        tooltip: 'Qwen3.8-Flash-Next inference for AMD Strix Halo with an OpenAI-compatible API.',
+    },
     chandra: {
         name: 'Chandra 2',
         tags: [HST.backend, HST.api, HST.image],

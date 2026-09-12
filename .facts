@@ -1223,6 +1223,12 @@
   command: grep -E '^#{3,5} ' docs/2.3.96-Satellite-Whishper.md | tr -d '#' | sed 's/^ *//' | tr '\n' '|' | grep -q 'Starting|Usage|Configuration|Environment Variables|Volumes|Cross-service integrations|Troubleshooting|Check Logs|Transcription stays pending or fails with status -1|Translate button does nothing / language list empty|UI loads but the transcription list is empty on a LAN or traefik client|Poor accuracy|Reset the database|Links|' && grep -q '^curl -F file=@hello.wav -F language=en -F modelSize=tiny -F device=cpu' docs/2.3.96-Satellite-Whishper.md && grep -q '^curl http://localhost:35060/api/translate/<id>/es' docs/2.3.96-Satellite-Whishper.md
   tags: [whishper, spec, implemented]
 
+## halogen
+- harbor up halogen exposes the Halogen OpenAI API on configurable host port 34950 with Strix Halo GPU access and unlimited locked memory @spec @halogen
+- Halogen persists its downloadable model bundle in a configurable workspace and exposes image version, context, pool size, slots and prefill size through harbor config @spec @halogen @implemented
+- Selecting webui and halogen connects Open WebUI to the Halogen API after its engine healthcheck succeeds @spec @halogen
+- The Halogen catalog entry and documentation explain Strix Halo requirements, model download size, configuration and a real chat completion request @spec @halogen @implemented
+
 # app
 - label: Harbor App blocks main UI behind a setup gate until setup detail status is ready
   command: rg -q 'detail\?\.status === "ready"' app/src/setup/HarborSetupContext.tsx

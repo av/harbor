@@ -1,0 +1,7 @@
+{
+  "openai": {
+    "api_base_urls": ["http://halogen:8731/v1"],
+    "api_keys": ["sk-halogen"],
+    "enabled": true
+  }
+}
