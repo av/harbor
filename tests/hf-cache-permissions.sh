@@ -26,7 +26,8 @@ for scenario in fresh legacy warm; do
       touch /cache/hub/models--test/blobs/root-owned /cache/token /cache/stored_tokens
       touch /cache/hub/models--test/blobs/keep /cache/unrelated/keep
       chown 23456:23456 /cache/hub/models--test/blobs/keep
-      ln -s /etc/passwd /cache/hub/external-link
+      ln -s /cache/unrelated/keep /cache/hub/external-link
+      ln -s /cache/unrelated /cache/hub/external-dir
       chmod 700 /cache/hub/models--test /cache/xet
     '
   fi
