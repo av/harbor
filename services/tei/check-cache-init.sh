@@ -35,5 +35,5 @@ expected="/data
 /data/models--BAAI--bge/snapshots/abc/config.json"
 actual=$(sort -u "$T/log")
 [ "$actual" = "$expected" ] && exit 0
-echo "chowned path set differs from expected:"; diff <(echo "$expected") <(echo "$actual") 2>/dev/null || { echo "--- expected"; echo "$expected"; echo "--- actual"; echo "$actual"; }
+printf 'chowned path set differs from expected:\n--- expected\n%s\n--- actual\n%s\n' "$expected" "$actual"
 exit 1

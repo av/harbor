@@ -69,6 +69,7 @@
 - label: install.sh verifies the install with harbor doctor --check so non-critical doctor warnings do not fail setup
   command: rg -q 'doctor --check' install.sh
   tags: [implemented]
+- Published Harbor releases keep CLI, Python, npm, desktop manifests and the Rust lockfile on the same version @issue-262 @implemented
 
 ## development
 - label: local Deno runtime caches under .deno-cache are ignored by Git
@@ -565,6 +566,9 @@
 - label: hf entrypoint setpriv-drops to the host user (TARGET_UID/GID from HARBOR_USER_ID/GROUP_ID) so downloads into the shared HF cache stay host-owned; no recursive chown of the cache mount
   command: grep -q 'setpriv --reuid' services/hf/entrypoint.sh && grep -q 'TARGET_UID=${HARBOR_USER_ID}' services/compose.hf.yml
   tags: [hf-xet, spec, implemented]
+- label: HF downloads initialize a Docker-created shared cache directory for the configured host UID and GID before dropping privileges, without recursively changing ownership of existing cached files
+  command: bash tests/hf-cache-permissions.sh
+  tags: [issue-262, implemented]
 
 ## perplexideez
 - label: compose.x.perplexideez.{ollama,searxng}.yml set env on perplexideez-service (the app), not the perplexideez nginx proxy, and LLM_MODE carries no literal quotes
@@ -815,6 +819,9 @@
 - label: tei doc content matches the service shape: the env table lists HARBOR_TEI_HOST_PORT 35030, HARBOR_TEI_MAX_CLIENT_BATCH_SIZE 512 and HARBOR_TEI_EXTRA_ARGS, the Volumes list names the HF hub cache at /data and override.env, the Integration table has one row per cross-file consumer (webui, librechat, anythingllm, lightrag) with end-user walkthroughs for Open WebUI, AnythingLLM and LibreChat, the CUDA tags named exist upstream (turing-latest, 86-latest, 89-latest), and the model-change recipe lists a re-index step per consumer
   command: d=docs/2.2.26-Backend-Text-Embeddings-Inference.md; grep -q "^HARBOR_TEI_HOST_PORT *35030$" $d && grep -q "^HARBOR_TEI_MAX_CLIENT_BATCH_SIZE *512$" $d && grep -q "^HARBOR_TEI_EXTRA_ARGS$" $d && grep -q "^##### Volumes$" $d && grep -q "/hub. (default .*) is mounted at ./data." $d && grep -q "services/tei/override.env" $d && for c in webui librechat anythingllm lightrag; do grep -q "^| .harbor up $c tei. |" $d || { echo "missing row: $c"; exit 1; }; done && for w in "Using it from Open WebUI" "Using it from AnythingLLM" "Using it from LibreChat"; do grep -q "^$w" $d || { echo "missing walkthrough: $w"; exit 1; }; done && grep -q "turing-latest" $d && grep -q "86-latest" $d && grep -q "89-latest" $d && for c in "Open WebUI" LibreChat AnythingLLM LightRAG; do grep -q "^- \*\*$c\*\*: " $d || { echo "missing re-index: $c"; exit 1; }; done
   tags: [tei, spec, implemented]
+- label: The TEI cache ownership regression check runs under POSIX sh and reports differing path sets without Bash-only syntax
+  command: sh services/tei/check-cache-init.sh
+  tags: [issue-262, implemented]
 
 ## lightrag
 - label: lightrag service compose file at services/compose.lightrag.yml exposes port 9621 on HARBOR_LIGHTRAG_HOST_PORT and persists /app/data under HARBOR_LIGHTRAG_WORKSPACE
