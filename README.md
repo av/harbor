@@ -30,13 +30,13 @@ Harbor is a CLI and companion app that lets you spin up a complete local LLM sta
 
 ## News
 
+- **v0.5.8** - New Halogen Flash Server backend for AMD Strix Halo and a fix for Hugging Face downloads failing on root-owned cache directories
 - **v0.5.7** - New Chandra 2 OCR backend, a Boost `codemode` module with `harbor launch --codemode` that lets a model drive every Boost tool from a single Python program, scoped `harbor down <service>` and `harbor restart <service>` that leave other running services alone, a far smaller `ollama-init` sidecar, per-service `services/<name>/default.env` defaults, atomic, duplicate-free `.env` repair, and `harbor dev docs --check` to catch stale generated docs
 - **v0.5.6** - Six new services — Text Embeddings Inference, LightRAG, Paperless-ngx, Paperless-GPT, Whishper, and Linkwarden — with Ollama, llama.cpp, Open WebUI, LibreChat, AnythingLLM, and Traefik integrations
 - **v0.5.5** - Workspace files now stay owned by your host user across 20+ services, new Speech-to-Speech (s2s) backend, Dify 1.x and DeerFlow v2 upgrades, and a large repair sweep restoring dozens of services on current upstream images
 - **v0.5.4** - Repairs first-boot and integration failures across 20+ services found by the new runnable integration suite, plus Boost error responses that propagate real backend status codes
 - **v0.5.3** - Boost agentic modules (`quickhop`, `deephop`, `autocheck`, `diffscope`) with `harbor launch --workflow` routing, grok CLI launch support, and faster HF downloads via `hf_transfer`
 - **v0.5.2** - Fixes `.env` corruption when several Harbor commands run at once and stops `harbor doctor` from hanging on non-interactive stdin
-- **v0.5.1** - Faster `harbor doctor` with timeout-guarded compose checks and early exit for `--check` mode
 
 ## Documentation
 
