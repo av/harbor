@@ -563,12 +563,13 @@
 - label: hf image entrypoint unsets empty SSL_CERT_FILE/REQUESTS_CA_BUNDLE (compose defines them empty when HARBOR_HF_SSL_CERT_FILE is unset; hf_xet reqwest errors on empty SSL_CERT_FILE)
   command: grep -q 'unset SSL_CERT_FILE' services/hf/entrypoint.sh && grep -q 'entrypoint.sh' services/hf/Dockerfile
   tags: [hf-xet, spec, implemented]
-- label: hf entrypoint setpriv-drops to the host user (TARGET_UID/GID from HARBOR_USER_ID/GROUP_ID) so downloads into the shared HF cache stay host-owned; no recursive chown of the cache mount
-  command: grep -q 'setpriv --reuid' services/hf/entrypoint.sh && grep -q 'TARGET_UID=${HARBOR_USER_ID}' services/compose.hf.yml
-  tags: [hf-xet, spec, implemented]
-- label: HF downloads initialize a Docker-created shared cache directory for the configured host UID and GID before dropping privileges, without recursively changing ownership of existing cached files
+- label: The HF downloader starts as the configured host UID and GID with HOME=/tmp and HF_HOME=/cache, after its cache initialization service succeeds
+  command: bash tests/hf-cache-permissions.sh
+  tags: [hf-xet, implemented]
+- label: HF cache initialization prepares fresh caches and repairs root-owned HF cache entries without following symlinks or changing non-root-owned cached files
   command: bash tests/hf-cache-permissions.sh
   tags: [issue-262, implemented]
+- Updating Harbor applies the HF downloader configuration and entrypoint to existing images without a manual rebuild @issue-262 @implemented
 
 ## perplexideez
 - label: compose.x.perplexideez.{ollama,searxng}.yml set env on perplexideez-service (the app), not the perplexideez nginx proxy, and LLM_MODE carries no literal quotes

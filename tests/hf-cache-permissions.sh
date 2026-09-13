@@ -1,20 +1,39 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Offline regression against the real HF image and its privilege-drop tools.
-# All writable state is inside disposable containers, never the host HF cache.
+# Exercise the production Compose dependency and mounted scripts with an
+# existing HF image. All cache mutations are confined to a temporary fixture.
 repo_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-for cache_owner in 0 12345; do
-  docker run --rm --network none --user 0 \
-    -e TARGET_UID=12345 -e TARGET_GID=12346 -e CACHE_OWNER="$cache_owner" \
-    -e SSL_CERT_FILE= -e REQUESTS_CA_BUNDLE= \
-    -v "$repo_dir/services/hf/entrypoint.sh:/entrypoint.sh:ro" \
-    -v "$repo_dir/tests/fixtures/hf-cache-probe.py:/usr/local/bin/hf:ro" \
-    --entrypoint sh "${HF_TEST_IMAGE:-harbor-hf:latest}" -ec '
-      mkdir -p /root/.cache/huggingface/existing
-      chown "$CACHE_OWNER:12346" /root/.cache/huggingface
-      touch /root/.cache/huggingface/existing/keep
-      chown 23456:23456 /root/.cache/huggingface/existing/keep
-      exec sh /entrypoint.sh
+test_dir=$(mktemp -d -t harbor-hf.XXXXXX)
+export HARBOR_CONTAINER_PREFIX="hf-test-$$"
+export HARBOR_USER_ID=12345 HARBOR_GROUP_ID=12346
+export HARBOR_HF_CACHE="$test_dir/cache" HARBOR_HF_TOKEN='' HARBOR_HF_SSL_CERT_FILE=''
+compose=(docker compose --project-directory "$repo_dir" -p "$HARBOR_CONTAINER_PREFIX"
+  -f "$repo_dir/compose.yml" -f "$repo_dir/services/compose.hf.yml"
+  -f "$repo_dir/tests/fixtures/hf-cache-compose.yml")
+cleanup() {
+  "${compose[@]}" down --volumes >/dev/null 2>&1 || true
+  docker run --rm -v "$test_dir:/fixture" alpine:3.20 \
+    chown -R "$(id -u):$(id -g)" /fixture
+  rm -rf "$test_dir"
+}
+trap cleanup EXIT
+
+for scenario in fresh legacy warm; do
+  if [ "$scenario" = legacy ]; then
+    docker run --rm -v "$HARBOR_HF_CACHE:/cache" alpine:3.20 sh -ec '
+      mkdir -p /cache/hub/models--test/blobs /cache/hub/.locks /cache/xet /cache/assets /cache/unrelated
+      touch /cache/hub/models--test/blobs/root-owned /cache/token /cache/stored_tokens
+      touch /cache/hub/models--test/blobs/keep /cache/unrelated/keep
+      chown 23456:23456 /cache/hub/models--test/blobs/keep
+      ln -s /etc/passwd /cache/hub/external-link
+      chmod 700 /cache/hub/models--test /cache/xet
     '
+  fi
+  "${compose[@]}" run --rm --pull never hf env >/dev/null
+  "${compose[@]}" run --rm --pull never --entrypoint python hf /probe.py "$scenario"
 done
+
+if [ "${HF_TEST_DOWNLOAD:-0}" = 1 ]; then
+  "${compose[@]}" run --rm --pull never hf download hf-internal-testing/tiny-random-gpt2 config.json
+fi
