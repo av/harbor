@@ -1240,6 +1240,35 @@
   command: rg -q 'halogen.loadbalancer.server.port=8731' services/compose.x.traefik.halogen.yml
   tags: [implemented, release]
 
+## n8n
+- label: n8n compose starts n8n-sandbox-certs, n8n-sandbox-api, and n8n-sandbox-runner-1 alongside n8n and n8n-db
+  command: grep -qE '^  n8n:$' services/compose.n8n.yml && grep -qE '^  n8n-db:$' services/compose.n8n.yml && grep -qE '^  n8n-sandbox-certs:$' services/compose.n8n.yml && grep -qE '^  n8n-sandbox-api:$' services/compose.n8n.yml && grep -qE '^  n8n-sandbox-runner-1:$' services/compose.n8n.yml
+  tags: [n8n-sandbox, implemented]
+- label: n8n waits for n8n-sandbox-api to be healthy before starting
+  command: grep -A25 '^  n8n:' services/compose.n8n.yml | grep -q 'n8n-sandbox-api:' && grep -A8 'depends_on:' services/compose.n8n.yml | grep -A1 'n8n-sandbox-api:' | grep -q 'condition: service_healthy'
+  tags: [n8n-sandbox, implemented]
+- label: n8n-sandbox-certs generates mTLS material with SANs matching n8n-sandbox-api and n8n-sandbox-runner
+  command: grep -q -- '--api-san n8n-sandbox-api' services/compose.n8n.yml && grep -q -- '--control-san-prefix n8n-sandbox-runner' services/compose.n8n.yml
+  tags: [n8n-sandbox, implemented]
+- label: n8n-sandbox-runner-1 is privileged Docker-in-Docker and neither it nor n8n-sandbox-api publish host ports
+  command: grep -A6 '^  n8n-sandbox-runner-1:' services/compose.n8n.yml | grep -q 'privileged: true' && ! grep -A80 '^  n8n-sandbox-api:' services/compose.n8n.yml | grep -q '^    ports:'
+  tags: [n8n-sandbox, implemented]
+- label: n8n is pointed at the bundled n8n-sandbox provider via N8N_INSTANCE_AI_SANDBOX and N8N_SANDBOX_SERVICE env vars
+  command: grep -q 'N8N_INSTANCE_AI_SANDBOX_ENABLED=true' services/compose.n8n.yml && grep -q 'N8N_INSTANCE_AI_SANDBOX_PROVIDER=n8n-sandbox' services/compose.n8n.yml && grep -q 'N8N_SANDBOX_SERVICE_URL=http://n8n-sandbox-api:8080' services/compose.n8n.yml && grep -q 'N8N_SANDBOX_SERVICE_API_KEY=${HARBOR_N8N_SANDBOX_API_KEY}' services/compose.n8n.yml
+  tags: [n8n-sandbox, implemented]
+- label: n8n sandbox API and runner secrets are HARBOR_N8N_SANDBOX_API_KEY, HARBOR_N8N_SANDBOX_REGISTRATION_TOKEN, and HARBOR_N8N_SANDBOX_RUNNER_KEY
+  command: grep -q '^HARBOR_N8N_SANDBOX_API_KEY=' profiles/default.env && grep -q '^HARBOR_N8N_SANDBOX_REGISTRATION_TOKEN=' profiles/default.env && grep -q '^HARBOR_N8N_SANDBOX_RUNNER_KEY=' profiles/default.env && grep -q 'SANDBOX_API_KEYS=${HARBOR_N8N_SANDBOX_API_KEY}' services/compose.n8n.yml && grep -q 'SANDBOX_API_RUNNER_REGISTRATION_TOKEN=${HARBOR_N8N_SANDBOX_REGISTRATION_TOKEN}' services/compose.n8n.yml && grep -q 'SANDBOX_RUNNER_API_KEYS=${HARBOR_N8N_SANDBOX_RUNNER_KEY}' services/compose.n8n.yml
+  tags: [n8n-sandbox, implemented]
+- label: n8n sandbox sidecar images are configured via HARBOR_N8N_SANDBOX image and version keys and default to n8n-io 1.2.0
+  command: grep -q '^HARBOR_N8N_SANDBOX_API_IMAGE=' profiles/default.env && grep -q '^HARBOR_N8N_SANDBOX_RUNNER_IMAGE=' profiles/default.env && grep -q '^HARBOR_N8N_SANDBOX_IMAGE=' profiles/default.env && grep -q '^HARBOR_N8N_SANDBOX_VERSION="1.2.0"' profiles/default.env && grep -q '${HARBOR_N8N_SANDBOX_API_IMAGE}:${HARBOR_N8N_SANDBOX_VERSION}' services/compose.n8n.yml && grep -q '${HARBOR_N8N_SANDBOX_RUNNER_IMAGE}:${HARBOR_N8N_SANDBOX_VERSION}' services/compose.n8n.yml
+  tags: [n8n-sandbox, implemented]
+- label: n8n compose.x overlay points n8n Assistant web search at Harbor SearXNG when both services are active
+  command: grep -q 'N8N_INSTANCE_AI_SEARXNG_URL=${HARBOR_SEARXNG_INTERNAL_URL}' services/compose.x.n8n.searxng.yml
+  tags: [n8n-sandbox, implemented]
+- label: n8n docs describe the bundled sandbox stack, the privileged runner, and the sandbox config keys
+  command: d='docs/2.3.23-Satellite&colon-n8n.md'; grep -q 'n8n-sandbox-api' "$d" && grep -q 'privileged' "$d" && grep -q 'HARBOR_N8N_SANDBOX_API_KEY' "$d" && grep -q 'n8n Assistant' "$d"
+  tags: [n8n-sandbox, implemented]
+
 # app
 - label: Harbor App blocks main UI behind a setup gate until setup detail status is ready
   command: rg -q 'detail\?\.status === "ready"' app/src/setup/HarborSetupContext.tsx

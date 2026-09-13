@@ -1,0 +1,4 @@
+services:
+  n8n:
+    environment:
+      - N8N_INSTANCE_AI_SEARXNG_URL=${HARBOR_SEARXNG_INTERNAL_URL}
