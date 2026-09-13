@@ -1235,6 +1235,9 @@
 - Halogen persists its downloadable model bundle in a configurable workspace and exposes image version, context, pool size, slots and prefill size through harbor config @spec @halogen @implemented
 - Selecting webui and halogen connects Open WebUI to the Halogen API after its engine healthcheck succeeds @spec @halogen
 - The Halogen catalog entry and documentation explain Strix Halo requirements, model download size, configuration and a real chat completion request @spec @halogen @implemented
+- label: Selecting traefik and halogen routes HTTPS requests for the Halogen subdomain to its API on port 8731
+  command: rg -q 'halogen.loadbalancer.server.port=8731' services/compose.x.traefik.halogen.yml
+  tags: [implemented, release]
 
 # app
 - label: Harbor App blocks main UI behind a setup gate until setup detail status is ready
