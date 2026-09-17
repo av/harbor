@@ -1232,9 +1232,9 @@
   tags: [whishper, spec, implemented]
 
 ## halogen
-- harbor up halogen exposes the Halogen OpenAI API on configurable host port 34950 with Strix Halo GPU access and unlimited locked memory @spec @halogen
+- harbor up halogen exposes the Halogen OpenAI API on configurable host port 34950 with Strix Halo GPU access and unlimited locked memory @spec @halogen @implemented
 - Halogen persists its downloadable model bundle in a configurable workspace and exposes image version, context, pool size, slots and prefill size through harbor config @spec @halogen @implemented
-- Selecting webui and halogen connects Open WebUI to the Halogen API after its engine healthcheck succeeds @spec @halogen
+- Selecting webui and halogen connects Open WebUI to the Halogen API after its engine healthcheck succeeds @spec @halogen @implemented
 - The Halogen catalog entry and documentation explain Strix Halo requirements, model download size, configuration and a real chat completion request @spec @halogen @implemented
 - label: Selecting traefik and halogen routes HTTPS requests for the Halogen subdomain to its API on port 8731
   command: rg -q 'halogen.loadbalancer.server.port=8731' services/compose.x.traefik.halogen.yml
@@ -2045,3 +2045,30 @@
 - label: chandra is discoverable and documented: the app catalog registers it as a backend with the datalab-to/chandra project link, README lists it under Backends and in the News section, tests/new-services.md carries a cold-start group skipped on non-NVIDIA hosts, and docs/2.2.27-Backend-Chandra.md follows the Windmill format while stating GPU-only/ROCm-untested, non-gated OpenRAIL-M weights, 16GB VRAM, <think>/HTML-ish raw output, the num_cache_lines troubleshooting entry and the HARBOR_CHANDRA_* env table
   command: d=docs/2.2.27-Backend-Chandra.md; test -f $d && prev=0; for h in "#### Starting" "#### Configuration" "##### Environment Variables" "#### Integration with Harbor" "#### Troubleshooting" "#### Links"; do n=$(grep -n -m1 "^$h$" $d | cut -d: -f1); [ -n "$n" ] && [ "$n" -gt "$prev" ] || { echo "missing or misordered: $h"; exit 1; }; prev=$n; done; [ "$(grep -A6 "^\*\*Key Features" $d | grep -c "^- ")" -ge 3 ] && grep -q "Handle: \`chandra\`" $d && grep -q "localhost:35080" $d && grep -q "harbor up chandra nvidia" $d && grep -qi "rocm" $d && grep -qi "untested" $d && grep -qi "OpenRAIL-M" $d && grep -q "not gated" $d && grep -q "16GB of VRAM" $d && grep -q "num_cache_lines" $d && grep -q "max-num-seqs 2 --max-model-len 8192" $d && grep -q "<think></think>" $d && grep -q "HARBOR_CHANDRA_HOST_PORT" $d && grep -q "HARBOR_CHANDRA_MODEL" $d && grep -q "HARBOR_CHANDRA_EXTRA_ARGS" $d && grep -q "datalab-to/chandra-ocr-2" $d && grep -A7 "^    chandra: {" app/src/serviceMetadata.ts | grep -q "HST.backend" && grep -A7 "^    chandra: {" app/src/serviceMetadata.ts | grep -q "2.2.27-Backend-Chandra\`" && grep -A7 "^    chandra: {" app/src/serviceMetadata.ts | grep -q "projectUrl: .https://github.com/datalab-to/chandra" && sed -n "/^##### Backends/,/^#####/p" README.md | grep -q "\[Chandra\](https://github.com/av/harbor/wiki/2.2.27-Backend-Chandra)" && sed -n "/^## News/,/^## Documentation/p" README.md | grep "^- " | grep -q "Chandra" && grep -q "^## Group [0-9]* — chandra" tests/new-services.md && sed -n "/^## Group [0-9]* — chandra/,/^## Group/p" tests/new-services.md | grep -q "harbor.sh up --no-defaults chandra nvidia" && sed -n "/^## Group [0-9]* — chandra/,/^## Group/p" tests/new-services.md | grep -q "localhost:35080/health" && sed -n "/^## Group [0-9]* — chandra/,/^## Group/p" tests/new-services.md | grep -q "/v1/chat/completions" && sed -n "/^## Group [0-9]* — chandra/,/^## Group/p" tests/new-services.md | grep -qi "skip" && sed -n "/^## Group [0-9]* — chandra/,/^## Group/p" tests/new-services.md | grep -q "harbor.sh down chandra"
   tags: [chandra, implemented]
+
+# halogen
+- label: Halogen defaults use image 0.6.3, a 262144-position KV pool and a 16384-token prefill arena
+  command: grep -q HARBOR_HALOGEN_VERSION=\"0.6.3\" services/halogen/default.env && grep -q HARBOR_HALOGEN_KV_POOL_POSITIONS=262144 services/halogen/default.env && grep -q HARBOR_HALOGEN_MAX_TOK=16384 services/halogen/default.env && grep -q HARBOR_HALOGEN_HOST_RESERVE_GIB=20 services/halogen/default.env
+  tags: [spec, halogen, implemented]
+- label: Harbor passes Halogen host reserve, context, pool, slots and prefill size into the container
+  command: grep -Fq "HALOGEN_HOST_RESERVE_GIB=${HARBOR_HALOGEN_HOST_RESERVE_GIB}" services/compose.halogen.yml && grep -Fq "HALOGEN_CTX=${HARBOR_HALOGEN_CTX}" services/compose.halogen.yml && grep -Fq "HALOGEN_KV_POOL_POSITIONS=${HARBOR_HALOGEN_KV_POOL_POSITIONS}" services/compose.halogen.yml && grep -Fq "HALOGEN_KV_SLOTS=${HARBOR_HALOGEN_KV_SLOTS}" services/compose.halogen.yml && grep -Fq "HALOGEN_MAX_TOK=${HARBOR_HALOGEN_MAX_TOK}" services/compose.halogen.yml
+  tags: [spec, halogen, implemented]
+- label: Halogen documentation states the 0.6.3 image, the 262144 pool, the 16384 prefill arena and that the engine watchdog stops a silent engine
+  command: rg -q "0.6.3" docs/2.2.28-Backend-Halogen.md && rg -q "262144" docs/2.2.28-Backend-Halogen.md && rg -q "16384" docs/2.2.28-Backend-Halogen.md && rg -q "watchdog" docs/2.2.28-Backend-Halogen.md
+  tags: [spec, halogen, implemented]
+- A multi-turn Halogen chat with a large system prompt finishes without the engine watchdog stopping the container @spec @halogen @implemented
+- label: Halogen defaults to 4 KV slots, the measured acceptable engine batch on a 128 GiB Strix Halo
+  command: grep -q HARBOR_HALOGEN_KV_SLOTS=4 services/halogen/default.env
+  tags: [spec, halogen, implemented]
+- label: Halogen defaults the chat completion token budget to 65536 when a client omits max_tokens
+  command: grep -q HARBOR_HALOGEN_MAX_TOKENS_DEFAULT=65536 services/halogen/default.env
+  tags: [spec, halogen, implemented]
+- label: Halogen keeps the engine watchdog on and waits 900 seconds for unanswered PINGs
+  command: grep -q HARBOR_HALOGEN_ENGINE_WATCHDOG_S=900 services/halogen/default.env
+  tags: [spec, halogen, implemented]
+- label: Harbor passes the Halogen chat token budget and engine watchdog into the container
+  command: grep -Fq "HALOGEN_MAX_TOKENS_DEFAULT=${HARBOR_HALOGEN_MAX_TOKENS_DEFAULT}" services/compose.halogen.yml && grep -Fq "HALOGEN_ENGINE_WATCHDOG_S=${HARBOR_HALOGEN_ENGINE_WATCHDOG_S}" services/compose.halogen.yml
+  tags: [spec, halogen, implemented]
+- label: Halogen documentation states the 65536-token chat budget and the 900-second engine watchdog
+  command: rg -q "HARBOR_HALOGEN_MAX_TOKENS_DEFAULT" docs/2.2.28-Backend-Halogen.md && rg -q "65536" docs/2.2.28-Backend-Halogen.md && rg -q "HARBOR_HALOGEN_ENGINE_WATCHDOG_S" docs/2.2.28-Backend-Halogen.md && rg -q "900" docs/2.2.28-Backend-Halogen.md
+  tags: [spec, halogen, implemented]
