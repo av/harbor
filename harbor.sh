@@ -9387,7 +9387,7 @@ run_prismml_command() {
     models|ls)
         shift
         local base_url
-        base_url=$(harbor url prismml)
+        base_url=$(get_url prismml)
         curl -s "${base_url}/v1/models" | jq -r '.data[].id'
         ;;
     model)
