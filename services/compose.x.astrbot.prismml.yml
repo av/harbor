@@ -1,0 +1,5 @@
+services:
+  astrbot:
+    environment:
+      # Configure in WebUI: http://prismml:8080/v1
+      - HARBOR_ASTRBOT_PRISMML_ENDPOINT=http://prismml:8080/v1

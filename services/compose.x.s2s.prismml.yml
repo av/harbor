@@ -1,0 +1,8 @@
+services:
+  s2s:
+    depends_on:
+      - prismml
+    environment:
+      - HARBOR_S2S_OPENAI_URL=http://prismml:8080/v1
+      - HARBOR_S2S_OPENAI_KEY=sk-prismml
+      - HARBOR_S2S_MODEL=${HARBOR_S2S_PRISMML_MODEL}

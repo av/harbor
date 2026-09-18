@@ -1,0 +1,38 @@
+services:
+  prismml:
+    # PrismML publishes release tarballs, not container images: the image is
+    # assembled locally from the prebuilt binaries for the active capability
+    build:
+      context: ./services/prismml
+      dockerfile: Dockerfile
+      args:
+        BASE_IMAGE: ${HARBOR_PRISMML_BASE_IMAGE_CPU}
+        PRISMML_VERSION: ${HARBOR_PRISMML_VERSION}
+        PRISMML_ASSET: ${HARBOR_PRISMML_ASSET_CPU}
+    image: harbor-prismml:${HARBOR_PRISMML_VERSION}-cpu
+    container_name: ${HARBOR_CONTAINER_PREFIX}.prismml
+    env_file:
+      - ./.env
+      - ./services/prismml/override.env
+    volumes:
+      - ${HARBOR_HF_CACHE:-./services/prismml/.hf-cache}:/root/.cache/huggingface
+      # GGUFs in the llama.cpp cache can be symlinks to absolute host HF-cache
+      # blob paths; bind the HF cache at the same host-absolute path so they resolve
+      - ${HARBOR_HF_CACHE:-./services/prismml/.hf-cache}:${HOME}/.cache/huggingface:ro
+      - ${HARBOR_LLAMACPP_CACHE}:/root/.cache/llama.cpp
+      - ./services/prismml/data:/app/data
+    ports:
+      - ${HARBOR_PRISMML_HOST_PORT}:8080
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '{ printf \"GET /health HTTP/1.0\\r\\n\\r\\n\" >&3; cat <&3; } 3<>/dev/tcp/127.0.0.1/8080 | grep -q ok || exit 1'"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    command: >
+      ${HARBOR_PRISMML_MODEL_SPECIFIER}
+      ${HARBOR_PRISMML_EXTRA_ARGS}
+      --port 8080
+      --host 0.0.0.0
+    networks:
+      - harbor-network

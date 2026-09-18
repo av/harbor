@@ -1,0 +1,8 @@
+services:
+  khoj:
+    depends_on:
+      - prismml
+    environment:
+      - OPENAI_BASE_URL=http://prismml:8080/v1/
+      - OPENAI_API_KEY=sk-prismml
+      - KHOJ_DEFAULT_CHAT_MODEL=${HARBOR_KHOJ_PRISMML_MODEL}

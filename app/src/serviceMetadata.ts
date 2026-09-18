@@ -249,6 +249,14 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         wikiUrl: `${wikiUrl}/2.2.21-Backend-ik_llama.cpp`,
         tooltip: 'llama.cpp fork with additional quantization formats and CPU/CUDA performance improvements.',
     },
+    prismml: {
+        name: 'PrismML llama.cpp',
+        tags: [HST.backend],
+        projectUrl: 'https://github.com/PrismML-Eng/llama.cpp',
+        logo: 'https://github.com/PrismML-Eng.png?size=200',
+        wikiUrl: `${wikiUrl}/2.2.29-Backend-PrismML-llama.cpp`,
+        tooltip: 'PrismML llama.cpp fork that runs Ternary Bonsai PTQ1_0/PQ2_0 GGUF models.',
+    },
     lmdeploy: {
         name: 'lmdeploy',
         tags: [HST.backend, HST.partial],

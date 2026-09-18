@@ -1,0 +1,9 @@
+services:
+  paperless-gpt:
+    depends_on:
+      - prismml
+    environment:
+      - LLM_PROVIDER=openai
+      - OPENAI_BASE_URL=http://prismml:8080/v1
+      - OPENAI_API_KEY=sk-paperless-gpt
+      - LLM_MODEL=${HARBOR_PAPERLESS_GPT_PRISMML_MODEL}

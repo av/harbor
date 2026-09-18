@@ -1,0 +1,14 @@
+services:
+  prismml:
+    build:
+      args:
+        BASE_IMAGE: ${HARBOR_PRISMML_BASE_IMAGE_NVIDIA}
+        PRISMML_ASSET: ${HARBOR_PRISMML_ASSET_NVIDIA}
+    image: harbor-prismml:${HARBOR_PRISMML_VERSION}-cuda
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

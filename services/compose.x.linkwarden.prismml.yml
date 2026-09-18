@@ -1,0 +1,9 @@
+services:
+  linkwarden:
+    depends_on:
+      - prismml
+    environment:
+      - CUSTOM_OPENAI_BASE_URL=http://prismml:8080/v1
+      - CUSTOM_OPENAI_NAME=prismml
+      - OPENAI_API_KEY=sk-prismml
+      - OPENAI_MODEL=${HARBOR_LINKWARDEN_PRISMML_MODEL}

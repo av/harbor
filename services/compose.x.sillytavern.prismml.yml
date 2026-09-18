@@ -1,0 +1,8 @@
+services:
+  sillytavern:
+    depends_on:
+      prismml:
+        condition: service_healthy
+    environment:
+      # harbor-init.sh reads the llamacpp slot; PrismML speaks the same API
+      - SILLYTAVERN_LLAMACPP_URL=http://prismml:8080

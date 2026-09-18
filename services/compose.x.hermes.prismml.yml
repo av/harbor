@@ -1,0 +1,8 @@
+services:
+  hermes:
+    depends_on:
+      - prismml
+    environment:
+      - OPENAI_BASE_URL=http://prismml:8080/v1
+      - HERMES_PROVIDER_BASE_URL=http://prismml:8080/v1
+      - HERMES_PROVIDER_MODEL=${HARBOR_HERMES_PRISMML_MODEL}

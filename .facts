@@ -708,6 +708,50 @@
   command: grep -q ':${HOME}/.cache/huggingface:ro' services/compose.ikllamacpp.yml
   tags: [spec, cache-symlinks, implemented]
 
+## prismml
+- label: prismml has a primary Docker Compose service at services/compose.prismml.yml using container name ${HARBOR_CONTAINER_PREFIX}.prismml, Harbor env files, harbor-network, and host port ${HARBOR_PRISMML_HOST_PORT}:8080
+  command: test -f services/compose.prismml.yml && rg -q "^  prismml:" services/compose.prismml.yml && rg -Fq 'container_name: ${HARBOR_CONTAINER_PREFIX}.prismml' services/compose.prismml.yml && rg -Fq "./services/prismml/override.env" services/compose.prismml.yml && rg -q "harbor-network" services/compose.prismml.yml && rg -Fq '${HARBOR_PRISMML_HOST_PORT}:8080' services/compose.prismml.yml
+  tags: [spec, prismml, implemented]
+- label: compose.prismml.yml additionally binds HARBOR_HF_CACHE read-only at ${HOME}/.cache/huggingface so llama.cpp-cache GGUF symlinks targeting absolute host HF-cache blob paths resolve inside the container
+  command: grep -q ':${HOME}/.cache/huggingface:ro' services/compose.prismml.yml
+  tags: [spec, cache-symlinks, prismml, implemented]
+- label: prismml assembles its image locally from a PrismML llama.cpp GitHub release tarball (PrismML publishes no container images) via services/prismml/Dockerfile, parameterised by BASE_IMAGE, PRISMML_VERSION and PRISMML_ASSET build args, with llama-server as the entrypoint and /app on LD_LIBRARY_PATH
+  command: rg -Fq 'github.com/PrismML-Eng/llama.cpp/releases/download/${PRISMML_VERSION}/llama-${PRISMML_VERSION}-bin-${PRISMML_ASSET}.tar.gz' services/prismml/Dockerfile && rg -q '^ARG BASE_IMAGE' services/prismml/Dockerfile && rg -Fq 'ENTRYPOINT ["/app/llama-server"]' services/prismml/Dockerfile && rg -q 'LD_LIBRARY_PATH=/app' services/prismml/Dockerfile
+  tags: [spec, prismml, implemented]
+- label: prismml defaults pin a PrismML release tag and define the CPU, NVIDIA and ROCm base image + release asset pairs, the default Ternary Bonsai 2 27B model spec, and source build controls
+  command: rg -q '^HARBOR_PRISMML_HOST_PORT=' services/prismml/default.env && rg -q '^HARBOR_PRISMML_VERSION="prism-b' services/prismml/default.env && rg -q '^HARBOR_PRISMML_BASE_IMAGE_CPU=' services/prismml/default.env && rg -q '^HARBOR_PRISMML_ASSET_CPU=' services/prismml/default.env && rg -q '^HARBOR_PRISMML_BASE_IMAGE_NVIDIA=' services/prismml/default.env && rg -q '^HARBOR_PRISMML_ASSET_NVIDIA="linux-cuda' services/prismml/default.env && rg -q '^HARBOR_PRISMML_BASE_IMAGE_ROCM=' services/prismml/default.env && rg -q '^HARBOR_PRISMML_ASSET_ROCM="ubuntu-rocm' services/prismml/default.env && rg -q '^HARBOR_PRISMML_MODEL_SPECIFIER="-hf prism-ml/Ternary-Bonsai-2-27B-gguf' services/prismml/default.env && rg -q '^HARBOR_PRISMML_BUILD_REF=prism' services/prismml/default.env && rg -q '^HARBOR_PRISMML_EXTRA_ARGS=' services/prismml/default.env
+  tags: [spec, prismml, implemented]
+- label: the nvidia and rocm overlays switch prismml to the CUDA / ROCm base image and release asset, tag the image per flavor (-cpu/-cuda/-rocm) so switching capability rebuilds instead of reusing a stale image, and pass the GPU (nvidia deploy reservation; /dev/kfd + /dev/dri for rocm); a cdi overlay mirrors the nvidia one
+  command: rg -q 'HARBOR_PRISMML_BASE_IMAGE_NVIDIA' services/compose.x.prismml.nvidia.yml && rg -q 'HARBOR_PRISMML_ASSET_NVIDIA' services/compose.x.prismml.nvidia.yml && rg -q 'driver: nvidia' services/compose.x.prismml.nvidia.yml && rg -q 'HARBOR_PRISMML_BASE_IMAGE_ROCM' services/compose.x.prismml.rocm.yml && rg -q '/dev/kfd' services/compose.x.prismml.rocm.yml && rg -q 'nvidia.com/gpu=all' services/compose.x.prismml.cdi.yml && rg -q 'image: harbor-prismml:\$\{HARBOR_PRISMML_VERSION\}-cpu' services/compose.prismml.yml && rg -q 'image: harbor-prismml:\$\{HARBOR_PRISMML_VERSION\}-cuda' services/compose.x.prismml.nvidia.yml && rg -q 'image: harbor-prismml:\$\{HARBOR_PRISMML_VERSION\}-rocm' services/compose.x.prismml.rocm.yml
+  tags: [spec, prismml, implemented]
+- label: the rocm overlay installs the ROCm runtime libraries the release binary links against (HARBOR_PRISMML_ROCM_PACKAGES, default hipblas rocblas) via the Dockerfile's EXTRA_PACKAGES build arg, because rocm/dev-ubuntu ships without them and llama-server silently falls back to CPU when libggml-hip.so cannot resolve libhipblas/librocblas
+  command: rg -q 'EXTRA_PACKAGES: \$\{HARBOR_PRISMML_ROCM_PACKAGES\}' services/compose.x.prismml.rocm.yml && rg -q '^HARBOR_PRISMML_ROCM_PACKAGES="hipblas rocblas"' services/prismml/default.env && rg -q '^ARG EXTRA_PACKAGES' services/prismml/Dockerfile && rg -Fq '${EXTRA_PACKAGES}' services/prismml/Dockerfile
+  tags: [spec, prismml, implemented]
+- label: with the build capability prismml builds the PrismML fork from source using the fork's own .devops cpu/cuda/rocm Dockerfiles at HARBOR_PRISMML_BUILD_REF, mirroring the llamacpp build overlays
+  command: rg -q 'github.com/PrismML-Eng/llama.cpp.git#\$\{HARBOR_PRISMML_BUILD_REF' services/compose.x.prismml.build.yml && rg -q '.devops/cpu.Dockerfile' services/compose.x.prismml.build.yml && rg -q '.devops/cuda.Dockerfile' services/compose.x.prismml.nvidia.build.yml && rg -q 'CUDA_DOCKER_ARCH' services/compose.x.prismml.nvidia.build.yml && rg -q '.devops/rocm.Dockerfile' services/compose.x.prismml.rocm.build.yml && rg -q 'ROCM_DOCKER_ARCH' services/compose.x.prismml.rocm.build.yml
+  tags: [spec, prismml, implemented]
+- label: prismml has a Harbor CLI helper (harbor prismml) with models, model, gguf, args, version and build subcommands; model accepts HF blob URLs and repo[:quant] specs and stores the resulting llama-server flags in prismml.model.specifier
+  command: rg -q 'run_prismml_command' harbor.sh && rg -q 'harbor prismml model' harbor.sh && rg -q 'prismml.extra.args' harbor.sh && rg -q 'prismml.build.ref' harbor.sh && rg -q 'prismml.version' harbor.sh && rg -q 'llamacpp_pull_model_args "\$current_model"' harbor.sh && rg -q '^    prismml\)' harbor.sh
+  tags: [spec, prismml, implemented]
+- label: prismml is registered as an OpenAI-compatible Harbor backend for dynamic backend integrations and harbor launch
+  command: rg -q "prismml: \{ url: 'http://prismml:8080'" routines/backendIntegration.ts && rg -q "prismml: 'prismml.model'" routines/backendIntegration.ts && rg -q 'ollama \| llamacpp \| ikllamacpp \| prismml' harbor.sh && rg -q 'echo "ollama llamacpp ikllamacpp prismml' harbor.sh
+  tags: [spec, prismml, implemented]
+- label: harbor models pull accepts --source prismml and downloads through the prismml image, so PTQ1_0/PQ2_0 GGUFs are fetched by a runtime that understands them
+  command: rg -q 'prismml\)' harbor.sh && rg -q 'run_llamacpp_pull "\$model" prismml' harbor.sh && rg -q 'ollama \| hf \| llamacpp \| prismml \| dmr' harbor.sh
+  tags: [spec, prismml, implemented]
+- label: every llamacpp satellite cross-file (compose.x.<svc>.llamacpp*.yml) has a prismml twin pointing at http://prismml:8080, and the config templates those twins mount exist
+  command: ok=1; for f in $(ls services/compose.x.*llamacpp*.yml | grep -v ikllamacpp | grep -v 'compose.x.llamacpp\.'); do t=$(echo "$f" | sed 's/llamacpp/prismml/g'); [ -f "$t" ] || { echo "missing $t"; ok=0; }; done; [ $ok = 1 ] && ! rg -l 'http://llamacpp:8080' services/compose.x.*prismml*.yml && test -f services/webui/configs/config.prismml.json && test -f services/aichat/configs/aichat.prismml.yml && test -f services/aider/configs/aider.prismml.yml && test -f services/chatnio/config/config.prismml.yml && test -f services/chatui/configs/chatui.prismml.yml && test -f services/litellm/litellm.prismml.yaml
+  tags: [spec, prismml, implemented]
+- label: every HARBOR_<svc>_PRISMML_* variable referenced by a prismml cross-file has a default in profiles/default.env or services/prismml/default.env
+  command: ok=1; for v in $(rg -o --no-filename 'HARBOR_[A-Z_]*PRISMML[A-Z_]*' services/compose.x.*prismml*.yml | sort -u | rg -v '^HARBOR_BOOST_OPENAI_(URL|KEY)_PRISMML$|^HARBOR_PRISMML_(URL|OPENAI_URL|API_KEY)$|^HARBOR_ASTRBOT_PRISMML_ENDPOINT$'); do rg -q "^$v=" profiles/default.env services/prismml/default.env || { echo "missing $v"; ok=0; }; done; [ $ok = 1 ]
+  tags: [spec, prismml, implemented]
+- label: prismml is documented as a backend, listed in the Harbor app metadata with the PrismML-Eng logo, and has a harbor prismml section in the CLI reference
+  command: test -f 'docs/2.2.29-Backend&colon-PrismML-llama.cpp.md' && rg -q 'Handle: `prismml`' 'docs/2.2.29-Backend&colon-PrismML-llama.cpp.md' && rg -q 'prismml: \{' app/src/serviceMetadata.ts && rg -q '2.2.29-Backend-PrismML-llama.cpp' app/src/serviceMetadata.ts && rg -q 'harbor prismml <command>' docs/3.-Harbor-CLI-Reference.md
+  tags: [spec, prismml, implemented]
+- label: [runtime: prismml up] after harbor up prismml the server passes /health and /v1/models lists the served Bonsai model, and a chat completion returns non-empty content (verified on ROCm gfx1151 during development)
+  command: curl -sf "$(./harbor.sh url prismml)/health" | grep -q ok && curl -sf "$(./harbor.sh url prismml)/v1/models" | jq -e '.data | length > 0' >/dev/null && curl -sf "$(./harbor.sh url prismml)/v1/chat/completions" -H 'Content-Type: application/json' -d '{"messages":[{"role":"user","content":"Reply with exactly: PONG"}],"max_tokens":512}' | jq -er '.choices[0].message.content | length > 0' >/dev/null
+  tags: [spec, prismml, runtime, implemented]
+
 ## ollama
 - label: compose.ollama.yml additionally binds HARBOR_HF_CACHE read-only at ${HOME}/.cache/huggingface so llama.cpp-cache GGUF symlinks targeting absolute host HF-cache blob paths resolve inside the container
   command: grep -q ':${HOME}/.cache/huggingface:ro' services/compose.ollama.yml

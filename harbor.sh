@@ -359,6 +359,7 @@ show_help() {
     echo "  webui     - Configure Open WebUI Service"
     echo "  llamacpp  - Configure llamacpp service"
     echo "  ikllamacpp - Configure ik_llama.cpp service"
+    echo "  prismml   - Configure PrismML llama.cpp service"
     echo "  tgi       - Configure text-generation-inference service"
     echo "  litellm   - Configure LiteLLM service"
     echo "  langflow  - Configure Langflow UI Service"
@@ -2350,6 +2351,8 @@ run_llamacpp_pull() {
     _check_docker || return 1
 
     local model="$1"
+    # llama.cpp-family service whose image performs the download
+    local service="${2:-llamacpp}"
 
     if [ -z "$model" ]; then
         log_error "No model specified for llamacpp pull."
@@ -2443,14 +2446,14 @@ run_llamacpp_pull() {
     llamacpp_cache_path="${llamacpp_cache_path/#\~/$HOME}"
     mkdir -p "$hf_cache_path" "$llamacpp_cache_path"
 
-    $(compose_with_options "llamacpp") run \
+    $(compose_with_options "$service") run \
         --rm \
         --user "$(id -u):$(id -g)" \
         -e HOME=/tmp \
         -v "$hf_cache_path:/tmp/.cache/huggingface" \
         -v "$llamacpp_cache_path:/tmp/.cache/llama.cpp" \
         --entrypoint /bin/sh \
-        llamacpp \
+        "$service" \
         -c "$cmd"
 }
 
@@ -2483,7 +2486,7 @@ run_run() {
 
 launch_backend_is_supported() {
     case "$1" in
-    ollama | llamacpp | ikllamacpp | vllm | dmr | mlx | omlx | tabbyapi | mistralrs | sglang | lmdeploy | aphrodite | ktransformers | unsloth-studio)
+    ollama | llamacpp | ikllamacpp | prismml | vllm | dmr | mlx | omlx | tabbyapi | mistralrs | sglang | lmdeploy | aphrodite | ktransformers | unsloth-studio)
         return 0
         ;;
     *)
@@ -2502,6 +2505,9 @@ launch_backend_model_key() {
         ;;
     ikllamacpp)
         echo "ikllamacpp.model"
+        ;;
+    prismml)
+        echo "prismml.model"
         ;;
     vllm)
         echo "vllm.model"
@@ -2613,7 +2619,7 @@ launch_start_services() {
 }
 
 launch_supported_backends() {
-    echo "ollama llamacpp ikllamacpp vllm dmr mlx omlx tabbyapi mistralrs sglang lmdeploy aphrodite ktransformers unsloth-studio"
+    echo "ollama llamacpp ikllamacpp prismml vllm dmr mlx omlx tabbyapi mistralrs sglang lmdeploy aphrodite ktransformers unsloth-studio"
 }
 
 launch_supported_host_tools() {
@@ -3566,7 +3572,7 @@ launch_warn_codex_backend_compat() {
     local backend="$1"
 
     case "$backend" in
-    llamacpp | ikllamacpp)
+    llamacpp | ikllamacpp | prismml)
         log_info "Codex CLI uses the Responses API tool schema; llama.cpp-family backends may reject its tool payloads with: 400 'type' of tool must be 'function'."
         log_info "If Codex fails here, use OpenCode with this backend for prompt smoke tests, or use Codex with a backend that accepts Codex's Responses API tool schema."
         ;;
@@ -4499,7 +4505,7 @@ _harbor_completions() {
     }
 
     # Top-level subcommands
-    local commands="up u start s down d restart r ps build shell logs log l pull exec run stats attach cmd help hf defaults alias aliases a link ln unlink unln launch open o url qr list ls version smi top dive eject config profile profiles p gum fixfs info update how find home vscode doctor bench history h size env dev tools eval routine volumes skills completion models tokscale tunnel t tunnels migrate modularmax ollama llamacpp ikllamacpp tgi litellm vllm dmr mlx omlx aphrodite openai opencode facts mi npcsh webui tabbyapi parllama oterm plandex pdx mistralrs interpreter opint cfd cloudflared cmdh fabric parler photoprism airllm txtai aider nanobot chatui comfyui aichat omnichain lmeval lm_eval sglang jupyter ol1 ktransformers openhands oh stt speaches boost nexa repopack k6 promptfoo pf webtop langflow kobold morphic gptme hermes mcp openfang"
+    local commands="up u start s down d restart r ps build shell logs log l pull exec run stats attach cmd help hf defaults alias aliases a link ln unlink unln launch open o url qr list ls version smi top dive eject config profile profiles p gum fixfs info update how find home vscode doctor bench history h size env dev tools eval routine volumes skills completion models tokscale tunnel t tunnels migrate modularmax ollama llamacpp ikllamacpp prismml tgi litellm vllm dmr mlx omlx aphrodite openai opencode facts mi npcsh webui tabbyapi parllama oterm plandex pdx mistralrs interpreter opint cfd cloudflared cmdh fabric parler photoprism airllm txtai aider nanobot chatui comfyui aichat omnichain lmeval lm_eval sglang jupyter ol1 ktransformers openhands oh stt speaches boost nexa repopack k6 promptfoo pf webtop langflow kobold morphic gptme hermes mcp openfang"
 
     # Commands that accept service names as arguments
     local service_commands="up u start s down d logs log l build shell pull exec run stats attach cmd eject open o url qr launch dive env"
@@ -4790,6 +4796,7 @@ _harbor() {
         'ollama:Ollama CLI'
         'llamacpp:Configure llamacpp'
         'ikllamacpp:Configure ik_llama.cpp'
+        'prismml:Configure PrismML llama.cpp'
         'tgi:Configure TGI'
         'litellm:Configure LiteLLM'
         'vllm:Configure VLLM'
@@ -5241,6 +5248,7 @@ complete -c harbor -n __harbor_no_subcommand -a migrate -d 'Run migration'
 complete -c harbor -n __harbor_no_subcommand -a ollama -d 'Ollama CLI'
 complete -c harbor -n __harbor_no_subcommand -a llamacpp -d 'Configure llamacpp'
 complete -c harbor -n __harbor_no_subcommand -a ikllamacpp -d 'Configure ik_llama.cpp'
+complete -c harbor -n __harbor_no_subcommand -a prismml -d 'Configure PrismML llama.cpp'
 complete -c harbor -n __harbor_no_subcommand -a tgi -d 'Configure TGI'
 complete -c harbor -n __harbor_no_subcommand -a litellm -d 'Configure LiteLLM'
 complete -c harbor -n __harbor_no_subcommand -a vllm -d 'Configure VLLM'
@@ -6516,7 +6524,7 @@ suggest_command() {
         up u start s down d restart r ps build shell logs log l pull exec run
         stats attach cmd help --help -h hf defaults alias aliases a link ln
         unlink unln launch open o url qr list ls version --version -v smi top dive eject
-        ollama llamacpp ikllamacpp tgi litellm vllm dmr mlx omlx aphrodite openai
+        ollama llamacpp ikllamacpp prismml tgi litellm vllm dmr mlx omlx aphrodite openai
         opencode facts mi npcsh webui tabbyapi parllama oterm plandex pdx mistralrs
         interpreter opint cfd cloudflared cmdh fabric parler photoprism airllm txtai
         aider nanobot chatui comfyui aichat omnichain lmeval lm_eval sglang
@@ -9357,6 +9365,105 @@ run_ikllamacpp_command() {
     esac
 }
 
+run_prismml_command() {
+    update_model_spec() {
+        local spec=""
+        local current_model
+        local current_gguf
+        current_model=$(env_manager get prismml.model)
+        current_gguf=$(env_manager get prismml.gguf)
+
+        if [ -n "$current_model" ]; then
+            # Accepts both HF blob URLs and repo[:quant] specs
+            spec=$(llamacpp_pull_model_args "$current_model") || return 1
+        elif [ -n "$current_gguf" ]; then
+            spec="-m $current_gguf"
+        fi
+
+        env_manager set prismml.model.specifier "$spec"
+    }
+
+    case "$1" in
+    models|ls)
+        shift
+        local base_url
+        base_url=$(harbor url prismml)
+        curl -s "${base_url}/v1/models" | jq -r '.data[].id'
+        ;;
+    model)
+        shift
+        env_manager_alias prismml.model --on-set update_model_spec "$@"
+        ;;
+    gguf)
+        shift
+        env_manager_alias prismml.gguf --on-set update_model_spec "$@"
+        ;;
+    args)
+        shift
+        env_manager_alias prismml.extra.args "$@"
+        ;;
+    version)
+        shift
+        env_manager_alias prismml.version "$@"
+        ;;
+    build)
+        shift
+        case "$1" in
+        on)
+            local current_caps
+            current_caps=$(env_manager get capabilities.default)
+            if [[ ! ";${current_caps};" =~ ";build;" ]]; then
+                if [ -z "$current_caps" ]; then
+                    env_manager set capabilities.default "build"
+                else
+                    env_manager set capabilities.default "${current_caps};build"
+                fi
+            fi
+            log_info "Build from source enabled for prismml"
+            log_info "Run 'harbor build prismml' to build, then 'harbor up prismml'"
+            ;;
+        off)
+            local current_caps
+            local new_caps
+            current_caps=$(env_manager get capabilities.default)
+            new_caps=$(echo "$current_caps" | sed 's/;*build//g; s/^;//; s/;$//')
+            env_manager set capabilities.default "$new_caps"
+            log_info "Build from source disabled for prismml"
+            ;;
+        ref)
+            shift
+            env_manager_alias prismml.build.ref "$@"
+            ;;
+        *)
+            echo "Usage: harbor prismml build <command>"
+            echo
+            echo "Commands:"
+            echo "  on              - Build the PrismML fork from source instead of using release binaries"
+            echo "  off             - Use PrismML release binaries (default)"
+            echo "  ref [git ref]   - Get or set git ref to build (branch/tag/commit)"
+            ;;
+        esac
+        ;;
+    -h | --help | help)
+        echo "Please note that this is not llama.cpp CLI, but a Harbor CLI to manage the prismml service."
+        echo "Access llama.cpp own CLI by running 'harbor exec prismml' when it's running."
+        echo
+        echo "Usage: harbor prismml <command>"
+        echo
+        echo "Commands:"
+        echo "  harbor prismml models                          - List models served by PrismML llama.cpp"
+        echo "  harbor prismml model [HF repo:quant or URL]    - Get or set the model to run"
+        echo "  harbor prismml gguf [gguf path]                - Get or set the path to GGUF to run"
+        echo "  harbor prismml args [args]                     - Get or set extra args to pass to the server"
+        echo "  harbor prismml version [release tag]           - Get or set the PrismML release tag to run"
+        echo "  harbor prismml build on|off|ref                - Manage building from source"
+        ;;
+    *)
+        return 1
+        ;;
+    esac
+}
+
 run_tgi_command() {
     update_model_spec() {
         local spec=""
@@ -9532,7 +9639,7 @@ show_models_help() {
     echo "  rm [--source SOURCE] <model>   Remove a model"
     echo "  <source> <command> ...         Alias for --source SOURCE"
     echo ""
-    echo "Sources: ollama, hf, llamacpp, dmr, mlx, omlx"
+    echo "Sources: ollama, hf, llamacpp, prismml, dmr, mlx, omlx"
     echo ""
     echo "Examples:"
     echo "  harbor models ls"
@@ -9999,11 +10106,15 @@ run_models_pull() {
         run_llamacpp_pull "$model"
         return
         ;;
+    prismml)
+        run_llamacpp_pull "$model" prismml
+        return
+        ;;
     "")
         ;;
     *)
         log_error "Unknown model source: $source"
-        log_error "Valid sources: ollama, hf, llamacpp, dmr, mlx, omlx"
+        log_error "Valid sources: ollama, hf, llamacpp, prismml, dmr, mlx, omlx"
         return 1
         ;;
     esac
@@ -10063,7 +10174,7 @@ run_models_pull() {
 
 models_extract_source_subcommand() {
     case "$1" in
-    ollama | hf | llamacpp | dmr | mlx | omlx)
+    ollama | hf | llamacpp | prismml | dmr | mlx | omlx)
         echo "$1"
         return 0
         ;;
@@ -12856,6 +12967,10 @@ main_entrypoint() {
     ikllamacpp)
         shift
         run_ikllamacpp_command "$@"
+        ;;
+    prismml)
+        shift
+        run_prismml_command "$@"
         ;;
     tgi)
         shift

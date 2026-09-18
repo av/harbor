@@ -1,0 +1,4 @@
+services:
+  aider:
+    volumes:
+      - ./services/aider/configs/aider.prismml.yml:/home/appuser/.aider/prismml.yml

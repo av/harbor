@@ -1,0 +1,7 @@
+services:
+  prismml:
+    build:
+      dockerfile: .devops/cuda.Dockerfile
+      args:
+        CUDA_DOCKER_ARCH: ${HARBOR_PRISMML_BUILD_CUDA_ARCH:-default}
+    image: harbor-prismml:src-${HARBOR_PRISMML_BUILD_REF:-prism}-cuda

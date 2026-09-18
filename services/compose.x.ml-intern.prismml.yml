@@ -1,0 +1,11 @@
+services:
+  ml-intern:
+    depends_on:
+      - prismml
+    environment:
+      # ml-intern's "llamacpp" provider is any llama-server endpoint
+      - ML_INTERN_MODEL=llamacpp/${HARBOR_ML_INTERN_PRISMML_MODEL}
+      - LLAMACPP_BASE_URL=http://prismml:8080/v1
+      - LLAMACPP_API_KEY=sk-prismml
+      - LOCAL_LLM_BASE_URL=http://prismml:8080/v1
+      - LOCAL_LLM_API_KEY=sk-prismml

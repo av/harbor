@@ -1,0 +1,11 @@
+services:
+  openterminal:
+    depends_on:
+      - prismml
+    environment:
+      - HARBOR_PRISMML_URL=http://prismml:8080
+      - HARBOR_PRISMML_OPENAI_URL=http://prismml:8080/v1
+      - HARBOR_PRISMML_API_KEY=sk-prismml
+      - HARBOR_PRISMML_MODEL=${HARBOR_PRISMML_MODEL}
+      - HARBOR_PRISMML_MODEL_SPECIFIER=${HARBOR_PRISMML_MODEL_SPECIFIER}
+      - HARBOR_PRISMML_EXTRA_ARGS=${HARBOR_PRISMML_EXTRA_ARGS}

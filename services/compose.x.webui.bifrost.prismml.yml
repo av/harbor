@@ -1,0 +1,5 @@
+services:
+  webui:
+    depends_on:
+      bifrost-prismml-bootstrap:
+        condition: service_completed_successfully
