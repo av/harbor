@@ -2412,6 +2412,19 @@ run_llamacpp_pull() {
             exit 0
         fi
 
+        # Fatal errors must be checked before the 'loading model' success
+        # marker: the PrismML fork prints \"load_model: loading model '<spec>'\"
+        # even when the -hf resolve failed, so both appear in the same log.
+        if grep -qE 'exiting due to model loading error|no GGUF files found in repository' \"$c_log\"; then
+            log_error 'Download failed - the model was not fetched. See the log above.'
+            if grep -q 'failed to write file' \"$c_log\"; then
+                log_error 'The cache is not writable by your user. Run: harbor fixfs'
+            fi
+            kill \$SRV_PID 2>/dev/null
+            kill \$TAIL_PID 2>/dev/null
+            exit 1
+        fi
+
         # 'loading model' indicates download finished
         if grep -q 'main: loading model' \"$c_log\" || grep -q 'load_model: loading model' \"$c_log\"; then
             log_success 'Download completed successfully.'
@@ -12439,7 +12452,7 @@ run_modularmax_command() {
 # ========================================================================
 
 # Globals
-version="0.5.12"
+version="0.5.13"
 harbor_release_url="https://api.github.com/repos/av/harbor/releases/latest"
 delimiter="|"
 scramble_exit_code=42

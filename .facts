@@ -739,6 +739,9 @@
 - label: harbor models pull accepts --source prismml and downloads through the prismml image, so PTQ1_0/PQ2_0 GGUFs are fetched by a runtime that understands them
   command: rg -q 'prismml\)' harbor.sh && rg -q 'run_llamacpp_pull "\$model" prismml' harbor.sh && rg -q 'ollama \| hf \| llamacpp \| prismml \| dmr' harbor.sh
   tags: [spec, prismml, implemented]
+- label: run_llamacpp_pull treats a failed -hf resolve as a failure even though the PrismML fork still prints the "load_model: loading model" success marker: fatal markers are checked before that marker, a non-writable cache is reported with the harbor fixfs hint, and the command exits non-zero instead of claiming the download succeeded
+  command: rg -Fq 'exiting due to model loading error|no GGUF files found in repository' harbor.sh && f=$(rg -n 'Fatal errors must be checked before' harbor.sh | head -1 | cut -d: -f1) && l=$(rg -n "indicates download finished" harbor.sh | head -1 | cut -d: -f1) && [ -n "$f" ] && [ -n "$l" ] && [ "$f" -lt "$l" ] && rg -Fq 'harbor fixfs' harbor.sh
+  tags: [spec, prismml, implemented]
 - label: every llamacpp satellite cross-file (compose.x.<svc>.llamacpp*.yml) has a prismml twin pointing at http://prismml:8080, and the config templates those twins mount exist
   command: ok=1; for f in $(ls services/compose.x.*llamacpp*.yml | grep -v ikllamacpp | grep -v 'compose.x.llamacpp\.'); do t=$(echo "$f" | sed 's/llamacpp/prismml/g'); [ -f "$t" ] || { echo "missing $t"; ok=0; }; done; [ $ok = 1 ] && ! rg -l 'http://llamacpp:8080' services/compose.x.*prismml*.yml && test -f services/webui/configs/config.prismml.json && test -f services/aichat/configs/aichat.prismml.yml && test -f services/aider/configs/aider.prismml.yml && test -f services/chatnio/config/config.prismml.yml && test -f services/chatui/configs/chatui.prismml.yml && test -f services/litellm/litellm.prismml.yaml
   tags: [spec, prismml, implemented]
