@@ -1185,6 +1185,36 @@ if [ -z "$svc_a_port" ] || [ -z "$svc_b_port" ]; then
   fail "_parse_compose_ports failed to extract duplicate port 9999 for both services"
 fi
 
+# Regression (#261): a container published on any host IP other than
+# 0.0.0.0/[::] (e.g. under a daemon default-bind-IP config) used to be
+# invisible to this check, so harbor up flagged its own container as a conflict.
+suite_log "port conflict: _harbor_owned_ports recognizes non-0.0.0.0 bind IPs"
+owned_fake_bin="$(mktemp -d -t harbor-owned.XXXXXX)"
+cat >"$owned_fake_bin/docker" <<'FAKE_DOCKER_PS'
+#!/usr/bin/env bash
+if [[ "$*" == *"ps --format"* ]]; then
+  printf '%s\n' \
+    '127.0.0.1:34431->8000/tcp' \
+    '0.0.0.0:34432->8000/tcp, :::34432->8000/tcp'
+  exit 0
+fi
+exit 0
+FAKE_DOCKER_PS
+chmod +x "$owned_fake_bin/docker"
+
+owned_output=$(
+  eval "$(sed -n '/_harbor_owned_ports()/,/^}/p' "$harbor_script")"
+  PATH="$owned_fake_bin:$PATH" _harbor_owned_ports harbor
+)
+if ! echo "$owned_output" | grep -qx "34431"; then
+  echo "Owned ports output: $owned_output" >&2
+  fail "_harbor_owned_ports did not recognize a container published on 127.0.0.1 (non-0.0.0.0 bind IP)"
+fi
+if ! echo "$owned_output" | grep -qx "34432"; then
+  echo "Owned ports output: $owned_output" >&2
+  fail "_harbor_owned_ports did not recognize a container published on 0.0.0.0"
+fi
+
 # ---------------------------------------------------------------------------
 # 25. harbor eject hardening (v0.5.0 — P2.3)
 #     harbor eject produces a standalone resolved Compose configuration.
