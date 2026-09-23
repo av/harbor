@@ -965,7 +965,7 @@ has_rocm() {
     ls /dev/dri/renderD* &>/dev/null || return 1
 
     # 3. Verify amdgpu kernel module is loaded
-    lsmod 2>/dev/null | grep -q "^amdgpu " || return 1
+    lsmod 2>/dev/null | grep "^amdgpu " 2>&1 >/dev/null || return 1
 
     return 0
 }
