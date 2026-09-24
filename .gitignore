@@ -51,6 +51,7 @@ langfuse/db/
 
 scripts/*
 !scripts/demos/
+!scripts/harbor-docker.sh
 
 # LiteLLM
 litellm/db
