@@ -638,6 +638,14 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         wikiUrl: `${wikiUrl}/2.3.37-Satellite-traefik`,
         tooltip: 'A modern HTTP reverse proxy and load balancer that makes deploying microservices easy.',
     },
+    caddy: {
+        name: 'Caddy',
+        tags: [HST.satellite, HST.api, HST.infra],
+        projectUrl: 'https://github.com/caddyserver/caddy',
+        logo: 'https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/caddy.png',
+        wikiUrl: `${wikiUrl}/2.3.100-Satellite-Caddy`,
+        tooltip: 'A configurable reverse proxy with automatic HTTPS for selected Harbor services.',
+    },
     latentscope: {
         name: 'Latent Scope',
         tags: [HST.satellite],
