@@ -1316,6 +1316,12 @@
   command: d='docs/2.3.23-Satellite&colon-n8n.md'; grep -q 'n8n-sandbox-api' "$d" && grep -q 'privileged' "$d" && grep -q 'HARBOR_N8N_SANDBOX_API_KEY' "$d" && grep -q 'n8n Assistant' "$d"
   tags: [n8n-sandbox, implemented]
 
+## r2r
+- R2R is available as a Harbor service with a persistent PostgreSQL/pgvector database and reachable API and dashboard. @spec @issue-120 @implemented
+- R2R requires per-installation database and application secrets rather than shipping fixed public credentials. @spec @issue-120 @implemented
+- When started with Harbor Ollama, R2R can ingest a local document using Ollama embeddings and query its contents with an Ollama chat model. @spec @issue-120 @implemented
+- R2R documentation explains the lighter deployment, limitations relative to upstream full deployment, persistent data, ports, and model configuration. @spec @issue-120 @implemented
+
 # app
 - label: Harbor App blocks main UI behind a setup gate until setup detail status is ready
   command: rg -q 'detail\?\.status === "ready"' app/src/setup/HarborSetupContext.tsx

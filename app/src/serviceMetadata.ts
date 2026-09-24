@@ -662,6 +662,14 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         wikiUrl: `${wikiUrl}/2.3.39-Satellite-RAGLite`,
         tooltip: 'Python toolkit for Retrieval-Augmented Generation (RAG)',
     },
+    r2r: {
+        name: 'R2R',
+        tags: [HST.frontend, HST.rag],
+        projectUrl: 'https://github.com/SciPhi-AI/R2R',
+        logo: 'https://github.com/SciPhi-AI.png?size=200',
+        wikiUrl: `${wikiUrl}/2.1.18-Frontend-R2R`,
+        tooltip: 'Self-hosted retrieval-augmented generation with document ingestion, search, and a dashboard.',
+    },
     llamaswap: {
         name: 'llama-swap',
         tags: [HST.satellite, HST.api],
