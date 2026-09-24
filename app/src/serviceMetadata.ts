@@ -281,6 +281,14 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         wikiUrl: `${wikiUrl}/2.1.5-Frontend:-Lobe-Chat`,
         tooltip: 'An open-source, modern-design AI chat framework. Supports Multi AI Providers( OpenAI / Claude 3 / Gemini / Ollama / Azure / DeepSeek / MiniMax), Knowledge Base (file upload / knowledge management / RAG ), Multi-Modals (Vision/TTS) and plugin system.',
     },
+    lobehub: {
+        name: 'LobeHub (Server Database)',
+        tags: [HST.frontend, HST.rag],
+        projectUrl: 'https://github.com/lobehub/lobehub',
+        logo: 'https://www.google.com/s2/favicons?domain=lobehub.com&sz=128',
+        wikiUrl: `${wikiUrl}/2.1.17-Frontend-LobeHub`,
+        tooltip: 'Database-backed LobeHub with persistent chats, knowledge files, and local-model support.',
+    },
     mistralrs: {
         name: 'mistral.rs',
         tags: [HST.backend],

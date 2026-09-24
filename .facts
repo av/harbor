@@ -1316,6 +1316,15 @@
   command: d='docs/2.3.23-Satellite&colon-n8n.md'; grep -q 'n8n-sandbox-api' "$d" && grep -q 'privileged' "$d" && grep -q 'HARBOR_N8N_SANDBOX_API_KEY' "$d" && grep -q 'n8n Assistant' "$d"
   tags: [n8n-sandbox, implemented]
 
+## lobehub
+- LobeHub server-database variant is a separate Harbor service from client-storage LobeChat, with persistent PostgreSQL data and local account sign-in. @spec @issue-118 @implemented
+- LobeHub stores uploaded knowledge files in a persistent S3-compatible service and can retrieve them after restart. @spec @issue-118 @implemented
+- LobeHub can chat using Harbor Ollama through a cross-service integration. @spec @issue-118 @implemented
+- LobeHub runtime secrets are generated or required explicitly rather than shipped as fixed public credentials. @spec @issue-118 @implemented
+- LobeHub and its browser-facing object storage bind to loopback by default, with an explicit host override for LAN access. @spec @issue-118 @implemented
+- LobeHub configures a per-installation JWKS signing key so uploaded knowledge files can be parsed and indexed without the optional agent gateway. @spec @issue-118 @implemented
+- When Harbor Ollama is selected with LobeHub, uploaded knowledge uses a local Ollama embedding model instead of requiring an OpenAI API key. @spec @issue-118 @implemented
+
 # app
 - label: Harbor App blocks main UI behind a setup gate until setup detail status is ready
   command: rg -q 'detail\?\.status === "ready"' app/src/setup/HarborSetupContext.tsx
