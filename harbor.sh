@@ -1443,6 +1443,20 @@ ensure_daytona_ssh_keys() {
     }
 }
 
+ensure_latitude_secrets() {
+    local key secret
+    for key in postgres.password postgres.runtime.password clickhouse.password storage.secret master.encryption.key better.auth.secret; do
+        if [ -z "$(env_manager --silent get "latitude.$key")" ]; then
+            secret=$(LC_ALL=C od -An -N32 -tx1 /dev/urandom | tr -d ' \n') || return 1
+            if [ "${#secret}" -ne 64 ]; then
+                log_error "Failed to generate Latitude secret: $key"
+                return 1
+            fi
+            env_manager --silent set "latitude.$key" "$secret" || return 1
+        fi
+    done
+}
+
 run_up() {
     _check_docker || return 1
     local should_tail=false
@@ -1543,6 +1557,9 @@ run_up() {
             ;;
         daytona)
             ensure_daytona_ssh_keys || return 1
+            ;;
+        latitude)
+            ensure_latitude_secrets || return 1
             ;;
         esac
     done
