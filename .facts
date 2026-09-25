@@ -1355,6 +1355,7 @@
 - label: Harbor App build splits vendor code into react terminal markdown and syntax chunks via Vite manualChunks so no JS chunk exceeds 600 kB
   command: grep -q 'manualChunks' app/vite.config.ts
   tags: [implemented]
+- Harbor App Profiles loads profiles under a dot-prefixed Harbor home without a Tauri forbidden-path error @spec @issue-64 @implemented
 
 # boost
 - label: Boost is a FastAPI LLM proxy that exposes OpenAI chat completions and optional Anthropic and Responses compat layers
