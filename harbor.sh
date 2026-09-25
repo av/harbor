@@ -492,6 +492,7 @@ show_help() {
     echo "  ls|list [--active|-a] - List available/active Harbor services"
     echo "  ln|link [--short]     - Create a symlink to the CLI, --short for 'h' link"
     echo "  unlink|unln           - Remove CLI symlinks and PATH entries"
+    echo "  wrappers [list|add|rm|sync] - Manage opt-in command wrappers"
     echo "  eject                 - Eject resolved Compose configuration, accepts same options as 'up'"
     echo "  help|--help|-h        - Show this help message"
     echo "  version|--version|-v  - Show the CLI version"
@@ -4227,6 +4228,104 @@ run_hf_open() {
     sys_open "$hf_url"
 }
 
+_wrapper_is_owned() {
+    local target="$1"
+    [ -L "$target" ] || return 1
+    case "$(readlink "$target")" in
+        "$harbor_home/shared/harbor-command-wrapper.sh" | */shared/harbor-command-wrapper.sh) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+_wrapper_link() {
+    local name="$1" target_dir="$2"
+    local source="$harbor_home/shared/harbor-command-wrapper.sh"
+    local target="$target_dir/$name"
+    local existing_command
+
+    if [ ! -f "$source" ]; then
+        log_error "Command wrapper source is missing: $source"
+        return 1
+    fi
+    existing_command=$(command -v "$name" 2>/dev/null || true)
+    if [ -n "$existing_command" ] && [ "$existing_command" != "$target" ]; then
+        log_error "Refusing to shadow existing command: $name ($existing_command)"
+        return 1
+    fi
+    if [ -e "$target" ] || [ -L "$target" ]; then
+        if ! _wrapper_is_owned "$target"; then
+            log_error "Refusing to replace existing command: $target"
+            return 1
+        fi
+    fi
+    mkdir -p "$target_dir" || return 1
+    ln -sfn "$source" "$target"
+    log_info "Command wrapper: $target -> $source"
+}
+
+run_wrappers_command() {
+    local action="${1:-list}" name="${2:-}"
+    local registered target_dir target new_registered item failed=false
+    registered=$(env_manager --silent get cli.wrappers)
+    target_dir=$(env_manager --silent get cli.path)
+    target_dir="${target_dir/#\~/$HOME}"
+
+    case "$action" in
+        list | ls)
+            printf '%s\n' "$registered" | tr ';' '\n' | sed '/^$/d'
+            ;;
+        add)
+            if [[ ! "$name" =~ ^[a-z][a-z0-9_-]*$ ]]; then
+                log_error "Usage: harbor wrappers add <command>"
+                return 1
+            fi
+            if [ "$name" = "$(env_manager --silent get cli.name)" ] ||
+                [ "$name" = "$(env_manager --silent get cli.short)" ]; then
+                log_error "A command wrapper cannot replace the Harbor CLI link: $name"
+                return 1
+            fi
+            _wrapper_link "$name" "$target_dir" || return 1
+            case ";$registered;" in
+                *";$name;"*) ;;
+                *)
+                    if [ -n "$registered" ]; then registered="$registered;$name"; else registered="$name"; fi
+                    env_manager --silent set cli.wrappers "$registered"
+                    ;;
+            esac
+            ;;
+        rm | remove)
+            if [[ ! "$name" =~ ^[a-z][a-z0-9_-]*$ ]]; then
+                log_error "Usage: harbor wrappers rm <command>"
+                return 1
+            fi
+            target="$target_dir/$name"
+            if _wrapper_is_owned "$target"; then
+                rm "$target" || return 1
+                log_info "Removed command wrapper: $target"
+            fi
+            new_registered=""
+            while IFS= read -r item; do
+                [ -n "$item" ] && [ "$item" != "$name" ] || continue
+                if [ -n "$new_registered" ]; then new_registered="$new_registered;$item"; else new_registered="$item"; fi
+            done < <(printf '%s\n' "$registered" | tr ';' '\n')
+            env_manager --silent set cli.wrappers "$new_registered"
+            ;;
+        sync)
+            while IFS= read -r item; do
+                [ -n "$item" ] || continue
+                if [[ ! "$item" =~ ^[a-z][a-z0-9_-]*$ ]] || ! _wrapper_link "$item" "$target_dir"; then
+                    failed=true
+                fi
+            done < <(printf '%s\n' "$registered" | tr ';' '\n')
+            ! $failed
+            ;;
+        *)
+            log_error "Usage: harbor wrappers [list|add <command>|rm <command>|sync]"
+            return 1
+            ;;
+    esac
+}
+
 link_cli() {
     local target_dir
     target_dir=$(env_manager get cli.path)
@@ -4403,6 +4502,7 @@ link_cli() {
 
     # Install tab completion scripts for the user's shell
     _install_completions
+    run_wrappers_command sync || log_warn "Some command wrappers could not be refreshed."
 
     local reload_hint=""
     if [[ -n "$shell_profile" ]]; then
@@ -4519,6 +4619,8 @@ _harbor_completions() {
 
     # Top-level subcommands
     local commands="up u start s down d restart r ps build shell logs log l pull exec run stats attach cmd help hf defaults alias aliases a link ln unlink unln launch open o url qr list ls version smi top dive eject config profile profiles p gum fixfs info update how find home vscode doctor bench history h size env dev tools eval routine volumes skills completion models tokscale tunnel t tunnels migrate modularmax ollama llamacpp ikllamacpp prismml tgi litellm vllm dmr mlx omlx aphrodite openai opencode facts mi npcsh webui tabbyapi parllama oterm plandex pdx mistralrs interpreter opint cfd cloudflared cmdh fabric parler photoprism airllm txtai aider nanobot chatui comfyui aichat omnichain lmeval lm_eval sglang jupyter ol1 ktransformers openhands oh stt speaches boost nexa repopack k6 promptfoo pf webtop langflow kobold morphic gptme hermes mcp openfang"
+
+    commands="$commands wrappers"
 
     # Commands that accept service names as arguments
     local service_commands="up u start s down d logs log l build shell pull exec run stats attach cmd eject open o url qr launch dive env"
@@ -4765,6 +4867,7 @@ _harbor() {
         'ln:Link CLI to PATH'
         'unlink:Remove CLI from PATH'
         'unln:Remove CLI from PATH'
+        'wrappers:Manage command wrappers'
         'launch:Launch service CLI'
         'open:Open service in browser'
         'o:Open service in browser'
@@ -5216,6 +5319,7 @@ complete -c harbor -n __harbor_no_subcommand -a link -d 'Link CLI to PATH'
 complete -c harbor -n __harbor_no_subcommand -a ln -d 'Link CLI to PATH'
 complete -c harbor -n __harbor_no_subcommand -a unlink -d 'Remove CLI from PATH'
 complete -c harbor -n __harbor_no_subcommand -a unln -d 'Remove CLI from PATH'
+complete -c harbor -n __harbor_no_subcommand -a wrappers -d 'Manage command wrappers'
 complete -c harbor -n __harbor_no_subcommand -a launch -d 'Launch service CLI'
 complete -c harbor -n __harbor_no_subcommand -a open -d 'Open service in browser'
 complete -c harbor -n __harbor_no_subcommand -a o -d 'Open service in browser'
@@ -8617,6 +8721,8 @@ update_harbor() {
             log_warn "To roll back: cd $harbor_home && git checkout tags/v$old_version"
         fi
     fi
+
+    run_wrappers_command sync || log_warn "Some command wrappers could not be refreshed."
 
     # Read the new version from the updated script on disk
     local new_version
@@ -12924,6 +13030,10 @@ main_entrypoint() {
     link | ln)
         shift
         link_cli "$@"
+        ;;
+    wrappers)
+        shift
+        run_wrappers_command "$@"
         ;;
     unlink | unln)
         shift
