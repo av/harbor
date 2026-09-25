@@ -1216,4 +1216,12 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         wikiUrl: `${wikiUrl}/2.2.27-Backend-Chandra`,
         tooltip: 'Chandra 2 OCR served with vLLM: document and image to structured markdown, HTML or JSON.',
     },
+    qwencode: {
+        name: 'Qwen Code',
+        tags: [HST.satellite, HST.tools, HST.workflows],
+        projectUrl: 'https://github.com/QwenLM/qwen-code',
+        logo: 'https://github.com/QwenLM.png?size=200',
+        wikiUrl: `${wikiUrl}/2.3.99-Satellite-Qwen-Code`,
+        tooltip: 'Qwen Code coding agent with a browser Web Shell, terminal CLI, and local Ollama integration.',
+    },
 };
