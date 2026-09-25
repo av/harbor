@@ -1326,6 +1326,15 @@
   command: d='docs/2.3.23-Satellite&colon-n8n.md'; grep -q 'n8n-sandbox-api' "$d" && grep -q 'privileged' "$d" && grep -q 'HARBOR_N8N_SANDBOX_API_KEY' "$d" && grep -q 'n8n Assistant' "$d"
   tags: [n8n-sandbox, implemented]
 
+## claraverse
+- claraverse starts from its official single-container image with persistent application data and uploads @spec @issue-154 @implemented
+- claraverse can discover Harbor Ollama models when both services run together @spec @issue-154 @implemented
+- claraverse documentation identifies missing Knowledge and web-search sidecars and first-user setup @spec @issue-154 @implemented
+- claraverse first boot makes its bind-mounted data and uploads writable by the upstream container user @spec @issue-154 @implemented
+- claraverse starts with persistent MySQL, MongoDB, and Redis dependencies required by the current official image @spec @issue-154 @implemented
+- claraverse creates and reuses a private MySQL password without a hard-coded shared credential @spec @issue-154 @implemented
+- claraverse documentation flags upstream missing-table warnings that limit synced conversation and model-tier features @spec @issue-154 @implemented
+
 ## ragflow
 - RAGFlow is available as a Harbor service with a reachable UI and persistent Elasticsearch, MySQL, object-storage, and cache data. @spec @issue-139 @implemented
 - RAGFlow does not start with shipped default credentials; database, search, storage, cache, and bootstrap-admin secrets must be configured per installation. @spec @issue-139 @implemented
