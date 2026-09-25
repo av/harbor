@@ -964,8 +964,8 @@ has_rocm() {
     # 2. Verify render nodes exist (needed for container device passthrough)
     ls /dev/dri/renderD* &>/dev/null || return 1
 
-    # 3. Verify amdgpu kernel module is loaded
-    lsmod 2>/dev/null | grep -q "^amdgpu " || return 1
+    # 3. Sysfs covers both loaded and built-in modules without a pipefail/SIGPIPE race.
+    [[ -d /sys/module/amdgpu ]] || return 1
 
     return 0
 }
