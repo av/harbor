@@ -358,9 +358,12 @@
 - label: anythingllm-init sidecar chowns the storage bind mount to the image's fixed uid 1000 before anythingllm starts, fixing the first-boot crash-loop (SQLite 'unable to open database file' on a root-owned storage dir)
   command: grep -q 'anythingllm-init' services/compose.anythingllm.yml && test -f services/anythingllm/storage-init.sh
   tags: [services-it, implemented]
-- label: anythingllm ollama overlay sets EMBEDDING_MODEL_PREF=nomic-embed-text:latest (part of the ollama default pull) — the ollama embedder aborts every chat with 'No embedding model was set' when the pref is missing
-  command: grep -q 'EMBEDDING_MODEL_PREF=nomic-embed-text' services/compose.x.anythingllm.ollama.yml
-  tags: [services-it, implemented]
+- label: anythingllm ollama overlay seeds nomic-embed-text:latest into the persisted settings file only when no embedding model choice exists, without forcing EMBEDDING_MODEL_PREF into the app environment
+  command: grep -q 'HARBOR_ANYTHINGLLM_DEFAULT_EMBEDDING_MODEL=nomic-embed-text:latest' services/compose.x.anythingllm.ollama.yml && grep -q 'HARBOR_ANYTHINGLLM_DEFAULT_EMBEDDING_MODEL' services/anythingllm/storage-init.sh && ! grep -q '^[[:space:]]*- EMBEDDING_MODEL_PREF=' services/compose.x.anythingllm.ollama.yml
+  tags: [services-it, spec, issue-183, implemented]
+- AnythingLLM init creates a private uid-1000 storage/.env file without truncating existing settings, and the app bind-mounts it at /app/server/.env alongside persistent storage. @spec @issue-183 @implemented
+- An Ollama model preference saved through AnythingLLM settings API remains in /app/server/.env after harbor restart anythingllm. @spec @issue-183 @runtime @implemented
+- When AnythingLLM runs with Ollama, a user-selected embedding model remains the effective EMBEDDING_MODEL_PREF after Harbor recreates the AnythingLLM container. @spec @issue-183 @runtime @implemented
 
 ## ldr
 - label: compose.x.ldr.searxng.yml sets LDR_SEARCH_ENGINE_WEB_SEARXNG_DEFAULT_PARAMS_INSTANCE_URL (LDR's env mapping for the searxng instance_url setting) instead of the stale SEARXNG_INSTANCE/LDR_SEARCH__TOOL names, so LDR web research actually queries SearXNG
@@ -1643,6 +1646,9 @@
 - label: sglang, lmdeploy, and aphrodite docs each carry an explicit NVIDIA-only note (upstream images are CUDA-only)
   command: bash -c 'grep -qi nvidia "docs/2.2.12-Backend&colon-SGLang.md" && grep -qi nvidia "docs/2.2.10-Backend&colon-lmdeploy.md" && grep -qi nvidia "docs/2.2.5-Backend&colon-Aphrodite-Engine.md"'
   tags: [sweep6, implemented]
+
+## anythingllm
+- AnythingLLM documentation identifies the persisted settings file, warns that it can contain secrets, and gives existing users a way to copy a still-running container settings file before upgrading. @spec @issue-183 @implemented
 
 ## ollama
 - The Ollama guide documents how to pin an AMD-specific published ROCm tag, explains why ollama.version does not control that tag, and gives the default restore command. @spec @issue-178 @implemented
