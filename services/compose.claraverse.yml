@@ -1,0 +1,127 @@
+services:
+  claraverse:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.claraverse
+    image: ${HARBOR_CLARAVERSE_IMAGE}:${HARBOR_CLARAVERSE_VERSION}
+    env_file:
+      - ./.env
+      - ./services/claraverse/override.env
+    depends_on:
+      claraverse-init:
+        condition: service_completed_successfully
+      claraverse-mysql:
+        condition: service_healthy
+      claraverse-mongodb:
+        condition: service_healthy
+      claraverse-redis:
+        condition: service_healthy
+    environment:
+      SERVE_FRONTEND: "true"
+      FRONTEND_URL: http://localhost:${HARBOR_CLARAVERSE_HOST_PORT}
+      BACKEND_URL: http://localhost:${HARBOR_CLARAVERSE_HOST_PORT}
+      ALLOWED_ORIGINS: ${HARBOR_CLARAVERSE_ALLOWED_ORIGINS}
+      MONGODB_URI: mongodb://claraverse-mongodb:27017/claraverse
+      REDIS_URL: redis://claraverse-redis:6379
+    entrypoint: ["/bin/sh", "/harbor-entrypoint.sh"]
+    command: ["/app/claraverse"]
+    ports:
+      - ${HARBOR_CLARAVERSE_BIND_HOST}:${HARBOR_CLARAVERSE_HOST_PORT}:3000
+    volumes:
+      - ./services/claraverse/entrypoint.sh:/harbor-entrypoint.sh:ro
+      - ${HARBOR_CLARAVERSE_WORKSPACE}/data:/app/data
+      - ${HARBOR_CLARAVERSE_WORKSPACE}/uploads:/app/uploads
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
+    networks:
+      - harbor-network
+
+  claraverse-mysql:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.claraverse-mysql
+    image: ${HARBOR_CLARAVERSE_MYSQL_IMAGE}:${HARBOR_CLARAVERSE_MYSQL_VERSION}
+    env_file:
+      - ./.env
+      - ./services/claraverse/override.env
+    environment:
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/mysql-root-password
+      MYSQL_PASSWORD_FILE: /run/secrets/mysql-password
+      MYSQL_DATABASE: claraverse
+      MYSQL_USER: claraverse
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
+    volumes:
+      - claraverse-mysql-data:/var/lib/mysql
+      - ${HARBOR_CLARAVERSE_WORKSPACE}/data/.mysql_root_password:/run/secrets/mysql-root-password:ro
+      - ${HARBOR_CLARAVERSE_WORKSPACE}/data/.mysql_password:/run/secrets/mysql-password:ro
+    depends_on:
+      claraverse-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks:
+      - harbor-network
+
+  claraverse-mongodb:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.claraverse-mongodb
+    image: ${HARBOR_CLARAVERSE_MONGODB_IMAGE}:${HARBOR_CLARAVERSE_MONGODB_VERSION}
+    env_file:
+      - ./.env
+      - ./services/claraverse/override.env
+    environment:
+      MONGO_INITDB_DATABASE: claraverse
+    volumes:
+      - claraverse-mongodb-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand({ping:1}).ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks:
+      - harbor-network
+
+  claraverse-redis:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.claraverse-redis
+    image: ${HARBOR_CLARAVERSE_REDIS_IMAGE}:${HARBOR_CLARAVERSE_REDIS_VERSION}
+    env_file:
+      - ./.env
+      - ./services/claraverse/override.env
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - claraverse-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    networks:
+      - harbor-network
+
+  claraverse-init:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.claraverse-init
+    image: alpine:3.20
+    env_file:
+      - ./.env
+      - ./services/claraverse/override.env
+    environment:
+      TARGET_UID: "1000"
+      TARGET_GID: "1000"
+    entrypoint: ["/bin/sh", "/init.sh"]
+    volumes:
+      - ./services/claraverse/workspace-init.sh:/init.sh:ro
+      - ${HARBOR_CLARAVERSE_WORKSPACE}:/workspace
+    networks:
+      - harbor-network
+
+volumes:
+  claraverse-mysql-data:
+  claraverse-mongodb-data:
+  claraverse-redis-data:

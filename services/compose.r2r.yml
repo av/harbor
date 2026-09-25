@@ -1,0 +1,109 @@
+services:
+  r2r-api:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.r2r-api
+    image: ${HARBOR_R2R_IMAGE}:${HARBOR_R2R_VERSION}
+    env_file:
+      - ./.env
+      - ./services/r2r/override.env
+    environment:
+      R2R_HOST: 0.0.0.0
+      R2R_PORT: "7272"
+      R2R_CONFIG_PATH: /tmp/harbor-r2r.toml
+      R2R_SECRET_KEY: ${HARBOR_R2R_SECRET_KEY}
+      R2R_USER_TOOLS_PATH: /app/user_tools
+      R2R_POSTGRES_USER: r2r
+      R2R_POSTGRES_PASSWORD: ${HARBOR_R2R_DB_PASSWORD}
+      R2R_POSTGRES_HOST: r2r-db
+      R2R_POSTGRES_PORT: "5432"
+      R2R_POSTGRES_DBNAME: r2r
+      CLUSTERING_SERVICE_URL: http://r2r-graph:7276
+      HARBOR_R2R_CONFIG_TEMPLATE: /r2r-config/ollama.toml
+      OLLAMA_API_BASE: ${HARBOR_OLLAMA_INTERNAL_URL}
+    entrypoint: ["/bin/sh", "/r2r-config/start.sh"]
+    ports:
+      - ${HARBOR_R2R_BIND_HOST}:${HARBOR_R2R_API_PORT}:7272
+    volumes:
+      - ./services/r2r/start.sh:/r2r-config/start.sh:ro
+      - ./services/r2r/ollama.toml:/r2r-config/ollama.toml:ro
+      - ./services/r2r/user_tools:/app/user_tools
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:7272/v3/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+    depends_on:
+      r2r-preflight:
+        condition: service_completed_successfully
+      r2r-db:
+        condition: service_healthy
+      r2r-graph:
+        condition: service_healthy
+    networks:
+      - harbor-network
+
+  r2r:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.r2r
+    image: ${HARBOR_R2R_DASHBOARD_IMAGE}:${HARBOR_R2R_DASHBOARD_VERSION}
+    env_file:
+      - ./.env
+      - ./services/r2r/override.env
+    environment:
+      NEXT_PUBLIC_R2R_DEPLOYMENT_URL: http://${HARBOR_R2R_PUBLIC_HOST}:${HARBOR_R2R_API_PORT}
+    ports:
+      - ${HARBOR_R2R_BIND_HOST}:${HARBOR_R2R_DASHBOARD_PORT}:3000
+    depends_on:
+      r2r-api:
+        condition: service_healthy
+    networks:
+      - harbor-network
+
+  r2r-preflight:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.r2r-preflight
+    image: alpine:3.20
+    env_file:
+      - ./.env
+    entrypoint: ["/bin/sh", "/preflight.sh"]
+    volumes:
+      - ./services/r2r/preflight.sh:/preflight.sh:ro
+    networks:
+      - harbor-network
+
+  r2r-db:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.r2r-db
+    image: ${HARBOR_R2R_DB_IMAGE}:${HARBOR_R2R_DB_VERSION}
+    env_file:
+      - ./.env
+    environment:
+      POSTGRES_USER: r2r
+      POSTGRES_DB: r2r
+      POSTGRES_PASSWORD: ${HARBOR_R2R_DB_PASSWORD}
+    command: ["postgres", "-c", "max_connections=1024"]
+    volumes:
+      - r2r-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U r2r -d r2r"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    depends_on:
+      r2r-preflight:
+        condition: service_completed_successfully
+    networks:
+      - harbor-network
+
+  r2r-graph:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.r2r-graph
+    image: ${HARBOR_R2R_GRAPH_IMAGE}:${HARBOR_R2R_GRAPH_VERSION}
+    env_file:
+      - ./.env
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:7276/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - harbor-network
+
+volumes:
+  r2r-db-data:
