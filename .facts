@@ -590,12 +590,21 @@
   tags: [airweave, spec, implemented]
 
 ## opencode
-- label: opencode data/config defaults live under ./services/opencode/ with the data dir gitignored, so runtime sqlite/logs never dirty the repo
-  command: grep -q 'HARBOR_OPENCODE_DATA="./services/opencode/data"' profiles/default.env && grep -q 'HARBOR_OPENCODE_CONFIG="./services/opencode/config"' profiles/default.env && git check-ignore -q services/opencode/data && git ls-files --error-unmatch services/opencode/config/opencode.json
+- label: opencode data/config defaults live under ./services/opencode/ with runtime data and generated config gitignored
+  command: grep -q 'HARBOR_OPENCODE_DATA="./services/opencode/data"' profiles/default.env && grep -q 'HARBOR_OPENCODE_CONFIG="./services/opencode/config"' profiles/default.env && git check-ignore -q services/opencode/data && git check-ignore -q services/opencode/config/opencode.json
   tags: [sweep8, implemented]
-- label: with an active backend, compose.opencode.ts chains the model-discovery script through the /harbor-entrypoint.sh setpriv wrapper (and the harbor-cli-only path does the same), so the opencode process runs as the host user, not root
+- label: opencode chains both discovery and no-backend startup through the setpriv wrapper, so startup hooks and the server run as the host user
   command: grep -c "'/harbor-entrypoint.sh'" services/compose.opencode.ts | grep -qx 2
   tags: [opencode-setpriv, spec, implemented]
+- label: OpenCode discovery preserves a nonempty user config or inline config and runs an executable persisted init hook before serving
+  command: grep -q 'skipping model discovery' services/compose.opencode.ts && grep -q 'init.sh' services/compose.opencode.ts && grep -q 'OPENCODE_CONFIG_CONTENT' services/compose.opencode.ts
+  tags: [spec, issue-250, implemented]
+- label: OpenCode discovers LiteLLM models using its configured master key without changing other backend auth
+  command: grep -q 'http://litellm:4000' services/compose.opencode.ts && grep -q 'LITELLM_MASTER_KEY' services/compose.opencode.ts && test -f services/compose.x.opencode.litellm.yml
+  tags: [spec, issue-250, implemented]
+- label: OpenCode docs explain manual config, LiteLLM integration, persistent init hook, and non-interactive task invocation
+  command: grep -q 'init.sh' docs/2.3.68-Satellite-OpenCode.md && grep -q 'litellm' docs/2.3.68-Satellite-OpenCode.md && grep -q 'opencode run' docs/2.3.68-Satellite-OpenCode.md
+  tags: [spec, issue-250, implemented]
 
 ## lemonade
 - label: lemonade workspace default lives under ./services/lemonade/data (gitignored), not a stray ./lemonade dir at repo root
