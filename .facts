@@ -184,6 +184,9 @@
 - label: service_compose_exists accepts cross-file-only selectors (tokens appearing as parts of compose.x.* filenames, e.g. mcp-server-time), keeping the documented 'harbor up mcpo mcp-server-time' flow working
   command: bash -c 'source /dev/null; ./harbor.sh cmd mcpo mcp-server-time >/dev/null'
   tags: [services-it, implemented]
+- label: Port pre-check recognizes ports published by existing Harbor containers on loopback, wildcard, or other host IPs without treating unpublished container ports as host ports
+  command: grep -Fq 'tr '"'"','"'"' '"'"'\n'"'"' | sed -nE '"'"'s/.*:([0-9]+)->.*/\1/p'"'"'' harbor.sh
+  tags: [spec, issue-261, implemented]
 
 ## hf
 - label: check_hf_cache in harbor.sh uses 'hf cache ls' (scan-cache was removed in hf CLI 1.x)
