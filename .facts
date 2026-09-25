@@ -205,6 +205,21 @@
 - Dockerized Harbor resolves the workspace and home cache at the same absolute paths seen by the host Docker daemon @issue-40 @implemented
 - Dockerized Harbor writes workspace configuration as the invoking host user @issue-40 @implemented
 
+## doctor
+- label: ROCm detection checks the loaded amdgpu module through sysfs without a pipefail-sensitive lsmod and grep pipeline
+  command: grep -q '\[\[ -d /sys/module/amdgpu \]\]' harbor.sh && ! sed -n '/^has_rocm()/,/^}/p' harbor.sh | grep -q 'lsmod.*grep -q'
+  tags: [spec, issue-244, implemented]
+
+## routines
+- containerized routines accept an optional PEM CA certificate mounted read-only and used by Deno @spec @issue-140 @implemented
+- containerized routines accept an optional Docker network without changing the default bridge network @spec @issue-140 @implemented
+- local Deno routines use the configured PEM CA certificate when one is set @spec @issue-140 @implemented
+
+## wrappers
+- Users can opt in to a command wrapper that forwards its command name and arguments to Harbor CLI @issue-49 @implemented
+- Command wrapper installation never replaces an existing non-Harbor executable or symlink @issue-49 @implemented
+- Registered command wrappers can be refreshed when Harbor CLI is linked or updated @issue-49 @implemented
+
 # services
 - label: compose.yml defines only the shared harbor-network without service definitions
   command: grep -q 'harbor-network' compose.yml && ! grep -q '^services:' compose.yml
@@ -331,6 +346,8 @@
 - label: ChatNode.history() merges consecutive same-role plain messages (no tool calls) so multi-assistant-turn modules like g1 pass llama.cpp's 'cannot have 2+ assistant messages at the end' validation
   command: cd services/boost && python -m pytest tests/test_chat_node.py -q -k merge
   tags: [services-runner, implemented]
+- Boost and WebUI containers map host.docker.internal to the Docker host gateway so external Ollama URLs work on Linux as well as Docker Desktop. @spec @issue-168 @implemented
+- With only webui and boost selected and an external Ollama URL configured through Harbor env, Boost advertises a prefixed external Ollama model and responds to a chat completion without starting the Harbor ollama service. @spec @issue-168 @runtime @implemented
 
 ## chatui
 - label: envify.js bridges Harbor's legacy MODELS config to chat-ui >= 0.10's single-provider scheme by emitting OPENAI_BASE_URL and OPENAI_API_KEY from the first configured openai endpoint, so per-backend configs (chatui.llamacpp.yml etc.) still take effect
@@ -351,9 +368,12 @@
 - label: anythingllm-init sidecar chowns the storage bind mount to the image's fixed uid 1000 before anythingllm starts, fixing the first-boot crash-loop (SQLite 'unable to open database file' on a root-owned storage dir)
   command: grep -q 'anythingllm-init' services/compose.anythingllm.yml && test -f services/anythingllm/storage-init.sh
   tags: [services-it, implemented]
-- label: anythingllm ollama overlay sets EMBEDDING_MODEL_PREF=nomic-embed-text:latest (part of the ollama default pull) — the ollama embedder aborts every chat with 'No embedding model was set' when the pref is missing
-  command: grep -q 'EMBEDDING_MODEL_PREF=nomic-embed-text' services/compose.x.anythingllm.ollama.yml
-  tags: [services-it, implemented]
+- label: anythingllm ollama overlay seeds nomic-embed-text:latest into the persisted settings file only when no embedding model choice exists, without forcing EMBEDDING_MODEL_PREF into the app environment
+  command: grep -q 'HARBOR_ANYTHINGLLM_DEFAULT_EMBEDDING_MODEL=nomic-embed-text:latest' services/compose.x.anythingllm.ollama.yml && grep -q 'HARBOR_ANYTHINGLLM_DEFAULT_EMBEDDING_MODEL' services/anythingllm/storage-init.sh && ! grep -q '^[[:space:]]*- EMBEDDING_MODEL_PREF=' services/compose.x.anythingllm.ollama.yml
+  tags: [services-it, spec, issue-183, implemented]
+- AnythingLLM init creates a private uid-1000 storage/.env file without truncating existing settings, and the app bind-mounts it at /app/server/.env alongside persistent storage. @spec @issue-183 @implemented
+- An Ollama model preference saved through AnythingLLM settings API remains in /app/server/.env after harbor restart anythingllm. @spec @issue-183 @runtime @implemented
+- When AnythingLLM runs with Ollama, a user-selected embedding model remains the effective EMBEDDING_MODEL_PREF after Harbor recreates the AnythingLLM container. @spec @issue-183 @runtime @implemented
 
 ## ldr
 - label: compose.x.ldr.searxng.yml sets LDR_SEARCH_ENGINE_WEB_SEARXNG_DEFAULT_PARAMS_INSTANCE_URL (LDR's env mapping for the searxng instance_url setting) instead of the stale SEARXNG_INSTANCE/LDR_SEARCH__TOOL names, so LDR web research actually queries SearXNG
@@ -595,12 +615,21 @@
   tags: [airweave, spec, implemented]
 
 ## opencode
-- label: opencode data/config defaults live under ./services/opencode/ with the data dir gitignored, so runtime sqlite/logs never dirty the repo
-  command: grep -q 'HARBOR_OPENCODE_DATA="./services/opencode/data"' profiles/default.env && grep -q 'HARBOR_OPENCODE_CONFIG="./services/opencode/config"' profiles/default.env && git check-ignore -q services/opencode/data && git ls-files --error-unmatch services/opencode/config/opencode.json
+- label: opencode data/config defaults live under ./services/opencode/ with runtime data and generated config gitignored
+  command: grep -q 'HARBOR_OPENCODE_DATA="./services/opencode/data"' profiles/default.env && grep -q 'HARBOR_OPENCODE_CONFIG="./services/opencode/config"' profiles/default.env && git check-ignore -q services/opencode/data && git check-ignore -q services/opencode/config/opencode.json
   tags: [sweep8, implemented]
-- label: with an active backend, compose.opencode.ts chains the model-discovery script through the /harbor-entrypoint.sh setpriv wrapper (and the harbor-cli-only path does the same), so the opencode process runs as the host user, not root
+- label: opencode chains both discovery and no-backend startup through the setpriv wrapper, so startup hooks and the server run as the host user
   command: grep -c "'/harbor-entrypoint.sh'" services/compose.opencode.ts | grep -qx 2
   tags: [opencode-setpriv, spec, implemented]
+- label: OpenCode discovery preserves a nonempty user config or inline config and runs an executable persisted init hook before serving
+  command: grep -q 'skipping model discovery' services/compose.opencode.ts && grep -q 'init.sh' services/compose.opencode.ts && grep -q 'OPENCODE_CONFIG_CONTENT' services/compose.opencode.ts
+  tags: [spec, issue-250, implemented]
+- label: OpenCode discovers LiteLLM models using its configured master key without changing other backend auth
+  command: grep -q 'http://litellm:4000' services/compose.opencode.ts && grep -q 'LITELLM_MASTER_KEY' services/compose.opencode.ts && test -f services/compose.x.opencode.litellm.yml
+  tags: [spec, issue-250, implemented]
+- label: OpenCode docs explain manual config, LiteLLM integration, persistent init hook, and non-interactive task invocation
+  command: grep -q 'init.sh' docs/2.3.68-Satellite-OpenCode.md && grep -q 'litellm' docs/2.3.68-Satellite-OpenCode.md && grep -q 'opencode run' docs/2.3.68-Satellite-OpenCode.md
+  tags: [spec, issue-250, implemented]
 
 ## lemonade
 - label: lemonade workspace default lives under ./services/lemonade/data (gitignored), not a stray ./lemonade dir at repo root
@@ -774,6 +803,8 @@
 - label: [runtime: ollama up] after ./harbor.sh up --no-defaults ollama the harbor.ollama-init container reports healthy and Ollama on host port 33821 (HARBOR_OLLAMA_HOST_PORT) lists the default model nomic-embed-text:latest in /api/tags, pulled by the slim sidecar over HTTP
   command: docker inspect -f '{{.Config.Image}} {{.State.Status}} {{.State.Health.Status}}' harbor.ollama-init | grep -q '^alpine:3.20 running healthy$' && curl -sf localhost:33821/api/tags | jq -e '[.models[].name]|index("nomic-embed-text:latest")!=null' >/dev/null
   tags: [ollama-init, runtime, implemented]
+- On AMD hosts the Ollama ROCm compose overlay selects HARBOR_OLLAMA_IMAGE:HARBOR_OLLAMA_ROCM_VERSION, defaulting to the published rocm tag independently of the CPU/NVIDIA version. @spec @issue-178 @implemented
+- On an AMD host, harbor up --no-defaults ollama starts the configured ROCm-tagged Ollama image and its HTTP API responds successfully. @spec @issue-178 @runtime @implemented
 
 ## ktransformers
 - label: compose.ktransformers.yml additionally binds HARBOR_HF_CACHE read-only at ${HOME}/.cache/huggingface so llama.cpp-cache GGUF symlinks targeting absolute host HF-cache blob paths resolve inside the container
@@ -1321,6 +1352,75 @@
   command: d='docs/2.3.23-Satellite&colon-n8n.md'; grep -q 'n8n-sandbox-api' "$d" && grep -q 'privileged' "$d" && grep -q 'HARBOR_N8N_SANDBOX_API_KEY' "$d" && grep -q 'n8n Assistant' "$d"
   tags: [n8n-sandbox, implemented]
 
+## qwencode
+- label: Qwen Code satellite runs the official container as an authenticated Web Shell daemon with persistent config and workspace on a dedicated Harbor port
+  command: test -f services/compose.qwencode.yml && test -f services/qwencode/default.env && grep -q 'qwen.*serve' services/compose.qwencode.yml && grep -q 'HARBOR_QWENCODE_HOST_PORT=34970' services/qwencode/default.env
+  tags: [spec, issue-247, implemented]
+- label: When Qwen Code and Ollama run together, Harbor seeds an OpenAI-compatible provider for the configured Ollama model without replacing existing Qwen settings
+  command: test -f services/compose.x.qwencode.ollama.yml && grep -q 'OPENAI_BASE_URL' services/compose.x.qwencode.ollama.yml && grep -q 'settings.json' services/qwencode/entrypoint.sh
+  tags: [spec, issue-247, implemented]
+- label: Qwen Code appears in app metadata and has service documentation with a Web Shell screenshot and security instructions
+  command: grep -q 'qwencode:' app/src/serviceMetadata.ts && test -f docs/2.3.99-Satellite-Qwen-Code.md && test -f docs/harbor-qwencode.png
+  tags: [spec, issue-247, implemented]
+
+## agent
+- label: The Harbor Agent Dockerfile omits unavailable neofetch and installs Node.js/npm through the supported NodeSource setup before Yarn, allowing harbor build agent to complete
+  command: ! grep -q neofetch services/agent/Dockerfile && grep -q 'https://deb.nodesource.com/setup_22.x' services/agent/Dockerfile && ! grep -q 'npmjs.org/install.sh' services/agent/Dockerfile
+  tags: [spec, issue-240, implemented]
+- label: Harbor Agent Python dependencies install on the current Webtop Python 3.14 base using an aiohttp release with cp314 wheels
+  command: grep -q '^aiohttp==3.14.3$' services/agent/requirements.txt
+  tags: [spec, issue-240, implemented]
+
+## claraverse
+- claraverse starts from its official single-container image with persistent application data and uploads @spec @issue-154 @implemented
+- claraverse can discover Harbor Ollama models when both services run together @spec @issue-154 @implemented
+- claraverse documentation identifies missing Knowledge and web-search sidecars and first-user setup @spec @issue-154 @implemented
+- claraverse first boot makes its bind-mounted data and uploads writable by the upstream container user @spec @issue-154 @implemented
+- claraverse starts with persistent MySQL, MongoDB, and Redis dependencies required by the current official image @spec @issue-154 @implemented
+- claraverse creates and reuses a private MySQL password without a hard-coded shared credential @spec @issue-154 @implemented
+- claraverse documentation flags upstream missing-table warnings that limit synced conversation and model-tier features @spec @issue-154 @implemented
+
+## ragflow
+- RAGFlow is available as a Harbor service with a reachable UI and persistent Elasticsearch, MySQL, object-storage, and cache data. @spec @issue-139 @implemented
+- RAGFlow does not start with shipped default credentials; database, search, storage, cache, and bootstrap-admin secrets must be configured per installation. @spec @issue-139 @implemented
+- RAGFlow can create a local account, ingest a document, and search it after a service restart. @spec @issue-139 @implemented
+- RAGFlow documentation explains the upstream dependency stack, first-run secrets, model setup, ports, and backup. @spec @issue-139 @implemented
+
+## caddy
+- Caddy runs as a Harbor service from the official Caddy image, serving a local health endpoint with loopback-only default HTTP and HTTPS ports. @spec @issue-135 @implemented
+- A user-selectable Caddyfile lets Caddy reverse proxy another service on the Harbor network. @spec @issue-135 @implemented
+- Caddy retains certificate and runtime data in persistent volumes, and its documentation covers safe public HTTPS configuration and coexistence with Traefik. @spec @issue-135 @implemented
+
+## r2r
+- R2R is available as a Harbor service with a persistent PostgreSQL/pgvector database and reachable API and dashboard. @spec @issue-120 @implemented
+- R2R requires per-installation database and application secrets rather than shipping fixed public credentials. @spec @issue-120 @implemented
+- When started with Harbor Ollama, R2R can ingest a local document using Ollama embeddings and query its contents with an Ollama chat model. @spec @issue-120 @implemented
+- R2R documentation explains the lighter deployment, limitations relative to upstream full deployment, persistent data, ports, and model configuration. @spec @issue-120 @implemented
+
+## lobehub
+- LobeHub server-database variant is a separate Harbor service from client-storage LobeChat, with persistent PostgreSQL data and local account sign-in. @spec @issue-118 @implemented
+- LobeHub stores uploaded knowledge files in a persistent S3-compatible service and can retrieve them after restart. @spec @issue-118 @implemented
+- LobeHub can chat using Harbor Ollama through a cross-service integration. @spec @issue-118 @implemented
+- LobeHub runtime secrets are generated or required explicitly rather than shipped as fixed public credentials. @spec @issue-118 @implemented
+- LobeHub and its browser-facing object storage bind to loopback by default, with an explicit host override for LAN access. @spec @issue-118 @implemented
+- LobeHub configures a per-installation JWKS signing key so uploaded knowledge files can be parsed and indexed without the optional agent gateway. @spec @issue-118 @implemented
+- When Harbor Ollama is selected with LobeHub, uploaded knowledge uses a local Ollama embedding model instead of requiring an OpenAI API key. @spec @issue-118 @implemented
+
+## perplexica
+- Perplexica exposes a configurable public backend host so browser API and WebSocket URLs can use a LAN hostname instead of localhost. @spec @issue-70 @implemented
+- Perplexica launched with Ollama and SearXNG loads its frontend through a LAN address and reaches both backend integrations. @spec @issue-70 @implemented
+- Perplexica's local embedding model cache is writable and persistent while the backend runs as the host user. @spec @issue-70 @implemented
+
+## autogenstudio
+- Harbor exposes AutoGen Studio as an autogenstudio satellite with a persistent app directory and configurable host port. @spec @issue-65 @implemented
+- Harbor's service catalog and documentation describe AutoGen Studio startup, persistence, and local-model configuration. @spec @issue-65 @implemented
+- AutoGen Studio starts through harbor up autogenstudio and can complete an agent workflow against a Harbor Ollama model. @spec @issue-65 @implemented
+
+## latitude
+- Harbor starts a self-hosted Latitude web UI with its API, ingest endpoint, workers, and required local datastores @spec @issue-59 @implemented
+- A new Latitude user can complete email sign-in through a local mail catcher and open the web UI @spec @issue-59 @implemented
+- Latitude's PostgreSQL, ClickHouse, queue, and object storage data persist across Harbor restarts @spec @issue-59 @implemented
+
 # app
 - label: Harbor App blocks main UI behind a setup gate until setup detail status is ready
   command: rg -q 'detail\?\.status === "ready"' app/src/setup/HarborSetupContext.tsx
@@ -1350,6 +1450,7 @@
 - label: Harbor App build splits vendor code into react terminal markdown and syntax chunks via Vite manualChunks so no JS chunk exceeds 600 kB
   command: grep -q 'manualChunks' app/vite.config.ts
   tags: [implemented]
+- Harbor App Profiles loads profiles under a dot-prefixed Harbor home without a Tauri forbidden-path error @spec @issue-64 @implemented
 
 # boost
 - label: Boost is a FastAPI LLM proxy that exposes OpenAI chat completions and optional Anthropic and Responses compat layers
@@ -1555,6 +1656,9 @@
   tags: [implemented]
 - pending launch CLI, Hugging Face model discovery, and Boost module changes have an agent-executable integration release checklist covering behavior, lint, facts, and user documentation @spec @release-validation @implemented
 - the test-boost-module skill live-tests current Boost modules through harbor launch with pi and does not recommend removed modules or obsolete module roles @spec @release-validation @implemented
+- label: Boost agentic container tests run uv without modifying the read-only project lockfile
+  command: rg -q 'uv run --frozen --with pytest --with pytest-asyncio' tests/lib/boost-agentic.sh
+  tags: [spec, boost-agentic-lock, implemented]
 
 # lint
 - label: harbor dev lint runs a three-pass Deno orchestrator with HARBOR-prefixed bash rules under .scripts/lint
@@ -1583,6 +1687,18 @@
 - label: sglang, lmdeploy, and aphrodite docs each carry an explicit NVIDIA-only note (upstream images are CUDA-only)
   command: bash -c 'grep -qi nvidia "docs/2.2.12-Backend&colon-SGLang.md" && grep -qi nvidia "docs/2.2.10-Backend&colon-lmdeploy.md" && grep -qi nvidia "docs/2.2.5-Backend&colon-Aphrodite-Engine.md"'
   tags: [sweep6, implemented]
+
+## links
+- label: The Unsloth Studio documentation links to the existing case-sensitive llama.cpp guide filename, and the reported Tools link retains its .md extension
+  command: rg -q -F './2.2.2-Backend&colon-llama.cpp.md' 'docs/2.3.83-Satellite-Unsloth-Studio.md' && ! rg -q -F './2.2.2-Backend&colon-Llama.cpp.md' docs && rg -q -F './1.2-Tools.md' 'docs/1.-Harbor-User-Guide.md'
+  tags: [spec, issue-230, implemented]
+
+## anythingllm
+- AnythingLLM documentation identifies the persisted settings file, warns that it can contain secrets, and gives existing users a way to copy a still-running container settings file before upgrading. @spec @issue-183 @implemented
+
+## ollama
+- The Ollama guide documents how to pin an AMD-specific published ROCm tag, explains why ollama.version does not control that tag, and gives the default restore command. @spec @issue-178 @implemented
+- The external-Ollama guide distinguishes cross-compose wiring from independent services and gives the Harbor env commands needed for Boost model discovery and WebUI direct Ollama access when the ollama handle is omitted. @spec @issue-168 @implemented
 
 # ci
 - label: CI includes GitHub Actions workflows for app-release bench-docker boost-docker lint and test

@@ -1,5 +1,0 @@
-{"$schema":"https://opencode.ai/config.json","provider":{
-"harbor-llamacpp":{"npm":"@ai-sdk/openai-compatible","name":"llamacpp (Harbor)","options":{"baseURL":"http://llamacpp:8080/v1","apiKey":"sk-harbor"},"models":{
-"Qwen3-Coder-Next-Q8_0-00001-of-00003.gguf":{"name":"Qwen3-Coder-Next-Q8_0-00001-of-00003.gguf","attachment":true,"tool_call":true,"limit":{"context":128000,"output":8192}}
-}}
-}}

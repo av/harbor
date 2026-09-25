@@ -29,5 +29,7 @@ services:
       - ${HARBOR_VLLM_CACHE}:/root/.cache/vllm
     ports:
       - ${HARBOR_BOOST_HOST_PORT}:8000
+    extra_hosts:
+      - host.docker.internal:host-gateway
     networks:
       - harbor-network
