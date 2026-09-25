@@ -200,6 +200,11 @@
   command: bash -c 'd=$(mktemp -d); export L=$(mktemp); printf "%s\n" "#!/usr/bin/env bash" "case \"\$*\" in *\"compose version\"*) echo v2.30.0; exit 0;; *\"config --services\"*) printf \"ollama\nboost\n\"; exit 0;; *\"compose ps\"*) echo ollama; exit 0;; esac" "[ \"\$1\" = compose ] && printf \"%s\n\" \"\$*\" >> \"\$L\"" "exit 0" > "$d/docker"; chmod +x "$d/docker"; export HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false PATH="$d:$PATH"; ./harbor.sh down boost >/dev/null 2>&1 && ./harbor.sh restart boost >/dev/null 2>&1 && grep -q -- " stop --timeout 10 boost$" "$L" && grep -q -- " rm -f boost$" "$L" && grep -q -- " up -d --wait boost$" "$L" && ! grep -q -- "--remove-orphans" "$L" && ! grep -Eq -- " (stop|rm -f|up -d --wait) .*(ollama|webui|llamacpp)" "$L"'
   tags: [cli, down-scope, implemented]
 
+## routines
+- containerized routines accept an optional PEM CA certificate mounted read-only and used by Deno @spec @issue-140 @implemented
+- containerized routines accept an optional Docker network without changing the default bridge network @spec @issue-140 @implemented
+- local Deno routines use the configured PEM CA certificate when one is set @spec @issue-140 @implemented
+
 ## wrappers
 - Users can opt in to a command wrapper that forwards its command name and arguments to Harbor CLI @issue-49 @implemented
 - Command wrapper installation never replaces an existing non-Harbor executable or symlink @issue-49 @implemented
