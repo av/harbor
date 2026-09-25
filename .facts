@@ -1338,6 +1338,17 @@
   command: d='docs/2.3.23-Satellite&colon-n8n.md'; grep -q 'n8n-sandbox-api' "$d" && grep -q 'privileged' "$d" && grep -q 'HARBOR_N8N_SANDBOX_API_KEY' "$d" && grep -q 'n8n Assistant' "$d"
   tags: [n8n-sandbox, implemented]
 
+## qwencode
+- label: Qwen Code satellite runs the official container as an authenticated Web Shell daemon with persistent config and workspace on a dedicated Harbor port
+  command: test -f services/compose.qwencode.yml && test -f services/qwencode/default.env && grep -q 'qwen.*serve' services/compose.qwencode.yml && grep -q 'HARBOR_QWENCODE_HOST_PORT=34970' services/qwencode/default.env
+  tags: [spec, issue-247, implemented]
+- label: When Qwen Code and Ollama run together, Harbor seeds an OpenAI-compatible provider for the configured Ollama model without replacing existing Qwen settings
+  command: test -f services/compose.x.qwencode.ollama.yml && grep -q 'OPENAI_BASE_URL' services/compose.x.qwencode.ollama.yml && grep -q 'settings.json' services/qwencode/entrypoint.sh
+  tags: [spec, issue-247, implemented]
+- label: Qwen Code appears in app metadata and has service documentation with a Web Shell screenshot and security instructions
+  command: grep -q 'qwencode:' app/src/serviceMetadata.ts && test -f docs/2.3.99-Satellite-Qwen-Code.md && test -f docs/harbor-qwencode.png
+  tags: [spec, issue-247, implemented]
+
 ## agent
 - label: The Harbor Agent Dockerfile omits unavailable neofetch and installs Node.js/npm through the supported NodeSource setup before Yarn, allowing harbor build agent to complete
   command: ! grep -q neofetch services/agent/Dockerfile && grep -q 'https://deb.nodesource.com/setup_22.x' services/agent/Dockerfile && ! grep -q 'npmjs.org/install.sh' services/agent/Dockerfile

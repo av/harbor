@@ -1,0 +1,9 @@
+services:
+  qwencode:
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      HARBOR_QWENCODE_OLLAMA_ENABLED: "true"
+      OPENAI_BASE_URL: ${HARBOR_OLLAMA_INTERNAL_URL}/v1
+      OPENAI_API_KEY: sk-ollama
