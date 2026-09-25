@@ -1321,6 +1321,11 @@
   command: d='docs/2.3.23-Satellite&colon-n8n.md'; grep -q 'n8n-sandbox-api' "$d" && grep -q 'privileged' "$d" && grep -q 'HARBOR_N8N_SANDBOX_API_KEY' "$d" && grep -q 'n8n Assistant' "$d"
   tags: [n8n-sandbox, implemented]
 
+## perplexica
+- Perplexica exposes a configurable public backend host so browser API and WebSocket URLs can use a LAN hostname instead of localhost. @spec @issue-70 @implemented
+- Perplexica launched with Ollama and SearXNG loads its frontend through a LAN address and reaches both backend integrations. @spec @issue-70 @implemented
+- Perplexica's local embedding model cache is writable and persistent while the backend runs as the host user. @spec @issue-70 @implemented
+
 ## autogenstudio
 - Harbor exposes AutoGen Studio as an autogenstudio satellite with a persistent app directory and configurable host port. @spec @issue-65 @implemented
 - Harbor's service catalog and documentation describe AutoGen Studio startup, persistence, and local-model configuration. @spec @issue-65 @implemented
