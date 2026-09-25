@@ -3,4 +3,4 @@ services:
     devices:
       - /dev/kfd
       - /dev/dri
-    image: ${HARBOR_OLLAMA_IMAGE}:rocm
+    image: ${HARBOR_OLLAMA_IMAGE}:${HARBOR_OLLAMA_ROCM_VERSION:-rocm}
