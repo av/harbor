@@ -200,6 +200,11 @@
   command: bash -c 'd=$(mktemp -d); export L=$(mktemp); printf "%s\n" "#!/usr/bin/env bash" "case \"\$*\" in *\"compose version\"*) echo v2.30.0; exit 0;; *\"config --services\"*) printf \"ollama\nboost\n\"; exit 0;; *\"compose ps\"*) echo ollama; exit 0;; esac" "[ \"\$1\" = compose ] && printf \"%s\n\" \"\$*\" >> \"\$L\"" "exit 0" > "$d/docker"; chmod +x "$d/docker"; export HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false PATH="$d:$PATH"; ./harbor.sh down boost >/dev/null 2>&1 && ./harbor.sh restart boost >/dev/null 2>&1 && grep -q -- " stop --timeout 10 boost$" "$L" && grep -q -- " rm -f boost$" "$L" && grep -q -- " up -d --wait boost$" "$L" && ! grep -q -- "--remove-orphans" "$L" && ! grep -Eq -- " (stop|rm -f|up -d --wait) .*(ollama|webui|llamacpp)" "$L"'
   tags: [cli, down-scope, implemented]
 
+## network
+- label: New Harbor bridge networks bind published service ports to loopback by default, and users can explicitly opt into LAN binding through host.bind_address
+  command: grep -q 'HARBOR_HOST_BIND_ADDRESS="127.0.0.1"' profiles/default.env && grep -q 'com.docker.network.bridge.host_binding_ipv4: ${HARBOR_HOST_BIND_ADDRESS}' compose.yml && grep -q 'harbor config set host.bind_address 0.0.0.0' docs/3.-Harbor-CLI-Reference.md
+  tags: [spec, issue-231, implemented]
+
 # services
 - label: compose.yml defines only the shared harbor-network without service definitions
   command: grep -q 'harbor-network' compose.yml && ! grep -q '^services:' compose.yml
