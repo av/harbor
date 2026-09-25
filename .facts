@@ -1321,6 +1321,11 @@
   command: d='docs/2.3.23-Satellite&colon-n8n.md'; grep -q 'n8n-sandbox-api' "$d" && grep -q 'privileged' "$d" && grep -q 'HARBOR_N8N_SANDBOX_API_KEY' "$d" && grep -q 'n8n Assistant' "$d"
   tags: [n8n-sandbox, implemented]
 
+## caddy
+- Caddy runs as a Harbor service from the official Caddy image, serving a local health endpoint with loopback-only default HTTP and HTTPS ports. @spec @issue-135 @implemented
+- A user-selectable Caddyfile lets Caddy reverse proxy another service on the Harbor network. @spec @issue-135 @implemented
+- Caddy retains certificate and runtime data in persistent volumes, and its documentation covers safe public HTTPS configuration and coexistence with Traefik. @spec @issue-135 @implemented
+
 ## r2r
 - R2R is available as a Harbor service with a persistent PostgreSQL/pgvector database and reachable API and dashboard. @spec @issue-120 @implemented
 - R2R requires per-installation database and application secrets rather than shipping fixed public credentials. @spec @issue-120 @implemented
