@@ -30,13 +30,13 @@ Harbor is a CLI and companion app that lets you spin up a complete local LLM sta
 
 ## News
 
+- **v0.5.14** - Eight new services (Latitude, AutoGen Studio, LobeHub, R2R, Caddy, RAGFlow, ClaraVerse, Qwen Code), a Dockerized Harbor CLI runner, external Ollama support for Boost and Open WebUI, opt-in CLI command wrappers, and fixes for ROCm detection, Perplexica on LAN, AnythingLLM settings persistence and the Harbor App on dot-prefixed homes
 - **v0.5.13** - `harbor models pull` no longer reports success when a model download actually failed, and the PrismML backend documents its two Bonsai 2 quants with measured speed and accuracy
 - **v0.5.12** - New PrismML llama.cpp backend that runs Ternary Bonsai 2 GGUFs on CPU, NVIDIA, and ROCm with the same model workflow and cross-service integrations as llama.cpp
 - **v0.5.11** - Halogen stays up through long Open WebUI generations with image 0.6.3, a 65536-token chat budget and a 900-second engine watchdog
 - **v0.5.10** - n8n first-time setup includes the Assistant code sandbox so new instances can finish the GUI wizard
 - **v0.5.9** - Hugging Face downloads run as your host user and recover root-owned caches automatically after upgrading
 - **v0.5.8** - New Halogen Flash Server backend for AMD Strix Halo and a fix for Hugging Face downloads failing on root-owned cache directories
-- **v0.5.7** - New Chandra 2 OCR backend, a Boost `codemode` module with `harbor launch --codemode` that lets a model drive every Boost tool from a single Python program, scoped `harbor down <service>` and `harbor restart <service>` that leave other running services alone, a far smaller `ollama-init` sidecar, per-service `services/<name>/default.env` defaults, atomic, duplicate-free `.env` repair, and `harbor dev docs --check` to catch stale generated docs
 
 ## Documentation
 
