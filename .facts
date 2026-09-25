@@ -1321,6 +1321,11 @@
   command: d='docs/2.3.23-Satellite&colon-n8n.md'; grep -q 'n8n-sandbox-api' "$d" && grep -q 'privileged' "$d" && grep -q 'HARBOR_N8N_SANDBOX_API_KEY' "$d" && grep -q 'n8n Assistant' "$d"
   tags: [n8n-sandbox, implemented]
 
+## latitude
+- Harbor starts a self-hosted Latitude web UI with its API, ingest endpoint, workers, and required local datastores @spec @issue-59 @implemented
+- A new Latitude user can complete email sign-in through a local mail catcher and open the web UI @spec @issue-59 @implemented
+- Latitude's PostgreSQL, ClickHouse, queue, and object storage data persist across Harbor restarts @spec @issue-59 @implemented
+
 # app
 - label: Harbor App blocks main UI behind a setup gate until setup detail status is ready
   command: rg -q 'detail\?\.status === "ready"' app/src/setup/HarborSetupContext.tsx
