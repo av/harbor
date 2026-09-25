@@ -6,3 +6,6 @@
 networks:
   harbor-network:
     external: false
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.host_binding_ipv4: ${HARBOR_HOST_BIND_ADDRESS}
