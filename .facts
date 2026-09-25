@@ -1333,6 +1333,14 @@
   command: d='docs/2.3.23-Satellite&colon-n8n.md'; grep -q 'n8n-sandbox-api' "$d" && grep -q 'privileged' "$d" && grep -q 'HARBOR_N8N_SANDBOX_API_KEY' "$d" && grep -q 'n8n Assistant' "$d"
   tags: [n8n-sandbox, implemented]
 
+## agent
+- label: The Harbor Agent Dockerfile omits unavailable neofetch and installs Node.js/npm through the supported NodeSource setup before Yarn, allowing harbor build agent to complete
+  command: ! grep -q neofetch services/agent/Dockerfile && grep -q 'https://deb.nodesource.com/setup_22.x' services/agent/Dockerfile && ! grep -q 'npmjs.org/install.sh' services/agent/Dockerfile
+  tags: [spec, issue-240, implemented]
+- label: Harbor Agent Python dependencies install on the current Webtop Python 3.14 base using an aiohttp release with cp314 wheels
+  command: grep -q '^aiohttp==3.14.3$' services/agent/requirements.txt
+  tags: [spec, issue-240, implemented]
+
 ## claraverse
 - claraverse starts from its official single-container image with persistent application data and uploads @spec @issue-154 @implemented
 - claraverse can discover Harbor Ollama models when both services run together @spec @issue-154 @implemented
