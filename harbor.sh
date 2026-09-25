@@ -266,8 +266,9 @@ _check_port_conflicts() {
     # compose will reuse them without conflict).
     local harbor_ports=""
     if [ -n "$default_container_prefix" ]; then
+        # The -> marker excludes container-only ports such as "8080/tcp".
         harbor_ports=$(docker ps --format '{{.Ports}}' --filter "name=${default_container_prefix}" 2>/dev/null \
-            | grep -oE '(0\.0\.0\.0|\[::\]):[0-9]+' | sed 's/.*://' | sort -u) || true
+            | tr ',' '\n' | sed -nE 's/.*:([0-9]+)->.*/\1/p' | sort -u) || true
     fi
 
     local checked_ports=""
