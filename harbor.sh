@@ -1117,13 +1117,32 @@ run_routine() {
 
     log_debug "Running routine: $routine_name"
 
+    local routine_ca_cert="$default_routine_ca_cert"
+    if [ -n "$routine_ca_cert" ]; then
+        if [[ "$routine_ca_cert" != /* ]] || [ ! -r "$routine_ca_cert" ] || [ ! -f "$routine_ca_cert" ]; then
+            log_error "routine.ca.cert must be an absolute path to a readable PEM file: $routine_ca_cert"
+            return 1
+        fi
+    fi
+
     if command -v deno &>/dev/null; then
         log_debug "Using local deno for routine"
-        HARBOR_LOG_LEVEL="$default_log_level" DENO_NO_UPDATE_CHECK=1 deno run -A --unstable-sloppy-imports "$routine_path" "$@"
+        local -a deno_env=("HARBOR_LOG_LEVEL=$default_log_level" "DENO_NO_UPDATE_CHECK=1")
+        if [ -n "$routine_ca_cert" ]; then
+            deno_env+=("DENO_CERT=$routine_ca_cert")
+        fi
+        env "${deno_env[@]}" deno run -A --unstable-sloppy-imports "$routine_path" "$@"
     else
         _check_docker || return 1
         log_debug "Using Docker container for routine"
-        docker run --rm \
+        local -a docker_options=()
+        if [ -n "$routine_ca_cert" ]; then
+            docker_options+=(-v "$routine_ca_cert:/harbor-routine-ca.pem:ro" -e "DENO_CERT=/harbor-routine-ca.pem")
+        fi
+        if [ -n "$default_routine_network" ]; then
+            docker_options+=(--network "$default_routine_network")
+        fi
+        docker run --rm "${docker_options[@]}" \
             --user "$(id -u):$(id -g)" \
             -v "$harbor_home:$harbor_home" \
             -v "$(_deno_cache_volume)" \
@@ -12586,6 +12605,8 @@ default_history_file=$(env_manager get history.file)
 default_history_size=$(env_manager get history.size)
 default_legacy_cli=${HARBOR_LEGACY_CLI:-$(env_manager get legacy.cli)}
 default_routine_runtime=$(env_manager get routine.runtime)
+default_routine_ca_cert=$(env_manager get routine.ca.cert)
+default_routine_network=$(env_manager get routine.network)
 
 run_volumes_command() {
     case "$1" in
