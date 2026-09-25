@@ -1,0 +1,261 @@
+x-latitude-env: &latitude-env
+  NODE_ENV: production
+  LAT_WEB_URL: ${HARBOR_LATITUDE_WEB_URL:-http://localhost:${HARBOR_LATITUDE_HOST_PORT}}
+  LAT_WEB_PORT: "3000"
+  LAT_API_URL: ${HARBOR_LATITUDE_API_URL:-http://localhost:${HARBOR_LATITUDE_API_HOST_PORT}}
+  LAT_API_PORT: "3001"
+  LAT_INGEST_URL: ${HARBOR_LATITUDE_INGEST_URL:-http://localhost:${HARBOR_LATITUDE_INGEST_HOST_PORT}}
+  LAT_INGEST_PORT: "3002"
+  LAT_TRUSTED_ORIGINS: ${HARBOR_LATITUDE_TRUSTED_ORIGINS:-http://localhost:${HARBOR_LATITUDE_HOST_PORT}}
+  LAT_CORS_ALLOWED_ORIGINS: ${HARBOR_LATITUDE_CORS_ALLOWED_ORIGINS:-http://localhost:${HARBOR_LATITUDE_HOST_PORT}}
+  LAT_DATABASE_URL: postgres://latitude_app:${HARBOR_LATITUDE_POSTGRES_RUNTIME_PASSWORD}@latitude-postgres:5432/latitude
+  LAT_ADMIN_DATABASE_URL: postgres://latitude:${HARBOR_LATITUDE_POSTGRES_PASSWORD}@latitude-postgres:5432/latitude
+  LAT_CLICKHOUSE_URL: http://latitude-clickhouse:8123
+  LAT_CLICKHOUSE_MIGRATION_URL: clickhouse://latitude-clickhouse:9000
+  LAT_CLICKHOUSE_USER: latitude
+  LAT_CLICKHOUSE_PASSWORD: ${HARBOR_LATITUDE_CLICKHOUSE_PASSWORD}
+  LAT_CLICKHOUSE_DB: latitude
+  LAT_REDIS_HOST: latitude-redis
+  LAT_REDIS_PORT: "6379"
+  LAT_BULLMQ_HOST: latitude-redis-bullmq
+  LAT_BULLMQ_PORT: "6379"
+  LAT_TEMPORAL_ADDRESS: latitude-temporal:7233
+  LAT_TEMPORAL_NAMESPACE: default
+  LAT_TEMPORAL_TASK_QUEUE: latitude-workflows
+  LAT_STORAGE_DRIVER: s3
+  LAT_STORAGE_S3_BUCKET: latitude
+  LAT_STORAGE_S3_REGION: eu-central-1
+  LAT_STORAGE_S3_ACCESS_KEY_ID: latitude
+  LAT_STORAGE_S3_SECRET_ACCESS_KEY: ${HARBOR_LATITUDE_STORAGE_SECRET}
+  LAT_STORAGE_S3_ENDPOINT: http://latitude-seaweedfs:8333
+  LAT_STORAGE_S3_FORCE_PATH_STYLE: "true"
+  LAT_MASTER_ENCRYPTION_KEY: ${HARBOR_LATITUDE_MASTER_ENCRYPTION_KEY}
+  LAT_BETTER_AUTH_SECRET: ${HARBOR_LATITUDE_BETTER_AUTH_SECRET}
+  LAT_MAILPIT_HOST: latitude-mailpit
+  LAT_MAILPIT_PORT: "1025"
+  LAT_MAILPIT_FROM: noreply@latitude.local
+  LAT_BILLING_ENABLED: "false"
+  LAT_OSS_TELEMETRY_ENABLED: "false"
+
+x-latitude-base: &latitude-base
+  env_file: &latitude-env-files
+    - ./.env
+    - ./services/latitude/override.env
+  networks: &latitude-networks
+    - harbor-network
+
+x-latitude-app: &latitude-app
+  <<: *latitude-base
+  environment: *latitude-env
+  depends_on:
+    latitude-migrations:
+      condition: service_completed_successfully
+
+services:
+  latitude:
+    <<: *latitude-app
+    env_file: *latitude-env-files
+    networks: *latitude-networks
+    container_name: ${HARBOR_CONTAINER_PREFIX}.latitude
+    image: ${HARBOR_LATITUDE_IMAGE}:${HARBOR_LATITUDE_VERSION}
+    ports:
+      - "${HARBOR_LATITUDE_HOST_IP}:${HARBOR_LATITUDE_HOST_PORT}:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:3000/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+    labels:
+      - "harbor.service=latitude"
+      - "harbor.port=3000"
+
+  latitude-api:
+    <<: *latitude-app
+    env_file: *latitude-env-files
+    networks: *latitude-networks
+    container_name: ${HARBOR_CONTAINER_PREFIX}.latitude-api
+    image: latitudedata/api:${HARBOR_LATITUDE_VERSION}
+    ports:
+      - "${HARBOR_LATITUDE_HOST_IP}:${HARBOR_LATITUDE_API_HOST_PORT}:3001"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:3001/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+
+  latitude-ingest:
+    <<: *latitude-app
+    env_file: *latitude-env-files
+    networks: *latitude-networks
+    container_name: ${HARBOR_CONTAINER_PREFIX}.latitude-ingest
+    image: latitudedata/ingest:${HARBOR_LATITUDE_VERSION}
+    ports:
+      - "${HARBOR_LATITUDE_HOST_IP}:${HARBOR_LATITUDE_INGEST_HOST_PORT}:3002"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:3002/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+
+  latitude-workers:
+    <<: *latitude-app
+    env_file: *latitude-env-files
+    networks: *latitude-networks
+    container_name: ${HARBOR_CONTAINER_PREFIX}.latitude-workers
+    image: latitudedata/workers:${HARBOR_LATITUDE_VERSION}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9090/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+
+  latitude-workflows:
+    <<: *latitude-app
+    env_file: *latitude-env-files
+    networks: *latitude-networks
+    container_name: ${HARBOR_CONTAINER_PREFIX}.latitude-workflows
+    image: latitudedata/workflows:${HARBOR_LATITUDE_VERSION}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9091/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+
+  latitude-migrations:
+    <<: *latitude-base
+    env_file: *latitude-env-files
+    networks: *latitude-networks
+    container_name: ${HARBOR_CONTAINER_PREFIX}.latitude-migrations
+    image: latitudedata/migrations:${HARBOR_LATITUDE_VERSION}
+    environment: *latitude-env
+    depends_on:
+      latitude-postgres:
+        condition: service_healthy
+      latitude-clickhouse:
+        condition: service_healthy
+
+  latitude-postgres:
+    <<: *latitude-base
+    env_file: *latitude-env-files
+    networks: *latitude-networks
+    container_name: ${HARBOR_CONTAINER_PREFIX}.latitude-postgres
+    image: pgvector/pgvector:pg16
+    command: ["postgres", "-c", "wal_level=logical"]
+    environment:
+      POSTGRES_USER: latitude
+      POSTGRES_PASSWORD: ${HARBOR_LATITUDE_POSTGRES_PASSWORD}
+      POSTGRES_DB: latitude
+      POSTGRES_RUNTIME_USER: latitude_app
+      POSTGRES_RUNTIME_PASSWORD: ${HARBOR_LATITUDE_POSTGRES_RUNTIME_PASSWORD}
+    volumes:
+      - latitude-postgres-data:/var/lib/postgresql/data
+      - ./services/latitude/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  latitude-clickhouse:
+    <<: *latitude-base
+    env_file: *latitude-env-files
+    networks: *latitude-networks
+    container_name: ${HARBOR_CONTAINER_PREFIX}.latitude-clickhouse
+    image: clickhouse/clickhouse-server:26.2
+    environment:
+      CLICKHOUSE_USER: latitude
+      CLICKHOUSE_PASSWORD: ${HARBOR_LATITUDE_CLICKHOUSE_PASSWORD}
+      CLICKHOUSE_DB: latitude
+    volumes:
+      - latitude-clickhouse-data:/var/lib/clickhouse
+      - ./services/latitude/storage.xml:/etc/clickhouse-server/config.d/storage.xml:ro
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: ["CMD-SHELL", "clickhouse-client --user \"$$CLICKHOUSE_USER\" --password \"$$CLICKHOUSE_PASSWORD\" --query 'SELECT 1'"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  latitude-redis:
+    <<: *latitude-base
+    env_file: *latitude-env-files
+    networks: *latitude-networks
+    container_name: ${HARBOR_CONTAINER_PREFIX}.latitude-redis
+    image: redis:7
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  latitude-redis-bullmq:
+    <<: *latitude-base
+    env_file: *latitude-env-files
+    networks: *latitude-networks
+    container_name: ${HARBOR_CONTAINER_PREFIX}.latitude-redis-bullmq
+    image: redis:7
+    command: ["redis-server", "--maxmemory-policy", "noeviction", "--appendonly", "yes"]
+    volumes:
+      - latitude-redis-bullmq-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  latitude-temporal:
+    <<: *latitude-base
+    env_file: *latitude-env-files
+    networks: *latitude-networks
+    container_name: ${HARBOR_CONTAINER_PREFIX}.latitude-temporal
+    image: temporalio/auto-setup:1.27.2
+    depends_on:
+      latitude-postgres:
+        condition: service_healthy
+    environment:
+      DB: postgres12
+      DB_PORT: "5432"
+      POSTGRES_USER: latitude
+      POSTGRES_PWD: ${HARBOR_LATITUDE_POSTGRES_PASSWORD}
+      POSTGRES_SEEDS: latitude-postgres
+      DBNAME: temporal
+      VISIBILITY_DBNAME: temporal_visibility
+
+  latitude-seaweedfs:
+    <<: *latitude-base
+    env_file: *latitude-env-files
+    networks: *latitude-networks
+    container_name: ${HARBOR_CONTAINER_PREFIX}.latitude-seaweedfs
+    image: chrislusf/seaweedfs:4.32
+    environment:
+      LAT_STORAGE_S3_BUCKET: latitude
+    entrypoint: ["/bin/sh", "/init.sh"]
+    command: ["server", "-dir=/data", "-s3", "-s3.port=8333"]
+    volumes:
+      - latitude-seaweedfs-data:/data
+      - ./services/latitude/seaweedfs-init.sh:/init.sh:ro
+
+  latitude-mailpit:
+    <<: *latitude-base
+    env_file: *latitude-env-files
+    networks: *latitude-networks
+    container_name: ${HARBOR_CONTAINER_PREFIX}.latitude-mailpit
+    image: axllent/mailpit:latest
+    ports:
+      - "${HARBOR_LATITUDE_HOST_IP}:${HARBOR_LATITUDE_MAILPIT_HOST_PORT}:8025"
+
+volumes:
+  latitude-postgres-data:
+  latitude-clickhouse-data:
+  latitude-redis-bullmq-data:
+  latitude-seaweedfs-data:
