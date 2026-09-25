@@ -200,6 +200,11 @@
   command: bash -c 'd=$(mktemp -d); export L=$(mktemp); printf "%s\n" "#!/usr/bin/env bash" "case \"\$*\" in *\"compose version\"*) echo v2.30.0; exit 0;; *\"config --services\"*) printf \"ollama\nboost\n\"; exit 0;; *\"compose ps\"*) echo ollama; exit 0;; esac" "[ \"\$1\" = compose ] && printf \"%s\n\" \"\$*\" >> \"\$L\"" "exit 0" > "$d/docker"; chmod +x "$d/docker"; export HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false PATH="$d:$PATH"; ./harbor.sh down boost >/dev/null 2>&1 && ./harbor.sh restart boost >/dev/null 2>&1 && grep -q -- " stop --timeout 10 boost$" "$L" && grep -q -- " rm -f boost$" "$L" && grep -q -- " up -d --wait boost$" "$L" && ! grep -q -- "--remove-orphans" "$L" && ! grep -Eq -- " (stop|rm -f|up -d --wait) .*(ollama|webui|llamacpp)" "$L"'
   tags: [cli, down-scope, implemented]
 
+## wrappers
+- Users can opt in to a command wrapper that forwards its command name and arguments to Harbor CLI @issue-49 @implemented
+- Command wrapper installation never replaces an existing non-Harbor executable or symlink @issue-49 @implemented
+- Registered command wrappers can be refreshed when Harbor CLI is linked or updated @issue-49 @implemented
+
 # services
 - label: compose.yml defines only the shared harbor-network without service definitions
   command: grep -q 'harbor-network' compose.yml && ! grep -q '^services:' compose.yml
@@ -1321,6 +1326,16 @@
 - Perplexica launched with Ollama and SearXNG loads its frontend through a LAN address and reaches both backend integrations. @spec @issue-70 @implemented
 - Perplexica's local embedding model cache is writable and persistent while the backend runs as the host user. @spec @issue-70 @implemented
 
+## autogenstudio
+- Harbor exposes AutoGen Studio as an autogenstudio satellite with a persistent app directory and configurable host port. @spec @issue-65 @implemented
+- Harbor's service catalog and documentation describe AutoGen Studio startup, persistence, and local-model configuration. @spec @issue-65 @implemented
+- AutoGen Studio starts through harbor up autogenstudio and can complete an agent workflow against a Harbor Ollama model. @spec @issue-65 @implemented
+
+## latitude
+- Harbor starts a self-hosted Latitude web UI with its API, ingest endpoint, workers, and required local datastores @spec @issue-59 @implemented
+- A new Latitude user can complete email sign-in through a local mail catcher and open the web UI @spec @issue-59 @implemented
+- Latitude's PostgreSQL, ClickHouse, queue, and object storage data persist across Harbor restarts @spec @issue-59 @implemented
+
 # app
 - label: Harbor App blocks main UI behind a setup gate until setup detail status is ready
   command: rg -q 'detail\?\.status === "ready"' app/src/setup/HarborSetupContext.tsx
@@ -1350,6 +1365,7 @@
 - label: Harbor App build splits vendor code into react terminal markdown and syntax chunks via Vite manualChunks so no JS chunk exceeds 600 kB
   command: grep -q 'manualChunks' app/vite.config.ts
   tags: [implemented]
+- Harbor App Profiles loads profiles under a dot-prefixed Harbor home without a Tauri forbidden-path error @spec @issue-64 @implemented
 
 # boost
 - label: Boost is a FastAPI LLM proxy that exposes OpenAI chat completions and optional Anthropic and Responses compat layers
