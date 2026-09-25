@@ -1,0 +1,43 @@
+[auth]
+provider = "r2r"
+require_authentication = true
+require_email_verification = false
+default_admin_email = "admin@harbor.local"
+default_admin_password = "__ADMIN_PASSWORD__"
+
+[app]
+fast_llm = "ollama/__CHAT_MODEL__"
+quality_llm = "ollama/__CHAT_MODEL__"
+reasoning_llm = "ollama/__CHAT_MODEL__"
+planning_llm = "ollama/__CHAT_MODEL__"
+
+[embedding]
+provider = "ollama"
+base_model = "__EMBEDDING_MODEL__"
+base_dimension = 1_024
+batch_size = 16
+concurrent_request_limit = 2
+
+[completion_embedding]
+provider = "ollama"
+base_model = "__EMBEDDING_MODEL__"
+base_dimension = 1_024
+batch_size = 16
+concurrent_request_limit = 2
+
+[agent]
+tools = ["search_file_knowledge"]
+
+[ingestion]
+automatic_extraction = false
+
+[completion]
+provider = "litellm"
+concurrent_request_limit = 1
+
+  [completion.generation_config]
+  temperature = 0.1
+  top_p = 1
+  max_tokens_to_sample = 1_024
+  stream = false
+  api_base = "http://ollama:11434"
