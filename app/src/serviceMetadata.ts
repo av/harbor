@@ -678,6 +678,14 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         wikiUrl: `${wikiUrl}/2.3.39-Satellite-RAGLite`,
         tooltip: 'Python toolkit for Retrieval-Augmented Generation (RAG)',
     },
+    ragflow: {
+        name: 'RAGFlow',
+        tags: [HST.satellite, HST.rag],
+        projectUrl: 'https://github.com/infiniflow/ragflow',
+        logo: 'https://github.com/infiniflow.png?size=200',
+        wikiUrl: `${wikiUrl}/2.3.101-Satellite-RAGFlow`,
+        tooltip: 'RAG engine with document parsing, datasets, hybrid search, and agent workflows.',
+    },
     r2r: {
         name: 'R2R',
         tags: [HST.frontend, HST.rag],
