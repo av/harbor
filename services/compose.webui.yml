@@ -24,6 +24,8 @@ services:
       start_period: 15m
     ports:
       - ${HARBOR_WEBUI_HOST_PORT}:8080
+    extra_hosts:
+      - host.docker.internal:host-gateway
     networks:
       - harbor-network
     environment:

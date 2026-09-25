@@ -1,0 +1,142 @@
+services:
+  lobehub:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.lobehub
+    image: ${HARBOR_LOBEHUB_IMAGE}:${HARBOR_LOBEHUB_VERSION}
+    env_file:
+      - ./.env
+      - ./services/lobehub/override.env
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - 'export JWKS_KEY="$(printf %s "$$HARBOR_LOBEHUB_JWKS_KEY_B64" | base64 -d)"; exec /bin/node /app/startServer.js'
+    ports:
+      - ${HARBOR_LOBEHUB_BIND_HOST}:${HARBOR_LOBEHUB_HOST_PORT}:3210
+    environment:
+      APP_URL: http://${HARBOR_LOBEHUB_PUBLIC_HOST}:${HARBOR_LOBEHUB_HOST_PORT}
+      INTERNAL_APP_URL: http://localhost:3210
+      AUTH_SECRET: ${HARBOR_LOBEHUB_AUTH_SECRET}
+      KEY_VAULTS_SECRET: ${HARBOR_LOBEHUB_KEY_VAULTS_SECRET}
+      AUTH_ALLOWED_EMAILS: ${HARBOR_LOBEHUB_ALLOWED_EMAILS}
+      DATABASE_URL: postgresql://lobehub:${HARBOR_LOBEHUB_DB_PASSWORD}@lobehub-db:5432/lobehub
+      REDIS_URL: redis://lobehub-redis:6379
+      REDIS_PREFIX: lobehub
+      REDIS_TLS: "0"
+      S3_ENDPOINT: http://${HARBOR_LOBEHUB_PUBLIC_HOST}:${HARBOR_LOBEHUB_S3_HOST_PORT}
+      S3_INTERNAL_ENDPOINT: http://lobehub-s3:9000
+      S3_BUCKET: lobe
+      S3_ENABLE_PATH_STYLE: "1"
+      S3_SET_ACL: "0"
+      S3_ACCESS_KEY: ${HARBOR_LOBEHUB_S3_ACCESS_KEY}
+      S3_ACCESS_KEY_ID: ${HARBOR_LOBEHUB_S3_ACCESS_KEY}
+      S3_SECRET_ACCESS_KEY: ${HARBOR_LOBEHUB_S3_SECRET_KEY}
+      LLM_VISION_IMAGE_USE_BASE64: "1"
+    depends_on:
+      lobehub-preflight:
+        condition: service_completed_successfully
+      lobehub-db:
+        condition: service_healthy
+      lobehub-redis:
+        condition: service_healthy
+      lobehub-s3-init:
+        condition: service_completed_successfully
+    networks:
+      - harbor-network
+
+  lobehub-preflight:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.lobehub-preflight
+    image: alpine:3.20
+    env_file:
+      - ./.env
+      - ./services/lobehub/override.env
+    entrypoint: ["/bin/sh", "/preflight.sh"]
+    volumes:
+      - ./services/lobehub/preflight.sh:/preflight.sh:ro
+    networks:
+      - harbor-network
+
+  lobehub-db:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.lobehub-db
+    image: ${HARBOR_LOBEHUB_DB_IMAGE}:${HARBOR_LOBEHUB_DB_VERSION}
+    env_file:
+      - ./.env
+      - ./services/lobehub/override.env
+    environment:
+      POSTGRES_USER: lobehub
+      POSTGRES_DB: lobehub
+      POSTGRES_PASSWORD: ${HARBOR_LOBEHUB_DB_PASSWORD}
+    command: ["postgres", "-c", "shared_preload_libraries=pg_search,pg_cron,pg_stat_statements"]
+    volumes:
+      - lobehub-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lobehub -h 127.0.0.1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 60s
+    depends_on:
+      lobehub-preflight:
+        condition: service_completed_successfully
+    networks:
+      - harbor-network
+
+  lobehub-redis:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.lobehub-redis
+    image: ${HARBOR_LOBEHUB_REDIS_IMAGE}:${HARBOR_LOBEHUB_REDIS_VERSION}
+    env_file:
+      - ./.env
+      - ./services/lobehub/override.env
+    command: ["redis-server", "--save", "60", "1000", "--appendonly", "yes"]
+    volumes:
+      - lobehub-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - harbor-network
+
+  lobehub-s3:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.lobehub-s3
+    image: ${HARBOR_LOBEHUB_S3_IMAGE}:${HARBOR_LOBEHUB_S3_VERSION}
+    env_file:
+      - ./.env
+      - ./services/lobehub/override.env
+    ports:
+      - ${HARBOR_LOBEHUB_BIND_HOST}:${HARBOR_LOBEHUB_S3_HOST_PORT}:9000
+    environment:
+      RUSTFS_ACCESS_KEY: ${HARBOR_LOBEHUB_S3_ACCESS_KEY}
+      RUSTFS_SECRET_KEY: ${HARBOR_LOBEHUB_S3_SECRET_KEY}
+    command: ["--access-key", "${HARBOR_LOBEHUB_S3_ACCESS_KEY}", "--secret-key", "${HARBOR_LOBEHUB_S3_SECRET_KEY}", "/data"]
+    volumes:
+      - lobehub-s3-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:9000/health >/dev/null 2>&1 || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    depends_on:
+      lobehub-preflight:
+        condition: service_completed_successfully
+    networks:
+      - harbor-network
+
+  lobehub-s3-init:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.lobehub-s3-init
+    image: ${HARBOR_LOBEHUB_S3_INIT_IMAGE}:${HARBOR_LOBEHUB_S3_INIT_VERSION}
+    env_file:
+      - ./.env
+      - ./services/lobehub/override.env
+    entrypoint: ["/bin/sh", "/init-s3.sh"]
+    volumes:
+      - ./services/lobehub/init-s3.sh:/init-s3.sh:ro
+      - ./services/lobehub/bucket.config.json:/bucket.config.json:ro
+    depends_on:
+      lobehub-s3:
+        condition: service_healthy
+    networks:
+      - harbor-network
+
+volumes:
+  lobehub-db-data:
+  lobehub-redis-data:
+  lobehub-s3-data:
