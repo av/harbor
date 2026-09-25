@@ -1,0 +1,13 @@
+{
+    admin off
+}
+
+:80 {
+    handle /health {
+        respond "ok" 200
+    }
+
+    handle {
+        respond "Harbor Caddy is ready. Configure a reverse_proxy route in a Caddyfile." 200
+    }
+}

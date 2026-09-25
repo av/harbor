@@ -9,6 +9,7 @@ services:
       - ${HARBOR_ANYTHINGLLM_HOST_PORT}:3001
     volumes:
       - ./services/anythingllm/storage:/app/server/storage
+      - ./services/anythingllm/storage/.env:/app/server/.env
     cap_add:
       - SYS_ADMIN
     environment:
