@@ -769,6 +769,8 @@
 - label: [runtime: ollama up] after ./harbor.sh up --no-defaults ollama the harbor.ollama-init container reports healthy and Ollama on host port 33821 (HARBOR_OLLAMA_HOST_PORT) lists the default model nomic-embed-text:latest in /api/tags, pulled by the slim sidecar over HTTP
   command: docker inspect -f '{{.Config.Image}} {{.State.Status}} {{.State.Health.Status}}' harbor.ollama-init | grep -q '^alpine:3.20 running healthy$' && curl -sf localhost:33821/api/tags | jq -e '[.models[].name]|index("nomic-embed-text:latest")!=null' >/dev/null
   tags: [ollama-init, runtime, implemented]
+- On AMD hosts the Ollama ROCm compose overlay selects HARBOR_OLLAMA_IMAGE:HARBOR_OLLAMA_ROCM_VERSION, defaulting to the published rocm tag independently of the CPU/NVIDIA version. @spec @issue-178 @implemented
+- On an AMD host, harbor up --no-defaults ollama starts the configured ROCm-tagged Ollama image and its HTTP API responds successfully. @spec @issue-178 @runtime @implemented
 
 ## ktransformers
 - label: compose.ktransformers.yml additionally binds HARBOR_HF_CACHE read-only at ${HOME}/.cache/huggingface so llama.cpp-cache GGUF symlinks targeting absolute host HF-cache blob paths resolve inside the container
@@ -1578,6 +1580,9 @@
 - label: sglang, lmdeploy, and aphrodite docs each carry an explicit NVIDIA-only note (upstream images are CUDA-only)
   command: bash -c 'grep -qi nvidia "docs/2.2.12-Backend&colon-SGLang.md" && grep -qi nvidia "docs/2.2.10-Backend&colon-lmdeploy.md" && grep -qi nvidia "docs/2.2.5-Backend&colon-Aphrodite-Engine.md"'
   tags: [sweep6, implemented]
+
+## ollama
+- The Ollama guide documents how to pin an AMD-specific published ROCm tag, explains why ollama.version does not control that tag, and gives the default restore command. @spec @issue-178 @implemented
 
 # ci
 - label: CI includes GitHub Actions workflows for app-release bench-docker boost-docker lint and test
