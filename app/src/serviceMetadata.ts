@@ -1224,4 +1224,12 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         wikiUrl: `${wikiUrl}/2.3.98-Satellite-AutoGen-Studio`,
         tooltip: 'Prototype and run multi-agent workflows in a web UI.',
     },
+    latitude: {
+        name: 'Latitude',
+        tags: [HST.satellite, HST.api, HST.eval],
+        projectUrl: 'https://github.com/latitude-dev/latitude-llm',
+        logo: 'https://www.google.com/s2/favicons?domain=latitude.so&sz=128',
+        wikiUrl: `${wikiUrl}/2.3.98-Satellite-Latitude`,
+        tooltip: 'Self-hosted AI agent observability, signal discovery, and evaluations.',
+    },
 };
