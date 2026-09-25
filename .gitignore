@@ -78,6 +78,7 @@ comfyui/workspace/
 
 # Perplexica
 services/perplexica/data/
+services/perplexica/cache/
 perplexica/config.toml
 
 # AutoGPT

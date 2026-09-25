@@ -281,6 +281,14 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         wikiUrl: `${wikiUrl}/2.1.5-Frontend:-Lobe-Chat`,
         tooltip: 'An open-source, modern-design AI chat framework. Supports Multi AI Providers( OpenAI / Claude 3 / Gemini / Ollama / Azure / DeepSeek / MiniMax), Knowledge Base (file upload / knowledge management / RAG ), Multi-Modals (Vision/TTS) and plugin system.',
     },
+    lobehub: {
+        name: 'LobeHub (Server Database)',
+        tags: [HST.frontend, HST.rag],
+        projectUrl: 'https://github.com/lobehub/lobehub',
+        logo: 'https://www.google.com/s2/favicons?domain=lobehub.com&sz=128',
+        wikiUrl: `${wikiUrl}/2.1.17-Frontend-LobeHub`,
+        tooltip: 'Database-backed LobeHub with persistent chats, knowledge files, and local-model support.',
+    },
     mistralrs: {
         name: 'mistral.rs',
         tags: [HST.backend],
@@ -669,6 +677,14 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         logo: 'https://github.com/superlinear-ai.png?size=200',
         wikiUrl: `${wikiUrl}/2.3.39-Satellite-RAGLite`,
         tooltip: 'Python toolkit for Retrieval-Augmented Generation (RAG)',
+    },
+    r2r: {
+        name: 'R2R',
+        tags: [HST.frontend, HST.rag],
+        projectUrl: 'https://github.com/SciPhi-AI/R2R',
+        logo: 'https://github.com/SciPhi-AI.png?size=200',
+        wikiUrl: `${wikiUrl}/2.1.18-Frontend-R2R`,
+        tooltip: 'Self-hosted retrieval-augmented generation with document ingestion, search, and a dashboard.',
     },
     llamaswap: {
         name: 'llama-swap',
@@ -1223,5 +1239,21 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         logo: 'https://www.google.com/s2/favicons?domain=www.datalab.to&sz=128',
         wikiUrl: `${wikiUrl}/2.2.27-Backend-Chandra`,
         tooltip: 'Chandra 2 OCR served with vLLM: document and image to structured markdown, HTML or JSON.',
+    },
+    autogenstudio: {
+        name: 'AutoGen Studio',
+        tags: [HST.satellite, HST.workflows],
+        projectUrl: 'https://github.com/microsoft/autogen',
+        logo: 'https://www.google.com/s2/favicons?domain=microsoft.github.io&sz=128',
+        wikiUrl: `${wikiUrl}/2.3.98-Satellite-AutoGen-Studio`,
+        tooltip: 'Prototype and run multi-agent workflows in a web UI.',
+    },
+    latitude: {
+        name: 'Latitude',
+        tags: [HST.satellite, HST.api, HST.eval],
+        projectUrl: 'https://github.com/latitude-dev/latitude-llm',
+        logo: 'https://www.google.com/s2/favicons?domain=latitude.so&sz=128',
+        wikiUrl: `${wikiUrl}/2.3.98-Satellite-Latitude`,
+        tooltip: 'Self-hosted AI agent observability, signal discovery, and evaluations.',
     },
 };
