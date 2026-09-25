@@ -7,4 +7,13 @@
 set -e
 mkdir -p /storage
 chown -R 1000:1000 /storage
-chmod -R 0775 /storage
+# Keep existing files' permissions, especially the settings file with API keys.
+find /storage -type d -exec chmod 0775 {} +
+touch /storage/.env
+chown 1000:1000 /storage/.env
+chmod 0600 /storage/.env
+
+if [ -n "${HARBOR_ANYTHINGLLM_DEFAULT_EMBEDDING_MODEL:-}" ] &&
+  ! grep -q '^EMBEDDING_MODEL_PREF=' /storage/.env; then
+  printf 'EMBEDDING_MODEL_PREF=%s\n' "$HARBOR_ANYTHINGLLM_DEFAULT_EMBEDDING_MODEL" >> /storage/.env
+fi
