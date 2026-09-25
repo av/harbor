@@ -1316,6 +1316,12 @@
   command: d='docs/2.3.23-Satellite&colon-n8n.md'; grep -q 'n8n-sandbox-api' "$d" && grep -q 'privileged' "$d" && grep -q 'HARBOR_N8N_SANDBOX_API_KEY' "$d" && grep -q 'n8n Assistant' "$d"
   tags: [n8n-sandbox, implemented]
 
+## ragflow
+- RAGFlow is available as a Harbor service with a reachable UI and persistent Elasticsearch, MySQL, object-storage, and cache data. @spec @issue-139 @implemented
+- RAGFlow does not start with shipped default credentials; database, search, storage, cache, and bootstrap-admin secrets must be configured per installation. @spec @issue-139 @implemented
+- RAGFlow can create a local account, ingest a document, and search it after a service restart. @spec @issue-139 @implemented
+- RAGFlow documentation explains the upstream dependency stack, first-run secrets, model setup, ports, and backup. @spec @issue-139 @implemented
+
 # app
 - label: Harbor App blocks main UI behind a setup gate until setup detail status is ready
   command: rg -q 'detail\?\.status === "ready"' app/src/setup/HarborSetupContext.tsx
