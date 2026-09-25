@@ -1651,6 +1651,9 @@
   tags: [implemented]
 - pending launch CLI, Hugging Face model discovery, and Boost module changes have an agent-executable integration release checklist covering behavior, lint, facts, and user documentation @spec @release-validation @implemented
 - the test-boost-module skill live-tests current Boost modules through harbor launch with pi and does not recommend removed modules or obsolete module roles @spec @release-validation @implemented
+- label: Boost agentic container tests run uv without modifying the read-only project lockfile
+  command: rg -q 'uv run --frozen --with pytest --with pytest-asyncio' tests/lib/boost-agentic.sh
+  tags: [spec, boost-agentic-lock, implemented]
 
 # lint
 - label: harbor dev lint runs a three-pass Deno orchestrator with HARBOR-prefixed bash rules under .scripts/lint
