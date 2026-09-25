@@ -200,6 +200,11 @@
   command: bash -c 'd=$(mktemp -d); export L=$(mktemp); printf "%s\n" "#!/usr/bin/env bash" "case \"\$*\" in *\"compose version\"*) echo v2.30.0; exit 0;; *\"config --services\"*) printf \"ollama\nboost\n\"; exit 0;; *\"compose ps\"*) echo ollama; exit 0;; esac" "[ \"\$1\" = compose ] && printf \"%s\n\" \"\$*\" >> \"\$L\"" "exit 0" > "$d/docker"; chmod +x "$d/docker"; export HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false PATH="$d:$PATH"; ./harbor.sh down boost >/dev/null 2>&1 && ./harbor.sh restart boost >/dev/null 2>&1 && grep -q -- " stop --timeout 10 boost$" "$L" && grep -q -- " rm -f boost$" "$L" && grep -q -- " up -d --wait boost$" "$L" && ! grep -q -- "--remove-orphans" "$L" && ! grep -Eq -- " (stop|rm -f|up -d --wait) .*(ollama|webui|llamacpp)" "$L"'
   tags: [cli, down-scope, implemented]
 
+## docker
+- A disposable Docker runner can execute Harbor CLI commands against the host Docker daemon @issue-40 @implemented
+- Dockerized Harbor resolves the workspace and home cache at the same absolute paths seen by the host Docker daemon @issue-40 @implemented
+- Dockerized Harbor writes workspace configuration as the invoking host user @issue-40 @implemented
+
 ## doctor
 - label: ROCm detection checks the loaded amdgpu module through sysfs without a pipefail-sensitive lsmod and grep pipeline
   command: grep -q '\[\[ -d /sys/module/amdgpu \]\]' harbor.sh && ! sed -n '/^has_rocm()/,/^}/p' harbor.sh | grep -q 'lsmod.*grep -q'
