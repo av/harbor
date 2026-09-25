@@ -1216,4 +1216,12 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         wikiUrl: `${wikiUrl}/2.2.27-Backend-Chandra`,
         tooltip: 'Chandra 2 OCR served with vLLM: document and image to structured markdown, HTML or JSON.',
     },
+    claraverse: {
+        name: 'ClaraVerse',
+        tags: [HST.frontend, HST.partial, HST.workflows],
+        projectUrl: 'https://github.com/claraverse-space/ClaraVerse',
+        logo: 'https://www.google.com/s2/favicons?domain=claraverse.space&sz=128',
+        wikiUrl: `${wikiUrl}/2.1.19-Frontend-ClaraVerse`,
+        tooltip: 'Private AI chat and workflow workspace with local-model discovery. Knowledge bases require upstream sidecars.',
+    },
 };
