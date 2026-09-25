@@ -1579,6 +1579,11 @@
   command: bash -c 'grep -qi nvidia "docs/2.2.12-Backend&colon-SGLang.md" && grep -qi nvidia "docs/2.2.10-Backend&colon-lmdeploy.md" && grep -qi nvidia "docs/2.2.5-Backend&colon-Aphrodite-Engine.md"'
   tags: [sweep6, implemented]
 
+## links
+- label: The Unsloth Studio documentation links to the existing case-sensitive llama.cpp guide filename, and the reported Tools link retains its .md extension
+  command: rg -q -F './2.2.2-Backend&colon-llama.cpp.md' 'docs/2.3.83-Satellite-Unsloth-Studio.md' && ! rg -q -F './2.2.2-Backend&colon-Llama.cpp.md' docs && rg -q -F './1.2-Tools.md' 'docs/1.-Harbor-User-Guide.md'
+  tags: [spec, issue-230, implemented]
+
 # ci
 - label: CI includes GitHub Actions workflows for app-release bench-docker boost-docker lint and test
   command: test -f .github/workflows/test.yml && test -f .github/workflows/lint.yml && test -f .github/workflows/boost-docker.yml
