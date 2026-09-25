@@ -326,6 +326,8 @@
 - label: ChatNode.history() merges consecutive same-role plain messages (no tool calls) so multi-assistant-turn modules like g1 pass llama.cpp's 'cannot have 2+ assistant messages at the end' validation
   command: cd services/boost && python -m pytest tests/test_chat_node.py -q -k merge
   tags: [services-runner, implemented]
+- Boost and WebUI containers map host.docker.internal to the Docker host gateway so external Ollama URLs work on Linux as well as Docker Desktop. @spec @issue-168 @implemented
+- With only webui and boost selected and an external Ollama URL configured through Harbor env, Boost advertises a prefixed external Ollama model and responds to a chat completion without starting the Harbor ollama service. @spec @issue-168 @runtime @implemented
 
 ## chatui
 - label: envify.js bridges Harbor's legacy MODELS config to chat-ui >= 0.10's single-provider scheme by emitting OPENAI_BASE_URL and OPENAI_API_KEY from the first configured openai endpoint, so per-backend configs (chatui.llamacpp.yml etc.) still take effect
@@ -1578,6 +1580,9 @@
 - label: sglang, lmdeploy, and aphrodite docs each carry an explicit NVIDIA-only note (upstream images are CUDA-only)
   command: bash -c 'grep -qi nvidia "docs/2.2.12-Backend&colon-SGLang.md" && grep -qi nvidia "docs/2.2.10-Backend&colon-lmdeploy.md" && grep -qi nvidia "docs/2.2.5-Backend&colon-Aphrodite-Engine.md"'
   tags: [sweep6, implemented]
+
+## ollama
+- The external-Ollama guide distinguishes cross-compose wiring from independent services and gives the Harbor env commands needed for Boost model discovery and WebUI direct Ollama access when the ollama handle is omitted. @spec @issue-168 @implemented
 
 # ci
 - label: CI includes GitHub Actions workflows for app-release bench-docker boost-docker lint and test
