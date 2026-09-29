@@ -1,0 +1,41 @@
+services:
+  chandra:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.chandra
+    image: ${HARBOR_CHANDRA_IMAGE}:${HARBOR_CHANDRA_VERSION}
+    env_file:
+      - ./.env
+      - ./services/chandra/override.env
+    # vLLM needs a large /dev/shm for its tensor-parallel and multimodal paths
+    ipc: host
+    environment:
+      - HUGGING_FACE_HUB_TOKEN=${HARBOR_HF_TOKEN}
+    # Flags mirror upstream's chandra_vllm launcher; the mm-processor pixel
+    # bounds are what the OCR model was tuned for and are not vLLM defaults.
+    # --max-num-seqs 16 is required, not a tuning knob: vLLM 0.17's cudagraph
+    # warm-up asserts causal_conv1d num_cache_lines >= batch on this hybrid
+    # Qwen3.5/GDN model at the default max_num_seqs 256. EXTRA_ARGS still wins.
+    command: >
+      --model ${HARBOR_CHANDRA_MODEL}
+      --served-model-name chandra
+      --dtype bfloat16
+      --max-model-len 18000
+      --gpu-memory-utilization 0.85
+      --enable-prefix-caching
+      --mm-processor-kwargs '{"min_pixels":3136,"max_pixels":6291456}'
+      --max-num-seqs 16
+      --max-num-batched-tokens 2048
+      ${HARBOR_CHANDRA_EXTRA_ARGS}
+    volumes:
+      # Standard HF hub layout, shared with vLLM/TEI/llama.cpp
+      - ${HARBOR_HF_CACHE:-./services/chandra/.hf-cache}:/root/.cache/huggingface
+    ports:
+      - ${HARBOR_CHANDRA_HOST_PORT}:8000
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health').status == 200 else 1)\""]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      # First start downloads ~10GB of weights; allow a long grace period
+      start_period: 30m
+    networks:
+      - harbor-network

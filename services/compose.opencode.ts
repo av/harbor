@@ -18,27 +18,48 @@ fi
 `.trim();
 }
 
+function generateWorkspaceInitScript(): string {
+  return `
+if [ -x /root/.config/opencode/init.sh ]; then
+  /root/.config/opencode/init.sh || echo "OpenCode workspace init failed; continuing"
+fi
+`.trim();
+}
+
 function generateDiscoveryScript(backends: DetectedBackend[]): string {
   const backendList = backends.map(b => `${b.service}=${b.info.url}`).join(' ');
 
   // Note: Using string concatenation for bash syntax that conflicts with JS template literals
   const configDirDefault = '$$' + '{OPENCODE_CONFIG_DIR:-/root/.config/opencode}';
+  const configContent = '$$' + '{OPENCODE_CONFIG_CONTENT:-}';
+  const litellmKey = '$$' + '{LITELLM_MASTER_KEY:-}';
   const backendNameExtract = '$$' + '{backend%%=*}';
   const backendUrlExtract = '$$' + '{backend#*=}';
 
   return `
 set -e
 ${generateHarborCliInitScript()}
+${generateWorkspaceInitScript()}
 CONFIG_DIR="${configDirDefault}"
 mkdir -p "$$CONFIG_DIR"
 CONFIG_FILE="$$CONFIG_DIR/opencode.json"
+if [ -s "$$CONFIG_FILE" ] || [ -n "${configContent}" ]; then
+  echo "OpenCode config exists; skipping model discovery"
+  exec opencode serve --hostname=0.0.0.0 --port=4096
+fi
+umask 077
 
 # Wait for backend with retries
 wait_for() {
   url="$$1"
+  key="$$2"
   attempt=0
   while [ $$attempt -lt 30 ]; do
-    curl -sf "$$url/v1/models" > /dev/null 2>&1 && return 0
+    if [ -n "$$key" ]; then
+      curl -sf -H "Authorization: Bearer $$key" "$$url/v1/models" > /dev/null 2>&1 && return 0
+    else
+      curl -sf "$$url/v1/models" > /dev/null 2>&1 && return 0
+    fi
     sleep 1
     attempt=$$((attempt + 1))
   done
@@ -62,6 +83,10 @@ discover() {
 # validate auth (ollama, llamacpp).
 resolve_key() {
   name="$$1"
+  if [ "$$name" = litellm ] && [ -n "${litellmKey}" ]; then
+    printf '%s' "$$LITELLM_MASTER_KEY"
+    return 0
+  fi
   key_file="/run/$$name-auth/api_key.txt"
   if [ -r "$$key_file" ]; then
     k=$$(tr -d '\\n' < "$$key_file")
@@ -82,12 +107,12 @@ for backend in ${backendList}; do
   api_key=$$(resolve_key "$$name")
 
   echo "Waiting for $$name at $$url..."
-  wait_for "$$url" || { echo "Backend $$name not available after 30s, skipping"; continue; }
+  wait_for "$$url" "$$api_key" || { echo "Backend $$name not available after 30s, skipping"; continue; }
 
   echo "Discovering models from $$name..."
   models=$$(discover "$$url" "$$api_key") || { echo "Failed to get models from $$name"; continue; }
 
-  model_ids=$$(echo "$$models" | grep -o '"id":"[^"]*"' | cut -d'"' -f4)
+  model_ids=$$(printf '%s' "$$models" | jq -r '.data[]?.id // empty') || { echo "Invalid model list from $$name"; continue; }
   [ -z "$$model_ids" ] && { echo "No models found for $$name"; continue; }
 
   $$first || echo ',' >> "$$CONFIG_FILE"
@@ -154,24 +179,23 @@ export default async function apply(ctx: ComposeContext): Promise<ComposeObject>
     }
   }
 
-  const hasHarborCli = services.includes('harbor-cli');
-
   // Detect active backends using shared utility
   const activeBackends = getAllActiveBackends(services);
+  if (services.includes('litellm')) {
+    activeBackends.push({ service: 'litellm', info: { url: 'http://litellm:4000', name: 'LiteLLM' } });
+  }
 
   if (activeBackends.length === 0) {
-    if (hasHarborCli) {
-      // Chain through the setpriv wrapper from compose.opencode.yml so the
-      // root chown + drop-to-host-user behavior is preserved.
-      compose.services.opencode.entrypoint = [
-        '/bin/bash',
-        '/harbor-entrypoint.sh',
-        '/bin/bash',
-        '-c',
-        `${generateHarborCliInitScript()}\nexec "$$@"`,
-        '--',
-      ];
-    }
+    // Preserve the root chown + drop-to-host-user wrapper before running
+    // the optional workspace init hook, even without an inference backend.
+    compose.services.opencode.entrypoint = [
+      '/bin/bash',
+      '/harbor-entrypoint.sh',
+      '/bin/bash',
+      '-c',
+      `${generateHarborCliInitScript()}\n${generateWorkspaceInitScript()}\nexec "$$@"`,
+      '--',
+    ];
     return compose;
   }
 

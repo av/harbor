@@ -1,0 +1,9 @@
+model_list:
+  # PrismML llama.cpp router auto-discovers models from the HF cache, so a static
+  # model id can't be pinned here — use provider wildcard routing instead:
+  # request "prismml/<router-model-id>" and LiteLLM forwards "<router-model-id>".
+  - model_name: "prismml/*"
+    litellm_params:
+      model: "openai/*"
+      api_base: http://prismml:8080/v1
+      api_key: sk-prismml

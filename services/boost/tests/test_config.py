@@ -20,6 +20,32 @@ import pytest
 # Config unit tests (no app import needed)
 # ---------------------------------------------------------------------------
 
+class TestEmptyEnvValues:
+    """Compose injects "" for keys missing from .env; numbers must not break."""
+
+    def test_empty_numeric_env_falls_back_to_default(self):
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+        from config import Config
+
+        with patch.dict(os.environ, {"HARBOR_BOOST_TEST_INT": ""}, clear=False):
+            timeout = Config[int](name="HARBOR_BOOST_TEST_INT", type=int, default="30")
+            assert timeout.value == 30
+
+        with patch.dict(os.environ, {"HARBOR_BOOST_TEST_FLOAT": ""}, clear=False):
+            ratio = Config[float](
+                name="HARBOR_BOOST_TEST_FLOAT", type=float, default="0.5"
+            )
+            assert ratio.value == 0.5
+
+    def test_empty_string_env_is_still_a_value(self):
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+        from config import Config
+
+        with patch.dict(os.environ, {"HARBOR_BOOST_TEST_STR": ""}, clear=False):
+            modules = Config[str](name="HARBOR_BOOST_TEST_STR", type=str, default="all")
+            assert modules.value == ""
+
+
 class TestConfigDefaults:
     """Default values for compat config flags."""
 

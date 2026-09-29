@@ -33,21 +33,21 @@ services:
     depends_on:
       ollama:
         condition: service_healthy
-    image: ${HARBOR_OLLAMA_IMAGE}:${HARBOR_OLLAMA_VERSION}
+    image: alpine:3.20
     env_file:
       - ./.env
       - ./services/ollama/override.env
+    environment:
+      OLLAMA_HOST: ${HARBOR_OLLAMA_INTERNAL_URL:-http://ollama:11434}
     volumes:
-      - ${HARBOR_OLLAMA_CACHE}:/root/.ollama
       - ./services/ollama/init_entrypoint.sh:/init_entrypoint.sh
     entrypoint: /init_entrypoint.sh
     # Healthcheck flips to OK as soon as default-model pulls finish; the
     # entrypoint then `tail -f`s to stay running. This makes compose --wait
     # classify the sidecar as running|healthy in every up combination,
     # rather than treating its (previously-clean) exit as premature.
-    # 30-min retry budget covers cold pulls of multi-GB default models. Misconfigs
-    # (bad model id, ollama down) exit the entrypoint via `set -e` and surface as
-    # a non-zero container exit, not as a healthcheck timeout — see init_entrypoint.sh.
+    # 30-min retry budget covers cold pulls of multi-GB default models. Failed
+    # pulls produce warnings but do not block consumers from starting.
     healthcheck:
       test: ["CMD-SHELL", "test -f /run/harbor/ollama-init-done"]
       interval: 2s

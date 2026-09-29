@@ -1,0 +1,8 @@
+services:
+  prismml:
+    build:
+      dockerfile: .devops/rocm.Dockerfile
+      target: server
+      args:
+        ROCM_DOCKER_ARCH: ${HARBOR_PRISMML_BUILD_ROCM_ARCH}
+    image: harbor-prismml:src-${HARBOR_PRISMML_BUILD_REF:-prism}-rocm

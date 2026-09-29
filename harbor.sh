@@ -359,6 +359,7 @@ show_help() {
     echo "  webui     - Configure Open WebUI Service"
     echo "  llamacpp  - Configure llamacpp service"
     echo "  ikllamacpp - Configure ik_llama.cpp service"
+    echo "  prismml   - Configure PrismML llama.cpp service"
     echo "  tgi       - Configure text-generation-inference service"
     echo "  litellm   - Configure LiteLLM service"
     echo "  langflow  - Configure Langflow UI Service"
@@ -491,6 +492,7 @@ show_help() {
     echo "  ls|list [--active|-a] - List available/active Harbor services"
     echo "  ln|link [--short]     - Create a symlink to the CLI, --short for 'h' link"
     echo "  unlink|unln           - Remove CLI symlinks and PATH entries"
+    echo "  wrappers [list|add|rm|sync] - Manage opt-in command wrappers"
     echo "  eject                 - Eject resolved Compose configuration, accepts same options as 'up'"
     echo "  help|--help|-h        - Show this help message"
     echo "  version|--version|-v  - Show the CLI version"
@@ -821,17 +823,24 @@ run_harbor_doctor() {
             log_warn "  Found $env_issues .env issue(s). Run 'harbor config update' to regenerate from defaults."
         fi
 
-        # Warn about stale keys: present in .env but absent from profiles/default.env
+        # Warn about stale keys: present in .env but absent from every
+        # default source (profiles/default.env + services/*/default.env)
         if [ -f "$default_profile" ] && [ -r "$default_profile" ]; then
             local stale_count=0
             local stale_keys=""
             local env_key
+            # Bash 3 compatible array fill (no bash-4 array builtins)
+            local doctor_defaults=()
+            local doctor_default_file
+            while IFS= read -r doctor_default_file; do
+                doctor_defaults+=("$doctor_default_file")
+            done < <(collect_default_env_files)
             while IFS= read -r line || [ -n "$line" ]; do
                 [[ -z "$line" || "$line" =~ ^[[:space:]]*# || "$line" != *=* ]] && continue
                 env_key="${line%%=*}"
                 # Skip non-HARBOR_ keys (user-added, system, etc.)
                 [[ "$env_key" != HARBOR_* ]] && continue
-                if ! grep -q "^${env_key}=" "$default_profile" 2>/dev/null; then
+                if ! grep -qh "^${env_key}=" "${doctor_defaults[@]}" 2>/dev/null; then
                     stale_count=$((stale_count + 1))
                     if [ "$stale_count" -le 5 ]; then
                         stale_keys="${stale_keys:+$stale_keys, }$env_key"
@@ -956,8 +965,8 @@ has_rocm() {
     # 2. Verify render nodes exist (needed for container device passthrough)
     ls /dev/dri/renderD* &>/dev/null || return 1
 
-    # 3. Verify amdgpu kernel module is loaded
-    lsmod 2>/dev/null | grep -q "^amdgpu " || return 1
+    # 3. Sysfs covers both loaded and built-in modules without a pipefail/SIGPIPE race.
+    [[ -d /sys/module/amdgpu ]] || return 1
 
     return 0
 }
@@ -1109,13 +1118,32 @@ run_routine() {
 
     log_debug "Running routine: $routine_name"
 
+    local routine_ca_cert="$default_routine_ca_cert"
+    if [ -n "$routine_ca_cert" ]; then
+        if [[ "$routine_ca_cert" != /* ]] || [ ! -r "$routine_ca_cert" ] || [ ! -f "$routine_ca_cert" ]; then
+            log_error "routine.ca.cert must be an absolute path to a readable PEM file: $routine_ca_cert"
+            return 1
+        fi
+    fi
+
     if command -v deno &>/dev/null; then
         log_debug "Using local deno for routine"
-        HARBOR_LOG_LEVEL="$default_log_level" DENO_NO_UPDATE_CHECK=1 deno run -A --unstable-sloppy-imports "$routine_path" "$@"
+        local -a deno_env=("HARBOR_LOG_LEVEL=$default_log_level" "DENO_NO_UPDATE_CHECK=1")
+        if [ -n "$routine_ca_cert" ]; then
+            deno_env+=("DENO_CERT=$routine_ca_cert")
+        fi
+        env "${deno_env[@]}" deno run -A --unstable-sloppy-imports "$routine_path" "$@"
     else
         _check_docker || return 1
         log_debug "Using Docker container for routine"
-        docker run --rm \
+        local -a docker_options=()
+        if [ -n "$routine_ca_cert" ]; then
+            docker_options+=(-v "$routine_ca_cert:/harbor-routine-ca.pem:ro" -e "DENO_CERT=/harbor-routine-ca.pem")
+        fi
+        if [ -n "$default_routine_network" ]; then
+            docker_options+=(--network "$default_routine_network")
+        fi
+        docker run --rm "${docker_options[@]}" \
             --user "$(id -u):$(id -g)" \
             -v "$harbor_home:$harbor_home" \
             -v "$(_deno_cache_volume)" \
@@ -1435,6 +1463,20 @@ ensure_daytona_ssh_keys() {
     }
 }
 
+ensure_latitude_secrets() {
+    local key secret
+    for key in postgres.password postgres.runtime.password clickhouse.password storage.secret master.encryption.key better.auth.secret; do
+        if [ -z "$(env_manager --silent get "latitude.$key")" ]; then
+            secret=$(LC_ALL=C od -An -N32 -tx1 /dev/urandom | tr -d ' \n') || return 1
+            if [ "${#secret}" -ne 64 ]; then
+                log_error "Failed to generate Latitude secret: $key"
+                return 1
+            fi
+            env_manager --silent set "latitude.$key" "$secret" || return 1
+        fi
+    done
+}
+
 run_up() {
     _check_docker || return 1
     local should_tail=false
@@ -1442,6 +1484,7 @@ run_up() {
     local should_attach=false
     local no_defaults=false
     local skip_port_check=false
+    local only_named=false
     local filtered_args=()
     local up_args=()
 
@@ -1462,6 +1505,12 @@ run_up() {
             ;;
         --skip-port-check)
             skip_port_check=true
+            ;;
+        --only-named)
+            # Internal (used by 'harbor restart <service...>'): hand the named
+            # services to compose instead of bringing up everything in the
+            # resolved file set. Not part of the public 'harbor up' contract.
+            only_named=true
             ;;
         *)
             filtered_args+=("$arg")
@@ -1529,6 +1578,9 @@ run_up() {
         daytona)
             ensure_daytona_ssh_keys || return 1
             ;;
+        latitude)
+            ensure_latitude_secrets || return 1
+            ;;
         esac
     done
 
@@ -1581,8 +1633,21 @@ run_up() {
         fi
     done
 
-    $(compose_with_options "${up_args[@]}" "${filtered_args[@]}") up -d --wait
-    local up_exit=$?
+    local up_exit=0
+    if $only_named; then
+        local up_services=()
+        for service in "${filtered_args[@]}"; do
+            if is_capability "$service"; then
+                continue
+            fi
+            up_services+=("$service")
+        done
+        if [ ${#up_services[@]} -gt 0 ]; then
+            $(compose_with_options "${up_args[@]}" "${filtered_args[@]}") up -d --wait "${up_services[@]}" || up_exit=$?
+        fi
+    else
+        $(compose_with_options "${up_args[@]}" "${filtered_args[@]}") up -d --wait || up_exit=$?
+    fi
 
     if [ $up_exit -ne 0 ]; then
         log_error "Failed to start services."
@@ -1630,15 +1695,21 @@ run_down() {
         echo
         echo "Usage: harbor down [service...] [options]"
         echo
+        echo "With no arguments, stops and removes every running service."
+        echo "With service names, stops and removes only those services and"
+        echo "their '<service>-*' companions - other running services are left"
+        echo "untouched."
+        echo
         echo "Options:"
-        echo "  --volumes, -v       Remove named volumes declared in compose files"
-        echo "  --rmi <type>        Remove images (\"local\" or \"all\")"
+        echo "  --volumes, -v       Remove volumes: named volumes for a bare 'down';"
+        echo "                      anonymous volumes only when services are named"
+        echo "  --rmi <type>        Remove images (\"local\" or \"all\"), bare 'down' only"
         echo "  --timeout, -t <s>   Shutdown timeout in seconds (default: 10)"
         echo
         echo "Examples:"
         echo "  harbor down                 Stop all running services"
-        echo "  harbor down ollama webui    Stop specific services"
-        echo "  harbor down --volumes       Stop all and remove volumes"
+        echo "  harbor down ollama webui    Stop only ollama and webui"
+        echo "  harbor down --volumes       Stop all and remove named volumes"
         echo "  harbor down --rmi local     Stop all and remove locally-built images"
         echo
         echo "See also: harbor restart, harbor ps"
@@ -1764,11 +1835,6 @@ run_down() {
         run_dmr_command stop || true
     fi
 
-    local matched_services_str=""
-    if [ ${#matched_services[@]} -gt 0 ]; then
-        matched_services_str=$(printf " %s" "${matched_services[@]}")
-    fi
-
     # Add default timeout unless user specified one
     local has_timeout=false
     local flag
@@ -1780,8 +1846,54 @@ run_down() {
         timeout_args=(--timeout 10)
     fi
 
-    $(compose_with_options "${compose_targets[@]}") down --remove-orphans "${timeout_args[@]}" "${down_flags[@]}" "${requested_services[@]}" $matched_services_str
-    local down_exit=$?
+    local down_exit=0
+
+    if [ ${#requested_services[@]} -eq 0 ]; then
+        $(compose_with_options "${compose_targets[@]}") down --remove-orphans "${timeout_args[@]}" "${down_flags[@]}" || down_exit=$?
+    else
+        # Scoped teardown. 'compose down' always tears down the whole project
+        # and --remove-orphans additionally kills any running service outside
+        # the resolved file set, so naming services here would sweep unrelated
+        # containers. 'stop' + 'rm -f' over the wildcard file set touches only
+        # the named services and their companions.
+        local stop_args=("${timeout_args[@]}")
+        local rm_flags=()
+        local i=0
+        while [ $i -lt ${#down_flags[@]} ]; do
+            flag="${down_flags[$i]}"
+            case "$flag" in
+            -v|--volumes)
+                rm_flags+=("-v")
+                ;;
+            --timeout|-t)
+                stop_args+=("--timeout" "${down_flags[$((i + 1))]:-10}")
+                i=$((i + 1))
+                ;;
+            --timeout=*|-t=*)
+                stop_args+=("--timeout" "${flag#*=}")
+                ;;
+            --rmi)
+                log_warn "'--rmi' only applies to a bare 'harbor down' - ignoring it for ${requested_services[*]}."
+                i=$((i + 1))
+                ;;
+            --rmi=*)
+                log_warn "'--rmi' only applies to a bare 'harbor down' - ignoring it for ${requested_services[*]}."
+                ;;
+            *)
+                log_warn "Ignoring '$flag' - not supported when stopping specific services."
+                ;;
+            esac
+            i=$((i + 1))
+        done
+
+        local down_target_services=("${requested_services[@]}" "${matched_services[@]}")
+        local compose_cmd
+        compose_cmd=$(compose_with_options "*") || return 1
+        $compose_cmd stop "${stop_args[@]}" "${down_target_services[@]}" || down_exit=$?
+        if [ $down_exit -eq 0 ]; then
+            $compose_cmd rm -f "${rm_flags[@]}" "${down_target_services[@]}" || down_exit=$?
+        fi
+    fi
 
     if [ $down_exit -eq 0 ]; then
         log_info "Services stopped."
@@ -1800,8 +1912,9 @@ run_restart() {
         echo "Usage: harbor restart [service...] [options]"
         echo
         echo "With no arguments, restarts all currently running services."
-        echo "With service names, stops those services and starts them along"
-        echo "with any other currently running services."
+        echo "With service names, recreates only those services (and their"
+        echo "'<service>-*' companions) - other running services keep running"
+        echo "and are not recreated."
         echo
         echo "Options:"
         echo "  --open, -o          Open in browser after restart"
@@ -1811,7 +1924,7 @@ run_restart() {
         echo
         echo "Examples:"
         echo "  harbor restart              Restart all running services"
-        echo "  harbor restart ollama       Restart ollama (keeps other services running)"
+        echo "  harbor restart ollama       Restart only ollama, leaving the rest running"
         echo "  harbor restart webui --tail Restart webui and tail logs"
         echo
         echo "See also: harbor down, harbor up"
@@ -1883,12 +1996,33 @@ run_restart() {
         fi
     done
 
+    # Named services restart in place: tear down exactly what was asked for
+    # (plus its companions, which run_down also removes) and bring back only
+    # that set, leaving every other running service alone.
+    local restart_services=()
+    if [ ${#services[@]} -gt 0 ]; then
+        local raw_services companion
+        raw_services=$(docker compose ps -a --format "{{.Service}}")
+        restart_services=("${services[@]}")
+        for svc in "${services[@]}"; do
+            while IFS= read -r companion; do
+                [ -n "$companion" ] || continue
+                restart_services+=("$companion")
+            done <<< "$(echo "$raw_services" | grep "^${svc}-" || true)"
+        done
+    fi
+
     if ! run_down "${services[@]}"; then
         log_error "Failed to stop services. Aborting restart."
         log_error "Check 'docker ps' for stuck containers, then retry."
         return 1
     fi
-    run_up "${unique_services[@]}" "${flags[@]}"
+
+    if [ ${#services[@]} -gt 0 ]; then
+        run_up --only-named "${restart_services[@]}" "${flags[@]}"
+    else
+        run_up "${unique_services[@]}" "${flags[@]}"
+    fi
 }
 
 run_ps() {
@@ -2254,6 +2388,8 @@ run_llamacpp_pull() {
     _check_docker || return 1
 
     local model="$1"
+    # llama.cpp-family service whose image performs the download
+    local service="${2:-llamacpp}"
 
     if [ -z "$model" ]; then
         log_error "No model specified for llamacpp pull."
@@ -2313,6 +2449,19 @@ run_llamacpp_pull() {
             exit 0
         fi
 
+        # Fatal errors must be checked before the 'loading model' success
+        # marker: the PrismML fork prints \"load_model: loading model '<spec>'\"
+        # even when the -hf resolve failed, so both appear in the same log.
+        if grep -qE 'exiting due to model loading error|no GGUF files found in repository' \"$c_log\"; then
+            log_error 'Download failed - the model was not fetched. See the log above.'
+            if grep -q 'failed to write file' \"$c_log\"; then
+                log_error 'The cache is not writable by your user. Run: harbor fixfs'
+            fi
+            kill \$SRV_PID 2>/dev/null
+            kill \$TAIL_PID 2>/dev/null
+            exit 1
+        fi
+
         # 'loading model' indicates download finished
         if grep -q 'main: loading model' \"$c_log\" || grep -q 'load_model: loading model' \"$c_log\"; then
             log_success 'Download completed successfully.'
@@ -2347,14 +2496,14 @@ run_llamacpp_pull() {
     llamacpp_cache_path="${llamacpp_cache_path/#\~/$HOME}"
     mkdir -p "$hf_cache_path" "$llamacpp_cache_path"
 
-    $(compose_with_options "llamacpp") run \
+    $(compose_with_options "$service") run \
         --rm \
         --user "$(id -u):$(id -g)" \
         -e HOME=/tmp \
         -v "$hf_cache_path:/tmp/.cache/huggingface" \
         -v "$llamacpp_cache_path:/tmp/.cache/llama.cpp" \
         --entrypoint /bin/sh \
-        llamacpp \
+        "$service" \
         -c "$cmd"
 }
 
@@ -2387,7 +2536,7 @@ run_run() {
 
 launch_backend_is_supported() {
     case "$1" in
-    ollama | llamacpp | ikllamacpp | vllm | dmr | mlx | omlx | tabbyapi | mistralrs | sglang | lmdeploy | aphrodite | ktransformers | unsloth-studio)
+    ollama | llamacpp | ikllamacpp | prismml | vllm | dmr | mlx | omlx | tabbyapi | mistralrs | sglang | lmdeploy | aphrodite | ktransformers | unsloth-studio)
         return 0
         ;;
     *)
@@ -2406,6 +2555,9 @@ launch_backend_model_key() {
         ;;
     ikllamacpp)
         echo "ikllamacpp.model"
+        ;;
+    prismml)
+        echo "prismml.model"
         ;;
     vllm)
         echo "vllm.model"
@@ -2517,7 +2669,7 @@ launch_start_services() {
 }
 
 launch_supported_backends() {
-    echo "ollama llamacpp ikllamacpp vllm dmr mlx omlx tabbyapi mistralrs sglang lmdeploy aphrodite ktransformers unsloth-studio"
+    echo "ollama llamacpp ikllamacpp prismml vllm dmr mlx omlx tabbyapi mistralrs sglang lmdeploy aphrodite ktransformers unsloth-studio"
 }
 
 launch_supported_host_tools() {
@@ -2887,7 +3039,7 @@ launch_workflow_services() {
     fi
 
     case "$1" in
-    quickhop | deephop)
+    quickhop | deephop | codemode)
         echo "searxng"
         ;;
     esac
@@ -3470,7 +3622,7 @@ launch_warn_codex_backend_compat() {
     local backend="$1"
 
     case "$backend" in
-    llamacpp | ikllamacpp)
+    llamacpp | ikllamacpp | prismml)
         log_info "Codex CLI uses the Responses API tool schema; llama.cpp-family backends may reject its tool payloads with: 400 'type' of tool must be 'function'."
         log_info "If Codex fails here, use OpenCode with this backend for prompt smoke tests, or use Codex with a backend that accepts Codex's Responses API tool schema."
         ;;
@@ -3486,6 +3638,7 @@ launch_host_tool_command() {
     local models=""
     local config_only=false
     local launch_workflow=""
+    local launch_codemode=false
     local boost_tool_groups=()
     local boost_tools=()
     local boost_services=()
@@ -3536,6 +3689,10 @@ launch_host_tool_command() {
             launch_append_unique boost_tool_groups "web"
             shift
             ;;
+        --codemode)
+            launch_codemode=true
+            shift
+            ;;
         --workflow)
             if launch_option_value_missing "${2-}"; then
                 log_error "Usage: harbor launch $tool --workflow <preset>"
@@ -3563,6 +3720,14 @@ launch_host_tool_command() {
             ;;
         esac
     done
+
+    if $launch_codemode; then
+        if [ -n "$launch_workflow" ] && [ "$launch_workflow" != "codemode" ]; then
+            log_error "harbor launch does not support --codemode and --workflow together."
+            return 1
+        fi
+        launch_workflow="codemode"
+    fi
 
     if [ ${#boost_tool_groups[@]} -gt 0 ] && [ -n "$launch_workflow" ]; then
         log_error "harbor launch does not support --web and --workflow together."
@@ -3809,7 +3974,7 @@ run_launch_command() {
         echo "When an inference backend is already running, backend-specific compose"
         echo "overlays are included the same way they are for direct service CLI commands."
         echo "Host tool adapters accept launch options before the tool name: --backend,"
-        echo "--model, --config, --web, and --workflow."
+        echo "--model, --config, --web, --codemode, and --workflow."
         echo "Every argument after the tool name is passed to the launched tool unchanged."
         echo "--web starts Boost with web_search and read_url tools, starts SearXNG,"
         echo "and routes the tool to a generated boost-web-... workflow model."
@@ -3817,6 +3982,8 @@ run_launch_command() {
         echo "starts SearXNG when web research is required, and routes the tool to"
         echo "a prefixed model such as quickhop-qwen3.5:4b or autocheck-qwen3.5:4b."
         echo "No built-in workflow presets ship by default."
+        echo "--codemode is sugar for --workflow codemode: the model gets a single"
+        echo "execute_code tool and calls every other Boost tool from Python."
         echo "If no backend is running, host tool adapters start llamacpp by default."
         echo "Use --service before the handle to bypass host tool adapters for name-colliding services."
         echo
@@ -3828,6 +3995,7 @@ run_launch_command() {
         echo
         echo "Examples:"
         echo "  harbor launch --web --backend ollama --model qwen3.5:4b codex"
+        echo "  harbor launch --codemode --backend ollama --model qwen3.5:4b codex"
         echo "  harbor launch --workflow quickhop --backend ollama --model qwen3.5:4b codex"
         echo "  harbor launch --workflow autocheck --backend ollama --model qwen3.5:4b codex"
         echo "  harbor launch --backend ollama --model qwen3.5:4b codex"
@@ -3865,7 +4033,7 @@ run_launch_command() {
             launch_options+=("$1")
             shift
             ;;
-        --config | --web)
+        --config | --web | --codemode)
             launch_options+=("$1")
             shift
             ;;
@@ -4096,6 +4264,104 @@ run_hf_open() {
     sys_open "$hf_url"
 }
 
+_wrapper_is_owned() {
+    local target="$1"
+    [ -L "$target" ] || return 1
+    case "$(readlink "$target")" in
+        "$harbor_home/shared/harbor-command-wrapper.sh" | */shared/harbor-command-wrapper.sh) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+_wrapper_link() {
+    local name="$1" target_dir="$2"
+    local source="$harbor_home/shared/harbor-command-wrapper.sh"
+    local target="$target_dir/$name"
+    local existing_command
+
+    if [ ! -f "$source" ]; then
+        log_error "Command wrapper source is missing: $source"
+        return 1
+    fi
+    existing_command=$(command -v "$name" 2>/dev/null || true)
+    if [ -n "$existing_command" ] && [ "$existing_command" != "$target" ]; then
+        log_error "Refusing to shadow existing command: $name ($existing_command)"
+        return 1
+    fi
+    if [ -e "$target" ] || [ -L "$target" ]; then
+        if ! _wrapper_is_owned "$target"; then
+            log_error "Refusing to replace existing command: $target"
+            return 1
+        fi
+    fi
+    mkdir -p "$target_dir" || return 1
+    ln -sfn "$source" "$target"
+    log_info "Command wrapper: $target -> $source"
+}
+
+run_wrappers_command() {
+    local action="${1:-list}" name="${2:-}"
+    local registered target_dir target new_registered item failed=false
+    registered=$(env_manager --silent get cli.wrappers)
+    target_dir=$(env_manager --silent get cli.path)
+    target_dir="${target_dir/#\~/$HOME}"
+
+    case "$action" in
+        list | ls)
+            printf '%s\n' "$registered" | tr ';' '\n' | sed '/^$/d'
+            ;;
+        add)
+            if [[ ! "$name" =~ ^[a-z][a-z0-9_-]*$ ]]; then
+                log_error "Usage: harbor wrappers add <command>"
+                return 1
+            fi
+            if [ "$name" = "$(env_manager --silent get cli.name)" ] ||
+                [ "$name" = "$(env_manager --silent get cli.short)" ]; then
+                log_error "A command wrapper cannot replace the Harbor CLI link: $name"
+                return 1
+            fi
+            _wrapper_link "$name" "$target_dir" || return 1
+            case ";$registered;" in
+                *";$name;"*) ;;
+                *)
+                    if [ -n "$registered" ]; then registered="$registered;$name"; else registered="$name"; fi
+                    env_manager --silent set cli.wrappers "$registered"
+                    ;;
+            esac
+            ;;
+        rm | remove)
+            if [[ ! "$name" =~ ^[a-z][a-z0-9_-]*$ ]]; then
+                log_error "Usage: harbor wrappers rm <command>"
+                return 1
+            fi
+            target="$target_dir/$name"
+            if _wrapper_is_owned "$target"; then
+                rm "$target" || return 1
+                log_info "Removed command wrapper: $target"
+            fi
+            new_registered=""
+            while IFS= read -r item; do
+                [ -n "$item" ] && [ "$item" != "$name" ] || continue
+                if [ -n "$new_registered" ]; then new_registered="$new_registered;$item"; else new_registered="$item"; fi
+            done < <(printf '%s\n' "$registered" | tr ';' '\n')
+            env_manager --silent set cli.wrappers "$new_registered"
+            ;;
+        sync)
+            while IFS= read -r item; do
+                [ -n "$item" ] || continue
+                if [[ ! "$item" =~ ^[a-z][a-z0-9_-]*$ ]] || ! _wrapper_link "$item" "$target_dir"; then
+                    failed=true
+                fi
+            done < <(printf '%s\n' "$registered" | tr ';' '\n')
+            ! $failed
+            ;;
+        *)
+            log_error "Usage: harbor wrappers [list|add <command>|rm <command>|sync]"
+            return 1
+            ;;
+    esac
+}
+
 link_cli() {
     local target_dir
     target_dir=$(env_manager get cli.path)
@@ -4272,6 +4538,7 @@ link_cli() {
 
     # Install tab completion scripts for the user's shell
     _install_completions
+    run_wrappers_command sync || log_warn "Some command wrappers could not be refreshed."
 
     local reload_hint=""
     if [[ -n "$shell_profile" ]]; then
@@ -4387,7 +4654,9 @@ _harbor_completions() {
     }
 
     # Top-level subcommands
-    local commands="up u start s down d restart r ps build shell logs log l pull exec run stats attach cmd help hf defaults alias aliases a link ln unlink unln launch open o url qr list ls version smi top dive eject config profile profiles p gum fixfs info update how find home vscode doctor bench history h size env dev tools eval routine volumes skills completion models tokscale tunnel t tunnels migrate modularmax ollama llamacpp ikllamacpp tgi litellm vllm dmr mlx omlx aphrodite openai opencode facts mi npcsh webui tabbyapi parllama oterm plandex pdx mistralrs interpreter opint cfd cloudflared cmdh fabric parler photoprism airllm txtai aider nanobot chatui comfyui aichat omnichain lmeval lm_eval sglang jupyter ol1 ktransformers openhands oh stt speaches boost nexa repopack k6 promptfoo pf webtop langflow kobold morphic gptme hermes mcp openfang"
+    local commands="up u start s down d restart r ps build shell logs log l pull exec run stats attach cmd help hf defaults alias aliases a link ln unlink unln launch open o url qr list ls version smi top dive eject config profile profiles p gum fixfs info update how find home vscode doctor bench history h size env dev tools eval routine volumes skills completion models tokscale tunnel t tunnels migrate modularmax ollama llamacpp ikllamacpp prismml tgi litellm vllm dmr mlx omlx aphrodite openai opencode facts mi npcsh webui tabbyapi parllama oterm plandex pdx mistralrs interpreter opint cfd cloudflared cmdh fabric parler photoprism airllm txtai aider nanobot chatui comfyui aichat omnichain lmeval lm_eval sglang jupyter ol1 ktransformers openhands oh stt speaches boost nexa repopack k6 promptfoo pf webtop langflow kobold morphic gptme hermes mcp openfang"
+
+    commands="$commands wrappers"
 
     # Commands that accept service names as arguments
     local service_commands="up u start s down d logs log l build shell pull exec run stats attach cmd eject open o url qr launch dive env"
@@ -4634,6 +4903,7 @@ _harbor() {
         'ln:Link CLI to PATH'
         'unlink:Remove CLI from PATH'
         'unln:Remove CLI from PATH'
+        'wrappers:Manage command wrappers'
         'launch:Launch service CLI'
         'open:Open service in browser'
         'o:Open service in browser'
@@ -4678,6 +4948,7 @@ _harbor() {
         'ollama:Ollama CLI'
         'llamacpp:Configure llamacpp'
         'ikllamacpp:Configure ik_llama.cpp'
+        'prismml:Configure PrismML llama.cpp'
         'tgi:Configure TGI'
         'litellm:Configure LiteLLM'
         'vllm:Configure VLLM'
@@ -5084,6 +5355,7 @@ complete -c harbor -n __harbor_no_subcommand -a link -d 'Link CLI to PATH'
 complete -c harbor -n __harbor_no_subcommand -a ln -d 'Link CLI to PATH'
 complete -c harbor -n __harbor_no_subcommand -a unlink -d 'Remove CLI from PATH'
 complete -c harbor -n __harbor_no_subcommand -a unln -d 'Remove CLI from PATH'
+complete -c harbor -n __harbor_no_subcommand -a wrappers -d 'Manage command wrappers'
 complete -c harbor -n __harbor_no_subcommand -a launch -d 'Launch service CLI'
 complete -c harbor -n __harbor_no_subcommand -a open -d 'Open service in browser'
 complete -c harbor -n __harbor_no_subcommand -a o -d 'Open service in browser'
@@ -5129,6 +5401,7 @@ complete -c harbor -n __harbor_no_subcommand -a migrate -d 'Run migration'
 complete -c harbor -n __harbor_no_subcommand -a ollama -d 'Ollama CLI'
 complete -c harbor -n __harbor_no_subcommand -a llamacpp -d 'Configure llamacpp'
 complete -c harbor -n __harbor_no_subcommand -a ikllamacpp -d 'Configure ik_llama.cpp'
+complete -c harbor -n __harbor_no_subcommand -a prismml -d 'Configure PrismML llama.cpp'
 complete -c harbor -n __harbor_no_subcommand -a tgi -d 'Configure TGI'
 complete -c harbor -n __harbor_no_subcommand -a litellm -d 'Configure LiteLLM'
 complete -c harbor -n __harbor_no_subcommand -a vllm -d 'Configure VLLM'
@@ -6016,6 +6289,81 @@ set_colors() {
     nok="${c_r}✘${c_nc}"
 }
 
+# Default configuration is assembled from profiles/default.env plus a
+# per-service services/<name>/default.env holding that service's
+# HARBOR_<NAME>_* keys. Prints one path per line, profile first, services
+# sorted (glob order).
+collect_default_env_files() {
+    printf '%s\n' "$default_profile"
+    local svc_default
+    for svc_default in "$harbor_home"/services/*/default.env; do
+        [ -f "$svc_default" ] && printf '%s\n' "$svc_default"
+    done
+    return 0
+}
+
+# Concatenate every default env source into $1, guaranteeing a newline
+# between files so a source without a trailing newline cannot glue its last
+# key onto the next file's first line.
+# Assembly is done in a private temp file next to the target and renamed into
+# place, so several harbor processes repairing the same .env at once cannot
+# append into each other's partial output (which left .env with every key
+# duplicated once per racing process).
+build_default_env_file() {
+    local out_file=$1
+    local src
+    local out_dir
+    local tmp_out
+
+    out_dir=$(dirname "$out_file")
+    tmp_out=$(mktemp "$out_dir/.harbor-defaults.XXXXXX") || return 1
+
+    while IFS= read -r src; do
+        cat "$src" >>"$tmp_out" || {
+            rm -f "$tmp_out" 2>/dev/null
+            return 1
+        }
+        if [ -s "$tmp_out" ] && [ -n "$(tail -c1 "$tmp_out")" ]; then
+            printf '\n' >>"$tmp_out"
+        fi
+    done < <(collect_default_env_files)
+
+    chmod 600 "$tmp_out" 2>/dev/null || true
+
+    mv -f "$tmp_out" "$out_file" || {
+        rm -f "$tmp_out" 2>/dev/null
+        return 1
+    }
+}
+
+# merge_env_files against the combined defaults (profile + per-service files).
+merge_default_env_files() {
+    local target_file=${1:-.env}
+    local combined
+
+    if [ ! -f "$default_profile" ]; then
+        log_error "Default profile not found: $default_profile"
+        log_error "Your Harbor installation may be corrupted. Try reinstalling with: curl -sS https://get.harbor.sh | bash"
+        return 1
+    fi
+
+    combined=$(mktemp -t harbor.XXXXXX) || {
+        log_error "Failed to create temporary file for config merge."
+        return 1
+    }
+
+    if ! build_default_env_file "$combined"; then
+        rm -f "$combined" 2>/dev/null
+        log_error "Failed to assemble default configuration."
+        return 1
+    fi
+
+    local merge_rc=0
+    merge_env_files "$combined" "$target_file" "default configuration" || merge_rc=$?
+    rm -f "$combined" 2>/dev/null
+    return $merge_rc
+}
+
 ensure_env_file() {
     local src_file=$default_profile
     local tgt_file=".env"
@@ -6033,7 +6381,7 @@ ensure_env_file() {
             return 1
         fi
         echo "Creating .env file..."
-        if ! cp "$src_file" "$tgt_file"; then
+        if ! build_default_env_file "$tgt_file"; then
             log_error "Failed to create .env file from $src_file"
             return 1
         fi
@@ -6054,6 +6402,9 @@ reset_env_file() {
 merge_env_files() {
     local default_file=$1
     local target_file=$2
+    # Optional display name for logs — callers merging a temporary combined
+    # defaults file pass a human-readable label instead of the temp path.
+    local source_label=${3:-}
 
     if [ -z "$default_file" ]; then
         default_file=$default_profile
@@ -6061,6 +6412,10 @@ merge_env_files() {
 
     if [ -z "$target_file" ]; then
         target_file=".env"
+    fi
+
+    if [ -z "$source_label" ]; then
+        source_label=$default_file
     fi
 
     if [[ ! -f "$default_file" ]]; then
@@ -6072,17 +6427,23 @@ merge_env_files() {
     # Check if both files exist
     if [[ ! -f "$target_file" ]]; then
         cp "$default_file" "$target_file"
-        echo "Copied $default_file to $target_file"
+        echo "Copied $source_label to $target_file"
         return
     fi
 
-    # Create a temporary file; clean up on error or interrupt
+    # Create a temporary file next to the target so the final mv is an atomic
+    # same-filesystem rename; clean up on error or interrupt
     local temp_file
-    temp_file=$(mktemp -t harbor.XXXXXX) || {
+    temp_file=$(mktemp "$(dirname "$target_file")/.harbor-merge.XXXXXX") || {
         log_error "Failed to create temporary file for config merge."
         return 1
     }
     trap 'rm -f "$temp_file" 2>/dev/null' RETURN
+
+    # Keys already written to the merged output — a key may appear more than
+    # once across the combined default sources (profile + per-service files)
+    # or in a target left duplicated by an older Harbor; first occurrence wins.
+    local seen_keys=$'\n'
 
     # Variable to track empty lines
     local empty_lines=0
@@ -6115,6 +6476,11 @@ merge_env_files() {
             repeat_count=0
             if [[ "$line" =~ ^[[:alnum:]_]+=.* ]]; then
                 var_name="${line%%=*}"
+                if [[ "$seen_keys" == *$'\n'"$var_name"$'\n'* ]]; then
+                    prev_line="$line"
+                    continue
+                fi
+                seen_keys="${seen_keys}${var_name}"$'\n'
                 if grep -q "^${var_name}=" "$target_file"; then
                     # If the variable exists in target, use that value
                     # Use head -1 to avoid duplicating keys if target has multiple entries
@@ -6135,7 +6501,11 @@ merge_env_files() {
     while IFS= read -r line || [[ -n "$line" ]]; do
         if [[ "$line" =~ ^[[:alnum:]_]+=.* ]]; then
             var_name="${line%%=*}"
+            if [[ "$seen_keys" == *$'\n'"$var_name"$'\n'* ]]; then
+                continue
+            fi
             if ! grep -q "^${var_name}=" "$default_file"; then
+                seen_keys="${seen_keys}${var_name}"$'\n'
                 if ! $added_custom; then
                     echo "" >> "$temp_file"
                     echo "# Custom Variables" >> "$temp_file"
@@ -6166,7 +6536,7 @@ merge_env_files() {
     # Clear the RETURN trap since temp_file has been moved (no longer exists)
     trap - RETURN
 
-    log_info "Merged content from $default_file into $target_file, preserving order and structure"
+    log_info "Merged content from $source_label into $target_file, preserving order and structure"
 }
 
 execute_and_process() {
@@ -6307,7 +6677,7 @@ suggest_command() {
         up u start s down d restart r ps build shell logs log l pull exec run
         stats attach cmd help --help -h hf defaults alias aliases a link ln
         unlink unln launch open o url qr list ls version --version -v smi top dive eject
-        ollama llamacpp ikllamacpp tgi litellm vllm dmr mlx omlx aphrodite openai
+        ollama llamacpp ikllamacpp prismml tgi litellm vllm dmr mlx omlx aphrodite openai
         opencode facts mi npcsh webui tabbyapi parllama oterm plandex pdx mistralrs
         interpreter opint cfd cloudflared cmdh fabric parler photoprism airllm txtai
         aider nanobot chatui comfyui aichat omnichain lmeval lm_eval sglang
@@ -6651,7 +7021,7 @@ env_manager() {
         ;;
     update)
         shift
-        merge_env_files
+        merge_default_env_files
         ;;
     search | find)
         if command -v deno &>/dev/null || _check_docker 2>/dev/null; then
@@ -7696,7 +8066,7 @@ harbor_profile_merge() {
         log_error "Failed to merge current config into profile."
         return 1
     fi
-    if ! merge_env_files "$default_profile" "$tmp_env_merge"; then
+    if ! merge_default_env_files "$tmp_env_merge"; then
         rm -f "$tmp_env_merge" 2>/dev/null
         log_error "Failed to merge default profile."
         return 1
@@ -8371,7 +8741,7 @@ update_harbor() {
     fi
 
     log_info "Merging .env files..."
-    if ! merge_env_files; then
+    if ! merge_default_env_files; then
         log_warn "Config merge encountered issues. Your .env may need manual review."
         log_warn "Run 'harbor config update' to retry, or compare with profiles/default.env"
         if [ -n "$old_version" ]; then
@@ -8387,6 +8757,8 @@ update_harbor() {
             log_warn "To roll back: cd $harbor_home && git checkout tags/v$old_version"
         fi
     fi
+
+    run_wrappers_command sync || log_warn "Some command wrappers could not be refreshed."
 
     # Read the new version from the updated script on disk
     local new_version
@@ -9148,6 +9520,105 @@ run_ikllamacpp_command() {
     esac
 }
 
+run_prismml_command() {
+    update_model_spec() {
+        local spec=""
+        local current_model
+        local current_gguf
+        current_model=$(env_manager get prismml.model)
+        current_gguf=$(env_manager get prismml.gguf)
+
+        if [ -n "$current_model" ]; then
+            # Accepts both HF blob URLs and repo[:quant] specs
+            spec=$(llamacpp_pull_model_args "$current_model") || return 1
+        elif [ -n "$current_gguf" ]; then
+            spec="-m $current_gguf"
+        fi
+
+        env_manager set prismml.model.specifier "$spec"
+    }
+
+    case "$1" in
+    models|ls)
+        shift
+        local base_url
+        base_url=$(get_url prismml)
+        curl -s "${base_url}/v1/models" | jq -r '.data[].id'
+        ;;
+    model)
+        shift
+        env_manager_alias prismml.model --on-set update_model_spec "$@"
+        ;;
+    gguf)
+        shift
+        env_manager_alias prismml.gguf --on-set update_model_spec "$@"
+        ;;
+    args)
+        shift
+        env_manager_alias prismml.extra.args "$@"
+        ;;
+    version)
+        shift
+        env_manager_alias prismml.version "$@"
+        ;;
+    build)
+        shift
+        case "$1" in
+        on)
+            local current_caps
+            current_caps=$(env_manager get capabilities.default)
+            if [[ ! ";${current_caps};" =~ ";build;" ]]; then
+                if [ -z "$current_caps" ]; then
+                    env_manager set capabilities.default "build"
+                else
+                    env_manager set capabilities.default "${current_caps};build"
+                fi
+            fi
+            log_info "Build from source enabled for prismml"
+            log_info "Run 'harbor build prismml' to build, then 'harbor up prismml'"
+            ;;
+        off)
+            local current_caps
+            local new_caps
+            current_caps=$(env_manager get capabilities.default)
+            new_caps=$(echo "$current_caps" | sed 's/;*build//g; s/^;//; s/;$//')
+            env_manager set capabilities.default "$new_caps"
+            log_info "Build from source disabled for prismml"
+            ;;
+        ref)
+            shift
+            env_manager_alias prismml.build.ref "$@"
+            ;;
+        *)
+            echo "Usage: harbor prismml build <command>"
+            echo
+            echo "Commands:"
+            echo "  on              - Build the PrismML fork from source instead of using release binaries"
+            echo "  off             - Use PrismML release binaries (default)"
+            echo "  ref [git ref]   - Get or set git ref to build (branch/tag/commit)"
+            ;;
+        esac
+        ;;
+    -h | --help | help)
+        echo "Please note that this is not llama.cpp CLI, but a Harbor CLI to manage the prismml service."
+        echo "Access llama.cpp own CLI by running 'harbor exec prismml' when it's running."
+        echo
+        echo "Usage: harbor prismml <command>"
+        echo
+        echo "Commands:"
+        echo "  harbor prismml models                          - List models served by PrismML llama.cpp"
+        echo "  harbor prismml model [HF repo:quant or URL]    - Get or set the model to run"
+        echo "  harbor prismml gguf [gguf path]                - Get or set the path to GGUF to run"
+        echo "  harbor prismml args [args]                     - Get or set extra args to pass to the server"
+        echo "  harbor prismml version [release tag]           - Get or set the PrismML release tag to run"
+        echo "  harbor prismml build on|off|ref                - Manage building from source"
+        ;;
+    *)
+        return 1
+        ;;
+    esac
+}
+
 run_tgi_command() {
     update_model_spec() {
         local spec=""
@@ -9323,7 +9794,7 @@ show_models_help() {
     echo "  rm [--source SOURCE] <model>   Remove a model"
     echo "  <source> <command> ...         Alias for --source SOURCE"
     echo ""
-    echo "Sources: ollama, hf, llamacpp, dmr, mlx, omlx"
+    echo "Sources: ollama, hf, llamacpp, prismml, dmr, mlx, omlx"
     echo ""
     echo "Examples:"
     echo "  harbor models ls"
@@ -9790,11 +10261,15 @@ run_models_pull() {
         run_llamacpp_pull "$model"
         return
         ;;
+    prismml)
+        run_llamacpp_pull "$model" prismml
+        return
+        ;;
     "")
         ;;
     *)
         log_error "Unknown model source: $source"
-        log_error "Valid sources: ollama, hf, llamacpp, dmr, mlx, omlx"
+        log_error "Valid sources: ollama, hf, llamacpp, prismml, dmr, mlx, omlx"
         return 1
         ;;
     esac
@@ -9854,7 +10329,7 @@ run_models_pull() {
 
 models_extract_source_subcommand() {
     case "$1" in
-    ollama | hf | llamacpp | dmr | mlx | omlx)
+    ollama | hf | llamacpp | prismml | dmr | mlx | omlx)
         echo "$1"
         return 0
         ;;
@@ -12119,7 +12594,7 @@ run_modularmax_command() {
 # ========================================================================
 
 # Globals
-version="0.5.6"
+version="0.5.14"
 harbor_release_url="https://api.github.com/repos/av/harbor/releases/latest"
 delimiter="|"
 scramble_exit_code=42
@@ -12253,6 +12728,8 @@ default_history_file=$(env_manager get history.file)
 default_history_size=$(env_manager get history.size)
 default_legacy_cli=${HARBOR_LEGACY_CLI:-$(env_manager get legacy.cli)}
 default_routine_runtime=$(env_manager get routine.runtime)
+default_routine_ca_cert=$(env_manager get routine.ca.cert)
+default_routine_network=$(env_manager get routine.network)
 
 run_volumes_command() {
     case "$1" in
@@ -12592,6 +13069,10 @@ main_entrypoint() {
         shift
         link_cli "$@"
         ;;
+    wrappers)
+        shift
+        run_wrappers_command "$@"
+        ;;
     unlink | unln)
         shift
         unlink_cli "$@"
@@ -12647,6 +13128,10 @@ main_entrypoint() {
     ikllamacpp)
         shift
         run_ikllamacpp_command "$@"
+        ;;
+    prismml)
+        shift
+        run_prismml_command "$@"
         ;;
     tgi)
         shift

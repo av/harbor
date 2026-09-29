@@ -67,7 +67,7 @@ Boost comes with [a lot of built-in modules](../docs/5.2.3-Harbor-Boost-Modules)
 |-|-|-|
 | ![](../docs/boost-dot.png) | ![](../docs/boost-klmbr.png) | ![](../docs/boost-r0.png) |
 
-Recent additions include web research flows — [`quickhop`](../docs/5.2.3-Harbor-Boost-Modules#quickhop) (single-hop search + read) and [`deephop`](../docs/5.2.3-Harbor-Boost-Modules#deephop) (two-hop deep research) — and style modules [`caveman`](../docs/5.2.3-Harbor-Boost-Modules#caveman) (terse output, `HARBOR_BOOST_CAVEMAN_LEVEL`) and [`ponytail`](../docs/5.2.3-Harbor-Boost-Modules#ponytail) (YAGNI build discipline, `HARBOR_BOOST_PONYTAIL_LEVEL`). Research budgets and triggers are configurable via `HARBOR_BOOST_QUICKHOP_*` / `HARBOR_BOOST_DEEPHOP_*` — see the [modules reference](../docs/5.2.3-Harbor-Boost-Modules) for details.
+Recent additions include web research flows — [`quickhop`](../docs/5.2.3-Harbor-Boost-Modules#quickhop) (single-hop search + read) and [`deephop`](../docs/5.2.3-Harbor-Boost-Modules#deephop) (two-hop deep research) — and style modules [`caveman`](../docs/5.2.3-Harbor-Boost-Modules#caveman) (terse output, `HARBOR_BOOST_CAVEMAN_LEVEL`) and [`ponytail`](../docs/5.2.3-Harbor-Boost-Modules#ponytail) (YAGNI build discipline, `HARBOR_BOOST_PONYTAIL_LEVEL`). Research budgets and triggers are configurable via `HARBOR_BOOST_QUICKHOP_*` / `HARBOR_BOOST_DEEPHOP_*` — see the [modules reference](../docs/5.2.3-Harbor-Boost-Modules) for details. [`codemode`](../docs/5.2.3-Harbor-Boost-Modules#codemode) hides every local tool behind a single `execute_code` tool and lets the model call them as Python functions, bounded by `HARBOR_BOOST_CODEMODE_TIMEOUT` / `_MAX_OUTPUT` / `_MAX_CALLS`.
 
 #### Workflows and agents
 

@@ -1,0 +1,8 @@
+clients:
+  - type: openai-compatible
+    name: prismml
+    api_base: http://prismml:8080/v1
+    api_key: sk-prismml
+    models:
+      - name: ${HARBOR_AICHAT_MODEL}
+

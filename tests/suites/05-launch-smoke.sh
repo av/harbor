@@ -51,6 +51,13 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# Test the harbor.sh under test, not whatever `harbor` happens to be installed
+# on PATH (a worktree checkout is usually not the globally linked one).
+cat >"$fake_bin/harbor" <<EOF
+#!/usr/bin/env bash
+exec "$HARBOR_TEST_REPO/harbor.sh" "\$@"
+EOF
+
 cat >"$fake_bin/docker" <<'EOF'
 #!/usr/bin/env bash
 if [ -n "${HARBOR_FAKE_DOCKER_LOG:-}" ]; then
@@ -317,7 +324,7 @@ cat >"$fake_bin/code" <<'EOF'
 } >>"$HARBOR_LAUNCH_TOOL_LOG"
 EOF
 
-chmod +x "$fake_bin/docker" "$fake_bin/curl" "$fake_bin/codex" "$fake_bin/copilot" "$fake_bin/claude" "$fake_bin/droid" "$fake_bin/grok" "$fake_bin/hermes" "$fake_bin/mi" "$fake_bin/openclaw" "$fake_bin/opencode" "$fake_bin/pi" "$fake_bin/pool" "$fake_bin/code"
+chmod +x "$fake_bin/harbor" "$fake_bin/docker" "$fake_bin/curl" "$fake_bin/codex" "$fake_bin/copilot" "$fake_bin/claude" "$fake_bin/droid" "$fake_bin/grok" "$fake_bin/hermes" "$fake_bin/mi" "$fake_bin/openclaw" "$fake_bin/opencode" "$fake_bin/pi" "$fake_bin/pool" "$fake_bin/code"
 
 run_launch() {
   local name="$1"
@@ -580,6 +587,33 @@ assert_log '^arg=-p$'
 assert_log '^arg=hello$'
 assert_file_not_exists "$grok_config"
 assert_output "Advertising Boost module 'quickhop' for this launch."
+
+run_launch "codemode launch starts SearXNG and routes through codemode module model" \
+  "ollama boost" "openai-mixed" \
+  --codemode --backend ollama codex --sandbox workspace-write
+assert_log '^tool=codex$'
+assert_log '^arg=model_providers\.harbor_launch\.base_url="http://localhost:8004/v1"$'
+assert_log '^arg=-m$'
+assert_log '^arg=codemode-qwen-chat-model$'
+assert_docker_log 'up -d --wait --force-recreate boost searxng$'
+assert_output "Starting Boost workflow 'codemode' for backend 'ollama'"
+assert_output "Advertising Boost module 'codemode' for this launch."
+
+suite_log "--codemode combined with a different --workflow is rejected"
+if env \
+  HARBOR_LEGACY_CLI=true \
+  HARBOR_CAPABILITIES_AUTODETECT=false \
+  HARBOR_HOME="$harbor_home" \
+  HARBOR_FAKE_RUNNING_SERVICES="ollama boost" \
+  HARBOR_FAKE_DOCKER_LOG="$docker_log" \
+  HARBOR_FAKE_DOCKER_STATE="$docker_state" \
+  HARBOR_FAKE_MODELS_SCHEMA="openai-mixed" \
+  PATH="$fake_bin:$PATH" \
+  harbor launch --codemode --workflow quickhop --backend ollama --config codex >"$step_out" 2>&1; then
+  cat "$step_out" >&2
+  fail "--codemode with a different --workflow should exit non-zero"
+fi
+assert_output 'does not support --codemode and --workflow together'
 
 suite_log "unsupported workflow name is rejected"
 if env \

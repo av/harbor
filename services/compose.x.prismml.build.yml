@@ -1,0 +1,7 @@
+services:
+  prismml:
+    build:
+      context: https://github.com/PrismML-Eng/llama.cpp.git#${HARBOR_PRISMML_BUILD_REF:-prism}
+      dockerfile: .devops/cpu.Dockerfile
+      target: server
+    image: harbor-prismml:src-${HARBOR_PRISMML_BUILD_REF:-prism}-cpu

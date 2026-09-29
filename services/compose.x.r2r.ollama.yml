@@ -1,0 +1,10 @@
+services:
+  r2r-api:
+    depends_on:
+      ollama:
+        condition: service_started
+      ollama-init:
+        condition: service_healthy
+  ollama-init:
+    environment:
+      HARBOR_OLLAMA_DEFAULT_MODELS: ${HARBOR_OLLAMA_DEFAULT_MODELS},${HARBOR_R2R_CHAT_MODEL},${HARBOR_R2R_EMBEDDING_MODEL}

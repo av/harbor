@@ -1,0 +1,26 @@
+services:
+  qwencode:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.qwencode
+    image: ${HARBOR_QWENCODE_IMAGE}:${HARBOR_QWENCODE_VERSION}
+    entrypoint: ["/bin/sh", "/harbor-entrypoint.sh"]
+    command: ["qwen", "serve", "--hostname", "0.0.0.0", "--port", "4170", "--workspace", "/workspace"]
+    env_file:
+      - ./.env
+      - ./services/qwencode/override.env
+    environment:
+      QWEN_SERVER_TOKEN: ${HARBOR_QWENCODE_SERVER_TOKEN:-}
+    ports:
+      - ${HARBOR_QWENCODE_HOST_PORT}:4170
+    volumes:
+      - ./services/qwencode/entrypoint.sh:/harbor-entrypoint.sh:ro
+      - ${HARBOR_QWENCODE_CONFIG}:/root/.qwen
+      - ${HARBOR_QWENCODE_WORKSPACE}:/workspace
+    working_dir: /workspace
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('net').connect(4170, '127.0.0.1').on('connect', () => process.exit(0)).on('error', () => process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    networks:
+      - harbor-network

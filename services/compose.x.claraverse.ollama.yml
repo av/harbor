@@ -1,0 +1,7 @@
+services:
+  claraverse:
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_BASE_URL: ${HARBOR_OLLAMA_INTERNAL_URL}

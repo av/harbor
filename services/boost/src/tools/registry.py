@@ -46,6 +46,43 @@ def is_local_tool(name: str) -> bool:
   return tool_name in local_tools
 
 
+def get_hidden_tool_names() -> set:
+  """Names of registered tools that are executable but not advertised."""
+  request_var = request.get()
+  if request_var is None:
+    return set()
+
+  local_state = request_var.state
+
+  if not hasattr(local_state, "hidden_local_tools"):
+    local_state.hidden_local_tools = set()
+
+  return local_state.hidden_local_tools
+
+
+def hide_local_tool(name: str) -> None:
+  """Stop advertising a tool while keeping it callable through the tool loop."""
+  get_hidden_tool_names().add(resolve_local_tool_name(name))
+
+
+def unhide_local_tool(name: str) -> None:
+  get_hidden_tool_names().discard(resolve_local_tool_name(name))
+
+
+def is_hidden_local_tool(name: str) -> bool:
+  return resolve_local_tool_name(name) in get_hidden_tool_names()
+
+
+def get_hidden_tools() -> dict:
+  """Registered tools that are currently hidden, keyed by prefixed name."""
+  local_tools = get_local_tools()
+  return {
+    name: tool
+    for name, tool in local_tools.items()
+    if name in get_hidden_tool_names()
+  }
+
+
 async def call_local_tool(name: str, **kwargs):
   """
   Calls a local tool by its name with the provided arguments.
@@ -95,9 +132,13 @@ def collect_tool_defs():
   """
 
   local_tools = get_local_tools()
+  hidden = get_hidden_tool_names()
 
-  return [tool_def_from_fn(tool) for tool in local_tools.values()
-         ] if local_tools else []
+  return [
+    tool_def_from_fn(tool)
+    for name, tool in local_tools.items()
+    if name not in hidden
+  ]
 
 
 def resolve_local_tool_name(name: str) -> str:

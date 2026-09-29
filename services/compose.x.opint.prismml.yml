@@ -1,0 +1,7 @@
+services:
+  opint:
+    entrypoint: >
+      interpreter
+        --api_base http://prismml:8080/v1
+        --api_key sk-prismml
+        ${HARBOR_OPINT_CMD}

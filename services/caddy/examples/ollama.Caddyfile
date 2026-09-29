@@ -1,0 +1,13 @@
+{
+    admin off
+}
+
+:80 {
+    handle /health {
+        respond "ok" 200
+    }
+
+    handle {
+        reverse_proxy ollama:11434
+    }
+}

@@ -4,18 +4,40 @@ services:
       context: ./services/hf
       dockerfile: Dockerfile
     container_name: ${HARBOR_CONTAINER_PREFIX}.hf
+    user: "${HARBOR_USER_ID}:${HARBOR_GROUP_ID}"
+    depends_on:
+      hf-init:
+        condition: service_completed_successfully
+    entrypoint: ["/bin/sh", "/harbor/entrypoint.sh"]
     env_file:
       - ./.env
       - ./services/hf/override.env
     volumes:
-      - ${HARBOR_HF_CACHE:-./services/hf/.hf-cache}:/root/.cache/huggingface
+      - ${HARBOR_HF_CACHE:-./services/hf/.hf-cache}:/cache
+      - ./services/hf/entrypoint.sh:/harbor/entrypoint.sh:ro
       # Mounted outside /etc/ssl/certs — a /dev/null placeholder there breaks
       # hf_xet/reqwest native cert loading (builder error on the empty PEM).
       - ${HARBOR_HF_SSL_CERT_FILE:-/dev/null}:/harbor/custom-ca.pem:ro
     environment:
       - HF_TOKEN=${HARBOR_HF_TOKEN}
-      - TARGET_UID=${HARBOR_USER_ID}
-      - TARGET_GID=${HARBOR_GROUP_ID}
+      - HOME=/tmp
+      - HF_HOME=/cache
       - SSL_CERT_FILE=${HARBOR_HF_SSL_CERT_FILE:+/harbor/custom-ca.pem}
       - REQUESTS_CA_BUNDLE=${HARBOR_HF_SSL_CERT_FILE:+/harbor/custom-ca.pem}
     network_mode: host
+
+  hf-init:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.hf-init
+    image: alpine:3.20
+    env_file:
+      - ./.env
+      - ./services/hf/override.env
+    environment:
+      TARGET_UID: ${HARBOR_USER_ID}
+      TARGET_GID: ${HARBOR_GROUP_ID}
+    entrypoint: ["/bin/sh", "/init.sh"]
+    volumes:
+      - ./services/hf/cache-init.sh:/init.sh:ro
+      - ${HARBOR_HF_CACHE:-./services/hf/.hf-cache}:/cache
+    networks:
+      - harbor-network

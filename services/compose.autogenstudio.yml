@@ -1,0 +1,49 @@
+services:
+  autogenstudio:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.autogenstudio
+    image: ${HARBOR_AUTOGENSTUDIO_IMAGE}:${HARBOR_AUTOGENSTUDIO_VERSION}
+    build:
+      context: ./services/autogenstudio
+      args:
+        AUTOGENSTUDIO_VERSION: ${HARBOR_AUTOGENSTUDIO_VERSION}
+    env_file:
+      - ./.env
+      - ./services/autogenstudio/override.env
+    environment:
+      HOME: /data
+    working_dir: /data
+    user: ${HARBOR_USER_ID}:${HARBOR_GROUP_ID}
+    command: ["autogenstudio", "ui", "--host", "0.0.0.0", "--port", "8080", "--appdir", "/data"]
+    ports:
+      - ${HARBOR_AUTOGENSTUDIO_BIND_ADDRESS}:${HARBOR_AUTOGENSTUDIO_HOST_PORT}:8080
+    volumes:
+      - ${HARBOR_AUTOGENSTUDIO_WORKSPACE}:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/api/version', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+    depends_on:
+      autogenstudio-init:
+        condition: service_completed_successfully
+    networks:
+      - harbor-network
+    labels:
+      - "harbor.service=autogenstudio"
+      - "harbor.port=8080"
+
+  autogenstudio-init:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.autogenstudio-init
+    image: alpine:3.20
+    env_file:
+      - ./.env
+      - ./services/autogenstudio/override.env
+    entrypoint: ["/bin/sh", "/init.sh"]
+    environment:
+      TARGET_UID: ${HARBOR_USER_ID}
+      TARGET_GID: ${HARBOR_GROUP_ID}
+    volumes:
+      - ./services/autogenstudio/workspace-init.sh:/init.sh:ro
+      - ${HARBOR_AUTOGENSTUDIO_WORKSPACE}:/data
+    networks:
+      - harbor-network

@@ -30,13 +30,13 @@ Harbor is a CLI and companion app that lets you spin up a complete local LLM sta
 
 ## News
 
-- **v0.5.6** - Six new services — Text Embeddings Inference, LightRAG, Paperless-ngx, Paperless-GPT, Whishper, and Linkwarden — with Ollama, llama.cpp, Open WebUI, LibreChat, AnythingLLM, and Traefik integrations
-- **v0.5.5** - Workspace files now stay owned by your host user across 20+ services, new Speech-to-Speech (s2s) backend, Dify 1.x and DeerFlow v2 upgrades, and a large repair sweep restoring dozens of services on current upstream images
-- **v0.5.4** - Repairs first-boot and integration failures across 20+ services found by the new runnable integration suite, plus Boost error responses that propagate real backend status codes
-- **v0.5.3** - Boost agentic modules (`quickhop`, `deephop`, `autocheck`, `diffscope`) with `harbor launch --workflow` routing, grok CLI launch support, and faster HF downloads via `hf_transfer`
-- **v0.5.2** - Fixes `.env` corruption when several Harbor commands run at once and stops `harbor doctor` from hanging on non-interactive stdin
-- **v0.5.1** - Faster `harbor doctor` with timeout-guarded compose checks and early exit for `--check` mode
-- **v0.5.0** - DMR, MLX, oMLX, and Daytona services, llamacpp replaces Ollama as default backend, in-app guided install, agent skills CLI, tab completion, and port conflict detection
+- **v0.5.14** - Eight new services (Latitude, AutoGen Studio, LobeHub, R2R, Caddy, RAGFlow, ClaraVerse, Qwen Code), a Dockerized Harbor CLI runner, external Ollama support for Boost and Open WebUI, opt-in CLI command wrappers, and fixes for ROCm detection, Perplexica on LAN, AnythingLLM settings persistence and the Harbor App on dot-prefixed homes
+- **v0.5.13** - `harbor models pull` no longer reports success when a model download actually failed, and the PrismML backend documents its two Bonsai 2 quants with measured speed and accuracy
+- **v0.5.12** - New PrismML llama.cpp backend that runs Ternary Bonsai 2 GGUFs on CPU, NVIDIA, and ROCm with the same model workflow and cross-service integrations as llama.cpp
+- **v0.5.11** - Halogen stays up through long Open WebUI generations with image 0.6.3, a 65536-token chat budget and a 900-second engine watchdog
+- **v0.5.10** - n8n first-time setup includes the Assistant code sandbox so new instances can finish the GUI wizard
+- **v0.5.9** - Hugging Face downloads run as your host user and recover root-owned caches automatically after upgrading
+- **v0.5.8** - New Halogen Flash Server backend for AMD Strix Halo and a fix for Hugging Face downloads failing on root-owned cache directories
 
 ## Documentation
 
@@ -268,7 +268,7 @@ harbor eject searxng llamacpp > docker-compose.harbor.yml
 [Parllama](https://github.com/av/harbor/wiki/2.1.7-Frontend:-parllama) ⦁︎ [SillyTavern](https://github.com/av/harbor/wiki/2.1.15-Frontend-SillyTavern) ⦁︎ [Voicebox](https://github.com/av/harbor/wiki/2.1.16-Frontend-Voicebox)
 
 ##### Backends
-[AirLLM](https://github.com/av/harbor/wiki/2.2.11-Backend:-AirLLM) ⦁︎ [Aphrodite](https://github.com/av/harbor/wiki/2.2.5-Backend:-Aphrodite-Engine) ⦁︎ [faster-whisper-server](https://github.com/av/harbor/wiki/2.2.14-Backend:-Speaches) ⦁︎ [ik_llama.cpp](https://github.com/av/harbor/wiki/2.2.21-Backend-ik_llama.cpp)
+[AirLLM](https://github.com/av/harbor/wiki/2.2.11-Backend:-AirLLM) ⦁︎ [Aphrodite](https://github.com/av/harbor/wiki/2.2.5-Backend:-Aphrodite-Engine) ⦁︎ [Chandra](https://github.com/av/harbor/wiki/2.2.27-Backend-Chandra) ⦁︎ [faster-whisper-server](https://github.com/av/harbor/wiki/2.2.14-Backend:-Speaches) ⦁︎ [ik_llama.cpp](https://github.com/av/harbor/wiki/2.2.21-Backend-ik_llama.cpp) ⦁︎ [PrismML llama.cpp](https://github.com/av/harbor/wiki/2.2.29-Backend-PrismML-llama.cpp)
 [KoboldCpp](https://github.com/av/harbor/wiki/2.2.16-Backend:-KoboldCpp) ⦁︎ [KTransformers](https://github.com/av/harbor/wiki/2.2.13-Backend:-KTransformers) ⦁︎ [Lemonade](https://github.com/av/harbor/wiki/2.2.19-Backend-Lemonade) ⦁︎ [llama.cpp](https://github.com/av/harbor/wiki/2.2.2-Backend:-llama.cpp)
 [llmman](https://github.com/av/harbor/wiki/2.2.27-Backend-llmman) ⦁︎ [lmdeploy](https://github.com/av/harbor/wiki/2.2.10-Backend:-lmdeploy) ⦁︎ [mistral.rs](https://github.com/av/harbor/wiki/2.2.6-Backend:-mistral.rs) ⦁︎ [Modular MAX](https://github.com/av/harbor/wiki/2.2.17-Backend-Modular-MAX) ⦁︎ [Needle](https://github.com/av/harbor/wiki/2.2.20-Backend-Needle)
 [Nexa SDK](https://github.com/av/harbor/wiki/2.2.15-Backend:-Nexa-SDK) ⦁︎ [Ollama](https://github.com/av/harbor/wiki/2.2.1-Backend:-Ollama) ⦁︎ [openedai-speech](https://github.com/av/harbor/wiki/2.2.7-Backend:-openedai-speech) ⦁︎ [Parler](https://github.com/av/harbor/wiki/2.2.8-Backend:-Parler)

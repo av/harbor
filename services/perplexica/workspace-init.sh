@@ -7,3 +7,4 @@ set -e
 mkdir -p /workspace
 chown -R "${TARGET_UID:-1000}:${TARGET_GID:-1000}" /workspace
 chmod -R 0775 /workspace
+chown -R "${TARGET_UID:-1000}:${TARGET_GID:-1000}" /cache

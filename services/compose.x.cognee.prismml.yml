@@ -1,0 +1,9 @@
+services:
+  cognee:
+    depends_on:
+      - prismml
+    environment:
+      - LLM_PROVIDER=openai
+      - LLM_API_KEY=sk-prismml
+      - LLM_MODEL=${HARBOR_PRISMML_MODEL}
+      - LLM_ENDPOINT=http://prismml:8080/v1

@@ -1,0 +1,15 @@
+services:
+  lobehub:
+    depends_on:
+      ollama:
+        condition: service_started
+      ollama-init:
+        condition: service_healthy
+    environment:
+      ENABLED_OLLAMA: "1"
+      OLLAMA_PROXY_URL: ${HARBOR_OLLAMA_INTERNAL_URL}
+      OLLAMA_MODEL_LIST: ${HARBOR_LOBEHUB_CHAT_MODEL}
+      DEFAULT_FILES_CONFIG: embedding_model=ollama/${HARBOR_LOBEHUB_EMBEDDING_MODEL}
+  ollama-init:
+    environment:
+      HARBOR_OLLAMA_DEFAULT_MODELS: ${HARBOR_OLLAMA_DEFAULT_MODELS},${HARBOR_LOBEHUB_EMBEDDING_MODEL},${HARBOR_LOBEHUB_CHAT_MODEL}

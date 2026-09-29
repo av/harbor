@@ -14,7 +14,6 @@ RUN sudo apt-get update \
   wmctrl \
   libreoffice \
   fonts-noto-cjk \
-  neofetch \
   python3-pip \
   python3-requests \
   python3-numpy \
@@ -25,7 +24,8 @@ RUN sudo apt-get update \
   python3-reportlab \
   && rm -rf /var/lib/apt/lists/*
 
-RUN curl -L https://npmjs.org/install.sh | sh
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | sudo bash - \
+  && sudo apt-get install -y nodejs
 RUN npm install -g --unsafe-perm yarn
 RUN sudo chown -R abc:abc /usr/lib/node_modules
 

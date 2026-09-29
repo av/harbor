@@ -120,9 +120,15 @@ services:
 
 ## Step 4: Environment Variables
 
-Add a section to `profiles/default.env` for the service.
+Create `services/${handle}/default.env` holding the service's `HARBOR_${HANDLE}_*`
+defaults. Harbor loads it alongside `profiles/default.env` — same syntax, same
+precedence — so new services keep their defaults next to their compose file
+instead of appending to the shared profile. Only truly global keys
+(`HARBOR_SERVICES_DEFAULT`, `HARBOR_LOG_LEVEL`, ...) belong in
+`profiles/default.env`.
 
-**Port allocation:** Read the end of `default.env` to find the last used port.
+**Port allocation:** Read the end of `profiles/default.env` and the other
+`services/*/default.env` files to find the last used port.
 Pick the next available port in the 33000–34999 range. Increment by 10 for services
 needing multiple ports.
 
@@ -141,9 +147,11 @@ HARBOR_${HANDLE}_MODEL=some-default-model      # if service uses AI models
 HARBOR_${HANDLE}_GIT_REF=https://github.com/...#branch  # if building from source
 ```
 
-**Every env var referenced in the compose file must be defined in `default.env`.**
+**Every env var referenced in the compose file must be defined in a default env
+file** — `services/${handle}/default.env` for service-specific keys,
+`profiles/default.env` for global ones.
 
-After editing `default.env`, propagate:
+After editing a default env file, propagate:
 ```bash
 harbor config update
 ```
@@ -239,7 +247,7 @@ Common issues and solutions.
 
 **Rules:**
 - Reference Harbor CLI commands, not raw Docker commands
-- Document ALL env vars from `default.env`
+- Document ALL env vars from `services/${handle}/default.env`
 - No behavior should surprise the user — if you add it, document it
 
 ### Screenshot
@@ -379,8 +387,9 @@ Before declaring the service complete, verify all of these:
 
 - [ ] Handle is unique and valid
 - [ ] Compose file follows all conventions (naming, env_file, network, no restart)
-- [ ] All env vars in compose are defined in `default.env`
-- [ ] `harbor config update` ran after editing `default.env`
+- [ ] `services/${handle}/default.env` exists and is tracked by git
+- [ ] All env vars in compose are defined in a default env file
+- [ ] `harbor config update` ran after editing the default env file
 - [ ] Metadata entry in `serviceMetadata.ts` with correct category and doc link
 - [ ] Documentation created with all required sections
 - [ ] Screenshot captured at `docs/harbor-${handle}.png` and embedded in the doc
@@ -394,11 +403,11 @@ Before declaring the service complete, verify all of these:
 
 ## Common Pitfalls
 
-- **Forgetting `harbor config update`** after editing `default.env` — your `.env` won't
-  have the new variables and the service will fail with empty substitutions.
+- **Forgetting `harbor config update`** after editing a default env file — your `.env`
+  won't have the new variables and the service will fail with empty substitutions.
 - **Wrong volume paths** — must use `./services/${handle}/...` (relative to repo root),
   not absolute paths.
 - **Setting `restart: always`** — Harbor doesn't expect auto-restart; omit the policy.
-- **Editing `.env` directly** — always use `harbor config set` or edit `default.env` +
-  `harbor config update`.
+- **Editing `.env` directly** — always use `harbor config set` or edit
+  `services/${handle}/default.env` + `harbor config update`.
 - **Mismatched service name** — the primary compose service name must equal the handle.

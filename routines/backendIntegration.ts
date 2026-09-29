@@ -43,6 +43,7 @@ export const OPENAI_COMPATIBLE_BACKENDS: Record<string, BackendInfo> = {
   ollama: { url: 'http://ollama:11434', name: 'Ollama' },
   llamacpp: { url: 'http://llamacpp:8080', name: 'Llama.cpp' },
   ikllamacpp: { url: 'http://ikllamacpp:8080', name: 'ik_llama.cpp' },
+  prismml: { url: 'http://prismml:8080', name: 'PrismML llama.cpp' },
   vllm: { url: 'http://vllm:8000', name: 'vLLM' },
   tabbyapi: { url: 'http://tabbyapi:5000', name: 'TabbyAPI' },
   mistralrs: { url: 'http://mistralrs:8021', name: 'Mistral.rs' },
@@ -57,6 +58,7 @@ export const OPENAI_COMPATIBLE_BACKENDS: Record<string, BackendInfo> = {
 export const BACKEND_MODEL_KEYS: Record<string, string> = {
   llamacpp: 'llamacpp.model',
   ikllamacpp: 'ikllamacpp.model',
+  prismml: 'prismml.model',
   vllm: 'vllm.model',
   tabbyapi: 'tabbyapi.model',
   mistralrs: 'mistralrs.model',

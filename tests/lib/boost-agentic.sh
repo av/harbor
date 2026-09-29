@@ -105,7 +105,7 @@ run_boost_agentic_pytest() {
         -v "${boost_dir}/uv.lock:/boost/uv.lock:ro" \
         -w /boost \
         "$boost_image" \
-        uv run --with pytest --with pytest-asyncio \
+        uv run --frozen --with pytest --with pytest-asyncio \
         pytest -q "${targets[@]}"
       ;;
     *)

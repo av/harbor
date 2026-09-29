@@ -1,0 +1,12 @@
+services:
+  hf:
+    image: ${HF_TEST_IMAGE:-harbor-hf:latest}
+    build: !reset null
+    env_file: !reset []
+    environment:
+      EXPECT_UID: ${HARBOR_USER_ID}
+      EXPECT_GID: ${HARBOR_GROUP_ID}
+    volumes:
+      - ./tests/fixtures/hf-cache-probe.py:/probe.py:ro
+  hf-init:
+    env_file: !reset []

@@ -1,0 +1,37 @@
+channel:
+  - id: 1
+    name: PrismML
+    type: openai
+    priority: 0
+    weight: 1
+    models:
+      - prismml
+    retry: 1
+    secret: sk-prismml
+    endpoint: http://prismml:8080
+    mapper: ""
+    state: true
+    group:
+      - anonymous
+      - normal
+      - basic
+      - standard
+      - pro
+    proxy:
+      proxytype: 0
+      proxy: ""
+      username: ""
+      password: ""
+    reflect: {}
+    hitmodels:
+      - prismml
+    excludemodels: []
+    currentsecret: null
+market:
+  - id: prismml
+    name: PrismML
+    description: ""
+    default: true
+    highcontext: false
+    avatar: llama2.webp
+    tag: []

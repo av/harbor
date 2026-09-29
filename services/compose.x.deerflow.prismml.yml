@@ -1,0 +1,10 @@
+# DeerFlow PrismML llama.cpp Integration
+# Points the Harbor model entry at Harbor's PrismML llama.cpp server
+services:
+  deerflow-backend:
+    environment:
+      - DEERFLOW_MODEL=${HARBOR_DEERFLOW_PRISMML_MODEL}
+      - DEERFLOW_MODEL_BASE_URL=http://prismml:8080/v1
+      - DEERFLOW_MODEL_API_KEY=sk-prismml
+    depends_on:
+      - prismml

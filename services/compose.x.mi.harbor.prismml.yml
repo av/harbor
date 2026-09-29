@@ -1,0 +1,4 @@
+services:
+  mi:
+    environment:
+      - MODEL=${HARBOR_HOW_PRISMML_MODEL:-prism-ml/Ternary-Bonsai-2-27B-gguf:PTQ1_0}

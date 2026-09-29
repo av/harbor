@@ -1,0 +1,13 @@
+# prismml + ollama both running: llama.cpp serves the LLM, Ollama serves the
+# embeddings. Without this file the ollama cross-file (applied later) would take
+# the LLM back for itself.
+services:
+  lightrag:
+    environment:
+      - LLM_BINDING=openai
+      - LLM_BINDING_HOST=http://prismml:8080/v1
+      - LLM_BINDING_API_KEY=sk-prismml
+      - LLM_MODEL=${HARBOR_LIGHTRAG_PRISMML_MODEL}
+      # The ollama cross-file points the query role at its derived Ollama copy
+      - QUERY_LLM_MODEL=${HARBOR_LIGHTRAG_PRISMML_MODEL}
+      - 'OPENAI_LLM_EXTRA_BODY={"chat_template_kwargs":{"enable_thinking":${HARBOR_LIGHTRAG_PRISMML_THINKING}}}'

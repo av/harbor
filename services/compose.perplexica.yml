@@ -12,8 +12,8 @@ services:
     networks:
       - harbor-network
     environment:
-      - BACKEND_API_URL=http://localhost:${HARBOR_PERPLEXICA_BACKEND_HOST_PORT}/api
-      - BACKEND_WS_URL=ws://localhost:${HARBOR_PERPLEXICA_BACKEND_HOST_PORT}
+      - BACKEND_API_URL=http://${HARBOR_PERPLEXICA_PUBLIC_HOST}:${HARBOR_PERPLEXICA_BACKEND_HOST_PORT}/api
+      - BACKEND_WS_URL=ws://${HARBOR_PERPLEXICA_PUBLIC_HOST}:${HARBOR_PERPLEXICA_BACKEND_HOST_PORT}
 
   perplexica-be:
     image: andypenno/perplexica-backend
@@ -34,6 +34,7 @@ services:
       - ${HARBOR_PERPLEXICA_BACKEND_HOST_PORT}:3001
     volumes:
       - ./services/perplexica/data:/home/perplexica/data
+      - ./services/perplexica/cache:/home/perplexica/node_modules/@xenova/transformers/.cache
       - ./services/perplexica/source.config.toml:/home/perplexica/config.toml
     networks:
       - harbor-network
@@ -61,5 +62,6 @@ services:
     volumes:
       - ./services/perplexica/workspace-init.sh:/init.sh:ro
       - ./services/perplexica/data:/workspace
+      - ./services/perplexica/cache:/cache
     networks:
       - harbor-network

@@ -16,6 +16,9 @@ services:
       - HARBOR_BOOST_SEARXNG_QUERY_PARAMS=${HARBOR_BOOST_SEARXNG_QUERY_PARAMS}
       - HARBOR_BOOST_JINA_READER_API_URL=${HARBOR_BOOST_JINA_READER_API_URL}
       - HARBOR_BOOST_JINA_READER_API_KEY=${HARBOR_BOOST_JINA_READER_API_KEY}
+      - HARBOR_BOOST_CODEMODE_TIMEOUT=${HARBOR_BOOST_CODEMODE_TIMEOUT:-30}
+      - HARBOR_BOOST_CODEMODE_MAX_OUTPUT=${HARBOR_BOOST_CODEMODE_MAX_OUTPUT:-8000}
+      - HARBOR_BOOST_CODEMODE_MAX_CALLS=${HARBOR_BOOST_CODEMODE_MAX_CALLS:-50}
     volumes:
       - ./services/boost/src:/boost
       - /boost/.venv
@@ -26,5 +29,7 @@ services:
       - ${HARBOR_VLLM_CACHE}:/root/.cache/vllm
     ports:
       - ${HARBOR_BOOST_HOST_PORT}:8000
+    extra_hosts:
+      - host.docker.internal:host-gateway
     networks:
       - harbor-network

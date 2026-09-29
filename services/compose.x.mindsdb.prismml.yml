@@ -1,0 +1,6 @@
+services:
+  mindsdb:
+    environment:
+      - LLM_FUNCTION_BASE_URL=http://prismml:8080/v1
+      - LLM_FUNCTION_MODEL=${HARBOR_MINDSDB_PRISMML_MODEL}
+      - OPENAI_API_KEY=sk-prismml

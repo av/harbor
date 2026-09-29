@@ -12,6 +12,8 @@ services:
     depends_on:
       n8n-db:
         condition: service_healthy
+      n8n-sandbox-api:
+        condition: service_healthy
     env_file:
       - ./.env
       - ./services/n8n/override.env
@@ -23,6 +25,11 @@ services:
       - DB_POSTGRESDB_DATABASE=${HARBOR_N8N_PG_DB}
       - N8N_ENCRYPTION_KEY=${HARBOR_N8N_ENCRYPTION_KEY}
       - N8N_USER_MANAGEMENT_JWT_SECRET=${HARBOR_N8N_JWT_SECRET}
+      - N8N_ENABLED_MODULES=instance-ai
+      - N8N_INSTANCE_AI_SANDBOX_ENABLED=true
+      - N8N_INSTANCE_AI_SANDBOX_PROVIDER=n8n-sandbox
+      - N8N_SANDBOX_SERVICE_URL=http://n8n-sandbox-api:8080
+      - N8N_SANDBOX_SERVICE_API_KEY=${HARBOR_N8N_SANDBOX_API_KEY}
     networks:
       - harbor-network
 
@@ -47,3 +54,85 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+
+  # One-shot: generates the mTLS certs the API and runner need, then exits.
+  n8n-sandbox-certs:
+    image: ${HARBOR_N8N_SANDBOX_API_IMAGE}:${HARBOR_N8N_SANDBOX_VERSION}
+    container_name: ${HARBOR_CONTAINER_PREFIX}.n8n-sandbox-certs
+    user: '0:0'
+    x-harbor-lint-ignore: [env-file-main]
+    entrypoint: ['sh', '-c']
+    command:
+      - >
+        bootstrap-mtls.sh --out-dir /tls --api-san n8n-sandbox-api
+        --control-san-prefix n8n-sandbox-runner --world-readable &&
+        chown -R sandbox-api:sandbox-api /tls/api && chmod -R a+rX /tls
+    environment:
+      NUM_RUNNERS: '1'
+    volumes:
+      - n8n-sandbox-tls:/tls
+    networks:
+      - harbor-network
+
+  # Control plane n8n Assistant talks to. Do not publish 8080/9090.
+  n8n-sandbox-api:
+    image: ${HARBOR_N8N_SANDBOX_API_IMAGE}:${HARBOR_N8N_SANDBOX_VERSION}
+    container_name: ${HARBOR_CONTAINER_PREFIX}.n8n-sandbox-api
+    x-harbor-lint-ignore: [env-file-main]
+    depends_on:
+      n8n-sandbox-certs:
+        condition: service_completed_successfully
+    environment:
+      - SANDBOX_API_KEYS=${HARBOR_N8N_SANDBOX_API_KEY}
+      - SANDBOX_API_RUNNER_REGISTRATION_TOKEN=${HARBOR_N8N_SANDBOX_REGISTRATION_TOKEN}
+      - SANDBOX_API_RUNNER_API_KEY=${HARBOR_N8N_SANDBOX_RUNNER_KEY}
+      - SANDBOX_API_GRPC_TLS_CERT_FILE=/tls/api/grpc-server.crt
+      - SANDBOX_API_GRPC_TLS_KEY_FILE=/tls/api/grpc-server.key
+      - SANDBOX_API_GRPC_TLS_CLIENT_CA_FILE=/tls/api/ca.crt
+      - SANDBOX_API_RUNNER_CONTROL_GRPC_TLS_CA_FILE=/tls/api/ca.crt
+      - SANDBOX_API_RUNNER_CONTROL_GRPC_TLS_CERT_FILE=/tls/api/control-grpc-api-client.crt
+      - SANDBOX_API_RUNNER_CONTROL_GRPC_TLS_KEY_FILE=/tls/api/control-grpc-api-client.key
+      - SANDBOX_API_RUNNER_CONTROL_GRPC_TLS_SERVER_NAME=n8n-sandbox-runner-1
+    volumes:
+      - n8n-sandbox-tls:/tls:ro
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://localhost:8080/healthz']
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks:
+      - harbor-network
+
+  # Privileged Docker-in-Docker runner that executes AI-generated code.
+  n8n-sandbox-runner-1:
+    image: ${HARBOR_N8N_SANDBOX_RUNNER_IMAGE}:${HARBOR_N8N_SANDBOX_VERSION}
+    container_name: ${HARBOR_CONTAINER_PREFIX}.n8n-sandbox-runner-1
+    privileged: true
+    x-harbor-lint-ignore: [env-file-main]
+    depends_on:
+      n8n-sandbox-api:
+        condition: service_healthy
+    environment:
+      - SANDBOX_RUNNER_API_KEYS=${HARBOR_N8N_SANDBOX_RUNNER_KEY}
+      - SANDBOX_RUNNER_REGISTRATION_TOKEN=${HARBOR_N8N_SANDBOX_REGISTRATION_TOKEN}
+      - SANDBOX_RUNNER_API_GRPC_ADDR=n8n-sandbox-api:9090
+      - SANDBOX_RUNNER_HTTP_BASE_URL=http://n8n-sandbox-runner-1:8080
+      - SANDBOX_RUNNER_CONTROL_GRPC_LISTEN_ADDR=:9091
+      - SANDBOX_RUNNER_CONTROL_GRPC_ADVERTISE_ADDR=n8n-sandbox-runner-1:9091
+      - SANDBOX_RUNNER_ID=runner-1
+      - SANDBOX_RUNNER_DOCKER_SANDBOX_IMAGE=${HARBOR_N8N_SANDBOX_IMAGE}:${HARBOR_N8N_SANDBOX_SANDBOX_VERSION}
+      - SANDBOX_RUNNER_REGISTRATION_GRPC_CA_FILE=/tls/runner/ca.crt
+      - SANDBOX_RUNNER_REGISTRATION_GRPC_CERT_FILE=/tls/runner/grpc-client.crt
+      - SANDBOX_RUNNER_REGISTRATION_GRPC_KEY_FILE=/tls/runner/grpc-client.key
+      - SANDBOX_RUNNER_REGISTRATION_GRPC_SERVER_NAME=n8n-sandbox-api
+      - SANDBOX_RUNNER_CONTROL_GRPC_TLS_CERT_FILE=/tls/runner/control-grpc-server.crt
+      - SANDBOX_RUNNER_CONTROL_GRPC_TLS_KEY_FILE=/tls/runner/control-grpc-server.key
+      - SANDBOX_RUNNER_CONTROL_GRPC_TLS_CLIENT_CA_FILE=/tls/runner/ca.crt
+    volumes:
+      - n8n-sandbox-tls:/tls:ro
+    networks:
+      - harbor-network
+
+volumes:
+  n8n-sandbox-tls:

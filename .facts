@@ -69,11 +69,15 @@
 - label: install.sh verifies the install with harbor doctor --check so non-critical doctor warnings do not fail setup
   command: rg -q 'doctor --check' install.sh
   tags: [implemented]
+- Published Harbor releases keep CLI, Python, npm, desktop manifests and the Rust lockfile on the same version @issue-262 @implemented
 
 ## development
 - label: local Deno runtime caches under .deno-cache are ignored by Git
   command: git check-ignore -q .deno-cache/latest.txt
   tags: [spec, implemented]
+- label: the release pipeline never publishes stale Boost docs: release.sh rebuilds the boost image before 'harbor dev docs', and 'harbor dev docs --check' regenerates docs/5.2.2 and docs/5.2.3 without writing, naming the boost source commit and resolved image id it generated from, and exits non-zero on any drift
+  command: b=$(grep -n 'harbor build boost' .scripts/release.sh | head -1 | cut -d: -f1); g=$(grep -n 'harbor dev docs' .scripts/release.sh | head -1 | cut -d: -f1); [ -n "$b" ] && [ -n "$g" ] && [ "$b" -lt "$g" ] || exit 1; out=$(./harbor.sh dev docs --check 2>&1); rc=$?; printf '%s\n' "$out" | grep -q '^docgen image: .*-boost sha256:' && [ $rc -eq 0 ]
+  tags: [docgen, implemented]
 
 # cli
 - label: harbor.sh is the main CLI entrypoint, a Bash script over 5000 lines
@@ -82,10 +86,10 @@
   command: test -f routines/deno.json && test $(find routines -name '*.ts' | wc -l) -ge 10
 - label: dev scripts live in .scripts/ and must be run via harbor dev, not directly
   command: test -d .scripts && test $(find .scripts -name '*.ts' -o -name '*.sh' | wc -l) -ge 20
-- label: harbor config get/set/search/update reads and writes workspace .env; defaults live in profiles/default.env
-  command: grep -q 'env_manager' harbor.sh && test -f profiles/default.env
-- label: harbor config update merges profiles/default.env into the active .env
-  command: grep -q 'config_update' harbor.sh || grep -q 'config update' harbor.sh
+- label: harbor config get/set/search/update reads and writes workspace .env; defaults live in profiles/default.env plus per-service services/<name>/default.env
+  command: grep -q 'env_manager' harbor.sh && test -f profiles/default.env && test -f services/chandra/default.env
+- label: harbor config update merges profiles/default.env and every services/*/default.env into the active .env
+  command: grep -q 'merge_default_env_files' harbor.sh && grep -q 'collect_default_env_files' harbor.sh
 - label: harbor compose up uses docker compose up -d --wait requiring Compose 2.23.1 or newer
   command: grep -q 'up -d --wait' harbor.sh && grep -q 'desired_compose_minor="23"' harbor.sh
   tags: [implemented]
@@ -185,6 +189,36 @@
 - label: check_hf_cache in harbor.sh uses 'hf cache ls' (scan-cache was removed in hf CLI 1.x)
   command: grep -q 'cache ls --no-truncate' harbor.sh && ! grep -q 'run_hf_docker_cli scan-cache' harbor.sh
   tags: [sweep7, implemented]
+
+## config
+- label: Harbor loads per-service defaults from services/<name>/default.env alongside profiles/default.env: a key defined only there (chandra.host_port) resolves through harbor config get on a fresh .env with no copy in profiles/default.env, and several harbor processes repairing an empty .env at once leave it complete and free of duplicate keys because the assembled defaults are renamed into place atomically
+  command: d=$(mktemp -d) && mkdir -p "$d/profiles" && cp profiles/default.env "$d/profiles/" && for f in services/*/default.env; do mkdir -p "$d/$(dirname "$f")" && cp "$f" "$d/$f"; done && cp harbor.sh "$d/" && : > "$d/.env" && for c in "ls" "ls -a" "defaults" "config get history.file"; do HARBOR_HOME="$d" "$d/harbor.sh" $c >/dev/null 2>&1 & done; wait; keys=$(grep -c "=" "$d/.env"); dupes=$(grep -v "^[[:space:]]*#" "$d/.env" | grep "=" | sed "s/=.*//" | sort | uniq -d); port=$(HARBOR_HOME="$d" "$d/harbor.sh" config get chandra.host_port 2>/dev/null | tail -1); rm -rf "$d"; test "$keys" -ge 50 && test -z "$dupes" && test "$port" = 35080 && test "$(grep -c HARBOR_CHANDRA profiles/default.env)" -eq 0
+  tags: [config, svc-defaults, implemented]
+
+## down
+- label: harbor down <service> and harbor restart <service> touch only the named services and their <service>-* companions: down uses compose stop + rm -f (never a project-wide down --remove-orphans) and restart brings the set back with an explicitly named up, so unrelated running services are never stopped or recreated
+  command: bash -c 'd=$(mktemp -d); export L=$(mktemp); printf "%s\n" "#!/usr/bin/env bash" "case \"\$*\" in *\"compose version\"*) echo v2.30.0; exit 0;; *\"config --services\"*) printf \"ollama\nboost\n\"; exit 0;; *\"compose ps\"*) echo ollama; exit 0;; esac" "[ \"\$1\" = compose ] && printf \"%s\n\" \"\$*\" >> \"\$L\"" "exit 0" > "$d/docker"; chmod +x "$d/docker"; export HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false PATH="$d:$PATH"; ./harbor.sh down boost >/dev/null 2>&1 && ./harbor.sh restart boost >/dev/null 2>&1 && grep -q -- " stop --timeout 10 boost$" "$L" && grep -q -- " rm -f boost$" "$L" && grep -q -- " up -d --wait boost$" "$L" && ! grep -q -- "--remove-orphans" "$L" && ! grep -Eq -- " (stop|rm -f|up -d --wait) .*(ollama|webui|llamacpp)" "$L"'
+  tags: [cli, down-scope, implemented]
+
+## docker
+- A disposable Docker runner can execute Harbor CLI commands against the host Docker daemon @issue-40 @implemented
+- Dockerized Harbor resolves the workspace and home cache at the same absolute paths seen by the host Docker daemon @issue-40 @implemented
+- Dockerized Harbor writes workspace configuration as the invoking host user @issue-40 @implemented
+
+## doctor
+- label: ROCm detection checks the loaded amdgpu module through sysfs without a pipefail-sensitive lsmod and grep pipeline
+  command: grep -q '\[\[ -d /sys/module/amdgpu \]\]' harbor.sh && ! sed -n '/^has_rocm()/,/^}/p' harbor.sh | grep -q 'lsmod.*grep -q'
+  tags: [spec, issue-244, implemented]
+
+## routines
+- containerized routines accept an optional PEM CA certificate mounted read-only and used by Deno @spec @issue-140 @implemented
+- containerized routines accept an optional Docker network without changing the default bridge network @spec @issue-140 @implemented
+- local Deno routines use the configured PEM CA certificate when one is set @spec @issue-140 @implemented
+
+## wrappers
+- Users can opt in to a command wrapper that forwards its command name and arguments to Harbor CLI @issue-49 @implemented
+- Command wrapper installation never replaces an existing non-Harbor executable or symlink @issue-49 @implemented
+- Registered command wrappers can be refreshed when Harbor CLI is linked or updated @issue-49 @implemented
 
 # services
 - label: compose.yml defines only the shared harbor-network without service definitions
@@ -315,6 +349,8 @@
 - label: ChatNode.history() merges consecutive same-role plain messages (no tool calls) so multi-assistant-turn modules like g1 pass llama.cpp's 'cannot have 2+ assistant messages at the end' validation
   command: cd services/boost && python -m pytest tests/test_chat_node.py -q -k merge
   tags: [services-runner, implemented]
+- Boost and WebUI containers map host.docker.internal to the Docker host gateway so external Ollama URLs work on Linux as well as Docker Desktop. @spec @issue-168 @implemented
+- With only webui and boost selected and an external Ollama URL configured through Harbor env, Boost advertises a prefixed external Ollama model and responds to a chat completion without starting the Harbor ollama service. @spec @issue-168 @runtime @implemented
 
 ## chatui
 - label: envify.js bridges Harbor's legacy MODELS config to chat-ui >= 0.10's single-provider scheme by emitting OPENAI_BASE_URL and OPENAI_API_KEY from the first configured openai endpoint, so per-backend configs (chatui.llamacpp.yml etc.) still take effect
@@ -335,9 +371,12 @@
 - label: anythingllm-init sidecar chowns the storage bind mount to the image's fixed uid 1000 before anythingllm starts, fixing the first-boot crash-loop (SQLite 'unable to open database file' on a root-owned storage dir)
   command: grep -q 'anythingllm-init' services/compose.anythingllm.yml && test -f services/anythingllm/storage-init.sh
   tags: [services-it, implemented]
-- label: anythingllm ollama overlay sets EMBEDDING_MODEL_PREF=nomic-embed-text:latest (part of the ollama default pull) — the ollama embedder aborts every chat with 'No embedding model was set' when the pref is missing
-  command: grep -q 'EMBEDDING_MODEL_PREF=nomic-embed-text' services/compose.x.anythingllm.ollama.yml
-  tags: [services-it, implemented]
+- label: anythingllm ollama overlay seeds nomic-embed-text:latest into the persisted settings file only when no embedding model choice exists, without forcing EMBEDDING_MODEL_PREF into the app environment
+  command: grep -q 'HARBOR_ANYTHINGLLM_DEFAULT_EMBEDDING_MODEL=nomic-embed-text:latest' services/compose.x.anythingllm.ollama.yml && grep -q 'HARBOR_ANYTHINGLLM_DEFAULT_EMBEDDING_MODEL' services/anythingllm/storage-init.sh && ! grep -q '^[[:space:]]*- EMBEDDING_MODEL_PREF=' services/compose.x.anythingllm.ollama.yml
+  tags: [services-it, spec, issue-183, implemented]
+- AnythingLLM init creates a private uid-1000 storage/.env file without truncating existing settings, and the app bind-mounts it at /app/server/.env alongside persistent storage. @spec @issue-183 @implemented
+- An Ollama model preference saved through AnythingLLM settings API remains in /app/server/.env after harbor restart anythingllm. @spec @issue-183 @runtime @implemented
+- When AnythingLLM runs with Ollama, a user-selected embedding model remains the effective EMBEDDING_MODEL_PREF after Harbor recreates the AnythingLLM container. @spec @issue-183 @runtime @implemented
 
 ## ldr
 - label: compose.x.ldr.searxng.yml sets LDR_SEARCH_ENGINE_WEB_SEARXNG_DEFAULT_PARAMS_INSTANCE_URL (LDR's env mapping for the searxng instance_url setting) instead of the stale SEARXNG_INSTANCE/LDR_SEARCH__TOOL names, so LDR web research actually queries SearXNG
@@ -552,9 +591,13 @@
 - label: hf image entrypoint unsets empty SSL_CERT_FILE/REQUESTS_CA_BUNDLE (compose defines them empty when HARBOR_HF_SSL_CERT_FILE is unset; hf_xet reqwest errors on empty SSL_CERT_FILE)
   command: grep -q 'unset SSL_CERT_FILE' services/hf/entrypoint.sh && grep -q 'entrypoint.sh' services/hf/Dockerfile
   tags: [hf-xet, spec, implemented]
-- label: hf entrypoint setpriv-drops to the host user (TARGET_UID/GID from HARBOR_USER_ID/GROUP_ID) so downloads into the shared HF cache stay host-owned; no recursive chown of the cache mount
-  command: grep -q 'setpriv --reuid' services/hf/entrypoint.sh && grep -q 'TARGET_UID=${HARBOR_USER_ID}' services/compose.hf.yml
-  tags: [hf-xet, spec, implemented]
+- label: The HF downloader starts as the configured host UID and GID with HOME=/tmp and HF_HOME=/cache, after its cache initialization service succeeds
+  command: bash tests/hf-cache-permissions.sh
+  tags: [hf-xet, implemented]
+- label: HF cache initialization prepares fresh caches and repairs root-owned HF cache entries without following symlinks or changing non-root-owned cached files
+  command: bash tests/hf-cache-permissions.sh
+  tags: [issue-262, implemented]
+- Updating Harbor applies the HF downloader configuration and entrypoint to existing images without a manual rebuild @issue-262 @implemented
 
 ## perplexideez
 - label: compose.x.perplexideez.{ollama,searxng}.yml set env on perplexideez-service (the app), not the perplexideez nginx proxy, and LLM_MODE carries no literal quotes
@@ -575,12 +618,21 @@
   tags: [airweave, spec, implemented]
 
 ## opencode
-- label: opencode data/config defaults live under ./services/opencode/ with the data dir gitignored, so runtime sqlite/logs never dirty the repo
-  command: grep -q 'HARBOR_OPENCODE_DATA="./services/opencode/data"' profiles/default.env && grep -q 'HARBOR_OPENCODE_CONFIG="./services/opencode/config"' profiles/default.env && git check-ignore -q services/opencode/data && git ls-files --error-unmatch services/opencode/config/opencode.json
+- label: opencode data/config defaults live under ./services/opencode/ with runtime data and generated config gitignored
+  command: grep -q 'HARBOR_OPENCODE_DATA="./services/opencode/data"' profiles/default.env && grep -q 'HARBOR_OPENCODE_CONFIG="./services/opencode/config"' profiles/default.env && git check-ignore -q services/opencode/data && git check-ignore -q services/opencode/config/opencode.json
   tags: [sweep8, implemented]
-- label: with an active backend, compose.opencode.ts chains the model-discovery script through the /harbor-entrypoint.sh setpriv wrapper (and the harbor-cli-only path does the same), so the opencode process runs as the host user, not root
+- label: opencode chains both discovery and no-backend startup through the setpriv wrapper, so startup hooks and the server run as the host user
   command: grep -c "'/harbor-entrypoint.sh'" services/compose.opencode.ts | grep -qx 2
   tags: [opencode-setpriv, spec, implemented]
+- label: OpenCode discovery preserves a nonempty user config or inline config and runs an executable persisted init hook before serving
+  command: grep -q 'skipping model discovery' services/compose.opencode.ts && grep -q 'init.sh' services/compose.opencode.ts && grep -q 'OPENCODE_CONFIG_CONTENT' services/compose.opencode.ts
+  tags: [spec, issue-250, implemented]
+- label: OpenCode discovers LiteLLM models using its configured master key without changing other backend auth
+  command: grep -q 'http://litellm:4000' services/compose.opencode.ts && grep -q 'LITELLM_MASTER_KEY' services/compose.opencode.ts && test -f services/compose.x.opencode.litellm.yml
+  tags: [spec, issue-250, implemented]
+- label: OpenCode docs explain manual config, LiteLLM integration, persistent init hook, and non-interactive task invocation
+  command: grep -q 'init.sh' docs/2.3.68-Satellite-OpenCode.md && grep -q 'litellm' docs/2.3.68-Satellite-OpenCode.md && grep -q 'opencode run' docs/2.3.68-Satellite-OpenCode.md
+  tags: [spec, issue-250, implemented]
 
 ## lemonade
 - label: lemonade workspace default lives under ./services/lemonade/data (gitignored), not a stray ./lemonade dir at repo root
@@ -693,10 +745,69 @@
   command: grep -q ':${HOME}/.cache/huggingface:ro' services/compose.ikllamacpp.yml
   tags: [spec, cache-symlinks, implemented]
 
+## prismml
+- label: prismml has a primary Docker Compose service at services/compose.prismml.yml using container name ${HARBOR_CONTAINER_PREFIX}.prismml, Harbor env files, harbor-network, and host port ${HARBOR_PRISMML_HOST_PORT}:8080
+  command: test -f services/compose.prismml.yml && rg -q "^  prismml:" services/compose.prismml.yml && rg -Fq 'container_name: ${HARBOR_CONTAINER_PREFIX}.prismml' services/compose.prismml.yml && rg -Fq "./services/prismml/override.env" services/compose.prismml.yml && rg -q "harbor-network" services/compose.prismml.yml && rg -Fq '${HARBOR_PRISMML_HOST_PORT}:8080' services/compose.prismml.yml
+  tags: [spec, prismml, implemented]
+- label: compose.prismml.yml additionally binds HARBOR_HF_CACHE read-only at ${HOME}/.cache/huggingface so llama.cpp-cache GGUF symlinks targeting absolute host HF-cache blob paths resolve inside the container
+  command: grep -q ':${HOME}/.cache/huggingface:ro' services/compose.prismml.yml
+  tags: [spec, cache-symlinks, prismml, implemented]
+- label: prismml assembles its image locally from a PrismML llama.cpp GitHub release tarball (PrismML publishes no container images) via services/prismml/Dockerfile, parameterised by BASE_IMAGE, PRISMML_VERSION and PRISMML_ASSET build args, with llama-server as the entrypoint and /app on LD_LIBRARY_PATH
+  command: rg -Fq 'github.com/PrismML-Eng/llama.cpp/releases/download/${PRISMML_VERSION}/llama-${PRISMML_VERSION}-bin-${PRISMML_ASSET}.tar.gz' services/prismml/Dockerfile && rg -q '^ARG BASE_IMAGE' services/prismml/Dockerfile && rg -Fq 'ENTRYPOINT ["/app/llama-server"]' services/prismml/Dockerfile && rg -q 'LD_LIBRARY_PATH=/app' services/prismml/Dockerfile
+  tags: [spec, prismml, implemented]
+- label: prismml defaults pin a PrismML release tag and define the CPU, NVIDIA and ROCm base image + release asset pairs, the default Ternary Bonsai 2 27B model spec, and source build controls
+  command: rg -q '^HARBOR_PRISMML_HOST_PORT=' services/prismml/default.env && rg -q '^HARBOR_PRISMML_VERSION="prism-b' services/prismml/default.env && rg -q '^HARBOR_PRISMML_BASE_IMAGE_CPU=' services/prismml/default.env && rg -q '^HARBOR_PRISMML_ASSET_CPU=' services/prismml/default.env && rg -q '^HARBOR_PRISMML_BASE_IMAGE_NVIDIA=' services/prismml/default.env && rg -q '^HARBOR_PRISMML_ASSET_NVIDIA="linux-cuda' services/prismml/default.env && rg -q '^HARBOR_PRISMML_BASE_IMAGE_ROCM=' services/prismml/default.env && rg -q '^HARBOR_PRISMML_ASSET_ROCM="ubuntu-rocm' services/prismml/default.env && rg -q '^HARBOR_PRISMML_MODEL_SPECIFIER="-hf prism-ml/Ternary-Bonsai-2-27B-gguf' services/prismml/default.env && rg -q '^HARBOR_PRISMML_BUILD_REF=prism' services/prismml/default.env && rg -q '^HARBOR_PRISMML_EXTRA_ARGS=' services/prismml/default.env
+  tags: [spec, prismml, implemented]
+- label: the nvidia and rocm overlays switch prismml to the CUDA / ROCm base image and release asset, tag the image per flavor (-cpu/-cuda/-rocm) so switching capability rebuilds instead of reusing a stale image, and pass the GPU (nvidia deploy reservation; /dev/kfd + /dev/dri for rocm); a cdi overlay mirrors the nvidia one
+  command: rg -q 'HARBOR_PRISMML_BASE_IMAGE_NVIDIA' services/compose.x.prismml.nvidia.yml && rg -q 'HARBOR_PRISMML_ASSET_NVIDIA' services/compose.x.prismml.nvidia.yml && rg -q 'driver: nvidia' services/compose.x.prismml.nvidia.yml && rg -q 'HARBOR_PRISMML_BASE_IMAGE_ROCM' services/compose.x.prismml.rocm.yml && rg -q '/dev/kfd' services/compose.x.prismml.rocm.yml && rg -q 'nvidia.com/gpu=all' services/compose.x.prismml.cdi.yml && rg -q 'image: harbor-prismml:\$\{HARBOR_PRISMML_VERSION\}-cpu' services/compose.prismml.yml && rg -q 'image: harbor-prismml:\$\{HARBOR_PRISMML_VERSION\}-cuda' services/compose.x.prismml.nvidia.yml && rg -q 'image: harbor-prismml:\$\{HARBOR_PRISMML_VERSION\}-rocm' services/compose.x.prismml.rocm.yml
+  tags: [spec, prismml, implemented]
+- label: the rocm overlay installs the ROCm runtime libraries the release binary links against (HARBOR_PRISMML_ROCM_PACKAGES, default hipblas rocblas) via the Dockerfile's EXTRA_PACKAGES build arg, because rocm/dev-ubuntu ships without them and llama-server silently falls back to CPU when libggml-hip.so cannot resolve libhipblas/librocblas
+  command: rg -q 'EXTRA_PACKAGES: \$\{HARBOR_PRISMML_ROCM_PACKAGES\}' services/compose.x.prismml.rocm.yml && rg -q '^HARBOR_PRISMML_ROCM_PACKAGES="hipblas rocblas"' services/prismml/default.env && rg -q '^ARG EXTRA_PACKAGES' services/prismml/Dockerfile && rg -Fq '${EXTRA_PACKAGES}' services/prismml/Dockerfile
+  tags: [spec, prismml, implemented]
+- label: with the build capability prismml builds the PrismML fork from source using the fork's own .devops cpu/cuda/rocm Dockerfiles at HARBOR_PRISMML_BUILD_REF, mirroring the llamacpp build overlays
+  command: rg -q 'github.com/PrismML-Eng/llama.cpp.git#\$\{HARBOR_PRISMML_BUILD_REF' services/compose.x.prismml.build.yml && rg -q '.devops/cpu.Dockerfile' services/compose.x.prismml.build.yml && rg -q '.devops/cuda.Dockerfile' services/compose.x.prismml.nvidia.build.yml && rg -q 'CUDA_DOCKER_ARCH' services/compose.x.prismml.nvidia.build.yml && rg -q '.devops/rocm.Dockerfile' services/compose.x.prismml.rocm.build.yml && rg -q 'ROCM_DOCKER_ARCH' services/compose.x.prismml.rocm.build.yml
+  tags: [spec, prismml, implemented]
+- label: prismml has a Harbor CLI helper (harbor prismml) with models, model, gguf, args, version and build subcommands; model accepts HF blob URLs and repo[:quant] specs and stores the resulting llama-server flags in prismml.model.specifier
+  command: rg -q 'run_prismml_command' harbor.sh && rg -q 'harbor prismml model' harbor.sh && rg -q 'prismml.extra.args' harbor.sh && rg -q 'prismml.build.ref' harbor.sh && rg -q 'prismml.version' harbor.sh && rg -q 'llamacpp_pull_model_args "\$current_model"' harbor.sh && rg -q '^    prismml\)' harbor.sh
+  tags: [spec, prismml, implemented]
+- label: prismml is registered as an OpenAI-compatible Harbor backend for dynamic backend integrations and harbor launch
+  command: rg -q "prismml: \{ url: 'http://prismml:8080'" routines/backendIntegration.ts && rg -q "prismml: 'prismml.model'" routines/backendIntegration.ts && rg -q 'ollama \| llamacpp \| ikllamacpp \| prismml' harbor.sh && rg -q 'echo "ollama llamacpp ikllamacpp prismml' harbor.sh
+  tags: [spec, prismml, implemented]
+- label: harbor models pull accepts --source prismml and downloads through the prismml image, so PTQ1_0/PQ2_0 GGUFs are fetched by a runtime that understands them
+  command: rg -q 'prismml\)' harbor.sh && rg -q 'run_llamacpp_pull "\$model" prismml' harbor.sh && rg -q 'ollama \| hf \| llamacpp \| prismml \| dmr' harbor.sh
+  tags: [spec, prismml, implemented]
+- label: run_llamacpp_pull treats a failed -hf resolve as a failure even though the PrismML fork still prints the "load_model: loading model" success marker: fatal markers are checked before that marker, a non-writable cache is reported with the harbor fixfs hint, and the command exits non-zero instead of claiming the download succeeded
+  command: rg -Fq 'exiting due to model loading error|no GGUF files found in repository' harbor.sh && f=$(rg -n 'Fatal errors must be checked before' harbor.sh | head -1 | cut -d: -f1) && l=$(rg -n "indicates download finished" harbor.sh | head -1 | cut -d: -f1) && [ -n "$f" ] && [ -n "$l" ] && [ "$f" -lt "$l" ] && rg -Fq 'harbor fixfs' harbor.sh
+  tags: [spec, prismml, implemented]
+- label: every llamacpp satellite cross-file (compose.x.<svc>.llamacpp*.yml) has a prismml twin pointing at http://prismml:8080, and the config templates those twins mount exist
+  command: ok=1; for f in $(ls services/compose.x.*llamacpp*.yml | grep -v ikllamacpp | grep -v 'compose.x.llamacpp\.'); do t=$(echo "$f" | sed 's/llamacpp/prismml/g'); [ -f "$t" ] || { echo "missing $t"; ok=0; }; done; [ $ok = 1 ] && ! rg -l 'http://llamacpp:8080' services/compose.x.*prismml*.yml && test -f services/webui/configs/config.prismml.json && test -f services/aichat/configs/aichat.prismml.yml && test -f services/aider/configs/aider.prismml.yml && test -f services/chatnio/config/config.prismml.yml && test -f services/chatui/configs/chatui.prismml.yml && test -f services/litellm/litellm.prismml.yaml
+  tags: [spec, prismml, implemented]
+- label: every HARBOR_<svc>_PRISMML_* variable referenced by a prismml cross-file has a default in profiles/default.env or services/prismml/default.env
+  command: ok=1; for v in $(rg -o --no-filename 'HARBOR_[A-Z0-9_]*PRISMML[A-Z0-9_]*' services/compose.x.*prismml*.yml | sort -u | rg -v '^HARBOR_BOOST_OPENAI_(URL|KEY)_PRISMML$|^HARBOR_PRISMML_(URL|OPENAI_URL|API_KEY)$|^HARBOR_ASTRBOT_PRISMML_ENDPOINT$'); do rg -q "^$v=" profiles/default.env services/prismml/default.env || { echo "missing $v"; ok=0; }; done; [ $ok = 1 ]
+  tags: [spec, prismml, implemented]
+- label: prismml is documented as a backend, listed in the Harbor app metadata with the PrismML-Eng logo, and has a harbor prismml section in the CLI reference
+  command: test -f 'docs/2.2.29-Backend-PrismML-llama.cpp.md' && rg -q 'Handle: `prismml`' 'docs/2.2.29-Backend-PrismML-llama.cpp.md' && rg -q 'prismml: \{' app/src/serviceMetadata.ts && rg -q '2.2.29-Backend-PrismML-llama.cpp' app/src/serviceMetadata.ts && rg -q 'harbor prismml <command>' docs/3.-Harbor-CLI-Reference.md
+  tags: [spec, prismml, implemented]
+- label: [runtime: prismml up] after harbor up prismml the server passes /health and /v1/models lists the served Bonsai model, and a chat completion returns non-empty content (verified on ROCm gfx1151 during development)
+  command: curl -sf "$(./harbor.sh url prismml)/health" | grep -q ok && curl -sf "$(./harbor.sh url prismml)/v1/models" | jq -e '.data | length > 0' >/dev/null && curl -sf "$(./harbor.sh url prismml)/v1/chat/completions" -H 'Content-Type: application/json' -d '{"messages":[{"role":"user","content":"Reply with exactly: PONG"}],"max_tokens":512}' | jq -er '.choices[0].message.content | length > 0' >/dev/null
+  tags: [spec, prismml, runtime, implemented]
+
 ## ollama
 - label: compose.ollama.yml additionally binds HARBOR_HF_CACHE read-only at ${HOME}/.cache/huggingface so llama.cpp-cache GGUF symlinks targeting absolute host HF-cache blob paths resolve inside the container
   command: grep -q ':${HOME}/.cache/huggingface:ro' services/compose.ollama.yml
   tags: [spec, cache-symlinks, implemented]
+- label: the ollama-init sidecar is slim: it runs on alpine:3.20 (instead of the multi-GB ollama image), mounts only services/ollama/init_entrypoint.sh with no /root/.ollama volume since pulls go through the ollama server's HTTP API, gets no GPU devices even under the rocm capability (which still gives the ollama server /dev/kfd, /dev/dri and the :rocm image), waits for ollama service_healthy, and flips to healthy on /run/harbor/ollama-init-done (2s interval, 900 retries) so consumers like cognee and cognee-mcp keep depending on it with service_healthy
+  command: C(){ $(./harbor.sh cmd --no-defaults "$@") config --format json; }; C ollama cognee | jq -e '(.services["ollama-init"] | .image=="alpine:3.20" and ([.volumes[]|select(.target=="/root/.ollama")]|length==0) and ([.volumes[]|select(.target=="/init_entrypoint.sh" and (.source|endswith("/services/ollama/init_entrypoint.sh")))]|length==1) and .entrypoint==["/init_entrypoint.sh"] and .depends_on.ollama.condition=="service_healthy" and (.healthcheck | .test==["CMD-SHELL","test -f /run/harbor/ollama-init-done"] and .interval=="2s" and .retries==900)) and .services.cognee.depends_on["ollama-init"].condition=="service_healthy" and .services["cognee-mcp"].depends_on["ollama-init"].condition=="service_healthy"' >/dev/null && C ollama rocm | jq -e '(.services.ollama | (.image|endswith(":rocm")) and ([.devices[].source]|index("/dev/kfd")!=null and index("/dev/dri")!=null)) and (.services["ollama-init"] | .image=="alpine:3.20" and (.devices==null or (.devices|length==0)) and (.deploy.resources.reservations.devices==null))' >/dev/null && ! grep -q 'ollama-init' services/compose.x.ollama.rocm.yml && grep -q '^HARBOR_OLLAMA_DEFAULT_MODELS="nomic-embed-text:latest"$' profiles/default.env
+  tags: [ollama-init, implemented]
+- label: the ollama-init entrypoint is POSIX sh with no ollama CLI and no apk add: it pulls each comma-separated HARBOR_OLLAMA_DEFAULT_MODELS entry by streaming a POST to /api/pull with busybox wget, rejects model names containing quotes or backslashes, accepts a pull only when the stream ends with status success, warns and continues past a model that fails, and always creates the /run/harbor/ollama-init-done marker before staying alive so one bad model id never blocks dependents
+  id: eda
+  command: s=services/ollama/init_entrypoint.sh; head -1 $s | grep -qx '#!/bin/sh' && shellcheck -s sh $s && ! grep -Eq 'read -ra|pipefail|\[\[|ollama pull|apk add|local ' $s && grep -q 'wget' $s && grep -q '/api/pull' $s && grep -q '"stream":true' $s && grep -q 'Model names containing quotes or backslashes are not supported' $s && grep -q 'tail -n 1' $s && grep -q '"status":"success"' $s && grep -q 'Pulled model' $s && grep -q 'touch /run/harbor/ollama-init-done' $s && grep -q 'exec tail -f /dev/null' $s && d=$(mktemp -d); printf '#!/bin/sh\necho stub wget failure >&2; exit 1\n' >$d/wget; chmod +x $d/wget; docker run --rm -e PATH=/stub:/usr/local/bin:/usr/bin:/bin -e HARBOR_OLLAMA_DEFAULT_MODELS='probe-bad:latest, probe-second:latest' -v $d:/stub:ro -v $PWD/services/ollama/init_entrypoint.sh:/init_entrypoint.sh:ro alpine:3.20 sh -c '/init_entrypoint.sh >/tmp/out 2>&1 & sleep 3; cat /tmp/out; grep -q WARNING /tmp/out && grep -q probe-bad /tmp/out && grep -q probe-second /tmp/out && test -f /run/harbor/ollama-init-done'; r=$?; rm -rf $d; exit $r
+  tags: [ollama-init, implemented]
+- label: [runtime: ollama up] after ./harbor.sh up --no-defaults ollama the harbor.ollama-init container reports healthy and Ollama on host port 33821 (HARBOR_OLLAMA_HOST_PORT) lists the default model nomic-embed-text:latest in /api/tags, pulled by the slim sidecar over HTTP
+  command: docker inspect -f '{{.Config.Image}} {{.State.Status}} {{.State.Health.Status}}' harbor.ollama-init | grep -q '^alpine:3.20 running healthy$' && curl -sf localhost:33821/api/tags | jq -e '[.models[].name]|index("nomic-embed-text:latest")!=null' >/dev/null
+  tags: [ollama-init, runtime, implemented]
+- On AMD hosts the Ollama ROCm compose overlay selects HARBOR_OLLAMA_IMAGE:HARBOR_OLLAMA_ROCM_VERSION, defaulting to the published rocm tag independently of the CPU/NVIDIA version. @spec @issue-178 @implemented
+- On an AMD host, harbor up --no-defaults ollama starts the configured ROCm-tagged Ollama image and its HTTP API responds successfully. @spec @issue-178 @runtime @implemented
 
 ## ktransformers
 - label: compose.ktransformers.yml additionally binds HARBOR_HF_CACHE read-only at ${HOME}/.cache/huggingface so llama.cpp-cache GGUF symlinks targeting absolute host HF-cache blob paths resolve inside the container
@@ -795,6 +906,9 @@
 - label: tei doc content matches the service shape: the env table lists HARBOR_TEI_HOST_PORT 35030, HARBOR_TEI_MAX_CLIENT_BATCH_SIZE 512 and HARBOR_TEI_EXTRA_ARGS, the Volumes list names the HF hub cache at /data and override.env, the Integration table has one row per cross-file consumer (webui, librechat, anythingllm, lightrag) with end-user walkthroughs for Open WebUI, AnythingLLM and LibreChat, the CUDA tags named exist upstream (turing-latest, 86-latest, 89-latest), and the model-change recipe lists a re-index step per consumer
   command: d=docs/2.2.26-Backend-Text-Embeddings-Inference.md; grep -q "^HARBOR_TEI_HOST_PORT *35030$" $d && grep -q "^HARBOR_TEI_MAX_CLIENT_BATCH_SIZE *512$" $d && grep -q "^HARBOR_TEI_EXTRA_ARGS$" $d && grep -q "^##### Volumes$" $d && grep -q "/hub. (default .*) is mounted at ./data." $d && grep -q "services/tei/override.env" $d && for c in webui librechat anythingllm lightrag; do grep -q "^| .harbor up $c tei. |" $d || { echo "missing row: $c"; exit 1; }; done && for w in "Using it from Open WebUI" "Using it from AnythingLLM" "Using it from LibreChat"; do grep -q "^$w" $d || { echo "missing walkthrough: $w"; exit 1; }; done && grep -q "turing-latest" $d && grep -q "86-latest" $d && grep -q "89-latest" $d && for c in "Open WebUI" LibreChat AnythingLLM LightRAG; do grep -q "^- \*\*$c\*\*: " $d || { echo "missing re-index: $c"; exit 1; }; done
   tags: [tei, spec, implemented]
+- label: The TEI cache ownership regression check runs under POSIX sh and reports differing path sets without Bash-only syntax
+  command: sh services/tei/check-cache-init.sh
+  tags: [issue-262, implemented]
 
 ## lightrag
 - label: lightrag service compose file at services/compose.lightrag.yml exposes port 9621 on HARBOR_LIGHTRAG_HOST_PORT and persists /app/data under HARBOR_LIGHTRAG_WORKSPACE
@@ -1203,6 +1317,113 @@
   command: grep -E '^#{3,5} ' docs/2.3.96-Satellite-Whishper.md | tr -d '#' | sed 's/^ *//' | tr '\n' '|' | grep -q 'Starting|Usage|Configuration|Environment Variables|Volumes|Cross-service integrations|Troubleshooting|Check Logs|Transcription stays pending or fails with status -1|Translate button does nothing / language list empty|UI loads but the transcription list is empty on a LAN or traefik client|Poor accuracy|Reset the database|Links|' && grep -q '^curl -F file=@hello.wav -F language=en -F modelSize=tiny -F device=cpu' docs/2.3.96-Satellite-Whishper.md && grep -q '^curl http://localhost:35060/api/translate/<id>/es' docs/2.3.96-Satellite-Whishper.md
   tags: [whishper, spec, implemented]
 
+## halogen
+- harbor up halogen exposes the Halogen OpenAI API on configurable host port 34950 with Strix Halo GPU access and unlimited locked memory @spec @halogen @implemented
+- Halogen persists its downloadable model bundle in a configurable workspace and exposes image version, context, pool size, slots and prefill size through harbor config @spec @halogen @implemented
+- Selecting webui and halogen connects Open WebUI to the Halogen API after its engine healthcheck succeeds @spec @halogen @implemented
+- The Halogen catalog entry and documentation explain Strix Halo requirements, model download size, configuration and a real chat completion request @spec @halogen @implemented
+- label: Selecting traefik and halogen routes HTTPS requests for the Halogen subdomain to its API on port 8731
+  command: rg -q 'halogen.loadbalancer.server.port=8731' services/compose.x.traefik.halogen.yml
+  tags: [implemented, release]
+
+## n8n
+- label: n8n compose starts n8n-sandbox-certs, n8n-sandbox-api, and n8n-sandbox-runner-1 alongside n8n and n8n-db
+  command: grep -qE '^  n8n:$' services/compose.n8n.yml && grep -qE '^  n8n-db:$' services/compose.n8n.yml && grep -qE '^  n8n-sandbox-certs:$' services/compose.n8n.yml && grep -qE '^  n8n-sandbox-api:$' services/compose.n8n.yml && grep -qE '^  n8n-sandbox-runner-1:$' services/compose.n8n.yml
+  tags: [n8n-sandbox, implemented]
+- label: n8n waits for n8n-sandbox-api to be healthy before starting
+  command: grep -A25 '^  n8n:' services/compose.n8n.yml | grep -q 'n8n-sandbox-api:' && grep -A8 'depends_on:' services/compose.n8n.yml | grep -A1 'n8n-sandbox-api:' | grep -q 'condition: service_healthy'
+  tags: [n8n-sandbox, implemented]
+- label: n8n-sandbox-certs generates mTLS material with SANs matching n8n-sandbox-api and n8n-sandbox-runner
+  command: grep -q -- '--api-san n8n-sandbox-api' services/compose.n8n.yml && grep -q -- '--control-san-prefix n8n-sandbox-runner' services/compose.n8n.yml
+  tags: [n8n-sandbox, implemented]
+- label: n8n-sandbox-runner-1 is privileged Docker-in-Docker and neither it nor n8n-sandbox-api publish host ports
+  command: grep -A6 '^  n8n-sandbox-runner-1:' services/compose.n8n.yml | grep -q 'privileged: true' && ! grep -A80 '^  n8n-sandbox-api:' services/compose.n8n.yml | grep -q '^    ports:'
+  tags: [n8n-sandbox, implemented]
+- label: n8n is pointed at the bundled n8n-sandbox provider via N8N_INSTANCE_AI_SANDBOX and N8N_SANDBOX_SERVICE env vars
+  command: grep -q 'N8N_INSTANCE_AI_SANDBOX_ENABLED=true' services/compose.n8n.yml && grep -q 'N8N_INSTANCE_AI_SANDBOX_PROVIDER=n8n-sandbox' services/compose.n8n.yml && grep -q 'N8N_SANDBOX_SERVICE_URL=http://n8n-sandbox-api:8080' services/compose.n8n.yml && grep -q 'N8N_SANDBOX_SERVICE_API_KEY=${HARBOR_N8N_SANDBOX_API_KEY}' services/compose.n8n.yml
+  tags: [n8n-sandbox, implemented]
+- label: n8n sandbox API and runner secrets are HARBOR_N8N_SANDBOX_API_KEY, HARBOR_N8N_SANDBOX_REGISTRATION_TOKEN, and HARBOR_N8N_SANDBOX_RUNNER_KEY
+  command: grep -q '^HARBOR_N8N_SANDBOX_API_KEY=' profiles/default.env && grep -q '^HARBOR_N8N_SANDBOX_REGISTRATION_TOKEN=' profiles/default.env && grep -q '^HARBOR_N8N_SANDBOX_RUNNER_KEY=' profiles/default.env && grep -q 'SANDBOX_API_KEYS=${HARBOR_N8N_SANDBOX_API_KEY}' services/compose.n8n.yml && grep -q 'SANDBOX_API_RUNNER_REGISTRATION_TOKEN=${HARBOR_N8N_SANDBOX_REGISTRATION_TOKEN}' services/compose.n8n.yml && grep -q 'SANDBOX_RUNNER_API_KEYS=${HARBOR_N8N_SANDBOX_RUNNER_KEY}' services/compose.n8n.yml
+  tags: [n8n-sandbox, implemented]
+- label: n8n sandbox sidecar images are configured via HARBOR_N8N_SANDBOX image and version keys and default to n8n-io 1.2.0
+  command: grep -q '^HARBOR_N8N_SANDBOX_API_IMAGE=' profiles/default.env && grep -q '^HARBOR_N8N_SANDBOX_RUNNER_IMAGE=' profiles/default.env && grep -q '^HARBOR_N8N_SANDBOX_IMAGE=' profiles/default.env && grep -q '^HARBOR_N8N_SANDBOX_VERSION="1.2.0"' profiles/default.env && grep -q '${HARBOR_N8N_SANDBOX_API_IMAGE}:${HARBOR_N8N_SANDBOX_VERSION}' services/compose.n8n.yml && grep -q '${HARBOR_N8N_SANDBOX_RUNNER_IMAGE}:${HARBOR_N8N_SANDBOX_VERSION}' services/compose.n8n.yml
+  tags: [n8n-sandbox, implemented]
+- label: n8n compose.x overlay points n8n Assistant web search at Harbor SearXNG when both services are active
+  command: grep -q 'N8N_INSTANCE_AI_SEARXNG_URL=${HARBOR_SEARXNG_INTERNAL_URL}' services/compose.x.n8n.searxng.yml
+  tags: [n8n-sandbox, implemented]
+- label: n8n docs describe the bundled sandbox stack, the privileged runner, and the sandbox config keys
+  command: d='docs/2.3.23-Satellite&colon-n8n.md'; grep -q 'n8n-sandbox-api' "$d" && grep -q 'privileged' "$d" && grep -q 'HARBOR_N8N_SANDBOX_API_KEY' "$d" && grep -q 'n8n Assistant' "$d"
+  tags: [n8n-sandbox, implemented]
+
+## qwencode
+- label: Qwen Code satellite runs the official container as an authenticated Web Shell daemon with persistent config and workspace on a dedicated Harbor port
+  command: test -f services/compose.qwencode.yml && test -f services/qwencode/default.env && grep -q 'qwen.*serve' services/compose.qwencode.yml && grep -q 'HARBOR_QWENCODE_HOST_PORT=34970' services/qwencode/default.env
+  tags: [spec, issue-247, implemented]
+- label: When Qwen Code and Ollama run together, Harbor seeds an OpenAI-compatible provider for the configured Ollama model without replacing existing Qwen settings
+  command: test -f services/compose.x.qwencode.ollama.yml && grep -q 'OPENAI_BASE_URL' services/compose.x.qwencode.ollama.yml && grep -q 'settings.json' services/qwencode/entrypoint.sh
+  tags: [spec, issue-247, implemented]
+- label: Qwen Code appears in app metadata and has service documentation with a Web Shell screenshot and security instructions
+  command: grep -q 'qwencode:' app/src/serviceMetadata.ts && test -f docs/2.3.99-Satellite-Qwen-Code.md && test -f docs/harbor-qwencode.png
+  tags: [spec, issue-247, implemented]
+
+## agent
+- label: The Harbor Agent Dockerfile omits unavailable neofetch and installs Node.js/npm through the supported NodeSource setup before Yarn, allowing harbor build agent to complete
+  command: ! grep -q neofetch services/agent/Dockerfile && grep -q 'https://deb.nodesource.com/setup_22.x' services/agent/Dockerfile && ! grep -q 'npmjs.org/install.sh' services/agent/Dockerfile
+  tags: [spec, issue-240, implemented]
+- label: Harbor Agent Python dependencies install on the current Webtop Python 3.14 base using an aiohttp release with cp314 wheels
+  command: grep -q '^aiohttp==3.14.3$' services/agent/requirements.txt
+  tags: [spec, issue-240, implemented]
+
+## claraverse
+- claraverse starts from its official single-container image with persistent application data and uploads @spec @issue-154 @implemented
+- claraverse can discover Harbor Ollama models when both services run together @spec @issue-154 @implemented
+- claraverse documentation identifies missing Knowledge and web-search sidecars and first-user setup @spec @issue-154 @implemented
+- claraverse first boot makes its bind-mounted data and uploads writable by the upstream container user @spec @issue-154 @implemented
+- claraverse starts with persistent MySQL, MongoDB, and Redis dependencies required by the current official image @spec @issue-154 @implemented
+- claraverse creates and reuses a private MySQL password without a hard-coded shared credential @spec @issue-154 @implemented
+- claraverse documentation flags upstream missing-table warnings that limit synced conversation and model-tier features @spec @issue-154 @implemented
+
+## ragflow
+- RAGFlow is available as a Harbor service with a reachable UI and persistent Elasticsearch, MySQL, object-storage, and cache data. @spec @issue-139 @implemented
+- RAGFlow does not start with shipped default credentials; database, search, storage, cache, and bootstrap-admin secrets must be configured per installation. @spec @issue-139 @implemented
+- RAGFlow can create a local account, ingest a document, and search it after a service restart. @spec @issue-139 @implemented
+- RAGFlow documentation explains the upstream dependency stack, first-run secrets, model setup, ports, and backup. @spec @issue-139 @implemented
+
+## caddy
+- Caddy runs as a Harbor service from the official Caddy image, serving a local health endpoint with loopback-only default HTTP and HTTPS ports. @spec @issue-135 @implemented
+- A user-selectable Caddyfile lets Caddy reverse proxy another service on the Harbor network. @spec @issue-135 @implemented
+- Caddy retains certificate and runtime data in persistent volumes, and its documentation covers safe public HTTPS configuration and coexistence with Traefik. @spec @issue-135 @implemented
+
+## r2r
+- R2R is available as a Harbor service with a persistent PostgreSQL/pgvector database and reachable API and dashboard. @spec @issue-120 @implemented
+- R2R requires per-installation database and application secrets rather than shipping fixed public credentials. @spec @issue-120 @implemented
+- When started with Harbor Ollama, R2R can ingest a local document using Ollama embeddings and query its contents with an Ollama chat model. @spec @issue-120 @implemented
+- R2R documentation explains the lighter deployment, limitations relative to upstream full deployment, persistent data, ports, and model configuration. @spec @issue-120 @implemented
+
+## lobehub
+- LobeHub server-database variant is a separate Harbor service from client-storage LobeChat, with persistent PostgreSQL data and local account sign-in. @spec @issue-118 @implemented
+- LobeHub stores uploaded knowledge files in a persistent S3-compatible service and can retrieve them after restart. @spec @issue-118 @implemented
+- LobeHub can chat using Harbor Ollama through a cross-service integration. @spec @issue-118 @implemented
+- LobeHub runtime secrets are generated or required explicitly rather than shipped as fixed public credentials. @spec @issue-118 @implemented
+- LobeHub and its browser-facing object storage bind to loopback by default, with an explicit host override for LAN access. @spec @issue-118 @implemented
+- LobeHub configures a per-installation JWKS signing key so uploaded knowledge files can be parsed and indexed without the optional agent gateway. @spec @issue-118 @implemented
+- When Harbor Ollama is selected with LobeHub, uploaded knowledge uses a local Ollama embedding model instead of requiring an OpenAI API key. @spec @issue-118 @implemented
+
+## perplexica
+- Perplexica exposes a configurable public backend host so browser API and WebSocket URLs can use a LAN hostname instead of localhost. @spec @issue-70 @implemented
+- Perplexica launched with Ollama and SearXNG loads its frontend through a LAN address and reaches both backend integrations. @spec @issue-70 @implemented
+- Perplexica's local embedding model cache is writable and persistent while the backend runs as the host user. @spec @issue-70 @implemented
+
+## autogenstudio
+- Harbor exposes AutoGen Studio as an autogenstudio satellite with a persistent app directory and configurable host port. @spec @issue-65 @implemented
+- Harbor's service catalog and documentation describe AutoGen Studio startup, persistence, and local-model configuration. @spec @issue-65 @implemented
+- AutoGen Studio starts through harbor up autogenstudio and can complete an agent workflow against a Harbor Ollama model. @spec @issue-65 @implemented
+
+## latitude
+- Harbor starts a self-hosted Latitude web UI with its API, ingest endpoint, workers, and required local datastores @spec @issue-59 @implemented
+- A new Latitude user can complete email sign-in through a local mail catcher and open the web UI @spec @issue-59 @implemented
+- Latitude's PostgreSQL, ClickHouse, queue, and object storage data persist across Harbor restarts @spec @issue-59 @implemented
+
 # app
 - label: Harbor App blocks main UI behind a setup gate until setup detail status is ready
   command: rg -q 'detail\?\.status === "ready"' app/src/setup/HarborSetupContext.tsx
@@ -1232,6 +1453,7 @@
 - label: Harbor App build splits vendor code into react terminal markdown and syntax chunks via Vite manualChunks so no JS chunk exceeds 600 kB
   command: grep -q 'manualChunks' app/vite.config.ts
   tags: [implemented]
+- Harbor App Profiles loads profiles under a dot-prefixed Harbor home without a Tauri forbidden-path error @spec @issue-64 @implemented
 
 # boost
 - label: Boost is a FastAPI LLM proxy that exposes OpenAI chat completions and optional Anthropic and Responses compat layers
@@ -1413,6 +1635,20 @@
   command: cd services/boost && uv run pytest -q tests/test_backend_error_logging.py
   tags: [spec, implemented, boost-error-logging]
 
+## codemode
+- label: codemode advertises exactly one tool __tool_execute_code (single code parameter) and hides every other local tool from the model, rendering each hidden tool as a Python signature with its docstring in the system prompt, absorbing tools registered by earlier workflow steps into the hidden catalog, still executing a hidden tool server-side if the model calls it by name, and leaving client-supplied request tools untouched
+  command: cd services/boost && uv run pytest tests/test_codemode.py -q --tb=no -k "TestAdvertisedTools or prompt_renders_signatures"
+  tags: [codemode, codemode-boost, implemented]
+- label: codemode's execute_code runs the model's program in an isolated subprocess that round-trips hidden tool calls over a JSON-lines protocol, returns program exceptions as traceback text and hidden tool failures as in-program RuntimeErrors, caps captured output at HARBOR_BOOST_CODEMODE_MAX_OUTPUT and hidden calls at HARBOR_BOOST_CODEMODE_MAX_CALLS, kills a program exceeding HARBOR_BOOST_CODEMODE_TIMEOUT together with its whole process group and returns partial output instead of raising, and restores the original local tool registry on every exit path while keeping execute_code advertised when the final completion is deferred
+  command: cd services/boost && uv run pytest tests/test_codemode.py -q --tb=no -k "TestExecution or TestRegistryLifecycle or TestSandboxHelpers"
+  tags: [codemode, codemode-boost, implemented]
+- label: harbor launch accepts --codemode in both launch parsers as sugar for --workflow codemode, rejects it combined with --workflow, routes to a codemode-prefixed model in the launch smoke suite, and is documented in the Boost modules doc, the Boost configuration doc and the CLI reference
+  command: grep -q -- '--codemode' harbor.sh && grep -q 'does not support --codemode and --workflow together' harbor.sh && grep -q '^## codemode' docs/5.2.3-Harbor-Boost-Modules.md && grep -q '^## HARBOR_BOOST_CODEMODE_TIMEOUT' docs/5.2.2-Harbor-Boost-Configuration.md && grep -q -- '--codemode' docs/3.-Harbor-CLI-Reference.md && grep -q -- '--codemode' tests/suites/05-launch-smoke.sh && bash tests/suites/05-launch-smoke.sh
+  tags: [codemode, codemode-harbor, implemented]
+- label: HARBOR_BOOST_CODEMODE_TIMEOUT, MAX_OUTPUT and MAX_CALLS default in services/boost/default.env and are passed through compose with inline defaults, so a stale or empty .env value cannot inject an empty setting and Boost falls back to the built-in defaults
+  command: grep -q '^HARBOR_BOOST_CODEMODE_TIMEOUT=30' services/boost/default.env && grep -q '^HARBOR_BOOST_CODEMODE_MAX_OUTPUT=8000' services/boost/default.env && grep -q '^HARBOR_BOOST_CODEMODE_MAX_CALLS=50' services/boost/default.env && grep -q 'HARBOR_BOOST_CODEMODE_TIMEOUT=${HARBOR_BOOST_CODEMODE_TIMEOUT:-30}' services/compose.boost.yml && grep -q 'HARBOR_BOOST_CODEMODE_MAX_OUTPUT=${HARBOR_BOOST_CODEMODE_MAX_OUTPUT:-8000}' services/compose.boost.yml && grep -q 'HARBOR_BOOST_CODEMODE_MAX_CALLS=${HARBOR_BOOST_CODEMODE_MAX_CALLS:-50}' services/compose.boost.yml && cd services/boost && uv run pytest tests/test_codemode.py -q --tb=no -k empty_env_uses_defaults
+  tags: [codemode, codemode-harbor, implemented]
+
 # testing
 - label: tests use a Deno orchestrator running sequential bash suites across containerized distros
   command: test -f tests/run.ts && test -f tests/suites/01-install.sh && test -f tests/suites/05-launch-smoke.sh
@@ -1423,6 +1659,9 @@
   tags: [implemented]
 - pending launch CLI, Hugging Face model discovery, and Boost module changes have an agent-executable integration release checklist covering behavior, lint, facts, and user documentation @spec @release-validation @implemented
 - the test-boost-module skill live-tests current Boost modules through harbor launch with pi and does not recommend removed modules or obsolete module roles @spec @release-validation @implemented
+- label: Boost agentic container tests run uv without modifying the read-only project lockfile
+  command: rg -q 'uv run --frozen --with pytest --with pytest-asyncio' tests/lib/boost-agentic.sh
+  tags: [spec, boost-agentic-lock, implemented]
 
 # lint
 - label: harbor dev lint runs a three-pass Deno orchestrator with HARBOR-prefixed bash rules under .scripts/lint
@@ -1451,6 +1690,18 @@
 - label: sglang, lmdeploy, and aphrodite docs each carry an explicit NVIDIA-only note (upstream images are CUDA-only)
   command: bash -c 'grep -qi nvidia "docs/2.2.12-Backend&colon-SGLang.md" && grep -qi nvidia "docs/2.2.10-Backend&colon-lmdeploy.md" && grep -qi nvidia "docs/2.2.5-Backend&colon-Aphrodite-Engine.md"'
   tags: [sweep6, implemented]
+
+## links
+- label: The Unsloth Studio documentation links to the existing case-sensitive llama.cpp guide filename, and the reported Tools link retains its .md extension
+  command: rg -q -F './2.2.2-Backend&colon-llama.cpp.md' 'docs/2.3.83-Satellite-Unsloth-Studio.md' && ! rg -q -F './2.2.2-Backend&colon-Llama.cpp.md' docs && rg -q -F './1.2-Tools.md' 'docs/1.-Harbor-User-Guide.md'
+  tags: [spec, issue-230, implemented]
+
+## anythingllm
+- AnythingLLM documentation identifies the persisted settings file, warns that it can contain secrets, and gives existing users a way to copy a still-running container settings file before upgrading. @spec @issue-183 @implemented
+
+## ollama
+- The Ollama guide documents how to pin an AMD-specific published ROCm tag, explains why ollama.version does not control that tag, and gives the default restore command. @spec @issue-178 @implemented
+- The external-Ollama guide distinguishes cross-compose wiring from independent services and gives the Harbor env commands needed for Boost model discovery and WebUI direct Ollama access when the ollama handle is omitted. @spec @issue-168 @implemented
 
 # ci
 - label: CI includes GitHub Actions workflows for app-release bench-docker boost-docker lint and test
@@ -1984,3 +2235,40 @@
   command: d=docs/2.3.97-Satellite-Linkwarden.md; grep -q "^##### Archived but never tagged" $d && grep -q "aiTaggingMethod" $d && grep -q "Settings Applied" $d && grep -q "Auto-tagging link" $d && grep -q "check-runtime.sh tags" $d && grep -q "Based on existing Tags" $d && grep -q "Based on predefined Tags" $d && grep -q "RSS Subscriptions" $d && grep -A4 "^##### Volumes" $d | grep "pgdata" | grep -q "postgres" && grep -q "empty database" $d
   tags: [linkwarden, spec, implemented]
 
+# services > chandra
+- label: chandra runs Chandra 2 OCR on vLLM as a GPU-only Harbor backend: HARBOR_CHANDRA_IMAGE:HARBOR_CHANDRA_VERSION on host port HARBOR_CHANDRA_HOST_PORT (container 8000), serving HARBOR_CHANDRA_MODEL under the OpenAI model name chandra with --max-num-seqs 16 --max-num-batched-tokens 2048 (vLLM 0.17 cudagraph warm-up asserts on this hybrid model at the default 256) followed by HARBOR_CHANDRA_EXTRA_ARGS verbatim, mounting the shared HuggingFace cache with HUGGING_FACE_HUB_TOKEN so weights download once, turning healthy on GET /health with a >=30m start_period, and reserving NVIDIA GPUs only under 'harbor up chandra nvidia'
+  command: C(){ $(./harbor.sh cmd --no-defaults "$@") config --format json; }; HARBOR_CHANDRA_IMAGE=probe/img HARBOR_CHANDRA_VERSION=probe-ver HARBOR_CHANDRA_HOST_PORT=35080 HARBOR_CHANDRA_MODEL=probe-model HARBOR_CHANDRA_EXTRA_ARGS="--probe-flag probe-val" HARBOR_HF_CACHE=/probe-cache HARBOR_HF_TOKEN=probe-tok C chandra | jq -e '.services.chandra | .image=="probe/img:probe-ver" and .container_name==(env.HARBOR_CONTAINER_PREFIX // "harbor")+".chandra" and (.ports|length==1) and .ports[0].target==8000 and .ports[0].published=="35080" and (.networks|has("harbor-network")) and ([.volumes[]|select(.type=="bind" and .source=="/probe-cache" and .target=="/root/.cache/huggingface")]|length==1) and .environment.HUGGING_FACE_HUB_TOKEN=="probe-tok" and (.healthcheck | (.test|join(" ")|test("/health")) and (.test|join(" ")|test("8000")) and ((.start_period|sub("m.*";"")|tonumber) >= 30) and .retries>=10) and (.command | (index("--model") as $i | $i!=null and .[$i+1]=="probe-model") and (index("--served-model-name") as $i | $i!=null and .[$i+1]=="chandra") and (index("--max-num-seqs") as $i | $i!=null and .[$i+1]=="16") and (index("--max-num-batched-tokens") as $i | $i!=null and .[$i+1]=="2048") and (index("--probe-flag") as $i | $i!=null and .[$i+1]=="probe-val" and $i > index("--max-num-seqs")))' >/dev/null && C chandra | jq -e '.services.chandra | (.command|index("datalab-to/chandra-ocr-2")!=null) and .deploy.resources.reservations.devices==null' >/dev/null && C chandra nvidia | jq -e '.services.chandra.deploy.resources.reservations.devices | length==1 and .[0].driver=="nvidia" and .[0].count==-1 and (.[0].capabilities|index("gpu")!=null)' >/dev/null && grep -q "HARBOR_HF_CACHE:-./services/chandra/.hf-cache}:/root/.cache/huggingface" services/compose.chandra.yml
+  tags: [chandra, implemented]
+- label: chandra's HARBOR_CHANDRA_* defaults (host port 35080, image vllm/vllm-openai, version v0.17.0, model datalab-to/chandra-ocr-2, empty extra args) live in services/chandra/default.env with no copy in profiles/default.env, and the service directory carries an override.env loaded after ./.env plus a .gitignore for the local .hf-cache fallback
+  command: test -f services/chandra/override.env && grep -q "^\.hf-cache" services/chandra/.gitignore && grep -Eq "^\s*- \./services/chandra/override\.env" services/compose.chandra.yml && grep -Eq "^\s*- \./\.env" services/compose.chandra.yml && grep -q "^HARBOR_CHANDRA_HOST_PORT=35080$" services/chandra/default.env && grep -q "^HARBOR_CHANDRA_IMAGE=\"vllm/vllm-openai\"$" services/chandra/default.env && grep -q "^HARBOR_CHANDRA_VERSION=\"v0.17.0\"$" services/chandra/default.env && grep -q "^HARBOR_CHANDRA_MODEL=\"datalab-to/chandra-ocr-2\"$" services/chandra/default.env && grep -q "^HARBOR_CHANDRA_EXTRA_ARGS=\"\"$" services/chandra/default.env && [ "$(grep -c HARBOR_CHANDRA profiles/default.env)" = "0" ] && [ "$(./harbor.sh config get chandra.host_port)" = "35080" ]
+  tags: [chandra, implemented]
+- label: chandra is discoverable and documented: the app catalog registers it as a backend with the datalab-to/chandra project link, README lists it under Backends and in the News section, tests/new-services.md carries a cold-start group skipped on non-NVIDIA hosts, and docs/2.2.27-Backend-Chandra.md follows the Windmill format while stating GPU-only/ROCm-untested, non-gated OpenRAIL-M weights, 16GB VRAM, <think>/HTML-ish raw output, the num_cache_lines troubleshooting entry and the HARBOR_CHANDRA_* env table
+  command: d=docs/2.2.27-Backend-Chandra.md; test -f $d && prev=0; for h in "#### Starting" "#### Configuration" "##### Environment Variables" "#### Integration with Harbor" "#### Troubleshooting" "#### Links"; do n=$(grep -n -m1 "^$h$" $d | cut -d: -f1); [ -n "$n" ] && [ "$n" -gt "$prev" ] || { echo "missing or misordered: $h"; exit 1; }; prev=$n; done; [ "$(grep -A6 "^\*\*Key Features" $d | grep -c "^- ")" -ge 3 ] && grep -q "Handle: \`chandra\`" $d && grep -q "localhost:35080" $d && grep -q "harbor up chandra nvidia" $d && grep -qi "rocm" $d && grep -qi "untested" $d && grep -qi "OpenRAIL-M" $d && grep -q "not gated" $d && grep -q "16GB of VRAM" $d && grep -q "num_cache_lines" $d && grep -q "max-num-seqs 2 --max-model-len 8192" $d && grep -q "<think></think>" $d && grep -q "HARBOR_CHANDRA_HOST_PORT" $d && grep -q "HARBOR_CHANDRA_MODEL" $d && grep -q "HARBOR_CHANDRA_EXTRA_ARGS" $d && grep -q "datalab-to/chandra-ocr-2" $d && grep -A7 "^    chandra: {" app/src/serviceMetadata.ts | grep -q "HST.backend" && grep -A7 "^    chandra: {" app/src/serviceMetadata.ts | grep -q "2.2.27-Backend-Chandra\`" && grep -A7 "^    chandra: {" app/src/serviceMetadata.ts | grep -q "projectUrl: .https://github.com/datalab-to/chandra" && sed -n "/^##### Backends/,/^#####/p" README.md | grep -q "\[Chandra\](https://github.com/av/harbor/wiki/2.2.27-Backend-Chandra)" && sed -n "/^## News/,/^## Documentation/p" README.md | grep "^- " | grep -q "Chandra" && grep -q "^## Group [0-9]* — chandra" tests/new-services.md && sed -n "/^## Group [0-9]* — chandra/,/^## Group/p" tests/new-services.md | grep -q "harbor.sh up --no-defaults chandra nvidia" && sed -n "/^## Group [0-9]* — chandra/,/^## Group/p" tests/new-services.md | grep -q "localhost:35080/health" && sed -n "/^## Group [0-9]* — chandra/,/^## Group/p" tests/new-services.md | grep -q "/v1/chat/completions" && sed -n "/^## Group [0-9]* — chandra/,/^## Group/p" tests/new-services.md | grep -qi "skip" && sed -n "/^## Group [0-9]* — chandra/,/^## Group/p" tests/new-services.md | grep -q "harbor.sh down chandra"
+  tags: [chandra, implemented]
+
+# halogen
+- label: Halogen defaults use image 0.6.3, a 262144-position KV pool and a 16384-token prefill arena
+  command: grep -q HARBOR_HALOGEN_VERSION=\"0.6.3\" services/halogen/default.env && grep -q HARBOR_HALOGEN_KV_POOL_POSITIONS=262144 services/halogen/default.env && grep -q HARBOR_HALOGEN_MAX_TOK=16384 services/halogen/default.env && grep -q HARBOR_HALOGEN_HOST_RESERVE_GIB=20 services/halogen/default.env
+  tags: [spec, halogen, implemented]
+- label: Harbor passes Halogen host reserve, context, pool, slots and prefill size into the container
+  command: grep -Fq "HALOGEN_HOST_RESERVE_GIB=${HARBOR_HALOGEN_HOST_RESERVE_GIB}" services/compose.halogen.yml && grep -Fq "HALOGEN_CTX=${HARBOR_HALOGEN_CTX}" services/compose.halogen.yml && grep -Fq "HALOGEN_KV_POOL_POSITIONS=${HARBOR_HALOGEN_KV_POOL_POSITIONS}" services/compose.halogen.yml && grep -Fq "HALOGEN_KV_SLOTS=${HARBOR_HALOGEN_KV_SLOTS}" services/compose.halogen.yml && grep -Fq "HALOGEN_MAX_TOK=${HARBOR_HALOGEN_MAX_TOK}" services/compose.halogen.yml
+  tags: [spec, halogen, implemented]
+- label: Halogen documentation states the 0.6.3 image, the 262144 pool, the 16384 prefill arena and that the engine watchdog stops a silent engine
+  command: rg -q "0.6.3" docs/2.2.28-Backend-Halogen.md && rg -q "262144" docs/2.2.28-Backend-Halogen.md && rg -q "16384" docs/2.2.28-Backend-Halogen.md && rg -q "watchdog" docs/2.2.28-Backend-Halogen.md
+  tags: [spec, halogen, implemented]
+- A multi-turn Halogen chat with a large system prompt finishes without the engine watchdog stopping the container @spec @halogen @implemented
+- label: Halogen defaults to 4 KV slots, the measured acceptable engine batch on a 128 GiB Strix Halo
+  command: grep -q HARBOR_HALOGEN_KV_SLOTS=4 services/halogen/default.env
+  tags: [spec, halogen, implemented]
+- label: Halogen defaults the chat completion token budget to 65536 when a client omits max_tokens
+  command: grep -q HARBOR_HALOGEN_MAX_TOKENS_DEFAULT=65536 services/halogen/default.env
+  tags: [spec, halogen, implemented]
+- label: Halogen keeps the engine watchdog on and waits 900 seconds for unanswered PINGs
+  command: grep -q HARBOR_HALOGEN_ENGINE_WATCHDOG_S=900 services/halogen/default.env
+  tags: [spec, halogen, implemented]
+- label: Harbor passes the Halogen chat token budget and engine watchdog into the container
+  command: grep -Fq "HALOGEN_MAX_TOKENS_DEFAULT=${HARBOR_HALOGEN_MAX_TOKENS_DEFAULT}" services/compose.halogen.yml && grep -Fq "HALOGEN_ENGINE_WATCHDOG_S=${HARBOR_HALOGEN_ENGINE_WATCHDOG_S}" services/compose.halogen.yml
+  tags: [spec, halogen, implemented]
+- label: Halogen documentation states the 65536-token chat budget and the 900-second engine watchdog
+  command: rg -q "HARBOR_HALOGEN_MAX_TOKENS_DEFAULT" docs/2.2.28-Backend-Halogen.md && rg -q "65536" docs/2.2.28-Backend-Halogen.md && rg -q "HARBOR_HALOGEN_ENGINE_WATCHDOG_S" docs/2.2.28-Backend-Halogen.md && rg -q "900" docs/2.2.28-Backend-Halogen.md
+  tags: [spec, halogen, implemented]

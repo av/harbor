@@ -1,0 +1,25 @@
+services:
+  caddy:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.caddy
+    image: ${HARBOR_CADDY_IMAGE}:${HARBOR_CADDY_VERSION}
+    env_file:
+      - ./.env
+      - ./services/caddy/override.env
+    ports:
+      - ${HARBOR_CADDY_BIND_HOST}:${HARBOR_CADDY_HTTP_HOST_PORT}:80
+      - ${HARBOR_CADDY_BIND_HOST}:${HARBOR_CADDY_HTTPS_HOST_PORT}:443
+    volumes:
+      - ${HARBOR_CADDY_CONFIG}:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    healthcheck:
+      test: ["CMD", "caddy", "validate", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - harbor-network
+
+volumes:
+  caddy-data:
+  caddy-config:

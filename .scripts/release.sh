@@ -16,6 +16,11 @@ else
   echo "WARNING: cargo not found — app/src-tauri/Cargo.lock NOT synced with the bumped Cargo.toml version. Run 'cargo update --workspace' in app/src-tauri manually." >&2
 fi
 
+# Boost docs are rendered by running config.py/mods.py in the boost container,
+# so a stale local image silently drops newly added modules and config from the docs.
+echo "Building boost for docgen..."
+harbor build boost
+
 echo "Moving docs..."
 harbor dev docs
 

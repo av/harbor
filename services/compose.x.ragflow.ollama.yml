@@ -1,0 +1,12 @@
+services:
+  ragflow:
+    depends_on:
+      ollama:
+        condition: service_healthy
+      ollama-init:
+        condition: service_healthy
+    environment:
+      OLLAMA_HOST: ${HARBOR_OLLAMA_INTERNAL_URL}
+  ollama-init:
+    environment:
+      HARBOR_OLLAMA_DEFAULT_MODELS: ${HARBOR_OLLAMA_DEFAULT_MODELS},${HARBOR_RAGFLOW_CHAT_MODEL},${HARBOR_RAGFLOW_EMBEDDING_MODEL}

@@ -81,10 +81,28 @@ export function mergeBoostModulesManualSections(
 }
 
 if (import.meta.main) {
-  main().catch(console.error);
+  main().catch((error) => {
+    console.error(error);
+    Deno.exit(1);
+  });
 }
 
 async function main() {
+  // --check regenerates the docgen targets and fails on any diff instead of writing.
+  if (Deno.args.includes('--check')) {
+    const stale = await docgen({ check: true });
+
+    if (stale.length > 0) {
+      console.error(
+        `Generated docs are out of date: ${stale.join(', ')}. Run 'harbor build boost && harbor dev docs'.`,
+      );
+      Deno.exit(1);
+    }
+
+    console.log('Generated docs are up to date.');
+    return;
+  }
+
   await Promise.all([
     renderServiceIndex(),
     docgen(),
@@ -379,8 +397,47 @@ async function readExistingDoc(dest: string): Promise<string | null> {
   }
 }
 
-async function docgen() {
-  await Promise.all(
+/** Docker Compose derives the project name from the directory, so worktrees get their own image tag. */
+function composeProjectName() {
+  const cwd = Deno.cwd();
+  const base = cwd.slice(cwd.lastIndexOf('/') + 1);
+  return base.toLowerCase().replace(/[^a-z0-9_-]/g, '');
+}
+
+async function capture(cmd: string, args: string[]): Promise<string> {
+  try {
+    const { success, stdout } = await new Deno.Command(cmd, {
+      args,
+      stdout: 'piped',
+      stderr: 'null',
+    }).output();
+
+    return success ? new TextDecoder().decode(stdout).trim() : '';
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * The Boost docs are rendered by running config.py/mods.py inside the Boost container,
+ * so the output depends on both this checkout's sources and the locally built image.
+ */
+async function boostProvenance(): Promise<string> {
+  const commit = await capture('git', ['log', '-1', '--format=%h %s', '--', 'services/boost']);
+  const dirty = await capture('git', ['status', '--porcelain', '--', 'services/boost']);
+  const image = `${composeProjectName()}-boost`;
+  const imageInfo = await capture('docker', ['image', 'inspect', '-f', '{{.Id}} created {{.Created}}', image]);
+
+  return [
+    `docgen source: services/boost @ ${commit || 'unknown'}${dirty ? ' (dirty)' : ''}`,
+    `docgen image: ${image} ${imageInfo || "MISSING - run 'harbor build boost'"}`,
+  ].join('\n');
+}
+
+async function docgen({ check = false }: { check?: boolean } = {}): Promise<string[]> {
+  console.log(await boostProvenance());
+
+  const results = await Promise.all(
     Object.entries(docgenTargets).map(async ([cmd, dest]) => {
       console.debug(`Rendering target: ${cmd} -> ${dest}`);
       const existingDoc = await readExistingDoc(dest);
@@ -406,7 +463,7 @@ async function docgen() {
       let output = new TextDecoder().decode(stdout).trim();
       if (!output) {
         console.warn(`No output from command "${cmd}"`);
-        return;
+        return null;
       }
 
       if (manualSections.length > 0) {
@@ -416,8 +473,19 @@ async function docgen() {
         );
       }
 
-      await Deno.writeTextFile(dest, `${output}\n`);
+      const rendered = `${output}\n`;
+      const changed = rendered !== existingDoc;
+
+      if (check) {
+        console.debug(`Checked target: ${dest} (${changed ? 'stale' : 'up to date'})`);
+        return changed ? dest : null;
+      }
+
+      await Deno.writeTextFile(dest, rendered);
       console.debug(`Rendered target: ${cmd} -> ${dest}`);
+      return changed ? dest : null;
     })
   );
+
+  return results.filter((dest): dest is string => dest !== null);
 }

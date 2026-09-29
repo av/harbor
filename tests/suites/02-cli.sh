@@ -163,7 +163,7 @@ assert_match "launch help lists host tools" 'Host tools: .*codex.*pi.*vscode' ha
 assert_match "launch help lists dmr mlx and omlx backends" 'Backends: .*dmr.*mlx.*omlx' harbor launch --help
 assert_match "launch help lists service CLI shortcuts" 'Service CLI shortcuts: .*plandex.*promptfoo.*tokscale' harbor launch --help
 assert_match "launch help lists container service fallback" "Container services: any service from 'harbor ls'.*mi.*opencode" harbor launch --help
-assert_match "launch help documents web and workflow modifiers" '^--model, --config, --web, and --workflow\.$' harbor launch --help
+assert_match "launch help documents web and workflow modifiers" '^--model, --config, --web, --codemode, and --workflow\.$' harbor launch --help
 assert_not_match "launch help does not list removed tool groups" '--time|--notes|--files|--scratch' harbor launch --help
 
 suite_log "launch help avoids broken generic service --help example"
@@ -1400,7 +1400,7 @@ fi
 
 # config --services -- needed by get_services
 if [[ "$*" == *"config --services"* ]]; then
-  printf '%s\n' ollama webui llamacpp
+  printf '%s\n' ollama webui llamacpp boost
   exit 0
 fi
 
@@ -1464,6 +1464,65 @@ fi
 if ! grep -q -- '--rmi' "$down_fake_log" || ! grep -q -- 'local' "$down_fake_log"; then
   cat "$down_fake_log" >&2
   fail "harbor down --rmi local did not forward flags to compose"
+fi
+
+# Test: harbor down <service> is scoped - stop + rm of the named service only,
+# and never a project-wide 'down --remove-orphans' that would sweep other
+# running services (v0.5.7).
+: >"$down_fake_log"
+suite_log "down <service>: scoped stop/rm, no --remove-orphans"
+if ! HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false HARBOR_DOWN_FAKE_LOG="$down_fake_log" PATH="$down_fake_bin:$PATH" harbor down boost >/tmp/cli-step.out 2>&1; then
+  cat /tmp/cli-step.out >&2
+  fail "harbor down boost exited non-zero"
+fi
+if ! grep -Eq -- ' stop .*(^| )boost( |$)' "$down_fake_log"; then
+  cat "$down_fake_log" >&2
+  fail "harbor down boost did not call compose stop for boost"
+fi
+if ! grep -Eq -- ' rm -f boost( |$)' "$down_fake_log"; then
+  cat "$down_fake_log" >&2
+  fail "harbor down boost did not call compose rm -f for boost"
+fi
+if grep -q -- '--remove-orphans' "$down_fake_log"; then
+  cat "$down_fake_log" >&2
+  fail "harbor down boost used --remove-orphans (would sweep other services)"
+fi
+if grep -Eq -- ' (stop|rm) .*(^| )(ollama|webui|llamacpp)( |$)' "$down_fake_log"; then
+  cat "$down_fake_log" >&2
+  fail "harbor down boost touched services other than boost"
+fi
+
+# Test: bare harbor down still tears the whole project down with orphan removal
+: >"$down_fake_log"
+suite_log "down (bare): still uses down --remove-orphans"
+if ! HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false HARBOR_DOWN_FAKE_LOG="$down_fake_log" PATH="$down_fake_bin:$PATH" harbor down >/tmp/cli-step.out 2>&1; then
+  cat /tmp/cli-step.out >&2
+  fail "bare harbor down exited non-zero"
+fi
+if ! grep -q -- ' down --remove-orphans' "$down_fake_log"; then
+  cat "$down_fake_log" >&2
+  fail "bare harbor down no longer calls down --remove-orphans"
+fi
+
+# Test: harbor restart <service> recreates only that service - the compose 'up'
+# must name it instead of being service-less (which would start all defaults).
+: >"$down_fake_log"
+suite_log "restart <service>: up names only the requested service"
+if ! HARBOR_LEGACY_CLI=true HARBOR_CAPABILITIES_AUTODETECT=false HARBOR_DOWN_FAKE_LOG="$down_fake_log" PATH="$down_fake_bin:$PATH" harbor restart boost >/tmp/cli-step.out 2>&1; then
+  cat /tmp/cli-step.out >&2
+  fail "harbor restart boost exited non-zero"
+fi
+if ! grep -Eq -- ' up -d --wait boost( |$)' "$down_fake_log"; then
+  cat "$down_fake_log" >&2
+  fail "harbor restart boost did not name boost in compose up"
+fi
+if grep -Eq -- ' up -d --wait$' "$down_fake_log"; then
+  cat "$down_fake_log" >&2
+  fail "harbor restart boost issued a service-less up (would start defaults)"
+fi
+if grep -q -- '--remove-orphans' "$down_fake_log"; then
+  cat "$down_fake_log" >&2
+  fail "harbor restart boost used --remove-orphans"
 fi
 
 rm -rf "$down_fake_bin" "$down_fake_log"

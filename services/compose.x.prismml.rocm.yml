@@ -1,0 +1,11 @@
+services:
+  prismml:
+    build:
+      args:
+        BASE_IMAGE: ${HARBOR_PRISMML_BASE_IMAGE_ROCM}
+        PRISMML_ASSET: ${HARBOR_PRISMML_ASSET_ROCM}
+        EXTRA_PACKAGES: ${HARBOR_PRISMML_ROCM_PACKAGES}
+    image: harbor-prismml:${HARBOR_PRISMML_VERSION}-rocm
+    devices:
+      - /dev/kfd
+      - /dev/dri

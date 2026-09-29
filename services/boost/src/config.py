@@ -105,7 +105,14 @@ class Config(Generic[T]):
         raw_value = os.getenv(self.name, self.default)
         if isinstance(raw_value, list):
             raw_value = raw_value[0] if raw_value else ""
+        if not raw_value.strip() and not self._accepts_empty():
+            # Compose injects "" for keys missing from .env - for numbers that
+            # is "unset", not a value.
+            raw_value = self.default
         return self._convert_value(raw_value)
+
+    def _accepts_empty(self) -> bool:
+        return self.type not in (int, float)
 
     def _resolve_wildcard(self) -> List[T]:
         prefix = self.name.replace("*", "")
@@ -617,6 +624,36 @@ TOOLS_FILE_MAX_CHARS = Config[int](
     type=int,
     default="100000",
     description="Maximum file size, in characters, accepted by the scratch file tools.",
+)
+
+CODEMODE_TIMEOUT = Config[int](
+    name="HARBOR_BOOST_CODEMODE_TIMEOUT",
+    type=int,
+    default="30",
+    description=(
+        "Maximum wall time, in seconds, for a single `execute_code` program in the "
+        "`codemode` module. The sandbox process is killed when it expires."
+    ),
+)
+
+CODEMODE_MAX_OUTPUT = Config[int](
+    name="HARBOR_BOOST_CODEMODE_MAX_OUTPUT",
+    type=int,
+    default="8000",
+    description=(
+        "Maximum number of characters of program output returned to the model by the "
+        "`codemode` module. Zero or a negative value falls back to the default."
+    ),
+)
+
+CODEMODE_MAX_CALLS = Config[int](
+    name="HARBOR_BOOST_CODEMODE_MAX_CALLS",
+    type=int,
+    default="50",
+    description=(
+        "Maximum number of hidden tool calls a single `codemode` program may make. "
+        "Further calls are rejected with an error inside the program."
+    ),
 )
 
 TAVILY_API_KEY = Config[str](

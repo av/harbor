@@ -1,0 +1,8 @@
+services:
+  plandex:
+    environment:
+      # Point to prismml
+      # PrismML will ignore the API key, but
+      # it's required for the OpenAI SDK
+      - OPENAI_API_KEY=sk-prismml
+      - OPENAI_API_BASE=http://prismml:8080/v1

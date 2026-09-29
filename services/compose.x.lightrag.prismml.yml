@@ -1,0 +1,21 @@
+services:
+  lightrag:
+    depends_on:
+      prismml:
+        condition: service_healthy
+    environment:
+      - LLM_BINDING=openai
+      - LLM_BINDING_HOST=http://prismml:8080/v1
+      - LLM_BINDING_API_KEY=sk-prismml
+      - LLM_MODEL=${HARBOR_LIGHTRAG_PRISMML_MODEL}
+      # Disables Qwen3-style thinking so extraction/query calls return content
+      # instead of spending the whole budget on reasoning tokens
+      - 'OPENAI_LLM_EXTRA_BODY={"chat_template_kwargs":{"enable_thinking":${HARBOR_LIGHTRAG_PRISMML_THINKING}}}'
+      # Hard cap per call so a runaway generation frees its slot
+      - OPENAI_LLM_MAX_COMPLETION_TOKENS=${HARBOR_LIGHTRAG_PRISMML_MAX_TOKENS}
+      - LLM_TIMEOUT=${HARBOR_LIGHTRAG_PRISMML_TIMEOUT}
+      # One in-flight call at a time: llama-server serves one model with a few
+      # slots, and LightRAG's default fan-out (4 async x 2 inserts) just queues
+      # extraction workers into the 480s worker timeout
+      - MAX_ASYNC=${HARBOR_LIGHTRAG_PRISMML_MAX_ASYNC}
+      - MAX_PARALLEL_INSERT=1
