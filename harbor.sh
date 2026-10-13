@@ -9790,7 +9790,7 @@ show_models_help() {
     echo ""
     echo "Commands:"
     echo "  ls [--json] [--source SOURCE]  List models"
-    echo "  pull [--source SOURCE] <model> Download a model"
+    echo "  pull [--source SOURCE] <model> [files...] Download a model or selected HF files"
     echo "  rm [--source SOURCE] <model>   Remove a model"
     echo "  <source> <command> ...         Alias for --source SOURCE"
     echo ""
@@ -9805,6 +9805,7 @@ show_models_help() {
     echo "  harbor models pull --source mlx mlx-community/Qwen3.5-4B-4bit"
     echo "  harbor models pull --source omlx mlx-community/Qwen3.5-4B-4bit"
     echo "  harbor models pull bartowski/Llama-3.2-1B-Instruct-GGUF"
+    echo "  harbor models pull --source hf hf-internal-testing/tiny-random-gpt2 config.json"
     echo "  harbor models rm qwen3:8b"
 }
 
@@ -10224,7 +10225,7 @@ run_models_pull() {
 
     if [ -z "$model" ]; then
         log_error "No model specified."
-        echo "Usage: harbor models pull [--source SOURCE] <model>" >&2
+        echo "Usage: harbor models pull [--source SOURCE] <model> [files...]" >&2
         echo "" >&2
         echo "Examples:" >&2
         echo "  harbor models pull qwen3:8b                          # Ollama model" >&2
@@ -10254,7 +10255,7 @@ run_models_pull() {
         return
         ;;
     hf)
-        run_hf_docker_cli download "$model"
+        run_hf_docker_cli download "$@"
         return
         ;;
     llamacpp)
@@ -10273,6 +10274,13 @@ run_models_pull() {
         return 1
         ;;
     esac
+
+    # A filename is an explicit Hugging Face file selection. Bypass GGUF
+    # auto-detection, which otherwise chooses llama.cpp for the whole model.
+    if [ "$#" -gt 1 ]; then
+        run_hf_docker_cli download "$@"
+        return
+    fi
 
     # Auto-detect the right source by checking HuggingFace API.
     # Models with a "/" are likely HF repo identifiers (org/repo).
@@ -10323,7 +10331,7 @@ run_models_pull() {
     if [ -n "$has_gguf" ]; then
         run_llamacpp_pull "$model"
     else
-        run_hf_docker_cli download "$model"
+        run_hf_docker_cli download "$@"
     fi
 }
 
