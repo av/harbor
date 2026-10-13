@@ -12602,7 +12602,7 @@ run_modularmax_command() {
 # ========================================================================
 
 # Globals
-version="0.5.14"
+version="0.5.15"
 harbor_release_url="https://api.github.com/repos/av/harbor/releases/latest"
 delimiter="|"
 scramble_exit_code=42
