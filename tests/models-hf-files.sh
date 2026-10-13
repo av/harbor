@@ -4,6 +4,7 @@ set -euo pipefail
 harbor_sh="${1:-$(dirname "$(dirname "${BASH_SOURCE[0]}")")/harbor.sh}"
 
 # Load only model command routing, without starting Harbor's CLI entrypoint.
+# shellcheck disable=SC1090
 source <(sed -n '/^run_models_pull() {/,/^run_dmr_command() {/p' "$harbor_sh" | sed '$d')
 
 run_hf_docker_cli() { printf 'hf'; printf '|%s' "$@"; }
