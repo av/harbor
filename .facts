@@ -166,6 +166,9 @@
 - label: harbor models supports source-aware list, pull, and rm for ollama, llamacpp, dmr, mlx, and omlx
   command: rg -q 'run_models_routine' harbor.sh && rg -q 'dmr' routines/models.ts && rg -q 'mlx' routines/models.ts && rg -q 'omlx' routines/models.ts
   tags: [implemented]
+- label: harbor models pull forwards named files to the Hugging Face CLI for explicit hf and automatic routing while repository-only pulls retain their existing behavior
+  command: bash tests/models-hf-files.sh
+  tags: [spec, hf-single-file, issue-290, implemented]
 
 ## compose-merge
 - label: compose environment-list merging is key-aware: a later cross-file's KEY=VALUE entry replaces an earlier same-KEY entry even when byte-identical, so .a.b tie-breaker files take effect
