@@ -12,13 +12,38 @@ set -e
 if [ -n "${HERMES_PROVIDER_BASE_URL:-}" ]; then
     python3 - <<'EOF'
 import os
-import yaml
+
+# The hermes-agent image dropped PyYAML in its 2026-10-08 rebuild; the venv now
+# ships ruamel.yaml only (and Hermes itself reads config.yaml with ruamel).
+# Prefer PyYAML so older images keep their existing byte-for-byte output, and
+# fall back to ruamel on newer ones. The indent call reproduces the block-sequence
+# indentation Hermes writes, so switching writers doesn't restyle the whole file.
+try:
+    import yaml
+
+    def load(f):
+        return yaml.safe_load(f)
+
+    def dump(cfg, f):
+        yaml.safe_dump(cfg, f, sort_keys=False)
+
+except ImportError:
+    from ruamel.yaml import YAML
+
+    _yaml = YAML()
+    _yaml.indent(mapping=2, sequence=4, offset=2)
+
+    def load(f):
+        return _yaml.load(f)
+
+    def dump(cfg, f):
+        _yaml.dump(cfg, f)
 
 path = os.path.join(os.environ.get("HERMES_HOME", "/opt/data"), "config.yaml")
 cfg = {}
 if os.path.exists(path):
     with open(path) as f:
-        cfg = yaml.safe_load(f) or {}
+        cfg = load(f) or {}
 
 model = cfg.setdefault("model", {})
 model["provider"] = "custom"
@@ -28,7 +53,7 @@ if os.environ.get("HERMES_PROVIDER_MODEL"):
 
 tmp = f"{path}.harbor-tmp"
 with open(tmp, "w") as f:
-    yaml.safe_dump(cfg, f, sort_keys=False)
+    dump(cfg, f)
 os.replace(tmp, path)
 print(f"[harbor] hermes provider -> custom {model['base_url']} "
       f"model={model.get('default', '(unchanged)')}")

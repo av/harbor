@@ -2200,6 +2200,9 @@
 - label: hermes compose sets HERMES_UID/HERMES_GID to HARBOR_USER_ID/HARBOR_GROUP_ID so the s6 image remaps the hermes user and workspace files stay host-owned
   command: grep -q 'HERMES_UID=${HARBOR_USER_ID}' services/compose.hermes.yml && grep -q 'HERMES_GID=${HARBOR_GROUP_ID}' services/compose.hermes.yml
   tags: [hermes-provider, spec, implemented]
+- label: hermes configure-provider.sh resolves its YAML writer at runtime (PyYAML first, ruamel.yaml as fallback) — the hermes-agent image ships ruamel only as of its 2026-10-08 rebuild, and the wrapper runs before the image entrypoint, so an unresolvable yaml import exits 1 and the gateway never starts
+  command: grep -q 'except ImportError' services/hermes/configure-provider.sh && grep -q 'from ruamel.yaml import YAML' services/hermes/configure-provider.sh
+  tags: [hermes-provider, spec, implemented]
 
 # services > tei
 - label: [runtime: tei up] harbor.tei runs as HARBOR_USER_ID and HARBOR_TEI_MODEL's models--* dir in HARBOR_HF_CACHE/hub contains no entry owned by another uid (SKIPs with exit 1 when harbor.tei is not healthy)
