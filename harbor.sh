@@ -212,6 +212,16 @@ _parse_compose_ports() {
     ' <<< "$config_output"
 }
 
+# Host ports held by Harbor's own containers, on any bind IP, not just
+# 0.0.0.0/[::], so a container we own is never mistaken for a conflict.
+# Usage: _harbor_owned_ports <container_name_prefix>
+_harbor_owned_ports() {
+    local prefix="$1"
+    [ -n "$prefix" ] || return 0
+    docker ps --format '{{.Ports}}' --filter "name=${prefix}" 2>/dev/null \
+        | grep -oE ':[0-9]+->' | sed -E 's/:([0-9]+)->/\1/' | sort -u
+}
+
 # Check for port conflicts before starting services.
 # 1. Inter-service conflicts: two services mapping the same host port
 # 2. Host conflicts: a host port already in use by another process
@@ -265,10 +275,7 @@ _check_port_conflicts() {
     # Also skip ports owned by already-running Harbor containers (docker
     # compose will reuse them without conflict).
     local harbor_ports=""
-    if [ -n "$default_container_prefix" ]; then
-        harbor_ports=$(docker ps --format '{{.Ports}}' --filter "name=${default_container_prefix}" 2>/dev/null \
-            | grep -oE '(0\.0\.0\.0|\[::\]):[0-9]+' | sed 's/.*://' | sort -u) || true
-    fi
+    harbor_ports=$(_harbor_owned_ports "$default_container_prefix") || true
 
     local checked_ports=""
     while IFS= read -r entry; do
