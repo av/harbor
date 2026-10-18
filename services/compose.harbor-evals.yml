@@ -1,0 +1,27 @@
+services:
+  harbor-evals:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.harbor-evals
+    build:
+      context: ./services/harbor-evals
+      dockerfile: Dockerfile
+      args:
+        HARBOR_EVALS_VERSION: ${HARBOR_HARBOR_EVALS_VERSION}
+    env_file:
+      - ./.env
+      - ./services/harbor-evals/override.env
+    user: "${HARBOR_USER_ID}:${HARBOR_GROUP_ID}"
+    group_add:
+      - "${HARBOR_HARBOR_EVALS_DOCKER_GID}"
+    environment:
+      HOME: ${HARBOR_HARBOR_EVALS_WORKSPACE}
+      HARBOR_TELEMETRY: "0"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      # The host daemon must see the same absolute paths as the runner.
+      - ${HARBOR_HARBOR_EVALS_WORKSPACE}:${HARBOR_HARBOR_EVALS_WORKSPACE}:z
+    working_dir: ${HARBOR_HARBOR_EVALS_WORKSPACE}
+    command: ["sleep", "infinity"]
+    security_opt:
+      - label=disable
+    networks:
+      - harbor-network

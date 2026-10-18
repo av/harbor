@@ -1,0 +1,16 @@
+version = "1.0"
+
+[metadata]
+name = "hello-harbor-evals"
+description = "Tiny local runner smoke evaluation"
+
+[agent]
+timeout_sec = 30
+
+[verifier]
+timeout_sec = 30
+
+[environment]
+build_timeout_sec = 120
+cpus = 1
+memory_mb = 128

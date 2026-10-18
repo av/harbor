@@ -1280,4 +1280,12 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         wikiUrl: `${wikiUrl}/2.3.98-Satellite-Latitude`,
         tooltip: 'Self-hosted AI agent observability, signal discovery, and evaluations.',
     },
+    'harbor-evals': {
+        name: 'Harbor Evals (Harbor Framework)',
+        tags: [HST.satellite, HST.cli, HST.eval],
+        projectUrl: 'https://github.com/harbor-framework/harbor',
+        logo: 'https://github.com/harbor-framework.png?size=200',
+        wikiUrl: `${wikiUrl}/2.3.102-Satellite-Harbor-Evals`,
+        tooltip: 'Harbor Framework from the Terminal-Bench creators: evaluate agents in local Docker environments.',
+    },
 };

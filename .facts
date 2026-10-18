@@ -1424,6 +1424,12 @@
 - A new Latitude user can complete email sign-in through a local mail catcher and open the web UI @spec @issue-59 @implemented
 - Latitude's PostgreSQL, ClickHouse, queue, and object storage data persist across Harbor restarts @spec @issue-59 @implemented
 
+## harbor-evals
+- harbor up harbor-evals starts a containerized Harbor Framework runner with local Docker access and no paid provider requirement @spec @harbor-evals @implemented
+- harbor harbor-evals forwards arguments to the upstream harbor CLI without changing Harbor aliases or the existing eval command @spec @harbor-evals @implemented
+- harbor-evals keeps task inputs and job results in a configurable host-owned workspace mounted at the same absolute path for sibling Docker containers @spec @harbor-evals @implemented
+- The service catalog and wiki-ready Harbor Evals documentation identify Harbor Framework, explain Docker permissions and configuration, and show a tiny free local evaluation @spec @harbor-evals @implemented
+
 # app
 - label: Harbor App blocks main UI behind a setup gate until setup detail status is ready
   command: rg -q 'detail\?\.status === "ready"' app/src/setup/HarborSetupContext.tsx
