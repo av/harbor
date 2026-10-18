@@ -9,7 +9,7 @@ from harbor.cli import jobs, notifications
 from rich.console import Console
 
 
-command_name = "harbor agenteval"
+command_name = "harbor-agent-evals"
 
 
 class CommandConsole(Console):

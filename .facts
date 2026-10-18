@@ -1424,13 +1424,14 @@
 - A new Latitude user can complete email sign-in through a local mail catcher and open the web UI @spec @issue-59 @implemented
 - Latitude's PostgreSQL, ClickHouse, queue, and object storage data persist across Harbor restarts @spec @issue-59 @implemented
 
-## agenteval
-- harbor up agenteval starts a containerized agent evaluation runner with local Docker access and no paid provider requirement @spec @agenteval @implemented
-- harbor agenteval forwards upstream subcommands with matching help and command hints without changing Harbor aliases or the existing eval command @spec @agenteval @implemented
-- agenteval keeps task inputs and job results in a configurable host-owned workspace mounted at the same absolute path for sibling Docker containers @spec @agenteval @implemented
-- The Agent Evaluations catalog entry and wiki-ready documentation identify the upstream framework, explain Docker permissions and configuration, and show a tiny free local evaluation @spec @agenteval @implemented
-- The evaluation service has a handle without harbor and exposes run, help and local job results without requiring users to type an inner harbor command @spec @agenteval @implemented
-- harbor agenteval results JOB reads the saved local job summary and reports completed trials, errors and reward without contacting a model or hosted service @spec @agenteval @implemented
+## harbor-agent-evals
+- harbor up harbor-agent-evals starts a containerized Harbor agent-evaluation runner with local Docker access and no paid provider requirement @spec @harbor-agent-evals @implemented
+- The harbor-agent-evals opt-in command wrapper forwards framework subcommands with matching help and job follow-up hints without changing other Harbor commands @spec @harbor-agent-evals @implemented
+- harbor-agent-evals keeps task inputs and job results in a configurable host-owned workspace mounted at the same absolute path for sibling Docker containers @spec @harbor-agent-evals @implemented
+- The Harbor Agent Evals catalog entry and wiki-ready documentation identify the upstream framework, explain setup and configuration, and show a tiny free local evaluation @spec @harbor-agent-evals @implemented
+- The canonical handle harbor-agent-evals contains the framework name and describes its agent-evaluation purpose @spec @harbor-agent-evals @implemented
+- harbor-agent-evals results JOB reads saved local job summaries and reports completed trials, errors and reward without a model or hosted-service call @spec @harbor-agent-evals @implemented
+- The evaluation service handle contains harbor, and the existing h alias plus an opt-in same-name command wrapper provide startup, run and results without typing the upstream harbor binary @spec @harbor-agent-evals @implemented
 
 # app
 - label: Harbor App blocks main UI behind a setup gate until setup detail status is ready
