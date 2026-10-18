@@ -1,25 +1,25 @@
 services:
-  harbor-evals:
-    container_name: ${HARBOR_CONTAINER_PREFIX}.harbor-evals
+  agenteval:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.agenteval
     build:
-      context: ./services/harbor-evals
+      context: ./services/agenteval
       dockerfile: Dockerfile
       args:
-        HARBOR_EVALS_VERSION: ${HARBOR_HARBOR_EVALS_VERSION}
+        AGENTEVAL_VERSION: ${HARBOR_AGENTEVAL_VERSION}
     env_file:
       - ./.env
-      - ./services/harbor-evals/override.env
+      - ./services/agenteval/override.env
     user: "${HARBOR_USER_ID}:${HARBOR_GROUP_ID}"
     group_add:
-      - "${HARBOR_HARBOR_EVALS_DOCKER_GID}"
+      - "${HARBOR_AGENTEVAL_DOCKER_GID}"
     environment:
-      HOME: ${HARBOR_HARBOR_EVALS_WORKSPACE}
+      HOME: ${HARBOR_AGENTEVAL_WORKSPACE}
       HARBOR_TELEMETRY: "0"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       # The host daemon must see the same absolute paths as the runner.
-      - ${HARBOR_HARBOR_EVALS_WORKSPACE}:${HARBOR_HARBOR_EVALS_WORKSPACE}:z
-    working_dir: ${HARBOR_HARBOR_EVALS_WORKSPACE}
+      - ${HARBOR_AGENTEVAL_WORKSPACE}:${HARBOR_AGENTEVAL_WORKSPACE}:z
+    working_dir: ${HARBOR_AGENTEVAL_WORKSPACE}
     command: ["sleep", "infinity"]
     security_opt:
       - label=disable

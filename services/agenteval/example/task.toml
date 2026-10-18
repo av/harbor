@@ -1,7 +1,7 @@
 version = "1.0"
 
 [metadata]
-name = "hello-harbor-evals"
+name = "hello-evaluation"
 description = "Tiny local runner smoke evaluation"
 
 [agent]

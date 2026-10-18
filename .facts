@@ -1424,11 +1424,13 @@
 - A new Latitude user can complete email sign-in through a local mail catcher and open the web UI @spec @issue-59 @implemented
 - Latitude's PostgreSQL, ClickHouse, queue, and object storage data persist across Harbor restarts @spec @issue-59 @implemented
 
-## harbor-evals
-- harbor up harbor-evals starts a containerized Harbor Framework runner with local Docker access and no paid provider requirement @spec @harbor-evals @implemented
-- harbor harbor-evals forwards arguments to the upstream harbor CLI without changing Harbor aliases or the existing eval command @spec @harbor-evals @implemented
-- harbor-evals keeps task inputs and job results in a configurable host-owned workspace mounted at the same absolute path for sibling Docker containers @spec @harbor-evals @implemented
-- The service catalog and wiki-ready Harbor Evals documentation identify Harbor Framework, explain Docker permissions and configuration, and show a tiny free local evaluation @spec @harbor-evals @implemented
+## agenteval
+- harbor up agenteval starts a containerized agent evaluation runner with local Docker access and no paid provider requirement @spec @agenteval @implemented
+- harbor agenteval forwards upstream subcommands with matching help and command hints without changing Harbor aliases or the existing eval command @spec @agenteval @implemented
+- agenteval keeps task inputs and job results in a configurable host-owned workspace mounted at the same absolute path for sibling Docker containers @spec @agenteval @implemented
+- The Agent Evaluations catalog entry and wiki-ready documentation identify the upstream framework, explain Docker permissions and configuration, and show a tiny free local evaluation @spec @agenteval @implemented
+- The evaluation service has a handle without harbor and exposes run, help and local job results without requiring users to type an inner harbor command @spec @agenteval @implemented
+- harbor agenteval results JOB reads the saved local job summary and reports completed trials, errors and reward without contacting a model or hosted service @spec @agenteval @implemented
 
 # app
 - label: Harbor App blocks main UI behind a setup gate until setup detail status is ready

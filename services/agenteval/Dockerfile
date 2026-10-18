@@ -6,5 +6,7 @@ COPY --from=docker /usr/local/libexec/docker/cli-plugins /usr/local/libexec/dock
 RUN apt-get update \
     && apt-get install -y --no-install-recommends git ca-certificates \
     && rm -rf /var/lib/apt/lists/*
-ARG HARBOR_EVALS_VERSION=0.24.0
-RUN pip install --no-cache-dir "harbor==${HARBOR_EVALS_VERSION}"
+ARG AGENTEVAL_VERSION=0.24.0
+RUN pip install --no-cache-dir "harbor==${AGENTEVAL_VERSION}"
+
+COPY --chmod=755 cli.py /usr/local/bin/agenteval
