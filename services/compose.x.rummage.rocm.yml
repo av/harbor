@@ -1,0 +1,12 @@
+services:
+  rummage:
+    # Vulkan by default: it measured faster than ROCm for EmbeddingGemma on
+    # AMD (Radeon 8060S). Set rummage.amd_backend to "rocm" for the ROCm build.
+    image: ${HARBOR_RUMMAGE_IMAGE}:${HARBOR_RUMMAGE_VERSION}-${HARBOR_RUMMAGE_AMD_BACKEND}
+    devices:
+      - /dev/kfd
+      - /dev/dri
+    # rummage runs as the host user, so it needs the group that owns
+    # /dev/dri/renderD* when those nodes aren't world-accessible.
+    group_add:
+      - ${HARBOR_RUMMAGE_GPU_GROUP}

@@ -1,0 +1,44 @@
+services:
+  rummage:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.rummage
+    image: ${HARBOR_RUMMAGE_IMAGE}:${HARBOR_RUMMAGE_VERSION}-cpu
+    # The image runs as uid 1000; run as the host user instead so the index,
+    # thumbnails and model files in the workspace stay host-owned.
+    user: "${HARBOR_USER_ID}:${HARBOR_GROUP_ID}"
+    env_file:
+      - ./.env
+      - ./services/rummage/override.env
+    ports:
+      - ${HARBOR_RUMMAGE_HOST_PORT}:8099
+    volumes:
+      - ${HARBOR_RUMMAGE_WORKSPACE}/data:/data
+      - ${HARBOR_RUMMAGE_FOLDERS}:/folders:ro
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8099/api/v1/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+    depends_on:
+      rummage-init:
+        condition: service_completed_successfully
+    networks:
+      - harbor-network
+
+  # Docker creates missing bind-mount targets as root:root, which the
+  # non-root rummage process can't write to.
+  rummage-init:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.rummage-init
+    image: alpine:3.20
+    env_file:
+      - ./.env
+      - ./services/rummage/override.env
+    environment:
+      TARGET_UID: ${HARBOR_USER_ID}
+      TARGET_GID: ${HARBOR_GROUP_ID}
+    entrypoint: ["/bin/sh", "/init.sh"]
+    volumes:
+      - ./services/rummage/workspace-init.sh:/init.sh:ro
+      - ${HARBOR_RUMMAGE_WORKSPACE}/data:/workspace
+    networks:
+      - harbor-network
