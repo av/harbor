@@ -1288,4 +1288,12 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         wikiUrl: `${wikiUrl}/2.3.102-Satellite-Harbor`,
         tooltip: "Laude Institute's Harbor framework for evaluating agents in local Docker tasks.",
     },
+    rummage: {
+        name: 'rummage',
+        tags: [HST.satellite, HST.rag, HST.image, HST.audio, HST.api],
+        projectUrl: 'https://github.com/av/rummage',
+        logo: 'https://github.com/av.png?size=200',
+        wikiUrl: `${wikiUrl}/2.3.103-Satellite-Rummage`,
+        tooltip: 'Local semantic search over your text, images, documents, audio and video with EmbeddingGemma 2.',
+    },
 };

@@ -1,0 +1,10 @@
+services:
+  rummage:
+    image: ${HARBOR_RUMMAGE_IMAGE}:${HARBOR_RUMMAGE_VERSION}-cuda
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

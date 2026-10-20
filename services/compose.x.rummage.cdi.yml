@@ -1,0 +1,13 @@
+# Maintained by hand, not by seed-cdi.ts: unlike the generated CDI files it
+# also switches to the CUDA image, as compose.x.rummage.nvidia.yml does.
+services:
+  rummage:
+    image: ${HARBOR_RUMMAGE_IMAGE}:${HARBOR_RUMMAGE_VERSION}-cuda
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: cdi
+              capabilities: [gpu]
+              device_ids:
+              - nvidia.com/gpu=all
