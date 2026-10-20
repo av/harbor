@@ -1424,14 +1424,12 @@
 - A new Latitude user can complete email sign-in through a local mail catcher and open the web UI @spec @issue-59 @implemented
 - Latitude's PostgreSQL, ClickHouse, queue, and object storage data persist across Harbor restarts @spec @issue-59 @implemented
 
-## harbor-agent-evals
-- harbor up harbor-agent-evals starts a containerized Harbor agent-evaluation runner with local Docker access and no paid provider requirement @spec @harbor-agent-evals @implemented
-- The harbor-agent-evals opt-in command wrapper forwards framework subcommands with matching help and job follow-up hints without changing other Harbor commands @spec @harbor-agent-evals @implemented
-- harbor-agent-evals keeps task inputs and job results in a configurable host-owned workspace mounted at the same absolute path for sibling Docker containers @spec @harbor-agent-evals @implemented
-- The Harbor Agent Evals catalog entry and wiki-ready documentation identify the upstream framework, explain setup and configuration, and show a tiny free local evaluation @spec @harbor-agent-evals @implemented
-- The canonical handle harbor-agent-evals contains the framework name and describes its agent-evaluation purpose @spec @harbor-agent-evals @implemented
-- harbor-agent-evals results JOB reads saved local job summaries and reports completed trials, errors and reward without a model or hosted-service call @spec @harbor-agent-evals @implemented
-- The evaluation service handle contains harbor, and the existing h alias plus an opt-in same-name command wrapper provide startup, run and results without typing the upstream harbor binary @spec @harbor-agent-evals @implemented
+## harbor
+- harbor up harbor starts the containerized Harbor agent-evaluation framework with local Docker access and no paid provider requirement @spec @harbor-evals @implemented
+- harbor harbor forwards framework subcommands and shows matching help and follow-up hints without extra aliases or standalone launchers @spec @harbor-evals @implemented
+- The harbor evaluation service keeps tasks and results in a configurable host-owned workspace mounted at the same absolute path for sibling Docker containers @spec @harbor-evals @implemented
+- The harbor catalog entry and wiki-ready guide identify the upstream framework and document setup, configuration and the tiny local oracle evaluation @spec @harbor-evals @implemented
+- harbor harbor results JOB reads saved local job summaries and reports completed trials, errors and reward without a model or hosted-service call @spec @harbor-evals @implemented
 
 # app
 - label: Harbor App blocks main UI behind a setup gate until setup detail status is ready

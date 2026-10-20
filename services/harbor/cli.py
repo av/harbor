@@ -9,7 +9,7 @@ from harbor.cli import jobs, notifications
 from rich.console import Console
 
 
-command_name = "harbor-agent-evals"
+command_name = "harbor harbor"
 
 
 class CommandConsole(Console):
@@ -22,7 +22,7 @@ class CommandConsole(Console):
         super().print(*objects, **kwargs)
 
 
-# Keep upstream follow-up hints inside the visible wrapper command.
+# Qualify container-only command hints for the host toolkit.
 jobs.console = CommandConsole()
 notifications.console = CommandConsole()
 for command in app.registered_commands:

@@ -405,7 +405,7 @@ show_help() {
     echo "  cmdh              - Run cmdh CLI"
     echo "  parllama          - Launch Parllama - TUI for chatting with Ollama models"
     echo "  bench             - Run and manage Harbor Bench"
-    echo "  harbor-agent-evals - Run agent evaluations"
+    echo "  harbor            - Run Harbor agent evaluations"
     echo "  lmeval|lm_eval    - Run LM Evaluation Harness"
     echo "  openhands|oh      - Run OpenHands service"
     echo "  repopack          - Run the Repopack CLI"
@@ -4657,7 +4657,7 @@ _harbor_completions() {
     # Top-level subcommands
     local commands="up u start s down d restart r ps build shell logs log l pull exec run stats attach cmd help hf defaults alias aliases a link ln unlink unln launch open o url qr list ls version smi top dive eject config profile profiles p gum fixfs info update how find home vscode doctor bench history h size env dev tools eval routine volumes skills completion models tokscale tunnel t tunnels migrate modularmax ollama llamacpp ikllamacpp prismml tgi litellm vllm dmr mlx omlx aphrodite openai opencode facts mi npcsh webui tabbyapi parllama oterm plandex pdx mistralrs interpreter opint cfd cloudflared cmdh fabric parler photoprism airllm txtai aider nanobot chatui comfyui aichat omnichain lmeval lm_eval sglang jupyter ol1 ktransformers openhands oh stt speaches boost nexa repopack k6 promptfoo pf webtop langflow kobold morphic gptme hermes mcp openfang"
 
-    commands="$commands wrappers harbor-agent-evals"
+    commands="$commands wrappers harbor"
 
     # Commands that accept service names as arguments
     local service_commands="up u start s down d logs log l build shell pull exec run stats attach cmd eject open o url qr launch dive env"
@@ -4985,7 +4985,7 @@ _harbor() {
         'comfyui:Configure ComfyUI'
         'aichat:Run aichat'
         'omnichain:Omnichain service'
-        'harbor-agent-evals:Agent evaluations'
+        'harbor:Agent evaluations'
         'lmeval:LM Evaluation Harness'
         'lm_eval:LM Evaluation Harness'
         'sglang:Configure SGLang'
@@ -5439,7 +5439,7 @@ complete -c harbor -n __harbor_no_subcommand -a chatui -d 'Configure ChatUI'
 complete -c harbor -n __harbor_no_subcommand -a comfyui -d 'Configure ComfyUI'
 complete -c harbor -n __harbor_no_subcommand -a aichat -d 'Run aichat'
 complete -c harbor -n __harbor_no_subcommand -a omnichain -d 'Omnichain service'
-complete -c harbor -n __harbor_no_subcommand -a harbor-agent-evals -d 'Agent evaluations'
+complete -c harbor -n __harbor_no_subcommand -a harbor -d 'Agent evaluations'
 complete -c harbor -n __harbor_no_subcommand -a lmeval -d 'LM Evaluation Harness'
 complete -c harbor -n __harbor_no_subcommand -a lm_eval -d 'LM Evaluation Harness'
 complete -c harbor -n __harbor_no_subcommand -a sglang -d 'Configure SGLang'
@@ -6683,7 +6683,7 @@ suggest_command() {
         ollama llamacpp ikllamacpp prismml tgi litellm vllm dmr mlx omlx aphrodite openai
         opencode facts mi npcsh webui tabbyapi parllama oterm plandex pdx mistralrs
         interpreter opint cfd cloudflared cmdh fabric parler photoprism airllm txtai
-        aider nanobot chatui comfyui aichat omnichain harbor-agent-evals lmeval lm_eval sglang
+        aider nanobot chatui comfyui aichat omnichain harbor lmeval lm_eval sglang
         jupyter ol1 ktransformers openhands oh stt speaches boost nexa
         repopack k6 promptfoo pf webtop langflow kobold morphic gptme hermes mcp tokscale
         migrate modularmax tunnel t tunnels config profile profiles p gum
@@ -11709,14 +11709,14 @@ run_bench_command() {
     esac
 }
 
-run_harbor_agent_evals_command() {
+run_harbor_command() {
     _check_docker || return 1
     local tty_opt=""
     if [ ! -t 0 ] || [ ! -t 1 ]; then
         tty_opt="-T"
     fi
-    $(compose_with_options --no-defaults "harbor-agent-evals") run $tty_opt --rm --no-deps \
-        --entrypoint harbor-agent-evals harbor-agent-evals "$@"
+    $(compose_with_options --no-defaults "harbor") run $tty_opt --rm --no-deps \
+        --entrypoint python harbor /opt/harbor/cli.py "$@"
 }
 
 run_lm_eval_command() {
@@ -13282,9 +13282,9 @@ main_entrypoint() {
         shift
         run_omnichain_command "$@"
         ;;
-    harbor-agent-evals)
+    harbor)
         shift
-        run_harbor_agent_evals_command "$@"
+        run_harbor_command "$@"
         ;;
     lmeval | lm_eval)
         shift

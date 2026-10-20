@@ -9,4 +9,4 @@ RUN apt-get update \
 ARG FRAMEWORK_VERSION=0.24.0
 RUN pip install --no-cache-dir "harbor==${FRAMEWORK_VERSION}"
 
-COPY --chmod=755 cli.py /usr/local/bin/harbor-agent-evals
+COPY cli.py /opt/harbor/cli.py
