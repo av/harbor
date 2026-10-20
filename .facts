@@ -187,6 +187,12 @@
 - label: service_compose_exists accepts cross-file-only selectors (tokens appearing as parts of compose.x.* filenames, e.g. mcp-server-time), keeping the documented 'harbor up mcpo mcp-server-time' flow working
   command: bash -c 'source /dev/null; ./harbor.sh cmd mcpo mcp-server-time >/dev/null'
   tags: [services-it, implemented]
+- label: cli > up > port precheck treats loopback binds of running Harbor containers (127.0.0.1:PORT / [::1]:PORT in docker ps, from HARBOR_<SVC>_HOST_PORT=IP:PORT) as Harbor-owned, so a stack with a loopback-published port does not abort later 'harbor up' runs with a false "already in use", while a genuinely foreign port still aborts
+  command: d=$(mktemp -d) && printf '#!/bin/sh\ncase "$*" in *"ps --format"*) echo "127.0.0.1:34192->5432/tcp";; esac\n' > "$d/docker" && chmod +x "$d/docker" && printf 'services:\n  n8n-db:\n    ports:\n      - published: "34192"\n' > "$d/cfg.yml" && printf '#!/bin/sh\ncat "$d/cfg.yml"\n' > "$d/cfg" && chmod +x "$d/cfg" && PATH="$d:$PATH" d="$d" bash -c 'eval "$(sed -n -e "/^_parse_compose_ports()/,/^}/p" -e "/^_check_port_conflicts()/,/^}/p" harbor.sh)"; log_error() { printf "%s\n" "$1" >&2; }; log_warn() { printf "%s\n" "$1" >&2; }; log_info() { :; }; c_g=""; c_nc=""; compose_with_options() { echo "$d/cfg"; }; _is_port_in_use() { return 0; }; default_container_prefix="harbor."; _check_port_conflicts n8n-db; a=$?; sed -i s/34192/9999/ "$d/docker"; _check_port_conflicts n8n-db; b=$?; test "$a" -eq 0 && test "$b" -eq 1'
+  tags: [port-check, spec, implemented]
+- label: cli > HARBOR_<SVC>_HOST_PORT accepts the compose short-syntax "IP:PORT" form to pin a published port to one interface; wherever the bare port number is needed (harbor url/open, host_port comparisons) _host_port_number strips the bind prefix and passes bare ints through unchanged
+  command: bash -c 'eval "$(sed -n "/^_host_port_number()/,/^}/p" harbor.sh)"; test "$(_host_port_number 8080)" = 8080 && test "$(_host_port_number 127.0.0.1:34192)" = 34192 && test "$(_host_port_number [::1]:8080)" = 8080' && [ "$(grep -c _host_port_number harbor.sh)" -ge 6 ] && grep -q "IP:PORT" profiles/default.env
+  tags: [port-check, spec, implemented]
 
 ## hf
 - label: check_hf_cache in harbor.sh uses 'hf cache ls' (scan-cache was removed in hf CLI 1.x)

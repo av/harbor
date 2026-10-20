@@ -171,6 +171,14 @@ _check_docker_disk_space() {
     fi
 }
 
+# HARBOR_<SVC>_HOST_PORT accepts compose short-syntax with an explicit bind
+# address ("IP:PORT", e.g. 127.0.0.1:8080) to publish a service port on a
+# single interface. Compose parses the full string; everywhere the bare port
+# number is needed (URLs, lookups, comparisons), strip the address prefix.
+_host_port_number() {
+    printf '%s' "${1##*:}"
+}
+
 # Check if a specific TCP port is in use on the host.
 # Uses ss (Linux), lsof (macOS/fallback), or /dev/tcp (bash builtin).
 # Returns 0 if the port IS in use, 1 if free.
@@ -266,8 +274,13 @@ _check_port_conflicts() {
     # compose will reuse them without conflict).
     local harbor_ports=""
     if [ -n "$default_container_prefix" ]; then
+        # Include loopback binds: a container published via
+        # HARBOR_<SVC>_HOST_PORT=IP:PORT shows as 127.0.0.1:PORT/[::1]:PORT in
+        # docker ps, and without matching those the check below misreads
+        # Harbor's own port as a foreign listener and aborts harbor up with a
+        # false "already in use".
         harbor_ports=$(docker ps --format '{{.Ports}}' --filter "name=${default_container_prefix}" 2>/dev/null \
-            | grep -oE '(0\.0\.0\.0|\[::\]):[0-9]+' | sed 's/.*://' | sort -u) || true
+            | grep -oE '(0\.0\.0\.0|\[::\]|127\.0\.0\.1|\[::1\]):[0-9]+' | sed 's/.*://' | sort -u) || true
     fi
 
     local checked_ports=""
@@ -5806,8 +5819,8 @@ get_service_port() {
         # order is arbitrary — prefer the configured main host port when it
         # is among the published ones
         if port=$(env_manager --silent get "${service_name}.host_port" 2>/dev/null) \
-            && [ -n "$port" ] && echo "$mapped_ports" | grep -qx "$port"; then
-            echo "$port"
+            && [ -n "$port" ] && echo "$mapped_ports" | grep -qx "$(_host_port_number "$port")"; then
+            echo "$(_host_port_number "$port")"
             return 0
         fi
 
@@ -5819,7 +5832,7 @@ get_service_port() {
     # listens directly on the host, so fall back to the configured host port.
     if [ "$(docker inspect --format '{{.HostConfig.NetworkMode}}' "$target_name" 2>/dev/null)" = "host" ]; then
         if port=$(env_manager --silent get "${service_name}.host_port" 2>/dev/null) && [ -n "$port" ]; then
-            echo "$port"
+            echo "$(_host_port_number "$port")"
             return 0
         fi
     fi
@@ -12051,7 +12064,7 @@ run_langflow_command() {
     case "$1" in
     ui | open)
         shift
-        local port=${HARBOR_LANGFLOW_HOST_PORT:-7860}
+        local port=$(_host_port_number "${HARBOR_LANGFLOW_HOST_PORT:-7860}")
         local url="http://localhost:$port"
         if sys_open "$url"; then
             log_info "Opened Langflow UI at $url"
@@ -12062,7 +12075,7 @@ run_langflow_command() {
         ;;
     url)
         shift
-        local port=${HARBOR_LANGFLOW_HOST_PORT:-7860}
+        local port=$(_host_port_number "${HARBOR_LANGFLOW_HOST_PORT:-7860}")
         echo "http://localhost:$port"
         ;;
     version)
