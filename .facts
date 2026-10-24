@@ -1465,6 +1465,7 @@
 - Harbor README starts with the application name before any shell examples @appimage @implemented
 - App pull requests build an AppImage and run the catalog test without creating a release @appimage @implemented
 - Harbor AppImage builds make the cached AppRun launcher executable for every user before bundling @appimage @implemented
+- Harbor App production bundles initialize React before Markdown components @appimage @implemented
 
 # boost
 - label: Boost is a FastAPI LLM proxy that exposes OpenAI chat completions and optional Anthropic and Responses compat layers
