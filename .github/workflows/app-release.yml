@@ -2,6 +2,10 @@ name: Harbor App Release
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - app/**
+      - .github/workflows/app-release.yml
   push:
     branches:
       - "main"
@@ -11,11 +15,75 @@ on:
     types: [published]
 
 jobs:
+  check-appimage:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.9
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install build and catalog test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev appstream gawk jq gnupg2 sudo imagemagick libasound2-dev pulseaudio-utils alsa-utils alsa-oss libjack0 desktop-file-utils xmlstarlet xsel xterm xvfb icewm x11-utils x11-apps netpbm xdotool libgl1-mesa-dri libgl1-mesa-dev mesa-utils libosmesa6 libsdl1.2-dev libsdl2-2.0-0 fonts-wqy-microhei libfile-mimeinfo-perl tesseract-ocr tesseract-ocr-eng tesseract-ocr-chi-sim tesseract-ocr-ara tesseract-ocr-rus tesseract-ocr-ell libfuse2 stalonetray
+          sudo gem install dupervisor -v 1.0.5 --no-document
+          sudo npm install -g asar
+      - name: Build AppImage
+        run: |
+          bun ./.scripts/docs-to-app.ts
+          cd app
+          bun install --frozen-lockfile
+          bun tauri build --bundles appimage -- --locked
+      - uses: actions/checkout@v4
+        with:
+          repository: AppImage/appimage.github.io
+          ref: 2c518882fd364ad4e1c4148a1b1c1a2fa5fc5e31
+          path: .appimage-catalog
+          sparse-checkout: code
+      - name: Run catalog test
+        working-directory: .appimage-catalog
+        env:
+          DISPLAY: :99
+          IS_PULLREQUEST: true
+          STRICT: true
+        run: |
+          bash code/fetch-deps.sh
+          cp -a deps/. .
+          sudo bash code/prep-dummy-soundcard.sh
+          mkdir -p data apps database "$HOME/.icewm"
+          printf 'ShowTaskBar = 0\nTaskBarAutoHide = 1\n' > "$HOME/.icewm/preferences"
+          BUNDLE_DIR="$GITHUB_WORKSPACE/app/src-tauri/target/release/bundle/appimage"
+          APPIMAGE=$(find "$BUNDLE_DIR" -maxdepth 1 -name '*.AppImage' -printf '%f\n')
+          printf 'http://127.0.0.1:8765/%s\n' "$APPIMAGE" > data/Harbor
+          python3 -m http.server 8765 --bind 127.0.0.1 --directory "$BUNDLE_DIR" > http.log 2>&1 &
+          SERVER_PID=$!
+          Xvfb :99 -screen 0 800x600x24 > xvfb.log 2>&1 &
+          XVFB_PID=$!
+          trap 'kill "$SERVER_PID" "$XVFB_PID" 2>/dev/null || true' EXIT
+          timeout --kill-after=30 600 bash -e code/worker.sh "$PWD/data/Harbor" 2>&1 | tee log.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: appimage-catalog-result
+          path: |
+            .appimage-catalog/*.log
+            .appimage-catalog/log.txt
+            .appimage-catalog/database/Harbor/
+            .appimage-catalog/failure-screens/
+          retention-days: 7
+
   test:
+    if: github.event_name != 'pull_request'
     name: Test Matrix
     uses: ./.github/workflows/test.yml
 
   publish-tauri:
+    if: github.event_name != 'pull_request'
     needs: test
     permissions:
       contents: write

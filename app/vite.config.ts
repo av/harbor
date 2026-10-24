@@ -34,6 +34,7 @@ export default defineConfig(async () => ({
     rollupOptions: {
       output: {
         manualChunks(id: string) {
+          if (id.includes("commonjsHelpers.js")) return "react";
           if (!id.includes("node_modules")) return;
           if (id.includes("refractor") || id.includes("highlight.js")) return "syntax";
           if (
