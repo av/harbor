@@ -308,6 +308,80 @@ _check_port_conflicts() {
     return 0
 }
 
+# `compose up --wait` accepts a one-shot container as completed only when
+# another service declares depends_on <service>: condition:
+# service_completed_successfully (docker/compose start.go
+# getDependencyCondition). Anything else is waited on as running|healthy,
+# and the 500ms poll fails with "container X exited (N)" — even for exit
+# code 0 — if it first sees the container after it exited. Post-init
+# sidecars (speaches-init) can never have such a dependent: they run after
+# their own dependency is healthy, so gating another service on them
+# would cycle. When the wait fails, check the project's real end state:
+# every service running, healthy, or completed with exit code 0 means the
+# up worked and only the waiter's race lost.
+# Args: compose command prefix, then service names to verify
+# (none = every service in the resolved compose config)
+_compose_services_up() {
+    local compose_cmd="$1"
+    shift
+
+    local expected=""
+    if [ "$#" -gt 0 ]; then
+        expected=$(printf '%s\n' "$@")
+    else
+        expected=$($compose_cmd config --services 2>/dev/null | sort -u) || true
+        if [ -z "$expected" ]; then
+            return 1
+        fi
+    fi
+
+    # Healthchecked services may still be settling when the waiter aborted
+    # on the one-shot race — poll a bounded window before giving up.
+    local attempt
+    for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
+        local states missing="$expected" bad=false pending=false
+        states=$($compose_cmd ps -a --format '{{.Service}}|{{.State}}|{{.Health}}|{{.ExitCode}}' 2>/dev/null) || true
+        if [ -z "$states" ]; then
+            return 1
+        fi
+
+        while IFS='|' read -r svc state health code; do
+            if [ -z "$svc" ]; then
+                continue
+            fi
+            missing=$(printf '%s\n' "$missing" | grep -vx "$svc") || true
+            case "$state" in
+            running)
+                case "$health" in
+                "" | healthy) ;;
+                starting) pending=true ;;
+                *) bad=true ;;
+                esac
+                ;;
+            exited)
+                if [ "$code" != "0" ]; then
+                    bad=true
+                fi
+                ;;
+            *) bad=true ;;
+            esac
+        done <<< "$states"
+
+        # A service with no container never started
+        if [ -n "$missing" ]; then
+            bad=true
+        fi
+        if $bad; then
+            return 1
+        fi
+        if ! $pending; then
+            return 0
+        fi
+        sleep 5
+    done
+    return 1
+}
+
 show_version() {
     echo "Harbor CLI version: $version"
 }
@@ -1635,6 +1709,7 @@ run_up() {
     done
 
     local up_exit=0
+    local wait_services=()
     if $only_named; then
         local up_services=()
         for service in "${filtered_args[@]}"; do
@@ -1645,9 +1720,20 @@ run_up() {
         done
         if [ ${#up_services[@]} -gt 0 ]; then
             $(compose_with_options "${up_args[@]}" "${filtered_args[@]}") up -d --wait "${up_services[@]}" || up_exit=$?
+            wait_services=("${up_services[@]}")
         fi
     else
         $(compose_with_options "${up_args[@]}" "${filtered_args[@]}") up -d --wait || up_exit=$?
+    fi
+
+    if [ $up_exit -ne 0 ]; then
+        # compose's waiter races one-shot sidecars (see _compose_services_up)
+        # — the stack may still be fully up, so verify the end state before
+        # reporting failure
+        if _compose_services_up "$(compose_with_options "${up_args[@]}" "${filtered_args[@]}")" "${wait_services[@]}"; then
+            log_info "All services are up; init sidecar(s) completed successfully."
+            up_exit=0
+        fi
     fi
 
     if [ $up_exit -ne 0 ]; then
