@@ -188,6 +188,10 @@
   command: bash -c 'source /dev/null; ./harbor.sh cmd mcpo mcp-server-time >/dev/null'
   tags: [services-it, implemented]
 
+- label: harbor up/restart port pre-check treats every host binding of a running Harbor container as Harbor's own — wildcard (0.0.0.0, [::]) and interface-specific bindings alike (e.g. the 127.0.0.1 in n8n.pg_host_port=127.0.0.1:34192) — so a running service with an interface-bound port no longer aborts up with a false "already in use on the host" conflict
+  command: d=$(mktemp -d) && printf '%s\n' '#!/usr/bin/env bash' "echo '127.0.0.1:34192->5432/tcp'" "echo '0.0.0.0:33801->8080/tcp, [::]:33801->8080/tcp'" > "$d/docker" && chmod +x "$d/docker" && f=$(mktemp) && sed -n '/^_harbor_bound_host_ports()/,/^}/p' harbor.sh > "$f" && o=$(PATH="$d:$PATH" bash -c 'default_container_prefix=harbor; . "$1"; _harbor_bound_host_ports' _ "$f") && rm -rf "$d" "$f" && printf '%s\n' "$o" | grep -qx 34192 && printf '%s\n' "$o" | grep -qx 33801
+  tags: [cli, up-port-check, implemented]
+
 ## hf
 - label: check_hf_cache in harbor.sh uses 'hf cache ls' (scan-cache was removed in hf CLI 1.x)
   command: grep -q 'cache ls --no-truncate' harbor.sh && ! grep -q 'run_hf_docker_cli scan-cache' harbor.sh

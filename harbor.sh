@@ -212,6 +212,17 @@ _parse_compose_ports() {
     ' <<< "$config_output"
 }
 
+# Host ports currently bound by Harbor's own running containers, on any
+# interface. Bindings to a specific interface (e.g. "127.0.0.1:34192" via a
+# "<ip>:<port>" host_port value) are ours just like wildcard bindings —
+# missing them makes the port pre-check flag a running service as a
+# foreign squatter on its own port.
+_harbor_bound_host_ports() {
+    docker ps --format '{{.Ports}}' --filter "name=${default_container_prefix}" 2>/dev/null \
+        | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}:[0-9]+|\[[0-9a-f:]+\]:[0-9]+' \
+        | sed 's/.*://' | sort -u
+}
+
 # Check for port conflicts before starting services.
 # 1. Inter-service conflicts: two services mapping the same host port
 # 2. Host conflicts: a host port already in use by another process
@@ -266,8 +277,7 @@ _check_port_conflicts() {
     # compose will reuse them without conflict).
     local harbor_ports=""
     if [ -n "$default_container_prefix" ]; then
-        harbor_ports=$(docker ps --format '{{.Ports}}' --filter "name=${default_container_prefix}" 2>/dev/null \
-            | grep -oE '(0\.0\.0\.0|\[::\]):[0-9]+' | sed 's/.*://' | sort -u) || true
+        harbor_ports=$(_harbor_bound_host_ports) || true
     fi
 
     local checked_ports=""
