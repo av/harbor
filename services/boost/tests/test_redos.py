@@ -60,6 +60,7 @@ class TestDiscussUrlExtraction:
     ("visit www.example.com/docs; then github.com/av/harbor.", ["www.example.com/docs", "github.com/av/harbor"]),
     ("<https://a.com/x> and \"https://b.com/y\"", ["https://a.com/x", "https://b.com/y"]),
     ("markdown [link](https://a.com/p) text", ["https://a.com/p"]),
+    ("Repo:github.com/av/harbor and www.example.com/.", ["github.com/av/harbor", "www.example.com/"]),
     ("unclosed https://a.com/x(y", ["https://a.com/x"]),
     ("HTTPS://EXAMPLE.COM/UP", ["HTTPS://EXAMPLE.COM/UP"]),
     ("no links, just a@b.com", []),

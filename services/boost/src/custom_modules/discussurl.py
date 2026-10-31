@@ -8,7 +8,7 @@ MAX_URLS = 10
 
 TOKEN_SPLIT_RE = re.compile(r"[\s<>]+")
 URL_START_RE = re.compile(r"(?i)\b(?:https?://|www\d{0,3}[.])")
-BARE_DOMAIN_RE = re.compile(r"(?i)[^a-z0-9]*([a-z0-9][a-z0-9.\-]*[.][a-z]{2,4}/)")
+BARE_DOMAIN_RE = re.compile(r"(?i)(?<![\w.\-])[.\-]*([a-z0-9][a-z0-9.\-]*[.][a-z]{2,4}/)")
 TRAILING_PUNCTUATION = "`!()[]{};:'\".,<>?«»“”‘’"
 
 prompt = """
@@ -26,14 +26,6 @@ Your task is to fulfill the user's request by discussing provided content.
 """.strip()
 
 ID_PREFIX = "discussurl"
-
-
-def _url_starts(token):
-  bare = BARE_DOMAIN_RE.match(token)
-  if bare:
-    yield bare.start(1), bare.end(1)
-  for match in URL_START_RE.finditer(token):
-    yield match.start(), match.end()
 
 
 def _url_end(token, start, body):
@@ -63,6 +55,18 @@ def _url_end(token, start, body):
   return end, stop
 
 
+def _token_urls(token):
+  starts = [(m.start(), m.end()) for m in URL_START_RE.finditer(token)]
+  starts += [(m.start(1), m.end(1)) for m in BARE_DOMAIN_RE.finditer(token)]
+  scanned = 0
+  for start, body in sorted(starts):
+    if start < scanned:
+      continue
+    end, scanned = _url_end(token, start, body)
+    if end is not None and end - body >= 2:
+      yield token[start:end]
+
+
 def extract_urls(text):
   """
   Finds URLs in linear time. Only the last MAX_TEXT_CHARS of the text are
@@ -75,15 +79,10 @@ def extract_urls(text):
 
   urls = []
   for token in tokens:
-    scanned = 0
-    for start, body in _url_starts(token):
-      if start < scanned:
-        continue
-      end, scanned = _url_end(token, start, body)
-      if end is not None and end > body:
-        urls.append(token[start:end])
-        if len(urls) == MAX_URLS:
-          return urls
+    for url in _token_urls(token):
+      urls.append(url)
+      if len(urls) == MAX_URLS:
+        return urls
   return urls
 
 
