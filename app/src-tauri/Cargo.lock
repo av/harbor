@@ -1493,7 +1493,7 @@ dependencies = [
 
 [[package]]
 name = "harbor-app"
-version = "0.5.17"
+version = "0.5.18"
 dependencies = [
  "fix-path-env",
  "portable-pty",
