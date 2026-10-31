@@ -337,8 +337,7 @@ _compose_services_up() {
 
     # Healthchecked services may still be settling when the waiter aborted
     # on the one-shot race — poll a bounded window before giving up.
-    local attempt
-    for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
+    for _ in 1 2 3 4 5 6 7 8 9 10 11 12; do
         local states missing="$expected" bad=false pending=false
         states=$($compose_cmd ps -a --format '{{.Service}}|{{.State}}|{{.Health}}|{{.ExitCode}}' 2>/dev/null) || true
         if [ -z "$states" ]; then
