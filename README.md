@@ -32,13 +32,13 @@ Harbor is a CLI and companion app that lets you spin up a complete local LLM sta
 
 ## News
 
+- **v0.5.19** - `harbor up` no longer flags Harbor's own loopback-published ports as conflicts or fails on init sidecars that finish early, Hermes starts with images that ship no PyYAML, AutoGPT runs the current AutoGPT Platform, and Boost's Anthropic API works with OpenAI gpt-5 and o-series models
 - **v0.5.18** - Boost security fix: the `discussurl` module's URL matching can no longer be stalled by crafted input, and similar slow pattern matching was removed from `autocheck` and web page reading
 - **v0.5.17** - Harbor AppImages install and launch correctly, and the desktop app opens reliably on Linux
 - **v0.5.16** - Two new services: rummage, local multimodal semantic search over your files with EmbeddingGemma 2 on CPU, NVIDIA or AMD, and Harbor Framework agent evaluations under the `harbor` handle
 - **v0.5.14** - Eight new services (Latitude, AutoGen Studio, LobeHub, R2R, Caddy, RAGFlow, ClaraVerse, Qwen Code), a Dockerized Harbor CLI runner, external Ollama support for Boost and Open WebUI, opt-in CLI command wrappers, and fixes for ROCm detection, Perplexica on LAN, AnythingLLM settings persistence and the Harbor App on dot-prefixed homes
 - **v0.5.13** - `harbor models pull` no longer reports success when a model download actually failed, and the PrismML backend documents its two Bonsai 2 quants with measured speed and accuracy
 - **v0.5.12** - New PrismML llama.cpp backend that runs Ternary Bonsai 2 GGUFs on CPU, NVIDIA, and ROCm with the same model workflow and cross-service integrations as llama.cpp
-- **v0.5.11** - Halogen stays up through long Open WebUI generations with image 0.6.3, a 65536-token chat budget and a 900-second engine watchdog
 
 ## Documentation
 
