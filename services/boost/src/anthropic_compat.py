@@ -32,6 +32,7 @@ from compat_utils import (
     sse_retry_line as _sse_retry,
     to_anthropic_tool_id as _to_anthropic_tool_id,
     to_openai_tool_id as _to_openai_tool_id,
+    token_limit_param,
 )
 
 logger = log.setup_logger(__name__)
@@ -383,13 +384,13 @@ def _convert_params(body: dict):
     else:
       # "disabled" or unknown type — fall through to plain max_tokens
       if max_tokens > 0:
-        params["max_tokens"] = max_tokens
+        params[token_limit_param(body.get("model"))] = max_tokens
   elif effort:
     # output_config.effort without explicit thinking config — some backends
     # accept reasoning_effort or similar params.
     params["max_completion_tokens"] = max_tokens
   elif max_tokens > 0:
-    params["max_tokens"] = max_tokens
+    params[token_limit_param(body.get("model"))] = max_tokens
 
   if "temperature" in body:
     params["temperature"] = body["temperature"]

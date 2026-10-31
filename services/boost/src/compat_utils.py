@@ -46,6 +46,17 @@ RATE_LIMIT_FORWARD_HEADERS = frozenset({
 # Tool use / tool call ID prefix patterns
 _KNOWN_PREFIXES_RE = re.compile(r"^(toolu_|call_|chatcmpl-)")
 
+# OpenAI reasoning models (o-series, gpt-5) reject max_tokens, optionally
+# behind a Boost module prefix such as "klmbr-"
+_MAX_COMPLETION_TOKENS_MODEL_RE = re.compile(r"(?:^|[-/])(?:o[1-9]|gpt-5)(?:[-.]|$)", re.IGNORECASE)
+
+
+def token_limit_param(model: str | None) -> str:
+    """Chat Completions field for the output token limit of *model*."""
+    if _MAX_COMPLETION_TOKENS_MODEL_RE.search(model or ""):
+        return "max_completion_tokens"
+    return "max_tokens"
+
 
 def to_anthropic_tool_id(raw_id: str) -> str:
     """Ensure a tool use ID has the ``toolu_`` prefix Anthropic clients expect.
