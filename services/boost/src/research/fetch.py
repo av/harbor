@@ -92,9 +92,37 @@ def require_http_url(url: str) -> str:
   return url
 
 
+_SKIPPED_BLOCK_OPEN_RE = re.compile(r"(?i)<(script|style|noscript)")
+_SKIPPED_BLOCK_CLOSE_RES = {
+  name: re.compile(rf"(?i)</{name}>") for name in ("script", "style", "noscript")
+}
+
+
+def _drop_skipped_blocks(raw: str) -> str:
+  # Same result as re.sub(r"(?is)<(script|style|noscript).*?</\1>", " ", raw),
+  # which rescans to the end of the page for every unclosed opening tag.
+  pieces = []
+  pos = search_from = 0
+  unclosed = set()
+  while match := _SKIPPED_BLOCK_OPEN_RE.search(raw, search_from):
+    name = match.group(1).lower()
+    close = None if name in unclosed else _SKIPPED_BLOCK_CLOSE_RES[name].search(raw, match.end())
+    if close is None:
+      unclosed.add(name)
+      search_from = match.end()
+      continue
+    pieces.append(raw[pos:match.start()])
+    pieces.append(" ")
+    pos = search_from = close.end()
+  pieces.append(raw[pos:])
+  return "".join(pieces)
+
+
 def _strip_html(raw: str) -> str:
-  text = re.sub(r"(?is)<(script|style|noscript).*?</\1>", " ", raw)
-  text = re.sub(r"(?s)<[^>]+>", " ", text)
+  text = _drop_skipped_blocks(raw)
+  # Nothing after the last ">" can match; scanning it is quadratic in the number of "<".
+  end = text.rfind(">") + 1
+  text = re.sub(r"(?s)<[^>]+>", " ", text[:end]) + text[end:]
   text = html.unescape(text)
   return re.sub(r"\s+", " ", text).strip()
 

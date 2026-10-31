@@ -129,8 +129,8 @@ WORKSPACE_TOOL_NAMES = frozenset({
   "git_diff_workspace",
 })
 
-SYMBOL_DEF_RE = re.compile(r"^\s*(?:async\s+)?def\s+([A-Za-z_]\w+)", re.MULTILINE)
-SYMBOL_CLASS_RE = re.compile(r"^\s*class\s+([A-Za-z_]\w+)", re.MULTILINE)
+SYMBOL_DEF_RE = re.compile(r"^[^\S\n]*(?:async\s+)?def\s+([A-Za-z_]\w+)", re.MULTILINE)
+SYMBOL_CLASS_RE = re.compile(r"^[^\S\n]*class\s+([A-Za-z_]\w+)", re.MULTILINE)
 BACKTICK_SYMBOL_RE = re.compile(r"`([A-Za-z_]\w{2,})`")
 
 SYMBOL_STOPWORDS = frozenset({
