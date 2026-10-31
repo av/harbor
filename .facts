@@ -188,6 +188,10 @@
   command: bash -c 'source /dev/null; ./harbor.sh cmd mcpo mcp-server-time >/dev/null'
   tags: [services-it, implemented]
 
+- label: harbor up treats a failed "compose up --wait" as success when every service in the resolved config is running, healthy, or completed with exit code 0, so post-init one-shot sidecars (speaches-init) that exit before compose's 500ms waiter first polls them do not fail the whole up with a spurious "container X exited (0)"
+  command: d=$(mktemp -d) && printf '%s\n' '#!/usr/bin/env bash' 'if [[ "$*" == *"config --services"* ]]; then printf "%s\n" speaches speaches-init webui; exit 0; fi' 'if [[ "$*" == *"ps -a"* ]]; then printf "%s\n" "speaches|running|healthy|0" "speaches-init|exited||${SIDE_EXIT:-0}" "webui|running|healthy|0"; exit 0; fi' 'exit 0' > "$d/docker" && chmod +x "$d/docker" && f=$(mktemp) && sed -n '/^_compose_services_up()/,/^}/p' harbor.sh > "$f" && r1=$(PATH="$d:$PATH" bash -c '. "$1"; _compose_services_up "docker compose -f t.yml" >/dev/null 2>&1; echo $?' _ "$f") && r2=$(SIDE_EXIT=1 PATH="$d:$PATH" bash -c '. "$1"; _compose_services_up "docker compose -f t.yml" >/dev/null 2>&1; echo $?' _ "$f") && rm -rf "$d" "$f" && [ "$r1" = 0 ] && [ "$r2" = 1 ]
+  tags: [cli, up-wait-sidecars, implemented]
+
 ## hf
 - label: check_hf_cache in harbor.sh uses 'hf cache ls' (scan-cache was removed in hf CLI 1.x)
   command: grep -q 'cache ls --no-truncate' harbor.sh && ! grep -q 'run_hf_docker_cli scan-cache' harbor.sh
