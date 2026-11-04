@@ -84,10 +84,13 @@ def matches_filter(obj: dict, filter: dict):
       return False
 
     if operation == 'regex':
-      return match_regex(str(obj[field]), value)
+      matched = match_regex(str(obj[field]), value)
     elif operation == 'contains':
-      return match_substring(str(obj[field]), value)
+      matched = match_substring(str(obj[field]), value)
     else:
-      return match_exact(str(obj[field]), value)
+      matched = match_exact(str(obj[field]), value)
+
+    if not matched:
+      return False
 
   return True
