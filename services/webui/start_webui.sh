@@ -19,6 +19,16 @@ if [ -r /run/unsloth-studio-auth/api_key.txt ]; then
     fi
 fi
 
+if [ -z "${WEBUI_SECRET_KEY:-}" ]; then
+    secret_file=/app/backend/data/.webui_secret_key
+    if [ ! -s "$secret_file" ]; then
+        echo "Generating a per-install WEBUI_SECRET_KEY in $secret_file"
+        (umask 077 && python -c 'import secrets; print(secrets.token_urlsafe(48))' > "$secret_file")
+    fi
+    WEBUI_SECRET_KEY=$(cat "$secret_file")
+    export WEBUI_SECRET_KEY
+fi
+
 echo "JSON Merger is starting..."
 python /app/json_config_merger.py --pattern ".json" --output "/app/backend/data/config.json" --directory "/app/configs" --flatten
 

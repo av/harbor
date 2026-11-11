@@ -1,0 +1,3 @@
+FROM ghcr.io/av/tools:latest
+RUN echo '{ "dependencies": { "pg": "^8.0.0" } }' > package.json
+RUN npm install

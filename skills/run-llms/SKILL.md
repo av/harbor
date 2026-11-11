@@ -723,7 +723,7 @@ open $(harbor home)/services/webui/configs/config.override.json
 | Config Key | Default | Purpose |
 |------------|---------|---------|
 | `WEBUI_HOST_PORT` | `33801` | Host port |
-| `WEBUI_SECRET` | `h@rb0r` | JWT token secret |
+| `WEBUI_SECRET` | `""` | JWT token secret (empty: random per-install key) |
 | `WEBUI_NAME` | `Harbor` | UI display name |
 | `WEBUI_LOG_LEVEL` | `INFO` | Log level |
 | `WEBUI_VERSION` | `main` | Docker image tag |
@@ -1300,7 +1300,7 @@ All variables below can be queried/set with `harbor config get/set <key>` (using
 | `LLAMACPP_IMAGE_NVIDIA` | `ghcr.io/ggml-org/llama.cpp:server-cuda` | llamacpp | NVIDIA image |
 | `LLAMACPP_IMAGE_ROCM` | `ghcr.io/ggml-org/llama.cpp:server-rocm` | llamacpp | ROCm image |
 | `WEBUI_HOST_PORT` | `33801` | webui | Host port |
-| `WEBUI_SECRET` | `h@rb0r` | webui | JWT secret |
+| `WEBUI_SECRET` | `""` | webui | JWT secret (empty: random per-install key) |
 | `WEBUI_NAME` | `Harbor` | webui | UI display name |
 | `WEBUI_LOG_LEVEL` | `INFO` | webui | Log level |
 | `WEBUI_VERSION` | `main` | webui | Docker tag |
