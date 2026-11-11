@@ -167,6 +167,14 @@ _docker_root_dir_from_info() {
     '
 }
 
+# Pre-v0.5.20 installs shipped a public Open WebUI JWT secret (#307)
+_warn_public_webui_secret() {
+    if [ "$(env_manager get webui.secret 2>/dev/null)" = "h@rb0r" ]; then
+        log_warn "${nok} Open WebUI uses the public default secret 'h@rb0r': anyone who can reach it can forge logins."
+        log_warn "  Rotate it (logs everyone out, resets MFA): harbor webui secret \"\$(openssl rand -base64 48)\" >/dev/null 2>&1 && harbor restart webui"
+    fi
+}
+
 # Check disk space for the Docker storage backend (where Ollama stores models
 # inside its container volume).  Uses Docker Root Dir from "docker info" output.
 # Usage: _check_docker_disk_space [min_gb]
@@ -916,6 +924,7 @@ run_harbor_doctor() {
             log_warn "  Found $env_issues .env issue(s). Run 'harbor config update' to regenerate from defaults."
         fi
 
+        _warn_public_webui_secret
 
         # Warn about stale keys: present in .env but absent from every
         # default source (profiles/default.env + services/*/default.env)
@@ -1687,6 +1696,13 @@ run_up() {
 
     # First boot of Open WebUI downloads embedding/whisper models before its
     # HTTP port starts serving - warn the user so the wait isn't a silent hang.
+    for service in "${display_services[@]}"; do
+        if [ "$service" = "webui" ]; then
+            _warn_public_webui_secret
+            break
+        fi
+    done
+
     for service in "${display_services[@]}"; do
         if [ "$service" = "webui" ] && [ ! -d "$harbor_home/services/webui/cache/embedding" ]; then
             log_info "First Open WebUI start downloads embedding/audio models - this can take a few minutes depending on your connection."

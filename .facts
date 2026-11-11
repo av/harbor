@@ -216,6 +216,12 @@
 - label: ROCm detection checks the loaded amdgpu module through sysfs without a pipefail-sensitive lsmod and grep pipeline
   command: grep -q '\[\[ -d /sys/module/amdgpu \]\]' harbor.sh && ! sed -n '/^has_rocm()/,/^}/p' harbor.sh | grep -q 'lsmod.*grep -q'
   tags: [spec, issue-244, implemented]
+- label: harbor doctor --check completes and exits 0 when docker info has no 'Docker Root Dir:' line (podman's docker-compat CLI prints YAML with graphRoot), reading storage free space from graphRoot instead
+  command: d=$(mktemp -d) && printf '%s\n' '#!/usr/bin/env bash' 'if [ "$1" = info ]; then printf "store:\n  graphRoot: /tmp\n"; exit 0; fi' 'exec /usr/bin/docker "$@"' > "$d/docker" && chmod +x "$d/docker" && out=$(PATH="$d:$PATH" bash ./harbor.sh doctor --check 2>&1); rc=$?; rm -rf "$d"; [ "$rc" -eq 0 ] && echo "$out" | grep -q 'Docker storage has' && echo "$out" | grep -q 'essential checks passed'
+  tags: [issue-304, implemented]
+- label: harbor doctor and harbor up (when webui is started) warn when webui.secret is still the pre-v0.5.20 public default h@rb0r, with a rotation command
+  command: grep -q '^_warn_public_webui_secret()' harbor.sh && [ "$(grep -c '^ *_warn_public_webui_secret$' harbor.sh)" -eq 2 ]
+  tags: [issue-307, implemented]
 
 ## routines
 - containerized routines accept an optional PEM CA certificate mounted read-only and used by Deno @spec @issue-140 @implemented
@@ -415,6 +421,9 @@
 - label: metamcp-postgres uses postgres:16-alpine (floating 16.x patch tag, data-compatible within major 16)
   command: grep -q 'postgres:16-alpine' services/compose.metamcp.yml
   tags: [implemented]
+- label: metamcp-sse builds from services/metamcp/Dockerfile.sse instead of dockerfile_inline, which podman's docker-compat build ignores
+  command: test -f services/metamcp/Dockerfile.sse && ! grep -q dockerfile_inline services/compose.metamcp.yml && grep -q 'dockerfile: Dockerfile.sse' services/compose.metamcp.yml
+  tags: [issue-306, implemented]
 
 ## mcp-inspector
 - label: compose.mcp-inspector.yml runs the inspector with HOST=0.0.0.0 and ALLOWED_ORIGINS for the remapped host port, with no socat entrypoint — the old socat forwarder self-connect-looped (inspector binds ::1, socat forwarded 127.0.0.1 into its own wildcard listener), leaving both published ports dead
@@ -2015,6 +2024,10 @@
   tags: [spec, default-services-no-ollama, implemented]
 
 ## webui speaches
+- label: HARBOR_WEBUI_SECRET defaults to empty; start_webui.sh then uses a random per-install key persisted (mode 600) in the data volume at /app/backend/data/.webui_secret_key, so a token signed with the old public default is rejected
+  command: grep -q '^HARBOR_WEBUI_SECRET=""' profiles/default.env && grep -q 'secrets.token_urlsafe(48)' services/webui/start_webui.sh && grep -q '/app/backend/data/.webui_secret_key' services/webui/start_webui.sh
+  tags: [issue-307, implemented]
+- On a fresh install, an Open WebUI session token stays valid after the webui container is recreated, and a JWT for the admin id signed with h@rb0r gets 401 from /api/v1/auths/ @issue-307 @runtime @implemented
 - label: start_webui.sh runs json_config_merger.py with --flatten so the merged Open WebUI config lands as dot-path keys (audio.tts.engine, openai.api_base_urls) matching Open WebUI's per-key config import
   command: grep -q -- --flatten services/webui/start_webui.sh
   tags: [spec, speaches-webui, implemented]
@@ -2147,8 +2160,11 @@
 
 # mcpo
 - label: mcpo launches via uvx with an mcp<2 pin because mcpo 0.0.20 breaks on mcp 2.0.0
-  command: grep -q "uvx --with 'mcp<2' mcpo" services/mcpo/start_mcpo.sh
+  command: grep -q "uvx .*--with 'mcp<2' mcpo" services/mcpo/start_mcpo.sh
   tags: [implemented]
+- label: mcpo launches via uvx with a fastapi<0.145 pin because mcpo passes ssl_certfile/ssl_keyfile to FastAPI(), which fastapi 0.145+ rejects with a TypeError
+  command: grep -q "uvx --with 'fastapi<0.145' --with 'mcp<2' mcpo" services/mcpo/start_mcpo.sh
+  tags: [issue-305, implemented]
 
 # nexa
 - label: the nexa Dockerfile installs the pinned GitHub release installer (HARBOR_NEXA_VERSION, default v0.2.73 — the last NexaAI x86_64 Linux release before the Qualcomm GenieX ARM64-only rebrand) instead of the dead public-storage.nexa4ai.com installer
