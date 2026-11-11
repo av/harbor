@@ -246,6 +246,20 @@ MiniMax-M2.7, and MiniMax-M2.7-highspeed.
 
 MINIMAX_BASE_URL = "https://api.minimax.io/v1"
 
+HARBOR_UBERLLM_API_KEY = Config[str](
+    name="HARBOR_UBERLLM_API_KEY",
+    type=str,
+    default="",
+    description="""
+UberLLM API key. When set, the UberLLM OpenAI-compatible
+endpoint (https://api.uberllm.dev/v1) is automatically
+registered as a boost backend. Models are discovered from
+its /models endpoint, so no static list is needed.
+""".strip(),
+)
+
+UBERLLM_BASE_URL = "https://api.uberllm.dev/v1"
+
 # Static model definitions for providers that don't
 # expose a /models endpoint.
 MINIMAX_MODELS = (
@@ -270,6 +284,7 @@ BOOST_APIS = [
     *HARBOR_BOOST_OPENAI_URLS.value,
     *HARBOR_BOOST_EXTRA_OPENAI_URLS.value,
     *([MINIMAX_BASE_URL] if HARBOR_MINIMAX_API_KEY.value else []),
+    *([UBERLLM_BASE_URL] if HARBOR_UBERLLM_API_KEY.value else []),
 ]
 
 BOOST_KEYS = [
@@ -277,6 +292,7 @@ BOOST_KEYS = [
     *HARBOR_BOOST_OPENAI_KEYS.value,
     *HARBOR_BOOST_EXTRA_OPENAI_KEYS.value,
     *([HARBOR_MINIMAX_API_KEY.value] if HARBOR_MINIMAX_API_KEY.value else []),
+    *([HARBOR_UBERLLM_API_KEY.value] if HARBOR_UBERLLM_API_KEY.value else []),
 ]
 
 EXTRA_LLM_PARAMS = Config[ConfigDict](
