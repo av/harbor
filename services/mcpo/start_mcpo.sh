@@ -24,6 +24,8 @@ trap shutdown SIGTERM SIGINT
 # Original entrypoint
 # mcp<2 pin: mcpo 0.0.20 declares mcp>=1.17.0 but breaks on mcp 2.0.0
 # (streamablehttp_client import removed upstream)
-uvx --with 'mcp<2' mcpo --config /app/config.json &
+# fastapi<0.145 pin: mcpo passes ssl_certfile/ssl_keyfile to FastAPI(), which
+# fastapi 0.145+ rejects with a TypeError (open-webui/mcpo#303)
+uvx --with 'fastapi<0.145' --with 'mcp<2' mcpo --config /app/config.json &
 # Wait for the process to finish or for a signal to be caught
 wait $!
