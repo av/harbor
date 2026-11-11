@@ -593,7 +593,11 @@ def _build_anthropic_response(openai_result, request_model, stop_sequences=None)
   )
   if finish_reason == "tool_calls" and not has_visible_tool_use:
     finish_reason = "stop"
-  content_text = content_blocks[0].get("text", "") if content_blocks else ""
+  content_text = "".join(
+    block.get("text", "")
+    for block in content_blocks
+    if block.get("type") == "text"
+  )
   stop_reason, stop_sequence = _map_stop_reason(
     finish_reason, stop_sequences, content_text
   )

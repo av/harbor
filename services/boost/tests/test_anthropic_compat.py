@@ -645,6 +645,25 @@ class TestParallelToolCalls:
 # ---------------------------------------------------------------------------
 
 class TestBuildAnthropicResponse:
+    def test_stop_sequence_matched_when_reasoning_precedes_text(self):
+        openai_result = {
+            "choices": [
+                {
+                    "message": {
+                        "content": "the answer is 42 STOP",
+                        "reasoning_content": "let me think",
+                    },
+                    "finish_reason": "stop",
+                }
+            ],
+            "usage": {},
+        }
+        response = anthropic_compat._build_anthropic_response(
+            openai_result, "claude-test", ["END", "STOP"]
+        )
+        assert response["stop_reason"] == "stop_sequence"
+        assert response["stop_sequence"] == "STOP"
+
     def test_text_only_response(self):
         openai_result = {
             "choices": [
