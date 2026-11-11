@@ -155,6 +155,18 @@ _check_disk_space() {
     return 0
 }
 
+# Print the storage root from "docker info" output on stdin. Podman's
+# docker-compat CLI prints YAML with graphRoot instead of "Docker Root Dir:".
+# awk (not grep) so a missing line is not a pipefail error under set -e;
+# it reads all input so the writer never gets SIGPIPE.
+_docker_root_dir_from_info() {
+    awk '
+        found { next }
+        /Docker Root Dir:/ { sub(/.*Docker Root Dir: */, ""); print; found = 1 }
+        /^[[:space:]]*graphRoot:/ { sub(/^[[:space:]]*graphRoot:[[:space:]]*/, ""); print; found = 1 }
+    '
+}
+
 # Check disk space for the Docker storage backend (where Ollama stores models
 # inside its container volume).  Uses Docker Root Dir from "docker info" output.
 # Usage: _check_docker_disk_space [min_gb]
@@ -164,7 +176,7 @@ _check_docker_disk_space() {
     # Try to get Docker Root Dir from docker info (fast, already cached by
     # _check_docker in most flows)
     local docker_root_dir
-    docker_root_dir=$(docker info 2>/dev/null | grep "Docker Root Dir:" | sed 's/.*Docker Root Dir: *//')
+    docker_root_dir=$(docker info 2>/dev/null | _docker_root_dir_from_info)
 
     if [ -n "$docker_root_dir" ]; then
         _check_disk_space "$docker_root_dir" "$min_gb" "Docker storage ($docker_root_dir)"
@@ -676,7 +688,7 @@ run_harbor_doctor() {
 
         # Check Docker disk space (LLM models are large, disk exhaustion is common)
         local docker_root_dir data_space_gb
-        docker_root_dir=$(echo "$docker_access_output" | grep "Docker Root Dir:" | sed 's/.*Docker Root Dir: *//')
+        docker_root_dir=$(echo "$docker_access_output" | _docker_root_dir_from_info)
         if [ -n "$docker_root_dir" ]; then
             # df -k is POSIX-portable (macOS lacks -BG); convert KB to GB
             data_space_gb=$(df -k "$docker_root_dir" 2>/dev/null | awk 'NR==2 {printf "%d", $4/1048576}')
@@ -903,6 +915,7 @@ run_harbor_doctor() {
         if [ "$env_issues" -gt 0 ]; then
             log_warn "  Found $env_issues .env issue(s). Run 'harbor config update' to regenerate from defaults."
         fi
+
 
         # Warn about stale keys: present in .env but absent from every
         # default source (profiles/default.env + services/*/default.env)
