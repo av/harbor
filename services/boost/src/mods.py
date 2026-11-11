@@ -5,6 +5,7 @@ the registry.
 """
 
 import os
+import sys
 import importlib
 
 from config import BOOST_FOLDERS
@@ -16,6 +17,10 @@ import log
 logger = log.setup_logger(__name__)
 
 registry = {}
+
+# When run as a script (docgen), modules that "import mods" would otherwise
+# execute this file a second time and re-enter load_folder mid-import.
+sys.modules.setdefault("mods", sys.modules[__name__])
 
 
 def load_folder(folder):
