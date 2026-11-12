@@ -1,0 +1,4 @@
+services:
+  aider:
+    volumes:
+      - ./services/aider/configs/aider.rapidmlx.yml:/home/appuser/.aider/rapidmlx.yml

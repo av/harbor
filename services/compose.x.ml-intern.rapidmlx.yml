@@ -1,0 +1,11 @@
+services:
+  ml-intern:
+    depends_on:
+      - rapidmlx
+    environment:
+      - OPENAI_BASE_URL=http://rapidmlx:8080/v1
+      - OPENAI_API_BASE=http://rapidmlx:8080/v1
+      - OPENAI_API_KEY=${HARBOR_RAPIDMLX_API_KEY}
+      - ML_INTERN_MODEL=openai/${HARBOR_RAPIDMLX_MODEL}
+      - LOCAL_LLM_BASE_URL=http://rapidmlx:8080/v1
+      - LOCAL_LLM_API_KEY=${HARBOR_RAPIDMLX_API_KEY}

@@ -1,0 +1,6 @@
+model_list:
+  - model_name: rapidmlx
+    litellm_params:
+      model: openai/${HARBOR_RAPIDMLX_MODEL}
+      api_base: http://rapidmlx:8080/v1
+      api_key: ${HARBOR_RAPIDMLX_API_KEY}

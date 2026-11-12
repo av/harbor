@@ -1,0 +1,4 @@
+services:
+  chatui:
+    volumes:
+      - ./services/chatui/configs/chatui.rapidmlx.yml:/app/configs/chatui.rapidmlx.yml

@@ -1,0 +1,9 @@
+services:
+  openterminal:
+    depends_on:
+      - rapidmlx
+    environment:
+      - HARBOR_RAPIDMLX_URL=http://rapidmlx:8080
+      - HARBOR_RAPIDMLX_OPENAI_URL=http://rapidmlx:8080/v1
+      - HARBOR_RAPIDMLX_API_KEY=${HARBOR_RAPIDMLX_API_KEY}
+      - HARBOR_RAPIDMLX_MODEL=${HARBOR_RAPIDMLX_MODEL}

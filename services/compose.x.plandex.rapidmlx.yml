@@ -1,0 +1,5 @@
+services:
+  plandex:
+    environment:
+      - OPENAI_API_KEY=${HARBOR_RAPIDMLX_API_KEY}
+      - OPENAI_API_BASE=http://rapidmlx:8080/v1

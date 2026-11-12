@@ -1296,4 +1296,12 @@ export const serviceMetadata: Record<string, Partial<HarborService>> = {
         wikiUrl: `${wikiUrl}/2.3.103-Satellite-Rummage`,
         tooltip: 'Local semantic search over your text, images, documents, audio and video with EmbeddingGemma 2.',
     },
+    rapidmlx: {
+        name: 'Rapid-MLX',
+        tags: [HST.backend, HST.api],
+        projectUrl: 'https://github.com/raullenchai/Rapid-MLX',
+        logo: 'https://raw.githubusercontent.com/raullenchai/Rapid-MLX/2420894078c4414324990cf732f0a4dbd9223ba3/docs/assets/logo.png',
+        wikiUrl: `${wikiUrl}/2.2.30-Backend-Rapid-MLX`,
+        tooltip: 'Host-native Apple Silicon LLM inference built on MLX with OpenAI-compatible APIs and continuous batching.',
+    },
 };

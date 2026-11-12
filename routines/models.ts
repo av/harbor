@@ -8,7 +8,7 @@ import { listOpenAiCompatibleModels } from './models/openai';
 import { formatTable, formatJson } from './models/format';
 import type { ModelEntry } from './models/types';
 
-const MODEL_SOURCES: ModelEntry['source'][] = ['ollama', 'hf', 'llamacpp', 'dmr', 'mlx', 'omlx'];
+const MODEL_SOURCES: ModelEntry['source'][] = ['ollama', 'hf', 'llamacpp', 'dmr', 'mlx', 'omlx', 'rapidmlx'];
 
 function validateSource(source: ModelEntry['source'] | undefined): void {
   if (!source) return;
@@ -25,13 +25,14 @@ async function cmdList(args: string[]) {
 
   const shouldList = (name: ModelEntry['source']) => !source || source === name;
 
-  const [ollamaModels, hfRepos, llamacppModels, dmrModels, mlxModels, omlxModels] = await Promise.all([
+  const [ollamaModels, hfRepos, llamacppModels, dmrModels, mlxModels, omlxModels, rapidmlxModels] = await Promise.all([
     shouldList('ollama') ? listOllamaModels() : Promise.resolve([]),
     shouldList('hf') ? listHfModels() : Promise.resolve([]),
     shouldList('llamacpp') ? listLlamacppModels() : Promise.resolve([]),
     shouldList('dmr') ? listOpenAiCompatibleModels({ source: 'dmr', url: process.env.HARBOR_DMR_URL, apiKey: process.env.HARBOR_DMR_API_KEY }) : Promise.resolve([]),
     shouldList('mlx') ? listOpenAiCompatibleModels({ source: 'mlx', url: process.env.HARBOR_MLX_URL }) : Promise.resolve([]),
     shouldList('omlx') ? listOpenAiCompatibleModels({ source: 'omlx', url: process.env.HARBOR_OMLX_URL, apiKey: process.env.HARBOR_OMLX_API_KEY }) : Promise.resolve([]),
+    shouldList('rapidmlx') ? listOpenAiCompatibleModels({ source: 'rapidmlx', url: process.env.HARBOR_RAPIDMLX_URL, apiKey: process.env.HARBOR_RAPIDMLX_API_KEY }) : Promise.resolve([]),
   ]);
 
   const entries: ModelEntry[] = [
@@ -58,6 +59,7 @@ async function cmdList(args: string[]) {
     ...dmrModels,
     ...mlxModels,
     ...omlxModels,
+    ...rapidmlxModels,
   ];
 
   if (jsonMode) {
