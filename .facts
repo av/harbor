@@ -1463,6 +1463,17 @@
   command: grep -q 'HARBOR_AUTOGPT_PUBLIC_URL:-http' services/compose.autogpt.yml && grep -q 'HARBOR_AUTOGPT_PUBLIC_URL:-https' services/compose.x.traefik.autogpt.yml
   tags: [autogpt-platform, implemented]
 
+## rapidmlx
+- label: Rapid-MLX is available as a host-native backend with a Caddy proxy and the same consumer overlays as oMLX
+  command: test -f services/compose.rapidmlx.yml && test -f services/rapidmlx/Caddyfile && test -f services/compose.x.webui.rapidmlx.yml
+  tags: [spec, rapidmlx-service, implemented]
+- label: Harbor launch and model listing support the rapidmlx backend with optional API authentication
+  command: rg -q rapidmlx.model harbor.sh && rg -q rapidmlx routines/models.ts && bash tests/suites/05-launch-smoke.sh
+  tags: [spec, rapidmlx-service, implemented]
+- label: Harbor can manage an installed rapid-mlx server on the host, while externally managed servers are left running
+  command: rg -q rapidmlx_host_start harbor.sh && rg -q rapidmlx_host_stop harbor.sh && bash -n harbor.sh
+  tags: [spec, rapidmlx-service, implemented]
+
 # app
 - label: Harbor App blocks main UI behind a setup gate until setup detail status is ready
   command: rg -q 'detail\?\.status === "ready"' app/src/setup/HarborSetupContext.tsx

@@ -1,0 +1,6 @@
+services:
+  cmdh:
+    environment:
+      - LLM_HOST=OpenAI
+      - OPENAI_API_KEY=${HARBOR_RAPIDMLX_API_KEY}
+      - OPENAI_BASE_URL=http://rapidmlx:8080/v1

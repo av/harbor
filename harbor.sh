@@ -468,6 +468,7 @@ show_help() {
     echo "  dmr       - Configure Docker Model Runner backend"
     echo "  mlx       - Configure host MLX backend"
     echo "  omlx      - Configure host oMLX backend"
+    echo "  rapidmlx  - Configure host Rapid-MLX backend"
     echo "  aphrodite - Configure Aphrodite service"
     echo "  tabbyapi  - Configure TabbyAPI service"
     echo "  mistralrs - Configure mistral.rs service"
@@ -522,7 +523,7 @@ show_help() {
     echo "    hf find <query> - Open HF Hub with a query (trending by default)"
     echo "    hf path <spec>  - Print a folder in HF cache for a given model spec"
     echo "    hf *            - Anything else is passed to the official Hugging Face CLI"
-    echo "  models            - Manage models across Ollama, HuggingFace, llama.cpp, DMR, MLX, and oMLX"
+    echo "  models            - Manage models across Ollama, HuggingFace, llama.cpp, DMR, MLX, oMLX, and Rapid-MLX"
     echo "  k6                - Run K6 CLI"
     echo
     echo "Harbor CLI Commands:"
@@ -1678,6 +1679,9 @@ run_up() {
         omlx)
             run_omlx_command start
             ;;
+        rapidmlx)
+            run_rapidmlx_command start
+            ;;
         daytona)
             ensure_daytona_ssh_keys || return 1
             ;;
@@ -1850,6 +1854,7 @@ run_down() {
     local stop_dmr=false
     local stop_mlx=false
     local stop_omlx=false
+    local stop_rapidmlx=false
 
     log_debug "Active services: $services"
 
@@ -1886,6 +1891,11 @@ run_down() {
             requested_services+=("$arg")
             compose_targets+=("$arg")
             ;;
+        rapidmlx)
+            stop_rapidmlx=true
+            requested_services+=("$arg")
+            compose_targets+=("$arg")
+            ;;
         *)
             requested_services+=("$arg")
             compose_targets+=("$arg")
@@ -1895,7 +1905,7 @@ run_down() {
 
     # Validate service names
     for svc in "${requested_services[@]}"; do
-        case "$svc" in dmr|mlx|omlx) continue ;; esac
+        case "$svc" in dmr|mlx|omlx|rapidmlx) continue ;; esac
         if ! service_compose_exists "$svc"; then
             log_error "Service '$svc' not found."
             local suggestion
@@ -1917,6 +1927,9 @@ run_down() {
         fi
         if echo "$services" | grep -qw 'omlx'; then
             stop_omlx=true
+        fi
+        if echo "$services" | grep -qw 'rapidmlx'; then
+            stop_rapidmlx=true
         fi
     fi
 
@@ -1952,6 +1965,9 @@ run_down() {
     fi
     if $stop_omlx; then
         run_omlx_command stop || true
+    fi
+    if $stop_rapidmlx; then
+        run_rapidmlx_command stop || true
     fi
     if $stop_dmr; then
         run_dmr_command stop || true
@@ -2078,7 +2094,7 @@ run_restart() {
     # Validate explicitly requested service names
     local svc
     for svc in "${services[@]}"; do
-        case "$svc" in dmr|mlx|omlx) continue ;; esac
+        case "$svc" in dmr|mlx|omlx|rapidmlx) continue ;; esac
         if ! service_compose_exists "$svc"; then
             log_error "Service '$svc' not found."
             local suggestion
@@ -2658,7 +2674,7 @@ run_run() {
 
 launch_backend_is_supported() {
     case "$1" in
-    ollama | llamacpp | ikllamacpp | prismml | vllm | dmr | mlx | omlx | tabbyapi | mistralrs | sglang | lmdeploy | aphrodite | ktransformers | unsloth-studio)
+    ollama | llamacpp | ikllamacpp | prismml | vllm | dmr | mlx | omlx | rapidmlx | tabbyapi | mistralrs | sglang | lmdeploy | aphrodite | ktransformers | unsloth-studio)
         return 0
         ;;
     *)
@@ -2693,6 +2709,9 @@ launch_backend_model_key() {
     omlx)
         echo "omlx.model"
         ;;
+    rapidmlx)
+        echo "rapidmlx.model"
+        ;;
     tabbyapi)
         echo "tabbyapi.model"
         ;;
@@ -2721,6 +2740,9 @@ launch_backend_api_key() {
     case "$backend" in
     omlx)
         key=$(env_manager --silent get omlx.api.key 2>/dev/null || true)
+        ;;
+    rapidmlx)
+        key=$(env_manager --silent get rapidmlx.api.key 2>/dev/null || true)
         ;;
     dmr)
         key=$(env_manager --silent get dmr.api.key 2>/dev/null || true)
@@ -2791,7 +2813,7 @@ launch_start_services() {
 }
 
 launch_supported_backends() {
-    echo "ollama llamacpp ikllamacpp prismml vllm dmr mlx omlx tabbyapi mistralrs sglang lmdeploy aphrodite ktransformers unsloth-studio"
+    echo "ollama llamacpp ikllamacpp prismml vllm dmr mlx omlx rapidmlx tabbyapi mistralrs sglang lmdeploy aphrodite ktransformers unsloth-studio"
 }
 
 launch_supported_host_tools() {
@@ -4776,7 +4798,7 @@ _harbor_completions() {
     }
 
     # Top-level subcommands
-    local commands="up u start s down d restart r ps build shell logs log l pull exec run stats attach cmd help hf defaults alias aliases a link ln unlink unln launch open o url qr list ls version smi top dive eject config profile profiles p gum fixfs info update how find home vscode doctor bench history h size env dev tools eval routine volumes skills completion models tokscale tunnel t tunnels migrate modularmax ollama llamacpp ikllamacpp prismml tgi litellm vllm dmr mlx omlx aphrodite openai opencode facts mi npcsh webui tabbyapi parllama oterm plandex pdx mistralrs interpreter opint cfd cloudflared cmdh fabric parler photoprism airllm txtai aider nanobot chatui comfyui aichat omnichain lmeval lm_eval sglang jupyter ol1 ktransformers openhands oh stt speaches boost nexa repopack k6 promptfoo pf webtop langflow kobold morphic gptme hermes mcp openfang"
+    local commands="up u start s down d restart r ps build shell logs log l pull exec run stats attach cmd help hf defaults alias aliases a link ln unlink unln launch open o url qr list ls version smi top dive eject config profile profiles p gum fixfs info update how find home vscode doctor bench history h size env dev tools eval routine volumes skills completion models tokscale tunnel t tunnels migrate modularmax ollama llamacpp ikllamacpp prismml tgi litellm vllm dmr mlx omlx rapidmlx aphrodite openai opencode facts mi npcsh webui tabbyapi parllama oterm plandex pdx mistralrs interpreter opint cfd cloudflared cmdh fabric parler photoprism airllm txtai aider nanobot chatui comfyui aichat omnichain lmeval lm_eval sglang jupyter ol1 ktransformers openhands oh stt speaches boost nexa repopack k6 promptfoo pf webtop langflow kobold morphic gptme hermes mcp openfang"
 
     commands="$commands wrappers harbor"
 
@@ -5077,6 +5099,7 @@ _harbor() {
         'dmr:Configure Docker Model Runner'
         'mlx:Configure MLX'
         'omlx:Configure oMLX'
+        'rapidmlx:Configure Rapid-MLX'
         'aphrodite:Configure Aphrodite'
         'openai:Configure OpenAI'
         'opencode:Run opencode'
@@ -5531,6 +5554,7 @@ complete -c harbor -n __harbor_no_subcommand -a vllm -d 'Configure VLLM'
 complete -c harbor -n __harbor_no_subcommand -a dmr -d 'Configure Docker Model Runner'
 complete -c harbor -n __harbor_no_subcommand -a mlx -d 'Configure MLX'
 complete -c harbor -n __harbor_no_subcommand -a omlx -d 'Configure oMLX'
+complete -c harbor -n __harbor_no_subcommand -a rapidmlx -d 'Configure Rapid-MLX'
 complete -c harbor -n __harbor_no_subcommand -a aphrodite -d 'Configure Aphrodite'
 complete -c harbor -n __harbor_no_subcommand -a openai -d 'Configure OpenAI'
 complete -c harbor -n __harbor_no_subcommand -a opencode -d 'Run opencode'
@@ -6801,7 +6825,7 @@ suggest_command() {
         up u start s down d restart r ps build shell logs log l pull exec run
         stats attach cmd help --help -h hf defaults alias aliases a link ln
         unlink unln launch open o url qr list ls version --version -v smi top dive eject
-        ollama llamacpp ikllamacpp prismml tgi litellm vllm dmr mlx omlx aphrodite openai
+        ollama llamacpp ikllamacpp prismml tgi litellm vllm dmr mlx omlx rapidmlx aphrodite openai
         opencode facts mi npcsh webui tabbyapi parllama oterm plandex pdx mistralrs
         interpreter opint cfd cloudflared cmdh fabric parler photoprism airllm txtai
         aider nanobot chatui comfyui aichat omnichain harbor lmeval lm_eval sglang
@@ -9908,7 +9932,7 @@ run_hf_command() {
 }
 
 show_models_help() {
-    echo "Manage models across Ollama, HuggingFace, llama.cpp, DMR, MLX, and oMLX"
+    echo "Manage models across Ollama, HuggingFace, llama.cpp, DMR, MLX, oMLX, and Rapid-MLX"
     echo ""
     echo "Usage: harbor models <command> [options]"
     echo ""
@@ -9918,7 +9942,7 @@ show_models_help() {
     echo "  rm [--source SOURCE] <model>   Remove a model"
     echo "  <source> <command> ...         Alias for --source SOURCE"
     echo ""
-    echo "Sources: ollama, hf, llamacpp, prismml, dmr, mlx, omlx"
+    echo "Sources: ollama, hf, llamacpp, prismml, dmr, mlx, omlx, rapidmlx"
     echo ""
     echo "Examples:"
     echo "  harbor models ls"
@@ -9928,6 +9952,7 @@ show_models_help() {
     echo "  harbor models pull --source dmr ai/smollm2"
     echo "  harbor models pull --source mlx mlx-community/Qwen3.5-4B-4bit"
     echo "  harbor models pull --source omlx mlx-community/Qwen3.5-4B-4bit"
+    echo "  harbor models pull --source rapidmlx mlx-community/Qwen3.5-4B-MLX-4bit"
     echo "  harbor models pull bartowski/Llama-3.2-1B-Instruct-GGUF"
     echo "  harbor models pull --source hf hf-internal-testing/tiny-random-gpt2 config.json"
     echo "  harbor models rm qwen3:8b"
@@ -10252,6 +10277,72 @@ omlx_host_stop() {
     fi
 }
 
+rapidmlx_workspace_path() {
+    harbor_resolve_path "$(env_manager get rapidmlx.workspace)"
+}
+
+rapidmlx_curl() {
+    local url="$1"
+    shift || true
+    local api_key
+    api_key=$(env_manager get rapidmlx.api.key)
+    if [ -n "$api_key" ]; then
+        curl "$@" -H "Authorization: Bearer $api_key" "$url"
+    else
+        curl "$@" "$url"
+    fi
+}
+
+rapidmlx_host_start() {
+    local manage_host workspace runner_port local_url api_key model logfile
+    manage_host=$(env_manager get rapidmlx.manage.host)
+    if ! config_bool_enabled "$manage_host"; then
+        log_info "Rapid-MLX host management is disabled; expecting Rapid-MLX at $(env_manager get rapidmlx.upstream.url)."
+        return 0
+    fi
+    runner_port=$(env_manager get rapidmlx.runner.port)
+    local_url="http://localhost:$runner_port"
+    if rapidmlx_curl "$local_url/v1/models" -fsS -o /dev/null; then
+        log_info "Rapid-MLX is already running on port $runner_port"
+        return 0
+    fi
+    command -v rapid-mlx >/dev/null || { log_error "Install Rapid-MLX first: brew install rapid-mlx"; return 1; }
+    workspace=$(rapidmlx_workspace_path)
+    mkdir -p "$workspace/logs"
+    logfile="$workspace/logs/rapid-mlx.log"
+    api_key=$(env_manager get rapidmlx.api.key)
+    if [ "$api_key" = "not-needed" ]; then
+        api_key=""
+    fi
+    model=$(env_manager get rapidmlx.hf.path)
+    RAPID_MLX_API_KEY="$api_key" nohup rapid-mlx serve "$model" --port "$runner_port" >>"$logfile" 2>&1 &
+    echo "$!" >"$workspace/logs/rapid-mlx.pid"
+    local retries=0 max_retries=60
+    while ! rapidmlx_curl "$local_url/v1/models" -fsS -o /dev/null 2>/dev/null; do
+        retries=$((retries + 1))
+        if [ "$retries" -ge "$max_retries" ]; then
+            log_error "Rapid-MLX failed to start within ${max_retries}s. Check $logfile"
+            return 1
+        fi
+        sleep 1
+    done
+    log_info "Rapid-MLX is ready on port $runner_port"
+}
+
+rapidmlx_host_stop() {
+    local manage_host pidfile pid
+    manage_host=$(env_manager get rapidmlx.manage.host)
+    config_bool_enabled "$manage_host" || return 0
+    pidfile="$(rapidmlx_workspace_path)/logs/rapid-mlx.pid"
+    [ -f "$pidfile" ] || return 0
+    pid=$(cat "$pidfile")
+    case "$pid" in ""|*[!0-9]*) return 1 ;; esac
+    if ps -p "$pid" -o args= | grep -q 'rapid-mlx serve'; then
+        kill "$pid"
+    fi
+    rm -f "$pidfile"
+}
+
 run_models_routine() {
     _check_docker || return 1
 
@@ -10305,9 +10396,16 @@ run_models_routine() {
     elif is_service_running "omlx"; then
         omlx_url="http://omlx:8080"
     fi
-    local dmr_api_key omlx_api_key
+    local rapidmlx_url=""
+    if [ "$requested_source" = "rapidmlx" ]; then
+        rapidmlx_url=$(env_manager get rapidmlx.upstream.url)
+    elif is_service_running "rapidmlx"; then
+        rapidmlx_url="http://rapidmlx:8080"
+    fi
+    local dmr_api_key omlx_api_key rapidmlx_api_key
     dmr_api_key=$(env_manager get dmr.api.key)
     omlx_api_key=$(env_manager get omlx.api.key)
+    rapidmlx_api_key=$(env_manager get rapidmlx.api.key)
 
     if { [ -z "$requested_source" ] || [ "$requested_source" = "ollama" ]; } && ! is_service_running "ollama"; then
         log_debug "Ollama is not running, launching..."
@@ -10332,8 +10430,10 @@ run_models_routine() {
         -e "HARBOR_DMR_URL=$dmr_url" \
         -e "HARBOR_MLX_URL=$mlx_url" \
         -e "HARBOR_OMLX_URL=$omlx_url" \
+        -e "HARBOR_RAPIDMLX_URL=$rapidmlx_url" \
         -e "HARBOR_DMR_API_KEY=$dmr_api_key" \
         -e "HARBOR_OMLX_API_KEY=$omlx_api_key" \
+        -e "HARBOR_RAPIDMLX_API_KEY=$rapidmlx_api_key" \
         $default_routine_runtime \
         ./routines/models.ts "$@"
 }
@@ -10374,6 +10474,10 @@ run_models_pull() {
         run_omlx_command pull "$model"
         return
         ;;
+    rapidmlx)
+        run_rapidmlx_command pull "$model"
+        return
+        ;;
     ollama)
         run_ollama_command pull "$model"
         return
@@ -10394,7 +10498,7 @@ run_models_pull() {
         ;;
     *)
         log_error "Unknown model source: $source"
-        log_error "Valid sources: ollama, hf, llamacpp, prismml, dmr, mlx, omlx"
+        log_error "Valid sources: ollama, hf, llamacpp, prismml, dmr, mlx, omlx, rapidmlx"
         return 1
         ;;
     esac
@@ -10461,7 +10565,7 @@ run_models_pull() {
 
 models_extract_source_subcommand() {
     case "$1" in
-    ollama | hf | llamacpp | prismml | dmr | mlx | omlx)
+    ollama | hf | llamacpp | prismml | dmr | mlx | omlx | rapidmlx)
         echo "$1"
         return 0
         ;;
@@ -10503,6 +10607,10 @@ run_models_command() {
                 ;;
             omlx)
                 run_omlx_command rm "$@"
+                return
+                ;;
+            rapidmlx)
+                run_rapidmlx_command rm "$@"
                 return
                 ;;
             *)
@@ -10694,6 +10802,51 @@ run_omlx_command() {
         ;;
     *)
         log_error "Unknown omlx subcommand: $cmd"
+        return 1
+        ;;
+    esac
+}
+
+run_rapidmlx_command() {
+    local cmd="${1:-help}"
+    shift || true
+    local runner_port url
+    runner_port=$(env_manager get rapidmlx.runner.port)
+    url="http://localhost:$runner_port"
+    case "$cmd" in
+    start | serve)
+        rapidmlx_host_start
+        ;;
+    stop)
+        rapidmlx_host_stop
+        ;;
+    status | ls | list | models)
+        rapidmlx_curl "$url/v1/models" -fsS
+        ;;
+    logs)
+        local logfile
+        logfile="$(rapidmlx_workspace_path)/logs/rapid-mlx.log"
+        if [ -f "$logfile" ]; then
+            cat "$logfile"
+        else
+            log_error "No log file found at $logfile"
+            return 1
+        fi
+        ;;
+    pull)
+        local hf_path="${1:-$(env_manager get rapidmlx.hf.path)}"
+        run_hf_docker_cli download "$hf_path"
+        ;;
+    rm | remove)
+        log_error "Model removal is not supported. Manage the shared Hugging Face cache manually."
+        return 1
+        ;;
+    help | -h | --help)
+        echo "Usage: harbor rapidmlx <start|stop|status|logs|ls|pull|rm>"
+        echo "Manages installed rapid-mlx for the Harbor rapidmlx backend."
+        ;;
+    *)
+        log_error "Unknown rapidmlx subcommand: $cmd"
         return 1
         ;;
     esac
@@ -13298,6 +13451,10 @@ main_entrypoint() {
     omlx)
         shift
         run_omlx_command "$@"
+        ;;
+    rapidmlx)
+        shift
+        run_rapidmlx_command "$@"
         ;;
     aphrodite)
         shift

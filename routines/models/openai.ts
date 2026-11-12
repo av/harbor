@@ -2,7 +2,7 @@ import { log } from '../utils';
 import type { ModelEntry } from './types';
 
 type ListOptions = {
-  source: 'dmr' | 'mlx' | 'omlx';
+  source: 'dmr' | 'mlx' | 'omlx' | 'rapidmlx';
   url: string | undefined;
   apiKey?: string;
 };

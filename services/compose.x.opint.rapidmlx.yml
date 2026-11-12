@@ -1,0 +1,7 @@
+services:
+  opint:
+    entrypoint: >
+      interpreter
+        --api_base http://rapidmlx:8080/v1
+        --api_key ${HARBOR_RAPIDMLX_API_KEY}
+        ${HARBOR_OPINT_CMD}

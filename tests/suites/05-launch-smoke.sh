@@ -112,6 +112,10 @@ if [ "$1" = "port" ]; then
       echo "8080/tcp -> 0.0.0.0:34940"
       exit 0
       ;;
+    harbor.rapidmlx)
+      echo "8080/tcp -> 0.0.0.0:34991"
+      exit 0
+      ;;
   esac
 fi
 
@@ -895,6 +899,25 @@ assert_log '^tool=hermes$'
 assert_log '^cwd='"$HARBOR_TEST_REPO"'$'
 assert_log '^OPENAI_BASE_URL=http://localhost:34940/v1$'
 assert_log '^OPENAI_API_KEY=sk-omlx$'
+assert_log '^HERMES_MODEL=qwen-chat-model$'
+assert_log '^arg=chat$'
+
+run_launch "rapidmlx backend resolves models and launches codex" \
+  "rapidmlx" "root-array" \
+  --backend rapidmlx codex
+assert_log '^tool=codex$'
+assert_log '^cwd='"$HARBOR_TEST_REPO"'$'
+assert_log '^OPENAI_API_KEY=not-needed$'
+assert_log '^arg=-m$'
+assert_log '^arg=root-array-model$'
+
+run_launch "rapidmlx backend launches hermes with correct environment" \
+  "rapidmlx" "openai-mixed" \
+  --backend rapidmlx hermes
+assert_log '^tool=hermes$'
+assert_log '^cwd='"$HARBOR_TEST_REPO"'$'
+assert_log '^OPENAI_BASE_URL=http://localhost:34991/v1$'
+assert_log '^OPENAI_API_KEY=not-needed$'
 assert_log '^HERMES_MODEL=qwen-chat-model$'
 assert_log '^arg=chat$'
 

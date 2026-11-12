@@ -1,0 +1,7 @@
+services:
+  sillytavern:
+    depends_on:
+      rapidmlx:
+        condition: service_healthy
+    environment:
+      - SILLYTAVERN_RAPIDMLX_URL=http://rapidmlx:8080

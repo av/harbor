@@ -1,0 +1,4 @@
+services:
+  litellm:
+    volumes:
+      - ./services/litellm/litellm.rapidmlx.yaml:/app/litellm/rapidmlx.yaml

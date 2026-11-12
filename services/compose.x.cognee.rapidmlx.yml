@@ -1,0 +1,9 @@
+services:
+  cognee:
+    depends_on:
+      - rapidmlx
+    environment:
+      - LLM_PROVIDER=openai
+      - LLM_API_KEY=${HARBOR_RAPIDMLX_API_KEY}
+      - LLM_MODEL=${HARBOR_RAPIDMLX_MODEL}
+      - LLM_ENDPOINT=http://rapidmlx:8080/v1

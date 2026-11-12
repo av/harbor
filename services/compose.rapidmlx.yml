@@ -1,0 +1,21 @@
+services:
+  rapidmlx:
+    container_name: ${HARBOR_CONTAINER_PREFIX}.rapidmlx
+    image: ${HARBOR_RAPIDMLX_IMAGE}:${HARBOR_RAPIDMLX_VERSION}
+    env_file:
+      - ./.env
+      - ./services/rapidmlx/override.env
+    ports:
+      - ${HARBOR_RAPIDMLX_HOST_PORT}:8080
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./services/rapidmlx/Caddyfile:/etc/caddy/Caddyfile:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    networks:
+      - harbor-network

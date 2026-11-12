@@ -1,0 +1,8 @@
+envVars:
+  MODELS:
+    - name: rapidmlx
+      id: rapidmlx
+      endpoints:
+        - type: openai
+          baseURL: http://rapidmlx:8080/v1
+          apiKey: not-needed

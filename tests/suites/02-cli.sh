@@ -161,6 +161,7 @@ assert_match "launch help documents service mode" '--service opencode' harbor la
 assert_match "launch help lists supported launch targets" 'Supported launch targets:' harbor launch --help
 assert_match "launch help lists host tools" 'Host tools: .*codex.*pi.*vscode' harbor launch --help
 assert_match "launch help lists dmr mlx and omlx backends" 'Backends: .*dmr.*mlx.*omlx' harbor launch --help
+assert_match "launch help lists Rapid-MLX backend" 'Backends: .*rapidmlx' harbor launch --help
 assert_match "launch help lists service CLI shortcuts" 'Service CLI shortcuts: .*plandex.*promptfoo.*tokscale' harbor launch --help
 assert_match "launch help lists container service fallback" "Container services: any service from 'harbor ls'.*mi.*opencode" harbor launch --help
 assert_match "launch help documents web and workflow modifiers" '^--model, --config, --web, --codemode, and --workflow\.$' harbor launch --help
