@@ -2034,6 +2034,9 @@
 - label: json_config_merger.py flatten mode stops at Open WebUI's dict-valued registered keys (models.default_params, openai.api_configs, ...) and rewrites legacy openai.enabled/ollama.enabled to openai.enable/ollama.enable
   command: grep -q DICT_VALUE_KEYS shared/json_config_merger.py && grep -q 'openai.enable' shared/json_config_merger.py
   tags: [spec, speaches-webui, implemented]
+- label: json_config_merger.py flatten mode keeps the other dict-valued keys Open WebUI registers (task.model.params, ui.default_interface_settings, audio.realtime.input_params, rag.mistral_ocr_params) as one row each instead of splitting them into unknown dot-path keys
+  command: python3 -c "import sys; sys.path.insert(0,'shared'); from json_config_merger import flatten_config; v={'a': {'b': 1}}; assert flatten_config({'task': {'model': {'params': v}}, 'ui': {'default_interface_settings': v}, 'audio': {'realtime': {'input_params': v}}, 'rag': {'mistral_ocr_params': v}}) == {'task.model.params': v, 'ui.default_interface_settings': v, 'audio.realtime.input_params': v, 'rag.mistral_ocr_params': v}"
+  tags: [spec, issue-314, implemented]
 - On a fresh boot of 'harbor up webui speaches', Open WebUI's config rows point STT and TTS at http://speaches:8000/v1 and TTS/STT requests through Open WebUI's audio API succeed against speaches @spec @speaches-webui @implemented
 
 ## webui config fragments
