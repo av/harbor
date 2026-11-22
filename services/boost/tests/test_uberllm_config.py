@@ -1,4 +1,4 @@
-"""Unit tests for UberLLM auto-configuration in boost config."""
+"""Unit tests for MartLLM auto-configuration in boost config."""
 
 import os
 import sys
@@ -8,11 +8,11 @@ from unittest.mock import patch
 # Add the boost src directory to the path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
-UBERLLM_URL = 'https://api.uberllm.dev/v1'
+UBERLLM_URL = 'https://api.martllm.com/v1'
 
 
 class TestUberLLMAutoConfig(unittest.TestCase):
-    """Test that the UberLLM backend is auto-registered when the API key is set."""
+    """Test that the MartLLM backend is auto-registered when the API key is set."""
 
     def setUp(self):
         # _reload_config() replaces sys.modules['config']; restore it so other

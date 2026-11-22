@@ -251,14 +251,14 @@ HARBOR_UBERLLM_API_KEY = Config[str](
     type=str,
     default="",
     description="""
-UberLLM API key. When set, the UberLLM OpenAI-compatible
-endpoint (https://api.uberllm.dev/v1) is automatically
+MartLLM API key. When set, the MartLLM OpenAI-compatible
+endpoint (https://api.martllm.com/v1) is automatically
 registered as a boost backend. Models are discovered from
 its /models endpoint, so no static list is needed.
 """.strip(),
 )
 
-UBERLLM_BASE_URL = "https://api.uberllm.dev/v1"
+UBERLLM_BASE_URL = "https://api.martllm.com/v1"
 
 # Static model definitions for providers that don't
 # expose a /models endpoint.
