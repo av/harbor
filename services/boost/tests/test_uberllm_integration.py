@@ -1,4 +1,4 @@
-"""Integration tests for UberLLM via boost's OpenAI-compatible proxy.
+"""Integration tests for MartLLM via boost's OpenAI-compatible proxy.
 
 Requires UBERLLM_API_KEY environment variable to be set.
 """
@@ -13,12 +13,12 @@ from unittest.mock import patch
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 UBERLLM_API_KEY = os.environ.get('UBERLLM_API_KEY', '')
-UBERLLM_BASE_URL = 'https://api.uberllm.dev/v1'
+UBERLLM_BASE_URL = 'https://api.martllm.com/v1'
 
 
 @unittest.skipUnless(UBERLLM_API_KEY, 'UBERLLM_API_KEY not set')
 class TestUberLLMIntegration(unittest.TestCase):
-    """Integration tests verifying UberLLM API connectivity."""
+    """Integration tests verifying MartLLM API connectivity."""
 
     def _get(self, path):
         req = urllib.request.Request(
